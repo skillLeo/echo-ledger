@@ -47,7 +47,7 @@ import { BannerSlot, useBannerTurn } from "../../components/BannerSlot";
 import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
-import { anyV2, useUiFlags } from "../../v2/flags";
+import { useUiFlags } from "../../v2/flags";
 import { shellStatus as shellStatusOf } from "../../v2/shell/status";
 import { helpV2Reachable } from "../../v2/help/route";
 import { hasV2Page } from "../../v2/settings/pages/route";
@@ -56,7 +56,6 @@ import { hasV2Page } from "../../v2/settings/pages/route";
 const v2 = () => import("../../v2/app");
 const ShellV2 = lazy(() => v2().then((m) => ({ default: m.Shell })));
 const LibraryV2 = lazy(() => v2().then((m) => ({ default: m.LibraryV2 })));
-const StorageCardV2 = lazy(() => v2().then((m) => ({ default: m.StorageCard })));
 const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
@@ -820,14 +819,7 @@ export default function MainApp() {
           </div>
         </Suspense>
       )}
-      {tab === "settings" && !ui.flags["ui_v2.settings"] && (anyV2(ui) || ui.classic) && (
-        <Suspense fallback={null}>
-          <div className="el-root el-settings-top" data-v2="settings-top">
-            {ui.flags["ui_v2.shell"] && <StorageCardV2 />}
-            <ClassicSwitchV2 state={ui} onState={setUi} />
-          </div>
-        </Suspense>
-      )}
+      {/* Classic Settings offers the new design from its own Appearance page (docs/PLAN_V2_PARITY.md 0). */}
       {tab === "settings" && !ui.flags["ui_v2.settings"] && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={settingsSection} />}
     </>
   );

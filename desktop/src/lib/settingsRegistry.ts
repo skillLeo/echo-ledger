@@ -229,6 +229,9 @@ export const SETTINGS: readonly SettingEntry[] = [
     options: opts(["comfortable", "Comfortable", true], ["compact", "Compact"]), keywords: ["spacing", "compact", "dense"] },
   { id: "appearance.clock", title: "Times", page: "appearance", kind: "segmented", resettable: true,
     options: opts(["12", "12-hour", true], ["24", "24-hour"]), keywords: ["clock", "time format", "am pm"], ru: ["waqt", "ghanta"], ur: ["وقت"] },
+  { id: "appearance.design", title: "Design", page: "appearance", kind: "action",
+    description: "Classic, or the new design: try it and come back whenever you like.",
+    keywords: ["new design", "new look", "classic", "old look", "v2", "switch back", "try the new design", "redesign"], ru: ["naya design", "purana design"], ur: ["نیا ڈیزائن"] },
 
   { id: "notifications", title: "Notifications", page: null, root: "App", kind: "page", keywords: ["alerts", "push", "notification"], ru: ["ittila", "ittilaat", "alert", "ghanti"], ur: ["اطلاع", "اطلاعات"] },
   { id: "notifications.enabled", title: "Show notifications", page: "notifications", kind: "switch", resettable: true, keywords: ["turn off notifications", "mute", "silence"], ru: ["band karo"] },

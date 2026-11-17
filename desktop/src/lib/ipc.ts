@@ -725,6 +725,16 @@ export interface AssistSnapshot {
 export interface UiFlagsAnswer {
   ui_flags: Record<string, boolean>;
   ui_classic: boolean;
+  /** Since 2.0.0-g (docs/API.md "The design switch"): the person's choice and what Appearance offers; missing before. */
+  ui_design?: UiDesignAnswer;
+}
+
+/** `ui_design`: `choice` null (never chose), "v2" or "classic"; `current` the design the flags now show. */
+export interface UiDesignAnswer {
+  choice: "v2" | "classic" | null;
+  current: "v2" | "classic";
+  can_try: boolean;
+  can_switch_back: boolean;
 }
 
 /** The last app that used the microphone without being recorded, and when it was last seen so (kept by the core). */
@@ -1844,6 +1854,8 @@ export const api = {
   trashKeepHours: () => invoke<number>("trash_keep_hours"),
   /** "Switch back to classic" (`PUT /api/account/ui`): the server's new flags. */
   uiClassicSet: (classic: boolean) => invoke<UiFlagsAnswer>("ui_classic_set", { classic }),
+  /** Try the new design or switch back (`PUT /api/account/ui {"design"}`, 2.0.0-g): the server's new flags. */
+  uiDesignSet: (design: "v2" | "classic" | null) => invoke<UiFlagsAnswer>("ui_design_set", { design }),
   /** Help (docs/API.md 2.0.0-d, v1.8 P6.4): the user guide's sections, those matching `q` best first (at most 20). */
   helpGuides: (q: string | null = null) => invoke<{ data: HelpGuideHit[] }>("help_guides", { q }),
   /** One section of the guide, as Markdown. */

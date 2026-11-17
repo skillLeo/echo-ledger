@@ -926,6 +926,8 @@ describe("parity with today's Settings pages, in every state", () => {
     today: (settings: Settings) => ReactElement; stalesOk?: boolean; steps?: Step[]; map?: Record<string, [ControlRole | RolelessField, string | RegExp]>;
     /** Lines the page may say (its footer's): in every state, the ones today's page shows must be the ones the v2 page shows. */
     lines?: readonly string[];
+    /** Today's controls the v2 page rightly lacks, each with why (the other side of a switch, tested elsewhere). */
+    otherSide?: Record<string, string>;
     /** Today's controls whose names carry data (a date, an amount), matched by pattern. */
     mapLike?: readonly [RegExp, [ControlRole, string | RegExp]][];
   };
@@ -1064,7 +1066,8 @@ describe("parity with today's Settings pages, in every state", () => {
     { name: "Never capture these apps", section: "screen.excluded", today: (st) => <ExcludedAppsPage settings={st} patch={patch} platform="windows" />,
       steps: [{ name: "an app typed", today: type("App or process name", "Signal.exe") }] },
     { name: "Appearance", section: "appearance",
-      today: () => <AppearancePage theme="system" onTheme={() => undefined} prefs={{ sidebarStyle: "light", density: "comfortable", clock: "12" }} setPref={() => undefined} />, steps: [reset] },
+      today: () => <AppearancePage theme="system" onTheme={() => undefined} prefs={{ sidebarStyle: "light", density: "comfortable", clock: "12" }} setPref={() => undefined} />, steps: [reset],
+      otherSide: { "button: Try the new design": "classic's side of the design switch; the new design's Appearance has Switch back to classic (v2/designSwitch.test.tsx)" } },
     ...(["windows", "macos"] as const).map((platform): Page => ({
       name: `Keyboard shortcuts, ${platform}`, section: "shortcuts", platform,
       today: (st) => <ShortcutsPage settings={st} status={makeStatus({ platform })} run={run} onSettings={() => undefined} />,
@@ -1157,7 +1160,7 @@ describe("parity with today's Settings pages, in every state", () => {
           return r === role && (typeof name === "string" ? n === name : name.test(n));
         });
       };
-      expect(today.controls.filter((c) => !v2Has(c)), `${page.name}: ${state}`).toEqual([]);
+      expect(today.controls.filter((c) => !v2Has(c) && !page.otherSide?.[c]), `${page.name}: ${state}`).toEqual([]);
       expect(v2.asked, `${page.name}: ${state}, the question asked`).toEqual(today.asked);
       expect(today.off.filter((c) => !v2.off.includes(c)), `${page.name}: ${state}, switches that can't be changed`).toEqual([]);
       if (page.lines) {
