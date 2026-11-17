@@ -278,7 +278,7 @@ const commands: Record<string, (args: Args) => unknown> = {
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
       : { phase: "up_to_date", current: "1.5.0", version: null, notes: null, checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), message: "You have the latest version.", progress: null },
-  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
+  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, dictationReplacements: [{ from: "echo ledger", to: "EchoLedger" }, { from: "kuraishi", to: "Qureshi" }], dictationSnippets: [{ trigger: "insert signature", text: "Regards, Hassam" }], onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" || screen === "library-table" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : LISTED),
@@ -378,7 +378,8 @@ const commands: Record<string, (args: Args) => unknown> = {
     : null,
   security_overview: () => ({ devices: [{ id: "d1", name: "Work laptop", platform: "windows", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: true }, { id: "d2", name: "Pixel 9", platform: "android", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: false }], events: [] }),
   storage_info: () => ({ recordings_bytes: 812_000_000, recordings_count: 42, disk_free_bytes: 80_123_456_789, disk_total_bytes: 107_374_182_400, retention_days: 30 }),
-  dictation_history: () => [],
+  dictation_history: () => [{ at: new Date(Date.now() - 600_000).toISOString(), text: "Please send the signed proforma by Thursday, and copy Bilal on it." },
+    { at: new Date(Date.now() - 3_600_000).toISOString(), text: "Meeting moved to 4 pm." }],
   marker_tags: () => ["Budget", "Decision", "Follow up"],
   recording_state: () => makeRecordingState({
     elapsedMs: 134_000,

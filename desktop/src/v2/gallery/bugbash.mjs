@@ -60,6 +60,11 @@ const CASES = [
   ["a-help-guide", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "After a call", exact: true }).click(); await page.waitForTimeout(800); }],
   ["a-whats-new", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "What's new" }).click(); await page.waitForTimeout(800); }],
   ["a-contact", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "Contact support" }).click(); await page.waitForTimeout(500); }],
+  ["a-set-voice", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Voice notes & dictation", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-replacements", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Voice notes & dictation", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Replacements", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-history", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Voice notes & dictation", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Recent dictations", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-captions", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Captions", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-caption-style", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Captions", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Style", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-controls", "app", app("controls"), ["en"], async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 const THEMES = ["light", "dark"];
