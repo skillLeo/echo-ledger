@@ -98,6 +98,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');
         // Interface flags (2.0.0-a): the person's "Switch back to classic".
         Route::put('account/ui', [AccountController::class, 'ui'])->middleware('abilities:config:read')->name('api.account.ui');
+        // Since 2.0.0-g: the design switch, read on its own.
+        Route::get('account/ui', [AccountController::class, 'showUi'])->middleware('abilities:config:read')->name('api.account.ui.show');
         // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
         // Since v1.8 P6.3 (docs/API.md 2.0.0-d): inviting people, for owners and admins.

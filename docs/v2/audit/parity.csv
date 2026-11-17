@@ -1,0 +1,6 @@
+id,platform,screen,feature,how to reach it in classic,where it lives in v2,status,test
+WEB-APP-001,web,Settings > Appearance,Theme row and its choices in the console's language,Settings > Appearance > Theme (English only: classic has no Urdu interface),Settings > Appearance > Theme: the title and System/Light/Dark stay English when the console language is Urdu,partial,
+WEB-APP-002,web,Settings > Appearance,Times choice reads 12-hour / 24-hour in Urdu,Settings > Appearance > Times,Settings > Appearance > Times: in Urdu the labels read "hour-12" / "hour-24" (the number and word swap in right-to-left),partial,
+WEB-APP-003,web,Settings,Settings side menu in the console's language,Settings side menu (English only: classic has no Urdu interface),Settings side menu: every group and page name stays English when the console language is Urdu,partial,
+WEB-APP-004,web,Settings > Appearance,Density / Library view / Sidebar rows in the console's language,Settings > Appearance,Settings > Appearance: Density and Library view titles and choices stay English in Urdu,partial,
+WEB-APP-005,web,Settings > Appearance,Design switch both ways,Settings > Appearance > Try the new design,Settings > Appearance > Switch back to classic,done,tests/Feature/InterfaceFlagsTest.php (the console both ways); tests/Feature/DesignSwitchTest.php

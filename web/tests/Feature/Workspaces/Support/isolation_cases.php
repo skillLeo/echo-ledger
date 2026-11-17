@@ -308,6 +308,8 @@ function isoApiCases(array $b): array
         // Since 2.0.0-a: "Switch back to classic" changes only the calling device's own person (no id in the request);
         // the answer is that person's flags. The test checks afterwards that Bob's setting did not move.
         'api.account.ui' => ['PUT', '/api/account/ui', ['classic' => true], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('ui_classic') === true],
+        // Since 2.0.0-g: the calling person's own design switch.
+        'api.account.ui.show' => ['GET', '/api/account/ui', [], 'list'],
         // Entitlements (v1.6): only the device's own person in its own workspace, never B's numbers or names.
         'api.me.entitlements' => ['GET', '/api/me/entitlements', [], 'list'],
         // A person's own key: only ever their own (no id in the request); a wrong key says so and changes nothing of B.

@@ -47,9 +47,8 @@ trait ManagesAppPages
                 'layout' => ['appearance.library_view', Shell::LAYOUTS],
             ],
             'languages' => ['' => 'Automatic', 'en' => 'English', 'ur' => 'Urdu', 'ar' => 'Arabic'],
-            // Since 2.0.0-a: "Switch back to classic", offered while a redesigned screen is on for this person.
-            'classicOffered' => app(InterfaceFlags::class)->anyUiV2($this->account()),
-            'classic' => (bool) $this->account()->ui_classic,
+            // Since 2.0.0-g: the design switch both ways (classic: Try the new design; v2: Switch back to classic).
+            'design' => app(InterfaceFlags::class)->design($this->account()),
             'more' => LanguageChoice::MORE,
             // Since v2.0: the console's language, under the new frame only.
             'appLanguages' => ConsoleV2::shell() ? ConsoleV2::LANGUAGES : null,
@@ -117,15 +116,41 @@ trait ManagesAppPages
         return ['rows' => EmailPreferences::rows($this->account())];
     }
 
-    /** Settings › Appearance → Switch back to classic (since 2.0.0-a): the same setting as PUT /api/account/ui. */
-    public function toggleClassic(): void
+    /** Settings › Appearance → Try the new design (since 2.0.0-g): the same setting as PUT /api/account/ui. */
+    public function tryNewDesign(): void
     {
         $user = $this->account();
-        if (! $user->ui_classic && ! app(InterfaceFlags::class)->anyUiV2($user)) {
+        $flags = app(InterfaceFlags::class);
+        if (! $flags->design($user)['can_try']) {
             return;
         }
-        app(InterfaceFlags::class)->setClassic($user, ! $user->ui_classic);
+        $flags->setDesign($user, 'v2');
+        $this->reopenAppearance();
+    }
+
+    /** Settings › Appearance → Switch back to classic (since 2.0.0-a; 2.0.0-g: the design choice "classic"). */
+    public function switchBackToClassic(): void
+    {
+        $user = $this->account();
+        $flags = app(InterfaceFlags::class);
+        if (! $flags->design($user)['can_switch_back']) {
+            return;
+        }
+        $flags->setDesign($user, 'classic');
+        $this->reopenAppearance();
+    }
+
+    /** 2.0.0-a's toggle, kept for older links: classic on or off. */
+    public function toggleClassic(): void
+    {
+        $this->account()->ui_classic ? $this->tryNewDesign() : $this->switchBackToClassic();
+    }
+
+    /** The other design draws the whole page (its frame too): open Appearance again in it. */
+    private function reopenAppearance(): void
+    {
         SettingsContext::forget();
+        $this->redirect(route('filament.app.auth.profile', ['subpage' => 'appearance']));
     }
 
     /** One category of emails on or off. */
