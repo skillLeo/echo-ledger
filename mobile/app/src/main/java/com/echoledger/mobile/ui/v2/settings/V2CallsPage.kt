@@ -340,7 +340,10 @@ private fun PhoneAppRecordingsGroup(settings: AppSettings, update: ((AppSettings
         }
     }
     // The last call's outcome in the screen's language; a note with no code isn't shown in other words.
-    note?.let { (at, words) -> LastCallNote.code(words)?.let { code -> at to code } }?.let { (at, code) ->
+    // The core's code, read back through the stopgap's sentences until the page maps the code itself.
+    note?.let { (at, core) ->
+        LastCallNote.code(core.english.replaceFirstChar { it.uppercase() })?.let { code -> at to code }
+    }?.let { (at, code) ->
         val said = stringResource(code.words, *code.args.toTypedArray())
         Note(stringResource(R.string.v2_calls_pa_last, clock.format(Instant.ofEpochMilli(at)), said))
     }

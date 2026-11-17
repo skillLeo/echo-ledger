@@ -507,7 +507,8 @@ internal fun PhoneAppRecordingsBlock(
                 ) { Text("Not this call") }
             }
         }
-        note?.let { (at, text) ->
+        note?.let { (at, code) ->
+            val text = code.english.replaceFirstChar { it.uppercase() }
             Text("Last call ${clock.format(java.time.Instant.ofEpochMilli(at))}: $text", color = Brand.Muted, fontSize = 12.sp)
         }
     }
