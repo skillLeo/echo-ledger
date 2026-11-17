@@ -7,7 +7,6 @@ namespace App\Services\Assist\Http;
 use App\Jobs\MakeAssistReportJob;
 use App\Models\AssistSession;
 use App\Models\AssistSuggestion;
-use App\Models\AssistTurn;
 use App\Services\Assist\AssistBudget;
 use App\Services\Assist\AssistPlans;
 use App\Services\Assist\Http\Ai\ModelFailure;
@@ -37,6 +36,9 @@ use Illuminate\Support\Str;
  */
 class SuggestionEngine
 {
+    /** Suggestions kept for the rewrites (the relay's history). */
+    private const HISTORY = 20;
+
     private const NO_TOKENS = ['input' => 0, 'cached' => 0, 'written' => 0, 'output' => 0];
 
     public function __construct(
@@ -48,6 +50,7 @@ class SuggestionEngine
         private readonly AssistBudget $budget,
         private readonly AssistPlans $plans,
         private readonly PromptBuilder $builder,
+        private readonly CallTranscript $transcripts,
     ) {}
 
     /**
@@ -66,9 +69,35 @@ class SuggestionEngine
     /** Me asked for help now: for the latest words of the other side (or the turn [$turnId]). */
     public function helpNow(AssistSession $session, ?string $turnId, EventStream $stream): void
     {
-        $transcript = $this->transcript($session);
+        $transcript = $this->transcripts->of($session);
         $turn = $turnId !== null ? $transcript->find($turnId) : $transcript->lastFrom('other');
         $this->start($session, Origin::helpNow($turn['id'] ?? null, $turn['text'] ?? ''), $stream, microtime(true));
+    }
+
+    /** A hint for a practice question (Them's turn [$turnId]): as for any question the other side asked. */
+    public function hint(AssistSession $session, string $turnId, string $text, EventStream $stream): void
+    {
+        $this->start($session, Origin::answer($turnId, $text), $stream, microtime(true), $this->state->otherFinals($session));
+    }
+
+    /**
+     * Me asked for another take on a finished suggestion ([$suggestionId], or the latest): a new suggestion that replaces
+     * it on the card, never SKIP and never sent to the upgrade model. Of the last 20 finished suggestions, as the relay keeps.
+     */
+    public function rewrite(AssistSession $session, string $kind, ?string $suggestionId, ?string $language, EventStream $stream): void
+    {
+        $history = AssistSuggestion::query()->where('assist_session_id', $session->id)->orderByDesc('id')->limit(self::HISTORY)->get();
+        $target = $suggestionId === null ? $history->first() : $history->firstWhere('suggestion_id', $suggestionId);
+        if (! $target instanceof AssistSuggestion) {
+            $stream->error('nothing_to_rewrite', 'There is no finished suggestion to change yet.');
+
+            return;
+        }
+        if ($kind === 'translate' && ($language === null || $language === 'off')) {
+            return;
+        }
+        $turn = $target->turn_id !== null ? $this->transcripts->of($session)->find($target->turn_id) : null;
+        $this->start($session, Origin::rewrite($kind, $target->turn_id, $turn['text'] ?? '', (string) $target->text, $language), $stream, microtime(true), 0, $target->suggestion_id);
     }
 
     /** Ends the suggestion being written ([$suggestionId], or whichever is on the card) as cancelled. */
@@ -94,7 +123,7 @@ class SuggestionEngine
 
             return;
         }
-        $plans = $this->candidates($session, $origin, $this->context->get($session), $this->transcript($session), $mode);
+        $plans = $this->candidates($session, $origin, $this->context->get($session), $this->transcripts->of($session), $mode);
         $run = $this->reserve($session, $origin, $plans, $t0, $replaces);
         if ($run === null) {
             if ($origin->explicit()) {
@@ -644,17 +673,6 @@ class SuggestionEngine
             'id' => $run->id, 'status' => $status, 'kind' => $run->origin->kind, 'turn_id' => $run->origin->turnId, 'model' => $run->model, 'mode' => $run->mode,
             'input_tokens' => $run->prompt->tokens(), 'started_at' => $run->t0,
         ];
-    }
-
-    /** The call's final turns, replayed in order (HTTP mode keeps no transcript in memory between requests). */
-    private function transcript(AssistSession $session): Transcript
-    {
-        $transcript = Transcript::fromConfig();
-        foreach (AssistTurn::query()->where('assist_session_id', $session->id)->orderBy('id')->cursor() as $turn) {
-            $transcript->push(['id' => $turn->client_ref, 'channel' => $turn->channel, 'text' => $turn->text, 'start_ms' => $turn->start_ms]);
-        }
-
-        return $transcript;
     }
 
     /**

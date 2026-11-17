@@ -20,6 +20,7 @@ class LiveHandler
         private readonly LiveState $state,
         private readonly ModeChoice $modes,
         private readonly SuggestionEngine $engine,
+        private readonly PracticeEngine $practice,
     ) {}
 
     /** @param  array<string, mixed>  $message */
@@ -30,6 +31,9 @@ class LiveHandler
             'turn_final' => $this->turnFinal($session, $message, $stream),
             'turn_partial' => $this->turnPartial($session, $message, $stream),
             'help_now' => $this->engine->helpNow($session, self::turnId($message), $stream),
+            'regenerate', 'shorter', 'formal' => $this->engine->rewrite($session, (string) $message['type'], self::turnId($message, 'suggestion_id'), null, $stream),
+            'translate' => $this->translate($session, $message, $stream),
+            'practice_next' => $this->practice->next($session, $stream),
             'cancel' => $this->engine->cancel($session, self::turnId($message, 'suggestion_id'), $stream),
             default => $stream->error('bad_message', 'That message is not supported.'),
         };
@@ -78,6 +82,18 @@ class LiveHandler
         if ($stored->wasRecentlyCreated) {
             $this->engine->answer($session, $turn['id'], $turn['text'], $this->state->otherFinalSent($session), $stream);
         }
+    }
+
+    /** @param  array<string, mixed>  $message */
+    private function translate(AssistSession $session, array $message, EventStream $stream): void
+    {
+        $language = $message['language'] ?? null;
+        if (! is_string($language) || ! in_array($language, ['off', 'urdu', 'roman_urdu', 'arabic'], true)) {
+            $stream->error('bad_message', 'That message could not be read.');
+
+            return;
+        }
+        $this->engine->rewrite($session, 'translate', self::turnId($message, 'suggestion_id'), $language, $stream);
     }
 
     /**
