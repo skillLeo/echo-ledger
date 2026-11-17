@@ -269,7 +269,7 @@ error answers. `fatal: true` means the relay closes the connection next.
 | `documents_too_large` | `documents` above about 60,000 tokens | no | Send the parts that matter, or retrieval chunks |
 | `nothing_to_rewrite` | A rewrite before any finished suggestion | no | Nothing |
 | `budget_exhausted` | Help now or a rewrite in `captions_only` | no | Show "Suggestions are off"; captions continue |
-| `budget_exhausted` (`retry: true`) | For now, the budget free beside calls in flight doesn't cover this suggestion even in the cheapest mode (it passes when they finish) | yes | Nothing, or "Try again in a moment" for help now |
+| `budget_exhausted` (`retry: true`) | Help now or a rewrite: for now, the budget free beside calls in flight doesn't cover it even in the cheapest mode (it passes when they finish) | yes | "Try again in a moment" |
 | `provider_not_configured` | The model's provider has no key on the server. Message: "Live Assist is not set up on the server yet. Ask your admin." (no vendor name) | no | Show the message |
 | `provider_unavailable`, `provider_timeout` | The model failed, after the fallback model if any | yes | Show the message; help now may work |
 | `model_declined` | The model declined, after the fallback model if any | no | Show the message |
@@ -370,9 +370,12 @@ Every suggestion (and its upgrade, and the cache warm-up) holds its worst case f
 both models, no cache, the longest answer; background calls hold theirs too. A suggestion starts only when its worst
 case fits in what is left with all of those held back. When the mode's doesn't fit (calls are in flight), the next
 cheaper allowed mode answers this one question, with no `mode_changed` (`suggestion_start.mode` says which); a hard
-question's upgrade that doesn't fit beside its draft is left out; when none fits, the app gets `budget_exhausted`
-with `retry: true` and no suggestion. The mode itself follows the budget left without those holds, so it never moves
-for a call in flight.
+question's upgrade that doesn't fit beside its draft is left out. When none fits, a question the app asked for (help
+now, regenerate, shorter, formal, translate) gets `budget_exhausted` with `retry: true` and no suggestion; an
+automatic one (a final or speculative turn) gets no message and waits: the relay starts it as soon as calls in flight
+release their holds, unless a newer question replaced it or Me has spoken since. A background call starts only when it
+leaves room for the reserved suggestions at the mode's worst case (one in Fast). The mode itself follows the budget
+left without those holds, so it never moves for a call in flight.
 
 ## Close codes
 

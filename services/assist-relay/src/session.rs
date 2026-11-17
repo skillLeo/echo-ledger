@@ -417,6 +417,11 @@ pub(crate) struct Engine {
     replying_to: Option<u64>,
     /// Background calls in flight and their worst-case cost: held back from the budget until their result arrives.
     reserved: HashMap<String, u64>,
+    /// The last automatic suggestion the budget gate turned away (its origin, when its question came, what it
+    /// replaces): started once reservations are released, unless a newer question replaced it or Me spoke since.
+    pending: Option<(Origin, Instant, Option<String>)>,
+    /// Reservations were released since the run loop last looked: time to try the pending suggestion again.
+    retry_due: bool,
     feed_tx: mpsc::Sender<Feed>,
     feed_rx: mpsc::Receiver<Feed>,
     suggestions: u64,
@@ -490,6 +495,8 @@ impl Engine {
             budget_limited: false,
             replying_to: None,
             reserved: HashMap::new(),
+            pending: None,
+            retry_due: false,
             feed_tx,
             feed_rx,
             suggestions: 0,
@@ -542,6 +549,9 @@ impl Engine {
             }
             if let Some(reason) = self.broken.take() {
                 self.detach(reason);
+            }
+            if std::mem::take(&mut self.retry_due) {
+                self.retry_pending();
             }
         }
         self.registry.remove(&self.session_id, self.generation);
@@ -948,7 +958,19 @@ impl Engine {
         self.claims.models.iter().any(|m| m == model) && self.config().model(model).is_some_and(|spec| spec.enabled)
     }
 
+    /// Starts the suggestion the budget gate turned away, now that reservations were released, unless Me has spoken
+    /// since its question (the moment has passed). A newer question already replaced it in `start`.
+    fn retry_pending(&mut self) {
+        let Some((origin, t0, replaces)) = self.pending.take() else { return };
+        if self.last_me_speech.is_some_and(|at| at > t0) {
+            return;
+        }
+        self.start(origin, t0, replaces);
+    }
+
     fn start(&mut self, origin: Origin, t0: Instant, replaces: Option<String>) {
+        // A newer question replaces whatever was waiting for budget.
+        self.pending = None;
         self.evaluate_mode(Why::Request);
         let Some(mode) = self.effective.mode() else {
             if origin.explicit() {
@@ -1002,7 +1024,14 @@ impl Engine {
             }
         }
         let Some((mode, plan, context, upgrade, fallback)) = chosen else {
-            self.error(ErrorMessage::new("budget_exhausted", "Not enough budget is free for a suggestion right now. Try again in a moment.").retry());
+            if origin.explicit() {
+                // The person asked: they hear why and may ask again.
+                self.error(ErrorMessage::new("budget_exhausted", "Not enough budget is free for a suggestion right now. Try again in a moment.").retry());
+            } else {
+                // Automatic: held quietly and started when background calls or other suggestions release their
+                // reservations.
+                self.pending = Some((origin, t0, replaces));
+            }
             return;
         };
         let id = self.next_id();
@@ -1541,6 +1570,7 @@ impl Engine {
 
     fn charge(&mut self, active: &Active) -> UsageReport {
         self.reserved.remove(&active.id);
+        self.retry_due = true;
         let (usage, estimated) = active.usage();
         let cost = self.config().model(&active.model).map_or(0, |spec| cost_micros(spec, &usage));
         self.add_spend(cost, &active.model);
@@ -1689,9 +1719,9 @@ impl Engine {
         [Some(&plan.primary), plan.fallback.as_ref()].into_iter().flatten().filter(|m| self.model_allowed(m)).cloned().collect()
     }
 
-    /// Starts one of the relay's own calls, unless no model is allowed or its cost could cross the budget left: the
-    /// same pricing as a suggestion's estimate, with the call's whole context as uncached input and its longest
-    /// answer as output, on the dearer of its models (`remaining()`).
+    /// Starts one of the relay's own calls, unless no model is allowed or its worst case (the call's whole context as
+    /// uncached input, its longest answer as output, on both its models) would leave less than the reserved
+    /// suggestions' worst cases in the budget free (`remaining()`).
     fn spawn_task(&mut self, kind: TaskKind, context: Context, question: String, max_output_tokens: u32) -> bool {
         let models = self.background_models();
         if models.is_empty() {
@@ -1710,7 +1740,8 @@ impl Engine {
             Some(mode) => {
                 let fixed = self.fixed_tokens();
                 let count = if mode == Mode::Fast { 1 } else { u64::from(config.budget.reserve_suggestions) };
-                self.estimate(mode, fixed).saturating_mul(count)
+                // The gate's own measure: what a suggestion in this mode may cost at most.
+                self.mode_worst(mode, fixed).saturating_mul(count)
             }
             None => 0,
         };
@@ -1811,6 +1842,7 @@ impl Engine {
 
     fn on_task(&mut self, kind: TaskKind, run: TaskRun) {
         self.reserved.remove(kind.id());
+        self.retry_due = true;
         match &kind {
             TaskKind::PracticeQuestion { .. } => self.practice_busy = false,
             TaskKind::Facts { .. } => self.facts_busy = false,
@@ -2034,6 +2066,7 @@ impl Engine {
         // What it reserved is its estimate: charged when it failed after its request was taken (a timeout, an error,
         // a dropped connection), not when the provider turned it away unprocessed (rate limited, no key).
         let estimate = self.reserved.remove(WARM_KEY).unwrap_or(0);
+        self.retry_due = true;
         let (cost, error) = match result {
             Ok(usage) => (self.config().model(&model).map_or(0, |spec| cost_micros(spec, &usage)), None),
             Err(error @ (ProviderError::NotConfigured(_) | ProviderError::RateLimited)) => (0, Some(error.code())),

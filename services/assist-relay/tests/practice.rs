@@ -207,6 +207,13 @@ async fn a_background_call_that_could_cross_the_budget_is_skipped() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_background_call_keeps_room_for_the_reserved_suggestions_at_their_worst() {
+    // Balanced, three suggestions kept (8 cents each at their worst) beside a facts call (8 cents): 32 cents.
+    assert_eq!(facts_calls_with_budget(31, "s-keep-short").await, (0, false));
+    assert_eq!(facts_calls_with_budget(32, "s-keep-room").await, (1, true));
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_ten_hour_captions_only_session_makes_no_background_calls_and_stays_responsive() {
     let h = harness(pricey_output());
     let mut token = claims("s-captions");
@@ -339,15 +346,18 @@ async fn practice_stops_after_three_failed_tries_at_a_question() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn suggestions_beside_background_calls_never_cross_the_budget_and_never_move_the_mode() {
+async fn a_question_turned_away_beside_a_facts_call_is_answered_once_the_call_finishes() {
     let mut config = pricey_output();
     // The slow facts call waits for Haiku instead of timing out to the fallback.
     config.models.get_mut("claude-haiku-5-5").unwrap().first_token_timeout_ms = 30_000;
+    // Background calls keep room for one suggestion at the mode's worst case.
+    config.budget.reserve_suggestions = 1;
     let h = harness(config);
     let mut token = claims("s-gate");
-    // 15 cents. Balanced runs (one worst case: 8 cents). A slow facts call holds 8 cents while questions come.
-    token.budget.cents_left = 15;
-    let budget_micros = 150_000;
+    // 16 cents. A slow facts call holds 8 cents (its worst case) beside one Balanced suggestion's worst (8 cents);
+    // answers spend the rest down while it is in flight.
+    token.budget.cents_left = 16;
+    let budget_micros = 160_000;
     let mut s = h.connect(token);
     assert_eq!(s.next().await["mode"], "balanced");
     s.drain(Duration::from_millis(200)).await;
@@ -356,30 +366,88 @@ async fn suggestions_beside_background_calls_never_cross_the_budget_and_never_mo
         s.send(final_turn(&format!("m-{i}"), "me", line)).await;
     }
     let mut seen = Vec::new();
-    for turn in 0..6 {
-        s.send(final_turn(&format!("o-{turn}"), "other", "What is your notice period?")).await;
-        let reply = s.next().await;
-        if reply["type"] == "suggestion_start" {
-            seen.push(reply.clone());
-            seen.extend(s.until("suggestion_end").await);
-        } else {
-            seen.push(reply);
+    let mut held = Vec::new();
+    for turn in 0..30 {
+        if !held.is_empty() {
+            break;
+        }
+        let turn_id = format!("o-{turn}");
+        s.send(final_turn(&turn_id, "other", "What is your notice period?")).await;
+        // A Fast answer starts at once; a question the gate turns away gets no message at all.
+        match s.next_within(Duration::from_secs(1)).await {
+            Some(reply) if reply["type"] == "suggestion_start" => {
+                seen.push(reply);
+                seen.extend(s.until("suggestion_end").await);
+            }
+            Some(reply) => seen.push(reply),
+            None => held.push(turn_id),
         }
         assert!(h.state.registry.spent("s-gate") <= budget_micros);
     }
-    // Balanced's worst case doesn't fit beside the facts call: Fast takes the questions, silently.
-    let starts = of_type(&seen, "suggestion_start");
-    assert!(!starts.is_empty() && starts.iter().all(|m| m["mode"] == "fast"), "{starts:?}");
-    // When even Fast's worst case doesn't fit, the question is refused for now (retry), the mode unchanged.
-    let refused = of_type(&seen, "error");
-    assert!(refused.iter().any(|e| e["code"] == "budget_exhausted" && e["retry"] == true), "{seen:?}");
-    seen.extend(s.drain(Duration::from_secs(25)).await);
-    assert!(of_type(&seen, "mode_changed").is_empty(), "no mode_changed: {:?}", of_type(&seen, "mode_changed"));
+    // Balanced answers while its worst case fits beside the facts call; then Fast takes the questions, silently.
+    let modes: Vec<&str> = of_type(&seen, "suggestion_start").iter().filter_map(|m| m["mode"].as_str()).collect();
+    assert_eq!(modes.first(), Some(&"balanced"), "{modes:?}");
+    assert!(modes.contains(&"fast") && modes.iter().skip_while(|m| **m == "balanced").all(|m| *m == "fast"), "{modes:?}");
+    // When even Fast's worst case doesn't fit, an automatic question is held quietly, no error...
+    assert!(!held.is_empty(), "some questions waited for budget: {seen:?}");
+    assert!(of_type(&seen, "error").is_empty(), "{seen:?}");
+    assert!(!h.reports.reports().iter().any(|r| matches!(r, Report::Facts(_))), "the facts call is still in flight");
+    // ...while the person asking hears why, and may ask again. Their request replaces the held question.
+    s.send(json!({"type": "help_now"})).await;
+    let refused = s.next().await;
+    assert_eq!((refused["code"].as_str(), refused["retry"].as_bool()), (Some("budget_exhausted"), Some(true)), "{refused}");
+    // The newest question is held; once the facts call finishes and releases its reservation, it is answered.
+    s.send(final_turn("o-7", "other", "And when could you start?")).await;
+    assert_eq!(s.next_within(Duration::from_secs(1)).await, None, "held");
+    let after = s.drain(Duration::from_secs(25)).await;
     assert!(h.reports.reports().iter().any(|r| matches!(r, Report::Facts(_))), "the facts call finished");
+    let restarted = of_type(&after, "suggestion_start");
+    assert_eq!(restarted.len(), 1, "only the newest held question starts: {after:?}");
+    assert_eq!(restarted[0]["turn_id"], "o-7");
+    assert_eq!(of_type(&after, "suggestion_end").last().map(|m| m["status"].clone()), Some(json!("done")), "{after:?}");
+    seen.extend(after);
+    assert!(of_type(&seen, "mode_changed").is_empty(), "no mode_changed: {:?}", of_type(&seen, "mode_changed"));
     assert!(h.state.registry.spent("s-gate") <= budget_micros, "spent {}", h.state.registry.spent("s-gate"));
     // With the facts call done and its reservation released, Balanced answers again.
     s.send(final_turn("o-9", "other", "What is your notice period?")).await;
     assert_eq!(s.next().await["mode"], "balanced");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_held_question_is_dropped_once_me_starts_speaking() {
+    let mut config = pricey_output();
+    config.models.get_mut("claude-haiku-5-5").unwrap().first_token_timeout_ms = 30_000;
+    config.budget.reserve_suggestions = 1;
+    let h = harness(config);
+    let mut token = claims("s-held-me");
+    token.budget.cents_left = 16;
+    let mut s = h.connect(token);
+    assert_eq!(s.next().await["mode"], "balanced");
+    s.drain(Duration::from_millis(200)).await;
+    h.mock(assist_relay::domain::ProviderKind::Anthropic).push(assist_relay::provider::MockBehavior::Late(Duration::from_secs(20)));
+    for (i, line) in ["I can start on the 3rd.", "My rate is 35 dollars an hour.", "The first build takes 2 weeks."].iter().enumerate() {
+        s.send(final_turn(&format!("m-{i}"), "me", line)).await;
+    }
+    // Spend Fast answers until a question is held.
+    let mut held = None;
+    for turn in 0..30 {
+        let turn_id = format!("o-{turn}");
+        s.send(final_turn(&turn_id, "other", "What is your notice period?")).await;
+        match s.next_within(Duration::from_secs(1)).await {
+            Some(reply) if reply["type"] == "suggestion_start" => drop(s.until("suggestion_end").await),
+            Some(reply) => panic!("unexpected {reply}"),
+            None => {
+                held = Some(turn_id);
+                break;
+            }
+        }
+    }
+    assert!(held.is_some(), "a question was held");
+    // Me answers it themselves before the facts call is done: the moment has passed.
+    s.send(json!({"type": "turn_partial", "turn_id": "m-9", "channel": "me", "text": "Two weeks, I", "silence_ms": 0})).await;
+    let after = s.drain(Duration::from_secs(25)).await;
+    assert!(h.reports.reports().iter().any(|r| matches!(r, Report::Facts(_))), "the facts call finished");
+    assert!(of_type(&after, "suggestion_start").is_empty(), "{after:?}");
 }
 
 #[tokio::test(start_paused = true)]
