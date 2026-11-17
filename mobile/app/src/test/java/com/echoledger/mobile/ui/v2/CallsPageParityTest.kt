@@ -34,7 +34,7 @@ import org.robolectric.shadows.ShadowBuild
  * Calls & meetings parity. Today's page (SettingsScreen on "calls") and the v2 page (CallsPage) are each walked through
  * the same steps, and their controls ("kind: name") collected after every step: as it opens; a call app typed in (Add
  * on); the app added (its Remove); SIM calls set to Always (the Phone app's recordings appear, with a recording waiting
- * and its settings openable); importing switched on (Delete the copy can be switched); Import this recording (the
+ * and its settings openable); the import switched (from its default, on); Import this recording (the
  * dialog); Reset to defaults (its question). Every control of today's page is mapped to its v2 control by kind and
  * name, and the two must first appear in the same step.
  */
@@ -83,9 +83,11 @@ class CallsPageParityTest : ScreenTest() {
                 pumpUntil("always") { vm.settings.value.phoneCalls == "always" }
             }
 
+            // The import switched from its default (on) and its effect waited for.
             Step.Importing -> {
+                val was = vm.settings.value.phoneAppImport
                 press("Import the Phone app's recordings")
-                pumpUntil("importing") { vm.settings.value.phoneAppImport }
+                pumpUntil("importing switched") { vm.settings.value.phoneAppImport != was }
             }
 
             Step.Dialog -> press("Import the recording of your call at 08:00")
@@ -152,8 +154,15 @@ class CallsPageParityTest : ScreenTest() {
     fun todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps() {
         val today = mutableMapOf<String, Step>()
         val v2 = mutableMapOf<String, Step>()
-        // One walk on today's page, then the same walk on the v2 page, each from the walked settings' defaults.
-        startFromDefaults()
+        // One walk on today's page from the walked settings' defaults, then the same walk on the v2 page (put back first).
+        val d = AppSettings()
+        val s = kotlinx.coroutines.runBlocking { app.graph.settings.current() }
+        assertEquals(
+            "the walked settings start at their defaults (an earlier test in this JVM left them changed?)",
+            listOf(d.extraCallApps, d.phoneCalls, d.phoneAppImport, d.deletePhoneAppCopy),
+            listOf(s.extraCallApps, s.phoneCalls, s.phoneAppImport, s.deletePhoneAppCopy)
+        )
+        pumpUntil("the view model shows the stored settings") { vm.settings.value == s }
         showBoth()
         today += ParityKit.firstSeen(compose, Step.entries, ::run)
         assertEquals(today.toString(), true, today.size > 30)
@@ -171,7 +180,7 @@ class CallsPageParityTest : ScreenTest() {
 
     private var page by androidx.compose.runtime.mutableIntStateOf(0)
 
-    /** The walked settings at their defaults, as the view model shows them (whatever an earlier test left). */
+    /** The walked settings back at their defaults, as the view model shows them, for the v2 walk. */
     private fun startFromDefaults() {
         val d = AppSettings()
         vm.updateSettings {
