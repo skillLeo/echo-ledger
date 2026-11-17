@@ -482,6 +482,9 @@ fn audio_processes() -> Vec<AudioProcess> {
     read_audio_processes().unwrap_or_default()
 }
 
+/// What the person reads when Core Audio could not be asked (its status code goes to the log only).
+const NOT_ANSWERED: &str = "macOS did not answer";
+
 /// The same, saying when Core Audio could not be asked: an empty list then is not "nothing plays".
 fn read_audio_processes() -> Result<Vec<AudioProcess>, String> {
     let mut out = Vec::new();
@@ -491,7 +494,8 @@ fn read_audio_processes() -> Result<Vec<AudioProcess>, String> {
         let mut size: u32 = 0;
         let status = AudioObjectGetPropertyDataSize(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size));
         if status != 0 {
-            return Err(format!("Core Audio did not list the apps (error {status})"));
+            eprintln!("[echoledger] Core Audio's process list: size error {status}");
+            return Err(NOT_ANSWERED.into());
         }
         let count = size as usize / std::mem::size_of::<AudioObjectID>();
         let mut ids = vec![0 as AudioObjectID; count];
@@ -500,7 +504,8 @@ fn read_audio_processes() -> Result<Vec<AudioProcess>, String> {
         }
         let status = AudioObjectGetPropertyData(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size), NonNull::new_unchecked(ids.as_mut_ptr().cast()));
         if status != 0 {
-            return Err(format!("Core Audio did not list the apps (error {status})"));
+            eprintln!("[echoledger] Core Audio's process list: data error {status}");
+            return Err(NOT_ANSWERED.into());
         }
         for id in ids {
             let Some(pid) = get_u32(id, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal, None) else { continue };
