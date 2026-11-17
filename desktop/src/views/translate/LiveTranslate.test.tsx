@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { LiveTranslateCard } from "../main/LiveTranslateCard";
 import TranslateOverlayApp from "./TranslateOverlayApp";
-import { TRANSLATE_FEED, type TranslateFeed, tailText } from "../../lib/translate";
+import { RUNNING_STATUSES, TRANSLATE_FEED, type TranslateFeed, endedWords, tailText, translatePhase } from "../../lib/translate";
+import translateRs from "../../../src-tauri/src/translate/mod.rs?raw";
 import { callsOf, emitEvent, listenerCount, resetTauriMock, respond } from "../../test/tauri";
 
 const subscribed = () => waitFor(() => expect(listenerCount(TRANSLATE_FEED)).toBeGreaterThan(0));
@@ -69,6 +70,97 @@ describe("Live Translate card", () => {
   });
 });
 
+describe("Live Translate's status: running, ended, stopped", () => {
+  it("sorts the feed's statuses, and a status this app doesn't know never counts as running", () => {
+    for (const status of ["listening", "live", "quiet", "reconnecting"]) expect(translatePhase(feed({ status }))).toBe("running");
+    expect(translatePhase(feed({ status: "ended" }))).toBe("ended");
+    expect(translatePhase(feed({ status: "paused_by_core_9" }))).toBe("ended");
+    expect(translatePhase(feed({ status: "stopped" }))).toBe("stopped");
+    expect(translatePhase(null)).toBe("stopped");
+    expect(translatePhase({ running: false } as unknown as TranslateFeed)).toBe("stopped");
+    expect(endedWords(feed({ status: "ended", notice: "Valorant closed." }))).toBe("Valorant closed.");
+    expect(endedWords(feed({ status: "ended" }))).toBe("Live Translate ended. Valorant closed or stopped playing sound.");
+    expect(endedWords(feed({ status: "ended", app: "" }))).toBe("Live Translate ended. The app closed or stopped playing sound.");
+  });
+
+  it("knows every status the core sets: running ones as running, stopped and ended as not", () => {
+    const set = [...translateRs.matchAll(/status(?: =|:) "([a-z_]+)"\.into\(\)/g)].map((m) => m[1]);
+    expect(set.length).toBeGreaterThan(3);
+    for (const status of set) expect(RUNNING_STATUSES.has(status) || status === "stopped" || status === "ended", status).toBe(true);
+  });
+
+  it("card, running: what it does and Stop", async () => {
+    render(<LiveTranslateCard run={run} />);
+    await subscribed();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "live" })));
+    expect(screen.getByText("Valorant · translating")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(screen.getByLabelText("App to translate")).toBeDisabled();
+  });
+
+  it("card, ended: the reason in plain words, Close instead of Stop, nothing that looks running; Close brings the form back", async () => {
+    render(<LiveTranslateCard run={run} />);
+    await subscribed();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "ended", notice: "The game closed, so Live Translate stopped." })));
+    expect(screen.getByRole("status")).toHaveTextContent("The game closed, so Live Translate stopped.");
+    expect(screen.getByTestId("translate-ended")).toHaveTextContent("Valorant · ended");
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Move Live Translate|Lock Live Translate/ })).toBeNull();
+    expect(screen.queryByText(/translating/)).toBeNull();
+    expect(screen.queryByText(/Ctrl\+Shift\+T lets you move/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(callsOf("translate_stop")).toHaveLength(1));
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.getByLabelText("App to translate")).not.toBeDisabled();
+  });
+
+  it("card, ended before it opened (translate_status), and a status it doesn't know: never running", async () => {
+    respond("translate_status", feed({ status: "ended" }));
+    render(<LiveTranslateCard run={run} />);
+    expect(await screen.findByRole("button", { name: "Close" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Live Translate ended. Valorant closed or stopped playing sound.");
+    await subscribed();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "something_new" })));
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("card, opened on a session that already ended (status() keeps its feed): the reason, Close, and Close stops it", async () => {
+    respond("translate_status", feed({ status: "ended", notice: "Valorant stopped playing sound, so Live Translate ended." }));
+    render(<LiveTranslateCard run={run} />);
+    expect(await screen.findByRole("button", { name: "Close" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Valorant stopped playing sound, so Live Translate ended.");
+    expect(screen.getByTestId("translate-ended")).toHaveTextContent("Valorant · ended");
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(callsOf("translate_stop")).toHaveLength(1));
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+  });
+
+  it("card, stopped: the form and Start, no status line", async () => {
+    render(<LiveTranslateCard run={run} />);
+    await subscribed();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "live" })));
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "stopped" })));
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(screen.queryByText(/Valorant ·/)).toBeNull();
+  });
+
+  it("the overlay shows a running session only: an ended one, a status it doesn't know and a stopped one leave nothing", async () => {
+    const { container } = render(<TranslateOverlayApp />);
+    await subscribed();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "live", text: "Enemy at the red house." })));
+    expect(screen.getByText("Enemy at the red house.")).toBeInTheDocument();
+    for (const status of ["ended", "something_new", "stopped"]) {
+      await act(async () => emitEvent(TRANSLATE_FEED, feed({ status, text: "Enemy at the red house." })));
+      expect(container, status).toBeEmptyDOMElement();
+    }
+  });
+});
+
 describe("Live Translate overlay", () => {
   it("shows the settled text, the changing words apart, and the original line", async () => {
     render(<TranslateOverlayApp />);
@@ -98,10 +190,10 @@ describe("Live Translate overlay", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Live Translate is listening · ⌘⇧H to show");
     await act(async () => emitEvent(TRANSLATE_FEED, feed({ hidden: false, locked: false, lock_keys: "⌘⇧T" })));
     expect(screen.getByRole("button", { name: "Done (⌘⇧T)" })).toBeInTheDocument();
-    // Ended on its own: the window keeps the reason, never the listening pill.
-    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "ended", hidden: false, notice: "This app stopped playing sound. Play something in it, then start Live Translate again." })));
-    expect(screen.getByText(/This app stopped playing sound/)).toBeInTheDocument();
+    // Ended on its own, even while hidden: never the listening pill; the overlay leaves the reason to the panel.
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "ended", hidden: true, notice: "This app stopped playing sound. Play something in it, then start Live Translate again." })));
     expect(screen.queryByText(/is listening/)).toBeNull();
+    expect(container).toBeEmptyDOMElement();
     await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "stopped" })));
     expect(container).toBeEmptyDOMElement();
   });

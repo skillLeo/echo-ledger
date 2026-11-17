@@ -197,13 +197,14 @@ describe("commands awaited from the core are called only where their fallback sa
     expect(wrappersOf("live_translate_status")).toEqual(["liveTranslateStatus"]);
   });
 
+  // With the list empty (as after core batches 3 and 4) this holds trivially; the next test keeps the rule itself checked.
   it("no awaited command is called outside its listed callers", () => {
     expect(strayCalls(appSources, AWAITING_CORE.commands)).toEqual([]);
   });
 
   it("a stray call fails: by its wrapper, or by invoking its name", () => {
     const listed = [{ name: "live_translate_status", fallback: "safe", callers: ["lib/ipc.ts", "v2/live/LiveV2.tsx"] },
-      { name: "diagnostic_report_copy", fallback: "not called", callers: [] }];
+      { name: "diagnostic_report_copy", fallback: "called only from its wrapper", callers: ["lib/ipc.ts"] }];
     const sources = {
       "lib/ipc.ts": appSources["lib/ipc.ts"],
       "v2/live/LiveV2.tsx": "api.liveTranslateStatus().then(set);",

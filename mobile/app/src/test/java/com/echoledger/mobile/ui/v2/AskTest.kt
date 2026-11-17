@@ -116,8 +116,9 @@ class AskTest {
     fun screenshots() {
         var language by mutableStateOf(EchoLanguage.English)
         var which by mutableStateOf("ask-answer")
+        var dark by mutableStateOf(false)
         compose.setContent {
-            EchoV2Theme(darkTheme = false, language = language) {
+            EchoV2Theme(darkTheme = dark, language = language) {
                 val q = if (language ==
                     EchoLanguage.Urdu
                 ) {
@@ -132,11 +133,13 @@ class AskTest {
             }
         }
         for (name in listOf("ask-answer", "ask")) {
-            for (l in EchoLanguage.entries) {
+            for ((l, d) in listOf(EchoLanguage.English to false, EchoLanguage.Urdu to false, EchoLanguage.English to true)) {
                 which = name
                 language = l
+                dark = d
                 compose.waitForIdle()
-                compose.onRoot().captureRoboImage(File(outDir, "$name-light-${if (l == EchoLanguage.Urdu) "ur" else "en"}.png"))
+                val file = "$name-${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}.png"
+                compose.onRoot().captureRoboImage(File(outDir, file))
             }
         }
     }

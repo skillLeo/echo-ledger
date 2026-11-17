@@ -207,7 +207,7 @@ export const SHARES: ShareLink[] = [
 
 /** What teammates sent (v1.5). */
 export const SHARED: SharedItem[] = [
-  { id: "sw1", kind: "session", from: { name: "Hassam", email: "hassam@example.com" }, note: "For tomorrow's review, the part about the launch date.", title: "Call with Omar", sent_at: at(0, 8, 45), saved_at: null, client: null,
+  { id: "sw1", kind: "session", from: { name: "Imran", email: "imran@example.com" }, note: "For tomorrow's review, the part about the launch date.", title: "Call with Omar", sent_at: at(0, 8, 45), saved_at: null, client: null,
     session: makeItem("x1", { title: "Call with Omar", source_app: "whatsapp", source_app_label: "WhatsApp", source_device: "phone", source_device_label: "Phone", client: client("x-omar", "Omar Traders"),
       started_at: at(1, 17, 20), duration_ms: 486_000, status: "completed", transcript: ready("x1", "Assalam o alaikum Omar bhai.") }) },
   { id: "sw2", kind: "project", from: { name: "Ana", email: "ana@contoso.com" }, note: null, title: "Northwind onboarding", sent_at: at(2, 14), saved_at: null, session: null, client: { id: "x-nw", name: "Northwind onboarding" } },
@@ -221,8 +221,8 @@ export const REQUESTS: RequestLink[] = [
 
 /** Settings → Account (v1.5). */
 export const ACCOUNT = {
-  name: "Hassam Ali",
-  email: "hassam@example.test",
+  name: "Ayesha Khan",
+  email: "ayesha@example.test",
   email_verified: true,
   two_factor: true,
   google: true,

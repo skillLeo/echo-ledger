@@ -13,19 +13,9 @@ export type AwaitedCommand = { name: string; fallback?: string; callers: readonl
 export const AWAITING_CORE: { removeBy: string; commands: readonly AwaitedCommand[] } = {
   /** The app version by which the list must be empty. */
   removeBy: "2.0.0",
-  /** Core batch 4 (the checks' advisory rows are a field of ready_check, not a command). */
-  commands: [
-    {
-      name: "live_translate_status",
-      fallback: "Without it the Live tab works the answer out from the system and the plan, and shows Live Translate as unavailable where it can't run.",
-      callers: ["lib/ipc.ts", "v2/live/LiveV2.tsx"],
-    },
-    {
-      name: "diagnostic_report_copy",
-      fallback: "Nothing in the app calls it yet: Setup & health shows no Copy the report button until the core has it.",
-      callers: [],
-    },
-  ],
+  /** Empty: core batches 3 and 4 brought live_translate_status and diagnostic_report_copy. A command the interface
+   * wraps before the core has it goes here, with its fallback and callers. */
+  commands: [],
 };
 
 /** The names on the list. */

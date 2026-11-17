@@ -167,6 +167,8 @@ describe("LibraryV2", () => {
       await open();
       expect(callsOf("session_screens")).toEqual([{ id: "bilal" }]);
       const strip = screen.getByRole("region", { name: "3 screens" });
+      // "3 screens" keeps its order in a right-to-left window.
+      expect(screen.getByRole("heading", { name: "3 screens" })).toHaveAttribute("dir", "auto");
       expect(within(strip).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
         "Screen 1 · 0:04: The proforma invoice", "Screen 2 · 0:07: The bank's LC form", "Screen 3 · 1:00",
       ]);

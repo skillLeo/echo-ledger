@@ -84,7 +84,7 @@
     <string name="v2_calls_note_not_always">نہیں لائی گئی: فون کالز ریکارڈ کریں ہمیشہ پر نہیں تھا۔</string>
     <string name="v2_calls_note_unknown_maker">آپ کا انتظار: فون نہیں بتاتا کہ فائل کس ایپ نے بنائی؛ اگر یہ اسی کال کی ہے تو ترتیبات میں لائیں۔</string>
     <string name="v2_calls_note_other_app">نہیں لائی گئی: کال فولڈر میں فائل کسی اور ایپ نے بنائی۔</string>
-    <string name="v2_calls_note_other_app_named">نہیں لائی گئی: کال فولڈر میں فائل کسی اور ایپ (%1$s) نے بنائی۔</string>
+    <string name="v2_calls_note_other_app_named">نہیں لائی گئی: کال فولڈر میں فائل کسی اور ایپ (\u2066%1$s\u2069) نے بنائی۔</string>
     <string name="v2_calls_note_too_large">نہیں لائی گئی: فائل اس کال کی ریکارڈنگ سے بڑی ہے۔</string>
     <string name="v2_calls_note_copy_did_not_come">فون ایپ کی کاپی نہیں آئی: EchoLedger کی اپنی ریکارڈنگ (صرف آپ کی آواز) معمول کے مطابق رکھی گئی۔</string>
     <string name="v2_calls_note_no_longer_waiting">نہیں لائی گئی: یہ اب انتظار میں نہیں۔</string>
@@ -96,7 +96,7 @@
     <string name="v2_calls_note_saving">ابھی نہیں لائی گئی: فون ایپ ابھی فائل محفوظ کر رہی ہے۔</string>
     <string name="v2_calls_note_no_permission">نہیں لائی گئی: آڈیو فائلیں یا کال لاگ پڑھنے کی اجازت نہیں۔</string>
     <string name="v2_calls_note_phone_calls_off">نہیں لائی گئی: فون کالز بند ہیں۔</string>
-    <string name="v2_calls_note_app_auto_off">نہیں لائی گئی: %1$s کے لیے خود ریکارڈ بند ہے۔</string>
+    <string name="v2_calls_note_app_auto_off">نہیں لائی گئی: \u2066%1$s\u2069 کے لیے خود ریکارڈ بند ہے۔</string>
     <string name="v2_calls_note_record_not_chosen">نہیں لائی گئی: ریکارڈ نہیں چنا گیا۔</string>
     <string name="v2_calls_note_not_wanted">نہیں لائی گئی: یہ کال ریکارڈ نہیں ہونی تھی۔</string>
     <string name="v2_calls_note_changed_while_read">نہیں لائی گئی: پڑھتے وقت فائل بدل گئی۔</string>

@@ -2,20 +2,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import type { AppStatus, PermissionsStatus, ScreensStatus, Settings, SettingsPatch } from "../../../lib/ipc";
-import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../../test/tauri";
 import { answerConfirm } from "../../../test/confirm";
-import { collectControls, stale, type ControlRole, type RolelessField } from "../../../test/parity";
-import { makeItem, makeMicUser, makeSettings, makeStatus, sampleEntitlements } from "../../../test/fixtures";
+import { collectControls, disabledSwitches, stale, type ControlRole, type RolelessField } from "../../../test/parity";
+import { makeItem, makeMicUser, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../../test/fixtures";
 import { resetEntitlementsForTests } from "../../../lib/entitlements";
-import { LanguagePage, WordsPage } from "../../../views/main/AppSettings";
+import { AboutPage, AppearancePage, LanguagePage, ShortcutsPage, WordsPage } from "../../../views/main/AppSettings";
+import { getThemeChoice } from "../../../lib/theme";
+import { loadPreferences } from "../../../lib/shell";
 import { TranscriptionKeyPage } from "../../../views/main/Upgrade";
-import { ConsentPage, PrivacyPage, SecurityPage } from "../../../views/main/AccountSettings";
-import { LockPage, NotificationsPage, StoragePage } from "../../../views/main/SecuritySettings";
+import { ConsentPage, PrivacyPage, ProfilePage, SecurityPage } from "../../../views/main/AccountSettings";
+import { PlanUsagePage } from "../../../views/main/Upgrade";
+import { useUpgradeSheet } from "../../../lib/entitlements";
+import { DevicesPage, LockPage, NotificationsPage, StoragePage } from "../../../views/main/SecuritySettings";
 import { resetTrashKeepHoursForTests } from "../../../lib/trash";
 import type { Account } from "../../../lib/ipc";
 import MainApp from "../../../views/main/MainApp";
 import { CallSitesPage, CallsPage, CaptionStylePage, CaptionsPage, MicrophonePage } from "../../../views/main/CaptureSettings";
-import { ExcludedAppsPage, ScreenMomentsPage } from "../../../views/main/ScreenSettings";
+import { MacCheckCard } from "../../../views/main/MacCheck";
+import type { CheckItem, CheckReport } from "../../../lib/ipc";
+import { ExcludedAppsPage, MONTHLY_NOTE, ScreenMomentsPage, TARGET_HINT, WINDOWS_WHOLE_SCREEN, screensBlocked } from "../../../views/main/ScreenSettings";
+import { setting } from "../../../lib/settingsRegistry";
 import { HistoryPage, ReplacementsPage, SnippetsPage, VoicePage } from "../../../views/main/DictationSettings";
 import { SettingsPagesV2 } from "./SettingsPagesV2";
 import { hasV2Page, sectionTarget } from "./route";
@@ -31,6 +38,18 @@ const SETTINGS = makeSettings({
 const ACCOUNT: Account = { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: true, google: false, created_at: null, workspace: null, deletes_at: null };
 const HISTORY = [{ at: "2026-11-17T08:00:00Z", text: "Send the proforma today." }];
 const run = <T,>(fn: () => Promise<T>) => fn().catch(() => undefined);
+const CHECK_OK: CheckItem = { key: "macos_version", title: "macOS version", state: "ok", detail: "macOS 15.1: call audio works on this version.", fix: null };
+const CHECK_OFF: CheckItem = { key: "system_audio_permission", title: "System audio permission", state: "off",
+  detail: "Off. Without it a recording has your voice, not the other side of the call.", fix: { label: "Open System Settings", settings: "system_audio" } };
+const CHECK_REOPEN: CheckItem = { key: "screen_permission", title: "Screen Recording", state: "limited", detail: "Allowed while EchoLedger ran: it applies after a reopen.",
+  fix: { label: "Quit & reopen", settings: "screen", reopen: true } };
+const macReport = (over: Partial<CheckReport> = {}): CheckReport =>
+  ({ items: [CHECK_OK, CHECK_OFF, CHECK_REOPEN], stopped: null, finishedAt: "2026-11-17T08:00:00Z", appVersion: "2.0.0", osVersion: "15.1", model: "Mac14,2", sentAt: null, ...over });
+const UPDATE_IDLE = { phase: "idle", current: "2.0.0", version: null, notes: null, checkedAt: "2026-11-17T08:00:00Z", message: null, progress: null };
+const DEVICES = [
+  { id: "d2", name: "Ayesha's S25", platform: "android", app_version: "2.0.0", last_seen_at: "2026-11-17T07:00:00Z", paired_at: null, current: false },
+  { id: "d1", name: "Work laptop", platform: "windows", app_version: "2.0.0", last_seen_at: null, paired_at: null, current: true },
+];
 
 beforeEach(() => {
   resetTauriMock();
@@ -50,6 +69,8 @@ beforeEach(() => {
   respond("screens_status", { supported: true, platform: "windows", borderless: false, permission: true, inPlan: true, onServer: true });
   respond("screens_permission", false);
   respond("lock_status", { enabled: false, locked: false, hasPin: false, osMethod: "windows_hello", retryAfterSeconds: 0 });
+  respond("update_status", UPDATE_IDLE);
+  respond("mac_check_last", null);
 });
 
 let onUnpaired = vi.fn();
@@ -72,7 +93,8 @@ describe("which sections open a v2 page", () => {
     expect(hasV2Page("calls")).toBe(true);
     expect(hasV2Page("lock")).toBe(true);
     expect(hasV2Page("notifications")).toBe(true);
-    expect(hasV2Page("appearance")).toBe(false);
+    expect(hasV2Page("appearance")).toBe(true);
+    expect(hasV2Page("help")).toBe(false);
     expect(hasV2Page("nonsense")).toBe(false);
   });
 });
@@ -517,7 +539,8 @@ describe("Storage v2", () => {
     expect(Number(meter.getAttribute("aria-valuenow"))).toBeGreaterThan(0);
     expect(screen.getByText("1,234 recordings")).toBeInTheDocument();
     expect(screen.getByText("1 year")).toBeInTheDocument();
-    expect(screen.getAllByText(/72 hours/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/3 days/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Trash")).toBeInTheDocument();
   });
 
   it("says the same facts as today's page (today's says the Bin keeps 2 days; v2 says Trash, with the server's hours)", async () => {
@@ -538,6 +561,354 @@ describe("Storage v2", () => {
   });
 });
 
+describe("Appearance v2", () => {
+  it("theme, sidebar, density and clock are kept on this computer and followed at once; Reset puts them back", async () => {
+    localStorage.clear();
+    const followed = vi.fn();
+    window.addEventListener("echoledger:preferences", followed);
+    await show("appearance");
+    const group = (name: string) => within(screen.getByRole("radiogroup", { name }));
+    fireEvent.click(group("Theme").getByRole("radio", { name: "Dark" }));
+    fireEvent.click(group("Sidebar style").getByRole("radio", { name: "Soft grey" }));
+    fireEvent.click(group("Density").getByRole("radio", { name: "Compact" }));
+    fireEvent.click(group("Times").getByRole("radio", { name: "24-hour" }));
+    expect(getThemeChoice()).toBe("dark");
+    expect(loadPreferences()).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24" });
+    expect(document.documentElement.dataset.density).toBe("compact");
+    expect(followed).toHaveBeenCalledTimes(3);
+    expect(group("Theme").getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
+    answerConfirm().mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    await act(flushAsync);
+    expect(getThemeChoice()).toBe("system");
+    expect(loadPreferences()).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12" });
+    window.removeEventListener("echoledger:preferences", followed);
+  });
+
+  it("the app's theme is the one shown, and a change goes to the app (the top bar's toggle agrees)", async () => {
+    const onTheme = vi.fn();
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "appearance", seq: 1 }} onHome={vi.fn()} run={run} status={makeStatus()} onUnpaired={vi.fn()} theme="light" onTheme={onTheme} /></div>);
+    await act(flushAsync);
+    const theme = within(screen.getByRole("radiogroup", { name: "Theme" }));
+    expect(theme.getByRole("radio", { name: "Light" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(theme.getByRole("radio", { name: "Dark" }));
+    expect(onTheme).toHaveBeenCalledWith("dark");
+  });
+});
+
+describe("Keyboard shortcuts v2", () => {
+  const key = (init: KeyboardEventInit) => act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", init)); await flushAsync(); });
+
+  it("Change listens for the keys and saves them; Escape stops listening; Clear empties one; Reset asks", async () => {
+    respondWith("set_shortcut", ({ action, accelerator }) => ({ ...SETTINGS, shortcuts: { ...SETTINGS.shortcuts, [action as string]: accelerator } }));
+    respond("reset_shortcuts", SETTINGS);
+    await show("shortcuts");
+    fireEvent.click(screen.getByRole("button", { name: "Change Record now" }));
+    expect(screen.getByText("Press keys… (Esc cancels)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change Record now" })).toHaveAttribute("aria-pressed", "true");
+    await key({ key: "Escape", code: "Escape" });
+    expect(screen.queryByText("Press keys… (Esc cancels)")).toBeNull();
+    expect(callsOf("set_shortcut")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Change Record now" }));
+    await key({ key: "Shift", code: "ShiftLeft", shiftKey: true, ctrlKey: true });
+    expect(callsOf("set_shortcut")).toEqual([]);
+    await key({ key: "k", code: "KeyK", shiftKey: true, ctrlKey: true });
+    expect(callsOf("set_shortcut")).toEqual([{ action: "record_now", accelerator: "CommandOrControl+Shift+K" }]);
+    expect(screen.getByText("Ctrl + Shift + K")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear Dictation" }));
+    await act(flushAsync);
+    expect(callsOf("set_shortcut")[1]).toEqual({ action: "dictation", accelerator: "" });
+    expect(screen.queryByRole("button", { name: "Clear Capture a voice note" })).toBeNull();
+    const asked = answerConfirm();
+    asked.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    await act(flushAsync);
+    expect(asked.mock.calls[0][0]).toBe("Reset Keyboard shortcuts to defaults?");
+    expect(callsOf("reset_shortcuts")).toHaveLength(1);
+  });
+
+  it("says when another app has a shortcut or the system refused it, and lists a Mac's own keys with ⌘", async () => {
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "shortcuts", seq: 1 }} onHome={vi.fn()} run={run}
+      status={makeStatus({ platform: "macos", shortcutErrors: [["dictation", "Another app already uses this shortcut."]] })} onUnpaired={vi.fn()} /></div>);
+    await act(flushAsync);
+    expect(screen.getByText("Another app already uses this shortcut.")).toBeInTheDocument();
+    expect(screen.getByText("⌘K")).toBeInTheDocument();
+    expect(screen.getByText("⌘Q")).toBeInTheDocument();
+    expect(screen.getByText("Quit EchoLedger; a running recording is saved first")).toBeInTheDocument();
+  });
+
+  it("warns when a shortcut is one browsers use", async () => {
+    await show("shortcuts");
+    expect(screen.getByText(/This shortcut also opens the element picker \(DevTools\) in browsers; EchoLedger takes it over\./)).toBeInTheDocument();
+  });
+});
+
+describe("Profile v2", () => {
+  it("who is signed in, an unverified email, the workspace and role on a team, since when, and Edit profile on the website", async () => {
+    respond("account_get", { ...ACCOUNT, email_verified: false, created_at: "2025-03-04T10:00:00Z", workspace: { id: 1, name: "Qureshi Textiles", role: "admin" } });
+    respond("server_page_open", null);
+    await show("profile");
+    expect(screen.getByText("Ayesha Siddiqui")).toBeInTheDocument();
+    expect(screen.getByText("ayesha@qureshitextiles.pk")).toBeInTheDocument();
+    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getByText("Qureshi Textiles, Admin")).toBeInTheDocument();
+    expect(screen.getByText(/2025/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit profile, opens in browser" }));
+    await act(flushAsync);
+    expect(callsOf("server_page_open")).toEqual([{ page: "app/profile", serverUrl: null }]);
+  });
+
+  it("one's own workspace isn't named, and a verified email has no mark", async () => {
+    await show("profile");
+    expect(screen.queryByText("Not verified")).toBeNull();
+    expect(screen.queryByText("Workspace")).toBeNull();
+  });
+});
+
+describe("Plan & usage v2", () => {
+  const Sheet = () => {
+    const sheet = useUpgradeSheet();
+    return <output data-testid="sheet">{sheet ? `${sheet.plan ?? ""}|${sheet.step ?? ""}` : "closed"}</output>;
+  };
+  const showPlan = async (e: ReturnType<typeof sampleEntitlements>) => {
+    resetEntitlementsForTests(e);
+    respond("upgrade_request_latest", e.upgrade_request);
+    render(<div className="el-root"><Sheet /><SettingsPagesV2 section={{ id: "plan", seq: 1 }} onHome={vi.fn()} run={run} status={makeStatus()} onUnpaired={vi.fn()} /></div>);
+    await act(flushAsync);
+  };
+
+  it("Free: Upgrade opens the flow at Pro, Compare plans, the own key instead of minutes, and every feature in place", async () => {
+    await showPlan(sampleEntitlements("free"));
+    expect(screen.getByText("Free plan")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add key" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("pro|");
+    expect(screen.getByTestId("plan-pro")).toHaveTextContent("Choose Pro");
+    expect(screen.getByTestId("plan-ultra")).toHaveTextContent("Everything in Pro, plus:");
+    fireEvent.click(screen.getByRole("button", { name: /^See every feature/ }));
+    expect(screen.getByRole("table", { name: "Every feature" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^See every feature/ })).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Promo code" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("pro|choose");
+  });
+
+  it("Pro: minutes as a meter with their reset, amber from 80 % and red with what stops when storage is full", async () => {
+    const e = sampleEntitlements("pro");
+    e.limits.monthly_minutes = { limit: 600, used: 510, resets_at: "2026-12-01" };
+    e.limits.storage_bytes = { limit: 21474836480, used: 21474836480 };
+    await showPlan(e);
+    expect(screen.getByText("Pro plan")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upgrade to Ultra" })).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: /^Transcription, 510 of 600 minutes used/ })).toHaveAttribute("aria-valuenow", "85");
+    expect(screen.getByTestId("meter-monthly_minutes")).toHaveTextContent("You've used 85% of your minutes.");
+    expect(screen.getByTestId("meter-storage_bytes")).toHaveTextContent("New recordings can't upload until you free up space or upgrade.");
+    fireEvent.click(within(screen.getByTestId("meter-storage_bytes")).getByRole("button", { name: "upgrade" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("ultra|");
+  });
+
+  it("an open request: its card has the main button, no Upgrade anywhere, and Cancel request asks first", async () => {
+    respondWith("upgrade_request_cancel", ({ id }) => makeUpgradeRequest("cancelled", { id: id as string }));
+    respond("entitlements_get", sampleEntitlements("free"));
+    const e = { ...sampleEntitlements("free"), upgrade_request: makeUpgradeRequest("awaiting_payment") };
+    await showPlan(e);
+    expect(screen.getByTestId("upgrade-request")).toHaveAttribute("data-stage", "awaiting_payment");
+    fireEvent.click(screen.getByRole("button", { name: "Pro requested, Waiting for payment. Opens the request" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("|status");
+    expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Payment details" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("|pay");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel request" }));
+    expect(screen.getByRole("alertdialog", { name: "Cancel this request?" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancel request" }));
+    await act(flushAsync);
+    expect(callsOf("upgrade_request_cancel")).toEqual([{ id: e.upgrade_request!.id }]);
+  });
+
+  it("a cancelled request has no card, and Payments keeps it as Cancelled by you", async () => {
+    await showPlan({ ...sampleEntitlements("free"), upgrade_request: makeUpgradeRequest("cancelled") });
+    expect(screen.queryByTestId("upgrade-request")).toBeNull();
+    expect(screen.getByRole("button", { name: "Upgrade" })).toBeInTheDocument();
+    expect(screen.getByText("Cancelled by you")).toBeInTheDocument();
+  });
+
+  it("a server without plans says so on Plan & usage and Transcription key, and waits only while it hasn't answered", async () => {
+    resetEntitlementsForTests(undefined);
+    await show("plan");
+    expect(screen.getByText("Loading settings")).toBeInTheDocument();
+    expect(screen.queryByText("Your server doesn't have plans yet.")).toBeNull();
+    act(() => resetEntitlementsForTests(null));
+    expect(screen.getByText("Your server doesn't have plans yet.")).toBeInTheDocument();
+    cleanup();
+    await show("key");
+    expect(screen.getByText("Your server doesn't have plans yet.")).toBeInTheDocument();
+  });
+
+  it("a team's member: the plan's facts, who manages it, and no button", async () => {
+    respond("account_get", { ...ACCOUNT, workspace: { id: 1, name: "Qureshi Textiles", role: "member" } });
+    await showPlan(sampleEntitlements("pro"));
+    expect(screen.getByText("Qureshi Textiles is on Pro. Its owner manages the plan.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Upgrade/ })).toBeNull();
+    expect(screen.queryByText("Payments")).toBeNull();
+  });
+});
+
+describe("Devices v2", () => {
+  it("this computer first and said so, the others with when they were active; rename any, sign the others out after asking", async () => {
+    respond("security_overview", { devices: DEVICES, events: [] });
+    respond("device_rename", "Office laptop");
+    respond("device_revoke", null);
+    await show("devices");
+    const rows = within(screen.getByRole("list", { name: "Signed-in devices" })).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("Work laptop");
+    expect(rows[0]).toHaveTextContent("This computer");
+    expect(rows[1]).toHaveTextContent(/Android phone, active/);
+    expect(screen.queryByRole("button", { name: "Sign out Work laptop" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Rename Work laptop" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename Work laptop" });
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "  Office laptop " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(callsOf("device_rename")).toEqual([{ id: "d1", name: "Office laptop" }]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const asked = answerConfirm();
+    asked.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Sign out Ayesha's S25" }));
+    await act(flushAsync);
+    expect(asked.mock.calls[0][0]).toMatch(/^Sign out Ayesha's S25\? It will need to sign in again\./);
+    expect(callsOf("device_revoke")).toEqual([{ id: "d2" }]);
+  });
+});
+
+describe("About v2", () => {
+  it("version, updates, this computer's name (opens Devices), the server, Technical details, settings export and import, policies", async () => {
+    respond("security_overview", { devices: DEVICES, events: [] });
+    respond("update_check", { ...UPDATE_IDLE, phase: "up_to_date", message: "EchoLedger is up to date." });
+    respond("settings_export", "C:/Users/a/Downloads/echoledger-settings.json");
+    respond("server_page_open", null);
+    await show("about");
+    expect(screen.getByText(/EchoLedger looks for updates when it starts and every 6 hours/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
+    await act(flushAsync);
+    expect(screen.getByText("EchoLedger is up to date.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Export settings" }));
+    await act(flushAsync);
+    expect(callsOf("settings_export")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Terms, opens in browser" }));
+    await act(flushAsync);
+    expect(callsOf("server_page_open")).toEqual([{ page: "terms", serverUrl: null }]);
+    fireEvent.click(screen.getByRole("button", { name: /^Device name/ }));
+    expect(screen.getByRole("heading", { level: 1, name: "Devices" })).toBeInTheDocument();
+  });
+
+  it("Technical details: whether the connection is verified, and the server's whole address; back goes to About", async () => {
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "about.technical", seq: 1 }} onHome={vi.fn()} run={run} onUnpaired={vi.fn()}
+      status={makeStatus({ pinned: false, serverUrl: "https://app.echoledger.pk" })} /></div>);
+    await act(flushAsync);
+    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getByText("https://app.echoledger.pk")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "About" }));
+    expect(screen.getByRole("heading", { level: 1, name: "About" })).toBeInTheDocument();
+  });
+
+  it("imports a settings file and reads it back", async () => {
+    respondWith("settings_import", ({ text }) => ({ ...SETTINGS, ...(JSON.parse(text as string) as Partial<Settings>) }));
+    await show("about");
+    const input = screen.getByLabelText("Import settings", { selector: "input" }) as HTMLInputElement;
+    const file = new File([JSON.stringify({ farSideWarning: false })], "s.json", { type: "application/json" });
+    Object.defineProperty(file, "text", { value: () => Promise.resolve(JSON.stringify({ farSideWarning: false })) });
+    fireEvent.change(input, { target: { files: [file] } });
+    await act(flushAsync);
+    expect(callsOf("settings_import")).toEqual([{ text: JSON.stringify({ farSideWarning: false }) }]);
+  });
+
+  it("an update ready: Restart, its notes, and while recording it waits and says why", async () => {
+    respond("update_status", { ...UPDATE_IDLE, phase: "ready", version: "2.0.1", notes: "Fixes for Live Translate." });
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "about", seq: 1 }} onHome={vi.fn()} run={run} onUnpaired={vi.fn()}
+      status={makeStatus({ recording: { clientRef: "r", mode: "call", sourceApp: "zoom", clientId: null, startedAt: "", backend: "mock" } })} /></div>);
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Restart" })).toBeDisabled();
+    expect(screen.getByText("Fixes for Live Translate.")).toBeInTheDocument();
+    expect(screen.getByText("Stop the recording first: EchoLedger restarts to install the update.")).toBeInTheDocument();
+  });
+});
+
+describe("Mac check v2", () => {
+  const mac = (over: Partial<AppStatus> = {}) => makeStatus({ platform: "macos", ...over });
+  const showMac = async (status = mac()) => {
+    const onSection = vi.fn();
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "help.mac_check", seq: 1 }} onHome={vi.fn()} onSection={onSection} run={run} status={status} onUnpaired={vi.fn()} /></div>);
+    await act(flushAsync);
+    return onSection;
+  };
+
+  it("runs one check at a time with a progress line, then a mark, the state in words, the sentence and the fix per item", async () => {
+    let finish: (r: CheckReport) => void = () => undefined;
+    respondWith("mac_check_run", () => new Promise((resolve) => { finish = resolve; }));
+    respond("open_privacy_settings", null);
+    respond("quit_and_reopen", null);
+    await showMac();
+    fireEvent.click(screen.getByRole("button", { name: "Run Mac check" }));
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+    await act(async () => emitEvent("mac_check:progress", { index: 4, total: 9, line: "Listening to the microphone for 5 seconds: say something…", done: [CHECK_OK] }));
+    expect(screen.getByTestId("mac-check-progress")).toHaveTextContent("5 of 9: Listening to the microphone for 5 seconds: say something…");
+    await act(async () => finish(macReport()));
+    const results = screen.getByRole("list", { name: "Mac check results" });
+    const rows = within(results).getAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    expect(rows[1]).toHaveAccessibleDescription(/^Off/);
+    fireEvent.click(within(rows[1]).getByRole("button", { name: "Open System Settings" }));
+    expect(callsOf("open_privacy_settings")).toEqual([{ kind: "system_audio" }]);
+    fireEvent.click(within(rows[2]).getByRole("button", { name: "Quit & reopen" }));
+    await act(flushAsync);
+    expect(callsOf("quit_and_reopen")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Run Mac check again" })).toBeInTheDocument();
+  });
+
+  it("copies and sends only when asked, says when it was sent, and why Send waits when signed out", async () => {
+    respond("mac_check_last", macReport());
+    respond("mac_check_copy", null);
+    respond("mac_check_send", "2026-11-17T08:05:00Z");
+    await showMac();
+    expect(callsOf("mac_check_copy")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Copy report" }));
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Send to my admin" }));
+    await act(flushAsync);
+    expect(callsOf("mac_check_send")).toHaveLength(1);
+    expect(screen.getByTestId("mac-check-sent")).toHaveTextContent(/^Sent to your admin/);
+    cleanup();
+    await showMac(mac({ paired: false }));
+    expect(screen.getByRole("button", { name: "Send to my admin" })).toBeDisabled();
+    expect(screen.getByTestId("mac-check-send-blocked")).toHaveTextContent("Sign in to send this to your admin.");
+  });
+
+  it("never during a recording; a recording that stopped it is said; a failure is shown; back goes to Help", async () => {
+    await showMac(mac({ recording: { clientRef: "r", mode: "call", sourceApp: "zoom", clientId: null, startedAt: "", backend: "mock" } }));
+    expect(screen.getByTestId("mac-check-recording")).toHaveTextContent("Finish the current recording to run the Mac check.");
+    expect(screen.queryByRole("button", { name: /Run Mac check/ })).toBeNull();
+    cleanup();
+    respond("mac_check_run", macReport({ items: [CHECK_OK], stopped: "A recording started, so the check stopped." }));
+    const onSection = await showMac();
+    fireEvent.click(screen.getByRole("button", { name: "Run Mac check" }));
+    await act(flushAsync);
+    expect(screen.getByText("A recording started, so the check stopped.")).toBeInTheDocument();
+    fail("mac_check_run", "The check couldn't start.");
+    fireEvent.click(screen.getByRole("button", { name: "Run Mac check again" }));
+    await act(flushAsync);
+    expect(screen.getByRole("alert")).toHaveTextContent("The check couldn't start.");
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+    expect(onSection).toHaveBeenCalledWith("help");
+  });
+
+  it("isn't on Windows", async () => {
+    await show("help.mac_check");
+    expect(screen.queryByTestId("mac-check")).toBeNull();
+  });
+});
+
 /**
  * Parity with today's pages: each page is rendered as today's and as the v2 page in each of its states (the page as it
  * opens, then each dialog and form opened, from a fresh page each time), and every control today's page shows in a
@@ -551,8 +922,12 @@ describe("parity with today's Settings pages, in every state", () => {
   type Step = { name: string; today: Act; v2?: Act };
   type Page = {
     name: string; section: string; platform?: string; settings?: Partial<Settings>; entitlements?: ReturnType<typeof sampleEntitlements>; account?: Account;
-    lock?: { hasPin: boolean }; status?: Partial<AppStatus>; permissions?: Partial<PermissionsStatus>; screens?: Partial<ScreensStatus>;
+    lock?: { hasPin: boolean }; status?: Partial<AppStatus>; devices?: boolean; update?: object; macLast?: CheckReport | null; permissions?: Partial<PermissionsStatus>; screens?: Partial<ScreensStatus>;
     today: (settings: Settings) => ReactElement; stalesOk?: boolean; steps?: Step[]; map?: Record<string, [ControlRole | RolelessField, string | RegExp]>;
+    /** Lines the page may say (its footer's): in every state, the ones today's page shows must be the ones the v2 page shows. */
+    lines?: readonly string[];
+    /** Today's controls whose names carry data (a date, an amount), matched by pattern. */
+    mapLike?: readonly [RegExp, [ControlRole, string | RegExp]][];
   };
   const press = (name: string | RegExp, role: ControlRole = "button"): Act => async () => {
     fireEvent.click(screen.getAllByRole(role, { name })[0]);
@@ -567,6 +942,49 @@ describe("parity with today's Settings pages, in every state", () => {
     for (const a of acts) await a();
   };
   const reset: Step = { name: "Reset to defaults", today: press("Reset to defaults") };
+  const PLAN_STATES = ((): [string, ReturnType<typeof sampleEntitlements>, string | null][] => {
+    const now = new Date().toISOString();
+    const at = (plan: "free" | "pro", stage: Parameters<typeof makeUpgradeRequest>[0]) =>
+      ({ ...sampleEntitlements(plan), upgrade_request: makeUpgradeRequest(stage, stage === "approved" || stage === "declined" ? { decided_at: now } : {}) });
+    const busy = sampleEntitlements("pro");
+    busy.limits.monthly_minutes = { limit: 600, used: 510, resets_at: "2026-12-01" };
+    busy.limits.storage_bytes = { limit: 21474836480, used: 21474836480 };
+    busy.limits.devices = { limit: 5, used: 5 };
+    busy.limits.uploads_per_day = { limit: 200, used: 190 };
+    const unlimited = sampleEntitlements("ultra");
+    unlimited.limits.monthly_minutes = { limit: null, used: 1200 };
+    const keyed = sampleEntitlements("free");
+    keyed.transcription_key = { provider: "groq", set: true, last4: "9xQ2" };
+    return [
+      ["Free", sampleEntitlements("free"), null], ["Free, key added", keyed, null], ["Pro", sampleEntitlements("pro"), null], ["Ultra, the top plan", sampleEntitlements("ultra"), null],
+      ["Pro, near and at its limits", busy, null], ["Ultra, minutes without a limit", unlimited, null],
+      ["Pro, a team's member", sampleEntitlements("pro"), "member"], ["Pro, a team's admin", sampleEntitlements("pro"), "admin"],
+      ["Free, request waiting for payment", at("free", "awaiting_payment"), null], ["Free, request in review", at("free", "in_review"), null],
+      ["Free, another receipt asked for", at("free", "needs_receipt"), null], ["Free, request not approved", at("free", "declined"), null],
+      ["Pro, request approved", at("pro", "approved"), null],
+      ["Free, request cancelled", at("free", "cancelled"), null],
+    ];
+  })();
+  const PLAN_LINES = [
+    "Free plan", "Pro plan", "Ultra plan", "Transcripts use your own free Groq key.", "Qureshi Textiles is on Pro. Its owner manages the plan.", "You're on our top plan.",
+    "Paid until", "No end date", "There is nothing to cancel.", "Minutes reset on the 1st of each month. Unused minutes don't carry over.",
+    "Every plan can record, organise, search, share links and export.", "Your Groq key", "Key added", "Not added",
+    "No monthly limit", "You've used 85% of your minutes.", "New recordings can't upload until you free up space", "Sign out a device to add another.", "You've used 95% of your",
+    "Everything in Pro, plus:", "Payments are by bank transfer. We switch your plan on after we see the money in our account.",
+    "Waiting for payment", "In review", "Action needed", "Not approved", "Approved", "to our bank account, then add a screenshot of the receipt.",
+    "Your request is still open. You don't need to pay again.", "If you've paid, reply to our email with your transaction ID and we'll look again.",
+    "Cancelled by you", "If you've already paid, add your receipt instead. Cancelling doesn't refund a payment.", "Uploads in the last 24 hours", "(yours)", "Shown below",
+  ];
+  const SCREENS_OK: ScreensStatus = { supported: true, platform: "windows", borderless: false, permission: true, inPlan: true, onServer: true };
+  const SCREEN_LINES = [
+    screensBlocked({ ...SCREENS_OK, onServer: false })!, screensBlocked({ ...SCREENS_OK, inPlan: false })!, screensBlocked({ ...SCREENS_OK, supported: false })!,
+    setting("screen.enabled").description!,
+    TARGET_HINT.meeting_window, TARGET_HINT.whole_screen + WINDOWS_WHOLE_SCREEN, TARGET_HINT.whole_screen,
+    "Windows 11 captures without the yellow border. If it still shows, allow borderless capture for EchoLedger in Windows Settings.",
+    "Windows 10 draws a yellow border around the meeting window while screens are on. Windows 11 captures without it.",
+    MONTHLY_NOTE, `macOS asks once for the Screen Recording permission. ${MONTHLY_NOTE}`,
+    "Turn on EchoLedger in System Settings › Privacy & Security › Screen & System Audio Recording, then open EchoLedger again.",
+  ];
   const withKey = () => { const e = sampleEntitlements("free"); e.transcription_key = { provider: "groq", set: true, last4: "9xQ2" }; return e; };
   const PAGES: Page[] = [
     { name: "Voice notes & dictation", section: "voice", today: (st) => <VoicePage settings={st} patch={patch} onOpen={() => undefined} />, steps: [reset],
@@ -629,6 +1047,9 @@ describe("parity with today's Settings pages, in every state", () => {
       ["Mac, permission not given", "macos", { platform: "macos", permission: false }, {}, "pro"],
       ["not in the plan", "windows", { platform: "windows", permission: true }, {}, "free"],
       ["server without it", "windows", { platform: "windows", permission: true, onServer: false }, {}, "pro"],
+      ["the server says not in the plan, the plan has it", "windows", { platform: "windows", permission: true, inPlan: false }, {}, "pro"],
+      ["this computer can't capture", "windows", { platform: "windows", permission: true, supported: false }, {}, "pro"],
+      ["Mac, allowed", "macos", { platform: "macos", permission: true }, {}, "pro"],
     ] as const).map(([label, platform, screens, settings, plan]): Page => ({
       name: `Screen moments, ${label}`, section: "screen", platform, screens, settings, entitlements: sampleEntitlements(plan),
       today: (st) => <ScreenMomentsPage settings={st} patch={patch} onExcluded={() => undefined} />,
@@ -638,25 +1059,73 @@ describe("parity with today's Settings pages, in every state", () => {
       ],
       map: { "combobox: Capture": ["combobox", /^Capture/], "button: Never capture these apps0 apps": ["button", "Never capture these apps"],
         "button: Never capture these apps3 apps": ["button", "Never capture these apps"], "button: Keep screen moments, in Pro": ["button", "Keep screen moments, in Pro"] },
-      stalesOk: true,
+      stalesOk: true, lines: SCREEN_LINES,
     })),
     { name: "Never capture these apps", section: "screen.excluded", today: (st) => <ExcludedAppsPage settings={st} patch={patch} platform="windows" />,
       steps: [{ name: "an app typed", today: type("App or process name", "Signal.exe") }] },
+    { name: "Appearance", section: "appearance",
+      today: () => <AppearancePage theme="system" onTheme={() => undefined} prefs={{ sidebarStyle: "light", density: "comfortable", clock: "12" }} setPref={() => undefined} />, steps: [reset] },
+    ...(["windows", "macos"] as const).map((platform): Page => ({
+      name: `Keyboard shortcuts, ${platform}`, section: "shortcuts", platform,
+      today: (st) => <ShortcutsPage settings={st} status={makeStatus({ platform })} run={run} onSettings={() => undefined} />,
+      steps: [{ name: "Change, listening", today: press("Change Record now") }, reset],
+    })),
+    ...([[false, null], [true, null], [true, { id: 1, name: "Qureshi Textiles", role: "admin" }]] as const).map(([unverified, workspace]): Page => {
+      const account: Account = { ...ACCOUNT, email_verified: !unverified, created_at: "2025-03-04T10:00:00Z", workspace: workspace && { ...workspace } };
+      return { name: `Profile${unverified ? ", email not verified" : ""}${workspace ? ", on a team" : ""}`, section: "profile", account,
+        today: () => <ProfilePage account={account} status={makeStatus()} run={run} />,
+        map: { "button: Edit profile, opens in browser": ["button", "Edit profile, opens in browser"] },
+        lines: ["Ayesha Siddiqui", "ayesha@qureshitextiles.pk", "Qureshi Textiles, Admin", "Your name and email are changed on the website."] };
+    }),
+    ...PLAN_STATES.map(([label, e, role]): Page => ({
+      name: `Plan & usage, ${label}`, section: "plan", entitlements: e,
+      account: role ? { ...ACCOUNT, workspace: { id: 1, name: "Qureshi Textiles", role } } : ACCOUNT,
+      today: () => <PlanUsagePage e={e} role={role} workspace={role ? "Qureshi Textiles" : null} onKey={() => undefined} />,
+      steps: [
+        { name: "every feature shown", today: press(/^See every feature/) },
+        ...(e.upgrade_request?.status === "awaiting_payment" ? [{ name: "Cancel request, asked", today: press("Cancel request") }] : []),
+      ],
+      lines: PLAN_LINES, stalesOk: true,
+      map: { "button: See every featureShown below": ["button", /^See every feature/], "button: See every feature": ["button", /^See every feature/] },
+      mapLike: [[/^button: Promo code/, ["button", "Promo code"]], [/^button: (Free|Pro|Ultra), 1 month/, ["button", /^(Free|Pro|Ultra), 1 month$/]]],
+    })),
+    { name: "Devices", section: "devices", today: () => <DevicesPage run={run} />, devices: true,
+      steps: [{ name: "Rename, the dialog", today: press("Rename Work laptop") }, { name: "Sign out, asked", today: press("Sign out Ayesha's S25") }] },
+    ...([["idle", {}, false], ["update ready", { phase: "ready", version: "2.0.1", notes: "Fixes." }, false], ["update ready, while recording", { phase: "ready", version: "2.0.1", notes: null }, true],
+      ["check failed", { phase: "failed", message: "The server didn't answer." }, false]] as const).map(([label, update, recording]): Page => ({
+      name: `About, ${label}`, section: "about", update, status: recording ? { recording: { clientRef: "r", mode: "call", sourceApp: "zoom", clientId: null, startedAt: "", backend: "mock" } } : {},
+      today: () => <AboutPage status={makeStatus(recording ? { recording: { clientRef: "r", mode: "call", sourceApp: "zoom", clientId: null, startedAt: "", backend: "mock" } } : {})} run={run} onImported={() => undefined} onDevices={() => undefined} onTechnical={() => undefined} />,
+      map: { "button: Device nameWork laptop": ["button", /^Device name/], "button: Privacy policy, opens in browser": ["button", "Privacy policy, opens in browser"],
+        "button: Terms, opens in browser": ["button", "Terms, opens in browser"] },
+      stalesOk: true,
+      lines: ["EchoLedger looks for updates when it starts and every 6 hours.", "Update ready — EchoLedger 2.0.1.", "Fixes.", "Stop the recording first: EchoLedger restarts to install the update.",
+        "The server didn't answer.", "Last checked", "The file has your preferences only, never the sign-in, keys or PIN.", "Work laptop"],
+    })),
+    ...([["no report yet", null, {}], ["the last report", macReport(), {}], ["the last report, sent", macReport({ sentAt: "2026-11-17T08:05:00Z" }), {}],
+      // While recording today's page has no controls at all; its sentence is checked by the tests above.
+      ["the last report, signed out", macReport(), { paired: false }]] as const).map(([label, last, status]): Page => ({
+      name: `Mac check, ${label}`, section: "help.mac_check", platform: "macos", status, macLast: last,
+      today: () => <MacCheckCard status={makeStatus({ platform: "macos", ...status })} />,
+      lines: ["The Mac check looks at macOS", "Finish the current recording to run the Mac check.", "Sign in to send this to your admin.", "Sent to your admin",
+        "The report has no names, no recordings and no account. It is sent only when you press the button.", CHECK_OFF.detail, CHECK_REOPEN.detail],
+    })),
     { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
       map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] },
       steps: [{ name: "Sign out everywhere", today: press("Sign out everywhere") }] },
   ];
 
   /** The controls on screen and the confirm questions asked, after `step` (none: the page as it opens). */
-  const capture = async (render_: () => void, step: Act | null): Promise<{ controls: string[]; asked: string[] }> => {
+  const capture = async (render_: () => void, step: Act | null): Promise<{ controls: string[]; asked: string[]; off: string[]; text: string }> => {
     const asked = answerConfirm();
     asked.mockReturnValue(false);
     render_();
     await act(flushAsync);
     if (step) await step();
     const controls = [...collectControls(new Set())];
+    const off = disabledSwitches();
+    const text = (document.body.textContent ?? "").replace(/\s+/g, " ");
     cleanup();
-    return { controls, asked: asked.mock.calls.map((c) => c[0]) };
+    return { controls, asked: asked.mock.calls.map((c) => c[0]), off, text };
   };
 
   it.each(PAGES.map((p) => [p.name, p] as const))("%s", async (_, page) => {
@@ -668,6 +1137,9 @@ describe("parity with today's Settings pages, in every state", () => {
       respond("lock_status", { enabled: !!page.settings?.appLock, locked: false, hasPin: page.lock?.hasPin ?? false, osMethod: "windows_hello", retryAfterSeconds: 0 });
       resetEntitlementsForTests(page.entitlements ?? sampleEntitlements("free"));
       respond("account_get", page.account ?? ACCOUNT);
+      respond("security_overview", { devices: page.devices ? DEVICES : [], events: [{ id: 1, event: "sign_in", label: "Signed in", summary: "Signed in", actor: "device", device: "Work laptop", at: "2026-11-17T08:00:00Z" }] });
+      respond("update_status", { ...UPDATE_IDLE, ...page.update });
+      respond("mac_check_last", page.macLast ?? null);
       respond("permissions_status", { microphone: "allowed", systemAudio: "allowed", screen: "allowed", browserAutomation: true, platform: "windows", ...page.permissions });
       respond("screens_status", { supported: true, platform: "windows", borderless: false, permission: true, inPlan: true, onServer: true, ...page.screens });
       const today = await capture(() => render(page.today(settings)), step?.today ?? null);
@@ -678,7 +1150,8 @@ describe("parity with today's Settings pages, in every state", () => {
           status={makeStatus({ platform: (page.platform ?? "windows") as "windows", ...page.status })} onUnpaired={vi.fn()} /></div>);
       }, step ? step.v2 ?? step.today : null);
       const v2Has = (control: string) => {
-        const [role, name] = page.map?.[control] ?? [control.split(": ")[0] as ControlRole | RolelessField, control.slice(control.indexOf(": ") + 2)];
+        const [role, name] = page.map?.[control] ?? page.mapLike?.find(([re]) => re.test(control))?.[1]
+          ?? [control.split(": ")[0] as ControlRole | RolelessField, control.slice(control.indexOf(": ") + 2)];
         return v2.controls.some((c) => {
           const [r, n] = [c.split(": ")[0], c.slice(c.indexOf(": ") + 2)];
           return r === role && (typeof name === "string" ? n === name : name.test(n));
@@ -686,6 +1159,12 @@ describe("parity with today's Settings pages, in every state", () => {
       };
       expect(today.controls.filter((c) => !v2Has(c)), `${page.name}: ${state}`).toEqual([]);
       expect(v2.asked, `${page.name}: ${state}, the question asked`).toEqual(today.asked);
+      expect(today.off.filter((c) => !v2.off.includes(c)), `${page.name}: ${state}, switches that can't be changed`).toEqual([]);
+      if (page.lines) {
+        const said = (text: string) => page.lines!.filter((l) => text.includes(l.replace(/\s+/g, " ")));
+        expect(said(v2.text), `${page.name}: ${state}, what it says`).toEqual(said(today.text));
+        expect(said(today.text).length, `${page.name}: ${state}, says something`).toBeGreaterThan(0);
+      }
     }
     // A mapping shared by several states of a page only has to match in one of them.
     if (!page.stalesOk) expect(stale([...seen], Object.keys(page.map ?? {}))).toEqual([]);

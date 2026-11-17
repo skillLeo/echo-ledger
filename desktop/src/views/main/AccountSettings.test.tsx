@@ -15,7 +15,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 
 function makeAccount(overrides: Partial<Account> = {}): Account {
   return {
-    name: "Hassam Ali", email: "hassam@example.test", email_verified: true, two_factor: false, google: true,
+    name: "Ayesha Khan", email: "ayesha@example.test", email_verified: true, two_factor: false, google: true,
     created_at: "2026-11-01T09:00:00+00:00", workspace: { id: 1, name: "Acme team", role: "owner" }, deletes_at: null, ...overrides,
   };
 }
@@ -45,8 +45,8 @@ describe("Profile and Sign-in & security", () => {
     respond("server_page_open", undefined);
     const status = makeStatus({ plan: makePlan({ role: "admin", workspace: "Acme team", seats: 5 }) });
     render(<ProfilePage account={makeAccount({ email_verified: false, workspace: { id: 1, name: "Acme team", role: "admin" } })} status={status} run={makeRun().run} />);
-    expect(document.getElementById("setting-profile.name")).toHaveTextContent("Hassam Ali");
-    expect(document.getElementById("setting-profile.email")).toHaveTextContent("hassam@example.test (not verified)");
+    expect(document.getElementById("setting-profile.name")).toHaveTextContent("Ayesha Khan");
+    expect(document.getElementById("setting-profile.email")).toHaveTextContent("ayesha@example.test (not verified)");
     expect(document.getElementById("setting-profile.workspace")).toHaveTextContent("Acme team, Admin");
     expect(document.getElementById("setting-profile.since")).toHaveTextContent("1 Nov 2026");
     fireEvent.click(screen.getByRole("button", { name: "Edit profile, opens in browser" }));

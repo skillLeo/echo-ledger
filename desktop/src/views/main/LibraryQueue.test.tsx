@@ -568,14 +568,14 @@ describe("Uploads that need you", () => {
 
 describe("Waiting for another account (v1.5)", () => {
   const held = (id: string, overrides: Partial<UploadItem> = {}) =>
-    makeUploadItem(id, { heldFor: "hassam@example.test", startedAt: local(10), ...overrides });
+    makeUploadItem(id, { heldFor: "ayesha@example.test", startedAt: local(10), ...overrides });
 
   it("lists what was made while another account was signed in, says which, and nowhere else", async () => {
     await renderLibrary([], [held("h1"), held("h2", { state: "failed", lastError: "x" }), held("h3", { state: "verifying" }), held("h4", { imported: true })]);
     const section = screen.getByTestId("held-uploads");
     expect(within(section).getByRole("heading", { name: "Waiting for another account" }).closest(".queue-head")).toHaveTextContent("4");
     expect(section).toHaveTextContent(
-      "4 recordings made while signed in as hassam@example.test wait for that account. Sign out and sign in as hassam@example.test to upload them, or discard them.",
+      "4 recordings made while signed in as ayesha@example.test wait for that account. Sign out and sign in as ayesha@example.test to upload them, or discard them.",
     );
     expect(screen.queryByRole("heading", { name: "Uploads that need you" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Importing" })).not.toBeInTheDocument();
@@ -586,7 +586,7 @@ describe("Waiting for another account (v1.5)", () => {
   it("names one recording in the singular and discards it after asking", async () => {
     const confirm = answerConfirm().mockReturnValue(true);
     await renderLibrary([], [held("h1", { title: "Board call" })]);
-    expect(screen.getByTestId("held-uploads")).toHaveTextContent("1 recording made while signed in as hassam@example.test waits for that account.");
+    expect(screen.getByTestId("held-uploads")).toHaveTextContent("1 recording made while signed in as ayesha@example.test waits for that account.");
     expect(screen.queryByRole("button", { name: /Discard all/ })).not.toBeInTheDocument();
     fireEvent.click(within(uploadRow("h1")).getByRole("button", { name: "Discard" }));
     expect(confirm).toHaveBeenCalledWith(DISCARD);
@@ -604,7 +604,7 @@ describe("Waiting for another account (v1.5)", () => {
     await waitFor(() => expect(callsOf("upload_discard")).toEqual([{ id: "h1" }, { id: "h2" }]));
     await waitFor(() => expect(notify).toHaveBeenCalledWith("Discarded 2 recordings", false, anyTarget));
     expect(screen.getByRole("region", { name: "Waiting for sara@example.test" })).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Waiting for hassam@example.test" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Waiting for ayesha@example.test" })).not.toBeInTheDocument();
   });
 });
 

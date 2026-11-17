@@ -21,7 +21,11 @@ describe("how long Trash keeps a recording", () => {
     expect(TRASH_KEEP_HOURS_FALLBACK).toBe(48);
     respond("trash_keep_hours", 72);
     expect(await trashKeepHours()).toBe(72);
-    expect(hoursWords(72)).toBe("72 hours");
+    expect(hoursWords(72)).toBe("3 days");
+    expect(hoursWords(720)).toBe("30 days");
+    expect(hoursWords(48)).toBe("48 hours");
+    expect(hoursWords(24)).toBe("24 hours");
+    expect(hoursWords(60)).toBe("60 hours");
     expect(hoursWords(1)).toBe("1 hour");
   });
 
@@ -38,7 +42,7 @@ describe("how long Trash keeps a recording", () => {
     expect(binHours(items, 72)).toBe(72);
     expect(binHours(items, null)).toBe(48);
     expect(binHours([], null)).toBe(48);
-    expect(binSentence(72)).toBe("Deleted recordings stay here for 72 hours, then their audio and transcripts are erased.");
+    expect(binSentence(72)).toBe("Deleted recordings stay here for 3 days, then their audio and transcripts are erased.");
   });
 });
 
@@ -48,8 +52,8 @@ describe("the sentences keep their words; only the number is the server's", () =
     respond("bin_list", { data: [] });
     render(<BinPanel notify={vi.fn()} onClose={vi.fn()} />);
     await act(flushAsync);
-    expect(screen.getByText("Deleted recordings stay here for 72 hours, then their audio and transcripts are erased.")).toBeInTheDocument();
-    expect(screen.getByText("Nothing deleted in the last 72 hours.")).toBeInTheDocument();
+    expect(screen.getByText("Deleted recordings stay here for 3 days, then their audio and transcripts are erased.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing deleted in the last 3 days.")).toBeInTheDocument();
   });
 
   it("classic Recently deleted with an older core says 48 hours", async () => {
@@ -68,6 +72,6 @@ describe("the sentences keep their words; only the number is the server's", () =
     await act(flushAsync);
     act(() => screen.getByRole("button", { name: "Trash" }).click());
     await act(flushAsync);
-    expect(screen.getByRole("region", { name: "Trash is empty" })).toHaveTextContent("Deleted recordings stay here for 72 hours, then their audio and transcripts are erased.");
+    expect(screen.getByRole("region", { name: "Trash is empty" })).toHaveTextContent("Deleted recordings stay here for 3 days, then their audio and transcripts are erased.");
   });
 });

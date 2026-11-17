@@ -8,6 +8,7 @@ import { fillWidth } from "../../lib/motion";
 import { AlertIcon, CaptionsIcon, CopyIcon, MicIcon, RecordIcon } from "../../components/Icons";
 import { RecordDotIcon, StopIcon } from "../../components/ControlIcons";
 import { LiveTranslateCard } from "./LiveTranslateCard";
+import { translateAvailability, useTranslateAvailability } from "../../lib/translate";
 import { LockedFeatureCard, useLocked } from "./Upgrade";
 import { PermissionBanner } from "./Permissions";
 import { isViewer, viewerSentence } from "../../lib/plan";
@@ -48,6 +49,14 @@ export function RecordView({ status, run, onImport }: {
 }) {
   const recording = status.recording;
   const liveTranslateLocked = useLocked("live_translate");
+  // Where Live Translate runs, and where the system or the plan holds it back (the core says which; an older core: worked
+  // out from the system and the plan). The plan's own badge stays for a plan without it.
+  const translateAnswer = useTranslateAvailability();
+  const translate = translateAvailability(translateAnswer, status.platform, status.plan.liveTranslate && !liveTranslateLocked);
+  const translateCard = liveTranslateLocked ? <LockedFeatureCard feature="live_translate" />
+    : translate.available ? <LiveTranslateCard run={run} />
+      : translate.reason === "platform" || translateAnswer?.reason === "plan" ? <LiveTranslateCard run={run} unavailable={translate.reason} />
+        : null;
   const paused = !!recording && status.paused;
   const [mic, sys] = status.levels;
   const what = recording ? (recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp)) : "";
@@ -69,7 +78,7 @@ export function RecordView({ status, run, onImport }: {
           <p className="small">{viewerSentence(status.plan.workspace)}</p>
           <p className="small muted">An owner or admin of the workspace can change your role in the console.</p>
         </div>
-        {liveTranslateLocked ? <LockedFeatureCard feature="live_translate" /> : status.plan.liveTranslate && <LiveTranslateCard run={run} />}
+        {translateCard}
       </>
     );
   }
@@ -145,7 +154,7 @@ export function RecordView({ status, run, onImport }: {
         </div>
       </div>
       {/* Live Translate when the plan has it; its badge when the entitlements (v1.6) leave it out; hidden by an older plan. */}
-      {liveTranslateLocked ? <LockedFeatureCard feature="live_translate" /> : status.plan.liveTranslate && <LiveTranslateCard run={run} />}
+      {translateCard}
       <div className="card dropzone" style={{ marginTop: 14 }}>
         Drop voice notes, audio or video files anywhere in this window to transcribe them (OPUS, OGG, MP3, M4A, AAC, WAV, MP4 or WEBM).
         {onImport && <div className="card-actions dropzone-actions"><button type="button" className="btn" onClick={onImport}>Choose files…</button></div>}

@@ -63,6 +63,19 @@ describe("the Ready check", () => {
     expect(callsOf("ready_check")).toHaveLength(0);
   });
 
+  it("an advisory row that isn't OK is worth a look: said so, never counted as a thing to fix, its fix not the main button", async () => {
+    const shortcuts = check("shortcuts", false, { advisory: true, label: "Shortcuts", fix: { label: "Change shortcuts", action: "open_shortcuts" } });
+    respond("ready_last", { ...READY, checks: [...READY.checks, shortcuts] });
+    render(<ReadyCheckCard />);
+    await flushAsync();
+    expect(screen.getByTestId("ready-card")).toHaveTextContent("✓ Ready to record calls");
+    const row = screen.getByTestId("ready-shortcuts");
+    expect(row).toHaveClass("limited");
+    expect(within(row).getByRole("img", { name: "Worth a look" })).toBeInTheDocument();
+    expect(row).toHaveTextContent("Shortcuts · Worth a look");
+    expect(within(row).getByRole("button", { name: "Change shortcuts" })).not.toHaveClass("primary");
+  });
+
   it("runs a check when none was made yet, again on request, and follows the core's answers", async () => {
     respond("ready_last", null);
     respond("ready_check", READY);
