@@ -249,3 +249,33 @@ async fn a_background_call_without_provider_counts_is_reported_as_estimated() {
         .expect("a usage record");
     assert!(usage.estimated, "{usage:?}");
 }
+
+/// A practice question whose Haiku attempt fails with `behavior`; Groq answers. The usage record of the question.
+async fn question_usage(behavior: assist_relay::provider::MockBehavior, session: &str) -> assist_relay::internal::UsageRecord {
+    let h = harness(RelayConfig::built_in());
+    let mut s = h.connect(practice_claims(session));
+    ready_now(&mut s).await;
+    h.mock(assist_relay::domain::ProviderKind::Anthropic).push(behavior);
+    s.send(json!({"type": "practice_next"})).await;
+    assert_eq!(s.until("practice_question").await.pop().unwrap()["index"], 1);
+    s.drain(Duration::from_secs(2)).await;
+    h.reports
+        .reports()
+        .into_iter()
+        .find_map(|r| match r {
+            Report::Usage(u) if u.kind == assist_relay::protocol::SuggestionKind::PracticeQuestion => Some(u),
+            _ => None,
+        })
+        .expect("a usage record")
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_primary_that_fails_after_streaming_is_charged_with_the_fallback() {
+    let broken = question_usage(assist_relay::provider::MockBehavior::Break(3), "s-broken").await;
+    let refused = question_usage(assist_relay::provider::MockBehavior::Fail(assist_relay::provider::ProviderError::RateLimited), "s-refused").await;
+    assert_eq!((broken.model.as_str(), broken.fallback), ("openai/gpt-oss-120b", true));
+    assert!(broken.estimated, "part of it is the abandoned attempt's estimate");
+    assert!(broken.tokens.input > refused.tokens.input, "{} vs {}", broken.tokens.input, refused.tokens.input);
+    assert!(broken.cost_usd > refused.cost_usd);
+    assert!(!refused.estimated, "a rate-limited request bills nothing");
+}

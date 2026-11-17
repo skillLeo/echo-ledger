@@ -24,7 +24,7 @@ use crate::budget::{Cause, allowed_modes, choose_mode, cost_micros, estimate_mic
 use crate::config::{RelayConfig, Shared, TranscriptScope};
 use crate::context::{CallContext, Context, ContextBuilder, RewriteKind, Task, Transcript, TranscriptTurn};
 use crate::domain::{Channel, EffectiveMode, LanguageHelp, Mode, ProviderKind};
-use crate::background::{self, LineBuffer, TaskKind, TaskOutcome};
+use crate::background::{self, LineBuffer, TaskKind, TaskRun};
 use crate::internal::{FactsReport, Report, ReportSink, SuggestionText, SummaryReport, UsageRecord};
 use crate::pack::Pack;
 use crate::protocol::{
@@ -279,7 +279,7 @@ struct Speculation {
 enum Feed {
     Stream { id: String, attempt: u32, at: Instant, item: Item },
     Warmed { model: String, result: Result<Usage, ProviderError> },
-    Task { kind: TaskKind, result: Result<TaskOutcome, ProviderError> },
+    Task { kind: TaskKind, run: TaskRun },
 }
 
 enum Item {
@@ -1024,7 +1024,7 @@ impl Engine {
     fn on_feed(&mut self, feed: Feed) {
         match feed {
             Feed::Warmed { model, result } => self.on_warmed(model, result),
-            Feed::Task { kind, result } => self.on_task(kind, result),
+            Feed::Task { kind, run } => self.on_task(kind, run),
             Feed::Stream { id, attempt, at, item } => {
                 if self.active.get(&id).is_none_or(|active| active.attempt != attempt) {
                     return;
@@ -1551,12 +1551,12 @@ impl Engine {
         }
         let config = self.config();
         let tokens = context.tokens();
+        // The primary and the fallback can both bill (the primary failing after its request was taken).
         let worst = models
             .iter()
             .filter_map(|model| config.model(model))
             .map(|spec| estimate_micros(spec, tokens, 0, false, max_output_tokens))
-            .max()
-            .unwrap_or(u64::MAX);
+            .fold(0u64, u64::saturating_add);
         if worst > self.remaining() {
             self.deps.telemetry.event(&SessionEvent::Background {
                 session: self.session_id.clone(),
@@ -1570,8 +1570,8 @@ impl Engine {
         let (providers, config, feed) = (self.deps.providers.clone(), self.config(), self.feed_tx.clone());
         let purpose = kind.purpose();
         tokio::spawn(async move {
-            let result = background::run(providers, config, models, Arc::new(context), purpose, question, max_output_tokens).await;
-            let _ = feed.send(Feed::Task { kind, result }).await;
+            let run = background::run(providers, config, models, Arc::new(context), purpose, question, max_output_tokens).await;
+            let _ = feed.send(Feed::Task { kind, run }).await;
         });
         true
     }
@@ -1639,32 +1639,55 @@ impl Engine {
         }
     }
 
-    fn on_task(&mut self, kind: TaskKind, result: Result<TaskOutcome, ProviderError>) {
+    fn on_task(&mut self, kind: TaskKind, run: TaskRun) {
         match &kind {
             TaskKind::PracticeQuestion { .. } => self.practice_busy = false,
             TaskKind::Facts { .. } => self.facts_busy = false,
             TaskKind::Summary { .. } => self.summary_busy = false,
         }
-        let outcome = match result {
+        // Attempts that failed after their request was taken: charged now, whatever the result.
+        let config = self.config();
+        let mut abandoned_usage = Usage::default();
+        let mut abandoned_cost = 0u64;
+        for (model, _, usage) in &run.abandoned {
+            let cost = config.model(model).map_or(0, |spec| cost_micros(spec, usage));
+            self.add_spend(cost, model);
+            abandoned_cost = abandoned_cost.saturating_add(cost);
+            abandoned_usage = add_usage(abandoned_usage, *usage);
+        }
+        let outcome = match run.result {
             Ok(outcome) => outcome,
             Err(error) => {
+                if let Some((model, provider, _)) = run.abandoned.last() {
+                    self.record_task(&kind, model, *provider, true, "error", abandoned_usage, abandoned_cost, true);
+                }
                 self.deps.telemetry.event(&SessionEvent::Background {
                     session: self.session_id.clone(),
                     task: kind.trigger(),
                     model: String::new(),
-                    cost_micros: 0,
+                    cost_micros: abandoned_cost,
                     error: Some(error.code()),
                 });
                 if let TaskKind::PracticeQuestion { .. } = kind {
                     let message = ErrorMessage::new(error.code(), plain_error(error));
                     self.error(if retryable(error) { message.retry() } else { message });
                 }
+                self.evaluate_mode(Why::Spend);
                 return;
             }
         };
-        let cost = self.config().model(&outcome.model).map_or(0, |spec| cost_micros(spec, &outcome.usage));
+        let cost = config.model(&outcome.model).map_or(0, |spec| cost_micros(spec, &outcome.usage));
         self.add_spend(cost, &outcome.model);
-        self.record_task(&kind, &outcome, cost);
+        self.record_task(
+            &kind,
+            &outcome.model,
+            outcome.provider,
+            outcome.fallback_used,
+            "done",
+            add_usage(abandoned_usage, outcome.usage),
+            cost.saturating_add(abandoned_cost),
+            outcome.estimated,
+        );
         let now = iso8601(unix_now());
         match kind {
             TaskKind::PracticeQuestion { question_id, index } => {
@@ -1719,44 +1742,58 @@ impl Engine {
         self.evaluate_mode(Why::Spend);
     }
 
-    /// The usage of one of the relay's own calls, for the server's ledger (kind practice_question, facts or summary).
-    fn record_task(&self, kind: &TaskKind, outcome: &TaskOutcome, cost: u64) {
+    /// The usage of one of the relay's own calls, for the server's ledger (kind practice_question, facts or summary):
+    /// the answer and any attempt given up on the way, together.
+    #[allow(clippy::too_many_arguments)]
+    fn record_task(
+        &self,
+        kind: &TaskKind,
+        model: &str,
+        provider: ProviderKind,
+        fallback: bool,
+        outcome: &'static str,
+        usage: Usage,
+        cost: u64,
+        estimated: bool,
+    ) {
         let suggestion_kind = match kind {
             TaskKind::PracticeQuestion { .. } => SuggestionKind::PracticeQuestion,
             TaskKind::Facts { .. } => SuggestionKind::Facts,
             TaskKind::Summary { .. } => SuggestionKind::Summary,
         };
-        let usage = UsageReport {
-            input_tokens: outcome.usage.input_tokens,
-            cached_input_tokens: outcome.usage.cached_input_tokens,
-            cache_write_tokens: outcome.usage.cache_write_tokens,
-            output_tokens: outcome.usage.output_tokens,
+        let report = UsageReport {
+            input_tokens: usage.input_tokens,
+            cached_input_tokens: usage.cached_input_tokens,
+            cache_write_tokens: usage.cache_write_tokens,
+            output_tokens: usage.output_tokens,
             cost_usd: micros_to_usd(cost),
-            estimated: outcome.estimated,
+            estimated,
         };
         self.deps.reports.report(Report::Usage(UsageRecord {
             suggestion_id: kind.id().to_owned(),
             session_id: self.session_id.clone(),
-            model: outcome.model.clone(),
-            provider: outcome.provider,
+            model: model.to_owned(),
+            provider,
             mode: Mode::Fast,
             kind: suggestion_kind,
             trigger: kind.trigger(),
-            outcome: "done",
-            fallback: outcome.fallback_used,
-            tokens: UsageRecord::tokens_of(&usage),
-            cost_usd: usage.cost_usd,
-            estimated: usage.estimated,
+            outcome,
+            fallback,
+            tokens: UsageRecord::tokens_of(&report),
+            cost_usd: report.cost_usd,
+            estimated,
             latency: Latency::default(),
             at: iso8601(unix_now()),
         }));
-        self.deps.telemetry.event(&SessionEvent::Background {
-            session: self.session_id.clone(),
-            task: kind.trigger(),
-            model: outcome.model.clone(),
-            cost_micros: cost,
-            error: None,
-        });
+        if outcome == "done" {
+            self.deps.telemetry.event(&SessionEvent::Background {
+                session: self.session_id.clone(),
+                task: kind.trigger(),
+                model: model.to_owned(),
+                cost_micros: cost,
+                error: None,
+            });
+        }
     }
 
     // -----------------------------------------------------------------------------------------------------------

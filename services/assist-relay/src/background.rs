@@ -253,6 +253,15 @@ pub struct TaskOutcome {
     pub estimated: bool,
 }
 
+/// A background call's result, and what attempts that failed cost on the way (estimated: the context as input, the
+/// words they streamed as output). A request the provider turned away unprocessed (rate limited, no key) costs
+/// nothing.
+#[derive(Debug, Clone)]
+pub struct TaskRun {
+    pub result: Result<TaskOutcome, ProviderError>,
+    pub abandoned: Vec<(String, ProviderKind, Usage)>,
+}
+
 /// One call, whole: each model in turn until one answers (the first is the Fast model, then its fallback). The
 /// first token must come within the model's first-token timeout, the whole answer within 30 s.
 pub async fn run(
@@ -263,8 +272,9 @@ pub async fn run(
     purpose: Purpose,
     question: String,
     max_output_tokens: u32,
-) -> Result<TaskOutcome, ProviderError> {
+) -> TaskRun {
     let mut last = ProviderError::Unavailable;
+    let mut abandoned = Vec::new();
     for (attempt, model) in models.iter().enumerate() {
         let Some(spec) = config.model(model) else { continue };
         let request = CompletionRequest {
@@ -276,13 +286,14 @@ pub async fn run(
             question: question.clone(),
         };
         let mut stream = providers.get(spec.provider).stream(request);
+        let mut text = String::new();
+        let mut usage = None;
         let collected = tokio::time::timeout(TASK_TIMEOUT, async {
-            let (mut text, mut usage) = (String::new(), None);
             let mut wait = spec.first_token_timeout();
             loop {
                 match tokio::time::timeout(wait, stream.next()).await {
                     Err(_) => return Err(ProviderError::Timeout),
-                    Ok(None) => return Ok((text, usage)),
+                    Ok(None) => return Ok(()),
                     Ok(Some(Err(error))) => return Err(error),
                     Ok(Some(Ok(StreamEvent::Text(piece)))) => {
                         text.push_str(&piece);
@@ -292,22 +303,25 @@ pub async fn run(
                 }
             }
         })
-        .await;
+        .await
+        .unwrap_or(Err(ProviderError::Timeout));
         match collected {
-            Ok(Ok((text, usage))) => {
-                let estimated = usage.is_none();
-                let usage = usage.unwrap_or(Usage {
-                    input_tokens: context.tokens(),
-                    output_tokens: estimate_tokens(&text),
-                    ..Usage::default()
-                });
-                return Ok(TaskOutcome { model: model.clone(), provider: spec.provider, text, usage, fallback_used: attempt > 0, estimated });
+            Ok(()) => {
+                let estimated = usage.is_none() || !abandoned.is_empty();
+                let usage = usage.unwrap_or(Usage { input_tokens: context.tokens(), output_tokens: estimate_tokens(&text), ..Usage::default() });
+                let outcome = TaskOutcome { model: model.clone(), provider: spec.provider, text, usage, fallback_used: attempt > 0, estimated };
+                return TaskRun { result: Ok(outcome), abandoned };
             }
-            Ok(Err(error)) => last = error,
-            Err(_) => last = ProviderError::Timeout,
+            Err(error) => {
+                if !matches!(error, ProviderError::NotConfigured(_) | ProviderError::RateLimited) {
+                    let spent = usage.unwrap_or(Usage { input_tokens: context.tokens(), output_tokens: estimate_tokens(&text), ..Usage::default() });
+                    abandoned.push((model.clone(), spec.provider, spent));
+                }
+                last = error;
+            }
         }
     }
-    Err(last)
+    TaskRun { result: Err(last), abandoned }
 }
 
 #[cfg(test)]
