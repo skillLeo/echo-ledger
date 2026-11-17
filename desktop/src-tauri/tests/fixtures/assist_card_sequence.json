@@ -1,0 +1,12 @@
+[
+  {"type": "suggestion_start", "suggestion_id": "s1", "turn_id": "o-1", "kind": "answer", "mode": "balanced", "model": "m1", "speculative": false, "draft": false},
+  {"type": "token", "suggestion_id": "s1", "text": "Thirty days, "},
+  {"type": "token", "suggestion_id": "s1", "text": "negotiable."},
+  {"type": "suggestion_end", "suggestion_id": "s1", "status": "done", "model": "m1", "latency": {"first_token_ms": 410}, "usage": {"input_tokens": 900, "output_tokens": 12}},
+  {"type": "suggestion_start", "suggestion_id": "s2", "turn_id": "o-2", "kind": "answer", "mode": "balanced", "model": "m1", "speculative": false, "draft": false},
+  {"type": "token", "suggestion_id": "s2", "text": "Mostly Rust."},
+  {"type": "suggestion_end", "suggestion_id": "s2", "status": "superseded", "model": "m1", "latency": {}, "usage": {"estimated": true}},
+  {"type": "skip", "suggestion_id": "s3", "turn_id": "o-3"},
+  {"type": "mode_changed", "from": "balanced", "to": "fast", "reason": "budget"},
+  {"type": "error", "code": "provider_timeout", "message": "upstream timeout", "retry": true, "suggestion_id": "s4", "fatal": false}
+]

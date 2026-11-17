@@ -30,22 +30,23 @@ final class AssistBudget
     public function __construct(private readonly AssistPlans $plans) {}
 
     /**
-     * Reserves [$cents] (the call's worst case) for a [$kind] call of [$session], as usage row [$id]; null when it does
-     * not fit what is left.
+     * Reserves [$cents] (the call's worst case) for a [$kind] call of [$session], as usage row [$id] (in [$mode], the
+     * session's when not given); null when it does not fit what is left, leaving [$keepCents] for what must still fit
+     * beside it (a background call leaves the suggestions' reserve).
      */
-    public function reserve(AssistSession $session, string $kind, string $model, int $cents, string $id): ?AssistUsage
+    public function reserve(AssistSession $session, string $kind, string $model, int $cents, string $id, ?string $mode = null, int $keepCents = 0): ?AssistUsage
     {
-        return DB::transaction(function () use ($session, $kind, $model, $cents, $id): ?AssistUsage {
+        return DB::transaction(function () use ($session, $kind, $model, $cents, $id, $mode, $keepCents): ?AssistUsage {
             // One person's reservations one at a time, whichever device or job asks.
             User::query()->whereKey($session->user_id)->lockForUpdate()->first();
-            if ($cents > $this->plans->left($session->workspace_id, $session->user_id, $session->practice)['cents_left']) {
+            if ($cents + $keepCents > $this->plans->left($session->workspace_id, $session->user_id, $session->practice)['cents_left']) {
                 return null;
             }
 
             return AssistUsage::query()->create([
                 'assist_session_id' => $session->id, 'workspace_id' => $session->workspace_id, 'user_id' => $session->user_id,
                 'suggestion_id' => $id, 'provider' => (string) config("assist.models.{$model}.provider", 'anthropic'), 'model' => $model,
-                'mode' => $session->mode, 'plan' => $session->plan ?? $this->plans->for($session->workspace_id)['key'],
+                'mode' => $mode ?? $session->mode, 'plan' => $session->plan ?? $this->plans->for($session->workspace_id)['key'],
                 'kind' => $kind, 'trigger' => $kind, 'outcome' => self::PENDING, 'estimated' => true,
                 'cost_usd' => round($cents / 100, 6), 'occurred_at' => now(),
             ]);
@@ -76,6 +77,35 @@ final class AssistBudget
             InternalAssistController::ledger($session, [
                 'suggestion_id' => $reservation->suggestion_id, 'provider' => $reservation->provider, 'model' => $model,
                 'tokens' => $tokens, 'cost_usd' => $cost,
+            ], Carbon::parse($reservation->occurred_at));
+        });
+    }
+
+    /**
+     * A live suggestion's reservation takes what the suggestion cost, summed over every model it asked (the answer and
+     * an attempt given up for the fallback), and is counted in the month's usage ledger. [$costUsd] is the sum, priced
+     * by the caller from the catalog; [$model] is the model that answered.
+     *
+     * @param  array{input: int, cached: int, written: int, output: int}  $tokens
+     * @param  array<string, float|null>|null  $latency
+     */
+    public function settleCall(AssistUsage $reservation, string $model, array $tokens, float $costUsd, bool $estimated, string $outcome, bool $fallback = false, ?array $latency = null): void
+    {
+        DB::transaction(function () use ($reservation, $model, $tokens, $costUsd, $estimated, $outcome, $fallback, $latency): void {
+            $reservation = AssistUsage::query()->whereKey($reservation->id)->lockForUpdate()->first();
+            if (! $reservation instanceof AssistUsage || $reservation->outcome !== self::PENDING) {
+                return;
+            }
+            $reservation->forceFill([
+                'model' => $model, 'provider' => (string) config("assist.models.{$model}.provider", $reservation->provider), 'outcome' => $outcome,
+                'estimated' => $estimated, 'fallback' => $fallback, 'latency' => $latency !== null ? array_filter($latency, 'is_numeric') : null,
+                'input_tokens' => $tokens['input'], 'cached_tokens' => $tokens['cached'], 'written_tokens' => $tokens['written'], 'output_tokens' => $tokens['output'],
+                'cost_usd' => round($costUsd, 6),
+            ])->save();
+            $session = AssistSession::query()->withoutGlobalScopes()->withTrashed()->findOrFail($reservation->assist_session_id);
+            InternalAssistController::ledger($session, [
+                'suggestion_id' => $reservation->suggestion_id, 'provider' => $reservation->provider, 'model' => $model,
+                'tokens' => $tokens, 'cost_usd' => $costUsd,
             ], Carbon::parse($reservation->occurred_at));
         });
     }

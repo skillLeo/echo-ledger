@@ -87,6 +87,9 @@ final class SettingsRegistry
                 'keywords' => ['clock', 'time format', 'am pm'], 'ru' => ['waqt', 'ghanta'], 'ur' => ['وقت']]),
             $e('appearance.library_view', 'Library view', 'appearance', 'segmented', ['options' => ['List', 'Table'], 'resettable' => true, 'default' => 'list',
                 'keywords' => ['table', 'list', 'layout']]),
+            // Since 2.0.0-g: the design switch both ways (shown while the other design is open to this person).
+            $e('appearance.design', 'Try the new design', 'appearance', 'action', ['aliases' => ['Switch back to classic'],
+                'keywords' => ['new design', 'classic', 'old design', 'redesign', 'new look']]),
             $e('notifications', 'Notifications', 'notifications', 'page', ['section' => 'App', 'keywords' => ['alerts', 'push', 'notification', 'email', 'emails'],
                 'ru' => ['ittila', 'ittilaat', 'alert', 'ghanti'], 'ur' => ['اطلاع', 'اطلاعات']]),
         ];

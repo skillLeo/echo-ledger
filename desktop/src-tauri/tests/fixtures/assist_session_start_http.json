@@ -1,0 +1,9 @@
+{"session": {"id": "01JCASSIST0SESSION00000001", "auto_saved": false, "mode": "balanced", "practice": false},
+ "transport": "http",
+ "relay": null,
+ "http": {"live_url": "LIVE_URL",
+          "ready": {"protocol": 1, "session_id": "01JCASSIST0SESSION00000001", "mode": "balanced", "requested_mode": "balanced",
+                    "allowed_modes": ["balanced", "fast"], "resumed": false, "practice": false,
+                    "limits": {"max_message_bytes": 2097152, "max_turn_chars": 4000, "messages_per_second": 10}}},
+ "stt": null,
+ "plan": {"modes": ["fast", "balanced"], "seconds_left": 31200}}

@@ -192,6 +192,7 @@ impl LiveCaptions {
             expected: grants.len(),
             done: Vec::new(),
         }));
+        let options = stream::SessionOptions::for_use_case(use_case);
         let mut senders = Vec::new();
         let mut stops = Vec::new();
         for (channel, grant) in grants {
@@ -209,6 +210,7 @@ impl LiveCaptions {
                     pcm_rx,
                     stop_rx,
                     move |event| on_stt_event(&hub_app, channel, targets, record_turns, (base_offset_ms, stream_start), event),
+                    options,
                     &mut usage,
                 )
                 .await;

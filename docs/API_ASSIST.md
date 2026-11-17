@@ -1,4 +1,9 @@
-# Live Assist contract — revision 1.9.0-p (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-q (frozen 2026-11-17 for the sprint)
+
+1.9.0-q: two transports for the live messages, chosen by the server per session: the relay's WebSocket, or HTTP mode
+(each app message POSTed to the server, the answer streamed back as server-sent events, with the same messages). The
+start lists the transports the app knows and answers `transport`; an app that knows only the relay is refused with
+`426 app_update_required` when the server runs HTTP mode.
 
 1.9.0-p: a report that could not be made shows `"report": "failed"` on the session; prep routes one per line.
 
@@ -47,7 +52,8 @@ body, another workspace's ids answer `404`, errors as `{"message", "code"}`.
 
 ```
  app (desktop / phone) ──REST──▶ server (Laravel)          preps, start, token refresh, turns, end, reports
- app ──WebSocket──▶ assist relay (services/assist-relay)    live turns in, suggestions out, token by token
+ app ──WebSocket──▶ assist relay (services/assist-relay)    live turns in, suggestions out (transport "relay")
+ app ──HTTPS + SSE──▶ server (Laravel)                     the same, one POST per message (transport "http")
  app ──WebSocket──▶ STT provider                            audio, with the short-lived STT token from the server
  relay ──HMAC REST──▶ server (internal)                     provider config, usage, suggestions, facts, summary
 ```
@@ -67,7 +73,7 @@ body, another workspace's ids answer `404`, errors as `{"message", "code"}`.
 | Ultra (Rs 12,499) | `fast`, `balanced`, `deep`, `max` | yes | 10 assist-hours, AI budget $60 |
 
 Every LLM and STT call goes through the per-user budget and usage ledger (feature `live_assist`). An assist-hour is
-wall-clock session time with the relay connected.
+wall-clock session time while the session is on, whichever transport carries it.
 
 ## REST (server)
 
@@ -107,15 +113,33 @@ Errors added by Live Assist:
 - `POST /api/assist/sessions` — start (also "Start now" from a prep):
   ```json
   {"prep_id": "01JB…", "mode": "balanced", "platform": "desktop", "recording_session_id": "01JB…",
-   "practice": false}
+   "practice": false, "transports": ["relay", "http"]}
   ```
   → `201`
   ```json
   {"session": {"id": "01JC…", "auto_saved": true, "mode": "balanced", "practice": false},
+   "transport": "relay",
    "relay": {"url": "wss://relay.example/v1/assist", "token": "…", "expires_at": "…"},
+   "http": null,
    "stt": {"provider": "soniox", "ws_url": "…", "token": "…", "expires_at": "…", "translate_other": true},
    "plan": {"modes": ["fast", "balanced"], "seconds_left": 31200}}
   ```
+  **Transport (since 1.9.0-q).** `transports` lists what the app can use (`relay`, `http`); absent means
+  `["relay"]` (apps before 1.9.0-q). The server picks one for the whole session from Admin › Settings › Live Assist
+  connection: **Dedicated relay** (the default: always the relay on the VPS; `503 relay_unavailable` while it is
+  down or not set up), **Automatic** (the relay whenever its address and secret are set, with the same `503` while it is
+  down, never HTTP mode instead; HTTP mode only while no relay is set up at all) or **Shared hosting** (always HTTP mode;
+  an emergency choice the admin makes by hand, never picked on its own: live answers may be slower or cut off). `transport`
+  says which: `"relay"` with the `relay` block and `"http": null`, or `"http"` with `"relay": null` and
+  ```json
+  "http": {"live_url": "https://<server>/api/assist/sessions/01JC…/live",
+           "ready": {"protocol": 1, "session_id": "01JC…", "mode": "balanced", "requested_mode": "balanced",
+                     "allowed_modes": ["balanced", "fast"], "resumed": false, "practice": false,
+                     "limits": {"max_message_bytes": 2097152, "max_turn_chars": 4000, "messages_per_second": 10}}}
+  ```
+  Refusals: `426 app_update_required` ("Live Assist needs the latest version of the app.") when the server's
+  transport is not in `transports`; `503 relay_unavailable` ("Live Assist can't connect right now. Try again in a few
+  minutes.") under Dedicated relay while the relay is down.
   One active session (live or practice) per person, across all their workspaces: a second start answers
   `409 session_active` with `{"session_id": "…", "practice": true|false, "device_id": "…"}`; the app may end it
   (`POST …/end`) and start again. `stt` is `null`
@@ -128,7 +152,9 @@ Errors added by Live Assist:
   pairs each hint with its question; `me` turns use the app's own ref.
 - `POST /api/assist/sessions/{id}/token` → `200` with new `relay` and `stt` blocks (`stt` may be `null` when captions
   are down right now; the refresh still succeeds and the app asks again in 30 s, showing that captions are paused) (tokens last at most 15 minutes;
-  apps refresh 2 minutes early and on a relay `error.code = "token_expired"`).
+  apps refresh 2 minutes early and on a relay `error.code = "token_expired"`). In HTTP mode it answers `transport`,
+  `"relay": null`, a fresh `http` block (its `ready` holds the mode as it is now) and `stt`; the app still refreshes
+  every 13 minutes, which keeps the session on (a session not refreshed for 20 minutes is ended).
 - `POST /api/assist/sessions/{id}/turns` — final turns in batches (every 5 s or 10 turns):
   `{"turns": [{"client_ref": "…", "channel": "other", "start_ms": 81200, "end_ms": 86400, "text": "…",
   "language": "en", "is_question": true}]}` → `200 {"accepted": 3}`; a repeated `client_ref` is ignored.
@@ -284,6 +310,44 @@ Rules: a suggestion is never triggered from the `me` channel; a speculative star
 like a question (≥ 128 ms of silence) is cancelled and restarted if they keep talking within 700 ms; a balanced draft
 is replaced by its upgrade only if the person has not started speaking; captions never stop when the budget runs out.
 The relay's own draft of these messages is `services/assist-relay/PROTOCOL.md`; this file wins where they differ.
+
+## HTTP mode (since 1.9.0-q)
+
+The same messages as the WebSocket, without a long-lived connection: for servers that can't hold one (shared
+hosting). Everything under "WebSocket (relay)" holds unless this section says otherwise.
+
+- **One POST per app message:** `POST {http.live_url}` — `sessions:write`, the device token (no relay token),
+  `Accept: text/event-stream`, the body one app message exactly as on the WebSocket (`context_update`, `turn_final`,
+  `turn_partial`, `help_now`, `regenerate`, `shorter`, `formal`, `translate`, `cancel`, `practice_next`; no `auth`,
+  `token_refresh` or `seq` needed). Before the stream starts the usual REST errors apply (`401`, `404`,
+  `409 session_ended`, `422`, `429`, `426 app_update_required` on a session whose transport is `relay`).
+- **The answer is a stream** of server-sent events, `200 text/event-stream`, one relay message per event:
+  `event: <type>` and `data: <the message as JSON>`, the same JSON as on the WebSocket (`suggestion_start`, `token`,
+  `suggestion_end`, `skip`, `mode_changed`, `practice_question`, `practice_done`, `error`); `seq` counts per stream
+  from 1. The stream ends when the work for that message is done (`event: end`, `data: {}`, then the response closes).
+  A message with nothing to say (a `me` turn, `context_update`) answers just `end`. Lines starting with `:` are
+  keep-alives. A stream lasts at most 60 s.
+- **Card semantics are those of the WebSocket:** the app feeds the events of every open stream into one card, in
+  arrival order. Whoever ends a suggestion sends its end: a new question's stream sends `suggestion_end` `superseded`
+  for the suggestion on the card before its own `suggestion_start`; a `cancel` stream sends `suggestion_end`
+  `cancelled`; the stream that was writing that suggestion then stops without another event about it. An upgrade and
+  a fallback (`replaces`) come in the stream of the question they answer. In such an end sent by another stream,
+  `usage` is the estimate at that moment (`estimated: true`).
+- **Turns:** send every `turn_final` (both channels; `client_ref` is not needed: the server stores the turns of HTTP
+  mode itself, and `POST …/turns` is not needed either). Send `turn_partial` only for `me`, once per turn, as soon as
+  Me starts speaking (it tells an upgrade or a held question that the moment has passed); `other` partials are not
+  sent: HTTP mode has no speculative starts (`speculative` is always false).
+- **Held questions:** a question the budget gate can't take yet keeps its stream open, quiet except for keep-alives,
+  for at most 5 s; it starts when calls in flight finish, or the stream ends with nothing when Me speaks, the other
+  side sends another final, or the 5 s pass.
+- **Not in HTTP mode:** `ready` (it is `http.ready` in the start and refresh answers), `auth`, `token_refresh` /
+  `token_refreshed`, close codes, resume, `relay_pins` (the server's own pins apply), `rate_limited` (HTTP `429`
+  instead). At most 4 streams open per session; a fifth answers `429`.
+- **Practice:** `practice_next` answers `practice_question` and then, in the same stream, the hint for it
+  (unless paused), or `practice_done`.
+- **Apps:** use the HTTP/2 connection the platform keeps alive (no new TLS handshake per message); keep the card logic
+  shared with the relay transport; on a dropped stream, the suggestion it was writing gets no end: clear it as after a
+  resumed `ready`.
 
 ## Output contract (prompt pack)
 

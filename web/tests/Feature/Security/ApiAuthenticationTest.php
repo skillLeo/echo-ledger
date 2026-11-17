@@ -114,6 +114,7 @@ function secDeviceGuardedRoutes(): array
         'GET account' => ['GET', '/api/account', 'config:read'],
         // Since 2.0.0-a: the person's "Switch back to classic".
         'PUT account/ui' => ['PUT', '/api/account/ui', 'config:read'],
+        'GET account/ui' => ['GET', '/api/account/ui', 'config:read'],
         'DELETE account' => ['DELETE', '/api/account', 'sessions:write'],
         'POST account/export' => ['POST', '/api/account/export', 'library:read'],
         'GET account/export/{id}' => ['GET', '/api/account/export/'.Fx::MISSING_ID, 'library:read'],
@@ -134,6 +135,8 @@ function secDeviceGuardedRoutes(): array
         'DELETE assist/sessions/{id}' => ['DELETE', '/api/assist/sessions/'.Fx::MISSING_ID, 'sessions:write'],
         'POST assist/sessions/{id}/suggestions/{s}/action' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/suggestions/s1/action', 'sessions:write'],
         'POST assist/sessions/{id}/ask' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/ask', 'sessions:write'],
+        // Since 1.9.0-q: HTTP mode, one app message per POST, the answer streamed back.
+        'POST assist/sessions/{id}/live' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/live', 'sessions:write'],
         // Since v1.8 P6.3: inviting people.
         'GET workspace/invitations' => ['GET', '/api/workspace/invitations', 'config:read'],
         'POST workspace/invitations' => ['POST', '/api/workspace/invitations', 'sessions:write'],
@@ -215,7 +218,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(134);
+    expect($guarded)->toBe(136);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {
