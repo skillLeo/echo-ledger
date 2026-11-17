@@ -360,10 +360,8 @@ fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     emit_recording_state(app);
     check_bluetooth_mic(app, info);
     crate::screens::on_recording_started(app, info);
-    // A prep armed for this meeting starts its Live Assist session.
-    if info.mode == RecordingMode::Call {
-        crate::assist::live::on_call_started(app);
-    }
+    // A prep armed for this meeting starts its Live Assist session, or the card asks (`assist::live::decide`).
+    crate::assist::live::on_recording_started(app, info);
 }
 
 /// Whether the recording's microphone is Bluetooth (v1.5), asked of the system beside the start so the start does not

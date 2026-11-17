@@ -29,17 +29,121 @@ pub const ARM_EARLY: Duration = Duration::from_secs(120);
 /// How often the card hears the assist time left.
 const BUDGET_EVERY: Duration = Duration::from_secs(60);
 
-/// A prep armed for its meeting until `until` (the server's `armed_until`, else 10 minutes after its time).
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A prep armed for its meeting: from `armed_at` until `until` (the server's `armed_until`, else 10 minutes after its
+/// time), with the app and the person it names, if any.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Armed {
     pub prep_id: String,
+    pub title: String,
+    pub at: DateTime<Utc>,
+    pub armed_at: DateTime<Utc>,
     pub until: DateTime<Utc>,
+    /// A meeting app the prep names (`zoom`, `google_meet`, `whatsapp`…).
+    pub app: Option<&'static str>,
+    /// The person the prep is with (`counterpart`).
+    pub person: Option<String>,
+}
+
+/// What people wrote stays out of logs.
+impl std::fmt::Debug for Armed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Armed").field("prep_id", &self.prep_id).field("until", &self.until).field("app", &self.app).finish_non_exhaustive()
+    }
+}
+
+/// The meeting apps a prep can name, as the recording's source app reads (WhatsApp's three apps are one).
+const APPS: [(&str, &[&str]); 9] = [
+    ("google_meet", &["google meet", "meet.google"]),
+    ("zoom", &["zoom"]),
+    ("microsoft_teams", &["microsoft teams", "teams"]),
+    ("whatsapp", &["whatsapp"]),
+    ("skype", &["skype"]),
+    ("slack", &["slack"]),
+    ("telegram", &["telegram"]),
+    ("signal", &["signal"]),
+    ("discord", &["discord"]),
+];
+
+fn words(text: &str) -> Vec<String> {
+    text.to_lowercase().split(|c: char| !c.is_alphanumeric() && c != '.').filter(|w| !w.is_empty()).map(str::to_string).collect()
+}
+
+/// The meeting app a prep names in its title, company, counterpart or instructions, if exactly one (pure).
+pub fn named_app(prep: &Prep) -> Option<&'static str> {
+    let text = format!(" {} ", words(&[prep.title.as_str(), &prep.company, &prep.counterpart, &prep.instructions].join(" ")).join(" "));
+    let named: Vec<&'static str> = APPS.iter().filter(|(_, names)| names.iter().any(|n| text.contains(&format!(" {n} ")))).map(|(key, _)| *key).collect();
+    (named.len() == 1).then(|| named[0])
+}
+
+fn same_app(named: &str, source_app: &str) -> bool {
+    if named == "whatsapp" { source_app.starts_with("whatsapp") } else { named == source_app }
+}
+
+/// The caller's name and the prep's person are the same person: a word of one is a word of the other (pure).
+pub fn same_person(person: &str, caller: &str) -> bool {
+    let caller = words(caller);
+    words(person).iter().filter(|w| w.chars().count() >= 2).any(|w| caller.contains(w))
 }
 
 impl Armed {
-    pub fn waits(&self, now: DateTime<Utc>) -> bool {
-        now <= self.until
+    pub fn from_prep(prep: &Prep, at: DateTime<Utc>, armed_at: DateTime<Utc>, until: DateTime<Utc>) -> Self {
+        let person = Some(prep.counterpart.trim().to_string()).filter(|p| !p.is_empty());
+        Armed { prep_id: prep.id.clone(), title: prep.title.clone(), at, armed_at, until, app: named_app(prep), person }
     }
+}
+
+/// A recording that just started, as arming sees it.
+#[derive(Clone, Copy, Debug)]
+pub struct CallStart<'a> {
+    pub mode: crate::audio::RecordingMode,
+    pub started_at: DateTime<Utc>,
+    pub source_app: &'a str,
+    /// Who it is with, once its window's title says.
+    pub caller: Option<&'a str>,
+}
+
+/// What an armed prep does with a recording that started (pure).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Arming {
+    /// Not its meeting: a voice note, a call that began before it was armed or after its time.
+    Nothing,
+    /// The app and the person it names match: Live Assist starts.
+    Start(String),
+    /// It names nobody, something does not match, or two preps could be this call: the card asks.
+    Ask(String),
+    /// It names a person and the caller is not known yet: asked again in a moment.
+    Wait,
+}
+
+fn verdict(armed: &Armed, call: &CallStart<'_>) -> Arming {
+    if call.mode != crate::audio::RecordingMode::Call || call.started_at < armed.armed_at || call.started_at > armed.until {
+        return Arming::Nothing;
+    }
+    let app = armed.app.map(|a| same_app(a, call.source_app));
+    let person = armed.person.as_deref().map(|p| call.caller.map(|c| same_person(p, c)));
+    match (app, person) {
+        (Some(false), _) | (_, Some(Some(false))) | (None, None) => Arming::Ask(armed.prep_id.clone()),
+        (_, Some(None)) => Arming::Wait,
+        _ => Arming::Start(armed.prep_id.clone()),
+    }
+}
+
+/// What the armed preps do with a recording that started (pure): one that matches starts; two that could be this call,
+/// or one that names nothing or does not match, make the card ask about the one scheduled nearest the call.
+pub fn decide(armed: &[Armed], call: &CallStart<'_>) -> Arming {
+    let candidates: Vec<(&Armed, Arming)> = armed.iter().map(|a| (a, verdict(a, call))).filter(|(_, v)| *v != Arming::Nothing).collect();
+    let nearest = || candidates.iter().min_by_key(|(a, _)| (a.at - call.started_at).num_seconds().abs()).map(|(a, _)| a.prep_id.clone());
+    let starts: Vec<&String> = candidates.iter().filter_map(|(_, v)| if let Arming::Start(id) = v { Some(id) } else { None }).collect();
+    match starts.as_slice() {
+        [one] => Arming::Start((*one).clone()),
+        [] if candidates.iter().any(|(_, v)| *v == Arming::Wait) => Arming::Wait,
+        _ => nearest().map_or(Arming::Nothing, Arming::Ask),
+    }
+}
+
+/// The card's question when an armed prep may be this call (it starts nothing by itself).
+pub fn offer_message(armed: &Armed) -> serde_json::Value {
+    serde_json::json!({"type": "offer", "prep_id": armed.prep_id, "title": armed.title, "question": "Start Live Assist for this call?"})
 }
 
 /// When a prep scheduled for `at` is armed (pure).
@@ -481,12 +585,13 @@ pub async fn schedule(app: &AppHandle, prep_id: &str, at: &str) -> AppResult<Pre
     let when = DateTime::parse_from_rfc3339(at).map_err(|_| AppError::msg("Choose a date and time for the meeting."))?.with_timezone(&Utc);
     let fields = serde_json::json!({"scheduled_at": when.to_rfc3339(), "status": "scheduled"});
     let prep = app.state::<crate::AppState>().api()?.assist_prep_patch(checked(prep_id)?, &fields).await?;
-    arm_later(app, prep.id.clone(), when);
+    arm_later(app, prep.clone(), when);
     Ok(prep)
 }
 
-/// Arms `prep_id` at [`arm_at`] (at once when that has passed).
-fn arm_later(app: &AppHandle, prep_id: String, at: DateTime<Utc>) {
+/// Arms `prep` at [`arm_at`] (at once when that has passed); one armed entry per prep.
+fn arm_later(app: &AppHandle, prep: Prep, at: DateTime<Utc>) {
+    let prep_id = prep.id.clone();
     let generation = ARMING.fetch_add(1, Ordering::SeqCst) + 1;
     arming().lock().unwrap_or_else(|p| p.into_inner()).insert(prep_id.clone(), generation);
     let app = app.clone();
@@ -506,12 +611,18 @@ fn arm_later(app: &AppHandle, prep_id: String, at: DateTime<Utc>) {
             }
         };
         let until = until.unwrap_or(at + chrono::Duration::minutes(10));
-        *state.assist.armed() = Some(Armed { prep_id, until });
-        // A call already being recorded is the meeting.
-        if state.capture.is_recording() {
-            on_call_started(&app);
-        }
+        // Only a call that starts from now on can be the meeting, never one already running.
+        let entry = Armed::from_prep(&prep, at, Utc::now(), until);
+        let mut armed = state.assist.armed();
+        armed.retain(|a| a.prep_id != prep_id && a.waits(Utc::now()));
+        armed.push(entry);
     });
+}
+
+impl Armed {
+    pub fn waits(&self, now: DateTime<Utc>) -> bool {
+        now <= self.until
+    }
 }
 
 /// At start or when Live Assist turns on: the scheduled preps get their arming timers again.
@@ -522,24 +633,57 @@ pub fn rearm(app: &AppHandle) {
         for prep in scheduled {
             let at = prep.scheduled_at.as_deref().and_then(|a| DateTime::parse_from_rfc3339(a).ok()).map(|a| a.with_timezone(&Utc));
             if let Some(at) = at.filter(|at| *at + chrono::Duration::minutes(10) > Utc::now()) {
-                arm_later(&app, prep.id, at);
+                arm_later(&app, prep, at);
             }
         }
     });
 }
 
-/// A call recording started: an armed prep starts its session with it.
-pub fn on_call_started(app: &AppHandle) {
-    let state = app.state::<crate::AppState>();
-    let armed = state.assist.armed().take();
-    let Some(armed) = armed.filter(|a| a.waits(Utc::now())) else { return };
-    if state.assist.session_id().is_some() {
+/// How long an armed prep that names a person waits for the caller's name before the card asks.
+const CALLER_WAIT: Duration = Duration::from_secs(30);
+
+/// A recording started: an armed prep that matches it starts its session; one that may be this call makes the card
+/// ask. Never a voice note, never a call that was running before the prep was armed.
+pub fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
+    if app.state::<crate::AppState>().assist.armed().is_empty() {
         return;
     }
-    let app = app.clone();
+    let (app, info) = (app.clone(), info.clone());
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = start(&app, Some(armed.prep_id), None, false).await {
-            let _ = app.emit("app:error", e.to_string());
+        let asked_until = Instant::now() + CALLER_WAIT;
+        loop {
+            let state = app.state::<crate::AppState>();
+            if state.assist.session_id().is_some() || state.capture.info().map(|i| i.client_ref) != Some(info.client_ref.clone()) {
+                return;
+            }
+            let caller = state.recording_caller.lock().unwrap_or_else(|p| p.into_inner()).as_ref().filter(|(r, _)| *r == info.client_ref).and_then(|(_, c)| c.name.clone());
+            let call = CallStart { mode: info.mode, started_at: info.started_at, source_app: &info.source_app, caller: caller.as_deref() };
+            let decision = {
+                let armed = state.assist.armed();
+                match decide(&armed, &call) {
+                    Arming::Wait if Instant::now() >= asked_until => armed.iter().find(|a| verdict(a, &call) == Arming::Wait).map_or(Arming::Nothing, |a| Arming::Ask(a.prep_id.clone())),
+                    other => other,
+                }
+            };
+            match decision {
+                Arming::Nothing => return,
+                Arming::Wait => tokio::time::sleep(Duration::from_secs(2)).await,
+                Arming::Start(prep_id) => {
+                    state.assist.armed().retain(|a| a.prep_id != prep_id);
+                    if let Err(e) = start(&app, Some(prep_id), None, false).await {
+                        let _ = app.emit("app:error", e.to_string());
+                    }
+                    return;
+                }
+                Arming::Ask(prep_id) => {
+                    let offer = state.assist.armed().iter().find(|a| a.prep_id == prep_id).map(offer_message);
+                    if let Some(offer) = offer {
+                        crate::lifecycle::show(&app, WINDOW, "assist");
+                        emit(&app, &offer);
+                    }
+                    return;
+                }
+            }
         }
     });
 }
@@ -602,13 +746,72 @@ mod tests {
         assert_eq!(serde_json::to_value(level).unwrap(), json!({"hint_level": "keywords", "assist": "on"}));
     }
 
+    fn utc(text: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(text).unwrap().with_timezone(&Utc)
+    }
+
+    fn armed(id: &str, title: &str, counterpart: &str, at: &str) -> Armed {
+        let at = utc(at);
+        let prep = Prep { id: id.into(), title: title.into(), counterpart: counterpart.into(), ..Prep::default() }.completed();
+        Armed::from_prep(&prep, at, arm_at(at), at + chrono::Duration::minutes(10))
+    }
+
+    fn call<'a>(at: &str, source_app: &'a str, caller: Option<&'a str>) -> CallStart<'a> {
+        CallStart { mode: crate::audio::RecordingMode::Call, started_at: utc(at), source_app, caller }
+    }
+
     #[test]
     fn a_scheduled_prep_is_armed_two_minutes_early_and_waits_until_its_time() {
-        let at = DateTime::parse_from_rfc3339("2026-12-01T10:00:00Z").unwrap().with_timezone(&Utc);
+        let at = utc("2026-12-01T10:00:00Z");
         assert_eq!(arm_at(at).to_rfc3339(), "2026-12-01T09:58:00+00:00");
-        let armed = Armed { prep_id: "p1".into(), until: at + chrono::Duration::minutes(10) };
-        assert!(armed.waits(at + chrono::Duration::minutes(9)));
-        assert!(!armed.waits(at + chrono::Duration::minutes(11)), "then the server cancels it");
+        let entry = armed("p1", "Interview", "", "2026-12-01T10:00:00Z");
+        assert!(entry.waits(at + chrono::Duration::minutes(9)));
+        assert!(!entry.waits(at + chrono::Duration::minutes(11)), "then the server cancels it");
+    }
+
+    #[test]
+    fn a_prep_starts_only_with_a_matching_call_that_starts_inside_its_window() {
+        let zoom_with_sara = [armed("p1", "Interview on Zoom", "Sara Khan", "2026-12-01T10:00:00Z")];
+        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:01:00Z", "zoom", Some("Sara"))), Arming::Start("p1".into()), "app and person match");
+        // A call already running when the prep was armed is never its meeting.
+        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T09:50:00Z", "zoom", Some("Sara"))), Arming::Nothing);
+        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:11:00Z", "zoom", Some("Sara"))), Arming::Nothing, "after its time");
+        // A voice note is never a meeting.
+        let note = CallStart { mode: crate::audio::RecordingMode::VoiceNote, ..call("2026-12-01T10:01:00Z", "voice_note", None) };
+        assert_eq!(decide(&zoom_with_sara, &note), Arming::Nothing);
+        // Another app: it does not start by itself; the card asks.
+        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:01:00Z", "google_meet", Some("Sara"))), Arming::Ask("p1".into()));
+        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:01:00Z", "zoom", Some("Omar Ali"))), Arming::Ask("p1".into()), "another person");
+        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:01:00Z", "zoom", None)), Arming::Wait, "the caller's name is not known yet");
+        // A prep that names neither: the card asks.
+        let bare = [armed("p2", "Weekly", "", "2026-12-01T10:00:00Z")];
+        assert_eq!(decide(&bare, &call("2026-12-01T10:00:30Z", "zoom", None)), Arming::Ask("p2".into()));
+        let whatsapp = [armed("p3", "Call on WhatsApp", "", "2026-12-01T10:00:00Z")];
+        assert_eq!(decide(&whatsapp, &call("2026-12-01T10:00:30Z", "whatsapp_business", None)), Arming::Start("p3".into()), "WhatsApp's apps are one");
+    }
+
+    #[test]
+    fn two_preps_close_together_make_the_card_ask_about_the_nearest() {
+        let two = [armed("p1", "Weekly", "", "2026-12-01T10:00:00Z"), armed("p2", "Standup", "", "2026-12-01T10:05:00Z")];
+        assert_eq!(decide(&two, &call("2026-12-01T10:04:00Z", "zoom", None)), Arming::Ask("p2".into()));
+        let both_zoom = [armed("p1", "Zoom one", "", "2026-12-01T10:00:00Z"), armed("p2", "Zoom two", "", "2026-12-01T10:05:00Z")];
+        assert_eq!(decide(&both_zoom, &call("2026-12-01T10:04:00Z", "zoom", None)), Arming::Ask("p2".into()), "two that match: asked, never guessed");
+        assert_eq!(decide(&both_zoom, &call("2026-12-01T10:01:00Z", "zoom", None)), Arming::Start("p1".into()), "before the second is armed, only the first can be it");
+        let one_matches = [armed("p1", "On Zoom", "", "2026-12-01T10:00:00Z"), armed("p2", "Weekly", "", "2026-12-01T10:05:00Z")];
+        assert_eq!(decide(&one_matches, &call("2026-12-01T10:04:00Z", "zoom", None)), Arming::Start("p1".into()), "the one that names this app");
+    }
+
+    #[test]
+    fn apps_and_people_are_read_from_the_prep_s_words() {
+        let prep = |title: &str| Prep { id: "p".into(), title: title.into(), ..Prep::default() };
+        assert_eq!(named_app(&prep("Interview on Google Meet")), Some("google_meet"));
+        assert_eq!(named_app(&prep("Teams sync")), Some("microsoft_teams"));
+        assert_eq!(named_app(&prep("Zoom or Teams")), None, "two apps: none for sure");
+        assert_eq!(named_app(&prep("Zoomed-out review")), None, "a word, not a part of one");
+        assert!(same_person("Sara Khan", "Sara") && same_person("Sara", "Sara Khan (Acme)"));
+        assert!(!same_person("Sara Khan", "Omar Ali"));
+        assert_eq!(offer_message(&armed("p1", "Weekly", "", "2026-12-01T10:00:00Z"))["question"], "Start Live Assist for this call?");
+        assert!(!format!("{:?}", armed("p1", "SECRET title", "SECRET person", "2026-12-01T10:00:00Z")).contains("SECRET"));
     }
 
     #[test]

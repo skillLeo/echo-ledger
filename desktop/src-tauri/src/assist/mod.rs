@@ -40,7 +40,7 @@ pub fn start(
 #[derive(Default)]
 pub struct Registry {
     running: Mutex<Option<Running>>,
-    armed: Mutex<Option<live::Armed>>,
+    armed: Mutex<Vec<live::Armed>>,
 }
 
 /// One running session.
@@ -80,8 +80,8 @@ impl Registry {
         self.running.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// The prep armed for its meeting, if any.
-    pub fn armed(&self) -> std::sync::MutexGuard<'_, Option<live::Armed>> {
+    /// The preps armed for their meetings, one entry per prep.
+    pub fn armed(&self) -> std::sync::MutexGuard<'_, Vec<live::Armed>> {
         self.armed.lock().unwrap_or_else(|p| p.into_inner())
     }
 
