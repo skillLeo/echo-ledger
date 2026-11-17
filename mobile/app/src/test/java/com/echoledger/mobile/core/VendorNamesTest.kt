@@ -181,7 +181,15 @@ class VendorNamesTest {
     }
 
     /** The Groq key step's string resources in every language, each by its key ("Groq did not accept that key"). */
-    private val groqKeyStepKeys = setOf("v2_vm_key_refused")
+    private val groqKeyStepKeys = setOf(
+        "v2_vm_key_refused",
+        // Settings v2's Transcription key page (the same step).
+        "v2_tr_key_saved",
+        "v2_tr_key_intro",
+        "v2_tr_key_step1",
+        "v2_tr_key_open",
+        "v2_tr_key_field"
+    )
 
     /** Every text of the app's resources (strings, labels, descriptions) and manifests. */
 
