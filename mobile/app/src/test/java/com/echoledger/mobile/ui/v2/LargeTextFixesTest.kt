@@ -102,7 +102,14 @@ class LargeTextFixesTest {
     }
 
     @Test
-    fun aLiveTabExplanationNeverEndsOnOneWordAlone() {
+    fun aLiveTabExplanationNeverEndsOnOneWordAlone() = liveTabExplanations()
+
+    /** The same on a narrower phone (360 dp wide). */
+    @Test
+    @Config(qualifiers = "w360dp-h780dp-420dpi")
+    fun aLiveTabExplanationNeverEndsOnOneWordAloneOnANarrowPhone() = liveTabExplanations()
+
+    private fun liveTabExplanations() {
         language = EchoLanguage.Urdu
         show { com.echoledger.mobile.ui.v2.live.V2LiveTab(liveAssist = true, liveTranslate = true, onOpen = {}) }
         val res = V2Testing.resources(EchoLanguage.Urdu)
@@ -122,7 +129,8 @@ class LargeTextFixesTest {
                 val layout = compose.onNodeWithText(words, useUnmergedTree = true).layout()
                 if (layout.lineCount < 2) continue
                 val last = words.substring(layout.getLineStart(layout.lineCount - 1), layout.getLineEnd(layout.lineCount - 1)).trim()
-                assertTrue("$s: \"$words\" ends on \"$last\"", last.contains(' '))
+                // Two words at least: a space, or the no-break space that keeps the last two words together.
+                assertTrue("$s: \"$words\" ends on \"$last\"", last.any { it == ' ' || it == '\u00A0' })
             }
         }
     }
