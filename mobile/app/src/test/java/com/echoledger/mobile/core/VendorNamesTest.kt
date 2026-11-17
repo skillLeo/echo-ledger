@@ -34,6 +34,7 @@ class VendorNamesTest {
         "https://console.groq.com/keys",
         "Groq API key",
         "Groq did not accept that key. Copy it again from console.groq.com.",
+        // The same line in Urdu is allowed by its key, below (groqKeyStepKeys).
         "The Free plan transcribes with your own free Groq key. Add it in You → Transcription key, then tap Retry.",
         "Groq did not accept your key. Check it in Transcription key, then try again.",
         // The settings search finds the key step by its vendor's name too (search words, never shown).
@@ -179,12 +180,20 @@ class VendorNamesTest {
             .toList()
     }
 
+    /** The Groq key step's string resources in every language, each by its key ("Groq did not accept that key"). */
+    private val groqKeyStepKeys = setOf("v2_vm_key_refused")
+
     /** Every text of the app's resources (strings, labels, descriptions) and manifests. */
+
     private fun resourceStrings(): List<Pair<String, String>> = sourceSets.flatMap { set ->
         set.walkTopDown()
             .filter { (it.extension == "xml" && "/res/" in it.path.replace('\\', '/')) || it.name == "AndroidManifest.xml" }
             .flatMap { file ->
-                Regex(">([^<>]+)<|=\"([^\"]+)\"").findAll(file.readText()).map { (it.groupValues[1].ifEmpty { it.groupValues[2] }) }
+                // A string the key step owns is left out by its name, in any language; everything else is read.
+                val text = Regex("""<string name="([^"]+)"[^>]*>[^<]*</string>""").replace(file.readText()) {
+                    if (it.groupValues[1] in groqKeyStepKeys) "" else it.value
+                }
+                Regex(">([^<>]+)<|=\"([^\"]+)\"").findAll(text).map { (it.groupValues[1].ifEmpty { it.groupValues[2] }) }
                     .map { "${set.name}/${file.name}: $it" to it }.toList()
             }.toList()
     }
