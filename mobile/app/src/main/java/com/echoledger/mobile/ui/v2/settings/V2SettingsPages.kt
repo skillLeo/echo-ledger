@@ -88,7 +88,7 @@ fun AppearancePage(
                 modifier = Modifier.highlightedIf(highlight == "appearance.font")
             )
             if (flags.offersClassicSwitch) {
-                EchoSwitch(flags.classic, onSwitchToClassic, v2Text.classicLook, supporting = v2Text.classicLookHelp)
+                com.echoledger.mobile.ui.v2.shell.SwitchBackToClassic { onSwitchToClassic(true) }
             }
             PageReset("appearance", stringResource(R.string.v2_set_page_appearance), update)
         }

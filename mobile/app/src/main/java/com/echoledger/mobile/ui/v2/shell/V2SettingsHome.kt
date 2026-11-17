@@ -27,6 +27,7 @@ import com.echoledger.mobile.ui.v2.components.EchoAvatar
 import com.echoledger.mobile.ui.v2.components.EchoBanner
 import com.echoledger.mobile.ui.v2.components.EchoBannerKind
 import com.echoledger.mobile.ui.v2.components.EchoButton
+import com.echoledger.mobile.ui.v2.components.EchoButtonKind
 import com.echoledger.mobile.ui.v2.components.EchoCard
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
@@ -34,7 +35,6 @@ import com.echoledger.mobile.ui.v2.components.EchoSkeletonBlock
 import com.echoledger.mobile.ui.v2.components.EchoSkeletonCircle
 import com.echoledger.mobile.ui.v2.components.EchoStatus
 import com.echoledger.mobile.ui.v2.components.EchoStatusKind
-import com.echoledger.mobile.ui.v2.components.EchoSwitch
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.library.LibraryModel
 import com.echoledger.mobile.ui.v2.theme.EchoV2
@@ -132,14 +132,7 @@ fun V2SettingsHomeContent(
         LazyColumn(Modifier.weight(1f)) {
             item { ProfileCardSlot(state, onUpgrade, onRetry) }
             if (flags.offersClassicSwitch) {
-                item {
-                    EchoSwitch(
-                        checked = flags.classic,
-                        onCheckedChange = onSwitchToClassic,
-                        label = text.classicLook,
-                        supporting = text.classicLookHelp
-                    )
-                }
+                item { SwitchBackToClassic { onSwitchToClassic(true) } }
             }
             item { EchoSettingRow(text.allSettings, icon = EchoIcons.Settings, onClick = onAllSettings) }
         }
@@ -225,5 +218,21 @@ private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modif
                 EchoButton(text.upgrade, onClick = onUpgrade)
             }
         }
+    }
+}
+
+/**
+ * "Switch back to classic" (Settings and Settings › Appearance): the classic screens again on this phone; classic's
+ * Settings › Appearance offers "Try the new design" back.
+ */
+@Composable
+fun SwitchBackToClassic(onClick: () -> Unit) {
+    val text = v2Text
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+        verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+    ) {
+        Text(text.classicLookHelp, style = EchoV2.type.meta, color = EchoV2.colors.textSecondary)
+        EchoButton(text.classicLook, onClick, kind = EchoButtonKind.Secondary)
     }
 }

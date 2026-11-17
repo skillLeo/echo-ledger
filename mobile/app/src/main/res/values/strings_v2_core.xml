@@ -60,8 +60,8 @@
     <string name="v2_speed">Playback speed</string>
     <string name="v2_settings">Settings</string>
     <string name="v2_all_settings">All settings</string>
-    <string name="v2_classic_look">Classic look</string>
-    <string name="v2_classic_look_help">Go back to the previous design on this phone and the web</string>
+    <string name="v2_classic_look">Switch back to classic</string>
+    <string name="v2_classic_look_help">Use the classic screens again on this phone. You can try the new design again in Settings › Appearance.</string>
     <string name="v2_plan">%1$s plan</string>
     <string name="v2_minutes_used">%1$d of %2$d minutes used this month</string>
     <string name="v2_storage_used">%1$s in %2$d recordings</string>

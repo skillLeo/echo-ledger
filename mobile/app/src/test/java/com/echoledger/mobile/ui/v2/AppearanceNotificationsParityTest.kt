@@ -135,7 +135,8 @@ class AppearanceNotificationsParityTest : ScreenTest() {
             "switch: Use phone font" to "switch: Use the phone's font"
         )
         val wallpaper = "switch: Wallpaper colours" to "v2 takes no wallpaper colours (SettingsTree.hiddenItems)"
-        compare(Step.entries, run, where, search + wallpaper) {
+        val design = "button: Try the new design" to "the other direction: the new design offers Switch back to classic (DesignSwitchTest)"
+        compare(Step.entries, run, where, search + wallpaper + design) {
             defaults(start) { it.copy(themeMode = d.themeMode, phoneFont = d.phoneFont) }
         }
     }

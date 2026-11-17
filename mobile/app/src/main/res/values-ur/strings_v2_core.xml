@@ -60,8 +60,8 @@
     <string name="v2_speed">رفتار</string>
     <string name="v2_settings">ترتیبات</string>
     <string name="v2_all_settings">تمام ترتیبات</string>
-    <string name="v2_classic_look">پرانا ڈیزائن</string>
-    <string name="v2_classic_look_help">اس فون اور ویب پر پچھلے ڈیزائن پر واپس جائیں</string>
+    <string name="v2_classic_look">کلاسک ڈیزائن پر واپس جائیں</string>
+    <string name="v2_classic_look_help">اس فون پر پرانی اسکرینیں دوبارہ استعمال کریں۔ نیا ڈیزائن ترتیبات › ظاہری شکل میں دوبارہ آزما سکتے ہیں۔</string>
     <string name="v2_plan">%1$s پلان</string>
     <string name="v2_minutes_used">اس مہینے %2$d میں سے %1$d منٹ استعمال ہوئے</string>
     <string name="v2_storage_used">%2$d ریکارڈنگز میں \u2066%1$s\u2069</string>

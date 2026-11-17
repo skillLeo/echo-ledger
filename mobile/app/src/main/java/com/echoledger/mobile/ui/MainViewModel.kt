@@ -546,6 +546,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 // Since 2.0.0-a/b: the redesign's flags and how long Trash keeps a recording.
                                 uiFlags = config.uiFlags,
                                 uiClassic = config.uiClassic,
+                                uiDesign = config.uiDesign,
                                 relayPins = config.relayPins,
                                 trashKeepHours = config.trash?.keepHours?.takeIf { hours -> hours > 0 }
                                     ?: com.echoledger.mobile.data.TrashConfig.DEFAULT_HOURS
@@ -1194,6 +1195,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         graph.settings.update { it.copy(uiFlags = answer.uiFlags, uiClassic = answer.uiClassic) }
         refresh().join()
         return true
+    }
+
+    /** What [chooseDesign] came to. */
+    enum class DesignAnswer { Taken, NotAvailable, OnThisPhone }
+
+    /**
+     * "Try the new design" ([design] `"v2"`) or "Switch back to classic" (`"classic"`), since 2.0.0-g: the server keeps the
+     * choice and its answer is stored, then the config is read again ([DesignAnswer.Taken]). `422 design_not_available`:
+     * nothing to try for this account ([DesignAnswer.NotAvailable]). A server without the design switch, or none
+     * reachable: the choice stays on this phone ([DesignAnswer.OnThisPhone]).
+     */
+    suspend fun chooseDesign(design: String?): DesignAnswer {
+        val answer = withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.setDesign(design) }
+        }
+        val dto = answer.getOrNull()
+        val failure = answer.exceptionOrNull()
+        return when {
+            dto?.uiDesign != null -> {
+                graph.settings.update { it.copy(uiFlags = dto.uiFlags, uiClassic = dto.uiClassic, uiDesign = dto.uiDesign) }
+                refresh().join()
+                DesignAnswer.Taken
+            }
+
+            (failure as? com.echoledger.mobile.net.ApiException)?.code == "design_not_available" -> DesignAnswer.NotAvailable
+
+            else -> DesignAnswer.OnThisPhone
+        }
     }
 
     /** Retries one recording the server refused (e.g. after fixing the cause). */

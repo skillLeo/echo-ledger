@@ -112,7 +112,8 @@ fun EchoV2Shell(
     /** Help v2's guides, notes and support messages (the phone core's); without it Help stays the classic page. */
     help: HelpSource? = null
 ) {
-    EchoV2Theme(darkTheme = darkTheme, language = language) {
+    val settings by vm.settings.collectAsState()
+    EchoV2Theme(darkTheme = darkTheme, language = language, phoneFont = settings.phoneFont) {
         val toasts = remember { EchoToastState(clock) }
         CompositionLocalProvider(LocalEchoToasts provides toasts) {
             MessagesToToasts(vm, toasts)

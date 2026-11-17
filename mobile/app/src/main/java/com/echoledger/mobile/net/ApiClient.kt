@@ -1046,6 +1046,16 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(request("account/ui").put(body).build(), com.echoledger.mobile.data.UiChoiceDto.serializer())!!
     }
 
+    /**
+     * `PUT /api/account/ui` with `{"design": …}` (since 2.0.0-g): "Try the new design" ([design] `"v2"`), "Switch back to
+     * classic" (`"classic"`) or back to the default (null); the new flags and `ui_design`. `422 design_not_available`
+     * when there is nothing to try.
+     */
+    suspend fun setDesign(design: String?): com.echoledger.mobile.data.UiChoiceDto {
+        val body = buildJsonObject { put("design", design) }.toString().toRequestBody(jsonType)
+        return call(request("account/ui").put(body).build(), com.echoledger.mobile.data.UiChoiceDto.serializer())!!
+    }
+
     /** `GET /api/bin` (since v1.1): recordings deleted in the last 48 hours. */
     suspend fun bin(): BinResponse = call(request("bin").get().build(), BinResponse.serializer())!!
 

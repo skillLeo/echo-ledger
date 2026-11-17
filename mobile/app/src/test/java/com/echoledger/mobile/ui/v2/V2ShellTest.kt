@@ -114,7 +114,7 @@ class V2ShellTest : ScreenTest() {
         seed()
         shell(v2)
         compose.onNodeWithContentDescription("Account and settings").performClick()
-        compose.onNodeWithText("Classic look").performClick()
+        compose.onNodeWithText("Switch back to classic").performClick()
         assertEquals(listOf(true), switched)
         compose.onNodeWithText("All settings").performClick()
         compose.onNodeWithText("Classic settings").assertExists()

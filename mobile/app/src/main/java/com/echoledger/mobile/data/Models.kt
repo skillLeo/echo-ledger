@@ -72,7 +72,22 @@ data class ServerConfig(
     /** Since 1.9.0-g (Live Assist): the relay host's pins, never the server's own; empty: Live Assist can't connect yet. */
     @SerialName("relay_pins") val relayPins: List<String> = emptyList(),
     /** Since 2.0.0-b: how long a deleted recording can be restored; null on an older server (48 hours). */
-    @Serializable(with = LenientTrash::class) val trash: TrashConfig? = null
+    @Serializable(with = LenientTrash::class) val trash: TrashConfig? = null,
+    /** Since 2.0.0-g: the person's design (classic or the new one) and which switch to offer; null on an older server. */
+    @SerialName("ui_design") val uiDesign: UiDesignDto? = null
+)
+
+/**
+ * `ui_design` (since 2.0.0-g, docs/API.md "The design switch"): [choice] is the person's own (`"v2"`, `"classic"` or
+ * null), [current] what they see; classic › Settings › Appearance offers "Try the new design" while [canTry], the new
+ * design "Switch back to classic" while [canSwitchBack].
+ */
+@Serializable
+data class UiDesignDto(
+    val choice: String? = null,
+    val current: String = "classic",
+    @SerialName("can_try") val canTry: Boolean = false,
+    @SerialName("can_switch_back") val canSwitchBack: Boolean = false
 )
 
 /** Live Assist (docs/API_ASSIST.md "Sessions"): the relay block of a session start and of each token refresh. */
@@ -135,7 +150,9 @@ data class TrashConfig(@SerialName("keep_hours") val keepHours: Int = TrashConfi
 @Serializable
 data class UiChoiceDto(
     @SerialName("ui_flags") @Serializable(with = LenientFlags::class) val uiFlags: Map<String, Boolean> = emptyMap(),
-    @SerialName("ui_classic") @Serializable(with = LenientTrue::class) val uiClassic: Boolean = false
+    @SerialName("ui_classic") @Serializable(with = LenientTrue::class) val uiClassic: Boolean = false,
+    /** Since 2.0.0-g. */
+    @SerialName("ui_design") val uiDesign: UiDesignDto? = null
 )
 
 /**

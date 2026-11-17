@@ -121,6 +121,8 @@ import com.echoledger.mobile.ui.lockAvailability
 import com.echoledger.mobile.ui.promptUnlock
 import com.echoledger.mobile.ui.reconnectUnlockPrompt
 import com.echoledger.mobile.ui.v2.shell.ClassicScreens
+import com.echoledger.mobile.ui.v2.shell.Design
+import com.echoledger.mobile.ui.v2.shell.DesignChoice
 import com.echoledger.mobile.ui.v2.shell.EchoV2Shell
 import com.echoledger.mobile.ui.v2.shell.UiFlagLatch
 import com.echoledger.mobile.ui.v2.shell.UiFlags
@@ -457,9 +459,20 @@ class MainActivity : FragmentActivity() {
         // Interface flags (contract 2.0.0-a): the server decides them; a change applies on the next screen the person
         // opens, never in the middle of a recording.
         val flagLatch = remember { UiFlagLatch() }
-        flagLatch.offer(UiFlags(settings.uiFlags, settings.uiClassic))
-        // The person's own "Switch back to classic" (or its undo) is a screen they open at once.
-        val flags = remember(loaded, tab, openItemId, showSetup, showWaiting, sharedNotes, recheck, settings.uiClassic) {
+        val design by DesignChoice.choice.collectAsState()
+        flagLatch.offer(UiFlags(settings.uiFlags, settings.uiClassic, design, settings.uiDesign))
+        // A choice kept on this phone (the server could not be reached) goes to the server once it has the switch.
+        LaunchedEffect(settings.uiDesign != null, design) {
+            val local = design
+            if (settings.uiDesign != null && local != null) {
+                // The server has no new design open for this account: its answer wins.
+                if (DesignChoice.choose(this@MainActivity, vm, local) == MainViewModel.DesignAnswer.NotAvailable) {
+                    DesignChoice.set(this@MainActivity, null)
+                }
+            }
+        }
+        // The person's own "Try the new design" or "Switch back to classic" is a screen they open at once.
+        val flags = remember(loaded, tab, openItemId, showSetup, showWaiting, sharedNotes, recheck, settings.uiClassic, design) {
             flagLatch.screenOpened(recording = RecordingService.live.value.active)
         }
         val shellOn = flags.shell
@@ -847,7 +860,12 @@ class MainActivity : FragmentActivity() {
                                     )
                                 }
                             ),
-                            onSwitchToClassic = vm::setClassicUi,
+                            // On this phone until the server keeps the design preference.
+                            onSwitchToClassic = { classic ->
+                                lifecycleScope.launch {
+                                    DesignChoice.choose(this@MainActivity, vm, if (classic) Design.Classic else Design.V2)
+                                }
+                            },
                             help = (application as EchoLedgerApp).graph.help
                         )
                     }
