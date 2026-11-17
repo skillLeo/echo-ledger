@@ -36,11 +36,12 @@ data class WizardStep(val key: String, val title: Int, val detail: Int, val acti
 
 /**
  * The Android capture helper's wizard. Every step is decided from what the phone shows now, never from history alone:
- * Developer options from Android's own switch; Shizuku installed from the package; paired only with evidence that
- * Shizuku was used (it runs now, or it is installed and the helper was last started through it); started while
- * Shizuku runs; allowed only while Shizuku can answer (else unknown); the helper while it runs. After a restart
- * Wireless debugging is off, so the start step says to turn it on first. A phone set up with the computer method gets
- * that method's one step instead.
+ * Developer options from Android's own switch; Shizuku installed from the package; paired only with live proof (Shizuku
+ * runs, or the helper is connected through it now) and unknown while Shizuku is stopped, since a reinstall, cleared
+ * data or a removed pairing all need pairing again; started while Shizuku runs; allowed only while Shizuku can answer
+ * (else unknown); the helper while it runs. The start step says to pair again if Shizuku asks, and after a restart,
+ * when Wireless debugging is off, to turn it on first. A phone set up with the computer method gets that method's one
+ * step instead.
  */
 object ShizukuWizard {
     private class Def(val key: String, val title: Int, val detail: Int, val action: StepAction, val label: Int)
@@ -61,7 +62,12 @@ object ShizukuWizard {
             )
         }
         val viaShizuku = helper && f.method == HelperMethod.Shizuku
-        val paired = r.shizukuRunning || viaShizuku || (r.shizukuInstalled && f.method == HelperMethod.Shizuku)
+        // null: unknown while Shizuku is stopped (the pairing may be gone); false while Shizuku isn't installed.
+        val paired: Boolean? = when {
+            r.shizukuRunning || viaShizuku -> true
+            r.shizukuInstalled -> null
+            else -> false
+        }
         val started = r.shizukuRunning || viaShizuku
         val startDef = if (!started && !f.wirelessDebugging) {
             Def(

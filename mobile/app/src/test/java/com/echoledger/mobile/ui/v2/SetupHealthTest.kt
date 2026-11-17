@@ -1,6 +1,7 @@
 package com.echoledger.mobile.ui.v2
 
 import android.app.Application
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -52,9 +53,9 @@ class SetupHealthTest {
     fun afterARestartWirelessDebuggingComesFirstThenStart() {
         val f = SetupHealthFixtures.afterRestart
         val steps = ShizukuWizard.steps(f)
-        // Pairing survives the restart (Shizuku was used here); whether Shizuku allows EchoLedger is unknown while it is stopped.
+        // While Shizuku is stopped the phone can't tell whether it is still paired or allows EchoLedger: both unknown.
         assertEquals(
-            listOf(StepState.Done, StepState.Done, StepState.Done, StepState.Current, StepState.Unknown, StepState.Todo),
+            listOf(StepState.Done, StepState.Done, StepState.Unknown, StepState.Current, StepState.Unknown, StepState.Todo),
             steps.map { it.state }
         )
         val start = steps.first { it.key == "start" }
@@ -83,8 +84,38 @@ class SetupHealthTest {
     }
 
     @Test
-    fun pairingNeedsEvidenceThatShizukuWasUsed() {
-        assertEquals("pair", current(SetupHealthFixtures.ranOnceNoEvidence))
+    fun aReinstalledShizukuIsNotTakenAsPaired() {
+        val steps = ShizukuWizard.steps(SetupHealthFixtures.shizukuReinstalled)
+        assertEquals(StepState.Unknown, steps.first { it.key == "pair" }.state)
+        val start = steps.first { it.key == "start" }
+        assertEquals(StepState.Current, start.state)
+        // Its words say to pair again if Shizuku asks.
+        assertEquals(R.string.v2_setup_step_start_detail, start.detail)
+    }
+
+    @Test
+    fun aRemovedPairingIsNotTakenAsPaired() {
+        val steps = ShizukuWizard.steps(SetupHealthFixtures.pairingRemoved)
+        assertEquals(StepState.Unknown, steps.first { it.key == "pair" }.state)
+        assertEquals(R.string.v2_setup_step_start_wireless_first, steps.first { it.key == "start" }.detail)
+    }
+
+    @Test
+    fun pairedOnlyWithLiveProof() {
+        // Shizuku running is proof; the helper connected through it is proof.
+        assertEquals(StepState.Done, ShizukuWizard.steps(SetupHealthFixtures.notAllowed).first { it.key == "pair" }.state)
+        assertEquals(StepState.Done, ShizukuWizard.steps(SetupHealthFixtures.allReady).first { it.key == "pair" }.state)
+        // Not installed: pairing is still to do, after installing.
+        assertEquals(StepState.Todo, ShizukuWizard.steps(SetupHealthFixtures.fresh).first { it.key == "pair" }.state)
+    }
+
+    @Test
+    fun theStartStepsWordsSayToPairAgainIfAsked() {
+        val en = V2Testing.resources(com.echoledger.mobile.ui.v2.theme.EchoLanguage.English)
+        assertTrue(en.getString(R.string.v2_setup_step_start_detail).contains("If Shizuku asks to pair, do the pairing step again."))
+        assertTrue(
+            en.getString(R.string.v2_setup_step_start_wireless_first).contains("If Shizuku asks to pair, do the pairing step again.")
+        )
     }
 
     @Test
@@ -141,8 +172,8 @@ class SetupHealthTest {
             }
         }
         compose.onNodeWithText("Start Shizuku").assertExists()
-        // Whether Shizuku allows EchoLedger can't be known while Shizuku is stopped.
-        compose.onNodeWithText("Known once Shizuku is running").assertExists()
+        // Pairing and whether Shizuku allows EchoLedger can't be known while Shizuku is stopped.
+        compose.onAllNodesWithText("Known once Shizuku is running").assertCountEquals(2)
         compose.onAllNodesWithText("Open Shizuku")[0].performClick()
         assertEquals(StepAction.OpenShizuku, ran)
         compose.onAllNodesWithText("Open Shizuku")[1].performClick()

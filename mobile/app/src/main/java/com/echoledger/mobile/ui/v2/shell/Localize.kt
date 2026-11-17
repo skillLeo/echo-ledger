@@ -75,6 +75,8 @@ object VmMessages {
         "This recording has no audio on the server." to R.string.v2_vm_no_audio_on_server,
         "1 recording updated" to R.string.v2_vm_one_updated,
         "Sign in on this phone first." to R.string.v2_vm_sign_in_first,
+        // The one vendor name allowed: the Free plan's own-key step.
+        "Groq did not accept that key. Copy it again from console.groq.com." to R.string.v2_vm_key_refused,
         // The workspace calls' own failure sentences (when the server gave no plain one).
         "It could not be removed." to R.string.v2_vm_ws_it_could_not_be_removed,
         "It could not be saved." to R.string.v2_vm_ws_it_could_not_be_saved,
@@ -142,12 +144,8 @@ object VmMessages {
         )
     )
 
-    /**
-     * Sentences the view model can say that stay in English on purpose. A new sentence must get a key or be listed
-     * here (V2WordsTest). The transcription-key refusal names an engine, which the owner's screens no longer do; it
-     * stays English until the view model's own words change.
-     */
-    val englishOnly: Set<String> = setOf("Groq did not accept that key. Copy it again from console.groq.com.")
+    /** Sentences the view model can say that stay in English on purpose: none. A new sentence needs a key (V2WordsTest). */
+    val englishOnly: Set<String> = emptySet()
 
     /** The English sentences that have a key (the test checks each against the view model's source). */
     val known: Set<String> get() = exact.keys

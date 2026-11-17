@@ -68,11 +68,11 @@ object SetupHealthFixtures {
     val computerAfterRestart =
         facts(helper = false, installed = false, running = false, allowed = false, wireless = false, method = HelperMethod.Computer)
 
-    /**
-     * The helper ran once, but there is no sign it was through Shizuku (it came from the computer before this version
-     * remembered how): Shizuku installed and stopped is not proof of pairing.
-     */
-    val ranOnceNoEvidence = facts(helper = false, running = false, allowed = false, method = null)
+    /** Shizuku was set up and used, then reinstalled (or its data cleared): installed again, not running. */
+    val shizukuReinstalled = facts(helper = false, running = false, allowed = false, wireless = true)
+
+    /** The pairing was removed in Wireless debugging: Shizuku installed and stopped, Wireless debugging off. */
+    val pairingRemoved = facts(helper = false, running = false, allowed = false, wireless = false)
 
     /** Developer options turned off again, though the helper ran before. */
     val developerOff = facts(helper = false, running = false, allowed = false, developer = false, wireless = false)

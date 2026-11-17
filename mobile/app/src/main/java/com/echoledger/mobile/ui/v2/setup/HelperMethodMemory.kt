@@ -8,6 +8,9 @@ import com.echoledger.mobile.privilege.HelperConnection
  * wizard knows after a restart, when the helper is gone, which method to bring back. Written whenever the v2 screens
  * see the helper connected.
  */
+// TODO(phone core): the core is moving this record into every helper connection and exposing it in the readiness
+// state. Read it from there once it lands and delete this UI-owned store, which only sees connections while a v2
+// screen is open.
 object HelperMethodMemory {
     private const val PREFS = "v2_setup"
     private const val KEY = "helper_method"
