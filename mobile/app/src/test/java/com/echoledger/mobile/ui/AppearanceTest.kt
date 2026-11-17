@@ -40,6 +40,7 @@ class AppearanceTest : ScreenTest() {
     @Config(sdk = [34])
     fun `wallpaper colours can be turned on from Android 12`() {
         showAppearance()
+        compose.waitForIdle()
         assertFalse(settings.dynamicColour)
         compose.onNodeWithContentDescription("Wallpaper colours").performClick()
         assertTrue(settings.dynamicColour)
@@ -55,6 +56,7 @@ class AppearanceTest : ScreenTest() {
     @Test
     fun `the bundled font is used until the phone font is turned on`() {
         showAppearance()
+        compose.waitForIdle()
         assertFalse(settings.phoneFont)
         compose.onNodeWithContentDescription("Use phone font").performClick()
         assertTrue(settings.phoneFont)

@@ -76,6 +76,7 @@ class PrivateDotTest : ScreenTest() {
             )
         }
         dot.performTouchInput { swipeLeft() }
+        compose.waitForIdle()
         assertEquals(0, shown)
         assertTrue("the drag reached the recording controls", dragged < 0f)
         dot.performClick()
