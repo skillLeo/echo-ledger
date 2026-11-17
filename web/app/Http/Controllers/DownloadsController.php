@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\AppRelease;
+use App\Support\WebsiteV2;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -24,7 +26,7 @@ final class DownloadsController
         'gz' => 'application/gzip',
     ];
 
-    public function page(): View
+    public function page(Request $request): View
     {
         $all = AppRelease::listed();
         $latest = collect(AppRelease::PLATFORMS)
@@ -32,7 +34,8 @@ final class DownloadsController
             ->filter();
         $older = $all->reject(fn (AppRelease $r): bool => $latest->contains(fn (AppRelease $l): bool => $l->is($r)))->values();
 
-        return view('site.downloads', ['latest' => $latest, 'older' => $older]);
+        // Since v2.0 (ui_v2.website): the new design, with the same words.
+        return view(WebsiteV2::on($request) ? 'site.v2.downloads' : 'site.downloads', ['latest' => $latest, 'older' => $older]);
     }
 
     /** The newest website build of the phone app; 404 while none is published. */

@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.echoledger.mobile.R
@@ -19,6 +21,7 @@ import com.echoledger.mobile.ui.v2.shell.UiFlags
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
+import kotlinx.coroutines.launch
 
 /** A setting a search result jumped to: drawn on the accent's soft fill (static; nothing moves). */
 @Composable
@@ -94,5 +97,45 @@ fun NotificationsPage(
                 modifier = Modifier.highlightedIf(highlight == "notifications.quiet")
             )
         }
+    }
+}
+
+/**
+ * "Reset to defaults" at the end of a page whose choices have defaults (as today's pages): it asks first, then puts only
+ * that page's choices back (SettingsReset; picked apps, games and words stay) and says so.
+ */
+@Composable
+fun PageReset(page: String, title: String, update: ((AppSettings) -> AppSettings) -> Unit) {
+    val group = when (page) {
+        "appearance", "notifications", "lock", "language" -> com.echoledger.mobile.core.SettingsGroup.General
+        "voice" -> com.echoledger.mobile.core.SettingsGroup.VoiceNotes
+        "calls", "mic", "captions" -> com.echoledger.mobile.core.SettingsGroup.Calls
+        "games" -> com.echoledger.mobile.core.SettingsGroup.Game
+        "videos" -> com.echoledger.mobile.core.SettingsGroup.Watch
+        else -> null
+    } ?: return
+    val toasts = com.echoledger.mobile.ui.v2.shell.LocalEchoToasts.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val done = stringResource(R.string.v2_calls_reset_done, title)
+    var confirm by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    com.echoledger.mobile.ui.v2.components.EchoButton(
+        stringResource(R.string.v2_calls_reset),
+        { confirm = true },
+        Modifier.padding(horizontal = EchoTokens.Space.s8, vertical = EchoTokens.Space.s8),
+        kind = com.echoledger.mobile.ui.v2.components.EchoButtonKind.Quiet
+    )
+    if (confirm) {
+        com.echoledger.mobile.ui.v2.components.EchoDialog(
+            title = stringResource(R.string.v2_calls_reset),
+            text = stringResource(R.string.v2_calls_reset_text, title),
+            confirmLabel = stringResource(R.string.v2_calls_reset_confirm),
+            onConfirm = {
+                confirm = false
+                update { com.echoledger.mobile.core.SettingsReset.resetPage(page, group, it) }
+                scope.launch { toasts.show(done) }
+            },
+            dismissLabel = stringResource(R.string.v2_calls_reset_cancel),
+            onDismiss = { confirm = false }
+        )
     }
 }

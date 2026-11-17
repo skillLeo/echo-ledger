@@ -67,6 +67,8 @@ describe('over the wire', function () {
     });
 
     it('writes, reads, sizes and deletes an object', function () {
+        // The fake server stamps the object with now(): frozen, so a run crossing a second boundary still compares equal (W-008).
+        $this->freezeSecond();
         $this->adapter->write('files/2026/11/a b+c.elr', 'hello', $this->config);
 
         expect($this->server->keys())->toBe(['files/2026/11/a b+c.elr'])
