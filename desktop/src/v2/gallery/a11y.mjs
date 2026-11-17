@@ -59,6 +59,18 @@ const SCREENS = [
   ["a-set-history", app("settings"), async (page) => { await page.getByRole("button", { name: "Voice notes & dictation", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Recent dictations", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-captions", app("settings"), async (page) => { await page.getByRole("button", { name: "Captions", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-caption-style", app("settings"), async (page) => { await page.getByRole("button", { name: "Captions", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Style", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-calls", app("settings"), async (page) => { await page.getByRole("button", { name: "Calls & meetings", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-call-sites", app("settings"), async (page) => { await page.getByRole("button", { name: "Calls & meetings", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Call sites", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-language", app("settings"), async (page) => { await page.getByRole("button", { name: "Language", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-words", app("settings"), async (page) => { await page.getByRole("button", { name: "Custom words", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-key", `${app("settings")}&plan=free`, async (page) => { await page.getByRole("button", { name: "Transcription key", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-privacy", app("settings"), async (page) => { await page.getByRole("button", { name: "Privacy & data", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-consent", app("settings"), async (page) => { await page.getByRole("button", { name: "Privacy & data", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Recording consent", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-delete", app("settings"), async (page) => { await page.getByRole("button", { name: "Privacy & data", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Delete my account", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-lock", app("settings"), async (page) => { await page.getByRole("button", { name: "App lock", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-pin", app("settings"), async (page) => { await page.getByRole("button", { name: "App lock", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "PIN", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-security", app("settings"), async (page) => { await page.getByRole("button", { name: "Sign-in & security", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-activity", app("settings"), async (page) => { await page.getByRole("button", { name: "Sign-in & security", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Sign-in activity", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-controls", app("controls"), async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 
