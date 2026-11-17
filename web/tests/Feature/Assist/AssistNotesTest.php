@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 use App\Jobs\UpdateLiveFactsJob;
 use App\Jobs\UpdateLiveSummaryJob;
+use App\Models\AssistSession;
 use App\Models\AssistTurn;
 use App\Models\AssistUsage;
 use App\Models\UsageLedgerEntry;
 use App\Services\Assist\AssistBudget;
+use App\Services\Assist\AssistRecords;
 use App\Services\Assist\AssistTransport;
 use App\Services\Assist\Http\CallNotes;
 use App\Services\Assist\Http\LiveContext;
 use App\Services\SettingsRepository;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Tests\Feature\Security\Support\ApiClient;
 
@@ -242,4 +245,48 @@ it('runs the facts call as the queue worker does, once three lines are in', func
     expect(app(LiveContext::class)->get(assistSessionOf($id))['facts'])->toBe(['Them: delivery is on Thursday'])
         ->and(AssistUsage::query()->where('assist_session_id', $id)->where('kind', 'facts')->count())->toBe(1)
         ->and(AssistUsage::query()->where('outcome', AssistBudget::PENDING)->count())->toBe(0);
+});
+
+it('writes nothing back for a session that ends while the model is being asked', function (string $what, Closure $over) {
+    Queue::fake();
+    $models = fakeAssistModels();
+    [$api, $id] = httpSession($this);
+    assistSay($api, $id, [['other', 'The budget is 8,000 USD.'], ['me', 'Good.'], ['other', 'Next, delivery.']]);
+    $answer = $what === 'facts' ? "Them: the budget is 8,000 USD\n" : 'Budget talk.';
+    // The call is in flight when the session ends (or is erased): its answer arrives after the context was cleared.
+    $models->on('claude-haiku-5-5', [['do' => fn () => $over($api, $id)], $answer, ['usage' => [500, 0, 0, 12]]]);
+
+    app(CallNotes::class)->{$what}($id);
+
+    $session = AssistSession::query()->withoutGlobalScopes()->withTrashed()->find($id);
+    expect(Cache::has('assist.live.context.'.$id))->toBeFalse()
+        ->and(app(LiveContext::class)->get(assistSessionOf($id))['facts'])->toBe([])
+        ->and(app(LiveContext::class)->get(assistSessionOf($id))['summary'])->toBe('')
+        ->and($session->facts)->toBeNull()->and($session->facts_at)->toBeNull()->and($session->summary)->toBeNull()->and($session->summary_at)->toBeNull();
+    // The model was asked and billed: what was spent is spent.
+    expect(AssistUsage::query()->where('assist_session_id', $id)->where('kind', $what)->sole()->outcome)->toBe('done');
+})->with([
+    'facts, the session ends' => ['facts', fn ($api, $id) => $api->postJson("/api/assist/sessions/{$id}/end")->assertOk()],
+    'summary, the session ends' => ['summary', fn ($api, $id) => $api->postJson("/api/assist/sessions/{$id}/end")->assertOk()],
+    'facts, the session is erased' => ['facts', fn ($api, $id) => AssistRecords::eraseSession(assistSessionOf($id))],
+    'summary, the session is erased' => ['summary', fn ($api, $id) => AssistRecords::eraseSession(assistSessionOf($id))],
+    // Trashed on its own, with the context already cleared: the late answer must not bring it back.
+    'facts, the session is trashed' => ['facts', function ($api, $id) {
+        Cache::forget('assist.live.context.'.$id);
+        assistSessionOf($id)->delete();
+    }],
+]);
+
+it('takes no context update for a session that has ended or been erased', function () {
+    [$api, $id] = httpSession($this);
+    $session = assistSessionOf($id);
+    expect(app(LiveContext::class)->update($session, ['memory' => 'Budget 5,000 USD.']))->toBeNull()
+        ->and(app(LiveContext::class)->get($session)['memory'])->toBe('Budget 5,000 USD.');
+
+    $api->postJson("/api/assist/sessions/{$id}/end")->assertOk();
+    app(LiveContext::class)->update(assistSessionOf($id), ['memory' => 'Written late.']);
+    app(LiveContext::class)->addFacts(assistSessionOf($id), ['Them: late']);
+    app(LiveContext::class)->setSummary(assistSessionOf($id), 'Late summary.');
+
+    expect(Cache::has('assist.live.context.'.$id))->toBeFalse();
 });

@@ -117,9 +117,12 @@ class CallNotes
         $this->took('facts', $session, $last);
         $new = Background::parseFacts($result['text']);
         if ($new !== []) {
+            // Nothing is kept for a session that ended or was erased while the model was asked.
             $ledger = $this->context->addFacts($session, $new);
-            AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereKey($id)->first()?->forceFill(['facts' => $ledger, 'facts_at' => now()])->save();
-            MakeAssistReportJob::stale($session);
+            if ($ledger !== null) {
+                AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereKey($id)->first()?->forceFill(['facts' => $ledger, 'facts_at' => now()])->save();
+                MakeAssistReportJob::stale($session);
+            }
         }
     }
 
@@ -152,9 +155,10 @@ class CallNotes
         $this->took('summary', $session, $last);
         $summary = Background::cleanSummary($result['text']);
         if ($summary !== null) {
-            $this->context->setSummary($session, $summary);
-            AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereKey($id)->first()?->forceFill(['summary' => $summary, 'summary_at' => now()])->save();
-            MakeAssistReportJob::stale($session);
+            if ($this->context->setSummary($session, $summary)) {
+                AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereKey($id)->first()?->forceFill(['summary' => $summary, 'summary_at' => now()])->save();
+                MakeAssistReportJob::stale($session);
+            }
         }
     }
 

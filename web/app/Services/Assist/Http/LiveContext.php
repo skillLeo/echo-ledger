@@ -51,7 +51,7 @@ class LiveContext
      */
     public function update(AssistSession $session, array $message): ?string
     {
-        return $this->locked($session, fn (): ?string => $this->apply($session, $message));
+        return $this->locked($session, fn (): ?string => $this->alive($session) ? $this->apply($session, $message) : null);
     }
 
     /**
@@ -131,14 +131,18 @@ class LiveContext
 
     /**
      * Adds the facts the facts call found to the ledger the suggestions read: those already there (ignoring case and
-     * spacing) are left out, and at most MAX_FACTS are kept, the oldest dropped first.
+     * spacing) are left out, and at most MAX_FACTS are kept, the oldest dropped first. Nothing is written for a session
+     * that has ended or been erased since the call began: what the call told the server went with it (see forget()).
      *
      * @param  list<string>  $new
-     * @return list<string> the whole ledger
+     * @return list<string>|null the whole ledger, or null when nothing was written
      */
-    public function addFacts(AssistSession $session, array $new): array
+    public function addFacts(AssistSession $session, array $new): ?array
     {
-        return $this->locked($session, function () use ($session, $new): array {
+        return $this->locked($session, function () use ($session, $new): ?array {
+            if (! $this->alive($session)) {
+                return null;
+            }
             $context = $this->get($session);
             $facts = array_values(array_map('strval', (array) ($context['facts'] ?? [])));
             $known = array_map(Text::normalize(...), $facts);
@@ -155,10 +159,22 @@ class LiveContext
         });
     }
 
-    /** The running summary the summary call wrote: it replaces the one the suggestions read. */
-    public function setSummary(AssistSession $session, string $summary): void
+    /**
+     * The running summary the summary call wrote: it replaces the one the suggestions read. Not written for a session
+     * that has ended or been erased since the call began.
+     *
+     * @return bool whether it was written
+     */
+    public function setSummary(AssistSession $session, string $summary): bool
     {
-        $this->locked($session, fn () => $this->put($session, [...$this->get($session), 'summary' => $summary]));
+        return $this->locked($session, function () use ($session, $summary): bool {
+            if (! $this->alive($session)) {
+                return false;
+            }
+            $this->put($session, [...$this->get($session), 'summary' => $summary]);
+
+            return true;
+        });
     }
 
     /** When Me last spoke (a wall-clock millisecond stamp), or null: only this, without reading the whole context. */
@@ -185,10 +201,24 @@ class LiveContext
         Cache::put(self::key($session), Crypt::encryptString((string) json_encode($context, JSON_UNESCAPED_UNICODE)), self::TTL_SECONDS);
     }
 
+    /**
+     * What the call told the server goes with the session. Under the lock the writers take, and after the session is
+     * marked ended: a writer that was ahead of it is cleared here, one behind it finds the session over (alive()).
+     */
     public function forget(AssistSession $session): void
     {
-        Cache::forget(self::key($session));
-        Cache::forget(self::meKey($session));
+        $this->locked($session, function () use ($session): void {
+            Cache::forget(self::key($session));
+            Cache::forget(self::meKey($session));
+        });
+    }
+
+    /** The session as it is now, in the database: still on, not ended and not erased (soft deleted). */
+    private function alive(AssistSession $session): bool
+    {
+        $fresh = AssistSession::query()->withoutGlobalScopes()->withTrashed()->find($session->id);
+
+        return $fresh instanceof AssistSession && ! $fresh->trashed() && ! $fresh->ended();
     }
 
     /**
