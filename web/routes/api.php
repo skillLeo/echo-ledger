@@ -248,6 +248,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::post('sessions/{id}/end', [AssistSessionController::class, 'end'])->name('api.assist.sessions.end');
             Route::delete('sessions/{id}', [AssistSessionController::class, 'destroy'])->name('api.assist.sessions.destroy');
             Route::post('sessions/{id}/suggestions/{suggestionId}/action', [AssistSessionController::class, 'action'])->name('api.assist.sessions.suggestions.action');
+            // Ask over the session (L7): a model call billed to the session's allowance, so the Ask limit too.
+            Route::post('sessions/{id}/ask', [AssistSessionController::class, 'ask'])->middleware('throttle:ask')->name('api.assist.sessions.ask');
         });
         Route::middleware(['abilities:stt:token', EnsureLiveAssist::class])->group(function (): void {
             Route::post('sessions', [AssistSessionController::class, 'store'])->name('api.assist.sessions.store');

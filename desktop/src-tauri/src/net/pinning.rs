@@ -87,6 +87,34 @@ pub fn server_tls_config(pins: &[String]) -> Result<rustls::ClientConfig, String
     Ok(config)
 }
 
+/// Shown when the Live Assist relay cannot be reached with its pinned key (none known, unusable, or not matching).
+pub const RELAY_INSECURE: &str = "Live Assist could not make a secure connection.";
+
+/// rustls config for the Live Assist relay (docs/API_ASSIST.md "Connecting"): WebPKI chain and hostname, then its
+/// public key must be one of the pins of the device security list (the relay's key and a backup), like the server's.
+/// Unlike the server's, no pins means no connection: the relay is never reached without them. HTTP/1.1 only, for the
+/// WebSocket upgrade.
+pub fn relay_tls_config(pins: &[String]) -> Result<rustls::ClientConfig, String> {
+    relay_tls_config_with_roots(pins, roots())
+}
+
+fn relay_tls_config_with_roots(pins: &[String], roots: Arc<RootCertStore>) -> Result<rustls::ClientConfig, String> {
+    let verifier = relay_verifier(pins, roots)?;
+    let mut config = rustls::ClientConfig::builder().dangerous().with_custom_certificate_verifier(Arc::new(verifier)).with_no_client_auth();
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    Ok(config)
+}
+
+/// The relay's verifier: a pin set with at least one usable pin, or no connection.
+pub(crate) fn relay_verifier(pins: &[String], roots: Arc<RootCertStore>) -> Result<SpkiPinVerifier, String> {
+    let parsed = parse_pins(pins);
+    if parsed.is_empty() {
+        return Err(RELAY_INSECURE.to_string());
+    }
+    let inner = WebPkiServerVerifier::builder(roots).build().map_err(|_| RELAY_INSECURE.to_string())?;
+    Ok(SpkiPinVerifier { inner, pins: parsed })
+}
+
 /// WebPKI-only config for third-party WebSockets (AssemblyAI / ElevenLabs).
 pub fn public_tls_config() -> Arc<rustls::ClientConfig> {
     Arc::new(rustls::ClientConfig::builder().with_root_certificates(roots()).with_no_client_auth())

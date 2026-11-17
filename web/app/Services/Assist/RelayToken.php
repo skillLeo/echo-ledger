@@ -6,7 +6,9 @@ namespace App\Services\Assist;
 
 use App\Exceptions\ApiError;
 use App\Models\AssistSession;
+use App\Models\User;
 use App\Services\SettingsRepository;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -47,7 +49,16 @@ final class RelayToken
         }
         $now = now()->getTimestamp();
         $expires = $now + min(900, (int) config('assist.token_ttl_seconds', 900));
-        $token = self::sign($this->claims($session, $now, $expires), $key);
+        // The budget the token grants is kept on the session with the person's row locked, as Ask and the report
+        // reserve theirs (AssistBudget): its unspent part is held back from what is left while the session is on.
+        $claims = DB::transaction(function () use ($session, $now, $expires): array {
+            User::query()->whereKey($session->user_id)->lockForUpdate()->first();
+            $claims = $this->claims($session, $now, $expires);
+            $session->forceFill(['claimed_cents' => (int) $claims['budget']['cents_left'], 'claimed_at' => now()->setTimestamp($now)])->save();
+
+            return $claims;
+        });
+        $token = self::sign($claims, $key);
 
         return ['url' => $url, 'token' => $token, 'expires_at' => now()->setTimestamp($expires)->toAtomString()];
     }
@@ -72,7 +83,7 @@ final class RelayToken
             'modes' => $modes,
             'models' => self::models($modes),
             // Practice's own allowance for a Practice session (1.9.0-h), the live one otherwise.
-            'budget' => $this->plans->left($session->workspace_id, $session->user_id, $session->practice),
+            'budget' => $this->plans->left($session->workspace_id, $session->user_id, $session->practice, exceptClaimOf: $session->id),
             'practice' => $session->practice,
             'iat' => $issuedAt,
             'exp' => $expiresAt,

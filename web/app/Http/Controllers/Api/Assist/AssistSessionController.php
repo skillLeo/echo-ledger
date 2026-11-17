@@ -16,6 +16,7 @@ use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\User;
+use App\Services\Assist\AssistAsk;
 use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistRecords;
 use App\Services\Assist\AssistStt;
@@ -57,9 +58,10 @@ final class AssistSessionController extends Controller
         // Practice runs the Practice mode on every plan; a live session the mode asked for, its prep's or Balanced.
         $mode = $practice ? $this->plans->modes($device->workspace_id, true)[0] : (string) ($data['mode'] ?? ($prep !== null ? $prep->mode : 'balanced'));
         $this->plans->assertMode($device->workspace_id, $mode, $practice);
-        $this->plans->assertLeft($device->workspace_id, $device->user_id, $practice);
-        // A quick look first, so a refusal asks nothing of the captions' provider; checked again, locked, below.
+        // A quick look first, so a refusal asks nothing of the captions' provider; checked again, locked, below. Before
+        // the budget: a session still on holds its token's budget, and the answer should name it.
         $this->assertNoneActive($device);
+        $this->plans->assertLeft($device->workspace_id, $device->user_id, $practice);
         // Refused before anything is created: no relay, or no captions where nothing else gives them (Practice, or a
         // call without a recording; a running recording has its own captions).
         $this->relay->assertReady();
@@ -80,7 +82,8 @@ final class AssistSessionController extends Controller
                 'assist_prep_id' => $prep?->id,
                 'capture_session_id' => $recording?->id,
                 'mode' => $mode,
-                'plan' => $this->plans->for($device->workspace_id)['claim'],
+                // The sold plan's key (business and personal are both the ultra tier), for the admin panel's numbers.
+                'plan' => $this->plans->for($device->workspace_id)['key'],
                 'practice' => $practice,
                 'platform' => (string) $data['platform'],
                 'auto_saved' => $prep !== null,
@@ -210,6 +213,17 @@ final class AssistSessionController extends Controller
         );
 
         return response()->noContent();
+    }
+
+    /**
+     * POST /api/assist/sessions/{id}/ask `{"question"}` — `sessions:write`, throttled: a question about the session,
+     * answered from its own lines, summary and facts, with the moments it rests on. Nothing is stored.
+     */
+    public function ask(Request $request, string $id, AssistAsk $ask): JsonResponse
+    {
+        $data = $request->validate(['question' => ['required', 'string', 'max:'.(int) config('assist.ask.question_chars', 500)]]);
+
+        return response()->json($ask->ask($this->find($request, $id), (string) $data['question']));
     }
 
     /** @return array<string, mixed> a session as the apps read it */

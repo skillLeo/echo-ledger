@@ -548,6 +548,124 @@ impl ApiClient {
         Self::ok_empty(resp).await
     }
 
+    /// `PUT /api/account/ui` (contract 2.0.0-a): "Switch back to classic" on or off for this person.
+    pub async fn set_ui_classic(&self, classic: bool) -> AppResult<crate::net::models::UiAnswer> {
+        let resp = self.authed(self.http.put(self.url("account/ui")))?.json(&json!({ "classic": classic })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/assist/sessions` (Live Assist 1.9.0-e): starts a session; the relay and speech tokens come back.
+    pub async fn assist_start(&self, request: &AssistStartRequest) -> AppResult<AssistStartAnswer> {
+        let resp = self.authed(self.http.post(self.url("assist/sessions")))?.json(request).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/assist/sessions`, where `409 session_active` (contract 1.9.0-k) comes back as the session that is
+    /// active, so the person can end it and start this one.
+    pub async fn assist_start_or_active(&self, request: &AssistStartRequest) -> AppResult<Result<AssistStartAnswer, ActiveAssist>> {
+        let resp = self.authed(self.http.post(self.url("assist/sessions")))?.json(request).send().await?;
+        if resp.status().as_u16() != 409 {
+            return Self::parse(resp).await.map(Ok);
+        }
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        match (body["code"].as_str(), serde_json::from_value::<ActiveAssist>(body.clone())) {
+            (Some("session_active"), Ok(active)) if !active.session_id.is_empty() => Ok(Err(active)),
+            (code, _) => Err(AppError::Server { status: 409, message: body["message"].as_str().unwrap_or("request failed").to_string(), code: code.map(str::to_string), retry_after_secs: None }),
+        }
+    }
+
+    /// `POST /api/assist/sessions/{id}/token`: new tokens before the old ones expire.
+    pub async fn assist_token(&self, session_id: &str) -> AppResult<AssistTokenAnswer> {
+        let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/token"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/assist/sessions/{id}/end`: the session ends and its report is made.
+    pub async fn assist_end(&self, session_id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/end"))))?.send().await?;
+        Self::parse::<serde_json::Value>(resp).await.map(|_| ())
+    }
+
+    /// `GET /api/assist/preps?status=`: the person's preps, all of them without `status`.
+    pub async fn assist_preps(&self, status: Option<&str>) -> AppResult<Vec<Prep>> {
+        let mut request = self.http.get(self.url("assist/preps"));
+        if let Some(status) = status {
+            request = request.query(&[("status", status)]);
+        }
+        let resp = self.authed(request)?.send().await?;
+        Self::parse::<serde_json::Value>(resp).await.map(Prep::list_from_answer)
+    }
+
+    /// `GET /api/assist/preps/{id}`.
+    pub async fn assist_prep(&self, id: &str) -> AppResult<Prep> {
+        let resp = self.authed(self.http.get(self.url(&format!("assist/preps/{id}"))))?.send().await?;
+        Prep::from_answer(Self::parse(resp).await?)
+    }
+
+    /// `POST /api/assist/preps`, or `PATCH /api/assist/preps/{id}` when the draft has an id.
+    pub async fn assist_prep_save(&self, draft: &PrepDraft) -> AppResult<Prep> {
+        let request = match &draft.id {
+            Some(id) => self.http.patch(self.url(&format!("assist/preps/{id}"))),
+            None => self.http.post(self.url("assist/preps")),
+        };
+        let resp = self.authed(request)?.json(draft).send().await?;
+        Prep::from_answer(Self::parse(resp).await?)
+    }
+
+    /// `PATCH /api/assist/preps/{id}` with only the given fields (scheduling).
+    pub async fn assist_prep_patch(&self, id: &str, fields: &serde_json::Value) -> AppResult<Prep> {
+        let resp = self.authed(self.http.patch(self.url(&format!("assist/preps/{id}"))))?.json(fields).send().await?;
+        Prep::from_answer(Self::parse(resp).await?)
+    }
+
+    /// `DELETE /api/assist/preps/{id}` (soft deleted on the server).
+    pub async fn assist_prep_delete(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("assist/preps/{id}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/assist/preps/{id}/documents`: project files join the prep; the prep as it is now.
+    pub async fn assist_prep_documents_add(&self, id: &str, file_ids: &[String]) -> AppResult<Prep> {
+        let resp = self.authed(self.http.post(self.url(&format!("assist/preps/{id}/documents"))))?.json(&json!({ "file_ids": file_ids })).send().await?;
+        Self::ok_empty(resp).await?;
+        self.assist_prep(id).await
+    }
+
+    /// `DELETE /api/assist/preps/{id}/documents/{fileId}`; the prep as it is now.
+    pub async fn assist_prep_document_remove(&self, id: &str, file_id: &str) -> AppResult<Prep> {
+        let resp = self.authed(self.http.delete(self.url(&format!("assist/preps/{id}/documents/{file_id}"))))?.send().await?;
+        Self::ok_empty(resp).await?;
+        self.assist_prep(id).await
+    }
+
+    /// `POST /api/assist/preps/{id}/arm`: the prep waits for its meeting until the answer's `armed_until`.
+    pub async fn assist_prep_arm(&self, id: &str) -> AppResult<Option<String>> {
+        let resp = self.authed(self.http.post(self.url(&format!("assist/preps/{id}/arm"))))?.send().await?;
+        let answer: serde_json::Value = Self::parse(resp).await?;
+        Ok(answer["armed_until"].as_str().map(str::to_string))
+    }
+
+    /// `POST /api/assist/sessions/{id}/turns`: final turns in a batch; how many the server took (a repeated
+    /// `client_ref` is ignored there).
+    pub async fn assist_turns(&self, session_id: &str, turns: &[crate::assist::card::TurnRow]) -> AppResult<u64> {
+        let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/turns"))))?.json(&json!({ "turns": turns })).send().await?;
+        let answer: serde_json::Value = Self::parse(resp).await?;
+        Ok(answer["accepted"].as_u64().unwrap_or(0))
+    }
+
+    /// `POST /api/assist/sessions/{id}/suggestions/{suggestionId}/action`: what the person did with a suggestion.
+    pub async fn assist_suggestion_action(&self, session_id: &str, suggestion_id: &str, action: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/suggestions/{suggestion_id}/action"))))?.json(&json!({ "action": action })).send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// The same, `shown` (contract 1.9.0-n): the suggestion was first drawn `render_ms` after its `suggestion_start`.
+    pub async fn assist_suggestion_shown(&self, session_id: &str, suggestion_id: &str, render_ms: u64) -> AppResult<()> {
+        let body = json!({ "action": "shown", "render_ms": render_ms });
+        let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/suggestions/{suggestion_id}/action"))))?.json(&body).send().await?;
+        Self::ok_empty(resp).await
+    }
+
     pub async fn config(&self) -> AppResult<ServerConfig> {
         let resp = self.authed(self.http.get(self.url("config")))?.send().await?;
         Self::parse(resp).await

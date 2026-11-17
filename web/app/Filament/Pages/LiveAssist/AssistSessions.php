@@ -49,7 +49,7 @@ class AssistSessions extends Page implements HasTable
 
     protected static ?string $slug = 'live-assist/sessions';
 
-    public const REPORT_LABELS = ['ready' => 'Ready', 'queued' => 'Being made', 'none' => '—'];
+    public const REPORT_LABELS = ['ready' => 'Ready', 'queued' => 'Being made', 'failed' => 'Could not be made', 'none' => '—'];
 
     public function getSubheading(): string
     {

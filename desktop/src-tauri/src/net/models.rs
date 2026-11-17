@@ -45,8 +45,13 @@ pub struct ServerConfig {
     pub providers: HashMap<String, ProviderConfig>,
     #[serde(default)]
     pub captions: CaptionsConfig,
+    /// The server's own public keys (the device security list).
     #[serde(default)]
     pub pins: Vec<String>,
+    /// The Live Assist relay host's public keys, its key and a backup (contract 1.9.0-g): sent while `live_assist` is on
+    /// for the person. Empty or missing means Live Assist can't connect yet; never the server's `pins`.
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub relay_pins: Vec<String>,
     /// `"1.1"` on v1.1 servers, absent on v1 servers (docs/API.md "Conventions").
     #[serde(default, deserialize_with = "lenient")]
     pub api_version: Option<String>,
@@ -74,6 +79,41 @@ pub struct ServerConfig {
     /// The server is in maintenance (since v1.6, P2.7): uploads wait.
     #[serde(default, deserialize_with = "lenient")]
     pub maintenance: Option<MaintenanceDto>,
+    /// The interface flags for this person (contract 2.0.0-a), as sent: `ui_flags::UiFlags::read` makes them safe.
+    #[serde(default)]
+    pub ui_flags: Option<serde_json::Value>,
+    /// The person chose "Switch back to classic" (contract 2.0.0-a); anything but `true` is off.
+    #[serde(default, deserialize_with = "lenient_bool")]
+    pub ui_classic: bool,
+    /// `{"keep_hours": 48}` (contract 2.0.0-b): how long a deleted recording can be restored; read with
+    /// [`ServerConfig::trash_keep_hours`].
+    #[serde(default)]
+    pub trash: Option<serde_json::Value>,
+}
+
+/// How long a deleted recording can be restored when the server does not say (contract 2.0.0-b).
+pub const TRASH_KEEP_HOURS: u64 = 48;
+
+impl ServerConfig {
+    /// The interface flags of this config (contract 2.0.0-a).
+    pub fn ui(&self) -> crate::ui_flags::UiFlags {
+        crate::ui_flags::UiFlags::read(self.ui_flags.as_ref(), self.ui_classic)
+    }
+
+    /// How many hours a deleted recording can be restored (contract 2.0.0-b): 48 when the server is older or sends no
+    /// usable whole number.
+    pub fn trash_keep_hours(&self) -> u64 {
+        self.trash.as_ref().and_then(|t| t.get("keep_hours")).and_then(serde_json::Value::as_u64).filter(|h| *h > 0).unwrap_or(TRASH_KEEP_HOURS)
+    }
+}
+
+/// `PUT /api/account/ui`'s answer (contract 2.0.0-a): the new flags and choice.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct UiAnswer {
+    #[serde(default)]
+    pub ui_flags: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "lenient_bool")]
+    pub ui_classic: bool,
 }
 
 /// `config.app_update` (docs/API.md "Updates, announcements and maintenance"). `refused`: the server answers this
@@ -253,6 +293,10 @@ pub struct ScreenUpload {
 }
 
 /// Deserialises an optional value, turning a value of the wrong shape into `None` instead of failing the parent.
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
 fn lenient<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -490,6 +534,10 @@ pub struct CreateSessionRequest {
     /// Who the recording was with, when this computer saw it (since v1.2: a meeting window's title).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caller: Option<CallerDto>,
+    /// Contract 1.8.0-e: `false` uploads the recording as audio only (no transcript); sent only then, since absent is
+    /// `true` and older servers never see the key.
+    #[serde(skip_serializing_if = "is_true")]
+    pub transcribe: bool,
 }
 
 /// Open session (since v1.1): `POST /api/sessions` without the `artifacts` key, status `recording`. Created only
@@ -525,6 +573,10 @@ pub struct FinishSessionRequest {
     /// Who the recording was with, when this computer saw it (since v1.2: a meeting window's title).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caller: Option<CallerDto>,
+    /// Contract 1.8.0-e: `false` uploads the recording as audio only (no transcript); sent only then, since absent is
+    /// `true` and older servers never see the key.
+    #[serde(skip_serializing_if = "is_true")]
+    pub transcribe: bool,
 }
 
 /// Caller names (since v1.2): who a recording was with and where the name came from (`window_title` here).
@@ -1265,4 +1317,246 @@ pub struct ShareCheckReport {
     pub meeting_app_version: Option<String>,
     /// `screen` | `window` | `tab`.
     pub share_mode: Option<String>,
+}
+
+/// `POST /api/assist/sessions`'s body (docs/API_ASSIST.md "Sessions").
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct AssistStartRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prep_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    pub platform: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recording_session_id: Option<String>,
+    pub practice: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+pub struct AssistSessionDto {
+    pub id: String,
+    #[serde(default)]
+    pub auto_saved: bool,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub practice: bool,
+}
+
+/// The relay block: where to connect, with which token, until when.
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct AssistRelayDto {
+    pub url: String,
+    pub token: String,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl std::fmt::Debug for AssistRelayDto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AssistRelayDto").field("url", &self.url).field("expires_at", &self.expires_at).finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+pub struct AssistPlanDto {
+    #[serde(default)]
+    pub modes: Vec<String>,
+    #[serde(default)]
+    pub seconds_left: Option<u64>,
+    /// The month's assist seconds, when the server says.
+    #[serde(default, deserialize_with = "lenient")]
+    pub seconds_total: Option<u64>,
+}
+
+/// `201` of `POST /api/assist/sessions`. The `stt` block is kept as sent: the live captions read it.
+#[derive(Clone, Debug, Deserialize)]
+pub struct AssistStartAnswer {
+    pub session: AssistSessionDto,
+    pub relay: AssistRelayDto,
+    #[serde(default)]
+    pub stt: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub plan: Option<AssistPlanDto>,
+}
+
+/// `200` of `POST /api/assist/sessions/{id}/token`: new relay and speech tokens.
+#[derive(Clone, Debug, Deserialize)]
+pub struct AssistTokenAnswer {
+    pub relay: AssistRelayDto,
+    #[serde(default)]
+    pub stt: Option<serde_json::Value>,
+    /// The assist time left now, when the server says.
+    #[serde(default, deserialize_with = "lenient")]
+    pub plan: Option<AssistPlanDto>,
+}
+
+/// `409 session_active` (contract 1.9.0-k): the person's Live Assist session that is active now.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActiveAssist {
+    pub session_id: String,
+    #[serde(default)]
+    pub practice: bool,
+    #[serde(default)]
+    pub device_id: Option<String>,
+}
+
+/// A text field that may come as `null`: read as empty.
+fn text<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(match Option::<serde_json::Value>::deserialize(deserializer)? {
+        Some(serde_json::Value::String(s)) => s,
+        _ => String::new(),
+    })
+}
+
+fn text_or(value: String, default: &str) -> String {
+    if value.is_empty() { default.to_string() } else { value }
+}
+
+/// A project file attached to a prep (the server extracts its text and counts its tokens). Its `text` comes only on
+/// the single read of a prep (contract 1.9.0-m) and goes to the relay, never to a window.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrepDocument {
+    #[serde(default, alias = "id", deserialize_with = "text")]
+    pub file_id: String,
+    #[serde(default, deserialize_with = "text")]
+    pub name: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub tokens: Option<u64>,
+    #[serde(default, skip_serializing, deserialize_with = "lenient")]
+    pub text: Option<String>,
+}
+
+/// A document's words stay out of logs.
+impl std::fmt::Debug for PrepDocument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrepDocument").field("file_id", &self.file_id).field("tokens", &self.tokens).finish_non_exhaustive()
+    }
+}
+
+/// A Live Assist prep (docs/API_ASSIST.md "Preps"), in the card's shape: every field present, `null` text as empty.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Prep {
+    #[serde(default, deserialize_with = "text")]
+    pub id: String,
+    /// `interview` | `boss` | `existing_client` | `new_client` | `general`.
+    #[serde(default, deserialize_with = "text")]
+    pub meeting_type: String,
+    #[serde(default, deserialize_with = "text")]
+    pub title: String,
+    #[serde(default, deserialize_with = "text")]
+    pub counterpart: String,
+    #[serde(default, deserialize_with = "text")]
+    pub company: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub project_id: Option<String>,
+    #[serde(default, deserialize_with = "text")]
+    pub goals: String,
+    #[serde(default, deserialize_with = "text")]
+    pub done: String,
+    #[serde(default, deserialize_with = "text")]
+    pub not_done: String,
+    #[serde(default, deserialize_with = "text")]
+    pub to_discuss: String,
+    #[serde(default, deserialize_with = "text")]
+    pub instructions: String,
+    /// `keywords` | `outline` | `full`.
+    #[serde(default, deserialize_with = "text")]
+    pub hint_level: String,
+    /// `fast` | `balanced` | `deep` | `max`.
+    #[serde(default, deserialize_with = "text")]
+    pub mode: String,
+    /// `off` | `urdu` | `roman_urdu` | `arabic`.
+    #[serde(default, deserialize_with = "text")]
+    pub language_help: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub scheduled_at: Option<String>,
+    /// `draft` | `scheduled` | `armed` | `done` | `cancelled`.
+    #[serde(default, deserialize_with = "text")]
+    pub status: String,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub documents: Vec<PrepDocument>,
+}
+
+impl Prep {
+    /// The defaults the contract names for what the server left out.
+    pub fn completed(mut self) -> Self {
+        self.meeting_type = text_or(std::mem::take(&mut self.meeting_type), "general");
+        self.hint_level = text_or(std::mem::take(&mut self.hint_level), "outline");
+        self.mode = text_or(std::mem::take(&mut self.mode), "balanced");
+        self.language_help = text_or(std::mem::take(&mut self.language_help), "off");
+        self.status = text_or(std::mem::take(&mut self.status), "draft");
+        self
+    }
+
+    /// One prep from an answer: the object itself or under `data`.
+    pub fn from_answer(answer: serde_json::Value) -> crate::error::AppResult<Self> {
+        let object = match answer {
+            serde_json::Value::Object(mut map) if map.get("data").is_some_and(serde_json::Value::is_object) => map.remove("data").unwrap_or_default(),
+            other => other,
+        };
+        serde_json::from_value::<Prep>(object).map(Prep::completed).map_err(|_| crate::error::AppError::msg("The server sent a prep this app can't read."))
+    }
+
+    /// A list of preps: a bare array or under `data`; entries that can't be read are left out.
+    pub fn list_from_answer(answer: serde_json::Value) -> Vec<Self> {
+        let items = match answer {
+            serde_json::Value::Array(items) => items,
+            serde_json::Value::Object(mut map) => match map.remove("data") {
+                Some(serde_json::Value::Array(items)) => items,
+                _ => Vec::new(),
+            },
+            _ => Vec::new(),
+        };
+        items.into_iter().filter_map(|i| serde_json::from_value::<Prep>(i).ok()).filter(|p| !p.id.is_empty()).map(Prep::completed).collect()
+    }
+}
+
+/// What people wrote stays out of logs.
+impl std::fmt::Debug for Prep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Prep").field("id", &self.id).field("meeting_type", &self.meeting_type).field("status", &self.status).finish_non_exhaustive()
+    }
+}
+
+/// A prep as the card saves it (`POST /api/assist/preps`, or `PATCH` with its id); the id is never in the body.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrepDraft {
+    #[serde(default, skip_serializing)]
+    pub id: Option<String>,
+    pub meeting_type: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub counterpart: String,
+    #[serde(default)]
+    pub company: String,
+    #[serde(default)]
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub goals: String,
+    #[serde(default)]
+    pub done: String,
+    #[serde(default)]
+    pub not_done: String,
+    #[serde(default)]
+    pub to_discuss: String,
+    #[serde(default)]
+    pub instructions: String,
+    #[serde(default)]
+    pub hint_level: String,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub language_help: String,
+    #[serde(default)]
+    pub scheduled_at: Option<String>,
+}
+
+impl std::fmt::Debug for PrepDraft {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrepDraft").field("id", &self.id).field("meeting_type", &self.meeting_type).finish_non_exhaustive()
+    }
 }

@@ -175,6 +175,9 @@
     <string name="v2_vm_ws_project_deleted">Project deleted</string>
     <string name="v2_vm_project_deleted_moved">Project deleted · %1$s moved to the Inbox</string>
     <string name="v2_vm_key_refused">Groq did not accept that key. Copy it again from console.groq.com.</string>
+    <string name="v2_vm_link_not_revoked">The link could not be revoked.</string>
+    <string name="v2_vm_not_deleted">The recording could not be deleted.</string>
+    <string name="v2_vm_key_not_saved">The key could not be saved.</string>
     <string name="v2_vm_sign_in_first">Sign in on this phone first.</string>
     <string name="v2_vm_signed_in_as">Signed in as %1$s</string>
     <string name="v2_vm_many_deleted">%1$s deleted</string>

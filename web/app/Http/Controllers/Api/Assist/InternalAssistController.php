@@ -111,8 +111,9 @@ final class InternalAssistController extends Controller
                 'provider' => $data['provider'],
                 'model' => $data['model'],
                 'mode' => $data['mode'],
-                // The plan as it is now (the session's own if it changed since): what the admin panel's cost per plan counts.
-                'plan' => app(AssistPlans::class)->for($session->workspace_id)['claim'],
+                // The plan the session started on (the workspace's plan now for a session from before it was kept): what the
+                // admin panel's cost per plan counts.
+                'plan' => $session->plan ?? app(AssistPlans::class)->for($session->workspace_id)['key'],
                 'kind' => $data['kind'],
                 'trigger' => $data['trigger'] ?? null,
                 'outcome' => $data['outcome'] ?? null,
@@ -126,28 +127,37 @@ final class InternalAssistController extends Controller
                 'latency' => is_array($data['latency'] ?? null) ? array_filter($data['latency'], 'is_numeric') : null,
                 'occurred_at' => $at,
             ]);
-            // The month's totals (Usage pages, the CSV) count it with every other use.
-            UsageLedgerEntry::query()->create([
-                'workspace_id' => $session->workspace_id,
-                'user_id' => $session->user_id,
-                'device_id' => $session->device_id,
-                'capture_session_id' => $session->capture_session_id,
-                'report_id' => 'assist/'.$data['suggestion_id'],
-                'source' => UsageLedgerEntry::SOURCE_SERVER,
-                'use_case' => 'live_assist',
-                'provider' => (string) $data['provider'],
-                'model' => mb_substr((string) $data['model'], 0, 64),
-                'duration_ms' => 0,
-                'channels' => 1,
-                'billed_ms' => 0,
-                'input_tokens' => (int) $data['tokens']['input'] + (int) $data['tokens']['cached'] + (int) $data['tokens']['written'],
-                'output_tokens' => (int) $data['tokens']['output'],
-                'unit_price_usd' => 0,
-                'cost_usd' => round((float) $data['cost_usd'], 6),
-                'billable' => true,
-                'occurred_at' => $at,
-            ]);
+            self::ledger($session, $data, $at);
         });
+    }
+
+    /**
+     * Counts one model call of [$session] in the month's usage ledger (Usage pages, the CSV), with every other use.
+     *
+     * @param  array<string, mixed>  $data  suggestion_id, provider, model, tokens and cost_usd
+     */
+    public static function ledger(AssistSession $session, array $data, Carbon $at): void
+    {
+        UsageLedgerEntry::query()->create([
+            'workspace_id' => $session->workspace_id,
+            'user_id' => $session->user_id,
+            'device_id' => $session->device_id,
+            'capture_session_id' => $session->capture_session_id,
+            'report_id' => 'assist/'.$data['suggestion_id'],
+            'source' => UsageLedgerEntry::SOURCE_SERVER,
+            'use_case' => 'live_assist',
+            'provider' => (string) $data['provider'],
+            'model' => mb_substr((string) $data['model'], 0, 64),
+            'duration_ms' => 0,
+            'channels' => 1,
+            'billed_ms' => 0,
+            'input_tokens' => (int) $data['tokens']['input'] + (int) $data['tokens']['cached'] + (int) $data['tokens']['written'],
+            'output_tokens' => (int) $data['tokens']['output'],
+            'unit_price_usd' => 0,
+            'cost_usd' => round((float) $data['cost_usd'], 6),
+            'billable' => true,
+            'occurred_at' => $at,
+        ]);
     }
 
     /** POST /api/internal/assist/suggestions: the words of a suggestion that was shown, for the report. */

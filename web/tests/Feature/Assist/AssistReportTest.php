@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Anthropic\Client;
 use App\Enums\SessionStatus;
+use App\Filament\Pages\LiveAssist\AssistReportPage;
 use App\Jobs\MakeAssistReportJob;
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
@@ -12,8 +13,10 @@ use App\Models\AssistUsage;
 use App\Models\ClientMemoryItem;
 use App\Models\Device;
 use App\Models\UsageLedgerEntry;
+use App\Services\Assist\AssistBudget;
 use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistReport;
+use App\Services\Assist\AssistReportAi;
 use App\Services\Assist\AssistReportFailed;
 use App\Services\Assist\ClaudeAssistReportAi;
 use App\Services\CredentialVault;
@@ -23,6 +26,7 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
 use Psr\Http\Message\RequestInterface;
@@ -491,4 +495,106 @@ it('never gives Practice a follow-up email, whatever the model wrote', function 
     $api->postJson("/api/assist/sessions/{$id}/end")->assertOk();
 
     expect($api->getJson("/api/assist/sessions/{$id}/report")->json('follow_up_email'))->toBeNull();
+});
+
+it('reserves the report\'s worst case while the model writes it, and settles it to the real cost', function () {
+    $device = assistPerson('pro');
+    $id = practiceSession($this, $this->api(Fx::token($device)));
+    $plans = app(AssistPlans::class);
+    $fake = new class($device->workspace_id, $device->user_id) implements AssistReportAi
+    {
+        public ?int $leftDuring = null;
+
+        public string $prompt = '';
+
+        public function __construct(private readonly int $workspace, private readonly int $user) {}
+
+        public function promptText(array $input): string
+        {
+            return $this->prompt = (string) json_encode($input, JSON_UNESCAPED_UNICODE);
+        }
+
+        public function write(array $input): array
+        {
+            $this->leftDuring = app(AssistPlans::class)->left($this->workspace, $this->user, true)['cents_left'];
+
+            return ['data' => ['summary' => 'Fine.'], 'model' => 'claude-sonnet-5-5', 'tokens' => ['input' => 10000, 'cached' => 2000, 'written' => 1000, 'output' => 1500]];
+        }
+    };
+    app()->instance(AssistReportAi::class, $fake);
+    // What is left once the session ends (its token's claim no longer held).
+    $before = $plans->left($device->workspace_id, $device->user_id, true, exceptClaimOf: $id)['cents_left'];
+
+    $this->api(Fx::token($device))->postJson("/api/assist/sessions/{$id}/end")->assertOk();
+
+    expect($fake->leftDuring)->toBe($before - AssistReport::worstCaseCents($fake->prompt))
+        ->and((float) AssistUsage::query()->where('kind', 'report')->sole()->cost_usd)->toBe(0.0377)
+        ->and($plans->left($device->workspace_id, $device->user_id, true)['cents_left'])->toBe(496);
+});
+
+describe('what a crash leaves behind', function () {
+    it('settles a reservation left behind at its worst case, and leaves a fresh one alone', function () {
+        $device = assistPerson('pro');
+        $session = AssistSession::query()->withoutGlobalScopes()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'mode' => 'fast',
+            'practice' => true, 'platform' => 'android', 'status' => 'ended', 'started_at' => now()->subHour(), 'ended_at' => now()->subHour(), 'seconds_used' => 60]);
+        $budget = app(AssistBudget::class);
+        $old = $budget->reserve($session, 'ask', 'claude-haiku-5-5', 3, 'ask-old');
+        $old->forceFill(['occurred_at' => now()->subMinutes(3)])->save();
+        $fresh = $budget->reserve($session, 'ask', 'claude-haiku-5-5', 3, 'ask-fresh');
+        $report = $budget->reserve($session, 'report', 'claude-sonnet-5-5', 9, 'report-'.$session->id.'-1');
+        $report->forceFill(['occurred_at' => now()->subMinutes(9)])->save();
+
+        Artisan::call('assist:sweep');
+
+        expect($old->fresh())->toMatchArray(['outcome' => 'lost', 'estimated' => true])->and((float) $old->fresh()->cost_usd)->toBe(0.03)
+            ->and($report->fresh()->outcome)->toBe('lost')
+            ->and($fresh->fresh()->outcome)->toBe('pending')
+            ->and(UsageLedgerEntry::query()->withoutGlobalScopes()->whereIn('report_id', ['assist/ask-old', 'assist/report-'.$session->id.'-1'])->count())->toBe(2)
+            ->and(UsageLedgerEntry::query()->withoutGlobalScopes()->where('report_id', 'assist/ask-fresh')->count())->toBe(0);
+    });
+
+    it('queues a report whose job died once more, counting the dead run, then marks it failed', function () {
+        $device = assistPerson('pro');
+        $id = practiceSession($this, $this->api(Fx::token($device)));
+        Queue::fake();
+        $this->api(Fx::token($device))->postJson("/api/assist/sessions/{$id}/end")->assertOk();
+        $session = AssistSession::query()->withoutGlobalScopes()->find($id);
+        // The job reserved its run, then its worker died: the session stays "queued", the reservation pending.
+        app(AssistBudget::class)->reserve($session, 'report', 'claude-sonnet-5-5', 9, "report-{$id}-1");
+
+        $this->travel(9)->minutes();
+        Artisan::call('assist:sweep');
+        $session->refresh();
+        expect($session->report_status)->toBe('queued')->and($session->report_requeued_at)->not->toBeNull()
+            ->and(AssistUsage::query()->where('suggestion_id', "report-{$id}-1")->value('outcome'))->toBe('lost');
+        Queue::assertPushed(MakeAssistReportJob::class, 2);
+
+        // The run that died counts: the next one is the second.
+        $ai = fakeAssistReportAi();
+        (new MakeAssistReportJob($id))->handle();
+        expect($session->fresh()->report['ai']['runs'])->toBe(2)->and(AssistUsage::query()->where('suggestion_id', "report-{$id}-2")->exists())->toBeTrue();
+
+        // A second death after the requeue: failed, and the console says so.
+        $session->refresh()->forceFill(['report_status' => 'queued', 'report' => null])->save();
+        (new MakeAssistReportJob($id))->failed(new RuntimeException('killed'));
+        expect($session->fresh()->report_status)->toBe('failed');
+        $this->api(Fx::token($device))->getJson("/api/assist/sessions/{$id}")->assertJsonPath('report', 'failed');
+        Filament\Facades\Filament::setCurrentPanel('app');
+        $this->actingAs($device->user->fresh(), 'web');
+        $this->get(AssistReportPage::getUrl(['session' => $id]))->assertOk()->assertSee('The report could not be made.');
+    });
+
+    it('queues once more from failed(), then marks failed', function () {
+        $device = assistPerson('pro');
+        $session = AssistSession::query()->withoutGlobalScopes()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'mode' => 'fast',
+            'practice' => true, 'platform' => 'android', 'status' => 'ended', 'started_at' => now(), 'ended_at' => now(), 'seconds_used' => 1, 'report_status' => 'queued']);
+        Queue::fake();
+
+        (new MakeAssistReportJob($session->id))->failed(new RuntimeException('timeout'));
+        expect($session->fresh()->report_status)->toBe('queued');
+        Queue::assertPushed(MakeAssistReportJob::class, 1);
+        (new MakeAssistReportJob($session->id))->failed(new RuntimeException('timeout'));
+        expect($session->fresh()->report_status)->toBe('failed');
+        Queue::assertPushed(MakeAssistReportJob::class, 1);
+    });
 });

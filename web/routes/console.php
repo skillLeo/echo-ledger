@@ -24,6 +24,9 @@ Schedule::command('queue:work assist-reports --queue=assist-reports --stop-when-
     ->runInBackground()
     ->when(fn (): bool => (bool) config('queue.via_scheduler', true));
 
+// Since v1.9: Live Assist's reservations left behind and reports that never came (AssistBudget, MakeAssistReportJob).
+Schedule::command('assist:sweep')->everyFiveMinutes()->withoutOverlapping(10);
+
 Schedule::command('stt:reconcile')->everyFiveMinutes()->withoutOverlapping(10);
 
 // Recordings left in "assembling" by a request or worker that died (docs/API.md "complete").

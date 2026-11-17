@@ -145,6 +145,7 @@ function abilityRoutes(): array
         'assist: end a session' => ['POST', "/api/assist/sessions/{$id}/end", 'sessions:write'],
         'assist: delete a session' => ['DELETE', "/api/assist/sessions/{$id}", 'sessions:write'],
         'assist: what was done with a suggestion' => ['POST', "/api/assist/sessions/{$id}/suggestions/{$id}/action", 'sessions:write'],
+        'assist: ask about a session' => ['POST', "/api/assist/sessions/{$id}/ask", 'sessions:write'],
         'assist: start a session' => ['POST', '/api/assist/sessions', 'stt:token'],
         'assist: refresh its tokens' => ['POST', "/api/assist/sessions/{$id}/token", 'stt:token'],
     ];

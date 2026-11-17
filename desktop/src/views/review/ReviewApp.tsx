@@ -18,7 +18,7 @@ const AfterCallStackV2 = lazy(() => import("../../v2/controls/AfterCallStack").t
 /** How long a failed action's message replaces the title. */
 const ERROR_MS = 4000;
 /** The chip's full time (pending::CHIP_SECONDS): its timer line starts from the part that is left. */
-export const CHIP_SECONDS = 10;
+export const CHIP_SECONDS = 12;
 /** How long a kept chip shows its check before it leaves (since v1.5). */
 export const KEPT_MS = 900;
 
@@ -26,9 +26,9 @@ const EMPTY: AfterCallState = { saved: null, discarded: null, ask: null };
 
 /**
  * The `review` window (360 x 168, bottom-right, near the tray): what shows after a call (v1.5) and the ask chip for an
- * unrecognised app. "Keep automatically" shows a one-line toast, "Saved · Call with Omar · 4:12 · Undo", for 6 s; "Ask
- * me" shows a pill-size chip with the title, ✓ Keep and a labelled Discard (a trash, never ×: one click) that keeps the
- * recording by itself after 10 s (a thin line counts down), and its title opens the recording in the main window to
+ * unrecognised app. "Always transcribe" and "Always save audio" show a one-line toast, "Saved · Call with Omar · 4:12 · Undo", for 6 s; "Ask
+ * me" shows a pill-size chip with the title, ✓ Keep and a labelled Discard (a trash, never ×: one click) that saves the
+ * audio by itself after 12 s, not transcribed (a thin line counts down, "Saves the audio in N s"), and its title opens the recording in the main window to
  * rename it or pick a project. Discard deletes nothing at once: "Discarded · … · Undo" shows for 6 s and Undo puts
  * the chip back; the core deletes the files only once that time is over. The core decides what is
  * shown (`aftercall:state`); the window never takes focus, so everything works on click and only what is visible is
@@ -71,6 +71,12 @@ export default function ReviewApp() {
   const [held, setHeld] = useState<PendingItem | null>(null);
   // The chip kept last: it says Kept, with its check, from then until it has left.
   const [keptId, setKeptId] = useState<string | null>(null);
+  // Taken by the core because nobody answered in time: the audio is saved, not transcribed (v1.8 P1).
+  const [audioId, setAudioId] = useState<string | null>(null);
+  const keptByAnswer = useCallback((id: string) => {
+    setAudioId(null);
+    setKeptId(id);
+  }, []);
   const onAnswer = useCallback((item: PendingItem, keeping: boolean) => {
     setAnswered(item.id);
     if (keeping) setHeld(item);
@@ -96,12 +102,14 @@ export default function ReviewApp() {
     } else if (lastAsk && lastAsk.id !== answered && secondsLeft(lastAsk.deadlineAt, Date.now()) === 0) {
       setHeld(lastAsk);
       setKeptId(lastAsk.id);
+      setAudioId(lastAsk.id);
     }
   }
   const saved = usePresence(state.saved);
   const discarded = usePresence(state.discarded ?? null);
   const chip = usePresence(held && (!state.ask || state.ask.id === held.id) ? held : state.ask);
   const chipKept = !!chip.item && chip.item.id === keptId;
+  const keptWord = chipKept && chip.item?.id === audioId ? "Audio saved" : "Kept";
 
   // The interface flags are read again each time the window shows something, before it is drawn (v2/flags.ts).
   const windowShown = useWindowShown();
@@ -125,7 +133,7 @@ export default function ReviewApp() {
           {(saved.item || discarded.item || chip.item) && <div className="review-badge"><PrivacyBadge compact /></div>}
           {saved.item && <SavedPill key={saved.item.id} saved={saved.item} leaving={saved.leaving} onGone={dropSaved} />}
           {discarded.item && <DiscardedPill key={discarded.item.id} discarded={discarded.item} leaving={discarded.leaving} onGone={dropDiscarded} />}
-          {chip.item && <KeepChip key={chip.item.id} item={chip.item} kept={chipKept} leaving={chip.leaving} onGone={dropChip} onAnswer={onAnswer} onAnswerFailed={onAnswerFailed} onKept={setKeptId} />}
+          {chip.item && <KeepChip key={chip.item.id} item={chip.item} kept={chipKept} keptWord={keptWord} leaving={chip.leaving} onGone={dropChip} onAnswer={onAnswer} onAnswerFailed={onAnswerFailed} onKept={keptByAnswer} />}
         </div>
       )}
     </div>
@@ -240,10 +248,12 @@ function DiscardedPill({ discarded, leaving, onGone }: { discarded: SavedToast; 
 
 /** "Ask me": the title (opens the recording to rename it or pick a project), ✓ Keep and a labelled Discard; kept by the
  * core at `deadlineAt` when nobody answers. */
-function KeepChip({ item, kept, leaving, onGone, onAnswer, onAnswerFailed, onKept }: {
+function KeepChip({ item, kept, keptWord = "Kept", leaving, onGone, onAnswer, onAnswerFailed, onKept }: {
   item: PendingItem;
   /** Kept: the check pops in where the app's icon was and the chip says so, then it leaves. */
   kept: boolean;
+  /** What a kept chip says: "Kept", or "Audio saved" when its time ran out with no answer. */
+  keptWord?: string;
   leaving: boolean;
   onGone: (id: string) => void;
   onAnswer: (item: PendingItem, keeping: boolean) => void;
@@ -254,6 +264,13 @@ function KeepChip({ item, kept, leaving, onGone, onAnswer, onAnswerFailed, onKep
   const busy = useRef(false);
   // Read once: a window built mid-countdown starts the line where the time is.
   const [left] = useState(() => secondsLeft(item.deadlineAt, Date.now()) ?? CHIP_SECONDS);
+  // The countdown says what happens at its end, once a second.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const countdown = `Saves the audio in ${Math.ceil(secondsLeft(item.deadlineAt, now) ?? left)} s`;
 
   const act = async (command: () => Promise<unknown>, keeping = false) => {
     if (busy.current) return;
@@ -275,11 +292,11 @@ function KeepChip({ item, kept, leaving, onGone, onAnswer, onAnswerFailed, onKep
   const title = afterCallTitle(item);
   if (kept) {
     return (
-      <section className={`after-pill chip kept ${leaving ? "leaving" : ""}`} data-testid="keep-chip" role="status" aria-label={`Kept: ${title}`}
+      <section className={`after-pill chip kept ${leaving ? "leaving" : ""}`} data-testid="keep-chip" role="status" aria-label={`${keptWord}: ${title}`}
         aria-hidden={leaving || undefined}>
         <span className="after-icon ok" aria-hidden="true"><SuccessCheck size={14} /></span>
         <span className="after-text">
-          <b className="after-word">Kept</b>
+          <b className="after-word">{keptWord}</b>
           <span className="after-sep" aria-hidden="true">·</span>
           <span className="after-title" dir="auto" title={title}>{title}</span>
         </span>
@@ -306,7 +323,7 @@ function KeepChip({ item, kept, leaving, onGone, onAnswer, onAnswerFailed, onKep
           <TrashIcon size={13} /><span>Discard</span>
         </button>
       </span>
-      <span className="after-progress" aria-hidden="true">
+      <span className="after-progress" role="timer" aria-label={countdown} title={countdown}>
         <span style={{ animationDuration: `${left}s`, "--from": String(Math.min(1, left / CHIP_SECONDS)) } as CSSProperties} />
       </span>
     </section>

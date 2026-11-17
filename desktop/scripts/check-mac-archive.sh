@@ -33,8 +33,8 @@ bad=$(printf '%s\n' "$names" | awk '
 ')
 [ -z "$bad" ] || fail "$(printf '%s' "$bad" | head -n 1)"
 # The same name to APFS: case and Unicode normal form aside.
-same=$(printf '%s\n' "$names" | LC_ALL=en_US.UTF-8 perl -CS -MUnicode::Normalize -ne '
-  chomp; my $key = lc NFC($_); $key =~ s{/$}{};
+same=$(printf '%s\n' "$names" | LC_ALL=en_US.UTF-8 perl -CS -Mfeature=fc -MUnicode::Normalize -ne '
+  chomp; my $key = fc NFC($_); $key =~ s{/$}{};
   if (exists $seen{$key}) { print "$seen{$key} and $_\n"; exit } $seen{$key} = $_;
 ')
 [ -z "$same" ] || fail "two names for one file (case or Unicode form): $same"

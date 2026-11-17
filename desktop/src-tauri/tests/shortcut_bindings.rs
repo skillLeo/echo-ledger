@@ -11,8 +11,9 @@ fn map(entries: &[(Action, &str)]) -> HashMap<Action, String> {
 #[test]
 fn the_defaults_are_the_documented_chords() {
     let defaults = default_map();
-    assert_eq!(defaults.len(), 7);
+    assert_eq!(defaults.len(), 8);
     assert_eq!(defaults[&Action::RecordNow], "CommandOrControl+Alt+R");
+    assert_eq!(defaults[&Action::CaptureScreen], "CommandOrControl+Alt+S", "v1.8 P0.1: Capture screen now");
     assert_eq!(defaults[&Action::HideAll], "CommandOrControl+Alt+Shift+P", "v1.8.1: not Hide Others (⌘⌥H)");
     assert_eq!(
         defaults[&Action::ToggleCaptions],
@@ -39,12 +40,12 @@ fn every_default_chord_parses() {
 fn the_action_list_is_complete_and_unique() {
     let mut all = Action::ALL.to_vec();
     all.dedup();
-    assert_eq!(all.len(), 8);
+    assert_eq!(all.len(), 9);
     let defaults: Vec<Option<&str>> = Action::ALL
         .iter()
         .map(|a| a.default_accelerator())
         .collect();
-    assert_eq!(defaults.iter().filter(|d| d.is_some()).count(), 7);
+    assert_eq!(defaults.iter().filter(|d| d.is_some()).count(), 8);
 }
 
 #[test]
@@ -69,7 +70,8 @@ fn action_names_in_settings_files_and_ipc_are_snake_case() {
             "dictation",
             "voice_note",
             "mark",
-            "hide_all"
+            "hide_all",
+            "capture_screen"
         ]
     );
     for action in Action::ALL {

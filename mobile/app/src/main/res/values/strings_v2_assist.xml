@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (assist). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_assist_title">Live Assist</string>
+    <string name="v2_assist_consent">Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me. Is that okay with you?</string>
+    <string name="v2_assist_consent_label">Say this before you start:</string>
+    <string name="v2_assist_interview_note">Check whether this interview allows AI help.</string>
+    <string name="v2_assist_copy">Copy</string>
+    <string name="v2_assist_ok">OK</string>
+    <string name="v2_assist_help_now">Help me now</string>
+    <string name="v2_assist_regenerate">Regenerate</string>
+    <string name="v2_assist_shorter">Shorter</string>
+    <string name="v2_assist_urdu">Urdu</string>
+    <string name="v2_assist_writing">Writing a suggestion</string>
+    <string name="v2_assist_no_reply">No reply needed</string>
+    <string name="v2_assist_waiting">Suggestions appear here when they ask you something.</string>
+    <string name="v2_assist_say_next">Say next</string>
+    <string name="v2_assist_ready_dot">A suggestion is ready. Tap to see it.</string>
+    <string name="v2_assist_collapse">Make the card small</string>
+    <string name="v2_assist_mode_fast">Fast</string>
+    <string name="v2_assist_mode_balanced">Balanced</string>
+    <string name="v2_assist_mode_deep">Deep</string>
+    <string name="v2_assist_mode_max">Max</string>
+    <string name="v2_assist_mode_captions_only">Captions only</string>
+    <string name="v2_assist_mode_off_plan">Live Assist isn\'t in your plan. Captions go on.</string>
+    <string name="v2_assist_mode_off_budget">This month\'s assist hours are used. Assist is paused; captions go on.</string>
+    <string name="v2_assist_mode_budget">Switched to %1$s to stay within your assist hours.</string>
+    <string name="v2_assist_mode_restored">Back to %1$s.</string>
+    <string name="v2_assist_mode_plan">%1$s is the best mode your plan has.</string>
+    <string name="v2_assist_mode_time">Switched to %1$s: this session is close to its time limit.</string>
+    <string name="v2_assist_error_reconnecting">Reconnecting to Live Assist. Recording goes on.</string>
+    <string name="v2_assist_error_session">This Live Assist session has ended. Start a new one from Live.</string>
+    <string name="v2_assist_error_busy">Live Assist is busy right now. Trying again.</string>
+    <string name="v2_assist_error_not_set_up">Live Assist isn\'t set up on the server yet.</string>
+    <string name="v2_assist_error_slow">The assistant didn\'t answer in time. Tap Help me now to try again.</string>
+    <string name="v2_assist_error_declined">The assistant couldn\'t answer that one.</string>
+    <string name="v2_assist_error_nothing_to_rewrite">There\'s nothing on the card to rewrite yet.</string>
+    <string name="v2_assist_error_documents_too_large">Those documents are too large. The earlier ones are still in use.</string>
+    <string name="v2_assist_error_too_fast">Too many requests. Wait a moment and try again.</string>
+    <string name="v2_assist_error_bad_message">That request didn\'t go through. Try again.</string>
+    <string name="v2_assist_error_budget_off">Suggestions are off: this month\'s assist hours are used. Captions go on.</string>
+    <string name="v2_assist_error_budget_wait">Try again in a moment.</string>
+    <string name="v2_assist_error_other">Something went wrong with Live Assist. Recording goes on.</string>
+    <string name="v2_assist_practice_question">Question %1$d of %2$d</string>
+    <string name="v2_assist_practice_done">Practice finished: %1$d questions.</string>
+    <string name="v2_assist_ended">Live Assist has ended.</string>
+    <string name="v2_assist_start">Start Live Assist</string>
+    <string name="v2_assist_start_help">Suggestions on screen while they talk, in the call pill</string>
+</resources>
