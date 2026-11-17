@@ -13,6 +13,7 @@ mod commands;
 pub mod deep_link;
 pub mod detect;
 pub mod device_report;
+pub mod diagnostics;
 pub mod dictation;
 pub mod error;
 pub mod files;
@@ -522,6 +523,8 @@ pub fn run() {
             commands::translate_apps,
             commands::translate_status,
             commands::live_translate_status,
+            commands::diagnostic_report,
+            commands::diagnostic_report_copy,
             commands::translate_start,
             commands::translate_stop,
             commands::translate_toggle_lock,

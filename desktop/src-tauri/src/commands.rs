@@ -2810,6 +2810,21 @@ pub async fn mac_check_run(app: AppHandle) -> AppResult<crate::mac_check::CheckR
     }
 }
 
+/// Setup & health › the diagnostic report (both platforms): the Ready check, screen-sharing privacy and the last Share
+/// Check, the shortcuts and the versions, as plain text with no secrets, audio or transcripts.
+#[tauri::command]
+pub fn diagnostic_report(app: AppHandle) -> String {
+    crate::diagnostics::report_text(&crate::diagnostics::gather(&app))
+}
+
+/// Setup & health › Copy the report.
+#[tauri::command]
+pub fn diagnostic_report_copy(app: AppHandle) -> AppResult<()> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    let text = crate::diagnostics::report_text(&crate::diagnostics::gather(&app));
+    app.clipboard().write_text(text).map_err(|e| AppError::msg(e.to_string()))
+}
+
 /// The last Mac check of this run, to show it again when the page opens.
 #[tauri::command]
 pub fn mac_check_last(state: State<'_, AppState>) -> Option<crate::mac_check::CheckReport> {

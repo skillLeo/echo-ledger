@@ -1684,6 +1684,10 @@ export const api = {
   // Live Translate (v1.3, lib/translate.ts holds its types).
   translateApps: () => invoke<import("./translate").TranslateApp[]>("translate_apps"),
   translateStatus: () => invoke<import("./translate").TranslateFeed | null>("translate_status"),
+  /** Setup & health (both platforms): the diagnostic report as plain text (no secrets, audio or transcripts). */
+  diagnosticReport: () => invoke<string>("diagnostic_report"),
+  /** Setup & health › Copy the report. */
+  diagnosticReportCopy: () => invoke<void>("diagnostic_report_copy"),
   /** Whether Live Translate can start here, and why not, so the page shows it disabled with the reason. */
   liveTranslateStatus: () => invoke<LiveTranslateStatus>("live_translate_status"),
   translateStart: (request: import("./translate").TranslateStartRequest) => invoke<string[]>("translate_start", { request }),
