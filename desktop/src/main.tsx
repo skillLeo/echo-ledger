@@ -14,6 +14,8 @@ const PillApp = lazy(() => import("./views/pill/PillApp"));
 const ReviewApp = lazy(() => import("./views/review/ReviewApp"));
 const TranslateOverlayApp = lazy(() => import("./views/translate/TranslateOverlayApp"));
 const ShareCheckWindow = lazy(() => import("./views/sharecheck/ShareCheckWindow"));
+// Live Assist's card (v1.9 L4), a window the core opens for a session; it draws nothing unless its flags are on.
+const AssistApp = lazy(() => import("./v2/assist/AssistApp"));
 const ShareCheckTest = () => <ShareCheckWindow kind="test" />;
 const ShareCheckControl = () => <ShareCheckWindow kind="control" />;
 const ShareCheckCard = () => <ShareCheckWindow kind="card" />;
@@ -29,6 +31,7 @@ const WINDOW_VIEWS = new Map<string, React.ComponentType>([
   ["share-check-test", ShareCheckTest],
   ["share-check-control", ShareCheckControl],
   ["share-check-card", ShareCheckCard],
+  ["assist", AssistApp],
 ]);
 
 function currentLabel(): string {

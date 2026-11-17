@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import MainApp from "../../views/main/MainApp";
 import type { MainTab } from "../../lib/mainView";
 import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
@@ -53,6 +53,24 @@ describe("the shell", () => {
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
   });
 
+  it("a Live page that loads late stays open (it suspends once, then shows)", async () => {
+    const LatePage = lazy(() => Promise.resolve({ default: () => <h1>Live page</h1> }));
+    function LiveHost() {
+      const [tab, setTab] = useState<MainTab>("library");
+      return (
+        <Suspense fallback={null}>
+          <Shell tab={tab} onGo={setTab} status={{ kind: "ready", text: "Ready to record" }} live={<Suspense fallback={null}><LatePage /></Suspense>}><p>page {tab}</p></Shell>
+        </Suspense>
+      );
+    }
+    render(<LiveHost />);
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Live" }));
+    expect(await screen.findByRole("heading", { name: "Live page" })).toBeInTheDocument();
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { name: "Live page" })).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Live" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("maps today's pages to modules and words the status", () => {
     expect(moduleOf("record")).toBe("home");
     expect(moduleOf("activity")).toBe("home");
@@ -61,6 +79,40 @@ describe("the shell", () => {
     expect(shellStatus({ recording: {}, elapsedMs: 134_000 })).toEqual({ kind: "recording", text: "Recording 02:14" });
     expect(shellStatus({ recording: null, elapsedMs: 0, callsReady: false })).toEqual({ kind: "setup", text: "Needs setup" });
     expect(shellStatus({ recording: null, elapsedMs: 0, callsReady: true })).toEqual({ kind: "ready", text: "Ready to record" });
+  });
+});
+
+describe("the After a call notice in the new shell", () => {
+  it("says it once, with Always transcribe; closing keeps Ask me", async () => {
+    const { AfterCallNoticeV2 } = await import("./AfterCallNotice");
+    respond("after_call_notice_answer", makeStatus());
+    const onStatus = vi.fn();
+    const { rerender } = render(<AfterCallNoticeV2 text="After a call, EchoLedger now asks what to do." onStatus={onStatus} />);
+    expect(screen.getByTestId("after-call-notice-v2")).toHaveTextContent("After a call, EchoLedger now asks what to do.");
+    fireEvent.click(screen.getByRole("button", { name: "Always transcribe" }));
+    await act(flushAsync);
+    expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }]);
+    expect(onStatus).toHaveBeenCalled();
+    expect(screen.getByText("Every call is now transcribed.")).toBeInTheDocument();
+    rerender(<AfterCallNoticeV2 key="again" text="After a call, EchoLedger now asks what to do." onStatus={onStatus} />);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await act(flushAsync);
+    expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }, { alwaysTranscribe: false }]);
+  });
+
+  it("shows in the shell from the core's status, and not without it", async () => {
+    respond("app_status", { ...makeStatus(), afterCallNotice: "After a call, EchoLedger now asks what to do." });
+    respond("library_list", [makeItem("a")]);
+    respond("library_refresh", [makeItem("a")]);
+    respond("get_settings", makeSettings());
+    respond("list_clients", { data: [] });
+    respond("mic_users", []);
+    respond("session_detail", {});
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true }, ui_classic: false });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(await screen.findByTestId("after-call-notice-v2")).toBeInTheDocument();
   });
 });
 

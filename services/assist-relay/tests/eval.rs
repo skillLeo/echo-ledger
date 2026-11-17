@@ -12,3 +12,11 @@ async fn the_golden_set_and_its_scorer_work() {
     let problems = ci_check(&cases).await;
     assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn practice_questions_invent_no_names_or_numbers() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("eval/practice");
+    let cases = assist_relay::eval::practice::load_dir(&dir).expect("practice cases load");
+    let problems = assist_relay::eval::practice::ci_check(&cases).await;
+    assert!(problems.is_empty(), "{} problems:\n{}", problems.len(), problems.join("\n"));
+}

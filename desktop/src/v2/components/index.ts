@@ -3,7 +3,7 @@ import "../../tokens.css";
 import "../styles/v2.css";
 
 export { Button, Icon, type ButtonProps, type ButtonVariant, type IconType } from "./Button";
-export { TextField, SearchField } from "./fields";
+export { TextField, SearchField, TextArea } from "./fields";
 export { Select, type SelectOption } from "./Select";
 export { List, ListRow, ListSection, type ListRowProps } from "./ListRow";
 export { Chip, FilterBar } from "./FilterBar";
@@ -12,6 +12,7 @@ export { Dialog, Sheet, useFocusTrap } from "./Dialog";
 export { Badge, Status, type Tone, type StatusKind } from "./Badge";
 export { Toggle, Checkbox, Radio, RadioGroup } from "./choices";
 export { EmptyState } from "./EmptyState";
+export { Banner } from "./Banner";
 export { Skeleton, SkeletonRow, Loading, Progress } from "./Skeleton";
 export { HealthCheckRow, SetupStep, Steps, type HealthState } from "./health";
 export { Tabs, Segmented } from "./Tabs";

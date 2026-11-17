@@ -132,6 +132,17 @@ impl Context {
         self.segments.iter().map(|s| s.tokens).sum()
     }
 
+    /// An upper bound of the input tokens (`text::upper_tokens`), for budget bounds.
+    pub fn upper_tokens(&self) -> u32 {
+        self.segments.iter().map(|s| crate::text::upper_tokens(&s.text)).fold(0u32, u32::saturating_add)
+    }
+
+    /// The upper bound of the part up to the last cache breakpoint.
+    pub fn upper_cacheable_tokens(&self) -> u32 {
+        let last = self.segments.iter().rposition(|s| s.cache_after);
+        last.map_or(0, |i| self.segments[..=i].iter().map(|s| crate::text::upper_tokens(&s.text)).fold(0u32, u32::saturating_add))
+    }
+
     /// Tokens up to and including the last cache breakpoint.
     pub fn cacheable_tokens(&self) -> u32 {
         let last = self.segments.iter().rposition(|s| s.cache_after);
@@ -195,7 +206,7 @@ impl fmt::Debug for TranscriptTurn {
 }
 
 impl TranscriptTurn {
-    fn line(&self) -> String {
+    pub fn line(&self) -> String {
         let who = match self.channel {
             Channel::Me => "Me",
             Channel::Other => "Them",
@@ -332,12 +343,28 @@ impl Transcript {
         self.full.iter().map(|b| b.tokens).sum()
     }
 
+    /// The upper bound of the closed blocks' tokens (`text::upper_tokens`), as `full_block_tokens`.
+    pub fn upper_full_block_tokens(&self) -> u32 {
+        self.full.iter().map(|b| crate::text::upper_tokens(&b.text)).sum()
+    }
+
     /// Tokens the transcript adds to a request in `scope`.
     pub fn tokens(&self, scope: TranscriptScope) -> u32 {
         let latest: u32 = self.latest().iter().map(|t| estimate_tokens(&t.line()) + 1).sum();
         match scope {
             TranscriptScope::Recent => latest,
             TranscriptScope::Full => latest + self.full_block_tokens() + self.open.tokens,
+        }
+    }
+
+    /// An upper bound of what the transcript adds to a request in `scope` (`text::upper_tokens`).
+    pub fn upper_tokens(&self, scope: TranscriptScope) -> u32 {
+        let latest: u32 = self.latest().iter().map(|t| crate::text::upper_tokens(&t.line()) + 1).sum();
+        match scope {
+            TranscriptScope::Recent => latest,
+            TranscriptScope::Full => {
+                latest + self.full.iter().map(|b| crate::text::upper_tokens(&b.text)).sum::<u32>() + crate::text::upper_tokens(&self.open.text)
+            }
         }
     }
 }

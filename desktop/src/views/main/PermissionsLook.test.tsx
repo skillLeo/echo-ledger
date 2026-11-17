@@ -9,6 +9,7 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 const mac = (over: Partial<PermissionsStatus>): PermissionsStatus => ({ microphone: "allowed", systemAudio: "allowed", screen: "allowed", browserAutomation: true, platform: "macos", ...over });
+const win = (over: Partial<PermissionsStatus>): PermissionsStatus => ({ microphone: "allowed", browserAutomation: false, platform: "windows", ...over });
 const look = (kind: "microphone" | "system_audio" | "screen", permissions: PermissionsStatus) => {
   render(<PermissionStep kind={kind} permissions={permissions} onChange={() => undefined} />);
   return within(screen.getByTestId(`permission-${kind}`)).queryAllByRole("button").map((b) => `${b.textContent} [${b.className}]`);
@@ -23,6 +24,8 @@ describe("the classic permission step's look", () => {
     ["reopen", "screen", mac({ screen: "reopen" }), ["Quit & reopen [btn primary]"]],
     ["stuck after reopening", "screen", mac({ screen: "reopen", reopenDidNotApply: true }), ["Open System Settings [btn primary]"]],
     ["allowed", "microphone", mac({}), []],
+    ["Windows: off", "microphone", win({ microphone: "denied" }), ["Open Windows Settings [btn]"]],
+    ["Windows: doesn't say", "microphone", win({ microphone: "unknown" }), ["Open Windows Settings [btn ghost]"]],
   ] as const)("%s", (_name, kind, permissions, buttons) => {
     expect(look(kind, permissions)).toEqual(buttons);
   });

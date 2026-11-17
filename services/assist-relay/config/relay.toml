@@ -34,6 +34,9 @@ reserve_suggestions = 3
 expected_output_tokens = 160
 # Share of Balanced suggestions that also go to the upgrade model (hard questions), for the estimate only.
 upgrade_share = 0.3
+# A question turned away while background calls or other suggestions held the budget starts when they finish, if
+# within this many milliseconds of the question (and no newer line came from the other side, and Me hasn't spoken).
+hold_max_ms = 5000
 
 [session]
 # A session survives a dropped connection this long; a reconnect with a valid token resumes it.
@@ -56,6 +59,20 @@ burst = 80
 # Open connections at once, for the whole relay. A session needs about 0.2 MiB and at most about 1 MiB, so 1000 fit
 # in the systemd unit's 2 GB with room to spare (DEPLOY.md); more answer 503 relay_busy and the app tries again.
 max_connections = 1000
+
+[practice]
+# A practice session: the relay asks this many questions (from the brief and the documents: the job description or
+# the client's brief), one per practice_next, then sends practice_done. Fast model, short questions.
+questions = 8
+max_output_tokens = 120
+
+[background]
+# Written by the relay with the Fast model, in the background, never blocking a suggestion, and posted to the server
+# (internal facts and summary endpoints): new facts after this many final turns, and the running summary at most this
+# often when the call moved on.
+facts_every_finals = 3
+summary_every_secs = 300
+max_output_tokens = 400
 
 # Mode -> model. Each plan's modes come from the assist token; Max is Ultra only.
 [modes.fast]

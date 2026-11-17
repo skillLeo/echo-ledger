@@ -5,6 +5,11 @@ import { LibraryScreen } from "./screens/Library";
 import { RecordingScreen } from "./screens/Recording";
 import { SettingsScreen } from "./screens/Settings";
 import "./gallery.css";
+import { AssistCard } from "../assist/AssistCard";
+import { FIXTURE_SESSION } from "../assist/fixture";
+import { EMPTY_CARD, cardReducer } from "../assist/card";
+
+const noop = () => undefined;
 
 /** The Gate 3 sample screens in the app's frame: the sidebar and one page, in the chosen language and direction. */
 export function Gallery({ screen, lang, state = "ready" }: Pick<GalleryParams, "screen" | "lang"> & { state?: GalleryParams["state"] }) {
@@ -24,6 +29,12 @@ export function Gallery({ screen, lang, state = "ready" }: Pick<GalleryParams, "
         {screen === "library" && <LibraryScreen lang={lang} state={state} />}
         {screen === "recording" && <RecordingScreen lang={lang} state={state} />}
         {screen === "settings" && <SettingsScreen lang={lang} state={state} />}
+        {screen === "assist" && (
+          <div className="g-assist">
+            <AssistCard state={FIXTURE_SESSION.reduce(cardReducer, EMPTY_CARD)} hint="outline" muted={false}
+              actions={{ onSend: noop, onMode: noop, onHint: noop, onMute: noop, onHide: noop, onCopyConsent: noop, onStartOffer: noop, onDismissOffer: noop, onEndAndStart: noop, onKeepRunning: noop }} />
+          </div>
+        )}
       </main>
     </div>
   );
