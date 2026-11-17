@@ -402,7 +402,10 @@ fn schedule_expiry(app: &AppHandle, label: &'static str, generation: u64) {
 
 fn spawn_build(app: &AppHandle, label: &'static str) {
     let app = app.clone();
-    tauri::async_runtime::spawn(async move {
+    // On a blocking thread, never an async worker: a build waits for the main thread to make its webview (many seconds on
+    // a cold WebView2), and builds on the workers (6 at start in the smoke test, on 4 workers) left the async runtime
+    // nothing to run anything else with until the main thread was done (the Server 2022 stall, run 44059717761).
+    tauri::async_runtime::spawn_blocking(move || {
         let built = if label == MAIN {
             build_main(&app)
         } else {
@@ -440,6 +443,22 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_are_built_on_blocking_threads_never_on_the_async_workers() {
+        // A build waits for the main thread to make its webview; on the async workers six of them starved the runtime
+        // (the smoke test's stall on Server 2022). The window builds go to the blocking pool.
+        let lifecycle = include_str!("lifecycle.rs");
+        let build = &lifecycle[lifecycle.find("fn spawn_build(").unwrap()..];
+        let build = &build[..build.find("\n}\n").unwrap()];
+        assert!(build.contains("tauri::async_runtime::spawn_blocking(move ||"), "{build}");
+        assert!(!build.contains("async_runtime::spawn(async"), "{build}");
+        let commands = include_str!("commands.rs");
+        let start = &commands[commands.find("pub async fn translate_start").unwrap()..];
+        let start = &start[..start.find("\n}\n").unwrap()];
+        let blocking = start.find("spawn_blocking(move || crate::overlay::create_translate_window(").expect("Live Translate's window too");
+        assert!(!start[..blocking].contains("create_translate_window(&app"), "never built on the async worker itself");
+    }
     use serde_json::json;
 
     fn t0() -> Instant {
