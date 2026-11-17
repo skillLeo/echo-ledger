@@ -138,13 +138,17 @@ fn last_ended() -> &'static Mutex<Option<Feed>> {
 }
 
 /// The session's feed as it ended (its capture ended on its own): ended, with the reason, never hidden. Kept for the
-/// panel ([`current_feed`]) and returned to be sent.
+/// panel ([`current_feed`]) only while no session runs, decided under `running`'s lock, which a Start holds while it
+/// clears it: a Start never gets an older session's ended feed back. Returned to be sent.
 fn mark_ended(feed: &mut Feed, reason: String) -> Feed {
     feed.status = "ended".into();
     feed.notice = Some(reason);
     // Hidden, the window said it was listening: it shows why it stopped instead.
     feed.hidden = false;
-    *last_ended().lock().unwrap_or_else(|p| p.into_inner()) = Some(feed.clone());
+    let running = running().lock().unwrap_or_else(|p| p.into_inner());
+    if running.is_none() {
+        *last_ended().lock().unwrap_or_else(|p| p.into_inner()) = Some(feed.clone());
+    }
     feed.clone()
 }
 
@@ -405,11 +409,13 @@ fn spawn_capture(
             if !end_if_current(&stop) {
                 return;
             }
-            unregister_hotkeys(&app);
+            // Said before the keys go back: a Start during that wait (it waits for the main thread) is never followed
+            // by this session's ended feed.
             if let Ok(mut f) = feed.lock() {
                 let ended = mark_ended(&mut f, reason);
                 let _ = app.emit(FEED_EVENT, &ended);
             }
+            unregister_hotkeys(&app);
             crate::actions::emit_status(&app);
         })
         .map(|_| ())
@@ -451,7 +457,6 @@ where
     Fut: std::future::Future<Output = Result<LiveTranslateToken, String>> + Send + 'static,
 {
     stop_session();
-    clear_ended();
     let stop_flag = Arc::new(AtomicBool::new(false));
     let feed = Arc::new(Mutex::new(Feed {
         mode: Some(mode),
@@ -462,13 +467,12 @@ where
         lock_keys: keys(crate::shortcuts::Action::TranslateLock, cfg!(target_os = "macos")),
         ..Default::default()
     }));
-    *running()
-        .lock()
-        .map_err(|_| "Live Translate is busy.".to_string())? = Some(Running {
-        stop: stop_flag.clone(),
-        feed: feed.clone(),
-        window: window_generation(),
-    });
+    {
+        let mut running = running().lock().map_err(|_| "Live Translate is busy.".to_string())?;
+        // Under `running`'s lock, as `mark_ended` decides: an older session's ended feed is gone for good.
+        clear_ended();
+        *running = Some(Running { stop: stop_flag.clone(), feed: feed.clone(), window: window_generation() });
+    }
 
     let (tx, rx) = mpsc::channel::<Vec<i16>>(64);
     #[cfg(windows)]
@@ -713,13 +717,24 @@ mod tests {
         // Close (Stop) and a new Start let it go.
         clear_ended();
         assert_eq!(current_feed(), None);
+        // A newer session already runs: an older capture's end is sent but never kept, so it can't come back later.
+        *running().lock().unwrap() = Some(Running { stop: Arc::default(), feed: Arc::new(Mutex::new(Feed { status: "live".into(), ..Default::default() })), window: 10 });
+        let mut old = Feed { status: "live".into(), ..Default::default() };
+        assert_eq!(mark_ended(&mut old, STOPPED_HEARING.into()).status, "ended", "still sent to its window");
+        *running().lock().unwrap() = None;
+        assert_eq!(current_feed(), None, "not kept while another session ran");
         let source = include_str!("mod.rs");
         let stop = &source[source.find("pub fn stop(app: &AppHandle)").unwrap()..];
         let stop = &stop[..stop.find("\n}").unwrap()];
         assert!(stop.contains("clear_ended();") && stop.contains("w.close()"), "Close clears it and closes the window: {stop}");
         let start = &source[source.find("pub fn start<").unwrap()..];
         let start = &start[..start.find("let (tx, rx)").unwrap()];
-        assert!(start.contains("clear_ended();"), "a new Start clears it");
+        let held = start.find("let mut running = running().lock()").expect("Start takes running's lock");
+        assert!(start.find("clear_ended();").is_some_and(|at| at > held), "a new Start clears it under running's lock");
+        // The natural end says it ended before the keys go back.
+        let thread = &source[source.find("fn spawn_capture(").unwrap()..];
+        let thread = &thread[..thread.find("\n}").unwrap()];
+        assert!(thread.find("mark_ended(&mut f, reason)") < thread.find("unregister_hotkeys(&app)"), "ended is said before the keys go back");
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         assert!(thread[..thread.find("\n}").unwrap()].contains("mark_ended(&mut f, reason)"));
     }
