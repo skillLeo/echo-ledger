@@ -1,6 +1,6 @@
 // Screen moments in the transcript and Copy for AI (since v1.5): the same placement and wording as the phone.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { forgetPictures, PICTURES_KEPT, screenAlt, screenLabel, screenMarker, screenPicture, screensByLine, screensBySession } from "./screens";
+import { forgetPictures, PICTURES_KEPT, saidAround, saidLines, screenAlt, screenLabel, screenMarker, screenPicture, screenSaid, screensByLine, screensBySession } from "./screens";
 import { copiedTranscript, DEFAULT_UNSURE } from "./format";
 import type { ProjectScreen } from "./ipc";
 import { callsOf, fail, resetTauriMock, respondWith } from "../test/tauri";
@@ -98,5 +98,38 @@ describe("pictures", () => {
     for (let i = 0; i <= PICTURES_KEPT; i++) await screenPicture(`https://ledger.example.test/${i}`);
     await screenPicture("https://ledger.example.test/0");
     expect(callsOf("screen_image")).toHaveLength(PICTURES_KEPT + 2);
+  });
+});
+
+// The server's own cases (web/tests/Feature/Api/ScreenAssetsTest.php): the app's stand-in reads the same.
+describe("what was said around a screen (v1.8 P4.2)", () => {
+  it("gives what was said within 15 seconds, speaker by speaker, at most 600 characters", () => {
+    const lines = [
+      { speaker: "Omar", start_ms: 30_000, end_ms: 44_999, text: "Too early." },
+      { speaker: "Omar", start_ms: 40_000, end_ms: 45_000, text: "Look at this page." },
+      { speaker: "Me", start_ms: 61_000, end_ms: 63_000, text: "I see the orders." },
+      { speaker: "Omar", start_ms: 75_000, end_ms: 80_000, text: "Just in time." },
+      { speaker: "Omar", start_ms: 75_001, end_ms: 80_000, text: "Too late." },
+    ];
+    expect(saidAround(60_000, lines)).toBe("Omar: Look at this page.\nMe: I see the orders.\nOmar: Just in time.");
+    expect(saidAround(60_000, [])).toBeNull();
+    const long = saidAround(60_000, [{ speaker: "Me", start_ms: 60_000, end_ms: 61_000, text: "word ".repeat(300) }])!;
+    expect(long.length).toBeLessThanOrEqual(600);
+    expect(long.length).toBeGreaterThan(590);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
+  it("takes the server's said when it sends the field, even null; works it out on a server without it", () => {
+    const lines = [{ speaker: "Me", start_ms: 4_000, end_ms: 6_000, text: "Here is the price." }];
+    expect(screenSaid(makeScreen(1, 5_000, { said: "Ayesha: The price." }), lines)).toBe("Ayesha: The price.");
+    expect(screenSaid(makeScreen(1, 5_000, { said: null }), lines)).toBeNull();
+    expect(screenSaid(makeScreen(1, 5_000), lines)).toBe("Me: Here is the price.");
+  });
+
+  it("splits it into speakers and their words", () => {
+    expect(saidLines("Omar: Look at this page.\nNo speaker here\nMe: Time: 14:32")).toEqual([
+      { speaker: "Omar", text: "Look at this page." }, { speaker: null, text: "No speaker here" }, { speaker: "Me", text: "Time: 14:32" },
+    ]);
+    expect(saidLines(null)).toEqual([]);
   });
 });

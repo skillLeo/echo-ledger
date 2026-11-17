@@ -62,6 +62,8 @@ export type RowModel = {
   when: string;
   duration: string;
   app: string;
+  /** Its screen moments, for the screens mark (0: none, or a server without them). */
+  screens: number;
 };
 
 /** A recording as a WhatsApp-style row: who or what, the first words, when and how long. */
@@ -78,7 +80,7 @@ export function rowModel(item: LibraryItem, now: Date = new Date()): RowModel {
       : waiting ? { tone: "warning" as const, text: "Untranscribed" } : null;
   const at = item.started_at ? new Date(item.started_at) : null;
   const when = !at || Number.isNaN(at.getTime()) ? "" : sameDay(item.started_at, now) ? formatTime(at) : rowDate(item.started_at, now);
-  return { title: recordingName(item.title), meta, badge, when, duration: formatDuration(item.duration_ms), app };
+  return { title: recordingName(item.title), meta, badge, when, duration: formatDuration(item.duration_ms), app, screens: item.screen_count ?? 0 };
 }
 
 /** The server's default for how long a deleted recording is kept (lib/trash.ts has the fallback). */

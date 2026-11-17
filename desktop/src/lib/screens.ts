@@ -66,3 +66,36 @@ export function screenPicture(url: string): Promise<string> {
 export function forgetPictures(): void {
   pictures.clear();
 }
+
+// ---- Meeting assets (v1.8 P4.2) ---------------------------------------------------------------------------------
+// The server names each screen (`file_name`, shown as it sends it, and not at all until it does: the app never makes up
+// a name the meeting folder won't use) and says what was said around it (`said`). Until a server sends `said` the app
+// works it out the same way from the transcript at hand.
+
+/** What was said this long before and after a screen. */
+export const SAID_WINDOW_MS = 15_000;
+/** At most this many characters of it. */
+export const SAID_CHARS = 600;
+/** The lines said within 15 s of a screen, as "Speaker: words" lines, at most 600 characters; null when none. */
+export function saidAround(atMs: number, lines: readonly { speaker: string; start_ms: number; end_ms: number; text: string }[]): string | null {
+  const said = lines
+    .filter((l) => l.end_ms >= atMs - SAID_WINDOW_MS && l.start_ms <= atMs + SAID_WINDOW_MS)
+    .map((l) => `${l.speaker.trim() ? `${l.speaker.trim()}: ` : ""}${l.text.trim()}`);
+  if (said.length === 0) return null;
+  const text = said.join("\n");
+  return text.length > SAID_CHARS ? `${text.slice(0, SAID_CHARS - 1).trimEnd()}…` : text;
+}
+
+/** What was said around a screen: the server's when it sends it (null = nothing), else from the transcript at hand. */
+export function screenSaid(screen: Pick<ScreenMoment, "at_ms" | "said">, lines: Parameters<typeof saidAround>[1]): string | null {
+  return screen.said !== undefined ? screen.said : saidAround(screen.at_ms, lines);
+}
+
+/** "Me: Here is the price." → { speaker: "Me", text: "Here is the price." }, one per line. */
+export function saidLines(said: string | null): { speaker: string | null; text: string }[] {
+  if (!said) return [];
+  return said.split("\n").filter((l) => l.trim()).map((l) => {
+    const m = /^([^:]{1,60}):\s(.*)$/.exec(l);
+    return m ? { speaker: m[1], text: m[2] } : { speaker: null, text: l };
+  });
+}

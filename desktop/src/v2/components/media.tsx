@@ -40,7 +40,14 @@ export function Player({ playing, position, duration, onToggle, onSeek, labels =
 export type Segment = { speaker: string; start: number; text: string };
 
 /** A transcript: who spoke, when, and what; the line being played is marked. */
-export function Transcript({ label, segments, activeIndex, lang }: { label: string; segments: Segment[]; activeIndex?: number; lang?: string }) {
+export function Transcript({ label, segments, activeIndex, lang, after }: {
+  label: string;
+  segments: Segment[];
+  activeIndex?: number;
+  lang?: string;
+  /** What follows a line inside it (the screens shown at its moment). */
+  after?: (index: number) => ReactNode;
+}) {
   return (
     <ol className="el-transcript" aria-label={label} lang={lang}>
       {segments.map((s, i) => (
@@ -50,6 +57,7 @@ export function Transcript({ label, segments, activeIndex, lang }: { label: stri
             <span className="el-segment__time el-num">{clock(s.start)}</span>
           </span>
           <p className="el-segment__text" dir="auto">{s.text}</p>
+          {after?.(i)}
         </li>
       ))}
     </ol>

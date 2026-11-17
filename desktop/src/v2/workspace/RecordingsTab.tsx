@@ -10,6 +10,7 @@ import { snippetParts } from "../../lib/player";
 import { timestamp } from "../../lib/format";
 import { Badge, Button, Card, Checkbox, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, Select, SkeletonRow } from "../components";
 import { dayGroups, rowModel } from "../library/model";
+import { ScreensMark } from "../library/screens";
 
 export const PROJECT_SORTS: readonly { value: SortKey; label: string }[] = [
   { value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }, { value: "title", label: "Name A–Z" }, { value: "longest", label: "Longest first" },
@@ -58,7 +59,7 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
     const inFolder = item.client && item.client.id !== project.id ? item.client.name : null;
     return (
       <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={inFolder ? `${inFolder} · ${r.meta}` : r.meta}
-        badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined}
+        badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined} mark={r.screens ? <ScreensMark count={r.screens} /> : undefined}
         endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
         onPointerDown={onMoveRecordings ? (e) => beginRecordingDrag(e, () => ({ ids: [item.id], label: dragLabel([item.title]) }), onMoveRecordings) : undefined}
         onClick={() => { if (!dragJustEnded()) onOpenRecording(item.id); }} />
