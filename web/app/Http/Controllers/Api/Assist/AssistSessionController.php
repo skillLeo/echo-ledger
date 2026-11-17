@@ -57,6 +57,8 @@ final class AssistSessionController extends Controller
         $mode = $practice ? $this->plans->modes($device->workspace_id, true)[0] : (string) ($data['mode'] ?? ($prep !== null ? $prep->mode : 'balanced'));
         $this->plans->assertMode($device->workspace_id, $mode, $practice);
         $this->plans->assertLeft($device->workspace_id, $device->user_id, $practice);
+        // A quick look first, so a refusal asks nothing of the captions' provider; checked again, locked, below.
+        $this->assertNoneActive($device);
         // Refused before anything is created: no relay, or no captions where nothing else gives them (Practice, or a
         // call without a recording; a running recording has its own captions).
         $this->relay->assertReady();
@@ -69,10 +71,7 @@ final class AssistSessionController extends Controller
             // One assist session at a time per person, live or Practice: each spends what is left of the month, so two
             // at once would spend it twice. The person's row is locked so two starts at once cannot both pass.
             User::query()->whereKey($device->user_id)->lockForUpdate()->first();
-            $this->endAbandoned($device);
-            if ($this->query($device)->where('status', 'active')->exists()) {
-                throw new ApiError(409, 'session_active', 'Live Assist is already on in another call or Practice. End it there first.');
-            }
+            $this->assertNoneActive($device);
             $session = AssistSession::query()->create([
                 'workspace_id' => $device->workspace_id,
                 'user_id' => $device->user_id,
@@ -245,13 +244,39 @@ final class AssistSessionController extends Controller
     }
 
     /**
-     * A live session whose app stopped refreshing its token (the last token long expired) is over: it ends where its
-     * last token did, so its time is not counted on.
+     * `409 session_active` while the person has an assist session on, live or Practice, in any of their workspaces
+     * (1.9.0-k: it names that session, its kind and its device, so the app can end it and start again). One whose
+     * app stopped refreshing is ended first.
+     */
+    private function assertNoneActive(Device $device): void
+    {
+        $this->endAbandoned($device);
+        $active = $this->activeOf($device->user_id)->orderByDesc('started_at')->first();
+        if ($active instanceof AssistSession) {
+            throw new ApiError(409, 'session_active', 'Live Assist is already on in another call or Practice. End it there first.', [
+                'session_id' => $active->id, 'practice' => $active->practice, 'device_id' => $active->device_id,
+            ]);
+        }
+    }
+
+    /**
+     * The person's sessions still on, in every workspace (as AssistPlans::left counts their time).
+     *
+     * @return Builder<AssistSession>
+     */
+    private function activeOf(int $userId): Builder
+    {
+        return AssistSession::query()->withoutGlobalScopes()->where('user_id', $userId)->where('status', 'active');
+    }
+
+    /**
+     * A session whose app stopped refreshing its token (the last token long expired) is over, in any workspace: it ends
+     * where its last token did, so its time is not counted on.
      */
     private function endAbandoned(Device $device): void
     {
         $cutoff = now()->subSeconds((int) config('assist.abandoned_after_seconds', 1200));
-        $this->query($device)->where('status', 'active')->where(fn (Builder $q) => $q->where('last_token_at', '<', $cutoff)->orWhere(
+        $this->activeOf($device->user_id)->where(fn (Builder $q) => $q->where('last_token_at', '<', $cutoff)->orWhere(
             fn (Builder $q) => $q->whereNull('last_token_at')->where('started_at', '<', $cutoff)))
             ->each(function (AssistSession $stale): void {
                 $at = ($stale->last_token_at ?? $stale->started_at)->copy()->addSeconds((int) config('assist.token_ttl_seconds', 900));

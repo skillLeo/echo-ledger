@@ -11,6 +11,7 @@ use App\Models\AssistUsage;
 use App\Models\ClientFile;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\DB;
@@ -228,8 +229,10 @@ describe('starting a session', function () {
         $device = assistPerson('pro');
         $api = $this->api(Fx::token($device));
         $practice = $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertCreated()->json('session.id');
-        // A second Practice, and a live session next to Practice, would spend the month's allowance twice.
-        $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertStatus(409)->assertJsonPath('code', 'session_active');
+        // A second Practice, and a live session next to Practice, would spend the month's allowance twice. The answer
+        // names the session on, so the app can end it and start again (1.9.0-k).
+        $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertStatus(409)->assertJsonPath('code', 'session_active')
+            ->assertJsonPath('session_id', $practice)->assertJsonPath('practice', true)->assertJsonPath('device_id', $device->id);
         $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])->assertStatus(409)->assertJsonPath('code', 'session_active');
         // From another device of the same person too.
         $this->api(Fx::token(Fx::device($device->user, ['workspace_id' => $device->workspace_id])))
@@ -245,6 +248,24 @@ describe('starting a session', function () {
         $stale = AssistSession::query()->withoutGlobalScopes()->find($first);
         // It ended where its last token did, so the time after counts for nothing.
         expect($stale->status)->toBe('ended')->and($stale->seconds_used)->toBe(900);
+    });
+
+    it('allows one session per person across all their workspaces, and asks the captions\' provider nothing when refusing', function () {
+        $device = assistPerson('pro');
+        $live = $this->api(Fx::token($device))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])->assertCreated()->json('session.id');
+        // The same person in a second workspace, signed in there on another device.
+        $user = $device->user->fresh();
+        $team = app(Workspaces::class)->createFor($user, 'Second team');
+        app(Workspaces::class)->switchTo($user, $team);
+        $there = Fx::device($user->fresh(), ['workspace_id' => $team->id]);
+        Http::swap(new HttpFactory);
+        Http::fake(['api.soniox.com/*' => Http::response(['api_key' => 'temp:abc', 'expires_at' => '2026-12-01T10:10:00Z'])]);
+
+        $this->api(Fx::token($there))->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])
+            ->assertStatus(409)->assertJsonPath('code', 'session_active')->assertJsonPath('session_id', $live)
+            ->assertJsonPath('practice', false)->assertJsonPath('device_id', $device->id);
+        Http::assertNothingSent();
+        expect(AssistSession::query()->withoutGlobalScopes()->where('user_id', $user->id)->count())->toBe(1);
     });
 
     it('answers 503 while the relay is not set up, and creates nothing', function () {
