@@ -118,6 +118,8 @@ class SettingsPagesShotsTest {
             // What goes in the words is said in both languages.
             for (arg in code.args) {
                 org.junit.Assert.assertTrue("${kind.wire} $arg", english.contains(arg.toString()) && urdu.contains(arg.toString()))
+                // A name (an app, another app's package) keeps its own left-to-right order inside the Urdu line.
+                if (arg is String) org.junit.Assert.assertTrue("${kind.wire} isolates $arg", urdu.contains("\u2066$arg\u2069"))
             }
             // English words are the capture log's sentence, as before.
             org.junit.Assert.assertEquals(kind.wire, note.english.replaceFirstChar { it.uppercase() }, english)
