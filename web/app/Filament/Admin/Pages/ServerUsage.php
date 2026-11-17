@@ -9,6 +9,7 @@ use App\Filament\Pages\Usage;
 use App\Filament\Support\Notice as Notification;
 use App\Models\Workspace;
 use App\Services\AuditLog;
+use App\Services\Screens\ScreenUsage;
 use App\Services\SettingsRepository;
 use App\Services\Staff\StaffAccess;
 use App\Services\Usage\CostAlerts;
@@ -179,6 +180,8 @@ class ServerUsage extends Page
             'daily' => $breakdown->daily($from, $to, $this->workspace()),
             'trend' => $breakdown->trend($this->workspace()),
             'budget' => app(CostAlerts::class)->status(),
+            // Since v1.8 P4.1: what screen moments really take a meeting hour.
+            'screens' => app(ScreenUsage::class)->between($from, $to, $this->workspace()),
             'from' => $from->format('M j, Y'),
             'to' => $to->copy()->subDay()->format('M j, Y'),
         ];
