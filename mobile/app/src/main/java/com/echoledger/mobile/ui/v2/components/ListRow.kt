@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.largeText
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
@@ -88,11 +89,12 @@ fun EchoListRow(
         leading?.invoke()
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                // From 150 % text a title takes two lines, so it says more than a few letters beside the time.
                 Text(
                     title,
                     style = type.content(title, type.bodyStrong),
                     color = c.textPrimary,
-                    maxLines = 1,
+                    maxLines = if (largeText()) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = startAlign(),
                     modifier = Modifier.weight(1f)

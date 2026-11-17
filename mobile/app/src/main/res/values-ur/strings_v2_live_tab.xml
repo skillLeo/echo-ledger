@@ -3,7 +3,7 @@
 <resources>
     <string name="v2_livetab_title">لائیو</string>
     <string name="v2_livetab_record">کالز اور میٹنگز ریکارڈ کریں</string>
-    <string name="v2_livetab_record_help">واٹس ایپ اور فون کالز، ہوتے ہی ریکارڈ</string>
+    <string name="v2_livetab_record_help">واٹس ایپ اور فون کالز، فوراً ریکارڈ</string>
     <string name="v2_livetab_voice_note">وائس نوٹ</string>
     <string name="v2_livetab_voice_note_help">ابھی اپنی آواز ریکارڈ کریں</string>
     <string name="v2_livetab_translate">لائیو ترجمہ</string>
