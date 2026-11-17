@@ -17,7 +17,7 @@ use tauri::{AppHandle, LogicalSize, Manager, Runtime, WebviewUrl, WebviewWindow,
 
 use crate::lifecycle;
 use crate::settings::{CaptionSize, CaptionStyle, CaptionWidth, Settings};
-use geometry::{Corner, PillPosition, RectPx, WorkArea, area_for, caption_overlay_size_for, cursor_in_regions_scaled, dock, nearest_corner, pill_origin_scaled, rescue_scaled, size_at};
+use geometry::{Corner, PillPosition, RectPx, Spot, WorkArea, area_for, caption_overlay_size_for, cursor_in_regions_scaled, dock, nearest_corner, pill_origin_scaled, rescue_scaled, scale_or_last, size_at, spot_on};
 
 pub const OVERLAY: &str = "overlay";
 pub const DICTATION: &str = "dictation";
@@ -294,7 +294,20 @@ impl Desk {
 /// The scale of a window's frame in [`Desk`]'s units: the scale of the monitor it is on (Windows, per-monitor DPI v2:
 /// physical px), 1 on a Mac (points everywhere).
 fn frame_scale<R: Runtime>(window: &WebviewWindow<R>) -> f64 {
-    if cfg!(target_os = "macos") { 1.0 } else { window.scale_factor().unwrap_or(1.0) }
+    if cfg!(target_os = "macos") { 1.0 } else { scale_of(window) }
+}
+
+/// The last scale read for each window, for when a read fails (the window is being moved or rebuilt).
+static LAST_SCALE: Mutex<Option<HashMap<String, f64>>> = Mutex::new(None);
+
+/// A window's scale now (its monitor's), else the last one read for it, else 1.
+fn scale_of<R: Runtime>(window: &WebviewWindow<R>) -> f64 {
+    let read = window.scale_factor().ok();
+    let mut last = LAST_SCALE.lock().unwrap_or_else(|p| p.into_inner());
+    let map = last.get_or_insert_with(HashMap::new);
+    let scale = scale_or_last(read, map.get(window.label()).copied());
+    map.insert(window.label().to_string(), scale);
+    scale
 }
 
 fn margin_units(scale: f64, logical: f64) -> i32 {
@@ -403,13 +416,14 @@ pub fn move_to_other_display<R: Runtime>(app: &AppHandle<R>) -> Result<(), Strin
     for label in labels {
         let Some(window) = app.get_webview_window(label) else { continue };
         let Some((_, size)) = frame_of(&window) else { continue };
-        let at = match label {
-            PILL => (area.x + (area.w as i32 - size.0 as i32) / 2, area.y + margin_units(scale, PILL_MARGIN_LOGICAL)),
-            OVERLAY => dock(area, size, corner, margin_units(scale, MARGIN_LOGICAL)),
-            DICTATION => dock(area, size, top_center_corner(corner), margin_units(scale, MARGIN_LOGICAL)),
-            _ => dock(area, size, Corner::BottomRight, margin_units(scale, MARGIN_LOGICAL)),
+        let (spot, margin) = match label {
+            PILL => (Spot::TopCentre, PILL_MARGIN_LOGICAL),
+            OVERLAY => (Spot::Corner(corner), MARGIN_LOGICAL),
+            DICTATION => (Spot::Corner(top_center_corner(corner)), MARGIN_LOGICAL),
+            _ => (Spot::Corner(Corner::BottomRight), MARGIN_LOGICAL),
         };
-        put(&window, at);
+        // At the size it will have on that display, which may have another scale than the one it leaves.
+        put(&window, spot_on(area, scale, size, frame_scale(&window), spot, margin));
     }
     Ok(())
 }
@@ -508,7 +522,7 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
                         Ok(origin) => {
                             // The window's scale now: dragged onto a monitor with another one (per-monitor DPI on
                             // Windows), its regions follow at once, before the page measures them again.
-                            let scale = window.scale_factor().unwrap_or(1.0);
+                            let scale = scale_of(&window);
                             let physical = geometry::scale_regions(rects, scale);
                             // A Mac's cursor and window are brought back to points; Windows' are physical already.
                             let window_scale = if cfg!(target_os = "macos") { scale } else { 1.0 };

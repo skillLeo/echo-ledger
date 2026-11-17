@@ -159,6 +159,31 @@ pub fn rescue_scaled(areas: &[(WorkArea, f64)], pos: (i32, i32), size: (u32, u32
     Some(clamp_into(area, pos, size_at(size, window_scale, scale)))
 }
 
+/// Where on a display a window goes when it is moved there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Spot {
+    TopCentre,
+    Corner(Corner),
+}
+
+/// A window moved onto a display at `scale` (pure): placed at `spot`, `margin_logical` px of that display from its
+/// edges, at the size it will have there (it is `size` at `window_scale` now), so it never hangs off the display.
+pub fn spot_on(area: WorkArea, scale: f64, size: (u32, u32), window_scale: f64, spot: Spot, margin_logical: f64) -> (i32, i32) {
+    let size = size_at(size, window_scale, scale);
+    let margin = (margin_logical * scale).round() as i32;
+    let at = match spot {
+        Spot::TopCentre => top_center(area, size, margin),
+        Spot::Corner(corner) => dock(area, size, corner, margin),
+    };
+    clamp_into(area, at, size)
+}
+
+/// A scale as read now, else the last one read for the same window, else 1 (pure).
+pub fn scale_or_last(read: Option<f64>, last: Option<f64>) -> f64 {
+    let ok = |s: &f64| s.is_finite() && *s > 0.0;
+    read.filter(ok).or(last.filter(ok)).unwrap_or(1.0)
+}
+
 /// The display that holds `point`, else the nearest one (its index); none without displays.
 pub fn area_for(areas: &[WorkArea], point: (i32, i32)) -> Option<usize> {
     if let Some(at) = areas.iter().position(|a| contains(*a, point)) {

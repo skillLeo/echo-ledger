@@ -641,3 +641,37 @@ fn a_window_rescued_onto_a_display_with_another_scale_fits_it_at_its_size_there(
     let moved = rescue_scaled(&desk, (4790, 1500), (360, 240), 1.0).unwrap();
     assert_eq!(moved, (1920 + 2880 - 540, 1560 - 360));
 }
+
+#[test]
+fn moving_the_windows_to_the_other_display_fits_them_at_their_size_there() {
+    use desktop_lib::overlay::geometry::{Corner, Spot, WorkArea, spot_on};
+    let inside = |area: WorkArea, at: (i32, i32), size: (u32, u32)| {
+        at.0 >= area.x && at.1 >= area.y && at.0 + size.0 as i32 <= area.x + area.w as i32 && at.1 + size.1 as i32 <= area.y + area.h as i32
+    };
+    // From a 100 % display onto a 200 % one (3840 × 2100 physical): the card is 360 × 168 now, 720 × 336 there.
+    let at_200 = WorkArea { x: 1920, y: 0, w: 3840, h: 2100 };
+    let card = spot_on(at_200, 2.0, (360, 168), 1.0, Spot::Corner(Corner::BottomRight), 18.0);
+    assert_eq!(card, (1920 + 3840 - 720 - 36, 2100 - 336 - 36));
+    assert!(inside(at_200, card, (720, 336)), "the whole card, at its size there");
+    let pill = spot_on(at_200, 2.0, (352, 84), 1.0, Spot::TopCentre, 12.0);
+    assert_eq!(pill, (1920 + (3840 - 704) / 2, 24));
+    assert!(inside(at_200, pill, (704, 168)));
+    // From a 150 % display onto a 100 % one: the captions (900 × 210 there now) are 600 × 140 there.
+    let at_100 = WorkArea { x: -1920, y: 0, w: 1920, h: 1040 };
+    let captions = spot_on(at_100, 1.0, (900, 210), 1.5, Spot::Corner(Corner::BottomLeft), 18.0);
+    assert_eq!(captions, (-1920 + 18, 1040 - 140 - 18));
+    assert!(inside(at_100, captions, (600, 140)));
+    // A window larger than the display stays at its top-left corner.
+    let tiny = WorkArea { x: 0, y: 0, w: 300, h: 100 };
+    assert_eq!(spot_on(tiny, 1.0, (360, 168), 1.0, Spot::Corner(Corner::BottomRight), 18.0), (0, 0));
+}
+
+#[test]
+fn a_scale_that_cannot_be_read_is_the_last_one_read() {
+    use desktop_lib::overlay::geometry::scale_or_last;
+    assert_eq!(scale_or_last(Some(1.5), Some(1.0)), 1.5);
+    assert_eq!(scale_or_last(None, Some(1.5)), 1.5, "a failed read keeps the window's last scale");
+    assert_eq!(scale_or_last(Some(f64::NAN), Some(2.0)), 2.0);
+    assert_eq!(scale_or_last(None, None), 1.0, "never read: 1");
+    assert_eq!(scale_or_last(Some(0.0), None), 1.0);
+}
