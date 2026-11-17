@@ -171,7 +171,7 @@ class LibraryTest : E2eTest() {
         Ui.device.pressHome()
         Shell.setNetwork(false)
         Ui.launchApp()
-        Ui.awaitText("Offline — showing the last synced library", Ui.LONG)
+        Ui.awaitText("Offline: showing the last synced library", Ui.LONG)
         Ui.snapshot("library-offline")
         assertTrue("cached library is still shown", Ui.has(SeedData.SILENT))
         Shell.setNetwork(true)

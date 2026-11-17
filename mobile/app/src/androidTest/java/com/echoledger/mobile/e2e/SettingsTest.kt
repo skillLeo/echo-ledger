@@ -38,14 +38,15 @@ class SettingsTest : E2eTest() {
     fun settingsShowThisPhoneTheServerAndThePinningState() {
         openSettings("Devices")
         Ui.awaitText("Settings phone · ${Backend.serverUrl}")
-        assertTrue(Ui.has("Certificate pinning not configured on the server"))
+        // Since v1.8.1 (P-021) the phone shows no server address details or certificate pins to people.
+        assertFalse(Ui.has("Certificate pinning not configured on the server"))
         Ui.snapshot("settings")
         Ui.device.pressBack()
         Ui.clickText("Captions")
         Ui.awaitText("Live captions while recording")
         Ui.device.pressBack()
         Ui.clickText("Recording")
-        Ui.awaitText("Near-end microphone source")
+        Ui.awaitText("Your microphone")
         Ui.device.pressBack()
         Ui.clickText("General")
         Ui.awaitText("Client keyterms")
@@ -68,17 +69,19 @@ class SettingsTest : E2eTest() {
 
     @Test
     fun theMicrophoneSourceCanBeSwitchedAndIsRemembered() {
+        // Since v1.8.1 (P-022) the choice is in plain words: "Reduce echo" (recommended) or "Unprocessed".
         openSettings("Recording")
-        Ui.awaitText("Voice communication (echo-cancelled)")
-        Ui.clickText("Change")
-        Ui.awaitText("Raw microphone")
-        assertEquals("mic", AppState.settings().micSource)
+        Ui.awaitText("Reduce echo")
+        Ui.clickText("Your microphone")
+        Ui.clickText("Unprocessed")
+        Ui.awaitCondition("the setting to be saved", Ui.NORMAL) { AppState.settings().micSource == "mic" }
         Ui.launchApp()
         Ui.openTab("Settings")
         Ui.clickText("Recording")
-        Ui.awaitText("Raw microphone")
-        Ui.clickText("Change")
-        Ui.awaitText("Voice communication (echo-cancelled)")
+        Ui.awaitText("Unprocessed")
+        Ui.clickText("Your microphone")
+        Ui.clickText("Reduce echo (recommended)")
+        Ui.awaitText("Reduce echo")
     }
 
     @Test
