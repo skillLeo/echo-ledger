@@ -1825,6 +1825,8 @@ export const api = {
   helpGuide: (id: string) => invoke<HelpGuide>("help_guide", { id }),
   /** This platform's last releases with notes, newest first (the core names the platform: windows or mac). */
   helpWhatsNew: () => invoke<{ data: WhatsNewRelease[] }>("help_whats_new"),
+  /** The device check this computer last sent (`POST /api/devices/report`), which Contact support can attach; null: none yet. */
+  lastDeviceReport: () => invoke<{ sentAt: string | null } | null>("last_device_report"),
   /** Contact support (5 an hour): the device's last report goes with it only when `includeDeviceReport`. */
   supportSend: (subject: string, message: string, includeDeviceReport: boolean) =>
     invoke<void>("support_send", { subject, message, includeDeviceReport }),

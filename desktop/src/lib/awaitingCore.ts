@@ -5,8 +5,11 @@
 export const AWAITING_CORE = {
   /** The app version by which the list must be empty. */
   removeBy: "2.0.0",
-  /** Help (docs/API.md 2.0.0-d): GET /api/help/guides, /guides/{id}, /whats-new and POST /api/support/messages. */
-  commands: ["help_guides", "help_guide", "help_whats_new", "support_send"] as readonly string[],
+  /**
+   * Help (docs/API.md 2.0.0-d): GET /api/help/guides, /guides/{id}, /whats-new and POST /api/support/messages; and the
+   * core's record of the last device report this computer sent, which Contact support says it attaches.
+   */
+  commands: ["help_guides", "help_guide", "help_whats_new", "support_send", "last_device_report"] as readonly string[],
 } as const;
 
 /** "1.10.2" ≥ "1.9.0", by number. */
@@ -30,7 +33,7 @@ export function releaseBlockers({ release, version, awaiting, helpReachable }: {
   if (versionAtLeast(version, AWAITING_CORE.removeBy)) {
     out.push(`version ${version} has reached ${AWAITING_CORE.removeBy}: the core must have ${awaiting.join(", ")}, and AWAITING_CORE must be empty`);
   }
-  const help = awaiting.filter((c) => c.startsWith("help_") || c === "support_send");
+  const help = awaiting.filter((c) => c.startsWith("help_") || c === "support_send" || c === "last_device_report");
   if (release && helpReachable && help.length > 0) {
     out.push(`a release can open Help v2 but the core lacks ${help.join(", ")}`);
   }
