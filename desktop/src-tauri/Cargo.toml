@@ -70,6 +70,11 @@ windows = { version = "0.62.2", features = [
   "Win32_Foundation",
   "Win32_System_Threading",
   "Win32_System_Diagnostics_ToolHelp",
+  # The smoke test's stall report: a minidump of every thread (`stall`).
+  "Win32_System_Diagnostics_Debug",
+  "Win32_System_Kernel",
+  "Win32_System_Memory",
+  "Win32_Storage_FileSystem",
   "Win32_Storage_Packaging_Appx",
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_WinRT",

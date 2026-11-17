@@ -739,7 +739,8 @@ mod tests {
         // The window's destruction is handled whatever closed it, off the main thread.
         let lib = include_str!("../lib.rs");
         let destroyed = &lib[lib.find("WindowEvent::Destroyed =>").unwrap()..];
-        let arm = &destroyed[..destroyed.find("\n            }").unwrap()];
+        // The arm ends where the match arm closes (`on_window_event` in lib.rs).
+        let arm = &destroyed[..destroyed.find("\n        }\n").unwrap()];
         assert!(arm.contains("translate::WINDOW") && arm.contains("translate::window_gone(&app, gone)"), "{arm}");
         assert!(arm.contains("window_generation()") && arm.find("window_generation()") < arm.find("spawn_blocking"), "the window's number is read when it goes: {arm}");
         assert!(arm.contains("async_runtime::spawn_blocking"), "blocking, never on the main thread: {arm}");

@@ -44,6 +44,7 @@ pub mod sharing;
 pub mod shortcuts;
 pub mod skipped;
 pub mod smoke;
+pub mod stall;
 pub mod spaces;
 pub mod stt;
 pub mod translate;
@@ -490,29 +491,14 @@ pub fn run() {
             actions::handle_links(&handle, &std::env::args().collect::<Vec<_>>());
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            // C9: closing the main window destroys it (the app keeps running: in the Dock and the menu bar of a Mac, the
-            // notification area of Windows, see `ExitRequested`); the next open builds a new one on the same page
-            // (main_view_get).
-            WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
-            // The Live Assist card was dragged: its place is kept for the next session.
-            WindowEvent::Moved(_) if window.label() == assist::live::WINDOW => assist::live::card_moved(window.app_handle()),
-            WindowEvent::Destroyed => {
-                privacy::destroyed(window.app_handle(), window.label());
-                lifecycle::on_destroyed(window.app_handle(), window.label());
-                // Live Translate's window went, however: its capture and its keys go with it (off the main thread).
-                if window.label() == translate::WINDOW {
-                    // Its number now, while no newer window can exist yet: a quick Start after Stop keeps its session.
-                    let gone = translate::window_generation();
-                    let app = window.app_handle().clone();
-                    tauri::async_runtime::spawn_blocking(move || translate::window_gone(&app, gone));
-                }
-            }
-            // Files dropped on the main window are heard by its page, which opens the import sheet (one client and
-            // language for the batch), so nothing is imported here.
-            _ => {}
+        .on_window_event(|window, event| {
+            // The smoke test's trail (`stall`): which window event the main thread is in.
+            let noted = stall::begin_with(|| format!("window {} {}", window.label(), stall::event_name(event)));
+            on_window_event(window, event);
+            stall::end(noted);
         })
-        .invoke_handler(tauri::generate_handler![
+        // The smoke test's trail (`stall`): each command, the thread that received it and when it returned there.
+        .invoke_handler(stall::traced(tauri::generate_handler![
             commands::app_status,
             commands::privacy_status,
             commands::share_check_run,
@@ -759,7 +745,7 @@ pub fn run() {
             commands::window_ready,
             commands::main_view_get,
             commands::main_view_set,
-        ])
+        ]))
         .build(tauri::generate_context!())
         .expect("error while building EchoLedger");
     // The Dock's Quit and the system's keep a running recording first (`app_life`): taught to the application delegate
@@ -796,4 +782,30 @@ pub fn run() {
         }
         let _ = handle;
     });
+}
+
+/// What the windows' events do (`on_window_event`).
+fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
+    match event {
+        // C9: closing the main window destroys it (the app keeps running: in the Dock and the menu bar of a Mac, the
+        // notification area of Windows, see `ExitRequested`); the next open builds a new one on the same page
+        // (main_view_get).
+        WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
+        // The Live Assist card was dragged: its place is kept for the next session.
+        WindowEvent::Moved(_) if window.label() == assist::live::WINDOW => assist::live::card_moved(window.app_handle()),
+        WindowEvent::Destroyed => {
+            privacy::destroyed(window.app_handle(), window.label());
+            lifecycle::on_destroyed(window.app_handle(), window.label());
+            // Live Translate's window went, however: its capture and its keys go with it (off the main thread).
+            if window.label() == translate::WINDOW {
+                // Its number now, while no newer window can exist yet: a quick Start after Stop keeps its session.
+                let gone = translate::window_generation();
+                let app = window.app_handle().clone();
+                tauri::async_runtime::spawn_blocking(move || translate::window_gone(&app, gone));
+            }
+        }
+        // Files dropped on the main window are heard by its page, which opens the import sheet (one client and
+        // language for the batch), so nothing is imported here.
+        _ => {}
+    }
 }

@@ -163,8 +163,11 @@ jobs:
           name: EchoLedger-windows-x64-app
           path: app
 
+      # A stall of the async runtime (exit 8) writes every thread's stack here (src-tauri/src/stall.rs), kept below.
       - name: Run the smoke test
         shell: pwsh
+        env:
+          ECHOLEDGER_STALL_DIR: ${{ runner.temp }}/stall
         run: ./desktop/scripts/smoke-windows.ps1 -Exe (Resolve-Path app/echoledger-desktop.exe).Path
 
       # Only this check may fail on the Windows 11 Arm runner without failing the run: on that image another process's
@@ -182,3 +185,11 @@ jobs:
           $exe = (Resolve-Path app/echoledger-desktop.exe).Path
           Remove-Item Env:RUNNER_TEMP
           ./desktop/scripts/smoke-windows.ps1 -Exe $exe
+
+      - name: Keep the stall report's thread stacks
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stall-${{ matrix.label }}
+          path: ${{ runner.temp }}/stall
+          if-no-files-found: ignore
