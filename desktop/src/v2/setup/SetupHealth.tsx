@@ -119,7 +119,7 @@ export function SetupHealth({ platform, onBack }: { platform: PermissionsStatus[
           ) : (
             <ul className="el-health-list" aria-label="Ready check">
               {report.checks.map((c) => (
-                <HealthCheckRow key={c.id} state={c.ok ? "ok" : "problem"} stateLabel={c.ok ? "OK" : "Needs a fix"} title={c.label} detail={c.detail ?? undefined}
+                <HealthCheckRow key={c.id} state={c.ok ? "ok" : c.advisory ? "limited" : "problem"} stateLabel={c.ok ? "OK" : c.advisory ? "Worth a look" : "Needs a fix"} title={c.label} detail={c.detail ?? undefined}
                   action={c.fix ? (
                     <Button size="sm" variant={c.ok ? "secondary" : "primary"} loading={busy === c.id} loadingLabel="Fixing…"
                       onClick={() => void doing(c.id, async () => setReport(await api.readyFix(c.fix!.action)))}>{c.fix.label}</Button>
