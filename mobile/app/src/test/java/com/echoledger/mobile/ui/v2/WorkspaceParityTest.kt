@@ -317,14 +317,24 @@ class WorkspaceParityTest : ScreenTest() {
                 showNew()
                 if (w.tab != r) press(w.tab!!)
                 if (w.tab == "Screens") waitFor("Kick-off")
+                // A tab's controls come with its data: wait for the one to press (a loaded machine is slower).
                 when (w.state) {
                     State.Menu -> compose.onNode(hasContentDescription("Project menu")).performClick()
 
-                    State.Brief -> press("Edit")
+                    State.Brief -> {
+                        waitFor("Edit")
+                        press("Edit")
+                    }
 
-                    State.Paste -> press("Paste instructions")
+                    State.Paste -> {
+                        waitFor("Paste instructions")
+                        press("Paste instructions")
+                    }
 
-                    State.RemoveFile -> compose.onNode(hasContentDescription("Remove Proforma March.pdf")).performClick()
+                    State.RemoveFile -> {
+                        waitFor("Proforma March.pdf")
+                        compose.onNode(hasContentDescription("Remove Proforma March.pdf")).performClick()
+                    }
 
                     State.Viewer -> press("Screen 7 · 14:32")
 

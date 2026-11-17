@@ -100,8 +100,8 @@ fun LanguagePage(vm: MainViewModel, settings: AppSettings, highlight: String?, o
             )
             Line(stringResource(R.string.v2_tr_lang_help))
         }
+        // The field's own label names it: no section header saying the same above it.
         val vocabulary = Modifier.highlightedIf(highlight == "language.vocabulary")
-        EchoSectionHeader(stringResource(R.string.v2_tr_vocab), vocabulary)
         var term by remember { mutableStateOf("") }
         Row(
             vocabulary.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),

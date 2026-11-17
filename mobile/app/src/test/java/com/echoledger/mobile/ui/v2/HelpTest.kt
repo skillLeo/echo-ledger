@@ -65,6 +65,18 @@ class HelpTest {
     }
 
     @Test
+    fun eachBlockTakesItsDirectionFromItsOwnWords() {
+        val ltr = androidx.compose.ui.unit.LayoutDirection.Ltr
+        val rtl = androidx.compose.ui.unit.LayoutDirection.Rtl
+        // An English guide on the Urdu screens keeps its list numbers and table columns in English order.
+        assertEquals(ltr, Markdown.direction(MdBlock.ListBlock(true, listOf("Keep or Delete", "Transcribe"))))
+        assertEquals(ltr, Markdown.direction(MdBlock.Table(listOf("Button", "What it does"), listOf(listOf("Keep", "Saves it")))))
+        assertEquals(rtl, Markdown.direction(MdBlock.Paragraph("کال کے بعد ایک کارڈ پوچھتا ہے۔")))
+        assertEquals(rtl, Markdown.direction(MdBlock.Heading(2, "After a call: کال کے بعد")))
+        assertEquals(ltr, Markdown.direction(MdBlock.Code("کوڈ")))
+    }
+
+    @Test
     fun theReaderMakesBlocksAndKeepsALinksWordsOnly() {
         val blocks = Markdown.blocks(
             "# Title\n\nSome **bold** and `code`.\n\n- one\n- two\n  more\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n> quote\n\n```\nx = 1\n```"
