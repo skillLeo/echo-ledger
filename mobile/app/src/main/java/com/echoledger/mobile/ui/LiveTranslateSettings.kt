@@ -459,9 +459,7 @@ internal fun GameMoreSection(vm: MainViewModel, settings: AppSettings) {
             }, kind = ButtonKind.Secondary)
         }
         Text(TranslateCost.estimate(), style = LocalEchoType.current.caption, color = LocalEchoColors.current.textMuted)
-        SwitchLine("Show speed details", "Delay, data rate and reconnects in the box, for testing.", lt.debugHud) { on ->
-            vm.updateSettings { it.copy(liveTranslate = it.liveTranslate.copy(debugHud = on)) }
-        }
+        // Since v1.8.1 (bug P-019) no testing switch on this page: the speed details are for the people who build it.
     }
 }
 
@@ -521,17 +519,30 @@ internal fun WatchStyleSection(vm: MainViewModel, settings: AppSettings) {
 
 // ---- Help & diagnostics (General) ---------------------------------------------------------------------------------
 
+/**
+ * Settings › Help: the capture test (only in a build with call capture: elsewhere it leads nowhere) and Copy
+ * diagnostics. Since v1.8.1 (bug P-018) the Audio probe, with its package names and Android's player states, is in
+ * builds for the people who build the app only ([engineering]).
+ */
 @Composable
-internal fun HelpSection(vm: MainViewModel, settings: AppSettings, onSetup: () -> Unit) {
+internal fun HelpSection(
+    vm: MainViewModel,
+    settings: AppSettings,
+    onSetup: () -> Unit,
+    captureInBuild: Boolean = com.echoledger.mobile.BuildConfig.CAPTURE_HELPER,
+    engineering: Boolean = com.echoledger.mobile.BuildConfig.DEBUG
+) {
     val helper by vm.helper.collectAsState()
     var probing by remember { mutableStateOf(false) }
     val clipboard = androidx.compose.ui.platform.LocalClipboard.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     SectionCard {
         PanelTitle("Help & diagnostics")
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
-            EchoButton("Capture test", onSetup, kind = ButtonKind.Secondary)
-            EchoButton("Audio probe", { probing = true }, kind = ButtonKind.Secondary)
+        if (captureInBuild || engineering) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                if (captureInBuild) EchoButton("Capture test", onSetup, kind = ButtonKind.Secondary)
+                if (engineering) EchoButton("Audio probe", { probing = true }, kind = ButtonKind.Secondary)
+            }
         }
         EchoButton("Copy diagnostics", {
             scope.launch {

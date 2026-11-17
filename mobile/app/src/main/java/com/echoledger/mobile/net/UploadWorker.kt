@@ -288,7 +288,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             return Result.success()
         }
         if (e.status == 429) {
-            graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
+            graph.recordings.update(id) { it.copy(state = "queued", lastError = com.echoledger.mobile.core.Problems.text(e, FAILED)) }
             val wait = e.retryAfterSeconds ?: 0
             if (wait <= SHORT_RETRY_SECONDS) return Result.retry()
             // Honour a long Retry-After: run again only after the server's delay.
@@ -298,10 +298,11 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         if (isPermanent(e.status)) {
             // The server understood and refused this recording (e.g. validation): retrying the same request can
             // never succeed, so show it as failed with the reason instead of "uploading" forever.
-            graph.recordings.update(id) { it.copy(state = "failed", lastError = e.message) }
+            graph.recordings.update(id) { it.copy(state = "failed", lastError = com.echoledger.mobile.core.Problems.text(e, FAILED)) }
             return Result.failure()
         }
-        graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
+        // The server's words when they are for people; a bare status or a 5xx in plain words (since v1.8.1, P-024).
+        graph.recordings.update(id) { it.copy(state = "queued", lastError = com.echoledger.mobile.core.Problems.text(e, FAILED)) }
         return if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
     }
 
@@ -331,7 +332,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
          */
         fun friendly(e: Throwable): String = when (e) {
             is javax.net.ssl.SSLException ->
-                "Your server's certificate could not be checked. Check the server address in You → General → This phone, then tap Retry."
+                "Your server's certificate could not be checked. Check the server address you signed in with, then tap Retry."
 
             is java.net.UnknownHostException, is java.net.ConnectException, is java.net.SocketTimeoutException,
             is java.net.NoRouteToHostException -> NO_CONNECTION

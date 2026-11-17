@@ -65,9 +65,10 @@ import okhttp3.Response
 
 class NotPairedException : IOException("This phone is not signed in to an EchoLedger server.")
 
+const val HTTPS_ONLY = "The server address must use https://"
 const val EMPTY_ANSWER = "Your server sent an empty answer. Try again in a minute."
-const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. Check the server address in You → General → This phone, " +
-    "or update EchoLedger."
+const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. Update EchoLedger, or sign out and sign in again " +
+    "with the right server address."
 
 /** A server answer other than 2xx/401: `code` is the machine-readable reason, `retryAfterSeconds` the `Retry-After` delay. */
 class ApiException(
@@ -93,7 +94,7 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         .build()
 
     init {
-        require(base.startsWith("https://") || Pins.isLocalDev(base)) { "The server address must use https://" }
+        require(base.startsWith("https://") || Pins.isLocalDev(base)) { HTTPS_ONLY }
     }
 
     private fun url(path: String) = "$base/api/${path.trimStart('/')}"

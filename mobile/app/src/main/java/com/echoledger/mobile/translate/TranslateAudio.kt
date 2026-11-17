@@ -37,7 +37,8 @@ class HelperAppSource(private val helper: ICaptureHelper, private val uid: Int, 
         val ok = runCatching { helper.startAppCapture(write, uid, usage, voiceChat) }.getOrElse {
             runCatching { read.close() }
             runCatching { write.close() }
-            return "The capture helper did not answer (${it.message ?: it.javaClass.simpleName})."
+            // Its own words stay out of the screen (since v1.8.1, P-024); Copy diagnostics has the helper's state.
+            return "The capture helper did not answer. Start it again in Setup."
         }
         runCatching { write.close() } // the helper holds its own copy
         if (!ok) {

@@ -315,7 +315,8 @@ class UploadWorkerTest : AppTest() {
 
         val kept = recording()!!
         assertEquals("queued", kept.state)
-        assertEquals("Server Error", kept.lastError)
+        // A server's crash is said in plain words (P-024), never its "Server Error".
+        assertEquals(com.echoledger.mobile.core.Problems.SERVER, kept.lastError)
         assertTrue(chunks().isEmpty())
     }
 
@@ -340,7 +341,8 @@ class UploadWorkerTest : AppTest() {
             val kept = recording()
             assertNotNull("status $status must keep the recording", kept)
             assertEquals("status $status", "queued", kept!!.state)
-            assertEquals("try later", kept.lastError)
+            // The server's own words, except for its crashes (5xx: plain words, P-024).
+            assertEquals("status $status", if (status >= 500) com.echoledger.mobile.core.Problems.SERVER else "try later", kept.lastError)
         }
     }
 

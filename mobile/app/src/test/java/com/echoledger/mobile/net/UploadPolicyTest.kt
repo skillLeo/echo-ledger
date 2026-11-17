@@ -22,7 +22,9 @@ class UploadPolicyTest {
             UploadWorker.friendly(java.net.UnknownHostException("Unable to resolve host \"ledger.example.com\""))
         )
         org.junit.Assert.assertEquals(UploadWorker.NO_CONNECTION, UploadWorker.friendly(java.net.SocketTimeoutException("timeout")))
-        assertTrue(UploadWorker.friendly(javax.net.ssl.SSLHandshakeException("bad cert")).contains("This phone"))
+        // Since v1.8.1 This phone no longer shows the address (P-021): the sentence names it without a place.
+        val certificate = UploadWorker.friendly(javax.net.ssl.SSLHandshakeException("bad cert"))
+        assertTrue(certificate, certificate.contains("server address you signed in with") && !certificate.contains("bad cert"))
         assertTrue(UploadWorker.friendly(java.io.IOException("stream was reset")).endsWith("tap Retry to try now."))
         assertTrue(UploadWorker.friendly(IllegalStateException()).contains("Tap Retry"))
         assertFalse(UploadWorker.friendly(java.net.UnknownHostException("Unable to resolve host")).contains("resolve"))

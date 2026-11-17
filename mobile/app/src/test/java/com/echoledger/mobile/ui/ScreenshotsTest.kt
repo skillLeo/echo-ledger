@@ -389,6 +389,48 @@ class ScreenshotsTest : ScreenTest() {
         capture("settings-privacy")
     }
 
+    /** Settings pages in plain words (since v1.8.1, batch 3): Help, About, Microphone & audio, Storage. */
+    private fun settingsPage(page: String, name: String, wait: String, shownServer: String? = null) {
+        runBlocking { app.pairLocally(server) }
+        // A page that only shows the address: a fixed one, so the picture does not change with the test server's port.
+        shownServer?.let { url -> runBlocking { app.graph.settings.update { it.copy(serverUrl = url) } } }
+        server.on(
+            "GET",
+            "/api/storage",
+            FakeServer.json(
+                200,
+                """{"recordings_bytes":3221225472,"recordings_count":42,"disk_free_bytes":1,"disk_total_bytes":2,"retention_days":30}"""
+            )
+        )
+        runBlocking {
+            app.graph.settings.update {
+                it.copy(
+                    plan = it.plan.copy(
+                        limits = mapOf(
+                            "storage_bytes" to
+                                com.echoledger.mobile.data.LimitDto(limit = 10L * 1024 * 1024 * 1024, used = 3L * 1024 * 1024 * 1024)
+                        )
+                    )
+                )
+            }
+        }
+        shoot { SettingsScreen(vm, onSetup = {}, openPage = page) }
+        pumpUntil("the page") { exists(wait) }
+        capture(name)
+    }
+
+    @Test
+    fun settingsHelp() = settingsPage("help", "settings-help", "Copy diagnostics")
+
+    @Test
+    fun settingsAbout() = settingsPage("about", "settings-about", "Setup guide", shownServer = "https://ledger.example.com")
+
+    @Test
+    fun settingsMicrophone() = settingsPage("mic", "settings-microphone", "Recording quality")
+
+    @Test
+    fun settingsStorage() = settingsPage("storage", "settings-storage", "Recordings on the server: 3.0 GB in 42 files.")
+
     /** Setup: Display over other apps names the floating windows it is for (review of v1.8.1). */
     @Test
     fun setupOverlayStep() {

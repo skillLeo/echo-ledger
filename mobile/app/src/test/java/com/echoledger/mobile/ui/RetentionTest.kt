@@ -1,5 +1,7 @@
 package com.echoledger.mobile.ui
 
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -102,13 +104,25 @@ class RetentionTest : ScreenTest() {
     }
 
     @Test
-    fun `storage shows the meter and the retention`() {
-        show { StorageSection(load = { StorageDto(3L * 1024 * 1024 * 1024, 42, 25L * 1024 * 1024 * 1024, 100L * 1024 * 1024 * 1024, 14) }) }
+    fun `storage shows the plan's meter and the retention, never the server's disk (P-023)`() {
+        val gb = 1024L * 1024 * 1024
+        show {
+            StorageSection(
+                load = { StorageDto(3L * gb, 42, 25L * gb, 100L * gb, 14) },
+                planStorage = com.echoledger.mobile.data.LimitDto(limit = 10L * gb, used = 3L * gb),
+                keepHours = 72
+            )
+        }
         pumpUntil("storage to load") {
             runCatching { compose.onNodeWithText("Recordings on the server: 3.0 GB in 42 files.").assertExists() }.isSuccess
         }
-        compose.onNodeWithContentDescription("Server disk used").assertExists()
-        compose.onNodeWithText("Server disk 75% used · 25.0 GB free").assertExists()
+        compose.onNodeWithContentDescription("Plan storage used").assertExists()
+        compose.onNodeWithText("Your plan's storage: 3 GB of 10 GB").assertExists()
+        compose.onNodeWithText(
+            "Recordings are deleted after 14 days unless kept. Deleted recordings can be restored for 72 hours."
+        ).assertExists()
+        compose.onAllNodesWithText("disk", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("25.0 GB", substring = true).assertCountEquals(0)
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextFirst(text: String) =

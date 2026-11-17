@@ -173,7 +173,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             finishSignIn(payload.url, payload.pins, response)
             _message.value = "Signed in to ${payload.url.removePrefix("https://")}"
         } catch (e: Exception) {
-            _message.value = e.message ?: "Could not sign in"
+            _message.value = com.echoledger.mobile.core.Problems.text(e, "Could not sign in")
         } finally {
             _busy.value = false
         }
@@ -240,7 +240,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             if (e.code == "otp_required") _otpNeeded.value = true
             _message.value = SignIn.message(e.code, e.message)
         } catch (e: Exception) {
-            _message.value = e.message ?: "Signing in failed"
+            _message.value = com.echoledger.mobile.core.Problems.text(e, "Signing in failed")
         } finally {
             _busy.value = false
         }
@@ -304,7 +304,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             null
         } catch (e: IllegalArgumentException) {
-            _signInState.update { it.copy(error = e.message ?: "Check the server address.") }
+            _signInState.update { it.copy(error = "Check the server address.") }
             null
         } catch (e: Exception) {
             _signInState.update { it.copy(error = "Can't reach the server. Check the connection and try again.") }
@@ -335,7 +335,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return@launch
         } catch (e: IllegalArgumentException) {
             _busy.value = false
-            _signInState.update { it.copy(error = e.message ?: "Check the server address.") }
+            _signInState.update { it.copy(error = "Check the server address.") }
             return@launch
         } catch (e: Exception) {
             _busy.value = false
@@ -448,7 +448,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: com.echoledger.mobile.net.ApiException) {
             _message.value = SignIn.message(e.code, e.message)
         } catch (e: Exception) {
-            _message.value = e.message ?: "Signing in failed"
+            _message.value = com.echoledger.mobile.core.Problems.text(e, "Signing in failed")
         } finally {
             _busy.value = false
         }
@@ -595,7 +595,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onSuccess {
                 _message.value = "Re-transcribing in ${Languages.label(language)}. The current transcript stays until the new one is ready."
             }
-            .onFailure { _message.value = it.message ?: "The recording could not be re-transcribed." }
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The recording could not be re-transcribed.") }
             .isSuccess
     }
 
@@ -607,7 +607,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Show as (since v1.2): asks the server to write the views; null with a message when it cannot. */
     suspend fun makeTranscriptViews(transcriptId: String): TranscriptViewsDto? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.makeTranscriptViews(transcriptId) }
-            .onFailure { _message.value = it.message ?: "The views could not be started." }.getOrNull()
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The views could not be started.") }.getOrNull()
     }
 
     /** Temporary signed streaming URL for the session's recording, or null when it is not (yet) playable. */
@@ -638,7 +638,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             File(dir, name).apply { writeBytes(bytes) }
         } catch (e: Exception) {
-            _message.value = e.message ?: "The export failed."
+            _message.value = com.echoledger.mobile.core.Problems.text(e, "The export failed.")
             null
         }
     }
@@ -671,7 +671,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun createShare(sessionId: String, expiresIn: Long, password: String?, includeAudio: Boolean): ShareLinkDto? =
         withContext(Dispatchers.IO) {
             runCatching { graph.api()?.createShare(sessionId, expiresIn, password, includeAudio) }
-                .onFailure { _message.value = it.message ?: "The link could not be made." }.getOrNull()
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The link could not be made.") }.getOrNull()
         }
 
     suspend fun shares(sessionId: String): List<ShareLinkDto> = withContext(Dispatchers.IO) {
@@ -679,14 +679,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun revokeShare(id: String): Boolean = withContext(Dispatchers.IO) {
-        runCatching { graph.api()?.revokeShare(id) }.onFailure { _message.value = it.message }.isSuccess
+        runCatching { graph.api()?.revokeShare(id) }
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The link could not be revoked.") }.isSuccess
     }
 
     /** "Add to vocabulary": for the selected client, or for every recording. */
     fun addKeyterm(term: String, clientId: String?) = viewModelScope.launch(Dispatchers.IO) {
         runCatching { graph.api()?.addKeyterm(term.trim(), clientId) }
             .onSuccess { _message.value = "Added “${term.trim()}” to the vocabulary" }
-            .onFailure { _message.value = it.message ?: "The term could not be added." }
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The term could not be added.") }
     }
 
     // ---- Organising the library (B15) ------------------------------------------------------------------------------
@@ -703,7 +704,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     ): Boolean {
         val ok = withContext(Dispatchers.IO) {
             runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title) ?: error("Not signed in") }
-                .onFailure { _message.value = it.message ?: "The change could not be saved." }.isSuccess
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.isSuccess
         }
         if (ok) refresh()
         return ok
@@ -713,7 +714,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun bulk(ids: List<String>, action: String, clientId: String? = null, label: String? = null): Int? {
         val changed = withContext(Dispatchers.IO) {
             runCatching { graph.api()?.bulk(ids.take(Organise.MAX_BULK), action, clientId, label) ?: error("Not signed in") }
-                .onFailure { _message.value = it.message ?: "The change could not be saved." }.getOrNull()
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.getOrNull()
         }
         if (changed != null) {
             _message.value =
@@ -740,7 +741,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             File(dir, name).apply { writeBytes(bytes) }
         } catch (e: Exception) {
-            _message.value = e.message ?: "The export failed."
+            _message.value = com.echoledger.mobile.core.Problems.text(e, "The export failed.")
             null
         }
     }
@@ -748,7 +749,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** A new client folder, added to the list right away. */
     suspend fun createClient(name: String): ClientDto? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.createClient(name.trim()) }
-            .onFailure { _message.value = it.message ?: "The project could not be created." }.getOrNull()
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be created.") }.getOrNull()
             ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
     }
 
@@ -896,7 +897,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
             File(dir, name).apply { writeBytes(bytes) }
         } catch (e: Exception) {
-            _message.value = e.message ?: "The meeting pack could not be made."
+            _message.value = com.echoledger.mobile.core.Problems.text(e, "The meeting pack could not be made.")
             null
         }
     }
@@ -943,7 +944,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             val picked = com.echoledger.mobile.share.FileImport.describe(context, uri)
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@count false
             runCatching { api.uploadClientFile(clientId, picked.name, ClientFiles.mime(picked.mime, picked.name), bytes) }
-                .onFailure { _message.value = it.message }.isSuccess
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The files could not be added.") }.isSuccess
         }
     } ?: 0
 
@@ -1059,7 +1060,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ok = withContext(Dispatchers.IO) {
             runCatching { graph.api()?.restoreSession(id) ?: error("Not signed in") }
                 .onSuccess { _message.value = "Restored" }
-                .onFailure { _message.value = it.message ?: "The recording could not be restored." }.isSuccess
+                .onFailure {
+                    _message.value = com.echoledger.mobile.core.Problems.text(it, "The recording could not be restored.")
+                }.isSuccess
         }
         if (ok) refresh()
         return ok
@@ -1069,7 +1072,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun eraseNow(id: String): Boolean = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.eraseFromBin(id) ?: error("Not signed in") }
             .onSuccess { _message.value = "Erased" }
-            .onFailure { _message.value = it.message ?: "The recording could not be erased." }.isSuccess
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The recording could not be erased.") }.isSuccess
     }
 
     /** The storage meter; null when offline. */
@@ -1086,7 +1089,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _message.value = "Renamed"
             true
         } catch (e: ApiException) {
-            _message.value = if (e.status == 404 || e.status == 405) "Rename it in the console: Account → Devices." else e.message
+            _message.value = if (e.status == 404 || e.status == 405) {
+                "Rename it in the console: Account → Devices."
+            } else {
+                com.echoledger.mobile.core.Problems.text(e, "The phone could not be renamed.")
+            }
             false
         } catch (e: Exception) {
             _message.value = "Can't reach the server. Try again."
@@ -1098,7 +1105,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun revokeDevice(id: String): Boolean = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.revokeDevice(id) ?: error("Not signed in") }
             .onSuccess { _message.value = "Device revoked" }
-            .onFailure { _message.value = it.message ?: "The device could not be revoked." }.isSuccess
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The device could not be revoked.") }.isSuccess
     }
 
     /**
@@ -1112,7 +1119,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun delete(item: LibraryItem) = viewModelScope.launch {
         runCatching { withContext(Dispatchers.IO) { graph.api()?.deleteSession(item.id) } }
             .onSuccess { refresh() }
-            .onFailure { _message.value = it.message }
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The recording could not be deleted.") }
     }
 
     /** Names, types and sizes of picked files (read off the main thread). */
@@ -1220,7 +1227,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!yes) return@launch
         runCatching { graph.api()?.setClientLanguage(asked.clientId, asked.language) }
             .onSuccess { _clients.value = _clients.value.map { if (it.id == asked.clientId) it.copy(language = asked.language) else it } }
-            .onFailure { _message.value = it.message ?: "The project could not be updated." }
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be updated.") }
     }
 
     /** Keep or Discard; a [title] typed on the card is stored first, in the same step, so the upload always carries it. */
@@ -1345,7 +1352,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             "connected via ${h.source}, uid ${h.helperUid}${if (h.stale) ", older version" else ""}$build${caps?.let { " ($it)" } ?: ""}"
         } else {
             "not connected (${h.error ?: "never started"})"
-        }
+        } + (
+            // The last capture problem in the helper's or Android's own words (Setup shows it in plain words).
+            com.echoledger.mobile.recording.CaptureProblems.load(getApplication())?.let { "; last capture problem ${it.at}: ${it.message}" }
+                .orEmpty()
+            )
         // Since v1.8: what the helper says of each player now (uid, state, usage), as Live Translate reads it; only the
         // apps picked for Live Translate are named.
         val players = if (h.connected) com.echoledger.mobile.translate.AudioProbe.lines(graph.helper.players()) else emptyList()
@@ -1425,7 +1436,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 ) {
                     "You have asked a few times today. Try again tomorrow."
                 } else {
-                    e.message ?: "That didn't work. Try again."
+                    com.echoledger.mobile.core.Problems.text(e, "That didn't work. Try again.")
                 }
             )
         } catch (e: Exception) {
@@ -1442,12 +1453,24 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun receiptError(e: ApiException): String = when (e.code) {
         "too_large" -> "That file is over 5 MB. Send a screenshot instead."
+
         "validation_failed" -> "Send a picture (JPG, PNG or WebP) or a PDF without a password."
+
         "too_many_proofs" -> "You can send 3 files at a time. Remove one first."
+
         "proof_locked" -> "That receipt was already sent, so it stays."
+
         "proof_required" -> "Add a receipt or the transaction ID first."
+
         "request_decided" -> "This request is already closed. Pull to refresh."
-        else -> if (e.status == 429) "Too many tries. Wait a minute, then try again." else e.message ?: "That didn't work. Try again."
+
+        else -> if (e.status ==
+            429
+        ) {
+            "Too many tries. Wait a minute, then try again."
+        } else {
+            com.echoledger.mobile.core.Problems.text(e, "That didn't work. Try again.")
+        }
     }
 
     private suspend fun storeRequest(request: com.echoledger.mobile.data.UpgradeRequestDto?) {
@@ -1533,7 +1556,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             withContext(Dispatchers.IO) { graph.api()?.setTranscriptionKey(key) }
         } catch (e: ApiException) {
             _message.value =
-                if (e.code == "invalid_key") "Groq did not accept that key. Copy it again from console.groq.com." else e.message
+                if (e.code == "invalid_key") {
+                    "Groq did not accept that key. Copy it again from console.groq.com."
+                } else {
+                    com.echoledger.mobile.core.Problems.text(e, "The key could not be saved.")
+                }
             null
         } catch (e: Exception) {
             _message.value = "Can't reach the server. Try again."
