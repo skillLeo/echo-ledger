@@ -37,7 +37,7 @@ object SettingsTree {
     )
 
     /** Pages drawn with the v2 components; the rest open their classic page with the same settings and actions. */
-    val nativePages = setOf("appearance", "notifications", SETUP)
+    val nativePages = setOf("appearance", "notifications", SETUP, "calls", "language", "words", "key", "lock", "privacy", "storage")
 
     /** Settings v2 leaves out: wallpaper colours (v2 takes no wallpaper colours; the classic screens keep the switch). */
     val hiddenItems = setOf("appearance.wallpaper")
@@ -80,6 +80,7 @@ object SettingsTree {
     )
 
     val itemTitles: Map<String, Int> = mapOf(
+        "calls.autorecord" to R.string.v2_set_item_calls_autorecord,
         "calls.auto" to R.string.v2_set_item_calls_auto,
         "calls.after" to R.string.v2_set_item_calls_after,
         "mic.source" to R.string.v2_set_item_mic_source,

@@ -643,7 +643,7 @@ class RecordingService : LifecycleService() {
             // SIM calls follow "Record phone calls" (since v1.2): off, ask each time, or always.
             when (PhoneCalls.mode(settings.phoneCalls)) {
                 PhoneCalls.OFF -> {
-                    CallJournal.finish(this, event.recordingId, CallJournal.Result.NOT_WANTED, "phone calls are off")
+                    CallJournal.finish(this, event.recordingId, CallJournal.Result.NOT_WANTED, CallJournal.NotWanted.PHONE_CALLS_OFF)
                     return
                 }
 
@@ -657,12 +657,12 @@ class RecordingService : LifecycleService() {
             }
         } else if (event is CallEvent.CallStarted && !AutoRecordRules.records(event.app, settings.autoRecordApps)) {
             // A call in an app whose auto-record switch is off is not recorded (B1); recording by hand still works.
-            CallJournal.finish(this, event.recordingId, CallJournal.Result.NOT_WANTED, "auto-record is off for ${event.app.label}")
+            CallJournal.finish(this, event.recordingId, CallJournal.Result.NOT_WANTED, CallJournal.NotWanted.autoRecordOff(event.app.label))
             return
         }
         if (event is CallEvent.CallEnded && phoneCallAsked) {
             phoneCallAsked = false
-            askedCallId?.let { CallJournal.finish(this, it, CallJournal.Result.NOT_WANTED, "Record was not chosen") }
+            askedCallId?.let { CallJournal.finish(this, it, CallJournal.Result.NOT_WANTED, CallJournal.NotWanted.RECORD_NOT_CHOSEN) }
             askedCallId = null
             Notifications.cancelAskRecordPhoneCall(this)
         }

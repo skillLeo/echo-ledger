@@ -327,7 +327,7 @@ class PhoneAppRecordingsTest {
         val file = samsung(1, c)
         val notes =
             Verdict.entries.map {
-                PhoneAppRecordings.note(it, c, file, entry(Result.NOT_WANTED, "Record was not chosen"), Own(0, 1, 2), always(), 10)
+                PhoneAppRecordings.note(it, c, file, entry(Result.NOT_WANTED, "Record was not chosen"), Own(0, 1, 2), always(), 10).english
             } +
                 Trust.entries.map { PhoneAppRecordings.note(it) }
         notes.forEach { note ->
@@ -335,16 +335,16 @@ class PhoneAppRecordingsTest {
         }
         assertEquals(
             "EchoLedger's own recording kept (both sides apart); the Phone app's copy stays in its folder.",
-            PhoneAppRecordings.note(Verdict.OWN, c, file, null, Own(0, 1, 2), always(), 10)
+            PhoneAppRecordings.note(Verdict.OWN, c, file, null, Own(0, 1, 2), always(), 10).english
         )
         assertEquals(
             "not imported, shorter than 10 s (Skip calls shorter than).",
-            PhoneAppRecordings.note(Verdict.SHORT, call(talkS = 5), file, null, null, always(), 10)
+            PhoneAppRecordings.note(Verdict.SHORT, call(talkS = 5), file, null, null, always(), 10).english
         )
         assertEquals(
             "kept, both sides heard, its file already sent",
             "EchoLedger heard both sides itself; the Phone app's copy stays in its folder.",
-            PhoneAppRecordings.note(Verdict.OWN, c, file, null, null, always(), 10)
+            PhoneAppRecordings.note(Verdict.OWN, c, file, null, null, always(), 10).english
         )
     }
 

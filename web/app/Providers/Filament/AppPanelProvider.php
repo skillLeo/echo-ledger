@@ -75,7 +75,7 @@ class AppPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, $shell(fn (): View => view('filament.shell.help')));
         // Since v2.0: the design values (tokens/) and the new frame's script, only while a v2.0 part is on for the
         // person; nothing at all otherwise, so the classic console stays as it was.
-        // The admin panel takes the same values under ui_v2.admin (admin.css: no layout change).
+        // The admin panel takes the same values under ui_v2.admin (admin.css: no markup change, the page's HTML stays as it is).
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): View|string => match (true) {
             ConsoleV2::any() => view('filament.v2.head', ['sheet' => 'console']),
             ConsoleV2::admin() => view('filament.v2.head', ['sheet' => 'admin']),

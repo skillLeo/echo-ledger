@@ -34,7 +34,7 @@
     <string name="v2_erase_body">The audio and the transcript are erased for good. This can\'t be undone.</string>
     <string name="v2_trash_empty_title">Trash is empty</string>
     <string name="v2_trash_error">Couldn\'t load Trash. Check the internet connection.</string>
-    <string name="v2_trash_keeps">Deleted recordings stay here for %1$d hours, then their audio and transcripts are erased.</string>
+    <string name="v2_trash_keeps">Deleted recordings stay here for %1$s, then their audio and transcripts are erased.</string>
     <string name="v2_erases_on">Erased on %1$s</string>
     <string name="v2_share">Share</string>
     <string name="v2_transcript">Transcript</string>

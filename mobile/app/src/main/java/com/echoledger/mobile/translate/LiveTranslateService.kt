@@ -208,7 +208,7 @@ class LiveTranslateService :
                     if (mode == TranslateMode.GAME && prefs.game.games.isEmpty()) {
                         "Choose your games in Game translate first."
                     } else if (helper == null) {
-                        "Start the capture helper (Calls & meetings → Microphone → Set up), or start Live Translate from the app to share the sound."
+                        "Start the capture helper (Settings › About › This phone › Setup guide), or start Live Translate from the app to share the sound."
                     } else {
                         "Nothing is playing yet. Start the game or video first, then Live Translate."
                     }

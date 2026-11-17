@@ -476,6 +476,13 @@ fun RecordingRow(
     }
 }
 
+/** When a settings row puts its value under the title (since v1.8.1): text at 130 % or larger. */
+object SettingsRowLayout {
+    const val LARGE_TEXT = 1.3f
+
+    fun stacked(fontScale: Float): Boolean = fontScale >= LARGE_TEXT
+}
+
 /**
  * A settings row (since v1.7, docs/DESIGN_SYSTEM.md "Settings"): an optional 24 dp icon in the muted text colour, never
  * on a tile; the title; the current value at the end ("Dark", "On", "2 signed in"); then a chevron, switch or tag.
@@ -494,6 +501,9 @@ fun SettingsRow(
     trailing: (@Composable () -> Unit)? = null
 ) {
     val type = LocalEchoType.current
+    // Large text (since v1.8.1, bug P-010): the value goes under the title, as Android's own Settings do, so the
+    // title keeps whole words instead of breaking inside them beside the value.
+    val stacked = value != null && SettingsRowLayout.stacked(androidx.compose.ui.platform.LocalDensity.current.fontScale)
     Row(
         modifier
             .fillMaxWidth()
@@ -507,7 +517,8 @@ fun SettingsRow(
             Spacer(Modifier.width(Space.s4))
         }
         Column(Modifier.weight(1f)) {
-            Text(title, style = type.body, color = titleColor, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(title, style = type.body, color = titleColor, maxLines = if (stacked) 3 else 2, overflow = TextOverflow.Ellipsis)
+            if (stacked && value != null) Text(value, style = type.body, color = Brand.Muted)
             if (summary != null) {
                 Text(
                     summary,
@@ -518,7 +529,7 @@ fun SettingsRow(
                 )
             }
         }
-        if (value != null) {
+        if (value != null && !stacked) {
             Spacer(Modifier.width(Space.s3))
             Text(
                 value,

@@ -12,7 +12,8 @@ export const READY = "Ready to record calls";
 /** The headline of a report: "✓ Ready to record calls" or how many things need fixing. */
 export function readyHeadline(report: Pick<ReadyReport, "ready" | "checks">): string {
   if (report.ready) return `✓ ${READY}`;
-  const problems = report.checks.filter((c) => !c.ok).length;
+  // Shortcuts and screen sharing are said with their fix, but calls are recorded whatever they say.
+  const problems = report.checks.filter((c) => !c.ok && !c.advisory).length;
   return problems === 1 ? "1 thing to fix before calls are recorded" : `${problems} things to fix before calls are recorded`;
 }
 

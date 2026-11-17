@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
 /** What a help call shows meanwhile, when it failed, and what it got. */
 private sealed interface Load<out T> {
     data object Loading : Load<Nothing>
-    data class Failed(val words: String) : Load<Nothing>
+    data class Failed(val failed: HelpResult.Failed) : Load<Nothing>
     data class Ready<T>(val value: T) : Load<T>
 }
 
@@ -63,7 +63,9 @@ private sealed interface Load<out T> {
 @Composable
 private fun failedWords(failed: HelpResult.Failed): String = when {
     failed.offline -> stringResource(R.string.v2_help_offline)
-    else -> failed.words ?: stringResource(R.string.v2_help_failed_generic)
+    failed.words != null -> failed.words
+    failed.message != null -> stringResource(failed.message)
+    else -> stringResource(R.string.v2_help_failed_generic)
 }
 
 /** Subject and message limits (contract 2.0.0-d). */
@@ -114,13 +116,11 @@ private fun Guides(source: HelpSource, onOpen: (String) -> Unit, onPhoneCheck: (
     var query by rememberSaveable { mutableStateOf("") }
     var hits by remember { mutableStateOf<Load<List<GuideHit>>>(Load.Loading) }
     var attempt by remember { mutableIntStateOf(0) }
-    val failedFallback = stringResource(R.string.v2_help_failed_generic)
-    val offline = stringResource(R.string.v2_help_offline)
     LaunchedEffect(query, attempt) {
         if (query.isNotBlank()) delay(SEARCH_SETTLE_MS)
         hits = when (val r = source.guides(query.trim())) {
             is HelpResult.Ok -> Load.Ready(r.value)
-            is HelpResult.Failed -> Load.Failed(if (r.offline) offline else r.words ?: failedFallback)
+            is HelpResult.Failed -> Load.Failed(r)
         }
     }
     EchoSearchField(
@@ -134,7 +134,7 @@ private fun Guides(source: HelpSource, onOpen: (String) -> Unit, onPhoneCheck: (
 
         is Load.Failed -> EchoErrorState(
             stringResource(R.string.v2_help_guides_failed),
-            h.words,
+            failedWords(h.failed),
             actionLabel = stringResource(R.string.v2_help_try_again),
             onAction = { attempt++ }
         )

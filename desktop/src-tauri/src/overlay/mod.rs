@@ -17,7 +17,7 @@ use tauri::{AppHandle, LogicalSize, Manager, Runtime, WebviewUrl, WebviewWindow,
 
 use crate::lifecycle;
 use crate::settings::{CaptionSize, CaptionStyle, CaptionWidth, Settings};
-use geometry::{Corner, PillPosition, RectPx, WorkArea, area_for, caption_overlay_size_for, cursor_in_regions_scaled, dock, nearest_corner, pill_origin, rescue};
+use geometry::{Corner, PillPosition, RectPx, Spot, WorkArea, area_for, caption_overlay_size_for, cursor_in_regions_scaled, dock, nearest_corner, pill_origin_scaled, rescue_scaled, scale_or_last, settled, size_at, spot_on};
 
 pub const OVERLAY: &str = "overlay";
 pub const DICTATION: &str = "dictation";
@@ -26,6 +26,9 @@ pub const REVIEW: &str = "review";
 
 /// Every overlay-type window: same builder flags, click-through unless the cursor is over a reported region.
 pub const WINDOWS: [&str; 5] = [OVERLAY, DICTATION, PILL, REVIEW, ASSIST];
+/// The windows kept on screen when a display goes away or moves (`keep_on_screen`): the overlays and Live Translate,
+/// whose clicks it locks and unlocks itself, so it stays out of the click-through poll's [`WINDOWS`].
+pub const RESCUED: [&str; 6] = [OVERLAY, DICTATION, PILL, REVIEW, ASSIST, crate::translate::WINDOW];
 /// The Live Assist card (the privacy service's name for it).
 pub const ASSIST: &str = crate::privacy::ASSIST;
 
@@ -117,7 +120,8 @@ const ASSIST_SIZE: (f64, f64) = (560.0, 440.0);
 const MARGIN_LOGICAL: f64 = 18.0;
 const PILL_MARGIN_LOGICAL: f64 = 12.0;
 
-/// Interactive rects per window label, pushed from React on layout change; the notify wakes the idle poll at once.
+/// Interactive rects per window label in CSS px, pushed from React on layout change (made physical at the window's
+/// scale at each poll); the notify wakes the idle poll at once.
 #[derive(Default)]
 pub struct HitRegions(pub Mutex<HashMap<String, Vec<RectPx>>>, pub tokio::sync::Notify);
 
@@ -290,6 +294,28 @@ impl Desk {
     }
 }
 
+/// The scale of a window's frame in [`Desk`]'s units: the scale of the monitor it is on (Windows, per-monitor DPI v2:
+/// physical px), 1 on a Mac (points everywhere).
+fn frame_scale<R: Runtime>(window: &WebviewWindow<R>) -> f64 {
+    if cfg!(target_os = "macos") { 1.0 } else { scale_of(window) }
+}
+
+/// Where each window was at the last screen check: one that moved since is not rescued that round (`settled`).
+static LAST_FRAME: Mutex<Option<HashMap<String, (i32, i32)>>> = Mutex::new(None);
+
+/// The last scale read for each window, for when a read fails (the window is being moved or rebuilt).
+static LAST_SCALE: Mutex<Option<HashMap<String, f64>>> = Mutex::new(None);
+
+/// A window's scale now (its monitor's), else the last one read for it, else 1.
+fn scale_of<R: Runtime>(window: &WebviewWindow<R>) -> f64 {
+    let read = window.scale_factor().ok();
+    let mut last = LAST_SCALE.lock().unwrap_or_else(|p| p.into_inner());
+    let map = last.get_or_insert_with(HashMap::new);
+    let scale = scale_or_last(read, map.get(window.label()).copied());
+    map.insert(window.label().to_string(), scale);
+    scale
+}
+
 fn margin_units(scale: f64, logical: f64) -> i32 {
     (logical * scale).round() as i32
 }
@@ -341,7 +367,8 @@ pub fn nearest_corner_of<R: Runtime>(window: &WebviewWindow<R>) -> Option<Corner
 fn dock_on_primary<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
     let (Some(desk), Some((_, size))) = (Desk::read(window), frame_of(window)) else { return };
     let (area, scale) = desk.primary();
-    put(window, dock(area, size, corner, margin_units(scale, MARGIN_LOGICAL)));
+    // Built on another display than the primary, the window takes the primary's scale once there.
+    put(window, dock(area, size_at(size, frame_scale(window), scale), corner, margin_units(scale, MARGIN_LOGICAL)));
 }
 
 /// The Live Translate window (v1.3; hidden from screen sharing like the other floating windows since v1.8.1): top-centre for a game's voice chat, bottom-centre for a video's subtitles, on
@@ -357,10 +384,9 @@ pub fn create_translate_window<R: Runtime>(app: &AppHandle<R>, subtitles: bool) 
     let _ = window.set_ignore_cursor_events(true);
     if let (Some(desk), Some((_, outer))) = (Desk::read(&window), frame_of(&window)) {
         let (area, scale) = desk.primary();
-        let margin = margin_units(scale, if subtitles { 96.0 } else { 16.0 });
-        let x = area.x + (area.w as i32 - outer.0 as i32) / 2;
-        let y = if subtitles { area.y + area.h as i32 - outer.1 as i32 - margin } else { area.y + margin };
-        put(&window, (x, y));
+        // At its size on the primary display, which may have another scale than the one it was built on.
+        let (spot, margin) = if subtitles { (Spot::BottomCentre, 96.0) } else { (Spot::TopCentre, 16.0) };
+        put(&window, spot_on(area, scale, outer, frame_scale(&window), spot, margin));
     }
     Ok(())
 }
@@ -395,13 +421,14 @@ pub fn move_to_other_display<R: Runtime>(app: &AppHandle<R>) -> Result<(), Strin
     for label in labels {
         let Some(window) = app.get_webview_window(label) else { continue };
         let Some((_, size)) = frame_of(&window) else { continue };
-        let at = match label {
-            PILL => (area.x + (area.w as i32 - size.0 as i32) / 2, area.y + margin_units(scale, PILL_MARGIN_LOGICAL)),
-            OVERLAY => dock(area, size, corner, margin_units(scale, MARGIN_LOGICAL)),
-            DICTATION => dock(area, size, top_center_corner(corner), margin_units(scale, MARGIN_LOGICAL)),
-            _ => dock(area, size, Corner::BottomRight, margin_units(scale, MARGIN_LOGICAL)),
+        let (spot, margin) = match label {
+            PILL => (Spot::TopCentre, PILL_MARGIN_LOGICAL),
+            OVERLAY => (Spot::Corner(corner), MARGIN_LOGICAL),
+            DICTATION => (Spot::Corner(top_center_corner(corner)), MARGIN_LOGICAL),
+            _ => (Spot::Corner(Corner::BottomRight), MARGIN_LOGICAL),
         };
-        put(&window, at);
+        // At the size it will have on that display, which may have another scale than the one it leaves.
+        put(&window, spot_on(area, scale, size, frame_scale(&window), spot, margin));
     }
     Ok(())
 }
@@ -410,8 +437,11 @@ pub fn move_to_other_display<R: Runtime>(app: &AppHandle<R>) -> Result<(), Strin
 /// area with a 12 px margin.
 pub fn place_pill<R: Runtime>(window: &WebviewWindow<R>, saved: Option<PillPosition>) {
     let (Some(desk), Some((_, size))) = (Desk::read(window), frame_of(window)) else { return };
-    let (primary, scale) = desk.primary();
-    put(window, pill_origin(saved, &desk.rects(), primary, size, margin_units(scale, PILL_MARGIN_LOGICAL)));
+    let window_scale = frame_scale(window);
+    if let Some(at) = pill_origin_scaled(saved, &desk.areas, desk.primary, size, window_scale, PILL_MARGIN_LOGICAL) {
+        eprintln!("[echoledger] placing {} at {at:?} ({} display(s); built at scale {window_scale})", window.label(), desk.areas.len());
+        put(window, at);
+    }
 }
 
 /// The pill's current top-left corner, for saving after the user dragged it.
@@ -421,16 +451,21 @@ pub fn pill_position<R: Runtime>(window: &WebviewWindow<R>) -> Option<PillPositi
 
 /// Moves overlays back on screen after a display went away or moved. Asked about every few seconds while one is built.
 fn keep_on_screen<R: Runtime>(app: &AppHandle<R>) {
-    let Some(first) = WINDOWS.iter().find_map(|label| app.get_webview_window(label)) else { return };
+    let Some(first) = RESCUED.iter().find_map(|label| app.get_webview_window(label)) else { return };
     let Some(desk) = Desk::read(&first) else { return };
-    let rects = desk.rects();
-    for label in WINDOWS {
+    for label in RESCUED {
         fit_to_text_size(app, label);
         let Some(window) = app.get_webview_window(label) else { continue };
-        if let Some((position, size)) = frame_of(&window)
-            && let Some(at) = rescue(&rects, position, size)
+        let Some((position, size)) = frame_of(&window) else { continue };
+        // Read before the lock is taken: nothing waits for the main thread while it is held.
+        let still = {
+            let mut seen = LAST_FRAME.lock().unwrap_or_else(|p| p.into_inner());
+            settled(seen.get_or_insert_with(HashMap::new).insert(label.to_string(), position), position)
+        };
+        if still
+            && let Some(at) = rescue_scaled(&desk.areas, position, size, frame_scale(&window))
         {
-            eprintln!("[echoledger] the {label} window was off screen: moved back");
+            eprintln!("[echoledger] the {label} window was off screen at {position:?}: moved back to {at:?}");
             put(&window, at);
         }
     }
@@ -476,7 +511,8 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
             period = poll_period(!regions.is_empty(), all_ignoring);
             // Nothing interactive and every window already click-through (or no overlay built): no cursor query, no
             // window calls.
-            if (!resync && regions.is_empty() && all_ignoring) || WINDOWS.iter().all(|l| app.get_webview_window(l).is_none()) {
+            // Live Translate open alone still needs the screen check, so it counts here (never in the click-through below).
+            if (!resync && regions.is_empty() && all_ignoring) || RESCUED.iter().all(|l| app.get_webview_window(l).is_none()) {
                 continue;
             }
             if resync && cfg!(target_os = "macos") {
@@ -496,8 +532,13 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
                     None => true,
                     Some(rects) => match window.inner_position() {
                         Ok(origin) => {
-                            let window_scale = if cfg!(target_os = "macos") { window.scale_factor().unwrap_or(1.0) } else { 1.0 };
-                            !cursor_in_regions_scaled((cursor.x, cursor.y), cursor_scale, (origin.x, origin.y), window_scale, rects)
+                            // The window's scale now: dragged onto a monitor with another one (per-monitor DPI on
+                            // Windows), its regions follow at once, before the page measures them again.
+                            let scale = scale_of(&window);
+                            let physical = geometry::scale_regions(rects, scale);
+                            // A Mac's cursor and window are brought back to points; Windows' are physical already.
+                            let window_scale = if cfg!(target_os = "macos") { scale } else { 1.0 };
+                            !cursor_in_regions_scaled((cursor.x, cursor.y), cursor_scale, (origin.x, origin.y), window_scale, &physical)
                         }
                         Err(_) => true,
                     },
@@ -589,6 +630,13 @@ pub fn hide_ask(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_translate_is_kept_on_screen_but_left_out_of_the_click_through_poll() {
+        assert!(RESCUED.contains(&crate::translate::WINDOW), "moved back after a display went away");
+        assert!(!WINDOWS.contains(&crate::translate::WINDOW), "its clicks stay locked and unlocked by Live Translate alone");
+        assert!(WINDOWS.iter().all(|w| RESCUED.contains(w)), "every overlay is still rescued");
+    }
 
     #[test]
     fn the_pill_and_the_after_call_card_grow_with_the_text_size_up_to_twice() {

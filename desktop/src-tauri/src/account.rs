@@ -351,9 +351,11 @@ mod tests {
         assert_eq!(check(Some(&p), &link(Some("c"), "someone-else"), now), Err(Refused::OtherState));
         // A state that differs only at the end, or is a prefix, is another state.
         let mut almost = p.state.clone();
-        almost.pop();
+        let last = almost.pop();
         assert_eq!(check(Some(&p), &link(Some("c"), &almost), now), Err(Refused::OtherState));
-        assert!(check(Some(&p), &link(Some("c"), &format!("{almost}x")), now).is_err());
+        // Another last character: never the one popped (the random state may end in 'x').
+        let other = if last == Some('x') { 'y' } else { 'x' };
+        assert_eq!(check(Some(&p), &link(Some("c"), &format!("{almost}{other}")), now), Err(Refused::OtherState));
         // Another state never ends the wait; the others do.
         assert!(!Refused::OtherState.ends_wait() && !Refused::NotStarted.ends_wait());
         assert!(Refused::Expired.ends_wait() && Refused::BadCode.ends_wait() && Refused::Declined.ends_wait());

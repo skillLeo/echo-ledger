@@ -101,7 +101,7 @@ class PhoneAppRecordingsRunTest : AppTest() {
     /** One look, by default 46 s after [call]'s recording was written (the card shows for a call that just ended). */
     private fun run(store: Store, atMs: Long = t + 3 * 60 * sec) = runBlocking { PhoneAppRecordings.run(app, store, atMs) }
 
-    private fun note() = PhoneAppRecordings.lastNote(app)?.second
+    private fun note() = PhoneAppRecordings.lastNote(app)?.second?.english?.replaceFirstChar { it.uppercase() }
 
     @Test
     fun `the Phone app's recording of a call EchoLedger missed comes in, named after the contact, with the after-call card`() {
@@ -392,7 +392,8 @@ class PhoneAppRecordingsRunTest : AppTest() {
         assertTrue(notices.any { it.extras.getString("android.title") == "Import the Phone app's recording?" })
 
         val note = runBlocking { PhoneAppRecordings.importCandidate(app, 1, store) }
-        assertEquals("imported the Phone app's recording (125 s), as you chose.", note)
+        assertEquals(PhoneAppNote(PhoneAppNote.Kind.IMPORTED_AS_CHOSEN, seconds = 125), note)
+        assertEquals("imported the Phone app's recording (125 s), as you chose.", note.english)
         assertEquals(1, app.graph.recordings.all().size)
         assertTrue(PhoneAppRecordings.candidates(app).isEmpty())
         assertNull("chosen in Settings, long after the call: no card over the screen", DecisionPopup.showingFor)

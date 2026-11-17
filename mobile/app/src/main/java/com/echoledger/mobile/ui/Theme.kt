@@ -161,6 +161,8 @@ internal fun EchoColors.withScheme(scheme: ColorScheme): EchoColors = copy(
 fun EchoColors.toScheme(): ColorScheme {
     val base = if (isDark) darkColorScheme() else lightColorScheme()
     return base.copy(
+        // The brand fill in both themes (filled buttons, switches, checkboxes, progress). Words in the accent colour
+        // that must be read in dark mode (text buttons, focused labels) use ReadableAccent instead (bug P-014).
         primary = accentStrong,
         onPrimary = onAccent,
         primaryContainer = accentSoft,

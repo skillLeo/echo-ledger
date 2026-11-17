@@ -121,9 +121,9 @@ sealed interface SettingsRoute {
 
 /**
  * Settings v2 (behind `ui_v2.settings`): the profile card at the top, search that reaches every individual setting
- * and jumps to it, the goals of docs/v2/IA.md with their pages and values, and Sign out. Appearance, Notifications and
- * Setup & health are v2 pages; the others open their classic page ([openClassicPage]) with the same settings and
- * actions. Nothing here changes the view model: choices go through [MainViewModel.updateSettings] as before.
+ * and jumps to it, the goals of docs/v2/IA.md with their pages and values, and Sign out. The pages of
+ * [SettingsTree.nativePages] are v2 pages; the others open their classic page ([openClassicPage]) with the same settings
+ * and actions. Nothing here changes the view model: choices go through [MainViewModel.updateSettings] as before.
  */
 @Composable
 fun V2SettingsScreen(
@@ -160,6 +160,29 @@ fun V2SettingsScreen(
                 "notifications" -> NotificationsPage(settings, vm::updateSettings, r.highlight, back)
 
                 SettingsTree.SETUP -> setupPage(r.highlight, back)
+
+                "calls" -> CallsPage(settings, vm::updateSettings, r.highlight, back, onSetup = {
+                    route =
+                        SettingsRoute.Page(SettingsTree.SETUP)
+                })
+
+                "language" -> LanguagePage(vm, settings, r.highlight, back)
+
+                "words" -> WordsPage(vm, settings, r.highlight, back)
+
+                "key" -> KeyPage(vm, settings.plan, r.highlight, back)
+
+                "lock" -> AppLockPage(settings, vm::updateSettings, { vm.setWidgetHideTitles(it) }, r.highlight, back)
+
+                "privacy" -> PrivacyPage(settings, vm::updateSettings, r.highlight, { page -> route = SettingsRoute.Page(page) }, back)
+
+                "storage" -> StoragePage(
+                    load = { vm.storage() },
+                    planStorage = settings.plan.limits["storage_bytes"],
+                    keepHours = settings.trashKeepHours,
+                    highlight = r.highlight,
+                    onBack = back
+                )
 
                 // Help v2 (guides, what's new, contact support); its phone check is the classic help page.
                 "help" -> if (help != null) HelpPage(help, openClassicPage, back) else openClassicPage(r.id, back)

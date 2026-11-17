@@ -744,7 +744,10 @@ class ScreenshotsTest : ScreenTest() {
         )
         val tenFortyTwo = java.time.LocalDate.now().atTime(10, 42).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
         app.getSharedPreferences("phone_app_recordings", android.content.Context.MODE_PRIVATE).edit()
-            .putString("note", "Imported the Phone app's recording (125 s).")
+            .putString(
+                "note",
+                com.echoledger.mobile.calls.PhoneAppNote(com.echoledger.mobile.calls.PhoneAppNote.Kind.IMPORTED, seconds = 125).wire()
+            )
             .putLong("note_at", tenFortyTwo)
             .putString("ask", "41:${tenFortyTwo - 3_600_000}")
             .commit()

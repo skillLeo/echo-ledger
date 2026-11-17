@@ -72,7 +72,7 @@ object Markdown {
 
     /** A table row's cells: at most [MAX_CELLS] (the rest are dropped). */
     private fun cells(line: String): List<String> =
-        line.trim().removePrefix("|").removeSuffix("|").split("|").take(MAX_CELLS).map { it.trim() }
+        line.trim().removePrefix("|").removeSuffix("|").split("|", limit = MAX_CELLS + 1).take(MAX_CELLS).map { it.trim() }
 
     fun blocks(markdown: String): List<MdBlock> {
         val lines = markdown.take(MAX_CHARS).replace("\r\n", "\n").replace('\r', '\n').split("\n").take(MAX_LINES)

@@ -61,6 +61,14 @@ class AppGraph(val context: Context) {
     val library: LibraryRepository by lazy { LibraryRepository(context, secretCipher) { api() } }
     val helper: HelperConnection by lazy { HelperConnection(context) }
 
+    /** When this phone last sent its device report (Help v2's Contact support). */
+    val deviceReports: com.echoledger.mobile.help.DeviceReports by lazy { com.echoledger.mobile.help.DeviceReports(context) }
+
+    /** Help v2 on this phone's API client. */
+    val help: com.echoledger.mobile.help.PhoneHelpSource by lazy {
+        com.echoledger.mobile.help.PhoneHelpSource({ api() }, deviceReports)
+    }
+
     @Volatile private var cached: Pair<String, ApiClient>? = null
 
     /** Pinned API client for the paired server, or null when not paired. Reused to keep one connection pool. */

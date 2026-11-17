@@ -440,7 +440,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         const val ALREADY_THERE = "Already in your Library"
         const val NO_CONNECTION = "No connection to your server. It uploads by itself when the phone is back online."
         const val INTERRUPTED = "The upload was interrupted. It tries again by itself; tap Retry to try now."
-        const val FAILED = "The upload did not go through. Tap Retry; if it keeps failing, copy diagnostics in You → General → Help."
+        const val FAILED = "The upload did not go through. Tap Retry; if it keeps failing, copy diagnostics in Settings › Help."
 
         /** The line a recording made under another account shows while it waits for that account. */
         fun held(owner: Owner): String = "Waits for ${owner.label()}: sign in as that account to send it."

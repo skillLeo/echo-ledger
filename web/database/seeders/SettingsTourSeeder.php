@@ -28,7 +28,7 @@ final class SettingsTourSeeder extends Seeder
 {
     /** email => [name, plan, minutes used this month, request stage or null] */
     public const PEOPLE = [
-        'free@echoledger.local' => ['Hassam Ali', 'free', 0, null],
+        'free@echoledger.local' => ['Ayesha Khan', 'free', 0, null],
         'pro@echoledger.local' => ['Sara Khan', 'pro', 492, null],
         'ultra@echoledger.local' => ['Farah Ahmed', 'business', 1180, null],
         'awaiting@echoledger.local' => ['Bilal Raza', 'free', 0, 'awaiting_payment'],
