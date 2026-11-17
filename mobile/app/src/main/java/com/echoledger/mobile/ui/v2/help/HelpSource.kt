@@ -9,10 +9,14 @@ data class Guide(val id: String, val title: String, val markdown: String)
 /** One Android release's notes (Markdown). */
 data class ReleaseNotes(val version: String, val releasedAt: String?, val notes: String)
 
-/** What a help call gave: the value, or why not in words for people (offline or the server's plain sentence). */
+/**
+ * What a help call gave: the value, or why not: [offline], the server's own plain [words] when it gave some, else our
+ * sentence as a string resource ([message]) that the screen says in its own language.
+ */
 sealed interface HelpResult<out T> {
     data class Ok<T>(val value: T) : HelpResult<T>
-    data class Failed(val offline: Boolean, val words: String?) : HelpResult<Nothing>
+    data class Failed(val offline: Boolean, val words: String?, @androidx.annotation.StringRes val message: Int? = null) :
+        HelpResult<Nothing>
 }
 
 /**

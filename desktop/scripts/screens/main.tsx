@@ -278,7 +278,7 @@ const commands: Record<string, (args: Args) => unknown> = {
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
       : { phase: "up_to_date", current: "1.5.0", version: null, notes: null, checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), message: "You have the latest version.", progress: null },
-  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
+  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, dictationReplacements: [{ from: "echo ledger", to: "EchoLedger" }, { from: "kuraishi", to: "Qureshi" }], dictationSnippets: [{ trigger: "insert signature", text: "Regards, Hassam" }], onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" || screen === "library-table" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : LISTED),
@@ -304,6 +304,7 @@ const commands: Record<string, (args: Args) => unknown> = {
   help_guide: () => HELP_GUIDE,
   help_whats_new: () => ({ data: WHATS_NEW }),
   support_send: () => null,
+  last_device_report: () => ({ sentAt: new Date(Date.now() - 86_400_000).toISOString() }),
   unsure_markers: () => null,
   pending_list: () => (empty ? [] : PENDING),
   skipped_list: () => (empty ? [] : SKIPPED),
@@ -325,12 +326,14 @@ const commands: Record<string, (args: Args) => unknown> = {
     makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
   // What the core chose: the Zoom call earlier today, not recorded because its switch is off, not the filter (D-014).
   mic_last_not_recorded: () => ({ user: makeMicUser({ name: "zoom.us", app: "zoom", site: null, decision: "ignored", reason: "app_off" }), at: new Date(new Date().setHours(9, 40, 0, 0)).toISOString() }),
-  translate_apps: () => [],
+  translate_apps: () => [{ pid: 4242, name: "Valorant" }, { pid: 77, name: "Chrome" }],
   translate_status: () => screen.startsWith("controls-translate") ? {
     mode: screen.endsWith("subtitles") ? "watch" : "game", app: "Valorant", locked: true, hidden: false, status: "running", notice: null, partial: "",
     original: screen.endsWith("subtitles") ? "" : "Necesitamos rotar al sitio B ahora mismo",
     text: screen.endsWith("subtitles") ? "We were never supposed to meet like this." : "We need to rotate to site B right now",
   } : null,
+  screens_status: () => ({ supported: true, platform: mac ? "macos" : "windows", borderless: !mac, permission: true, inPlan: true, onServer: true }),
+  screens_permission: () => true,
   input_devices: () => [
     { id: "default", name: "Microphone (Realtek Audio)", isDefault: !bluetooth, bluetooth: false },
     ...(bluetooth ? [{ id: "airpods", name: "AirPods Pro", isDefault: true, bluetooth: true }] : []),
@@ -376,9 +379,13 @@ const commands: Record<string, (args: Args) => unknown> = {
         ],
       }
     : null,
-  security_overview: () => ({ devices: [{ id: "d1", name: "Work laptop", platform: "windows", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: true }, { id: "d2", name: "Pixel 9", platform: "android", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: false }], events: [] }),
+  security_overview: () => ({ devices: [{ id: "d1", name: "Work laptop", platform: "windows", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: true }, { id: "d2", name: "Pixel 9", platform: "android", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: false }], events: [
+    { id: 1, event: "sign_in", label: "Signed in", summary: "Signed in", actor: "device", device: "Work laptop", at: new Date(Date.now() - 3_600_000).toISOString() },
+    { id: 2, event: "two_factor_on", label: "Two-step on", summary: "Two-step sign-in turned on", actor: "web", device: null, at: new Date(Date.now() - 86_400_000).toISOString() },
+  ] }),
   storage_info: () => ({ recordings_bytes: 812_000_000, recordings_count: 42, disk_free_bytes: 80_123_456_789, disk_total_bytes: 107_374_182_400, retention_days: 30 }),
-  dictation_history: () => [],
+  dictation_history: () => [{ at: new Date(Date.now() - 600_000).toISOString(), text: "Please send the signed proforma by Thursday, and copy Bilal on it." },
+    { at: new Date(Date.now() - 3_600_000).toISOString(), text: "Meeting moved to 4 pm." }],
   marker_tags: () => ["Budget", "Decision", "Follow up"],
   recording_state: () => makeRecordingState({
     elapsedMs: 134_000,

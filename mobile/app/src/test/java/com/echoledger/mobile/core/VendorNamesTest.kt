@@ -35,7 +35,7 @@ class VendorNamesTest {
         "Groq API key",
         "Groq did not accept that key. Copy it again from console.groq.com.",
         // The same line in Urdu is allowed by its key, below (groqKeyStepKeys).
-        "The Free plan transcribes with your own free Groq key. Add it in You → Transcription key, then tap Retry.",
+        "The Free plan transcribes with your own free Groq key. Add it in Settings › Transcription key, then tap Retry.",
         "Groq did not accept your key. Check it in Transcription key, then try again.",
         // The settings search finds the key step by its vendor's name too (search words, never shown).
         "groq key free own transcription",

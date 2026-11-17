@@ -3,7 +3,6 @@ package com.echoledger.mobile.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.data.SecurityEventDto
 import com.echoledger.mobile.data.SecurityResponse
+import com.echoledger.mobile.ui.design.TextButton
 import kotlinx.coroutines.launch
 
 /** "Recording deleted: Acme kickoff · Work laptop": what happened and who did it. */
@@ -66,7 +66,7 @@ fun SecuritySection(
                     if (renaming == d.id) {
                         // Since v1.6 (P3): renamed in place.
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            androidx.compose.material3.OutlinedTextField(
+                            com.echoledger.mobile.ui.design.OutlinedTextField(
                                 newName,
                                 { newName = it.take(60) },
                                 label = { Text("Name") },

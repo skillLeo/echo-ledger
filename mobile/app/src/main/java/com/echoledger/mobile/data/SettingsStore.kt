@@ -241,6 +241,8 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
     }
 
     suspend fun clearPairing() {
+        // A device report sent for this account is never attached to another account's support message.
+        com.echoledger.mobile.help.DeviceReports(context).clear()
         context.dataStore.edit {
             it.remove(Keys.TOKEN)
             it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), it.toSettings().copy(deviceId = null, deviceName = null))

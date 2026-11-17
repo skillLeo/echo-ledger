@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import ipcTs from "./ipc.ts?raw";
 import { MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT } from "./ipc";
-import { AWAITING_CORE } from "./awaitingCore";
+import { AWAITING_CORE, awaitedNames, type AwaitedCommand } from "./awaitingCore";
 import settingsViewTsx from "../views/main/SettingsView.tsx?raw";
 import recordViewTsx from "../views/main/RecordView.tsx?raw";
 import screenSettingsTsx from "../views/main/ScreenSettings.tsx?raw";
@@ -164,6 +164,55 @@ function tsFieldUnion(field: string): string[] {
 
 const sorted = (values: string[]) => [...values].sort();
 
+// Every app source (not the tests), by its path under src/.
+const appSources = Object.fromEntries(
+  Object.entries(import.meta.glob<string>("../**/*.{ts,tsx}", { query: "?raw", import: "default", eager: true }))
+    .filter(([path]) => !/\.test\.tsx?$/.test(path) && !path.includes("/test/"))
+    // Globbed from src/lib: "../v2/live/LiveV2.tsx" and "./ipc.ts" become "v2/live/LiveV2.tsx" and "lib/ipc.ts".
+    .map(([path, text]) => [path.startsWith("./") ? `lib/${path.slice(2)}` : path.replace(/^\.\.\//, ""), text]),
+);
+
+/** The api wrappers in ipc.ts that invoke `command` ("liveTranslateStatus" for live_translate_status). */
+function wrappersOf(command: string, ipc: string = ipcTs): string[] {
+  return [...ipc.matchAll(new RegExp(`^\\s*(\\w+):[^\\n]*?invoke(?:<[^\\n]*?>)?\\(\\s*"${command}"`, "gm"))].map((m) => m[1]);
+}
+
+/** Source files that call an awaited command (its name in an invoke, or one of its wrappers) but aren't its callers. */
+export function strayCalls(sources: Record<string, string>, awaited: readonly AwaitedCommand[], ipc: string = ipcTs): string[] {
+  const stray: string[] = [];
+  for (const c of awaited) {
+    const wrappers = wrappersOf(c.name, ipc);
+    const callsIt = (text: string) => new RegExp(`invoke(?:<[^>]*>)?\\(\\s*["'\`]${c.name}["'\`]`).test(text)
+      || wrappers.some((w) => new RegExp(`\\.${w}\\s*\\(`).test(text));
+    for (const [path, text] of Object.entries(sources)) if (callsIt(text) && !c.callers.includes(path)) stray.push(`${c.name} in ${path}`);
+  }
+  return stray;
+}
+
+describe("commands awaited from the core are called only where their fallback says", () => {
+  it("finds the app's sources and each awaited command's wrappers", () => {
+    expect(Object.keys(appSources)).toContain("lib/ipc.ts");
+    expect(Object.keys(appSources)).toContain("v2/live/LiveV2.tsx");
+    expect(wrappersOf("live_translate_status")).toEqual(["liveTranslateStatus"]);
+  });
+
+  it("no awaited command is called outside its listed callers", () => {
+    expect(strayCalls(appSources, AWAITING_CORE.commands)).toEqual([]);
+  });
+
+  it("a stray call fails: by its wrapper, or by invoking its name", () => {
+    const listed = [{ name: "live_translate_status", fallback: "safe", callers: ["lib/ipc.ts", "v2/live/LiveV2.tsx"] },
+      { name: "diagnostic_report_copy", fallback: "not called", callers: [] }];
+    const sources = {
+      "lib/ipc.ts": appSources["lib/ipc.ts"],
+      "v2/live/LiveV2.tsx": "api.liveTranslateStatus().then(set);",
+      "v2/home/HomeV2.tsx": "void api.liveTranslateStatus();",
+      "v2/setup/SetupHealth.tsx": 'await invoke<string>("diagnostic_report_copy");',
+    };
+    expect(strayCalls(sources, listed)).toEqual(["live_translate_status in v2/home/HomeV2.tsx", "diagnostic_report_copy in v2/setup/SetupHealth.tsx"]);
+  });
+});
+
 describe("command names and arguments", () => {
   const commands = rustCommands();
 
@@ -184,7 +233,7 @@ describe("command names and arguments", () => {
   });
 
   it.each(calls.map((c) => [c.command, c] as const))("%s exists in Rust and is registered in the invoke handler", (name) => {
-    if (AWAITING_CORE.commands.includes(name)) {
+    if (awaitedNames().includes(name)) {
       // Fails the day the core has it: take it off AWAITING_CORE, and the checks below then hold it to Rust's arguments.
       expect(commands.has(name), `${name} is in the core now: remove it from AWAITING_CORE (lib/awaitingCore.ts)`).toBe(false);
       return;

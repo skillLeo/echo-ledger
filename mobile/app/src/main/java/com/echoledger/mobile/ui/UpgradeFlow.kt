@@ -39,7 +39,6 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -83,6 +82,7 @@ import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.CopyRow
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.InlineBanner
+import com.echoledger.mobile.ui.design.OutlinedTextField
 import com.echoledger.mobile.ui.design.PlanTag
 import com.echoledger.mobile.ui.design.RowDivider
 import com.echoledger.mobile.ui.design.SettingsSection

@@ -9,8 +9,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -42,7 +44,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -94,12 +95,46 @@ import com.echoledger.mobile.ui.design.InlineBanner
 import com.echoledger.mobile.ui.design.SectionHeader
 import com.echoledger.mobile.ui.design.SettingsRow
 import com.echoledger.mobile.ui.design.SourceAppTile
+import com.echoledger.mobile.ui.design.TextButton
 import com.echoledger.mobile.ui.design.tabular
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** What the Record screen shows: a voice note (record, import) or calls and meetings (auto-record, Keep/Discard). */
 enum class RecordMode { VOICE, CALLS, GAME, WATCH }
+
+/**
+ * The Auto-record calls switch with its one line (on Record › Calls & meetings and, since v1.8.1 (bug P-016), at the
+ * top of Settings › Calls & meetings): the same row in both places.
+ */
+@Composable
+internal fun AutoRecordCallsRow(capabilities: Capabilities, settings: com.echoledger.mobile.data.AppSettings, onSetup: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    SettingsRow(
+        Icons.Rounded.Call,
+        "Auto-record calls",
+        summary = when {
+            !capabilities.helperInBuild -> Capabilities.NOT_IN_THIS_BUILD
+            !capabilities.callCaptureSupportedByOs -> "Needs Android 12 or newer"
+            !capabilities.helperConnected -> "Enable call capture in Setup first"
+            settings.afterCall == PostCallPrompt.ASK -> "The after-call card asks after each call; kept after 10 s"
+            else -> "Answered calls are kept automatically; unanswered and short ones are skipped"
+        },
+        onClick = if (capabilities.helperConnected || !capabilities.helperInBuild) null else onSetup,
+        trailing = {
+            Switch(
+                checked = settings.autoRecordArmed,
+                enabled = capabilities.canCaptureCalls,
+                modifier = Modifier.semantics { contentDescription = "Auto-record calls" },
+                onCheckedChange = { on ->
+                    context.startForegroundService(
+                        RecordingService.intent(context, if (on) RecordingService.ACTION_ARM else RecordingService.ACTION_DISARM)
+                    )
+                }
+            )
+        }
+    )
+}
 
 /**
  * The Record sheet (since v1.3), from the centre button: four modes in a 2×2 grid, each with a one-line status.
@@ -143,14 +178,14 @@ fun RecordSheet(
                 AppCallCapture.VOICE_ONLY -> "Calls: your voice only"
                 AppCallCapture.BOTH_SIDES -> if (autoRecordOn) "Calls: auto-record on" else "Calls: ready"
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
                 ModeTile(Icons.Rounded.Mic, "Voice & files", "Record or import", Modifier.weight(1f)) { onPick(RecordMode.VOICE) }
                 ModeTile(Icons.Rounded.Call, "Calls & meetings", calls, Modifier.weight(1f)) { onPick(RecordMode.CALLS) }
             }
             // Since v1.5: a plan without Live Translate shows neither mode; since v1.6 they show with the plan's badge.
             if (!liveTranslate && liveTranslateLock != null) {
                 Spacer(Modifier.height(Space.s3))
-                Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
                     ModeTile(Icons.Rounded.SportsEsports, "Game translate", liveTranslateLock.badge, Modifier.weight(1f)) {
                         onLocked(liveTranslateLock)
                     }
@@ -161,7 +196,7 @@ fun RecordSheet(
             }
             if (liveTranslate) Spacer(Modifier.height(Space.s3))
             if (liveTranslate) {
-                Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
                     val translating by com.echoledger.mobile.translate.LiveTranslateService.state.collectAsState()
                     // What Soniox said last time it refused ("Needs Soniox credit"), until a session runs again.
                     val blocked = com.echoledger.mobile.translate.TranslateStatus.blocked(androidx.compose.ui.platform.LocalContext.current)
@@ -195,10 +230,12 @@ fun RecordSheet(
 private fun ModeTile(icon: ImageVector, name: String, status: String, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val c = LocalEchoColors.current
     val type = LocalEchoType.current
-    // A fixed 112 dp tile (since 1.3.2: a flexible spacer stretched each tile to the whole sheet).
+    // At least 112 dp (since 1.3.2: a flexible spacer stretched each tile to the whole sheet); since v1.8.1 (bug P-012) it
+    // grows with large text so the status line is never cut off.
     Column(
         modifier
-            .height(112.dp)
+            .fillMaxHeight()
+            .heightIn(min = 112.dp)
             .clip(RoundedCornerShape(Radius.md))
             .background(c.surface2)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
@@ -214,7 +251,7 @@ private fun ModeTile(icon: ImageVector, name: String, status: String, modifier: 
         }
         Column {
             Text(name, style = type.bodyL, color = if (enabled) c.text else c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(status, style = type.labelM, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(status, style = type.labelM, color = c.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -305,30 +342,7 @@ fun RecordScreen(
         }
         if (mode == RecordMode.CALLS) {
             if (live.active) SectionHeader("Calls & meetings")
-            SettingsRow(
-                Icons.Rounded.Call,
-                "Auto-record calls",
-                summary = when {
-                    !capabilities.helperInBuild -> Capabilities.NOT_IN_THIS_BUILD
-                    !capabilities.callCaptureSupportedByOs -> "Needs Android 12 or newer"
-                    !capabilities.helperConnected -> "Enable call capture in Setup first"
-                    settings.afterCall == PostCallPrompt.ASK -> "The after-call card asks after each call; kept after 10 s"
-                    else -> "Answered calls are kept automatically; unanswered and short ones are skipped"
-                },
-                onClick = if (capabilities.helperConnected || !capabilities.helperInBuild) null else onSetup,
-                trailing = {
-                    Switch(
-                        checked = settings.autoRecordArmed,
-                        enabled = capabilities.canCaptureCalls,
-                        modifier = Modifier.semantics { contentDescription = "Auto-record calls" },
-                        onCheckedChange = { on ->
-                            context.startForegroundService(
-                                RecordingService.intent(context, if (on) RecordingService.ACTION_ARM else RecordingService.ACTION_DISARM)
-                            )
-                        }
-                    )
-                }
-            )
+            AutoRecordCallsRow(capabilities, settings, onSetup)
             // Since v1.5: what a call records on this phone is said before any call, not found out after one.
             DeviceCheck.callLine(capabilities.appCalls)?.takeIf { capabilities.helperInBuild }?.let { line ->
                 InlineBanner(line, Modifier.padding(horizontal = Space.screen, vertical = Space.s2), kind = BannerKind.Info)

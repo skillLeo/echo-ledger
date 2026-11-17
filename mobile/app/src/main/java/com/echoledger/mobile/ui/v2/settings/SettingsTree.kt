@@ -80,6 +80,7 @@ object SettingsTree {
     )
 
     val itemTitles: Map<String, Int> = mapOf(
+        "calls.autorecord" to R.string.v2_set_item_calls_autorecord,
         "calls.auto" to R.string.v2_set_item_calls_auto,
         "calls.after" to R.string.v2_set_item_calls_after,
         "mic.source" to R.string.v2_set_item_mic_source,

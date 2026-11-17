@@ -473,7 +473,7 @@ object PhoneAppRecordings {
     private fun asked(choices: CallJournal.Choices): Boolean =
         choices.autoRecord && !choices.viewer && PhoneCalls.mode(choices.phoneCalls) == PhoneCalls.ALWAYS
 
-    /** The outcome in plain words, for the capture log and Settings (no names or numbers). */
+    /** The outcome as a code, for Settings in the screen's language and (its English) the capture log; no names or numbers. */
     fun note(
         verdict: Verdict,
         call: LogCall,
@@ -482,32 +482,38 @@ object PhoneAppRecordings {
         own: Own?,
         choices: CallJournal.Choices?,
         shortestS: Int
-    ): String = when (verdict) {
-        Verdict.IMPORT ->
-            "imported the Phone app's recording (${file.durationMs / 1000} s)" +
-                (if (CallJournal.Result.of(entry?.result) == CallJournal.Result.KEPT) "; EchoLedger's own has one side only." else ".")
-
-        Verdict.WAIT -> "waiting: EchoLedger is still saving its own recording of this call."
-
-        Verdict.OWN -> if (own != null) {
-            "EchoLedger's own recording kept (" + (if (own.channels == 2) "both sides apart" else "both voices on one track") +
-                "); the Phone app's copy stays in its folder."
-        } else {
-            "EchoLedger heard both sides itself; the Phone app's copy stays in its folder."
+    ): PhoneAppNote = when (verdict) {
+        Verdict.IMPORT -> {
+            val oneSide = CallJournal.Result.of(entry?.result) == CallJournal.Result.KEPT
+            PhoneAppNote(
+                if (oneSide) PhoneAppNote.Kind.IMPORTED_ONE_SIDE else PhoneAppNote.Kind.IMPORTED,
+                seconds = (file.durationMs / 1000).toInt()
+            )
         }
+
+        Verdict.WAIT -> PhoneAppNote.of(PhoneAppNote.Kind.WAITING_FOR_OWN)
+
+        Verdict.OWN -> PhoneAppNote.of(
+            when {
+                own == null -> PhoneAppNote.Kind.HEARD_BOTH_SIDES
+                own.channels == 2 -> PhoneAppNote.Kind.OWN_KEPT_APART
+                else -> PhoneAppNote.Kind.OWN_KEPT_ONE_TRACK
+            }
+        )
 
         Verdict.SHORT -> if (shortestS > 0 && call.talkS * 1000 >= CallStateMachine.MIN_DURATION_MS) {
-            "not imported, shorter than $shortestS s (Skip calls shorter than)."
+            PhoneAppNote(PhoneAppNote.Kind.SHORTER_THAN_SETTING, seconds = shortestS)
         } else {
-            "not imported, shorter than ${CallStateMachine.MIN_DURATION_MS / 1000} s."
+            PhoneAppNote(PhoneAppNote.Kind.SHORTER_THAN_MINIMUM, seconds = (CallStateMachine.MIN_DURATION_MS / 1000).toInt())
         }
 
-        Verdict.DISCARDED -> "not imported: EchoLedger's recording of this call was discarded."
+        Verdict.DISCARDED -> PhoneAppNote.of(PhoneAppNote.Kind.OWN_DISCARDED)
 
+        // The journal's reason as a code (never its words); without one, the choices then in force.
         Verdict.NOT_ASKED -> when {
-            entry?.note != null -> "not imported: ${entry.note}."
-            choices != null && !choices.autoRecord -> "not imported: auto-record was off."
-            else -> "not imported: Record phone calls was not set to Always."
+            entry?.note != null -> PhoneAppNote.notWanted(entry.note)
+            choices != null && !choices.autoRecord -> PhoneAppNote.of(PhoneAppNote.Kind.AUTO_RECORD_OFF)
+            else -> PhoneAppNote.of(PhoneAppNote.Kind.PHONE_CALLS_NOT_ALWAYS)
         }
     }
 
@@ -515,16 +521,15 @@ object PhoneAppRecordings {
      * Why a matched file was not brought in by itself; another app that made a file in the call folder is named (its
      * package, so the phone's own Phone app can be told apart when a phone names it differently).
      */
-    fun note(trust: Trust, owner: String? = null): String = when (trust) {
-        Trust.OK -> ""
-
-        Trust.UNKNOWN_MAKER ->
-            "waiting for you: the phone does not say which app made the file; import it in Settings if it is this call's."
-
-        Trust.NOT_THE_PHONE_APP -> "not imported: another app" + (owner?.let { " ($it)" } ?: "") + " made the file in the call folder."
-
-        Trust.TOO_LARGE -> "not imported: the file is larger than a recording of this call can be."
+    fun noteOf(trust: Trust, owner: String? = null): PhoneAppNote? = when (trust) {
+        Trust.OK -> null
+        Trust.UNKNOWN_MAKER -> PhoneAppNote.of(PhoneAppNote.Kind.UNKNOWN_MAKER)
+        Trust.NOT_THE_PHONE_APP -> PhoneAppNote(PhoneAppNote.Kind.OTHER_APP, owner = owner)
+        Trust.TOO_LARGE -> PhoneAppNote.of(PhoneAppNote.Kind.TOO_LARGE)
     }
+
+    /** [noteOf] in the capture log's English ("" for [Trust.OK]). */
+    fun note(trust: Trust, owner: String? = null): String = noteOf(trust, owner)?.english.orEmpty()
 
     // ---- the guide (Settings → Calls & meetings → Auto-record apps → Phone calls) ---------------------------------
 
@@ -727,11 +732,18 @@ object PhoneAppRecordings {
 
     private fun ids(text: String?): List<Long> = text?.split(',')?.mapNotNull { it.toLongOrNull() }.orEmpty()
 
-    /** The last call's outcome, for Settings ("Last call 10:42: Imported the Phone app's recording (12 s)."), or null. */
-    fun lastNote(context: Context): Pair<Long, String>? {
+    /**
+     * The last call's outcome as a code each screen says in its own language, with the call's time; null when there is
+     * none, or only an older build's sentence.
+     */
+    fun lastNote(context: Context): Pair<Long, PhoneAppNote>? {
         val p = prefs(context)
-        val text = p.getString(NOTE, null) ?: return null
-        return p.getLong(NOTE_AT, 0) to text
+        val note = PhoneAppNote.fromWire(p.getString(NOTE, null)) ?: return null
+        return p.getLong(NOTE_AT, 0) to note
+    }
+
+    private fun keepNote(context: Context, note: PhoneAppNote, callAtMs: Long) {
+        prefs(context).edit().putString(NOTE, note.wire()).putLong(NOTE_AT, callAtMs).apply()
     }
 
     /**
@@ -869,7 +881,7 @@ object PhoneAppRecordings {
         done.forEach { h ->
             val rec = graph.recordings.get(h.recordingId)?.takeIf { it.state == "pending_decision" } ?: return@forEach
             val now = graph.recordings.update(rec.id) { it.copy(state = PostCallPrompt.stateFor(settings.afterCall)) } ?: return@forEach
-            log(context, "the Phone app's copy did not come: EchoLedger's own recording (your voice only) is kept as usual.")
+            log(context, PhoneAppNote.of(PhoneAppNote.Kind.COPY_DID_NOT_COME).english)
             if (cardNow(h.endMs, nowMs, MissedRecordingWorker.ongoing(context))) {
                 withContext(Dispatchers.Main.immediate) {
                     PostCallPrompt.show(
@@ -961,7 +973,7 @@ object PhoneAppRecordings {
                         }
                     }
                 } else {
-                    note = note(trust, file.owner)
+                    note = noteOf(trust, file.owner) ?: note
                     if (trust == Trust.UNKNOWN_MAKER) {
                         waitsForPerson = true
                         saveCandidates(context, candidates(context).filter { it.fileId != file.id } + Candidate(file.id, call.dateMs))
@@ -979,10 +991,8 @@ object PhoneAppRecordings {
             } else {
                 PendingImports.doneOverlapping(context, times.first, times.last)
             }
-            log(context, note)
-            if (call.dateMs >= p.getLong(NOTE_AT, 0)) {
-                p.edit().putString(NOTE, note.replaceFirstChar { it.uppercase() }).putLong(NOTE_AT, call.dateMs).apply()
-            }
+            log(context, note.english)
+            if (call.dateMs >= p.getLong(NOTE_AT, 0)) keepNote(context, note, call.dateMs)
         }
         markHandled(context, done)
         // Brought in without the card: one quiet notification for all of them.
@@ -1009,33 +1019,36 @@ object PhoneAppRecordings {
      * The person chose "Import this recording" for a file the phone does not say the maker of: it is checked again (the
      * call it belongs to, written during it and not changed since, its length and size) and brought in. Returns the note.
      */
-    suspend fun importCandidate(context: Context, fileId: Long, sources: Sources = Phone(context)): String = running.withLock {
+    suspend fun importCandidate(context: Context, fileId: Long, sources: Sources = Phone(context)): PhoneAppNote = running.withLock {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         val settings = graph.settings.current()
-        val candidate = candidates(context).firstOrNull { it.fileId == fileId } ?: return@withLock "not imported: it is no longer waiting."
+        val candidate = candidates(context).firstOrNull { it.fileId == fileId }
+            ?: return@withLock PhoneAppNote.of(PhoneAppNote.Kind.NO_LONGER_WAITING)
 
         // Whatever the answer, it is no longer offered; only a file that could not be read now stays for another try.
-        fun answered(note: String): String {
+        fun answered(note: PhoneAppNote): PhoneAppNote {
             dropCandidate(context, fileId)
-            log(context, note)
+            log(context, note.english)
             return note
         }
-        val file = sources.reload(MediaFile(fileId, "", "", 0, 0)) ?: return@withLock answered("not imported: the file is gone.")
+        val file = sources.reload(MediaFile(fileId, "", "", 0, 0)) ?: return@withLock answered(PhoneAppNote.of(PhoneAppNote.Kind.FILE_GONE))
         val call =
             match(sources.calls(candidate.callAtMs - RING_MAX_MS), listOf(file)).firstOrNull {
                 it.first.dateMs == candidate.callAtMs
             }?.first
-                ?: return@withLock answered("not imported: the file no longer fits the call.")
+                ?: return@withLock answered(PhoneAppNote.of(PhoneAppNote.Kind.NO_LONGER_FITS))
         val trust = trust(file, call, sources.thisPhone())
-        if (trust == Trust.TOO_LARGE || trust == Trust.NOT_THE_PHONE_APP) return@withLock answered(note(trust, file.owner))
+        if (trust == Trust.TOO_LARGE || trust == Trust.NOT_THE_PHONE_APP) return@withLock answered(noteOf(trust, file.owner)!!)
         val (replaces, second) = ownCopy(context, entriesFor(listOf(call), CallJournal.book(context).calls)[call])
         when (val copy = importFile(context, sources, file, call, settings, System.currentTimeMillis(), prompt = false, replaces, second)) {
-            Copy.Later -> "not imported yet: the file could not be read.".also { log(context, it) }
+            Copy.Later -> PhoneAppNote.of(PhoneAppNote.Kind.UNREADABLE).also { log(context, it.english) }
 
             is Copy.Refused -> answered(copy.note)
 
-            is Copy.Done -> answered("imported the Phone app's recording (${file.durationMs / 1000} s), as you chose.").also { note ->
-                prefs(context).edit().putString(NOTE, note.replaceFirstChar { it.uppercase() }).putLong(NOTE_AT, call.dateMs).apply()
+            is Copy.Done -> answered(
+                PhoneAppNote(PhoneAppNote.Kind.IMPORTED_AS_CHOSEN, seconds = (file.durationMs / 1000).toInt())
+            ).also { note ->
+                keepNote(context, note, call.dateMs)
             }
         }
     }
@@ -1067,7 +1080,7 @@ object PhoneAppRecordings {
     private sealed interface Copy {
         data class Done(val stored: LocalRecording, val quiet: Boolean) : Copy
 
-        data class Refused(val note: String) : Copy
+        data class Refused(val note: PhoneAppNote) : Copy
 
         data object Later : Copy
     }
@@ -1090,16 +1103,16 @@ object PhoneAppRecordings {
 
     /** What a row that is not [Row.SAME] means for the import. */
     private fun copyFor(row: Row): Copy = when (row) {
-        Row.GONE -> Copy.Refused("not imported: the file is gone.")
+        Row.GONE -> Copy.Refused(PhoneAppNote.of(PhoneAppNote.Kind.FILE_GONE))
         Row.SAVING -> Copy.Later
-        else -> Copy.Refused("not imported: the file changed after the call.")
+        else -> Copy.Refused(PhoneAppNote.of(PhoneAppNote.Kind.FILE_CHANGED))
     }
 
     /** Kinds of audio the server does not take, refused whatever the file's name says. */
     private val REFUSED_TYPES = setOf("audio/3gpp", "audio/3gpp2", "video/3gpp", "video/3gpp2", "audio/amr-wb")
 
-    /** The note for a kind of audio file the server does not take. */
-    const val UNSUPPORTED = "not imported: EchoLedger can't take this kind of audio file."
+    /** The note for a kind of audio file the server does not take (the capture log's English). */
+    val UNSUPPORTED: String get() = PhoneAppNote.of(PhoneAppNote.Kind.UNSUPPORTED).english
 
     /** The after-call card shows for a call that ended at most this long ago (else a quiet notification says it). */
     const val CARD_MS = 2 * 60_000L
@@ -1128,17 +1141,17 @@ object PhoneAppRecordings {
         second: Boolean = false
     ): Copy {
         val graph = (context.applicationContext as EchoLedgerApp).graph
-        val (mime, codec) = typeOf(file) ?: return Copy.Refused(UNSUPPORTED)
+        val (mime, codec) = typeOf(file) ?: return Copy.Refused(PhoneAppNote.of(PhoneAppNote.Kind.UNSUPPORTED))
         val limit = maxBytes(call.talkS)
         val copy = File(context.cacheDir, "import-${UUID.randomUUID()}.tmp")
         val input = runCatching { sources.open(file) }.getOrNull()
         if (input == null) {
-            log(context, "not imported yet: the file could not be read.")
+            log(context, PhoneAppNote.of(PhoneAppNote.Kind.UNREADABLE).english)
             return Copy.Later
         }
         val copied: Long? = input.use { stream ->
             rowNow(file, sources.reload(file), call).takeIf { it != Row.SAME }?.let { row ->
-                if (row == Row.SAVING) log(context, "not imported yet: the Phone app is still saving the file.")
+                if (row == Row.SAVING) log(context, PhoneAppNote.of(PhoneAppNote.Kind.STILL_SAVING).english)
                 return copyFor(row)
             }
             runCatching {
@@ -1162,24 +1175,30 @@ object PhoneAppRecordings {
         when {
             copied == null -> {
                 copy.delete()
-                log(context, "not imported yet: the file could not be read.")
+                log(context, PhoneAppNote.of(PhoneAppNote.Kind.UNREADABLE).english)
                 return Copy.Later
             }
 
             copied < 0 -> {
                 copy.delete()
-                return Copy.Refused(note(Trust.TOO_LARGE))
+                return Copy.Refused(PhoneAppNote.of(PhoneAppNote.Kind.TOO_LARGE))
             }
 
             after != Row.SAME -> {
                 copy.delete()
-                if (after == Row.SAVING) log(context, "not imported yet: the Phone app is still saving the file.")
+                if (after == Row.SAVING) log(context, PhoneAppNote.of(PhoneAppNote.Kind.STILL_SAVING).english)
                 return copyFor(after)
             }
 
             short -> {
                 copy.delete()
-                return if (file.endMs in windowOf(call)) Copy.Later else Copy.Refused("not imported: the file changed while it was read.")
+                return if (file.endMs in
+                    windowOf(call)
+                ) {
+                    Copy.Later
+                } else {
+                    Copy.Refused(PhoneAppNote.of(PhoneAppNote.Kind.FILE_CHANGED_WHILE_READ))
+                }
             }
         }
         val name = call.name?.takeIf { it.isNotBlank() } ?: call.number?.let { PhoneCallLog.contactNameOf(context, it) }
@@ -1260,7 +1279,7 @@ object PhoneAppRecordings {
         // EchoLedger's own recording of the call with your voice only, still undecided: the two-sided copy takes its place.
         replaces?.let {
             Decisions.apply(context, it.id, keep = false)
-            log(context, "the Phone app's copy took the place of EchoLedger's own (your voice only).")
+            log(context, PhoneAppNote.of(PhoneAppNote.Kind.TOOK_THE_PLACE).english)
         }
         // Kept already (or sent): the copy waits in Record for the person, with no second card and no time limit.
         if (second) {
@@ -1392,7 +1411,7 @@ object PhoneAppRecordings {
             val settings = (context as EchoLedgerApp).graph.settings.current()
             // Not wanted any more: the watch ends here (turning the import back on starts it again).
             if (!wanted(settings) || !allowed(context)) {
-                if (!watching && wanted(settings)) log(context, "not imported: no permission to read audio files or the call log.")
+                if (!watching && wanted(settings)) log(context, PhoneAppNote.of(PhoneAppNote.Kind.NO_PERMISSION).english)
                 if (!watching) gaveUp(context)
                 return@withContext Result.success()
             }

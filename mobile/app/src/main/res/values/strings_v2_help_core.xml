@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (help_core: Help's failures from the phone core). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_help_core_guides_failed">The guides could not be loaded. Try again in a minute.</string>
+    <string name="v2_help_core_guide_failed">This guide could not be opened. Try again in a minute.</string>
+    <string name="v2_help_core_whats_new_failed">What\'s new could not be loaded. Try again in a minute.</string>
+    <string name="v2_help_core_send_failed">Your message could not be sent. Try again in a minute.</string>
+    <string name="v2_help_core_too_many_messages">You have sent 5 messages in the last hour. Try again later, or write to support by email.</string>
+    <string name="v2_help_core_too_many_tries">Too many tries. Try again in a minute.</string>
+    <string name="v2_help_core_not_verified">Confirm your email address first: the link is in the email we sent you. Then send your message.</string>
+    <string name="v2_help_core_busy">The server is busy right now. Try again in a minute.</string>
+    <string name="v2_help_core_guide_gone">This guide is no longer there.</string>
+    <string name="v2_help_core_server">The server had a problem. Try again in a minute.</string>
+    <string name="v2_help_core_offline">Can\'t reach the server. Check the connection and try again.</string>
+    <string name="v2_help_core_sign_in">Sign in on this phone first.</string>
+    <string name="v2_help_core_certificate">The server\'s certificate is not the one this phone expects. Check the server address.</string>
+    <string name="v2_help_core_empty_answer">Your server sent an empty answer. Try again in a minute.</string>
+    <string name="v2_help_core_unreadable_answer">Your server sent an answer this app cannot read. If this Wi-Fi has a sign-in page, open it first; otherwise update EchoLedger.</string>
+</resources>

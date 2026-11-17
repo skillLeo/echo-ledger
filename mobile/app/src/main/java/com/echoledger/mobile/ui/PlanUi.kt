@@ -26,7 +26,6 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,6 +58,7 @@ import com.echoledger.mobile.data.UpgradeRequestDto
 import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.MeterRow
+import com.echoledger.mobile.ui.design.OutlinedTextField
 import com.echoledger.mobile.ui.design.PlanTag
 import com.echoledger.mobile.ui.design.RowDivider
 import com.echoledger.mobile.ui.design.SettingsSection
@@ -582,7 +582,7 @@ fun UpgradeSheet(vm: MainViewModel, plan: PlanState, lock: PlanState.Lock?, onDi
         androidx.compose.material3.AlertDialog(
             onDismissRequest = onDismiss,
             text = { Text(lock?.let { "${it.featureName} is on the ${it.badge} plan." } ?: "Your plan is managed outside this app.") },
-            confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("OK") } }
+            confirmButton = { com.echoledger.mobile.ui.design.TextButton(onClick = onDismiss) { Text("OK") } }
         )
         return
     }
@@ -597,9 +597,11 @@ internal fun CancelRequestDialog(onKeep: () -> Unit, onCancel: () -> Unit) {
         title = { Text("Cancel this request?") },
         text = { Text("If you've already paid, add your receipt instead. Cancelling doesn't refund a payment.") },
         confirmButton = {
-            androidx.compose.material3.TextButton(onClick = onCancel) { Text("Cancel request", color = LocalEchoColors.current.danger) }
+            com.echoledger.mobile.ui.design.TextButton(onClick = onCancel) {
+                Text("Cancel request", color = LocalEchoColors.current.danger)
+            }
         },
-        dismissButton = { androidx.compose.material3.TextButton(onClick = onKeep) { Text("Keep request") } }
+        dismissButton = { com.echoledger.mobile.ui.design.TextButton(onClick = onKeep) { Text("Keep request") } }
     )
 }
 

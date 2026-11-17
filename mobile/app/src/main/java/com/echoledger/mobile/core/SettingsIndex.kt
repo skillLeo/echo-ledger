@@ -57,6 +57,7 @@ object SettingsIndex {
 
     /** Every setting people can look for, with the words they might type (English and common Roman Urdu). */
     val items: List<Item> = listOf(
+        item("calls.autorecord", "calls", "auto-apps", "Auto-record calls", "auto record automatic calls on off start khud"),
         item(
             "calls.auto",
             "calls",

@@ -30,6 +30,7 @@
     <string name="v2_set_page_help">Help</string>
     <string name="v2_set_page_about">About</string>
     <string name="v2_set_page_setup">Setup &amp; health</string>
+    <string name="v2_set_item_calls_autorecord">Auto-record calls</string>
     <string name="v2_set_item_calls_auto">Auto-record apps</string>
     <string name="v2_set_item_calls_after">After a call</string>
     <string name="v2_set_item_mic_source">Microphone source</string>

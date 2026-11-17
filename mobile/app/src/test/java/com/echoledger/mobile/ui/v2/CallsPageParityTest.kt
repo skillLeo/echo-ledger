@@ -34,7 +34,7 @@ import org.robolectric.shadows.ShadowBuild
  * Calls & meetings parity. Today's page (SettingsScreen on "calls") and the v2 page (CallsPage) are each walked through
  * the same steps, and their controls ("kind: name") collected after every step: as it opens; a call app typed in (Add
  * on); the app added (its Remove); SIM calls set to Always (the Phone app's recordings appear, with a recording waiting
- * and its settings openable); the import switched (from its default, on); Import this recording (the
+ * and its settings openable); importing switched off (it is on by default); Import this recording (the
  * dialog); Reset to defaults (its question). Every control of today's page is mapped to its v2 control by kind and
  * name, and the two must first appear in the same step.
  */
@@ -83,11 +83,12 @@ class CallsPageParityTest : ScreenTest() {
                 pumpUntil("always") { vm.settings.value.phoneCalls == "always" }
             }
 
-            // The import switched from its default (on) and its effect waited for.
             Step.Importing -> {
-                val was = vm.settings.value.phoneAppImport
+                // Importing is on by default, so the press turns it off: wait for the change itself. Waiting for "on"
+                // passed only when the check ran before the write landed (a race, failing about 3 runs in 4).
+                val before = vm.settings.value.phoneAppImport
                 press("Import the Phone app's recordings")
-                pumpUntil("importing switched") { vm.settings.value.phoneAppImport != was }
+                pumpUntil("importing switched") { vm.settings.value.phoneAppImport != before }
             }
 
             Step.Dialog -> press("Import the recording of your call at 08:00")
@@ -125,6 +126,8 @@ class CallsPageParityTest : ScreenTest() {
             "WhatsApp", "WhatsApp Business", "Google Meet", "Zoom", "Microsoft Teams", "Telegram", "Signal", "Messenger",
             "Instagram", "Skype", "Slack", "Discord"
         ).forEach { put("switch: Auto-record $it", "switch: $it") }
+        put("switch: Auto-record calls", "switch: Auto-record calls")
+        put("button: Auto-record calls", "button: Setup & health")
         put("textbox: Another call app (package name)", "textbox: Another call app (package name)")
         put("button: Add", "button: Add")
         put("button: Remove com.example.voip from the call apps", "button: Remove com.example.voip from the call apps")
