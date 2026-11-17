@@ -110,15 +110,24 @@ class ScreensTest {
         }
 
     @Test
-    fun aScreensFileNameIsItsNumberTimeAndASlug() {
-        assertEquals("S01_0-26_clients-purchase-order-po.webp", ScreenAssets.fileName(screens[0]))
+    fun aScreensFileNameIsItsNumberTimeAndASlugAsTheServerMakesIt() {
+        // The server's own examples (web/tests/Feature/Api/ScreenAssetsTest.php).
         assertEquals(
-            "S07_14-32_orders-page.png",
-            ScreenAssets.fileName(screen("x", 7, 872_000, "The orders page", url = "https://x/a.png?sig=1"))
+            "S07_14-32_orders-page-client-points-at-submit.webp",
+            ScreenAssets.fileName(screen("x", 7, 872_000, "Orders page, client points at Submit"), count = 12)
         )
-        assertEquals("S120_1-00-00_screen.jpg", ScreenAssets.fileName(screen("x", 120, 3_600_000, null, url = "https://x/a.jpeg")))
-        // The server's name wins once it sends one (web P4).
-        assertEquals("S01_00-26_po.webp", ScreenAssets.fileName(screens[0], serverName = "S01_00-26_po.webp"))
+        assertEquals("S007_1-04-32_screen.webp", ScreenAssets.fileName(screen("x", 7, 3_872_000, null), count = 120))
+        assertEquals(
+            "S01_0-05_ein-bild-ubersicht-kosten-2026.png",
+            ScreenAssets.fileName(screen("x", 1, 5_000, "Ein Bild: Übersicht & Kosten / 2026", url = "https://x/a.png?sig=1"), count = 1)
+        )
+        assertEquals(
+            "S03_0-00_the-invoice-settings-page-with-the-tax.webp",
+            ScreenAssets.fileName(screen("x", 3, 0, "The invoice settings page with the tax rate dropdown open and highlighted"), count = 9)
+        )
+        assertEquals("S01_0-26_the-clients-purchase-order-po-2291-with.webp", ScreenAssets.moments(screens, lines).first().fileName)
+        // The server's name wins once the phone reads it.
+        assertEquals("S01_0-26_po.webp", ScreenAssets.fileName(screens[0], serverName = "S01_0-26_po.webp"))
         assertEquals("screen", ScreenAssets.slug("   "))
     }
 
@@ -128,8 +137,11 @@ class ScreensTest {
         // 0:26 ± 15 s: the line ending at 0:10 is out, the ones from 0:20 and 0:38 are in.
         assertEquals(listOf(20_000L, 38_000L), said.map { it.atMs })
         assertEquals(listOf(125_000L), ScreenAssets.said(screens[1], lines).map { it.atMs })
-        val server = listOf(SaidLine("Client", 1_000, "From the server"))
-        assertEquals(server, ScreenAssets.said(screens[0], lines, serverSaid = server))
+        // The server's text, once read: "Speaker: words", one per line.
+        assertEquals(
+            listOf(SaidLine("Bilal", null, "Send the rate."), SaidLine("Me", null, "Rs 4,200: on the PO.")),
+            ScreenAssets.said(screens[0], lines, serverSaid = "Bilal: Send the rate.\nMe: Rs 4,200: on the PO.")
+        )
         // Screens go after the last line that started at or before them.
         assertEquals(mapOf(1 to listOf(screens[0]), 3 to listOf(screens[1])), ScreenAssets.byLine(lines, screens))
     }
@@ -160,7 +172,7 @@ class ScreensTest {
         compose.onNodeWithText("What was said").assertExists()
         compose.onNodeWithText("It is Rs 4,200 a carton, on the PO you shared.").assertExists()
         compose.onNodeWithText("PO-2291 Basmati 40 cartons Rs 4,200").performScrollTo().assertExists()
-        compose.onNodeWithText("S01_0-26_clients-purchase-order-po.webp").performScrollTo().assertExists()
+        compose.onNodeWithText("S01_0-26_the-clients-purchase-order-po-2291-with.webp").performScrollTo().assertExists()
         compose.onNodeWithText("Play from here").performScrollTo().performClick()
         assertEquals(listOf(26_000L), played)
         compose.onNodeWithContentDescription("Previous screen").assertIsNotEnabled()

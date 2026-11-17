@@ -157,7 +157,7 @@ fun V2WorkspaceScreen(
 
     viewing?.let { (list, index) ->
         V2ScreenViewer(
-            moments = list.map { ScreenMoment(it.screen(), ScreenAssets.fileName(it.screen()), emptyList()) },
+            moments = list.map { ScreenMoment(it.screen(), ScreenAssets.fileName(it.screen(), list.size), emptyList()) },
             startIndex = index,
             onPlayFrom = { at ->
                 viewing = null

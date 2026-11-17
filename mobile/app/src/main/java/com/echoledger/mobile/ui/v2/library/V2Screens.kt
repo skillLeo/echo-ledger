@@ -242,7 +242,7 @@ fun V2ScreenViewer(
                     moment.said.forEach { line ->
                         EchoTranscriptLine(
                             speakerName(line.speaker, text),
-                            formatClock(line.atMs),
+                            line.atMs?.let { formatClock(it) }.orEmpty(),
                             line.text,
                             isMe = line.speaker == Speakers.ME
                         )
