@@ -34,7 +34,7 @@ import org.robolectric.shadows.ShadowBuild
  * Calls & meetings parity. Today's page (SettingsScreen on "calls") and the v2 page (CallsPage) are each walked through
  * the same steps, and their controls ("kind: name") collected after every step: as it opens; a call app typed in (Add
  * on); the app added (its Remove); SIM calls set to Always (the Phone app's recordings appear, with a recording waiting
- * and its settings openable); importing switched on (Delete the copy can be switched); Import this recording (the
+ * and its settings openable); importing switched off (it is on by default); Import this recording (the
  * dialog); Reset to defaults (its question). Every control of today's page is mapped to its v2 control by kind and
  * name, and the two must first appear in the same step.
  */
@@ -127,6 +127,7 @@ class CallsPageParityTest : ScreenTest() {
             "Instagram", "Skype", "Slack", "Discord"
         ).forEach { put("switch: Auto-record $it", "switch: $it") }
         put("switch: Auto-record calls", "switch: Auto-record calls")
+        put("button: Auto-record calls", "button: Setup & health")
         put("textbox: Another call app (package name)", "textbox: Another call app (package name)")
         put("button: Add", "button: Add")
         put("button: Remove com.example.voip from the call apps", "button: Remove com.example.voip from the call apps")
@@ -149,9 +150,7 @@ class CallsPageParityTest : ScreenTest() {
 
     /** Today's controls the v2 page doesn't have, and why. */
     private val reasons = mapOf(
-        "button: Search settings" to "v2 Settings searches from its first page; Back leads there",
-        "button: Auto-record calls" to
-            "the row opens Setup while call capture is off; on v2 the switch's line says so and Setup is in Settings"
+        "button: Search settings" to "v2 Settings searches from its first page; Back leads there"
     )
 
     @Test

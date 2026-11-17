@@ -66,7 +66,7 @@ class AppGraph(val context: Context) {
 
     /** Help v2 on this phone's API client. */
     val help: com.echoledger.mobile.help.PhoneHelpSource by lazy {
-        com.echoledger.mobile.help.PhoneHelpSource(context, { api() }, deviceReports)
+        com.echoledger.mobile.help.PhoneHelpSource({ api() }, deviceReports)
     }
 
     @Volatile private var cached: Pair<String, ApiClient>? = null

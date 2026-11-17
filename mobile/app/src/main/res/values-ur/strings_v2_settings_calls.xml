@@ -95,6 +95,11 @@
     <string name="v2_calls_note_unsupported">نہیں لائی گئی: EchoLedger اس قسم کی آڈیو فائل نہیں لے سکتا۔</string>
     <string name="v2_calls_note_saving">ابھی نہیں لائی گئی: فون ایپ ابھی فائل محفوظ کر رہی ہے۔</string>
     <string name="v2_calls_note_no_permission">نہیں لائی گئی: آڈیو فائلیں یا کال لاگ پڑھنے کی اجازت نہیں۔</string>
+    <string name="v2_calls_note_phone_calls_off">نہیں لائی گئی: فون کالز بند ہیں۔</string>
+    <string name="v2_calls_note_app_auto_off">نہیں لائی گئی: %1$s کے لیے خود ریکارڈ بند ہے۔</string>
+    <string name="v2_calls_note_record_not_chosen">نہیں لائی گئی: ریکارڈ نہیں چنا گیا۔</string>
+    <string name="v2_calls_note_not_wanted">نہیں لائی گئی: یہ کال ریکارڈ نہیں ہونی تھی۔</string>
+    <string name="v2_calls_note_changed_while_read">نہیں لائی گئی: پڑھتے وقت فائل بدل گئی۔</string>
     <string name="v2_calls_note_took_place">فون ایپ کی کاپی نے EchoLedger کی اپنی (صرف آپ کی آواز) کی جگہ لے لی۔</string>
     <string name="v2_calls_pa_last">آخری کال %1$s: %2$s</string>
 </resources>

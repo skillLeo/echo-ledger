@@ -79,7 +79,9 @@ fun CallsPage(
     highlight: String?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    manufacturer: String = Build.MANUFACTURER
+    manufacturer: String = Build.MANUFACTURER,
+    /** Settings › Setup & health, where call capture is turned on (the Auto-record row's "Setup first"). */
+    onSetup: () -> Unit = {}
 ) {
     val c = EchoV2.colors
     val text = v2Text
@@ -162,6 +164,10 @@ fun CallsPage(
                     ),
                     enabled = caps.canCaptureCalls
                 )
+                // Call capture is off: Setup & health turns it on, as today's row opens Setup.
+                if (caps.helperInBuild && caps.callCaptureSupportedByOs && !caps.helperConnected) {
+                    EchoButton(stringResource(R.string.v2_set_page_setup), onSetup, kind = EchoButtonKind.Quiet)
+                }
                 EchoSectionHeader(stringResource(R.string.v2_calls_auto_title))
                 if (!settings.autoRecordArmed) Note(stringResource(R.string.v2_calls_auto_off_note))
                 AutoRecordRules.APPS.forEach { app ->
@@ -375,19 +381,11 @@ private fun PhoneAppRecordingsGroup(settings: AppSettings, update: ((AppSettings
             )
         }
     }
-    // The last call's outcome: the core's own words on an English screen; on another, its code in that language, and
-    // nothing when it has no code (never English words inside an Urdu line).
-    val english = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language != "ur"
+    // The last call's outcome, its code in the screen's language.
     note?.let { (at, core) ->
-        // The core's code, read back through the stopgap's sentences until the page maps the code itself.
-        val words = core.english.replaceFirstChar { it.uppercase() }
-        val code = LastCallNote.code(words)
-        val said = when {
-            english -> words
-            code != null -> stringResource(code.words, *code.args.toTypedArray())
-            else -> null
-        }
-        said?.let { Note(stringResource(R.string.v2_calls_pa_last, clock.format(Instant.ofEpochMilli(at)), it)) }
+        val code = LastCallNote.code(core)
+        val said = stringResource(code.words, *code.args.toTypedArray())
+        Note(stringResource(R.string.v2_calls_pa_last, clock.format(Instant.ofEpochMilli(at)), said))
     }
     confirm?.let { candidate ->
         // Today's dialog (the file's name and length, and Play to listen first).

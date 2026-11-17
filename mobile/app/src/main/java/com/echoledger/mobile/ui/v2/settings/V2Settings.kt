@@ -161,7 +161,10 @@ fun V2SettingsScreen(
 
                 SettingsTree.SETUP -> setupPage(r.highlight, back)
 
-                "calls" -> CallsPage(settings, vm::updateSettings, r.highlight, back)
+                "calls" -> CallsPage(settings, vm::updateSettings, r.highlight, back, onSetup = {
+                    route =
+                        SettingsRoute.Page(SettingsTree.SETUP)
+                })
 
                 "language" -> LanguagePage(vm, settings, r.highlight, back)
 

@@ -17,14 +17,10 @@ import kotlinx.coroutines.CancellationException
 /**
  * Help v2 on the phone's API client (contract 2.0.0-d): the user guide's sections, Android's release notes, a
  * message to support, and when this phone last sent its device report. A failure is [HelpResult.Failed]: `offline`
- * when the server can't be reached, else words for people in the phone's language ([words] reads the string
- * resources): ours for each refusal, or the server's own when written for people; never a status code.
+ * when the server can't be reached; the server's own words when written for people; else our sentence as a string
+ * resource, which the screen says in its own language. Never a status code.
  */
-class PhoneHelpSource(private val api: suspend () -> ApiClient?, private val reports: DeviceReports, private val words: (Int) -> String) :
-    HelpSource {
-    constructor(context: Context, api: suspend () -> ApiClient?, reports: DeviceReports) :
-        this(api, reports, context.applicationContext::getString)
-
+class PhoneHelpSource(private val api: suspend () -> ApiClient?, private val reports: DeviceReports) : HelpSource {
     /** Which call failed: a 429 and a 404 mean something different for each. */
     enum class Call(val failed: Int) {
         GUIDES(R.string.v2_help_core_guides_failed),
@@ -52,7 +48,7 @@ class PhoneHelpSource(private val api: suspend () -> ApiClient?, private val rep
     override fun lastReportAt(): String? = reports.lastAt()
 
     private suspend fun <T> help(call: Call, block: suspend (ApiClient) -> T): HelpResult<T> = try {
-        HelpResult.Ok(block(api() ?: return HelpResult.Failed(offline = false, words = words(R.string.v2_help_core_sign_in))))
+        HelpResult.Ok(block(api() ?: return HelpResult.Failed(offline = false, words = null, message = R.string.v2_help_core_sign_in)))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -81,11 +77,16 @@ class PhoneHelpSource(private val api: suspend () -> ApiClient?, private val rep
 
             else -> null
         }
-        if (key != null) return HelpResult.Failed(offline = false, words = words(key))
+        if (key != null) return HelpResult.Failed(offline = false, words = null, message = key)
         val english = Problems.text(e, FAILED_ENGLISH)
         val offline = refused == null && english == Problems.OFFLINE
-        val said = PROBLEM_KEYS[english]?.let(words) ?: if (english == FAILED_ENGLISH) words(call.failed) else english
-        return HelpResult.Failed(offline = offline, words = said)
+        // Problems' own sentences and the "no better words" fallback are ours; anything else is the server's own words.
+        val ours = PROBLEM_KEYS[english] ?: call.failed.takeIf { english == FAILED_ENGLISH }
+        return if (ours != null) {
+            HelpResult.Failed(offline = offline, words = null, message = ours)
+        } else {
+            HelpResult.Failed(offline = offline, words = english, message = call.failed)
+        }
     }
 
     private companion object {

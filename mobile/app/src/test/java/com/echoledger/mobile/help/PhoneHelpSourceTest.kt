@@ -54,7 +54,7 @@ class PhoneHelpSourceTest {
         server.start()
         context.getSharedPreferences("device_reports", 0).edit().clear().commit()
         reports = DeviceReports(context) { java.time.Instant.parse("2026-11-17T09:30:00Z") }
-        help = PhoneHelpSource(context, { ApiClient(server.url("/").toString(), emptyList(), "7|token") }, reports)
+        help = PhoneHelpSource({ ApiClient(server.url("/").toString(), emptyList(), "7|token") }, reports)
     }
 
     @After
@@ -96,7 +96,7 @@ class PhoneHelpSourceTest {
         answer = { json(404, """{"code":"not_found","message":"Not found."}""") }
         val failed = help.guide("gone") as HelpResult.Failed
         assertFalse(failed.offline)
-        assertEquals(context.getString(R.string.v2_help_core_guide_gone), failed.words)
+        assertEquals(R.string.v2_help_core_guide_gone, failed.message)
     }
 
     @Test
@@ -143,44 +143,53 @@ class PhoneHelpSourceTest {
     @Test
     fun `refusals are said in plain words, never as a status code`() = runBlocking {
         answer = { json(429, """{"code":"too_many_requests","message":"Too Many Attempts."}""") }
-        assertEquals(context.getString(R.string.v2_help_core_too_many_messages), (help.send("a", "b", false) as HelpResult.Failed).words)
+        assertEquals(R.string.v2_help_core_too_many_messages, (help.send("a", "b", false) as HelpResult.Failed).message)
 
         answer = { json(403, """{"code":"email_not_verified","message":"Your email address is not verified."}""") }
-        assertEquals(context.getString(R.string.v2_help_core_not_verified), (help.send("a", "b", false) as HelpResult.Failed).words)
+        assertEquals(R.string.v2_help_core_not_verified, (help.send("a", "b", false) as HelpResult.Failed).message)
 
         answer = { json(503, """{"code":"server_busy","message":"Busy."}""") }
-        assertEquals(context.getString(R.string.v2_help_core_busy), (help.send("a", "b", false) as HelpResult.Failed).words)
+        assertEquals(R.string.v2_help_core_busy, (help.send("a", "b", false) as HelpResult.Failed).message)
 
         answer = { MockResponse.Builder().code(500).build() }
         val server = help.whatsNew() as HelpResult.Failed
-        assertEquals(context.getString(R.string.v2_help_core_server), server.words)
-        assertFalse(server.words!!.contains("Request failed"))
+        assertEquals(R.string.v2_help_core_server, server.message)
+        assertNull("our sentence, never the server's status", server.words)
         assertFalse(server.offline)
 
         answer = { MockResponse.Builder().code(400).build() }
-        assertEquals(context.getString(R.string.v2_help_core_guides_failed), (help.guides("x") as HelpResult.Failed).words)
+        assertEquals(R.string.v2_help_core_guides_failed, (help.guides("x") as HelpResult.Failed).message)
     }
 
     @Test
     fun `a 429 or a 404 on the guides is that call's own sentence, never the support or guide one`() = runBlocking {
         answer = { json(429, """{"code":"too_many_requests","message":"Too Many Attempts."}""") }
-        assertEquals(context.getString(R.string.v2_help_core_too_many_tries), (help.guides("x") as HelpResult.Failed).words)
-        assertEquals(context.getString(R.string.v2_help_core_too_many_tries), (help.whatsNew() as HelpResult.Failed).words)
-        assertEquals(context.getString(R.string.v2_help_core_too_many_tries), (help.guide("a") as HelpResult.Failed).words)
+        assertEquals(R.string.v2_help_core_too_many_tries, (help.guides("x") as HelpResult.Failed).message)
+        assertEquals(R.string.v2_help_core_too_many_tries, (help.whatsNew() as HelpResult.Failed).message)
+        assertEquals(R.string.v2_help_core_too_many_tries, (help.guide("a") as HelpResult.Failed).message)
 
         answer = { json(404, """{"code":"not_found","message":"Not found."}""") }
-        assertEquals(context.getString(R.string.v2_help_core_guides_failed), (help.guides("x") as HelpResult.Failed).words)
-        assertEquals(context.getString(R.string.v2_help_core_whats_new_failed), (help.whatsNew() as HelpResult.Failed).words)
-        assertEquals(context.getString(R.string.v2_help_core_send_failed), (help.send("a", "b", false) as HelpResult.Failed).words)
+        assertEquals(R.string.v2_help_core_guides_failed, (help.guides("x") as HelpResult.Failed).message)
+        assertEquals(R.string.v2_help_core_whats_new_failed, (help.whatsNew() as HelpResult.Failed).message)
+        assertEquals(R.string.v2_help_core_send_failed, (help.send("a", "b", false) as HelpResult.Failed).message)
     }
 
     @Test
     @org.robolectric.annotation.Config(qualifiers = "ur")
-    fun `the failure words are in the phone's language`() = runBlocking {
+    fun `our failures are string resources, so the screen says them in its own language`() = runBlocking {
         answer = { json(429, """{"code":"too_many_requests","message":"Too Many Attempts."}""") }
-        val words = (help.send("a", "b", false) as HelpResult.Failed).words!!
-        assertEquals(context.getString(R.string.v2_help_core_too_many_messages), words)
-        assertTrue(words, words.contains("پیغام"))
+        val failed = help.send("a", "b", false) as HelpResult.Failed
+        assertNull("not the server's English", failed.words)
+        val urdu = context.getString(failed.message!!)
+        assertTrue(urdu, urdu.contains("پیغام"))
+    }
+
+    @Test
+    fun `the server's own plain words pass as they are, with our sentence beside them`() = runBlocking {
+        answer = { json(422, """{"code":"too_long","message":"Ask a shorter question."}""") }
+        val failed = help.send("a", "b", false) as HelpResult.Failed
+        assertEquals("Ask a shorter question.", failed.words)
+        assertEquals(R.string.v2_help_core_send_failed, failed.message)
     }
 
     @Test
@@ -195,10 +204,10 @@ class PhoneHelpSourceTest {
     fun `no connection is offline`() = runBlocking {
         val closed = server.port
         server.close()
-        val away = PhoneHelpSource(context, { ApiClient("http://127.0.0.1:$closed", emptyList(), "7|token") }, reports)
+        val away = PhoneHelpSource({ ApiClient("http://127.0.0.1:$closed", emptyList(), "7|token") }, reports)
         val failed = away.guides("") as HelpResult.Failed
         assertTrue(failed.offline)
-        assertEquals(context.getString(R.string.v2_help_core_offline), failed.words)
+        assertEquals(R.string.v2_help_core_offline, failed.message)
     }
 
     @Test
@@ -206,13 +215,14 @@ class PhoneHelpSourceTest {
         answer = { MockResponse.Builder().onRequestStart(SocketEffect.CloseSocket()).build() }
         val failed = help.guides("") as HelpResult.Failed
         assertFalse(failed.offline)
-        assertFalse(failed.words!!.contains("Exception"))
+        assertNull(failed.words)
+        assertTrue(failed.message != null)
     }
 
     @Test
     fun `not signed in says so`() = runBlocking {
-        val failed = PhoneHelpSource(context, { null }, reports).whatsNew() as HelpResult.Failed
-        assertEquals(context.getString(R.string.v2_help_core_sign_in), failed.words)
+        val failed = PhoneHelpSource({ null }, reports).whatsNew() as HelpResult.Failed
+        assertEquals(R.string.v2_help_core_sign_in, failed.message)
         assertFalse(failed.offline)
     }
 }
