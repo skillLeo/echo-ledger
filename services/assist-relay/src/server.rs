@@ -1,4 +1,4 @@
-//! HTTP: `GET /healthz`, and `GET /v1/assist`, the WebSocket (contract 1.9.0-b). The session is the token's `sid`.
+//! HTTP: `GET /healthz`, and `GET /v1/assist`, the WebSocket (contract 1.9.0-f). The session is the token's `sid`.
 //! With `Authorization: Bearer <token>` the token is checked before the upgrade, so a refused app gets an HTTP answer
 //! and no socket. Apps that cannot set headers send `{"type": "auth", "token": …}` as the first message instead,
 //! within 5 seconds; until then nothing else is read.

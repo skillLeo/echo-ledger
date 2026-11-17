@@ -65,9 +65,10 @@ import okhttp3.Response
 
 class NotPairedException : IOException("This phone is not signed in to an EchoLedger server.")
 
+const val HTTPS_ONLY = "The server address must use https://"
 const val EMPTY_ANSWER = "Your server sent an empty answer. Try again in a minute."
-const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. Check the server address in You → General → This phone, " +
-    "or update EchoLedger."
+const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. If this Wi-Fi has a sign-in page, open it first; " +
+    "otherwise update EchoLedger."
 
 /** A server answer other than 2xx/401: `code` is the machine-readable reason, `retryAfterSeconds` the `Retry-After` delay. */
 class ApiException(
@@ -93,7 +94,7 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         .build()
 
     init {
-        require(base.startsWith("https://") || Pins.isLocalDev(base)) { "The server address must use https://" }
+        require(base.startsWith("https://") || Pins.isLocalDev(base)) { HTTPS_ONLY }
     }
 
     private fun url(path: String) = "$base/api/${path.trimStart('/')}"
@@ -941,6 +942,12 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
             ids?.let { list -> put("ids", buildJsonArray { list.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) }
         }.toString().toRequestBody(jsonType)
         return call(request("activity/read").post(body).build(), UnreadAnswer.serializer())!!.unreadCount
+    }
+
+    /** `PUT /api/account/ui` (since 2.0.0-a): "Switch back to classic" ([classic] true) or its undo; the new flags. */
+    suspend fun setClassicUi(classic: Boolean): com.echoledger.mobile.data.UiChoiceDto {
+        val body = buildJsonObject { put("classic", classic) }.toString().toRequestBody(jsonType)
+        return call(request("account/ui").put(body).build(), com.echoledger.mobile.data.UiChoiceDto.serializer())!!
     }
 
     /** `GET /api/bin` (since v1.1): recordings deleted in the last 48 hours. */

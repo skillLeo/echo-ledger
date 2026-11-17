@@ -202,6 +202,10 @@ struct Active {
     t0: Instant,
     requested_at: Instant,
     provider_first_token_at: Option<Instant>,
+    /// The model's latest word: for an answer held until complete, the model's share runs to here.
+    provider_last_token_at: Option<Instant>,
+    /// This answer is held until complete (`hold_until_complete`).
+    held: bool,
     first_sent_at: Option<Instant>,
     gate: SkipGate,
     text: String,
@@ -210,6 +214,9 @@ struct Active {
     task: JoinHandle<()>,
     /// A shown draft: its upgrade. An upgrade: its draft.
     linked: Option<String>,
+    /// Attempts given up for the fallback model: their (estimated) usage and cost, already in the spend, added to this
+    /// suggestion's usage report.
+    abandoned: Option<(Usage, u64)>,
 }
 
 impl Active {
@@ -233,8 +240,12 @@ impl Active {
         let request = self.requested_at.saturating_duration_since(self.t0);
         let provider = self.provider_first_token_at.map(|at| at.saturating_duration_since(self.requested_at));
         let shown = self.first_sent_at.map(|at| at.saturating_duration_since(self.t0));
-        let overhead = match (shown, provider, self.visibility) {
-            (Some(shown), Some(provider), Visibility::Shown) => Some(shown.saturating_sub(provider)),
+        // The model's share of the wait for the first word on the card: to its first word, or, for an answer held
+        // until complete, to its last.
+        let model_share = if self.held { self.provider_last_token_at } else { self.provider_first_token_at }
+            .map(|at| at.saturating_duration_since(self.requested_at));
+        let overhead = match (shown, model_share, self.visibility) {
+            (Some(shown), Some(model), Visibility::Shown) => Some(shown.saturating_sub(model)),
             _ => None,
         };
         Latency {
@@ -330,6 +341,8 @@ pub(crate) struct Engine {
     ledger: Ledger,
     connected_since: Option<Instant>,
     assist_used_up: bool,
+    /// The last mode change was the budget's: a refresh that raises the mode restores budget.
+    budget_limited: bool,
     /// The `seq` of the app's message being handled (quoted in errors about it).
     replying_to: Option<u64>,
     feed_tx: mpsc::Sender<Feed>,
@@ -387,6 +400,7 @@ impl Engine {
             ledger,
             connected_since: None,
             assist_used_up: false,
+            budget_limited: false,
             replying_to: None,
             feed_tx,
             feed_rx,
@@ -841,6 +855,8 @@ impl Engine {
             if origin.explicit() {
                 let message = if self.assist_used_up {
                     "Suggestions are off: this plan's assist time is used up. Captions continue."
+                } else if allowed_modes(&self.config(), &self.claims).is_empty() {
+                    "Suggestions are off: this plan has no live suggestions (Practice has them). Captions continue."
                 } else {
                     "Suggestions are off: this session's budget is used up. Captions continue."
                 };
@@ -919,6 +935,8 @@ impl Engine {
             t0,
             requested_at: Instant::now(),
             provider_first_token_at: None,
+            provider_last_token_at: None,
+            held: false,
             first_sent_at: None,
             gate: SkipGate::default(),
             text: String::new(),
@@ -926,6 +944,7 @@ impl Engine {
             context,
             task,
             linked,
+            abandoned: None,
         };
         self.active.insert(id, active);
     }
@@ -1002,13 +1021,22 @@ impl Engine {
         }
     }
 
+    /// Whether a model's words wait for the end of its answer before any is shown (`hold_until_complete`): a model
+    /// with safety classifiers can end in a refusal after streaming words, and a refusal is never shown.
+    fn holds_text(&self, model: &str) -> bool {
+        self.config().model(model).is_some_and(|spec| spec.hold_until_complete)
+    }
+
     fn on_text(&mut self, id: &str, at: Instant, text: &str) {
+        let holds = self.active.get(id).is_some_and(|active| self.holds_text(&active.model));
         let Some(active) = self.active.get_mut(id) else {
             return;
         };
         active.provider_first_token_at.get_or_insert(at);
+        active.provider_last_token_at = Some(at);
+        active.held = holds;
         active.text.push_str(text);
-        if active.visibility == Visibility::Upgrade {
+        if active.visibility == Visibility::Upgrade || holds {
             return;
         }
         let Some(release) = active.gate.feed(text) else {
@@ -1038,9 +1066,18 @@ impl Engine {
         if !active.gate.is_open()
             && let Some(fallback) = active.fallback.clone()
         {
-            // Nothing reached the card yet: the same suggestion on the fallback model.
-            let attempt = active.attempt + 1;
+            // Nothing reached the card yet: the same suggestion on the fallback model. The abandoned attempt is charged
+            // first (its estimate when the provider sent no counts), unless the provider turned the request away
+            // unprocessed (rate limited, or no key): that bills nothing.
             let config = self.config();
+            let abandoned = match error {
+                ProviderError::NotConfigured(_) | ProviderError::RateLimited => None,
+                _ => {
+                    let (usage, _) = active.usage();
+                    Some((usage, config.model(&active.model).map_or(0, |spec| cost_micros(spec, &usage))))
+                }
+            };
+            let attempt = active.attempt + 1;
             let max_output_tokens = config.modes.get(active.mode).max_output_tokens;
             let task = self.spawn_attempt(id, attempt, &fallback, &active.context, max_output_tokens, &active.origin);
             let provider = config.model(&fallback).map_or(active.provider, |spec| spec.provider);
@@ -1056,10 +1093,65 @@ impl Engine {
                 active.gate = SkipGate::default();
                 active.usage = None;
                 active.provider_first_token_at = None;
+                active.provider_last_token_at = None;
+                active.held = false;
+                if let Some((usage, cost)) = abandoned {
+                    let (before, before_cost) = active.abandoned.unwrap_or_default();
+                    active.abandoned = Some((add_usage(before, usage), before_cost.saturating_add(cost)));
+                }
+            }
+            if let Some((_, cost)) = abandoned {
+                let model = self.active.get(id).map(|a| a.model.clone()).unwrap_or_default();
+                self.add_spend(cost, &model);
             }
             return;
         }
+        if active.visibility == Visibility::Shown
+            && let Some(fallback) = active.fallback.clone()
+        {
+            // Words already reached the card: the fallback model answers again as a new suggestion in its place.
+            self.replace_on_fallback(id, fallback);
+            return;
+        }
         self.finish_shown(id, Finish::Error(error));
+    }
+
+    /// A shown suggestion broke after its first words (the connection dropped, or the model declined mid-answer). It
+    /// ends `superseded`, and the fallback model answers the same request as a new suggestion that `replaces` it, timed
+    /// from the same end of turn. The fallback gets no fallback of its own. A Balanced draft's upgrade carries over:
+    /// the fallback's answer becomes the draft it may replace, with the same rule as before.
+    fn replace_on_fallback(&mut self, id: &str, fallback: String) {
+        let Some(active) = self.active.get_mut(id) else {
+            return;
+        };
+        // Taken off the broken draft so that finishing it does not discard the upgrade.
+        let upgrade = active.linked.take();
+        let (origin, mode, context, t0) = (active.origin.clone(), active.mode, active.context.clone(), active.t0);
+        self.finish_shown(id, Finish::Superseded);
+        let new_id = self.next_id();
+        self.suggestions += 1;
+        self.emit(ServerMessage::SuggestionStart(SuggestionStart {
+            suggestion_id: new_id.clone(),
+            turn_id: origin.turn_id().map(str::to_owned),
+            kind: origin.kind(),
+            mode,
+            model: fallback.clone(),
+            speculative: false,
+            draft: upgrade.is_some(),
+            replaces: Some(id.to_owned()),
+        }));
+        if let Some(spec) = self.spec.as_mut()
+            && spec.suggestion_id == id
+        {
+            spec.suggestion_id = new_id.clone();
+        }
+        self.launch(new_id.clone(), Visibility::Shown, origin, mode, fallback, None, context, t0, upgrade.clone());
+        if let Some(upgrade) = upgrade.and_then(|upgrade| self.active.get_mut(&upgrade)) {
+            upgrade.linked = Some(new_id.clone());
+        }
+        if let Some(active) = self.active.get_mut(&new_id) {
+            active.fallback_used = true;
+        }
     }
 
     fn on_attempt_end(&mut self, id: &str) {
@@ -1070,6 +1162,20 @@ impl Engine {
             self.finish_upgrade(id, None);
             return;
         }
+        let model = active.model.clone();
+        if self.holds_text(&model) {
+            // The whole answer arrived without a refusal: now it may be shown.
+            let Some(active) = self.active.get_mut(id) else {
+                return;
+            };
+            let text = active.text.clone();
+            if let Some(release) = active.gate.feed(&text) {
+                self.send_text(id, release);
+            }
+        }
+        let Some(active) = self.active.get_mut(id) else {
+            return;
+        };
         match active.gate.finish() {
             GateEnd::Skip => self.finish_shown(id, Finish::Skip),
             GateEnd::Flush(rest) => {
@@ -1279,6 +1385,11 @@ impl Engine {
         let (usage, estimated) = active.usage();
         let cost = self.config().model(&active.model).map_or(0, |spec| cost_micros(spec, &usage));
         self.add_spend(cost, &active.model);
+        // Abandoned attempts were charged when they were given up; the report counts them too.
+        let (usage, cost, estimated) = match active.abandoned {
+            Some((before, before_cost)) => (add_usage(before, usage), cost.saturating_add(before_cost), true),
+            None => (usage, cost, estimated),
+        };
         UsageReport {
             input_tokens: usage.input_tokens,
             cached_input_tokens: usage.cached_input_tokens,
@@ -1361,15 +1472,20 @@ impl Engine {
             return;
         }
         let rank = |mode: EffectiveMode| mode.mode().map_or(0, |m| m as u8 + 1);
+        let rising = rank(next) > rank(previous);
         let reason = match cause {
+            // The budget had held the mode down and a new token raised it: that is the change, even when the plan
+            // now caps how far it goes.
+            _ if rising && why == Why::Refresh && self.budget_limited => ModeReason::BudgetRestored,
             None => ModeReason::AssistTime,
             Some(Cause::Budget) => ModeReason::Budget,
             Some(Cause::Plan) => ModeReason::Plan,
             Some(Cause::Requested) if why == Why::Settings => ModeReason::Requested,
-            Some(Cause::Requested) if rank(next) > rank(previous) => ModeReason::BudgetRestored,
+            Some(Cause::Requested) if rising => ModeReason::BudgetRestored,
             Some(Cause::Requested) => ModeReason::Requested,
         };
         self.effective = next;
+        self.budget_limited = matches!(reason, ModeReason::Budget);
         self.emit(ServerMessage::ModeChanged(ModeChanged { from: previous, to: next, reason }));
         self.deps.telemetry.event(&SessionEvent::ModeChanged {
             session: self.session_id.clone(),
@@ -1447,6 +1563,15 @@ impl Engine {
     }
 }
 
+fn add_usage(a: Usage, b: Usage) -> Usage {
+    Usage {
+        input_tokens: a.input_tokens.saturating_add(b.input_tokens),
+        cached_input_tokens: a.cached_input_tokens.saturating_add(b.cached_input_tokens),
+        cache_write_tokens: a.cache_write_tokens.saturating_add(b.cache_write_tokens),
+        output_tokens: a.output_tokens.saturating_add(b.output_tokens),
+    }
+}
+
 /// The tokio instant at which the token expiring at unix time `exp` stops being valid (with the clock leeway).
 fn deadline_for(exp: i64) -> Instant {
     let left = exp.saturating_add(crate::auth::LEEWAY_SECS).saturating_sub(unix_now()).max(0);
@@ -1461,7 +1586,8 @@ fn retryable(error: ProviderError) -> bool {
 /// The sentence the app may show for a failed suggestion.
 fn plain_error(error: ProviderError) -> String {
     match error {
-        ProviderError::NotConfigured(kind) => format!("{} is not configured on this relay, so no suggestion could be made.", kind.label()),
+        // No vendor name for the app: the provider is in the log (the suggestion record's `provider`) only.
+        ProviderError::NotConfigured(_) => "Live Assist is not set up on the server yet. Ask your admin.".to_owned(),
         ProviderError::Timeout => "The model did not answer in time. Try again.".to_owned(),
         ProviderError::Declined => "The model declined to answer this one.".to_owned(),
         ProviderError::Unavailable | ProviderError::RateLimited | ProviderError::Protocol => {

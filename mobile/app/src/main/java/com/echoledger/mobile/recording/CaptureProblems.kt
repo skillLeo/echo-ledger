@@ -38,6 +38,19 @@ object CaptureProblems {
     /** The problem reported at or after [atMs] (during the capture that started then), or null: never an older one. */
     fun since(context: Context, atMs: Long): String? = load(context)?.takeIf { it.at.toEpochMilli() >= atMs }?.message
 
+    /** [message] in plain words for people (since v1.8.1): the helper's or Android's own words go only into diagnostics. */
+    fun plain(message: String): String = when {
+        message.startsWith(
+            "The microphone stopped giving sound"
+        ) -> "The microphone stopped giving sound. What was recorded until then is kept."
+
+        message.startsWith("The microphone could not start") -> "The microphone could not start."
+
+        message.startsWith("Call capture could not start") -> "Call capture could not start."
+
+        else -> "Call capture had a problem."
+    }
+
     fun clear(context: Context) {
         _last.value = null
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()

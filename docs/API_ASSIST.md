@@ -1,4 +1,20 @@
-# Live Assist contract — revision 1.9.0-f (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-m (frozen 2026-11-17 for the sprint)
+
+1.9.0-m: `GET /api/assist/preps/{id}` returns its documents' extracted text, which the app sends in `context_update`.
+
+1.9.0-l: `POST …/end` works on the person's own session in any of their workspaces; the report's shape; the
+server-side usage kind `report`.
+
+1.9.0-k: `409 session_active` names the active session; a start from the same device may end it first.
+
+1.9.0-j: `practice_question` numbers questions with `index`; the apps send the relay's `turn_id` as each `other`
+turn's `client_ref`; a token refresh never fails because captions are down.
+
+1.9.0-i: one active assist session per person; `stt` may be `null` only when a recording is running.
+
+1.9.0-h: practice messages over the relay, the facts ledger and running summary from the relay, and the usage kinds.
+
+1.9.0-g: the relay host's pins are `relay_pins` in `GET /api/config`.
 
 1.9.0-f: the suggestion fields follow the relay as built: `kind` names the request, a fallback is recognised by
 `replaces`, `status` is `done` / `cancelled` / `superseded`, a failure ends with an `error` carrying the
@@ -70,7 +86,8 @@ Errors added by Live Assist:
   plan at start, not at save); `language_help`: `off` | `urdu` | `roman_urdu` | `arabic`; `status`: `draft` |
   `scheduled` | `armed` | `done` | `cancelled`. Text fields at most 4,000 characters each. Soft deleted.
 - `POST /api/assist/preps/{id}/documents` `{"file_ids": ["…"]}` attaches project files (the server extracts text and
-  counts tokens); `DELETE /api/assist/preps/{id}/documents/{fileId}`.
+  counts tokens); `GET /api/assist/preps/{id}` returns `documents: [{"file_id", "name", "tokens", "text"}]` (the
+  text only on this single read, never in lists), and the app sends them in its first `context_update`; `DELETE /api/assist/preps/{id}/documents/{fileId}`.
 - `POST /api/assist/preps/{id}/arm` → `200 {"armed_until": "…"}`: a scheduled prep is armed 2 minutes early and waits
   up to 10 minutes for the meeting; then it is cancelled.
 
@@ -87,17 +104,32 @@ Errors added by Live Assist:
    "stt": {"provider": "soniox", "ws_url": "…", "token": "…", "expires_at": "…", "translate_other": true},
    "plan": {"modes": ["fast", "balanced"], "seconds_left": 31200}}
   ```
+  One active session (live or practice) per person, across all their workspaces: a second start answers
+  `409 session_active` with `{"session_id": "…", "practice": true|false, "device_id": "…"}`; the app may end it
+  (`POST …/end`) and start again. `stt` is `null`
+  when the server can't issue a captions token; that is allowed only with a running recording (the app then uses its
+  own captions through `POST /api/stt/token`). Otherwise the start is refused with `503 provider_not_configured`.
   `auto_saved` is true when the session started from a prep: that call gets no after-call card. `recording_session_id`
   links the recording made at the same time (a session in status `recording` of this device). Practice:
   `"practice": true` without `recording_session_id`; the AI asks the questions.
-- `POST /api/assist/sessions/{id}/token` → `200` with new `relay` and `stt` blocks (tokens last at most 15 minutes;
+- Final turns: for the `other` channel the apps send the relay's `turn_id` as the turn's `client_ref`, so the report
+  pairs each hint with its question; `me` turns use the app's own ref.
+- `POST /api/assist/sessions/{id}/token` → `200` with new `relay` and `stt` blocks (`stt` may be `null` when captions
+  are down right now; the refresh still succeeds and the app asks again in 30 s, showing that captions are paused) (tokens last at most 15 minutes;
   apps refresh 2 minutes early and on a relay `error.code = "token_expired"`).
 - `POST /api/assist/sessions/{id}/turns` — final turns in batches (every 5 s or 10 turns):
   `{"turns": [{"client_ref": "…", "channel": "other", "start_ms": 81200, "end_ms": 86400, "text": "…",
   "language": "en", "is_question": true}]}` → `200 {"accepted": 3}`; a repeated `client_ref` is ignored.
-- `POST /api/assist/sessions/{id}/end` → `200 {"report": "queued"}`.
+- `POST /api/assist/sessions/{id}/end` → `200 {"report": "queued"}`. It ends the person's own session in any of their
+  workspaces (so the app can act on a `409 session_active`); anyone else's answers `404`.
 - `GET /api/assist/sessions?limit=` · `GET /api/assist/sessions/{id}` · `GET /api/assist/sessions/{id}/report`
-  (`404 report_not_ready` until the job is done) · `DELETE /api/assist/sessions/{id}`.
+  (`404 report_not_ready` until the first report exists; a remade report replaces it). The report:
+  `{"version", "mode", "practice", "meeting_type", "title", "started_at", "ended_at", "seconds", "turns",
+  "ai": {"status", "reason", "model", "runs"}, "summary", "summary_translation", "qa": [{question, answer, hint,
+  verdict, better_answer, missed}], "mistakes": [], "promises": [], "coaching": {"words_per_minute", "fillers",
+  "talk_ratio", "pauses", "grammar": []}, "action_items": [], "memory_added", "follow_up_email", "facts",
+  "running_summary", "suggestions", "used"}`; without the model (`ai.status` not `done`) the Q&A table, coaching,
+  running summary and facts are still there · `DELETE /api/assist/sessions/{id}`.
 - `POST /api/assist/sessions/{id}/suggestions/{suggestionId}/action` `{"action": "used" | "dismissed" |
   "regenerated" | "shorter" | "formal" | "translated"}` → `204`.
 
@@ -160,8 +192,9 @@ downgrade: `max → deep → balanced → fast → captions_only`, with `reason`
   live sessions; the client then sends its `context_update` again.
 - `relay.url` (in the session start answer) is exactly `wss://<relay host>/v1/assist`: from one server setting, never
   from the request's host; no port, query or trailing slash; the same for the whole session.
-- The apps pin the relay host's public key (plus a backup key) like the server's, delivered in the device security
-  list before the first connection. A pin mismatch refuses the connection with a clear message; recording is
+- The apps pin the relay host's public key (plus a backup key) like the server's. Since 1.9.0-g `GET /api/config`
+  carries them as `"relay_pins": ["sha256/…", "sha256/…"]` (present while `live_assist` is on for the person; an empty
+  or missing list means Live Assist can't connect yet), read before the first connection. A pin mismatch refuses the connection with a clear message; recording is
   unaffected.
 - Clients set `TCP_NODELAY` on the socket.
 
@@ -180,6 +213,22 @@ downgrade: `max → deep → balanced → fast → captions_only`, with `reason`
   catalog) never shows refused text; the fallback answers. For a streamed model (Haiku, Groq), a refusal after words
   were shown ends that suggestion at once with `status: superseded`, and the app clears its text from the card at
   that moment, before the fallback's first token.
+
+### Practice, facts and summary (since 1.9.0-h)
+
+- Practice (a session started with `practice: true`): the client sends `practice_next` to get the next question. The
+  relay plays Them for the meeting type and answers `practice_question` (`question_id`, `turn_id` `q-N`, `index`,
+  `total`, `text`); the question counts as Them's turn, so a hint follows unless suggestions are paused, and the
+  person answers by voice. After the last question (8) the relay sends `practice_done`. Errors: `not_practice`,
+  `practice_busy` (retry), `budget_exhausted`. The app posts each question in its batched turns: channel `other`,
+  `client_ref` = `question_id`, `is_question: true`, so the report pairs each question with the answers after it.
+- The relay keeps the facts ledger (after every 3 final lines) and the running summary (at most every 5 minutes) on
+  the Fast model in the background, within the budget; a call that could cross the budget is skipped.
+  `POST /api/internal/assist/facts` `{session_id, facts: [...], at}` and `POST /api/internal/assist/summary`
+  `{session_id, summary, at}` replace what the server stored.
+- Usage kinds posted by the relay: `suggestion`, `practice_question`, `facts`, `summary`; idempotent per id. The
+  server's own report call is usage kind `report`, charged to the session's allowance. Practice
+  usage is billed to the plan's Practice allowance.
 
 Rules: a suggestion is never triggered from the `me` channel; a speculative start on an `other` partial that looks
 like a question (≥ 128 ms of silence) is cancelled and restarted if they keep talking within 700 ms; a balanced draft

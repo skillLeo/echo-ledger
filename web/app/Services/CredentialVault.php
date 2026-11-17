@@ -28,10 +28,14 @@ final class CredentialVault
         'google' => ['client_id' => 'Client ID', 'client_secret' => 'Client secret'],
         // Since v1.6: Cloudflare Turnstile, the anti-bot check of the web sign-up (skipped while either is empty).
         'turnstile' => ['site_key' => 'Site key', 'secret_key' => 'Secret key'],
+        // Since v1.9 (Live Assist): a model provider the relay may use later (not sent to it yet), and the secret the
+        // server shares with the relay (App\Services\Assist\RelaySecret; its previous value is kept apart).
+        'moonshot' => ['api_key' => 'API key'],
+        'assist_relay' => ['secret' => 'Relay secret'],
     ];
 
     /** Secrets that EchoLedger can generate for the admin. */
-    public const GENERATABLE = ['assemblyai.webhook_secret', 'soniox.webhook_secret'];
+    public const GENERATABLE = ['assemblyai.webhook_secret', 'soniox.webhook_secret', 'assist_relay.secret'];
 
     /** @var array<string, string|null> */
     private array $memo = [];

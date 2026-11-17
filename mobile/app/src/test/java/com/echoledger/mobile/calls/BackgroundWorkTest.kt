@@ -189,14 +189,71 @@ class BackgroundWorkTest : AppTest() {
         assertTrue("the question is withdrawn", shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.isEmpty())
     }
 
+    private fun posted() = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications
+
+    private fun discardWork(id: String) =
+        WorkManager.getInstance(app).getWorkInfosForUniqueWork(DiscardLaterWorker.workName(id)).get(10, TimeUnit.SECONDS)
+
     @Test
-    fun `Discard from the notification deletes the recording and its encrypted file`() {
-        app.storeRecording(id = "call-1", state = "pending_decision")
+    fun `Discard from the notification says Discarded with Undo and deletes only when that is over (P-006)`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val rec = app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 272_000)
+        Notifications.showSaveDecision(app, rec, clientName = null, decisionTimeout = "keep")
 
         app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_DISCARD, "call-1"))
-        pumpUntil("the decision") { app.peekRecording("call-1") == null }
+        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertTrue("the tap deletes nothing", app.graph.recordings.encryptedFile("call-1").exists())
+        pumpUntil("Discarded in place of the question") { posted().any { shadowOf(it).contentTitle.startsWith("Discarded") } }
+        val discarded = posted().single()
+        assertEquals("Discarded · WhatsApp call · 4:32", shadowOf(discarded).contentTitle.toString())
+        assertEquals(listOf("Undo"), discarded.actions.map { it.title.toString() })
+        assertEquals(com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS, discarded.timeoutAfter)
 
+        val work = discardWork("call-1").single()
+        androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!.setInitialDelayMet(work.id)
+        pumpUntil("the call to be deleted") { app.peekRecording("call-1") == null }
         assertFalse(app.graph.recordings.encryptedFile("call-1").exists())
+        assertTrue(infos("call-1").isEmpty())
+    }
+
+    @Test
+    fun `Undo on Discarded asks again, and the call is kept after ten seconds as before`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        app.storeRecording(id = "call-1", state = "pending_decision")
+        app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_DISCARD, "call-1"))
+        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+
+        app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_UNDO_DISCARD, "call-1"))
+        pumpUntil("the question again") { posted().any { shadowOf(it).contentTitle.toString() == "Save this recording?" } }
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue(discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+        val timeout = WorkManager.getInstance(
+            app
+        ).getWorkInfosForUniqueWork(DecisionTimeoutWorker.workName("call-1")).get(10, TimeUnit.SECONDS)
+        assertEquals(listOf(WorkInfo.State.ENQUEUED), timeout.map { it.state })
+    }
+
+    @Test
+    fun `Undo on the Saved notification is a Discard with its own Undo, never a delete at once`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val rec = app.storeRecording(id = "call-1", state = "queued", durationMs = 272_000)
+        Notifications.savedWithUndo(app, rec, "WhatsApp call")
+
+        app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_UNDO, "call-1"))
+        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+        pumpUntil("Discarded with Undo") { posted().any { shadowOf(it).contentTitle.toString() == "Discarded · WhatsApp call · 4:32" } }
+    }
+
+    @Test
+    fun `a late keep never brings back a call on its way out`() {
+        app.storeRecording(id = "call-1", state = "pending_decision")
+        runBlocking {
+            Decisions.discardLater(app, "call-1")
+            Decisions.apply(app, "call-1", keep = true)
+        }
+        assertEquals(Decisions.DISCARDING, app.peekRecording("call-1")?.state)
         assertTrue(infos("call-1").isEmpty())
     }
 

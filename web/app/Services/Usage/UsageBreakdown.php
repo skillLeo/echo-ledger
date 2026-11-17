@@ -48,6 +48,8 @@ final class UsageBreakdown
         'voice_note' => 'Voice notes',
         'game_translate' => 'Game translate',
         'watch_translate' => 'Watch translate',
+        // Since v1.9 (L1): what the relay's suggestions cost.
+        'live_assist' => 'Live Assist',
     ];
 
     /** Whether each use costs what the ledger stored with it, instead of the price table (stored()). */

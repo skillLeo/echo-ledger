@@ -624,6 +624,8 @@ it('M2 counts from the first grant of the last 48 hours, and what was reported s
 });
 
 it('M2 works on the database cache store, which a shared host uses', function () {
+    // What is left after the first report is counted from the clock (W-005): frozen, so a slow run cannot add seconds.
+    $this->freezeTime();
     config(['cache.default' => 'database']);
     $device = Fx::device();
     grantStreaming($device, 1);

@@ -157,6 +157,9 @@ class ApiSamplesTest {
         "upgrade_request_latest.promo_code",
         "upgrade_request_latest.percent",
         "upgrade_request_latest.amount_due",
+        // Trash's keep time (contract 2.0.0-b) until the server's samples carry it; missing reads as 48 hours.
+        "config.trash",
+        "auth_password.config.trash",
         "auth_password.config.providers.live_captions.required_artifacts",
         "auth_password.config.providers.live_captions.preferred_primary",
         "auth_password.config.providers.dictation.required_artifacts",

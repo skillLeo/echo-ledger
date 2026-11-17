@@ -1,0 +1,13 @@
+: Written by hand from the documented Chat Completions streaming format with Groq's x_groq usage (not a recording).
+: Replace it with a recording from assist-relay-smoke --record when a key is available.
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1763337600,"model":"openai/gpt-oss-120b","system_fingerprint":"fp_fixture","choices":[{"index":0,"delta":{"role":"assistant","content":""},"logprobs":null,"finish_reason":null}],"x_groq":{"id":"req_fixture"}}
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1763337600,"model":"openai/gpt-oss-120b","system_fingerprint":"fp_fixture","choices":[{"index":0,"delta":{"content":"One month,"},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1763337600,"model":"openai/gpt-oss-120b","system_fingerprint":"fp_fixture","choices":[{"index":0,"delta":{"content":" from Groq."},"logprobs":null,"finish_reason":null}]}
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1763337600,"model":"openai/gpt-oss-120b","system_fingerprint":"fp_fixture","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}],"x_groq":{"id":"req_fixture","usage":{"queue_time":0.01,"prompt_tokens":1900,"prompt_time":0.05,"completion_tokens":12,"completion_time":0.02,"total_tokens":1912,"total_time":0.07,"prompt_tokens_details":{"cached_tokens":1536}}}}
+
+data: [DONE]
+

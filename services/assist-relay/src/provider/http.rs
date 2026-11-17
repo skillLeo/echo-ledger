@@ -7,6 +7,7 @@
 //! session moves on to the mode's fallback model, usually at another provider.
 
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use futures_util::{StreamExt, stream};
@@ -14,6 +15,10 @@ use reqwest::{RequestBuilder, Response, StatusCode};
 
 use super::{ProviderError, StreamEvent, TokenStream};
 use crate::domain::ProviderKind;
+
+/// A copy of every response body a client reads, for `assist-relay-smoke --record` (which turns the hand-written test
+/// fixtures into recordings). Not used by the relay itself.
+pub type Tap = Arc<Mutex<Vec<u8>>>;
 
 /// The HTTP client for the providers.
 pub fn client() -> reqwest::Client {
@@ -172,8 +177,15 @@ pub trait Decoder: Send + 'static {
 }
 
 enum State<D> {
-    Connect { kind: ProviderKind, retry: Retry, build: Box<dyn Fn() -> RequestBuilder + Send + Sync>, decoder: D },
-    Reading { response: Response, parser: SseParser, decoder: D, pending: VecDeque<Result<StreamEvent, ProviderError>>, finished: bool },
+    Connect { kind: ProviderKind, retry: Retry, build: Box<dyn Fn() -> RequestBuilder + Send + Sync>, decoder: D, tap: Option<Tap> },
+    Reading {
+        response: Response,
+        parser: SseParser,
+        decoder: D,
+        pending: VecDeque<Result<StreamEvent, ProviderError>>,
+        finished: bool,
+        tap: Option<Tap>,
+    },
     Done,
 }
 
@@ -185,34 +197,40 @@ pub fn sse_stream<D: Decoder>(
     retry: Retry,
     build: impl Fn() -> RequestBuilder + Send + Sync + 'static,
     decoder: D,
+    tap: Option<Tap>,
 ) -> TokenStream {
-    let start = State::Connect { kind, retry, build: Box::new(build), decoder };
+    let start = State::Connect { kind, retry, build: Box::new(build), decoder, tap };
     stream::unfold(start, |state| async move {
         let mut state = state;
         loop {
             state = match state {
                 State::Done => return None,
-                State::Connect { kind, retry, build, decoder } => match send(kind, retry, build).await {
-                    Ok(response) => State::Reading { response, parser: SseParser::default(), decoder, pending: VecDeque::new(), finished: false },
+                State::Connect { kind, retry, build, decoder, tap } => match send(kind, retry, build).await {
+                    Ok(response) => {
+                        State::Reading { response, parser: SseParser::default(), decoder, pending: VecDeque::new(), finished: false, tap }
+                    }
                     Err(error) => return Some((Err(error), State::Done)),
                 },
-                State::Reading { mut response, mut parser, mut decoder, mut pending, mut finished } => {
+                State::Reading { mut response, mut parser, mut decoder, mut pending, mut finished, tap } => {
                     if let Some(item) = pending.pop_front() {
                         let next = if item.is_err() {
                             State::Done
                         } else {
-                            State::Reading { response, parser, decoder, pending, finished }
+                            State::Reading { response, parser, decoder, pending, finished, tap }
                         };
                         return Some((item, next));
                     }
                     match response.chunk().await {
                         Ok(Some(bytes)) => {
+                            if let Some(copy) = tap.as_ref().and_then(|tap| tap.lock().ok()).as_mut() {
+                                copy.extend_from_slice(&bytes);
+                            }
                             for event in parser.push(&bytes) {
                                 let decoded = decoder.decode(event);
                                 pending.extend(decoded.items);
                                 finished |= decoded.finished;
                             }
-                            State::Reading { response, parser, decoder, pending, finished }
+                            State::Reading { response, parser, decoder, pending, finished, tap }
                         }
                         // After the provider's last word, a connection that ends badly lost nothing.
                         Ok(None) | Err(_) if finished => match decoder.finish() {

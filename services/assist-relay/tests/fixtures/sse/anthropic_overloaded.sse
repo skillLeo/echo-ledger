@@ -1,0 +1,8 @@
+: Written by hand from the documented Messages API streaming format: an error event mid-stream (not a recording).
+
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_fixture_4","type":"message","role":"assistant","model":"claude-haiku-5-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":42,"cache_creation_input_tokens":0,"cache_read_input_tokens":1830,"output_tokens":1}}}
+
+event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+

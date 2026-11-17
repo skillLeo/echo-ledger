@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Pages;
 
 use App\Filament\Support\Notice as Notification;
+use App\Rules\CertificatePin;
 use App\Services\Accounts\GoogleSignIn;
+use App\Services\Assist\RelaySecret;
+use App\Services\Assist\RelayToken;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use App\Services\Staff\StaffAccess;
 use App\Stt\GroqPacer;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
@@ -50,9 +54,34 @@ class ApiCredentials extends Page
         return StaffAccess::can('credentials.manage');
     }
 
+    /** A relay secret just generated, until its modal has read it (it is never kept beyond that). */
+    public ?string $newRelaySecret = null;
+
+    /** The new relay secret, shown once with a copy box; closing the modal forgets it. */
+    public function relaySecretShownAction(): Action
+    {
+        return Action::make('relaySecretShown')
+            ->modalHeading('New relay secret')
+            ->modalDescription('Give it to the relay now as relay_secret, and the old one as relay_secret_previous (see the relay\'s DEPLOY.md). It is not shown again. Until the relay signs with it, or for 15 minutes, the old one keeps working and still signs the relay tokens.')
+            ->fillForm(function (): array {
+                $secret = $this->newRelaySecret;
+                $this->newRelaySecret = null;
+
+                return ['secret' => $secret];
+            })
+            ->schema([TextInput::make('secret')->label('Relay secret')->readOnly()->copyable(copyMessage: 'Copied')
+                ->extraInputAttributes(['class' => 'font-mono', 'data-1p-ignore' => 'true', 'data-lpignore' => 'true'])])
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Done')
+            ->modalWidth('lg');
+    }
+
     public function mount(): void
     {
         $this->form->fill(); // intentionally empty: secrets are write-only
+        // The relay's address and pins are no secret: shown as they are saved.
+        $this->data['relay_url'] = app(SettingsRepository::class)->get('relay.url');
+        $this->data['relay_pins'] = app(SettingsRepository::class)->relayPins();
     }
 
     public function form(Schema $schema): Schema
@@ -88,6 +117,14 @@ class ApiCredentials extends Page
                         ->requiresConfirmation()
                         ->modalDescription('Creates a new random secret. Webhooks already in flight will fail verification.')
                         ->action(function () use ($provider, $key, $vault): void {
+                            if ("{$provider}.{$key}" === RelaySecret::PROVIDER.'.'.RelaySecret::CURRENT) {
+                                // The relay needs the value: shown once, in a modal with a copy box (never in a stored
+                                // notification). The old one works 15 more minutes.
+                                $this->newRelaySecret = app(RelaySecret::class)->rotate(null, (int) auth()->id());
+                                $this->replaceMountedAction('relaySecretShown');
+
+                                return;
+                            }
                             $vault->put($provider, $key, CredentialVault::generateSecret(), (int) auth()->id());
                             Notification::make()->title('New secret generated and stored')->success()->send();
                         }));
@@ -106,6 +143,8 @@ class ApiCredentials extends Page
                 'gemini' => 'Google Gemini (optional, an Urdu challenger)',
                 'google' => 'Google sign-in (optional)',
                 'turnstile' => 'Turnstile (optional, the web sign-up\'s check against robots)',
+                'moonshot' => 'Moonshot (Kimi, optional, for Live Assist later)',
+                'assist_relay' => 'Live Assist relay',
             })->columns(2)->collapsible()->schema($inputs);
             if ($provider === 'groq') {
                 $section->description(fn (): ?string => self::groqUse());
@@ -115,6 +154,21 @@ class ApiCredentials extends Page
             }
             if ($provider === 'turnstile') {
                 $section->description('A free Cloudflare Turnstile widget for this console\'s domain (dash.cloudflare.com → Turnstile → Add widget). With both keys saved, the web sign-up asks for the check before it emails a code; without them it is skipped.');
+            }
+            if ($provider === 'assist_relay') {
+                // Since v1.9 (L1): the relay's host, where the apps connect (docs/API_ASSIST.md `relay.url`).
+                $section->schema([
+                    TextInput::make('relay_url')->label('Relay address')->placeholder('relay.example.com')->maxLength(253)
+                        ->helperText(fn (?string $state): string => RelayToken::url($state) !== null
+                            ? 'The apps connect to '.RelayToken::url($state).'. Empty: Live Assist cannot start.'
+                            : 'The relay\'s host name; the apps connect to wss://<host>/v1/assist. Empty: Live Assist cannot start.'),
+                    // Since 1.9.0-g: the relay host's pins, sent to the apps while Live Assist is on for them.
+                    TagsInput::make('relay_pins')->label('Relay certificate pins (SPKI SHA-256)')->placeholder('sha256/…')
+                        ->nestedRecursiveRules([new CertificatePin])
+                        ->helperText('The relay host\'s current and backup key pins. Empty: the apps cannot connect to the relay.'),
+                    ...$inputs,
+                ]);
+                $section->description('Signs the relay tokens and the relay\'s requests to this server. Generate one, or paste one of at least '.RelaySecret::MIN_LENGTH.' characters; the old one keeps working for 15 minutes, so the relay can be given the new one without a gap.');
             }
             if ($provider === 'google') {
                 $section->description('An OAuth client ID of type "Web application" from the Google Cloud console (APIs & Services → Credentials). Its authorised redirect URI: '.GoogleSignIn::redirectUri().' — Sign in with Google appears on the sign-in page once both values are saved.');
@@ -169,8 +223,21 @@ class ApiCredentials extends Page
 
     public function save(CredentialVault $vault): void
     {
+        $state = $this->form->getState();
+        // The relay's address first: kept as the host only, always wss://<host>/v1/assist for the apps.
+        $relay = trim((string) ($state['relay_url'] ?? ''));
+        if ($relay !== '' && RelayToken::url($relay) === null) {
+            $this->addError('data.relay_url', 'Enter the relay\'s host name, such as relay.example.com.');
+            Notification::make()->title('Nothing saved')->body('Check the boxes marked in red.')->danger()->send();
+
+            return;
+        }
+        app(SettingsRepository::class)->set('relay.url', $relay === '' ? null : (string) parse_url((string) RelayToken::url($relay), PHP_URL_HOST));
+        app(SettingsRepository::class)->set('relay.pins', array_values(array_unique(array_filter((array) ($state['relay_pins'] ?? []), CertificatePin::isValid(...)))));
+        unset($state['relay_url'], $state['relay_pins']);
+
         $typed = [];
-        foreach ($this->form->getState() as $field => $value) {
+        foreach ($state as $field => $value) {
             if (! is_string($value) || trim($value) === '' || ! str_contains($field, '__')) {
                 continue; // only overwrite what the admin actually typed
             }
@@ -192,6 +259,8 @@ class ApiCredentials extends Page
                 $errors[$field] = $errors[$seen[$value]] = 'Two boxes got the same text, probably a password the browser filled in. Paste each key again.';
             } elseif (str_ends_with($field, '__api_key') && mb_strlen($value) < self::MIN_API_KEY_LENGTH) {
                 $errors[$field] = 'Too short to be an API key. Copy the whole key from the provider.';
+            } elseif ($field === RelaySecret::PROVIDER.'__'.RelaySecret::CURRENT && mb_strlen($value) < RelaySecret::MIN_LENGTH) {
+                $errors[$field] = 'The relay needs at least '.RelaySecret::MIN_LENGTH.' characters. Press Generate for one.';
             }
             $seen[$value] ??= $field;
         }
@@ -206,10 +275,18 @@ class ApiCredentials extends Page
 
         foreach ($typed as $field => $value) {
             [$provider, $key] = explode('__', $field, 2);
+            if ($provider === RelaySecret::PROVIDER && $key === RelaySecret::CURRENT) {
+                // A pasted relay secret replaces the current one as Generate does: the old one stays 15 minutes.
+                app(RelaySecret::class)->rotate($value, (int) auth()->id());
+
+                continue;
+            }
             $vault->put($provider, $key, $value, (int) auth()->id());
         }
         $saved = count($typed);
         $this->form->fill();
+        $this->data['relay_url'] = app(SettingsRepository::class)->get('relay.url');
+        $this->data['relay_pins'] = app(SettingsRepository::class)->relayPins();
 
         Notification::make()->title($saved > 0 ? "Saved {$saved} credential(s)" : 'Nothing to save')->success()->send();
     }

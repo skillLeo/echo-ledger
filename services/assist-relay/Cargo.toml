@@ -17,6 +17,21 @@ path = "src/main.rs"
 name = "assist-relay-loadtest"
 path = "tools/loadtest.rs"
 
+# One real request to one model, opt-in (--yes) with a key from the environment at run time (tools/smoke.rs).
+[[bin]]
+name = "assist-relay-smoke"
+path = "tools/smoke.rs"
+
+# The golden eval set (plan L9): --ci on the mocked models, --live --yes on real ones (tools/eval.rs).
+[[bin]]
+name = "assist-relay-eval"
+path = "tools/eval.rs"
+
+# The latency benchmark the owner runs from Pakistan, opt-in with --yes (tools/latency.rs).
+[[bin]]
+name = "assist-relay-latency"
+path = "tools/latency.rs"
+
 [dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
 base64 = "0.22.1"

@@ -321,6 +321,7 @@ class DictationTest : ScreenTest() {
         assertEquals("Send the invoice.", clipboard.primaryClip!!.getItemAt(0).text.toString())
         compose.onNodeWithText("Copied").assertExists()
         compose.onNodeWithText("Clear history").performClick()
+        compose.onNodeWithText("Clear").performClick()
         compose.onNodeWithText("Nothing dictated yet.").assertExists()
         assertTrue(history.all().isEmpty())
     }

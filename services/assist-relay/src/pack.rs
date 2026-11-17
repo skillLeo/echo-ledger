@@ -3,7 +3,7 @@
 //! changes first and the question last; the relay fills them as the server's renderer does (an empty block is
 //! `(none)`) and cuts the result into cacheable segments at the blocks.
 //!
-//! The relay carries a copy of pack 1.0.1 (`pack/`), so it runs without the server; `RELAY_PACK_DIR` names another
+//! The relay carries a copy of pack 1.0.2 (`pack/`), so it runs without the server; `RELAY_PACK_DIR` names another
 //! folder of the same shape, and the server's own copy replaces it once the internal endpoint for it exists.
 
 use std::collections::{BTreeMap, HashMap};
@@ -89,7 +89,7 @@ pub struct Pack {
 }
 
 impl Pack {
-    /// The copy built into the relay (pack 1.0.1). Checked by the tests, so it cannot fail in a release.
+    /// The copy built into the relay (pack 1.0.2). Checked by the tests, so it cannot fail in a release.
     pub fn built_in() -> Self {
         let files: HashMap<&str, &str> = BUILT_IN.into_iter().collect();
         Self::from_files(|name| files.get(name).map(|text| (*text).to_owned()).ok_or_else(|| missing(name)))
@@ -215,10 +215,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_built_in_pack_is_the_servers_1_0_1_for_contract_1_9_0_b() {
+    fn the_built_in_pack_is_1_0_2_for_contract_1_9_0_f() {
         let pack = Pack::built_in();
-        assert_eq!(pack.version, "1.0.1");
-        assert_eq!(pack.contract, "1.9.0-b");
+        assert_eq!(pack.version, "1.0.2");
+        assert_eq!(pack.contract, "1.9.0-f");
         assert_eq!(
             pack.consent_line,
             "Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me. Is that okay with you?"

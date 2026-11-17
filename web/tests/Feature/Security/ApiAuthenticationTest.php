@@ -117,6 +117,24 @@ function secDeviceGuardedRoutes(): array
         'DELETE account' => ['DELETE', '/api/account', 'sessions:write'],
         'POST account/export' => ['POST', '/api/account/export', 'library:read'],
         'GET account/export/{id}' => ['GET', '/api/account/export/'.Fx::MISSING_ID, 'library:read'],
+        // Since v1.9 (L1): Live Assist.
+        'GET assist/preps' => ['GET', '/api/assist/preps', 'library:read'],
+        'GET assist/preps/{id}' => ['GET', '/api/assist/preps/'.Fx::MISSING_ID, 'library:read'],
+        'GET assist/sessions' => ['GET', '/api/assist/sessions', 'library:read'],
+        'GET assist/sessions/{id}' => ['GET', '/api/assist/sessions/'.Fx::MISSING_ID, 'library:read'],
+        'GET assist/sessions/{id}/report' => ['GET', '/api/assist/sessions/'.Fx::MISSING_ID.'/report', 'library:read'],
+        'POST assist/preps' => ['POST', '/api/assist/preps', 'sessions:write'],
+        'PATCH assist/preps/{id}' => ['PATCH', '/api/assist/preps/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE assist/preps/{id}' => ['DELETE', '/api/assist/preps/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST assist/preps/{id}/documents' => ['POST', '/api/assist/preps/'.Fx::MISSING_ID.'/documents', 'sessions:write'],
+        'DELETE assist/preps/{id}/documents/{fileId}' => ['DELETE', '/api/assist/preps/'.Fx::MISSING_ID.'/documents/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST assist/preps/{id}/arm' => ['POST', '/api/assist/preps/'.Fx::MISSING_ID.'/arm', 'sessions:write'],
+        'POST assist/sessions/{id}/turns' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/turns', 'sessions:write'],
+        'POST assist/sessions/{id}/end' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/end', 'sessions:write'],
+        'DELETE assist/sessions/{id}' => ['DELETE', '/api/assist/sessions/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST assist/sessions/{id}/suggestions/{s}/action' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/suggestions/s1/action', 'sessions:write'],
+        'POST assist/sessions' => ['POST', '/api/assist/sessions', 'stt:token'],
+        'POST assist/sessions/{id}/token' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/token', 'stt:token'],
     ];
 }
 
@@ -165,6 +183,9 @@ it('exposes exactly the documented public API routes and guards every other one'
     expect($public)->toBe([
         // Since v1.5 (Phase 1C): what the sign-in screen offers.
         'GET api/auth/options',
+        // Since v1.9 (L1): the Live Assist relay's internal API, never a device token: HMAC-signed by the relay
+        // (VerifyAssistRelay; tests/Feature/Assist/AssistRelayInternalTest.php).
+        'GET api/internal/assist/providers',
         'GET api/recordings/{recording}/audio',
         // Since v1.5: signing in with an account (the email and password, or the browser sign-in's code).
         // Since v1.6: the email first, a code by email, and the new account's sign-up.
@@ -175,10 +196,14 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/auth/sign-up',
         'POST api/auth/start',
         'POST api/devices/register',
+        'POST api/internal/assist/facts',
+        'POST api/internal/assist/suggestions',
+        'POST api/internal/assist/summary',
+        'POST api/internal/assist/usage',
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(107);
+    expect($guarded)->toBe(124);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

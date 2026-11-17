@@ -3,6 +3,9 @@ package com.echoledger.mobile.ui
 import android.content.ClipboardManager
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -19,13 +22,16 @@ import com.echoledger.mobile.data.TranscriptSummary
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.awaitAppIdle
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -339,12 +345,54 @@ class SessionScreenTest : ScreenTest() {
     }
 
     @Test
+    fun `once a key is saved after the refusal, the banner offers Retry so "then try again" can be done`() {
+        runBlocking { app.graph.settings.update { it.copy(ownKeySavedAt = "2026-10-20T11:00:00Z") } }
+        server.on("POST", "/api/sessions/.+/retranscribe", FakeServer.empty(202))
+        serve(
+            ServerFixtures.transcript(status = "failed", errorCode = "own_key_rejected", error = "rejected", segments = "[]", text = null)
+        )
+        showSession(item(finalStatus = "failed"))
+
+        awaitText("Groq did not accept your key. Check it in Transcription key, then try again.")
+        compose.onAllNodesWithText("Check your key").assertCountEquals(0)
+        compose.onNodeWithText("Retry").performClick()
+        pumpUntil("the retry") { server.requestsTo("POST", "/api/sessions/.+/retranscribe").isNotEmpty() }
+        assertNull(settingsOpened)
+    }
+
+    @Test
+    fun `a key saved before the refusal is not a new one`() {
+        assertFalse(KeyRetry.newerKey("2026-10-20T10:00:00Z", "2026-10-20T10:05:00+00:00"))
+        assertTrue(KeyRetry.newerKey("2026-10-20T10:06:00Z", "2026-10-20T10:05:00+00:00"))
+        assertFalse("none saved on this phone", KeyRetry.newerKey(null, "2026-10-20T10:05:00+00:00"))
+    }
+
+    @Test
     fun `audio the server does not have reads as such and offers no retry (1_8_1-b)`() {
         serve(ServerFixtures.transcript(status = "failed", errorCode = "recording_missing", error = "x", segments = "[]", text = null))
         showSession(item(finalStatus = "failed"))
 
         awaitText("The audio did not fully reach the server, or it is no longer stored.")
         compose.onAllNodesWithText("Retry").assertCountEquals(0)
+    }
+
+    @Test
+    fun `the no-audio card's Delete asks first, like the menu's (P-007)`() {
+        serve(ServerFixtures.transcript(status = "failed", errorCode = "no_audio", error = "x", segments = "[]", text = null))
+        server.on("DELETE", "/api/sessions/.+", FakeServer.empty(204))
+        showSession(item(finalStatus = "failed"))
+        awaitText("Nothing was heard in this recording")
+
+        compose.onNodeWithText("Delete").performClick()
+        awaitText("Delete this recording on every device?")
+        compose.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).performClick()
+        awaitAppIdle()
+        assertTrue("Cancel deletes nothing", server.requestsTo("DELETE", "/api/sessions/.+").isEmpty())
+        assertEquals(0, backTaps)
+
+        compose.onNodeWithText("Delete").performClick()
+        compose.onNode(hasText("Delete") and hasAnyAncestor(isDialog())).performClick()
+        pumpUntil("the delete") { server.requestsTo("DELETE", "/api/sessions/.+").isNotEmpty() }
     }
 
     @Test

@@ -61,7 +61,9 @@ data class ReadyFacts(
     /** The last call recorded only this phone's side (A5); null when the last call had both or none was checked. */
     val lastCallOneSided: String? = null,
     /** Notification access is on (since v1.6.1): the caller's name is read from WhatsApp's and the dialer's call notification. */
-    val callerNamesAllowed: Boolean = true
+    val callerNamesAllowed: Boolean = true,
+    /** How the helper was last started on this phone (since v1.8.1); null when it never connected. */
+    val helperMethod: com.echoledger.mobile.privilege.HelperMethod? = null
 )
 
 /** What the chip says. */
@@ -74,7 +76,12 @@ enum class ReadyChip(val text: String) {
     NONE("")
 }
 
-data class Readiness(val problems: List<ReadyProblem>, val chip: ReadyChip) {
+data class Readiness(
+    val problems: List<ReadyProblem>,
+    val chip: ReadyChip,
+    /** How the helper was last started (Shizuku or a computer), so Setup brings it back the same way (since v1.8.1). */
+    val helperMethod: com.echoledger.mobile.privilege.HelperMethod? = null
+) {
     val ready: Boolean get() = chip == ReadyChip.READY
     val critical: List<ReadyProblem> get() = problems.filter { it.critical }
 
@@ -175,7 +182,7 @@ data class Readiness(val problems: List<ReadyProblem>, val chip: ReadyChip) {
                 !facts.autoRecordOn -> ReadyChip.OFF
                 else -> ReadyChip.READY
             }
-            return Readiness(problems, chip)
+            return Readiness(problems, chip, facts.helperMethod)
         }
 
         private fun helperProblems(facts: ReadyFacts): List<ReadyProblem> {

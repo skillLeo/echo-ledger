@@ -1,0 +1,15 @@
+: Written by hand from the documented Chat Completions streaming format with include_usage (not a recording).
+: Replace it with a recording from assist-relay-smoke --record when a key is available.
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1763337600,"model":"gpt-6-luna","choices":[{"index":0,"delta":{"role":"assistant","content":"","refusal":null},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1763337600,"model":"gpt-6-luna","choices":[{"index":0,"delta":{"content":"One month,"},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1763337600,"model":"gpt-6-luna","choices":[{"index":0,"delta":{"content":" from OpenAI."},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1763337600,"model":"gpt-6-luna","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}],"usage":null}
+
+data: {"id":"chatcmpl-fixture","object":"chat.completion.chunk","created":1763337600,"model":"gpt-6-luna","choices":[],"usage":{"prompt_tokens":1900,"completion_tokens":6,"total_tokens":1906,"prompt_tokens_details":{"cached_tokens":1792}}}
+
+data: [DONE]
+

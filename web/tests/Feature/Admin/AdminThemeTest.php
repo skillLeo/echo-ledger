@@ -46,8 +46,10 @@ it('applies the stored theme before first paint to avoid a flash of the wrong th
 
     expect($html)->toMatch('/window\.theme\s*=\s*localStorage\.getItem\(\'filament:theme:mode\'\)\s*\?\?\s*\'system\'/')
         ->toContain("document.documentElement.classList.add('dark')");
-    // The script runs in the head, ahead of the stylesheet-dependent body and the Livewire bundle.
-    expect(strpos($html, 'filament:theme:mode'))->toBeLessThan(strpos($html, 'livewire.js'))
+    // The script runs in the head, ahead of the stylesheet-dependent body and the Livewire bundle (livewire.js, or
+    // livewire.min.js with debug mode off as in production: W-004).
+    expect(preg_match('/livewire(\.min)?\.js/', $html, $bundle, PREG_OFFSET_CAPTURE))->toBe(1)
+        ->and(strpos($html, 'filament:theme:mode'))->toBeLessThan($bundle[0][1])
         ->and(strpos($html, 'filament:theme:mode'))->toBeLessThan(strpos($html, '<body'));
 });
 
