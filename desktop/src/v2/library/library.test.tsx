@@ -362,6 +362,77 @@ describe("LibraryV2", () => {
     expect(document.body).not.toHaveTextContent(/30 days/);
   });
 
+  describe("parity rows that had no test (docs/v2/audit/parity.csv)", () => {
+    it("Import, clearing a search by its button and by Esc, and a search that matches nothing (DT-LIB-005, 008, 009, 138)", async () => {
+      const onImport = vi.fn();
+      await show({ onImport });
+      fireEvent.click(screen.getByRole("button", { name: "Import" }));
+      expect(onImport).toHaveBeenCalled();
+      const search = screen.getByRole("searchbox", { name: "Search recordings" });
+      fireEvent.change(search, { target: { value: "zzz nothing" } });
+      const none = screen.getByRole("region", { name: "No recordings match" });
+      fireEvent.click(within(none).getByRole("button", { name: "Clear search" }));
+      expect(search).toHaveValue("");
+      fireEvent.change(search, { target: { value: "Usman" } });
+      fireEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
+      expect(search).toHaveValue("");
+      fireEvent.change(search, { target: { value: "Bilal" } });
+      fireEvent.keyDown(search, { key: "Escape" });
+      expect(search).toHaveValue("");
+    });
+
+    it("a recording where nothing was heard says No audio in its row and Nothing was heard when opened (DT-LIB-072, DT-REC-055)", async () => {
+      const quiet = makeItem("quiet", { title: "Quiet call", started_at: at(17, 10), transcript: { final_status: "failed", final_transcript_id: null, live_available: false, preview: null, final_error_code: "no_audio" } });
+      respond("library_list", [quiet]);
+      respond("library_refresh", [quiet]);
+      respond("session_detail", { playback_url: null });
+      await show();
+      expect(screen.getByRole("list", { name: "Recordings" })).toHaveTextContent("No audio");
+      fireEvent.click(screen.getByRole("button", { name: "Quiet call" }));
+      await act(flushAsync);
+      expect(screen.getByRole("region", { name: "Nothing was heard" })).toBeInTheDocument();
+    });
+
+    it("Trash: a list that didn't load says so with Try again; All goes back to the recordings (DT-LIB-112, 113)", async () => {
+      fail("bin_list", "The server is out of reach");
+      await show();
+      fireEvent.click(screen.getByRole("button", { name: /^Trash/ }));
+      await act(flushAsync);
+      expect(screen.getByRole("alert")).toHaveTextContent("Trash didn't load");
+      expect(within(screen.getByRole("alert")).getByRole("button", { name: "Try again" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /^All/ }));
+      await act(flushAsync);
+      expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
+    });
+
+    it("a recording: loading, a transcript that didn't load with Try again, Save audio, time and length, and its Details (DT-REC-013, 062, 063, 123, 137 to 142)", async () => {
+      const bilal = { ...ITEMS[0], client: { id: "c1", name: "Qureshi Textiles" }, language_chip: "Urdu", device: { id: "d1", name: "Work laptop" } } as unknown as LibraryItem;
+      respond("library_list", [bilal]);
+      respond("library_refresh", [bilal]);
+      respond("session_detail", { playback_url: "https://ledger.example.com/a.m4a" });
+      let answer: (v: unknown) => void = () => undefined;
+      respondWith("transcript_detail", () => new Promise((_, no) => { answer = no; }));
+      respond("save_audio", "/Users/a/Downloads/call.m4a");
+      await show();
+      fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
+      await act(flushAsync);
+      expect(screen.getByText("Loading the transcript")).toBeInTheDocument();
+      await act(async () => answer("The server is out of reach"));
+      await act(flushAsync);
+      expect(screen.getByRole("alert", { name: "The transcript didn't load" })).toBeInTheDocument();
+      expect(screen.getByText(/0:00 \/ 18:24/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Save audio" }));
+      await act(flushAsync);
+      expect(callsOf("save_audio")).toEqual([{ id: "bilal" }]);
+      fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+      const details = document.querySelector(".el-details") as HTMLElement;
+      for (const [term, value] of [["Recorded", /./], ["Length", "18:24"], ["Source", "WhatsApp"], ["Device", "Work laptop"], ["Project", "Qureshi Textiles"], ["Language", "Urdu"]] as const) {
+        const dt = within(details).getByText(term);
+        expect(dt.nextElementSibling?.textContent ?? "", term).toMatch(value);
+      }
+    });
+  });
+
   it("Restore from Trash says so and offers to open it", async () => {
     respond("session_restore", { data: ITEMS[0] });
     await show();
