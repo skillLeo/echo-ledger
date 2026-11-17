@@ -1,12 +1,14 @@
 //! Model providers behind one trait: a streaming completion that is cancelled by dropping its stream, and a warm-up
 //! that opens the connection and writes the cache for a session's fixed prefix.
 //!
-//! In this version the relay runs the deterministic mocks (`RELAY_PROVIDERS=mock`); every real provider answers
-//! "not configured" until the relay can read the keys from the server's Admin -> API Credentials.
+//! Real providers: Anthropic (Messages API), Groq and OpenAI (Chat Completions), Gemini (streamGenerateContent). Keys come from the server (Admin -> API Credentials) and live in memory only. The
+//! deterministic mocks (`RELAY_PROVIDERS=mock`) stand in for all of them in tests and the load test.
 
 pub mod anthropic;
+pub mod gemini;
 pub mod http;
 pub mod mock;
+pub mod openai_compat;
 pub mod unconfigured;
 
 use std::collections::BTreeMap;
@@ -20,8 +22,13 @@ use thiserror::Error;
 use crate::config::RelayConfig;
 use crate::context::Context;
 use crate::domain::ProviderKind;
+use crate::internal::ProviderKeys;
 
+pub use anthropic::Anthropic;
+pub use gemini::Gemini;
+pub use http::Retry;
 pub use mock::{MockBehavior, MockProvider, MockStats};
+pub use openai_compat::OpenAiCompatible;
 pub use unconfigured::Unconfigured;
 
 /// Token counts as providers report them. `input_tokens` is the uncached rest only.
@@ -139,6 +146,26 @@ pub trait Provider: Send + Sync + fmt::Debug {
     fn warm(&self, request: CompletionRequest) -> BoxFuture<'static, Result<Usage, ProviderError>>;
 }
 
+/// Where each real provider is: the official addresses, or a local server in the tests.
+#[derive(Debug, Clone)]
+pub struct Endpoints {
+    pub anthropic: String,
+    pub groq: String,
+    pub openai: String,
+    pub gemini: String,
+}
+
+impl Default for Endpoints {
+    fn default() -> Self {
+        Endpoints {
+            anthropic: anthropic::BASE_URL.to_owned(),
+            groq: openai_compat::GROQ_BASE_URL.to_owned(),
+            openai: openai_compat::OPENAI_BASE_URL.to_owned(),
+            gemini: gemini::BASE_URL.to_owned(),
+        }
+    }
+}
+
 /// One provider per kind.
 #[derive(Debug, Clone)]
 pub struct Providers {
@@ -146,12 +173,16 @@ pub struct Providers {
 }
 
 impl Providers {
-    /// The real providers. None is connected in this version: each answers "not configured".
-    pub fn live() -> Self {
-        let by_kind = ProviderKind::ALL
-            .into_iter()
-            .map(|kind| (kind, Arc::new(Unconfigured::new(kind)) as Arc<dyn Provider>))
-            .collect();
+    /// The real providers, reading their keys from `keys` (filled from the server's Admin -> API Credentials) at each
+    /// request. A provider without a key answers "not configured".
+    pub fn live(keys: Arc<ProviderKeys>, endpoints: &Endpoints, retry: Retry) -> Self {
+        let client = http::client();
+        let mut by_kind: BTreeMap<ProviderKind, Arc<dyn Provider>> = BTreeMap::new();
+        by_kind.insert(ProviderKind::Anthropic, Arc::new(Anthropic::new(&endpoints.anthropic, keys.clone(), client.clone(), retry)));
+        for (kind, base) in [(ProviderKind::Groq, &endpoints.groq), (ProviderKind::Openai, &endpoints.openai)] {
+            by_kind.insert(kind, Arc::new(OpenAiCompatible::new(kind, base, keys.clone(), client.clone(), retry)));
+        }
+        by_kind.insert(ProviderKind::Gemini, Arc::new(Gemini::new(&endpoints.gemini, keys.clone(), client.clone(), retry)));
         Providers { by_kind }
     }
 

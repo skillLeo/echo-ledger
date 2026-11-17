@@ -98,6 +98,12 @@ phrases = [
 # Models. `options` go to the provider as they are: thinking stays off where the model allows it (Opus 5.5 cannot turn
 # it off, so it runs at the lowest effort). `mock` is the latency of the mocked model (RELAY_PROVIDERS=mock).
 
+# Anthropic API reference, checked 2026-11 (section in brackets); src/provider/anthropic.rs has the full list.
+# No model sets temperature, top_p or top_k: from anthropic-version 2026-10-21 they are a 400 [Versioning], and the
+# client drops them if they appear.
+
+# [Effort] Haiku 5.5 defaults to medium, so low is set explicitly. [Extended thinking] disabled is accepted at effort
+# high or below.
 [models."claude-haiku-5-5"]
 provider = "anthropic"
 first_token_timeout_ms = 2500
@@ -106,15 +112,25 @@ long_context = { above_tokens = 100000, input = 0.50, cache_write = 0.625, cache
 options = { effort = "low", thinking = "disabled" }
 mock = { first_token_ms = 350, token_ms = 12 }
 
+# [Effort] Sonnet 5.5 defaults to high. [Extended thinking] disabled is a 400; between_tools turns thinking off, at
+# effort high or below, with no other field in the thinking object.
 [models."claude-sonnet-5-5"]
 provider = "anthropic"
+# Safety classifiers can refuse after words have streamed; a refusal is never shown, so the answer is held until it
+# is complete [Handling stop reasons]. Balanced upgrades are held whole anyway.
+hold_until_complete = true
 first_token_timeout_ms = 4000
 price = { input = 2.00, cache_write = 2.50, cache_read = 0.10, output = 10.00 }
 options = { effort = "low", thinking = "between_tools" }
 mock = { first_token_ms = 700, token_ms = 18 }
 
+# [Effort] Opus 5.5 defaults to medium. [Extended thinking] it can't turn thinking off at any effort (a 400), so it has
+# no thinking option: effort alone controls it.
 [models."claude-opus-5-5"]
 provider = "anthropic"
+# Safety classifiers can refuse after words have streamed; a refusal is never shown, so the answer is held until it
+# is complete [Handling stop reasons]. Balanced upgrades are held whole anyway.
+hold_until_complete = true
 first_token_timeout_ms = 6000
 price = { input = 4.00, cache_write = 5.00, cache_read = 0.20, output = 20.00 }
 options = { effort = "low" }

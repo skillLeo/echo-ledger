@@ -1033,3 +1033,14 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   workspace / person; Admin → Interface flags, super admin only), `ui_flags` and `ui_classic` in GET /api/config,
   PUT /api/account/ui, Switch back to classic in the console; prompt pack 1.0.2; the Usage screenshots retaken.
   The web deploy for v1.8.1 is now v1.1 at this point (the flags ship off).
+- v1.8.1 is cut as `release/v1.8.1` at a6c7cc53 (everything v1.8.1 needs; the interface flags ship off). v2 work keeps
+  merging into v1.1. Release notes must mention: the Windows permission step now names Windows Settings and has no
+  Allow button that did nothing (D-136 follow-up).
+- Merged `39963b5e` (b-desktop-ui at the reviewed dee55ae0): desktop v2 components, shell, Library, Settings,
+  Setup & health, pill and after-call card, all behind the ui_v2 flags.
+- Contracts: API.md 2.0.0-b (trash.keep_hours), API_ASSIST.md 1.9.0-f (aligned with the relay). Decided: Practice
+  uses Fast on every plan; Trash stays 48 hours until the owner decides on 30 days (privacy policy).
+- Merged b-relay at the reviewed fea082fe: the streaming clients (Anthropic, Groq, OpenAI, Gemini) on the server's
+  keys with mid-stream fallback; refusals never shown (held answers on Sonnet/Opus, streamed refusals ended at once);
+  prompt pack 1.0.2; the L9 golden set, the rule scorer (an upper bound) and the judge-required live verdict; the
+  latency benchmark. Waiting on keys: the smoke-record release gate (DEPLOY.md §11), the live eval, the latency run.

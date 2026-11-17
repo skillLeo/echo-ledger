@@ -163,7 +163,7 @@ struct Sample {
     ttft_ms: f64,
     /// The relay's `latency.relay_overhead_ms`.
     relay_overhead_ms: f64,
-    /// The app's first-token time minus the model's share (`request_to_first_token_ms`): the relay plus the socket.
+    /// The app's first-token time minus the model's share as the relay reports it: the relay plus both sockets.
     app_overhead_ms: f64,
     total_ms: f64,
 }
@@ -346,7 +346,11 @@ async fn answer(socket: &mut Socket, turn: &str, mode: &str, sent_at: Instant, r
                 let first = first.ok_or("an answer without tokens")?;
                 let latency = &message["latency"];
                 let ttft_ms = first.saturating_duration_since(sent_at).as_secs_f64() * 1000.0;
-                let model_ms = latency["request_to_first_token_ms"].as_f64().ok_or("no model latency")?;
+                // The model's share of the wait for the first word shown, as the relay reports it: its time to the
+                // first word, or to the last for an answer held until complete (Deep's Sonnet).
+                let shown_ms = latency["end_of_turn_to_first_token_ms"].as_f64().ok_or("no first-token latency")?;
+                let relay_ms = latency["relay_overhead_ms"].as_f64().ok_or("no relay overhead")?;
+                let model_ms = shown_ms - relay_ms;
                 return Ok(Sample {
                     mode: mode.to_owned(),
                     ttft_ms,

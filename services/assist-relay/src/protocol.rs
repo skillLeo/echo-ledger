@@ -1,4 +1,4 @@
-//! The WebSocket messages (PROTOCOL.md; contract 1.9.0-b, docs/API_ASSIST.md). One JSON object per text frame, named
+//! The WebSocket messages (PROTOCOL.md; contract 1.9.0-f, docs/API_ASSIST.md). One JSON object per text frame, named
 //! by `type`, with a per-direction `seq`.
 //!
 //! Every type that carries words someone said or wrote has a `Debug` that shows lengths only, so a stray `{:?}` can
@@ -454,7 +454,8 @@ pub struct Latency {
     pub end_of_turn_to_request_ms: f64,
     pub request_to_first_token_ms: Option<f64>,
     pub end_of_turn_to_first_token_ms: Option<f64>,
-    /// The relay's own share: end of turn to first token, minus the model's time to first token.
+    /// The relay's own share: end of turn to first token shown, minus the model's share (its time to the first word,
+    /// or to the last for an answer held until complete).
     pub relay_overhead_ms: Option<f64>,
     pub total_ms: f64,
 }

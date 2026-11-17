@@ -37,12 +37,15 @@ pub fn micros_to_usd(micros: u64) -> f64 {
     micros as f64 / 1_000_000.0
 }
 
-/// The modes this session may use: in the plan, in the token, and with the mode's main model allowed by the token.
+/// The modes this session may use: allowed for the session, in the token, and with the mode's main model allowed by
+/// the token. A Practice session (`practice: true`) gets Fast on every plan, Free included, within the Practice
+/// allowance the token's budget carries; the plan's live modes apply to live sessions only.
 pub fn allowed_modes(config: &RelayConfig, claims: &Claims) -> Vec<Mode> {
     Mode::LADDER
         .into_iter()
         .filter(|&mode| {
-            claims.plan.allows(mode) && claims.modes.contains(&mode) && claims.models.contains(&config.modes.get(mode).primary)
+            let allowed = if claims.practice { mode == Mode::Fast } else { claims.plan.allows(mode) };
+            allowed && claims.modes.contains(&mode) && claims.models.contains(&config.modes.get(mode).primary)
         })
         .collect()
 }
