@@ -14,6 +14,8 @@ use App\Models\ShareCheckResult;
 use App\Models\UpgradeRequest;
 use App\Models\UpgradeRequestProof;
 use App\Models\Workspace;
+use App\Models\WorkspaceInvitation;
+use App\Models\WorkspaceInviteLink;
 use App\Services\InterfaceFlags;
 use App\Services\ShareLinks;
 use App\Services\Sharing\RequestLinks;
@@ -84,6 +86,9 @@ const ISO_WEB_BYPASS = [
     'device.sign-in' => 'the apps\' browser sign-in: the signed-in person approves a device for their own account',
     'device.sign-in.approve' => 'the apps\' browser sign-in: the signed-in person approves a device for their own account',
     'invitations.show' => 'signed link of one invitation: the token and the invited address are the only keys',
+    // Since v1.8 P6.3: an invite link's page; its secret token decides the team, and joining needs a signed-in account.
+    'join.show' => 'invite link: the secret token decides the team, nothing of any workspace shows but its name',
+    'join.accept' => 'invite link: the secret token decides the team; the signed-in account joins it',
     'invitations.accept' => 'signed link of one invitation: the token and the invited address are the only keys',
     'account.delete' => 'deleting one\'s own account: the signed-in person only, no workspace data',
     'account.delete.store' => 'deleting one\'s own account: the signed-in person only, no workspace data',
@@ -157,9 +162,15 @@ function isoWorld(bool $sameWorkspace = false): array
     $assistSession = AssistSession::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $bob->id, 'device_id' => $device->id, 'mode' => 'fast',
         'platform' => 'android', 'status' => 'active', 'started_at' => now(), 'last_token_at' => now(), 'summary' => 'BOBSECRETNOTE summary']);
     AssistTurn::query()->create(['assist_session_id' => $assistSession->id, 'client_ref' => 'bob-1', 'channel' => 'other', 'start_ms' => 0, 'end_ms' => 10, 'text' => 'BOBSECRETTRANSCRIPT asked']);
+    // Since v1.8 P6.3: an invitation and an invite link of a team of Bob's (never Alice's workspace).
+    $bobTeam = Workspace::query()->create(['name' => 'BOB-SECRET-TEAM', 'plan_id' => Workspace::query()->findOrFail($device->workspace_id)->plan_id]);
+    $bobInvitation = WorkspaceInvitation::query()->create(['workspace_id' => $bobTeam->id, 'email' => 'bob-secret-invitee@example.test', 'role' => 'member',
+        'token_hash' => hash('sha256', 'bob-invitation'), 'invited_by' => $bob->id, 'expires_at' => now()->addDay()]);
+    $bobLink = WorkspaceInviteLink::query()->create(['workspace_id' => $bobTeam->id, 'role' => 'member', 'token_hash' => hash('sha256', 'bob-link'),
+        'created_by' => $bob->id, 'expires_at' => now()->addDay()]);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession');
+    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
@@ -316,6 +327,12 @@ function isoApiCases(array $b): array
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
         'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],
         'api.account.sign-out-everywhere' => ['POST', '/api/account/sign-out-everywhere', [], fn (TestResponse $r): bool => $r->status() === 204],
+        // Since v1.8 P6.3: inviting people; another workspace's invitation and link are the same 404 as unknown ids.
+        'api.workspace.invitations' => ['GET', '/api/workspace/invitations', [], 'list'],
+        'api.workspace.invitations.store' => ['POST', '/api/workspace/invitations', ['email' => 'iso-new@example.test', 'role' => 'member'], fn (TestResponse $r): bool => in_array($r->status(), [201, 403], true)],
+        'api.workspace.invitations.destroy' => ['DELETE', "/api/workspace/invitations/{$b['bobInvitation']->id}", [], 404],
+        'api.workspace.invite-links.store' => ['POST', '/api/workspace/invite-links', ['role' => 'viewer'], fn (TestResponse $r): bool => in_array($r->status(), [201, 403], true)],
+        'api.workspace.invite-links.destroy' => ['DELETE', "/api/workspace/invite-links/{$b['bobLink']->id}", [], 404],
         // Since v1.9 (L1): Live Assist. Lists hold only Alice's own; Bob's prep and session are the same 404 as unknown ids.
         'api.assist.preps' => ['GET', '/api/assist/preps', [], 'list'],
         'api.assist.preps.store' => ['POST', '/api/assist/preps', ['meeting_type' => 'general'], fn (TestResponse $r): bool => $r->status() === 201],

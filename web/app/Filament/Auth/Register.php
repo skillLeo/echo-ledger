@@ -6,6 +6,7 @@ namespace App\Filament\Auth;
 
 use App\Models\WorkspaceInvitation;
 use App\Services\Accounts\Invitations;
+use App\Services\Accounts\InviteLinks;
 use App\Services\Accounts\SignUp;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
@@ -26,11 +27,24 @@ class Register extends Login
     #[Locked]
     public ?string $invite = null;
 
+    /** Since v1.8 P6.3: the invite link's token (`?join=…`, from "Join Acme on EchoLedger"); the browser cannot change it. */
+    #[Locked]
+    public ?string $join = null;
+
+    /** Every request of the page: an open invite link lets this sign-up through and joins the team (SignUp::withLink). */
+    public function boot(): void
+    {
+        SignUp::withLink(app(InviteLinks::class)->find($this->join));
+    }
+
     public function mount(): void
     {
         abort_unless(app(SignUp::class)->open(), 404);
         $token = request()->query('invite');
         $this->invite = is_string($token) ? mb_substr($token, 0, 128) : null;
+        $join = request()->query('join');
+        $this->join = is_string($join) ? mb_substr($join, 0, 128) : null;
+        SignUp::withLink(app(InviteLinks::class)->find($this->join));
 
         parent::mount();
 
@@ -44,7 +58,7 @@ class Register extends Login
     {
         if (! $this->canSignUp()) {
             return $schema->components([
-                Text::make('Sign-up on this server is by invitation. Ask the person who runs it, or a workspace owner, to invite you, then open the link in that email.'),
+                Text::make('Sign-up on this server is by invitation. Ask the person who runs it, or a workspace owner, to invite you, then open the link they send you.'),
             ]);
         }
 
@@ -89,7 +103,7 @@ class Register extends Login
     {
         $signUp = app(SignUp::class);
 
-        return $signUp->mode() === SignUp::ANYONE || ($signUp->open() && $this->invitation() !== null);
+        return $signUp->mode() === SignUp::ANYONE || ($signUp->open() && ($this->invitation() !== null || app(InviteLinks::class)->find($this->join) !== null));
     }
 
     private function invitation(): ?WorkspaceInvitation

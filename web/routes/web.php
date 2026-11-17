@@ -11,6 +11,7 @@ use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\Auth\DeviceSignInController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\InvitationController;
+use App\Http\Controllers\Auth\JoinController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
 use App\Http\Controllers\LegacyConsoleRedirect;
@@ -151,6 +152,12 @@ Route::middleware([AuthenticateSession::class, 'throttle:google'])->prefix('/aut
 Route::middleware([AuthenticateSession::class, 'signed', 'throttle:account'])->group(function (): void {
     Route::get('/invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
     Route::post('/invitations/{token}', [InvitationController::class, 'accept'])->middleware('auth:web')->name('invitations.accept');
+});
+
+// Invite links (v1.8 P6.3): "Join Acme on EchoLedger"; the token is the secret, so no signature.
+Route::middleware([AuthenticateSession::class, 'throttle:account'])->group(function (): void {
+    Route::get('/join/{token}', [JoinController::class, 'show'])->name('join.show');
+    Route::post('/join/{token}', [JoinController::class, 'accept'])->middleware('auth:web')->name('join.accept');
 });
 
 // A notification of the bell opened (since v1.6.1): marked read, then where it is about. Only the person's own.

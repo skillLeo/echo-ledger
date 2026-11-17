@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Auth;
 
 use App\Exceptions\ApiError;
+use App\Filament\Pages\GetTheApps;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\WorkspaceInvitation;
@@ -43,6 +44,7 @@ final class InvitationController extends Controller
 
         return response()->view('auth.invitation', [
             'workspace' => $invitation->workspace->name, 'role' => $invitation->role->label(), 'email' => $user->email,
+            'inviter' => $invitation->invited_by !== null ? User::query()->whereKey($invitation->invited_by)->value('name') : null,
             'action' => $request->fullUrl(),
         ]);
     }
@@ -61,7 +63,8 @@ final class InvitationController extends Controller
             return $this->message(403, 'This workspace is full', $e->getMessage(), url('/app'), 'Open the console');
         }
 
-        return redirect()->to(Filament::getPanel('app')->getUrl() ?? '/app');
+        // Since v1.8 P6.3: then the apps, as after a sign-up.
+        return redirect()->to(GetTheApps::getUrl(panel: 'app'));
     }
 
     private function message(int $status, string $title, string $message, ?string $back = null, ?string $backLabel = null): Response

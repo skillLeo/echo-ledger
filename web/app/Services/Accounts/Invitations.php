@@ -21,7 +21,8 @@ use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
- * Invitations to a workspace (since v1.5). Every invitation is an email with a link that works for 7 days, once, and
+ * Invitations to a workspace (since v1.5). Every invitation is an email with a link that works for 7 days (since v1.8
+ * P6.3: 1, 7 or 30, InviteLinks::DAYS), once, and
  * only for that address: an address without an account gets the sign-up page with the invitation, an account the
  * signed page that asks it to join (InvitationController). Accepting makes the account a member with the invited
  * role. An open invitation takes a seat of the workspace's plan (`403 seat_limit_reached` past them), so does accepting.
@@ -36,8 +37,9 @@ final class Invitations
      * A new invitation for [$email] with [$role], replacing an unused one to the same workspace. Returns the link in
      * the email. Someone already in the workspace is refused; `403 seat_limit_reached` when no seat is left.
      */
-    public function invite(Workspace $workspace, User $inviter, string $email, WorkspaceRole $role): string
+    public function invite(Workspace $workspace, User $inviter, string $email, WorkspaceRole $role, int $days = self::DAYS): string
     {
+        $days = in_array($days, InviteLinks::DAYS, true) ? $days : self::DAYS;
         $email = Str::lower(trim($email));
         if ($role === WorkspaceRole::Owner) {
             throw new InvalidArgumentException('A workspace has one owner: invite them as an admin and hand it over later.');
@@ -50,7 +52,7 @@ final class Invitations
         // Since v1.6 a team is a paid feature of the workspace's plan (the inviter's overrides count).
         $this->limits->assertFeature($workspace->id, 'team', $inviter->id);
 
-        return DB::transaction(function () use ($workspace, $inviter, $email, $role, $existing): string {
+        return DB::transaction(function () use ($workspace, $inviter, $email, $role, $existing, $days): string {
             // One invitation of the workspace at a time, so two cannot both take its last seat.
             Workspace::query()->whereKey($workspace->id)->lockForUpdate()->first();
             WorkspaceInvitation::query()->where('workspace_id', $workspace->id)->where('email', $email)->whereNull('accepted_at')->delete();
@@ -58,7 +60,7 @@ final class Invitations
             $token = Str::random(48);
             $invitation = WorkspaceInvitation::query()->create([
                 'workspace_id' => $workspace->id, 'email' => $email, 'role' => $role->value, 'token_hash' => hash('sha256', $token),
-                'invited_by' => $inviter->id, 'expires_at' => now()->addDays(self::DAYS),
+                'invited_by' => $inviter->id, 'expires_at' => now()->addDays($days),
             ]);
             $url = $existing instanceof User ? $this->acceptUrl($invitation, $token) : $this->signUpUrl($token);
             $expires = $invitation->expires_at->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, Y');
