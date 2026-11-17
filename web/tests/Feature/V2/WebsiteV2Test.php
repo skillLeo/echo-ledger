@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 use App\Models\Plan;
 use App\Models\User;
+use App\Services\Entitlements\Entitlements;
 use App\Services\InterfaceFlags;
+use App\Support\SitePlans;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
 uses(AdminTestHelpers::class);
+
+require_once __DIR__.'/../../Support/vendor_names.php';
 
 /*
  * The v2.0 website (ui_v2.website): Home, Pricing from the live plans and Download in the new design, for everyone once
@@ -24,8 +28,10 @@ it('shows the new Home, Pricing and Download to everyone once the flag is on for
     websiteForEveryone();
 
     $home = (string) $this->get('/')->assertOk()->getContent();
-    expect($home)->toContain('s-body')->toContain('Your calls and meetings, written down word for word.')
+    expect($home)->toContain('s-body')->toContain('Your calls and meetings, written down.')
         ->toContain('class="s-point"')->not->toContain('class="grid"')->not->toContain('gradient')
+        // No word-perfect promise on the new Home (the classic one keeps its words until Gate 3).
+        ->not->toContain('word for word')->not->toContain('accurate transcripts')->not->toContain('accurately')->not->toContain('keeps every word')
         ->toContain('href="'.route('site.pricing').'"')->toContain('href="'.route('downloads').'"')->toContain('href="'.route('sign-up').'"')
         ->toContain('href="'.route('legal.terms').'"')->toContain('href="'.route('legal.privacy').'"');
 
@@ -66,4 +72,34 @@ it('lets staff preview it before everyone, and nobody else', function () {
     app(InterfaceFlags::class)->set('ui_v2.website', false, 0, [], [$staff->id]);
     $this->actingAs($staff, 'web')->get('/')->assertOk()->assertSee('s-body', false);
     $this->actingAs($person, 'web')->get('/')->assertOk()->assertDontSee('s-body', false);
+});
+
+it('says each thing once on Pricing: no price that is the plan\'s name, no doubled "Everything in", no minutes twice', function () {
+    websiteForEveryone();
+    Plan::query()->updateOrCreate(['key' => 'pro'], ['name' => 'Pro', 'price_label' => 'Rs 2,999 a month', 'on_offer' => true, 'sort_order' => 10,
+        'monthly_minutes' => 600, 'features' => ['platform_transcription' => true, 'views' => true]]);
+    Plan::query()->updateOrCreate(['key' => 'business'], ['name' => 'Business', 'price_label' => 'Rs 12,499 a month', 'on_offer' => true, 'sort_order' => 20,
+        'monthly_minutes' => 3000, 'seats' => 10, 'description' => 'Everything in Pro, and a team with roles.', 'features' => ['platform_transcription' => true, 'views' => true, 'team' => true]]);
+
+    $cards = collect(SitePlans::cards(app(Entitlements::class)->offered()))->keyBy('key');
+    $html = (string) $this->get('/pricing')->assertOk()->getContent();
+
+    expect($cards['free']['price'])->toBeNull()
+        ->and($cards['pro']['price'])->toBe('Rs 2,999 a month')
+        ->and($cards['business']['everything'])->toBeNull()
+        ->and(collect($cards['pro']['limits'])->filter(fn (string $l): bool => str_contains($l, 'transcription minutes'))->all())->toBe([])
+        ->and(substr_count($html, '600 transcription minutes'))->toBe(1)
+        ->and($html)->not->toContain('<p class="s-plan-price">Free</p>');
+});
+
+it('shows no provider name on Pricing, and leaves out a plan description that names one', function () {
+    websiteForEveryone();
+
+    expect(vendorNamesIn((string) $this->get('/pricing')->assertOk()->getContent()))->toBe([]);
+
+    Plan::query()->updateOrCreate(['key' => 'pro'], ['name' => 'Pro', 'price_label' => 'Rs 2,999 a month', 'on_offer' => true, 'sort_order' => 10,
+        'description' => 'Transcripts and notes written by Claude.']);
+    $html = (string) $this->get('/pricing')->assertOk()->getContent();
+
+    expect($html)->toContain('Pro')->not->toContain('written by Claude')->and(vendorNamesIn($html))->toBe([]);
 });

@@ -5,11 +5,11 @@
 
 @section('content')
     <section class="s-hero" aria-labelledby="s-hero-title">
-        <h1 id="s-hero-title" class="s-display">Your calls and meetings, written down word for word.</h1>
+        <h1 id="s-hero-title" class="s-display">Your calls and meetings, written down.</h1>
         <p class="s-lead">
-            @brand records calls and meetings on your phone and computer, both sides of the conversation, and turns
-            them into accurate transcripts, in English, Urdu and Roman Urdu. Everything is kept in projects you can
-            search, share with your team, and open in Claude or ChatGPT.
+            @brand records calls and meetings on your phone and computer, both sides of the conversation, and writes
+            them down as transcripts you can trust, in English, Urdu and Roman Urdu. Everything is kept in projects you
+            can search, share with your team, and open in Claude or ChatGPT.
         </p>
         <p class="s-actions">
             <a class="s-btn s-btn-primary" href="{{ url('/app') }}">Sign in</a>
@@ -22,7 +22,7 @@
     <section class="s-points" aria-label="What it does">
         @foreach ([
             ['phone', "Calls that don't disturb you", 'Recording starts when the call is answered. Unanswered and very short calls are skipped by themselves, with nothing to tap afterwards.'],
-            ['transcript', 'Urdu, accurately', 'Urdu and mixed calls wait for the most accurate engine, and the Roman Urdu view keeps every word.'],
+            ['transcript', 'Urdu and Roman Urdu', 'Urdu and mixed calls wait for the engine made for them, and the Roman Urdu view shows the same call in Latin letters.'],
             ['folder', 'Projects and sharing', 'Recordings file themselves into projects by contact, meeting title or app. Share a recording or a whole project with a link, a password, or only the people you name.'],
             ['captions', 'What was on the screen', 'During a meeting the computer app keeps what was on the shared screen, linked to the moment it was talked about.'],
         ] as [$icon, $title, $text])

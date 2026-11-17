@@ -18,7 +18,9 @@
             @foreach ($plans as $plan)
                 <section class="s-plan" aria-labelledby="plan-{{ $plan['key'] }}">
                     <h2 id="plan-{{ $plan['key'] }}" class="s-plan-name">{{ $plan['name'] }}</h2>
-                    <p class="s-plan-price">{{ $plan['price'] }}</p>
+                    @if ($plan['price'] !== null)
+                        <p class="s-plan-price">{{ $plan['price'] }}</p>
+                    @endif
                     @if ($plan['description'] !== null)
                         <p class="s-text">{{ $plan['description'] }}</p>
                     @endif

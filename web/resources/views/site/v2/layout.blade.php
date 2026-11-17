@@ -13,7 +13,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="{{ config('echoledger.site_indexable') && $keep === [] ? 'index, follow' : 'noindex, nofollow' }}">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <meta name="description" content="@brand records calls and meetings on your phone and computer and turns them into accurate transcripts, including Urdu and Roman Urdu.">
+    <meta name="description" content="@brand records calls and meetings on your phone and computer and writes them down as transcripts, including Urdu and Roman Urdu.">
     <title>@yield('title', \App\Support\Brand::name())</title>
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <link rel="alternate icon" href="{{ asset('favicon.ico') }}">

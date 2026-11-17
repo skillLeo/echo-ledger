@@ -62,3 +62,19 @@ it('changes only the head under ui_v2.admin: the saved dashboard plus the design
         ->and(trim((string) preg_replace('/\n\s*\n/', "\n", normaliseClassic((string) preg_replace($head, '', $html), (string) session()->token()))))
         ->toBe(trim((string) preg_replace('/\n\s*\n/', "\n", (string) file_get_contents(__DIR__.'/golden/admin-dashboard.html'))));
 });
+
+it('recolours only the plan columns\' badges under ui_v2.admin: a status badge such as Active keeps its colour', function () {
+    $admin = classicAdmin($this);
+    $html = (string) $this->actingAs($admin, 'web')->get('/admin/customers')->assertOk()->getContent();
+    $css = (string) preg_replace('~/\*.*?\*/~s', '', (string) file_get_contents(resource_path('css/v2/admin.css')));
+
+    // The Active badge is Filament's success colour, not a stored palette: the plan rule cannot reach it.
+    expect($html)->toMatch('/<span class="[^"]*fi-badge[^"]*fi-color-success[^"]*">\s*Active\s*</');
+    // Every rule that recolours a palette badge is scoped to the plan columns.
+    preg_match_all('/([^{}]+)\{[^}]*\}/', $css, $rules);
+    foreach ($rules[1] as $selector) {
+        if (str_contains($selector, '--color-50')) {
+            expect(trim($selector))->toStartWith(':is(.fi-ta-cell-plan, .fi-ta-cell-badge)');
+        }
+    }
+});

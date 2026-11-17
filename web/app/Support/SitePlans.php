@@ -17,21 +17,27 @@ final class SitePlans
 {
     /**
      * @param  list<Plan>  $plans  cheapest first
-     * @return list<array{key: string, name: string, price: string, description: string|null, everything: string|null, lines: list<string>, limits: list<string>}>
+     * @return list<array{key: string, name: string, price: string|null, description: string|null, everything: string|null, lines: list<string>, limits: list<string>}>
      */
     public static function cards(array $plans): array
     {
         $cards = [];
         $below = null;
         foreach ($plans as $plan) {
+            $price = $plan->priceText();
+            $description = self::description($plan);
+            $lines = $below === null ? self::freeLines($plan) : UpgradeFlow::highlights($plan, $below);
+            // Said once: a price that is the plan's name ("Free"), the description's own "Everything in …", and the
+            // minutes when a line already gives them.
+            $minutesSaid = collect($lines)->contains(fn (string $line): bool => str_contains($line, 'transcription minutes'));
             $cards[] = [
                 'key' => $plan->key,
                 'name' => $plan->name,
-                'price' => $plan->priceText(),
-                'description' => filled($plan->description) ? (string) $plan->description : null,
-                'everything' => $below !== null && $below->key !== Plan::FREE ? $below->name : null,
-                'lines' => $below === null ? self::freeLines($plan) : UpgradeFlow::highlights($plan, $below),
-                'limits' => self::limits($plan),
+                'price' => mb_strtolower(trim($price)) === mb_strtolower(trim($plan->name)) ? null : $price,
+                'description' => $description,
+                'everything' => $below !== null && $below->key !== Plan::FREE && ! str_starts_with((string) $description, 'Everything in') ? $below->name : null,
+                'lines' => $lines,
+                'limits' => self::limits($plan, ! $minutesSaid),
             ];
             $below = $plan;
         }
@@ -50,10 +56,24 @@ final class SitePlans
             array_filter(array_keys(Features::all()), fn (string $f): bool => $plan->allows($f))));
     }
 
-    /** @return list<string> the plan's limits, as the console's plan page states them */
-    private static function limits(Plan $plan): array
+    /**
+     * The plan's description from Admin › Plans, free text on a public page: left out when it names a provider, model
+     * or vendor (the plain-words rule), except the Free plan's own Groq key that people make themselves.
+     */
+    public static function description(Plan $plan): ?string
     {
-        $minutes = $plan->limit('monthly_minutes');
+        if (blank($plan->description)) {
+            return null;
+        }
+        $text = (string) $plan->description;
+
+        return ProviderText::names((string) preg_replace(['/\bGroq key\b/', '/\bconsole\.groq\.com\b/'], '', $text)) ? null : $text;
+    }
+
+    /** @return list<string> the plan's limits, as the console's plan page states them */
+    private static function limits(Plan $plan, bool $withMinutes = true): array
+    {
+        $minutes = $withMinutes ? $plan->limit('monthly_minutes') : 0;
         $storage = $plan->limit('storage_bytes');
         $devices = $plan->limit('devices');
         $days = $plan->limit('retention_days');

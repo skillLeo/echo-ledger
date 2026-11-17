@@ -53,8 +53,9 @@
 }
 
 /* A plan's badge keeps its stored colour in the data; on the design values it reads in the accent's soft pair, so no
-   palette colour is left. The badge's inline palette only sets variables; these set the colours. */
-.fi-badge.fi-color[style*='--color-50'] {
+   palette colour is left. Only the plan columns (Customers, Plans, Upgrade requests, Promo codes): a status badge
+   (Active, Suspended…) keeps its own colour. The badge's inline palette only sets variables; these set the colours. */
+:is(.fi-ta-cell-plan, .fi-ta-cell-badge) .fi-badge.fi-color[style*='--color-50'] {
     background-color: var(--el-role-accent-soft);
     color: var(--el-role-accent-text);
     --tw-ring-color: var(--el-role-accent-soft);
