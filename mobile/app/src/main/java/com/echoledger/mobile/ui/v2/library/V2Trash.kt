@@ -61,6 +61,23 @@ fun trashKeepHours(configHours: Int?, items: List<BinItemDto>?): Int {
 }
 
 /**
+ * How long Trash keeps a recording, in words: hours up to two days ("48 hours"), whole days beyond ("30 days" for 720),
+ * so a month never reads as 720 hours.
+ */
+fun keepWords(res: android.content.res.Resources, hours: Int): String = when {
+    hours > 48 && hours % 24 == 0 -> daysWords(res, hours / 24)
+    hours == 1 -> res.getString(com.echoledger.mobile.R.string.v2_priv_hour_one)
+    else -> res.getString(com.echoledger.mobile.R.string.v2_priv_hours, hours)
+}
+
+/** "1 day", "30 days". */
+fun daysWords(res: android.content.res.Resources, days: Int): String = if (days == 1) {
+    res.getString(com.echoledger.mobile.R.string.v2_priv_day_one)
+} else {
+    res.getString(com.echoledger.mobile.R.string.v2_priv_days, days)
+}
+
+/**
  * Library › Trash: recordings the server keeps for [configKeepHours] (`trash.keep_hours`; null until the app reads it),
  * each restorable or erasable now (with a confirmation).
  */

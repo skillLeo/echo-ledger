@@ -86,7 +86,7 @@ fun CallsPage(
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(stringResource(R.string.v2_set_page_calls), onBack = onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Column(Modifier.highlightedIf(highlight == "after-call")) {
+            Column(Modifier.highlightedIf(highlight == "calls.after")) {
                 EchoSectionHeader(stringResource(R.string.v2_calls_after_call))
                 EchoRadio(
                     settings.afterCall == PostCallPrompt.KEEP,
@@ -127,7 +127,7 @@ fun CallsPage(
                     EchoRadio(settings.undecidedKeepHours == hours, { update { it.copy(undecidedKeepHours = hours) } }, words)
                 }
             }
-            Column(Modifier.highlightedIf(highlight == "auto-apps")) {
+            Column(Modifier.highlightedIf(highlight == "calls.auto" || highlight == "calls.autorecord")) {
                 // The Auto-record calls switch itself, above the apps it applies to (bug P-016), as on the Record page.
                 val context = LocalContext.current
                 val helperState = remember {
@@ -371,13 +371,19 @@ private fun PhoneAppRecordingsGroup(settings: AppSettings, update: ((AppSettings
             )
         }
     }
-    // The last call's outcome in the screen's language; a note with no code isn't shown in other words.
-    // The core's code, read back through the stopgap's sentences until the page maps the code itself.
+    // The last call's outcome: the core's own words on an English screen; on another, its code in that language, and
+    // nothing when it has no code (never English words inside an Urdu line).
+    val english = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language != "ur"
     note?.let { (at, core) ->
-        LastCallNote.code(core.english.replaceFirstChar { it.uppercase() })?.let { code -> at to code }
-    }?.let { (at, code) ->
-        val said = stringResource(code.words, *code.args.toTypedArray())
-        Note(stringResource(R.string.v2_calls_pa_last, clock.format(Instant.ofEpochMilli(at)), said))
+        // The core's code, read back through the stopgap's sentences until the page maps the code itself.
+        val words = core.english.replaceFirstChar { it.uppercase() }
+        val code = LastCallNote.code(words)
+        val said = when {
+            english -> words
+            code != null -> stringResource(code.words, *code.args.toTypedArray())
+            else -> null
+        }
+        said?.let { Note(stringResource(R.string.v2_calls_pa_last, clock.format(Instant.ofEpochMilli(at)), it)) }
     }
     confirm?.let { candidate ->
         // Today's dialog (the file's name and length, and Play to listen first).

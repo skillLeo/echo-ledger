@@ -16,7 +16,7 @@
     <string name="v2_set_page_voice">وائس نوٹس اور ڈکٹیشن</string>
     <string name="v2_set_page_language">زبان</string>
     <string name="v2_set_page_words">خاص الفاظ</string>
-    <string name="v2_set_page_key">ٹرانسکرپشن کی</string>
+    <string name="v2_set_page_key">ٹرانسکرپشن کی کلید</string>
     <string name="v2_set_page_games">گیمز</string>
     <string name="v2_set_page_videos">ویڈیوز</string>
     <string name="v2_set_page_appearance">ظاہری شکل</string>
@@ -44,7 +44,7 @@
     <string name="v2_set_item_language_new">نئی ریکارڈنگز کی زبان</string>
     <string name="v2_set_item_language_vocabulary">خاص الفاظ میں شامل کریں</string>
     <string name="v2_set_item_words_project">خاص الفاظ</string>
-    <string name="v2_set_item_key_groq">ٹرانسکرپشن کی</string>
+    <string name="v2_set_item_key_groq">ٹرانسکرپشن کی کلید</string>
     <string name="v2_set_item_games_list">گیمز اور زبانیں</string>
     <string name="v2_set_item_games_box">باکس کا انداز</string>
     <string name="v2_set_item_games_budget">ماہانہ بجٹ اور رازداری</string>

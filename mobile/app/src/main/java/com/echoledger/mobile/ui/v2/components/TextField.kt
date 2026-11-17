@@ -28,6 +28,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
@@ -48,7 +51,9 @@ fun EchoTextField(
     singleLine: Boolean = true,
     leadingIcon: ImageVector? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    keyboardActions: KeyboardActions = KeyboardActions.Default
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    /** A secret (a key, a password): shown as dots, with the password keyboard. */
+    secret: Boolean = false
 ) {
     val c = EchoV2.colors
     val type = EchoV2.type
@@ -67,7 +72,8 @@ fun EchoTextField(
         singleLine = singleLine,
         textStyle = type.body.copy(color = if (enabled) c.textPrimary else c.textDisabled),
         cursorBrush = SolidColor(c.accent),
-        keyboardOptions = keyboardOptions,
+        keyboardOptions = if (secret) keyboardOptions.copy(keyboardType = KeyboardType.Password) else keyboardOptions,
+        visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardActions = keyboardActions,
         interactionSource = interaction,
         modifier = modifier

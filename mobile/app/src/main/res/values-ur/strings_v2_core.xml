@@ -34,7 +34,7 @@
     <string name="v2_erase_body">آڈیو اور ٹرانسکرپٹ ہمیشہ کے لیے مٹ جائیں گے۔ یہ واپس نہیں ہو سکتا۔</string>
     <string name="v2_trash_empty_title">ردی خالی ہے</string>
     <string name="v2_trash_error">ردی لوڈ نہیں ہو سکی۔ انٹرنیٹ کنکشن چیک کریں۔</string>
-    <string name="v2_trash_keeps">حذف کی ہوئی ریکارڈنگز یہاں %1$d گھنٹے رہتی ہیں، پھر ان کی آڈیو اور ٹرانسکرپٹ مٹا دیے جاتے ہیں۔</string>
+    <string name="v2_trash_keeps">حذف کی ہوئی ریکارڈنگز یہاں %1$s رہتی ہیں، پھر ان کی آڈیو اور ٹرانسکرپٹ مٹا دیے جاتے ہیں۔</string>
     <string name="v2_erases_on">%1$s کو مٹ جائے گی</string>
     <string name="v2_share">شیئر</string>
     <string name="v2_transcript">ٹرانسکرپٹ</string>

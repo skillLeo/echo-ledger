@@ -77,6 +77,33 @@ class SettingsPagesShotsTest {
     }
 
     @Test
+    @Config(qualifiers = "ur-w411dp-h891dp-420dpi")
+    fun todaysPageShowsTheImportDialogInEnglishOnAnUrduPhone() {
+        val file = com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile(1, "", "", 0, 252_000)
+        compose.setContent {
+            com.echoledger.mobile.ui.ClassicImportRecordingDialog(
+                com.echoledger.mobile.calls.PhoneAppRecordings.Candidate(1, 0),
+                "08:00",
+                { _, _ -> file },
+                onDismiss = {}
+            ) {}
+        }
+        compose.waitForIdle()
+        for (words in listOf(
+            "Import this recording?",
+            "Recording",
+            "Play",
+            "Import",
+            "Cancel"
+        )) {
+            compose.onNodeWithText(words).assertExists()
+        }
+        compose.onNodeWithText("یہ ریکارڈنگ لائیں؟").assertDoesNotExist()
+    }
+
+    // TODO(phone core): until lastNote() returns a code, this list is the core's sentences copied here; once the codes
+    // land, check them instead.
+    @Test
     fun everyLastCallNoteOfTheCoreHasACode() {
         val core = com.echoledger.mobile.calls.PhoneAppRecordings
         val sentences = listOf(
