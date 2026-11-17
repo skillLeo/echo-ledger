@@ -181,7 +181,11 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
         None => None,
     };
     let mode = mode.filter(|m| !m.is_empty()).or_else(|| prep.as_ref().map(|p| p.mode.clone())).unwrap_or_else(|| "balanced".into());
-    let recording_session_id = if practice { None } else { Some(recording_session(app).await?) };
+    let captions_were_on = state.live.is_live();
+    let (recording_session_id, started_recording) = if practice { (None, None) } else {
+        let (id, started) = recording_session(app).await?;
+        (Some(id), started)
+    };
     let request = AssistStartRequest { prep_id: prep.as_ref().map(|p| p.id.clone()), mode: Some(mode.clone()), platform: "desktop".into(), recording_session_id, practice };
     let pins = super::relay_pins(state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref());
     let meeting_type = prep.as_ref().map(|p| p.meeting_type.clone());
@@ -208,6 +212,8 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
         batch: TurnBatch::new(Instant::now()),
         budget,
         language_help: prep.as_ref().map(|p| p.language_help.clone()).unwrap_or_else(|| "off".into()),
+        started_recording,
+        captions_were_on,
     });
     // From a prep: the call is saved without the after-call card.
     if started.auto_saved && let Some(info) = state.capture.info() {
@@ -235,19 +241,40 @@ struct Early {
     waiting: Vec<AssistEvent>,
 }
 
-/// The open server session of the recording the assist runs beside: a call recording is started (with captions,
-/// whose turns feed the relay) when none runs.
-async fn recording_session(app: &AppHandle) -> AppResult<String> {
+/// The open server session of the recording the assist runs beside, and the recording this started (its
+/// `client_ref`): a call recording is started (with captions, whose turns feed the relay) when none runs.
+async fn recording_session(app: &AppHandle) -> AppResult<(String, Option<String>)> {
     let state = app.state::<crate::AppState>();
-    if !state.capture.is_recording() {
+    let started = if state.capture.is_recording() {
+        None
+    } else {
         let source = state.detect.meeting().map_or("other", |m| m.app.as_str());
         crate::actions::start_call_recording_with(app, source, false, true).await?;
-    }
+        state.capture.info().map(|i| i.client_ref)
+    };
     if !state.live.is_live() {
         crate::actions::start_captions(app).await?;
     }
     let info = state.capture.info().ok_or_else(|| AppError::msg("The recording ended before Live Assist could start."))?;
-    crate::actions::ensure_server_session(app, &info).await
+    Ok((crate::actions::ensure_server_session(app, &info).await?, started))
+}
+
+/// What the end of a session does to the recording beside it (pure).
+#[derive(Debug, PartialEq, Eq)]
+pub struct AtEnd {
+    /// The session started this recording: it stops (its captions with it).
+    pub stop_recording: bool,
+    /// The person's own recording goes on, and its captions were off before the session: they go off again.
+    pub captions_off: bool,
+}
+
+/// `started`: the recording the session started; `running`: the recording now; `captions_were_on`: before the session.
+pub fn at_end(started: Option<&str>, running: Option<&str>, captions_were_on: bool) -> AtEnd {
+    let Some(running) = running else { return AtEnd { stop_recording: false, captions_off: false } };
+    if started == Some(running) {
+        return AtEnd { stop_recording: true, captions_off: false };
+    }
+    AtEnd { stop_recording: false, captions_off: !captions_were_on }
 }
 
 /// What the relay connection of session `id` heard.
@@ -307,8 +334,9 @@ fn spawn_upkeep(app: &AppHandle, id: String) {
     });
 }
 
-/// Ends the session that runs: the last turns go, the server is told, the card hears `ended` and hides, and the
-/// recording stops. Nothing runs: nothing to do.
+/// Ends the session that runs: the last turns go, the server is told, the card hears `ended` and hides. A recording the
+/// session started stops; one the person started before goes on, with captions as they were before the session.
+/// Nothing runs: nothing to do.
 pub async fn end(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let Some(taken) = state.assist.take() else { return Ok(()) };
@@ -320,8 +348,12 @@ pub async fn end(app: &AppHandle) -> AppResult<()> {
     };
     emit(app, &card::ended_message("closed", None));
     crate::lifecycle::hide(app, WINDOW, "assist");
-    if state.capture.is_recording() {
+    let running = state.capture.info().map(|i| i.client_ref);
+    let plan = at_end(taken.started_recording.as_deref(), running.as_deref(), taken.captions_were_on);
+    if plan.stop_recording {
         crate::actions::stop_recording(app, false).await?;
+    } else if plan.captions_off && state.live.is_live() {
+        crate::actions::stop_captions(app);
     }
     ended
 }
@@ -577,6 +609,15 @@ mod tests {
         let armed = Armed { prep_id: "p1".into(), until: at + chrono::Duration::minutes(10) };
         assert!(armed.waits(at + chrono::Duration::minutes(9)));
         assert!(!armed.waits(at + chrono::Duration::minutes(11)), "then the server cancels it");
+    }
+
+    #[test]
+    fn the_end_stops_only_the_recording_the_session_started() {
+        assert_eq!(at_end(Some("rec-1"), Some("rec-1"), false), AtEnd { stop_recording: true, captions_off: false }, "started by Live Assist");
+        assert_eq!(at_end(None, Some("rec-0"), true), AtEnd { stop_recording: false, captions_off: false }, "the person's recording, captions on before: all goes on");
+        assert_eq!(at_end(None, Some("rec-0"), false), AtEnd { stop_recording: false, captions_off: true }, "the person's recording goes on; captions go back off");
+        assert!(!at_end(Some("rec-1"), Some("rec-2"), true).stop_recording, "a later recording is not the session's");
+        assert_eq!(at_end(Some("rec-1"), None, false), AtEnd { stop_recording: false, captions_off: false }, "nothing runs");
     }
 
     #[test]

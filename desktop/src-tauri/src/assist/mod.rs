@@ -53,6 +53,10 @@ pub struct Running {
     pub budget: card::Budget,
     /// The prep's `language_help` (`off` | `urdu` | `roman_urdu` | `arabic`), for `translate`.
     pub language_help: String,
+    /// The recording this session started (its `client_ref`); none when the person's own recording was running.
+    pub started_recording: Option<String>,
+    /// Live captions were on before the session turned them on.
+    pub captions_were_on: bool,
 }
 
 /// What is left of a session that was taken out: its id and the turns that still wait for the server.
@@ -60,6 +64,8 @@ pub struct Running {
 pub struct Taken {
     pub id: String,
     pub rows: Vec<card::TurnRow>,
+    pub started_recording: Option<String>,
+    pub captions_were_on: bool,
 }
 
 /// What one caption line gives the app: the card's message, and whether a batch of turns should go now.
@@ -114,7 +120,7 @@ impl Registry {
             while !running.batch.is_empty() {
                 rows.extend(running.batch.take(std::time::Instant::now()));
             }
-            Taken { id: running.id, rows }
+            Taken { id: running.id, rows, started_recording: running.started_recording, captions_were_on: running.captions_were_on }
         })
     }
 
