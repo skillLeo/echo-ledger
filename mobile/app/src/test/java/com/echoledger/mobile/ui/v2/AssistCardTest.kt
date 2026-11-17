@@ -187,7 +187,7 @@ class AssistCardTest {
                 "v2/assist-card-sequences.json"
             )
         val sequences = Json.parseToJsonElement(file.readText()).jsonObject["sequences"]!!.jsonArray
-        assertTrue(sequences.size >= 10)
+        assertTrue(sequences.size >= 16)
         for (sequence in sequences) {
             val name = sequence.jsonObject["name"]!!.jsonPrimitive.content
             var state = CardState()
@@ -199,6 +199,13 @@ class AssistCardTest {
                 assertEquals(at, expect["text"]!!.jsonPrimitive.content, state.shown?.text.orEmpty())
                 assertEquals(at, expect["status"]!!.jsonPrimitive.contentOrNull, state.shown?.status?.name?.lowercase())
                 assertEquals(at, expect["skipped"]!!.jsonPrimitive.boolean, state.skipped)
+                // Suggestions checked by id, on the card or not.
+                expect["also"]?.jsonArray?.forEach { one ->
+                    val id = one.jsonObject["id"]!!.jsonPrimitive.content
+                    val found = state.suggestions.firstOrNull { it.id == id }
+                    assertEquals("$at, $id", one.jsonObject["text"]!!.jsonPrimitive.content, found?.text)
+                    assertEquals("$at, $id", one.jsonObject["status"]!!.jsonPrimitive.content, found?.status?.name?.lowercase())
+                }
             }
         }
     }
