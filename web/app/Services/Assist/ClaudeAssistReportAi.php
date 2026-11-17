@@ -24,7 +24,7 @@ class ClaudeAssistReportAi implements AssistReportAi
         You write the report of one conversation a person had with help from Live Assist, a coach that showed short
         suggested answers on their screen. The person is often not confident in English. The input is JSON: the meeting
         (type, title, the other person, goals), whether it was a Practice session (an AI asked the questions), the
-        question-and-answer pairs (each with its index, the question, what the person actually said and the hint shown),
+        questions with the answers (each with its index, the question, what the person actually said and the hint shown),
         the facts ledger kept during the call, the running summary, the transcript lines ("Me" is the person, "Them" the
         other side) and the language for a translated summary.
 
