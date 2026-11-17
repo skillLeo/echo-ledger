@@ -33,7 +33,8 @@ use ZipArchive;
  */
 final class MeetingPack
 {
-    public const FORMATS = ['html', 'zip'];
+    /** `text` (since v1.8 P4.4): Copy for AI, the transcript with the screens' markers and a line explaining them. */
+    public const FORMATS = ['html', 'zip', 'text'];
 
     public const VIEWS = ['roman', 'english', 'urdu', 'original'];
 
@@ -77,9 +78,11 @@ final class MeetingPack
         $screens = ScreenStore::ordered($session->id)->get()->values();
         $path = $this->uploads->tempPath('meeting-pack');
         try {
-            $format === 'html'
-                ? $this->writeHtml($path, $session, $transcript, $shown, $lines, $screens, $printBar)
-                : $this->writeZip($path, $session, $lines, $screens, $withAudio);
+            match ($format) {
+                'html' => $this->writeHtml($path, $session, $transcript, $shown, $lines, $screens, $printBar),
+                'text' => $this->writeText($path, $session, $lines, $screens),
+                default => $this->writeZip($path, $session, $lines, $screens, $withAudio),
+            };
         } catch (Throwable $e) {
             @unlink($path);
             throw $e;
@@ -87,8 +90,12 @@ final class MeetingPack
 
         return [
             'path' => $path,
-            'name' => TranscriptExporter::filename($session, $format),
-            'mime' => $format === 'html' ? 'text/html; charset=utf-8' : 'application/zip',
+            'name' => TranscriptExporter::filename($session, $format === 'text' ? 'txt' : $format),
+            'mime' => match ($format) {
+                'html' => 'text/html; charset=utf-8',
+                'text' => 'text/plain; charset=utf-8',
+                default => 'application/zip',
+            },
         ];
     }
 
@@ -103,11 +110,14 @@ final class MeetingPack
         return 'Screen '.$number.' at '.TranscriptExporter::clock($atMs).($description !== '' ? ' — '.$description : '');
     }
 
-    /** `images/screen-07.webp`: numbered with at least two digits, as many as the last number needs. */
+    /** `screens/S07_14-32_orders-page.webp` (since v1.8 P4.2, ScreenAssets::fileName): where the folder keeps it. */
     public static function imageName(Screen $screen, int $number, int $count): string
     {
-        return sprintf('images/screen-%0'.max(2, strlen((string) $count)).'d.%s', $number, $screen->extension());
+        return 'screens/'.ScreenAssets::fileName($screen, $number, $count);
     }
+
+    /** What Copy for AI says first: what the markers mean. */
+    public const AI_NOTE = 'Note: a line like [Screen 7 at 14:32 — what it shows] marks what was on the shared screen at that moment of the recording; the pictures are in the meeting folder (ZIP), named by their number and time.';
 
     /**
      * The lines and the screens in time order: each screen comes before the first line that starts after its moment.
@@ -195,14 +205,13 @@ final class MeetingPack
                     continue;
                 }
                 [, $screen, $number] = $item;
-                $label = self::label($number, $screen->at_ms);
+                $label = self::label($number, $screen->at_ms, $screen->description);
                 $picture = $this->screens->picture($screen, $thumbs);
-                fwrite($out, '<figure class="screen" id="screen-'.$number.'"><figcaption><span class="label">['.$e($label).']</span>'
-                    .($screen->description !== null ? ' <span dir="auto">'.$e($screen->description).'</span>' : '').'</figcaption>');
+                fwrite($out, '<figure class="screen" id="screen-'.$number.'"><figcaption><span class="label" dir="auto">['.$e($label).']</span></figcaption>');
                 if ($picture !== null) {
                     fwrite($out, '<img src="data:'.($thumbs ? 'image/webp' : $screen->mime).';base64,');
                     fwrite($out, base64_encode($picture));
-                    fwrite($out, '" alt="'.$e($label.($screen->description !== null ? ': '.$screen->description : '')).'">');
+                    fwrite($out, '" alt="'.$e($label).'">');
                 }
                 fwrite($out, '</figure>'."\n");
             }
@@ -242,22 +251,19 @@ final class MeetingPack
                     continue;
                 }
                 [, $screen, $number] = $item;
-                $label = self::label($number, $screen->at_ms);
+                // Since v1.8 P4.4: "[Screen 7 at 14:32 — Orders page]", then the picture from screens/.
+                $short = self::label($number, $screen->at_ms);
                 $name = self::imageName($screen, $number, $count);
-                $picture = $this->screens->picture($screen);
-                if ($picture !== null) {
-                    $file = $this->uploads->tempPath('pack-image');
-                    file_put_contents($file, $picture);
-                    $temp[] = $file;
-                    $zip->addFile($file, $name);
-                    $zip->setCompressionName($name, ZipArchive::CM_STORE);
-                    $md .= '!['.$label.']('.$name.' "'.$label.'")'."\n";
-                } else {
-                    $md .= '['.$label.']'."\n";
+                $md .= '**\['.TranscriptExporter::mdEscape(self::label($number, $screen->at_ms, $screen->description)).'\]**'."\n";
+                if ($this->addPicture($zip, $screen, $name, $temp)) {
+                    $md .= '!['.$short.'](<'.$name.'> "'.$short.'")'."\n";
                 }
-                $md .= ($screen->description !== null ? '*'.TranscriptExporter::mdEscape($screen->description).'*' : '*'.$label.'*')."\n\n";
+                $md .= "\n";
             }
             $zip->addFromString('transcript.md', rtrim($md)."\n");
+            if ($count > 0) {
+                $zip->addFromString('screens.md', $this->screensTable($session, $screens, $lines));
+            }
             if ($withAudio) {
                 $primary = $session->recordings()->where('role', RecordingRole::Primary->value)->first();
                 if ($primary instanceof Recording && $primary->isReady()) {
@@ -276,6 +282,78 @@ final class MeetingPack
             foreach ($temp as $file) {
                 @unlink($file);
             }
+        }
+    }
+
+    /**
+     * Adds [$screen]'s picture to [$zip] as [$name]; false when it is gone. The temp file is deleted with the others.
+     *
+     * @param  list<string>  $temp
+     */
+    private function addPicture(ZipArchive $zip, Screen $screen, string $name, array &$temp): bool
+    {
+        $picture = $this->screens->picture($screen);
+        if ($picture === null) {
+            return false;
+        }
+        $file = $this->uploads->tempPath('pack-image');
+        file_put_contents($file, $picture);
+        $temp[] = $file;
+        $zip->addFile($file, $name);
+        $zip->setCompressionName($name, ZipArchive::CM_STORE);
+
+        return true;
+    }
+
+    /**
+     * screens.md (since v1.8 P4.4): one row a screen, its number, time, file, description and what was said around it.
+     *
+     * @param  Collection<int, Screen>  $screens
+     * @param  list<array{speaker: string, start_ms: int, end_ms: int, text: string}>  $lines
+     */
+    private function screensTable(CaptureSession $session, Collection $screens, array $lines): string
+    {
+        $cell = fn (?string $v): string => $v === null || trim($v) === '' ? '—' : str_replace(["\r\n", "\n", "\r"], ' / ', TranscriptExporter::mdEscape(trim($v)));
+        $out = ['# Screens of '.TranscriptExporter::mdEscape($session->displayTitle()), '',
+            '| # | Time | File | Description | What was said |', '|---|---|---|---|---|'];
+        foreach ($screens as $i => $screen) {
+            $name = self::imageName($screen, $i + 1, $screens->count());
+            $out[] = '| '.($i + 1).' | '.TranscriptExporter::clock($screen->at_ms).' | [`'.basename($name).'`](<'.$name.'>) | '
+                .$cell($screen->description).' | '.$cell(ScreenAssets::said($screen, $lines)).' |';
+        }
+
+        return implode("\n", $out)."\n";
+    }
+
+    /**
+     * Copy for AI (since v1.8 P4.4): a line saying what the markers mean, the facts, then the transcript with each
+     * screen as "[Screen 7 at 14:32 — Orders page]" at its moment, as plain text.
+     *
+     * @param  list<array{index: int, speaker: string, label: string, channel: int, start_ms: int, end_ms: int, text: string}>  $lines
+     * @param  Collection<int, Screen>  $screens
+     */
+    private function writeText(string $path, CaptureSession $session, array $lines, Collection $screens): void
+    {
+        $out = [];
+        if ($screens->isNotEmpty()) {
+            $out[] = self::AI_NOTE;
+            $out[] = '';
+        }
+        $out[] = $session->displayTitle();
+        foreach ($this->facts($session, $lines, $screens->count()) as $name => $value) {
+            $out[] = $name.': '.$value;
+        }
+        if (($note = $this->noteLine($lines)) !== null) {
+            $out[] = $note;
+        }
+        $out[] = '';
+        foreach (self::timeline($lines, $screens) as $item) {
+            $out[] = $item[0] === 'line'
+                ? '['.TranscriptExporter::clock($item[1]['start_ms']).'] '.($item[1]['speaker'] !== '' ? $item[1]['speaker'].': ' : '').$item[1]['text']
+                : '['.self::label($item[2], $item[1]->at_ms, $item[1]->description).']';
+        }
+        if (file_put_contents($path, implode("\n", $out)."\n") === false) {
+            throw new RuntimeException('Could not write the meeting pack.');
         }
     }
 
