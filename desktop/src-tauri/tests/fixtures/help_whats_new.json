@@ -1,0 +1,6 @@
+{
+  "data": [
+    { "version": "1.8.2", "platform": "windows", "released_at": "2026-11-14T10:00:00+00:00", "notes": "Faster uploads." },
+    { "version": "1.8.0", "platform": "windows", "released_at": null, "notes": "New: missed recordings.\nFixed: the pill." }
+  ]
+}

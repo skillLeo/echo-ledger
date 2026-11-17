@@ -1560,3 +1560,40 @@ impl std::fmt::Debug for PrepDraft {
         f.debug_struct("PrepDraft").field("id", &self.id).field("meeting_type", &self.meeting_type).finish_non_exhaustive()
     }
 }
+
+// ---- Help (docs/API.md 2.0.0-d "Help") ----------------------------------------------------------------------------
+
+/// `{"data": [...]}`, the help routes' lists, handed to the window as they come.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct DataList<T> {
+    pub data: Vec<T>,
+}
+
+/// One section of the user guide (`GET /api/help/guides?q=`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct HelpGuideHit {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub excerpt: String,
+}
+
+/// A section of the user guide in full (`GET /api/help/guides/{id}`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct HelpGuide {
+    pub id: String,
+    pub title: String,
+    pub markdown: String,
+}
+
+/// One release's notes (`GET /api/help/whats-new?platform=`), newest first.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct WhatsNewRelease {
+    pub version: String,
+    pub platform: String,
+    /// ISO 8601; null when the server does not know it.
+    #[serde(default)]
+    pub released_at: Option<String>,
+    #[serde(default)]
+    pub notes: String,
+}

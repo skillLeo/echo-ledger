@@ -586,6 +586,32 @@ pub async fn upgrade_request_latest(app: AppHandle) -> AppResult<Option<crate::n
     app.state::<AppState>().api()?.latest_upgrade_request().await
 }
 
+// ---- Help (docs/API.md 2.0.0-d "Help") -----------------------------------------------------------------------------
+
+/// The user guide's sections (`{data}` as the server sends it); with `q`, those that match, best first.
+#[tauri::command]
+pub async fn help_guides(app: AppHandle, q: Option<String>) -> AppResult<crate::net::models::DataList<crate::net::models::HelpGuideHit>> {
+    crate::help::guides(&app.state::<AppState>().api()?, q.as_deref()).await
+}
+
+/// One section of the guide in full (its Markdown).
+#[tauri::command]
+pub async fn help_guide(app: AppHandle, id: String) -> AppResult<crate::net::models::HelpGuide> {
+    crate::help::guide(&app.state::<AppState>().api()?, &id).await
+}
+
+/// What's new on this computer's platform (the core picks it), newest first (`{data}` as the server sends it).
+#[tauri::command]
+pub async fn help_whats_new(app: AppHandle) -> AppResult<crate::net::models::DataList<crate::net::models::WhatsNewRelease>> {
+    crate::help::whats_new(&app.state::<AppState>().api()?).await
+}
+
+/// A message to support; nothing comes back when the server took it.
+#[tauri::command]
+pub async fn support_send(app: AppHandle, subject: String, message: String, include_device_report: bool) -> AppResult<()> {
+    crate::help::send(&app.state::<AppState>().api()?, &subject, &message, include_device_report).await
+}
+
 // ---- Payment receipts (v1.7, docs/API.md "Payment receipts") -------------------------------------------------------
 
 /// "Choose file…" on Send receipt: screenshots and PDFs, several at once; each path then goes to

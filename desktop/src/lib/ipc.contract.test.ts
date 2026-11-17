@@ -311,6 +311,14 @@ describe("wire types", () => {
     expect(keys(pick)).toContain("screens");
   });
 
+  it("the help's types carry the fields the Rust models send (2.0.0-d)", () => {
+    for (const name of ["HelpGuideHit", "HelpGuide", "WhatsNewRelease"]) {
+      expect(sorted(tsInterfaceKeys(name)), name).toEqual(sorted(rustFields(rustSourceDeclaring("struct", name), name, false)));
+    }
+    // The lists come as the server sends them, `{data: [...]}`, which the window reads.
+    expect(rustFields(rustSourceDeclaring("struct", "DataList"), "DataList", false)).toEqual(["data"]);
+  });
+
   it("screen hold reasons match the serde names of the Rust enum", () => {
     expect(sorted(tsUnionValues("ScreenHoldReason"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "HoldReason"), "HoldReason")));
   });

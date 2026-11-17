@@ -479,6 +479,35 @@ impl ApiClient {
         }
     }
 
+    /// `GET /api/help/guides?q=` (2.0.0-d): the user guide's sections; with `q`, those that match, best first.
+    pub async fn help_guides(&self, q: Option<&str>) -> AppResult<DataList<HelpGuideHit>> {
+        let mut request = self.http.get(self.url("help/guides"));
+        if let Some(q) = q {
+            request = request.query(&[("q", q)]);
+        }
+        let resp = self.authed(request)?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/help/guides/{id}` (2.0.0-d): one section in full; `404` for an unknown id.
+    pub async fn help_guide(&self, id: &str) -> AppResult<HelpGuide> {
+        let resp = self.authed(self.http.get(self.url(&format!("help/guides/{id}"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/help/whats-new?platform=` (2.0.0-d): the platform's last releases with notes, newest first.
+    pub async fn help_whats_new(&self, platform: &str) -> AppResult<DataList<WhatsNewRelease>> {
+        let resp = self.authed(self.http.get(self.url("help/whats-new")).query(&[("platform", platform)]))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/support/messages` (2.0.0-d): `202` with nothing in it; 5 an hour per person.
+    pub async fn support_message(&self, subject: &str, message: &str, include_device_report: bool) -> AppResult<()> {
+        let body = json!({ "subject": subject, "message": message, "include_device_report": include_device_report });
+        let resp = self.authed(self.http.post(self.url("support/messages")))?.json(&body).send().await?;
+        Self::ok_empty(resp).await
+    }
+
     /// `POST /api/devices/report` (since v1.5): a device check the person chose to send; returns when the server took it.
     pub async fn device_report(&self, report: &DeviceReport) -> AppResult<String> {
         let resp = self.authed(self.http.post(self.url("devices/report")))?.json(report).send().await?;
