@@ -37,10 +37,10 @@ export function hueOf(value: string): { hue: number; sat: number } | null {
   return { hue: (hue + 360) % 360, sat: d / (1 - Math.abs(2 * light - 1)) };
 }
 
-/** Purple, indigo or violet: a hue from 250 to 300 degrees that is not close to grey. */
+/** Indigo, violet or purple: a hue from 225 to 300 degrees that is not close to grey. */
 export function isPurple(value: string): boolean {
   const c = hueOf(value);
-  return !!c && c.sat >= 0.15 && c.hue >= 250 && c.hue <= 300;
+  return !!c && c.sat >= 0.15 && c.hue >= 225 && c.hue <= 300;
 }
 
 const ROLE_COLOUR = /--el-role-(accent|success|warning|danger|record)/;
@@ -90,6 +90,7 @@ describe("the template look stays out of v2", () => {
       "color: #7C3AED;",
       "background: rgb(139, 92, 246);",
       "color: hsl(270 60% 50%);",
+      "--accent: #4F46E5;",
     ]) expect(templateFindings(planted), planted).not.toEqual([]);
     expect(templateFindings("border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default);")).toEqual([]);
     expect(templateFindings('<span className="el-pill__sep">·</span>')).toEqual([]);
@@ -97,10 +98,12 @@ describe("the template look stays out of v2", () => {
     expect(templateFindings("border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);")).toEqual([]);
   });
 
-  it("reads the hue of a colour and calls 250 to 300 degrees purple, never a grey or the teal accent", () => {
+  it("reads the hue of a colour and calls 225 to 300 degrees indigo, violet or purple, never a grey or the teal accent", () => {
     expect(hueOf("#7C3AED")!.hue).toBeCloseTo(262, 0);
     expect(isPurple("#7C3AED")).toBe(true);
-    expect(isPurple("#3e63dd")).toBe(false);
+    expect(isPurple("#6366F1")).toBe(true); // indigo, 239 degrees
+    expect(isPurple("#3e63dd")).toBe(true); // the classic app's indigo, 226 degrees
+    expect(isPurple("#2563EB")).toBe(false); // blue, 221 degrees
     expect(isPurple("#8B5CF6")).toBe(true);
     expect(isPurple("rgb(139, 92, 246)")).toBe(true);
     expect(isPurple("hsl(270 60% 50%)")).toBe(true);

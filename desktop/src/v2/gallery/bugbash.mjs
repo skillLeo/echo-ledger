@@ -37,6 +37,12 @@ const CASES = [
   ["a-home", "app", app("library"), ["en"], nav("Home")],
   ["a-live", "app", app("library"), ["en"], nav("Live")],
   ["a-ask", "app", app("library"), ["en"], nav("Ask")],
+  ["a-workspace", "app", app("project"), ["en"], async (page) => {
+    await page.getByRole("button", { name: "Acme Holdings", exact: true }).first().click();
+    await page.waitForTimeout(1200);
+    await page.getByRole("tab", { name: "Memory & instructions" }).click();
+    await page.waitForTimeout(800);
+  }],
   ["a-prep", "app", app("library"), ["en"], async (page) => { await nav("Live")(page); await page.getByRole("button", { name: "New session" }).click(); await page.waitForTimeout(800); }],
   ["a-settings", "app", app("settings"), ["en"]],
   ["a-settings-page", "app", app("settings"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],

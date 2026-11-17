@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import MainApp from "../../views/main/MainApp";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
-import { AskV2, citationValue } from "./AskV2";
+import { AskV2, OFFLINE, TRY_AGAIN, askFailureWords, citationValue } from "./AskV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -64,7 +64,7 @@ describe("Ask v2 (as on the phone)", () => {
   });
 
   it("a failed answer says so in plain words, with Ask again", async () => {
-    fail("client_ask", "offline");
+    fail("client_ask", "Network error: error sending request");
     render(<AskV2 projects={PROJECTS} {...props()} />);
     fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), { target: { value: "When is the delivery?" } });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
@@ -75,6 +75,35 @@ describe("Ask v2 (as on the phone)", () => {
     fireEvent.click(within(alert).getByRole("button", { name: "Ask" }));
     await act(flushAsync);
     expect(screen.getByText(ANSWER.data.answer)).toBeInTheDocument();
+  });
+
+  it("failures: the connection only when offline, the server's own sentence for people, else Try again", () => {
+    expect(askFailureWords("Network error: dns error", true)).toBe(OFFLINE);
+    expect(askFailureWords("This month's AI budget ($5.00) is used up. Raise it in Settings → AI.", false)).toBe(OFFLINE);
+    expect(askFailureWords("This month's AI budget ($5.00) is used up. Raise it in Settings → AI.", true)).toBe("This month's AI budget ($5.00) is used up. Raise it in Settings → AI.");
+    expect(askFailureWords("AI isn't set up on the server yet. Ask the person who runs the console.", true)).toBe("AI isn't set up on the server yet. Ask the person who runs the console.");
+    expect(askFailureWords("Server returned 502: Bad gateway", true)).toBe(TRY_AGAIN);
+    expect(askFailureWords("The speech engine could not be reached. Try again in a moment.", true)).toBe(TRY_AGAIN);
+    expect(askFailureWords(new Error(""), true)).toBe(TRY_AGAIN);
+  });
+
+  it("another project puts the answer away", async () => {
+    respond("client_ask", ANSWER);
+    render(<AskV2 projects={PROJECTS} {...props()} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Your question" }), { target: { value: "When is the delivery?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await act(flushAsync);
+    expect(screen.getByText(ANSWER.data.answer)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("combobox", { name: /Ask about/ }));
+    fireEvent.click(screen.getByRole("option", { name: "Mehran Foods" }));
+    expect(screen.queryByText(ANSWER.data.answer)).toBeNull();
+    expect(screen.getByRole("region", { name: "Ask your recordings" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Your question" })).toHaveValue("When is the delivery?");
+  });
+
+  it("offers the answer languages the server takes", () => {
+    render(<AskV2 projects={PROJECTS} {...props()} />);
+    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual(["English", "Roman Urdu"]);
   });
 
   it("a source's line: the moment of a call, the page of a file", () => {

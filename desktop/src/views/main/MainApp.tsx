@@ -62,6 +62,7 @@ const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })))
 const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
 const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
 const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
+const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
 type Tab = MainTab;
@@ -740,7 +741,15 @@ export default function MainApp() {
           aside={<LibraryColumn places={places} folder={libraryFolder} view={libraryView} onOpen={openPlace} projects={projects} expanded={expanded}
             onToggle={toggleExpanded} onProject={(id) => openProject(id)} />} />
       )}
-      {tab === "projects" && (
+      {tab === "projects" && ui.flags["ui_v2.ask"] && projectId && (projects ?? []).some((p) => p.id === projectId) && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded">
+            <WorkspaceV2 key={projectId} project={(projects ?? []).find((p) => p.id === projectId)!} onBack={() => openProject(null)}
+              onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
+          </div>
+        </Suspense>
+      )}
+      {tab === "projects" && !(ui.flags["ui_v2.ask"] && projectId && (projects ?? []).some((p) => p.id === projectId)) && (
         <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
           projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
           requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}

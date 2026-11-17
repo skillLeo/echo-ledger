@@ -3,11 +3,27 @@
 // server answers per project today (`client_ask`, POST /api/clients/{id}/ask), so the scope is a project; "All
 // recordings" is said, not offered, until the server can.
 import { useState } from "react";
-import { api, type AnswerCitation, type AnswerLanguage, type ClientAnswer } from "../../lib/ipc";
+import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type ClientAnswer } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
 import { Banner, Button, Card, EmptyState, Icons, List, ListRow, ListSection, Loading, Segmented, Select, Skeleton, TextArea } from "../components";
 
-export type AskState = { kind: "idle" } | { kind: "asking" } | { kind: "answer"; answer: ClientAnswer } | { kind: "failed" };
+export type AskState = { kind: "idle" } | { kind: "asking" } | { kind: "answer"; answer: ClientAnswer } | { kind: "failed"; words: string };
+
+export const OFFLINE = "The answer couldn't be made. Check the internet connection and try again.";
+export const TRY_AGAIN = "The answer couldn't be made. Try again.";
+/** The core's words that aren't written for people (lib/ipc errors, src-tauri error.rs). */
+const TECHNICAL = /^(Server returned|Audio error|I\/O error|Data error|Tauri error|Something went wrong|The speech engine could not be reached)/;
+
+/**
+ * What a failed Ask says: the connection only when offline; the server's own sentence when it is written for people
+ * (the month's AI budget, AI not set up, a question too short); otherwise "Try again".
+ */
+export function askFailureWords(e: unknown, online: boolean = typeof navigator === "undefined" ? true : navigator.onLine): string {
+  const text = errorMessage(e);
+  if (!online || /^Network error/.test(text)) return OFFLINE;
+  if (TECHNICAL.test(text)) return TRY_AGAIN;
+  return text;
+}
 
 /** A source's line: "Call · 12:40", "Proforma March.pdf · page 3". */
 export function citationValue(c: AnswerCitation): string | undefined {
@@ -23,16 +39,24 @@ export type AskV2Props = {
   onOpenAt: (sessionId: string, atMs: number) => void;
   onOpenProject: (projectId: string) => void;
   onLibrary: () => void;
+  /** Inside a project's page: no page title and no project choice (it asks that project). */
+  embedded?: boolean;
 };
 
+/** The answer languages the server takes (POST /api/clients/{id}/ask: en | roman_urdu); Urdu script waits for it. */
 const LANGUAGES: { value: AnswerLanguage; label: string }[] = [{ value: "en", label: "English" }, { value: "roman_urdu", label: "Roman Urdu" }];
 
-export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProject, onLibrary }: AskV2Props) {
+export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProject, onLibrary, embedded = false }: AskV2Props) {
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
   const [question, setQuestion] = useState("");
   const [language, setLanguage] = useState<AnswerLanguage>("en");
   const [state, setState] = useState<AskState>({ kind: "idle" });
   const chosen = projects.find((p) => p.id === projectId) ?? projects[0] ?? null;
+  // Another project: the answer on screen was about the last one.
+  const choose = (id: string) => {
+    if (id !== chosen?.id) setState({ kind: "idle" });
+    setProjectId(id);
+  };
 
   if (projects.length === 0) {
     return (
@@ -50,20 +74,20 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
     setState({ kind: "asking" });
     try {
       const r = await api.askClient(chosen.id, question.trim(), language);
-      setState(r?.data ? { kind: "answer", answer: r.data } : { kind: "failed" });
-    } catch {
-      setState({ kind: "failed" });
+      setState(r?.data ? { kind: "answer", answer: r.data } : { kind: "failed", words: TRY_AGAIN });
+    } catch (e) {
+      setState({ kind: "failed", words: askFailureWords(e) });
     }
   };
 
   return (
-    <div className="el-page el-page--narrow" data-v2="ask">
-      <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>
+    <div className={embedded ? "el-ask el-ask--embedded" : "el-page el-page--narrow"} data-v2="ask">
+      {!embedded && <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>}
       <Card className="el-form">
-        <div className="el-field">
-          <Select label="Ask about" value={chosen?.id ?? ""} onChange={setProjectId} options={projects.map((p) => ({ value: p.id, label: p.name }))} />
+        {!embedded && <div className="el-field">
+          <Select label="Ask about" value={chosen?.id ?? ""} onChange={choose} options={projects.map((p) => ({ value: p.id, label: p.name }))} />
           <span className="el-field__hint">All recordings (not available yet)</span>
-        </div>
+        </div>}
         <TextArea label="Your question" value={question} placeholder="What did Bilal Traders agree on payment?" rows={3}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void ask(); }} />
@@ -84,7 +108,7 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
       )}
       {state.kind === "failed" && (
         <Banner tone="danger" icon={Icons.ErrorIcon} action={<Button size="sm" onClick={() => void ask()}>Ask</Button>}>
-          The answer couldn't be made. Check the internet connection and try again.
+          {state.words}
         </Banner>
       )}
       {state.kind === "answer" && (
