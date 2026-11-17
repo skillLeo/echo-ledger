@@ -1341,6 +1341,28 @@ export interface ScreenMoment {
   said?: string | null;
 }
 
+/** `GET /api/help/guides?q=` (2.0.0-d): a section of the user guide. */
+export interface HelpGuideHit {
+  id: string;
+  title: string;
+  excerpt: string;
+}
+
+/** `GET /api/help/guides/{id}`. */
+export interface HelpGuide {
+  id: string;
+  title: string;
+  markdown: string;
+}
+
+/** `GET /api/help/whats-new?platform=` (2.0.0-d): one release's notes. */
+export interface WhatsNewRelease {
+  version: string;
+  platform: string;
+  released_at: string | null;
+  notes: string;
+}
+
 /** `GET /api/sessions/{id}/screens`. */
 export interface SessionScreens {
   data: ScreenMoment[];
@@ -1797,6 +1819,15 @@ export const api = {
   trashKeepHours: () => invoke<number>("trash_keep_hours"),
   /** "Switch back to classic" (`PUT /api/account/ui`): the server's new flags. */
   uiClassicSet: (classic: boolean) => invoke<UiFlagsAnswer>("ui_classic_set", { classic }),
+  /** Help (docs/API.md 2.0.0-d, v1.8 P6.4): the user guide's sections, those matching `q` best first (at most 20). */
+  helpGuides: (q: string | null = null) => invoke<{ data: HelpGuideHit[] }>("help_guides", { q }),
+  /** One section of the guide, as Markdown. */
+  helpGuide: (id: string) => invoke<HelpGuide>("help_guide", { id }),
+  /** This platform's last releases with notes, newest first (the core names the platform: windows or mac). */
+  helpWhatsNew: () => invoke<{ data: WhatsNewRelease[] }>("help_whats_new"),
+  /** Contact support (5 an hour): the device's last report goes with it only when `includeDeviceReport`. */
+  supportSend: (subject: string, message: string, includeDeviceReport: boolean) =>
+    invoke<void>("support_send", { subject, message, includeDeviceReport }),
   /** Live Assist (API_ASSIST.md 1.9.0-g): the person's preps, all of them without a status. */
   assistPrepsList: (status: AssistPrepStatus | null = null) => invoke<AssistPrep[]>("assist_preps_list", { status }),
   assistPrepSave: (prep: AssistPrepDraft) => invoke<AssistPrep>("assist_prep_save", { prep }),

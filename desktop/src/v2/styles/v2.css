@@ -679,7 +679,7 @@ button.el-step__head { cursor: pointer; }
 .el-drop--over { border-color: var(--el-role-accent-default); background: var(--el-role-accent-soft); }
 .el-mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
 /* A switch with its words across a card: the words at the start, the switch at the end. */
-.el-form > .el-check-row { display: flex; justify-content: space-between; gap: var(--el-space-16); }
+.el-form > .el-check-row:has(> .el-toggle) { display: flex; justify-content: space-between; gap: var(--el-space-16); }
 .el-ai-off { flex-direction: row; align-items: center; justify-content: space-between; }
 .el-workspace-add { border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-ask__answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -805,3 +805,26 @@ button.el-step__head { cursor: pointer; }
 .el-said { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-4); }
 .el-screen-viewer__text summary { cursor: pointer; color: var(--el-role-text-secondary); }
 .el-screen-viewer__text p { margin-block-start: var(--el-space-8); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Help (v1.8 P6.4): the guides, a guide to read, what's new, contact support. */
+.el-help { display: grid; gap: var(--el-space-16); }
+.el-help__guide > h2 { margin: 0; }
+.el-help__guide > h2:focus { outline: none; }
+.el-help__guide > h2:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-help__release { display: grid; gap: var(--el-space-4); padding: var(--el-space-16); }
+.el-help__guide > .el-page__back { justify-self: start; }
+.el-help__release > h2 { margin: 0; font-size: var(--el-text-body-size); }
+.el-help__sent { display: grid; gap: var(--el-space-8); justify-items: start; }
+.el-help__sent > h2 { margin: 0; font-size: var(--el-text-body-size); }
+.el-markdown { display: grid; gap: var(--el-space-12); min-inline-size: 0; overflow-wrap: anywhere; }
+.el-markdown > * { margin: 0; }
+.el-markdown h3, .el-markdown h4, .el-markdown h5, .el-markdown h6 { font-size: var(--el-text-body-size); margin-block-start: var(--el-space-8); }
+.el-markdown ul, .el-markdown ol { padding-inline-start: var(--el-space-24); display: grid; gap: var(--el-space-4); }
+.el-markdown ul { list-style: disc; }
+.el-markdown ol { list-style: decimal; }
+.el-markdown blockquote { padding-inline-start: var(--el-space-12); color: var(--el-role-text-secondary); }
+.el-markdown__table { overflow-x: auto; }
+.el-markdown table { border-collapse: collapse; inline-size: 100%; font-size: var(--el-text-caption-size); }
+.el-markdown th, .el-markdown td { text-align: start; vertical-align: top; padding: var(--el-space-8); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-code { font-family: var(--el-font-family-mono); font-size: var(--el-text-caption-size); background: var(--el-role-bg-subtle); border-radius: var(--el-radius-sm); padding-inline: var(--el-space-4); }
+pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
