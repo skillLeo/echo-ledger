@@ -161,7 +161,9 @@ describe("the page promises no more than the last check saw", () => {
   const hidings = ["all", "floating", "off"] as const;
   const badges = ["private", "visible", "not_checked", "black_box"] as const;
   it.each(hidings.flatMap((hiding) => badges.map((badge) => [hiding, badge] as const)))("hiding %s, badge %s: today's page, onboarding and the v2 page", async (hiding, badge) => {
-    expect(SHARE_PRIVACY_INTRO).toBe("EchoLedger hides its windows from screen sharing, checks on this computer whether that works, and tells you what the last check saw.");
+    expect(SHARE_PRIVACY_INTRO).toBe("EchoLedger hides its windows from screen sharing and checks on this computer that it works.");
+    // One sentence for what EchoLedger does; what the last check saw is said once, in its own sentence.
+    expect(SHARE_PRIVACY_INTRO).not.toMatch(/last check/i);
     expect(SHARE_PRIVACY_OFF).toBe("Hide from screen sharing is off: EchoLedger's windows show in a screen share.");
     const settings = makeSettings({ hideFromSharing: hiding });
     const pages: [string, () => ReactElement][] = [

@@ -87,8 +87,8 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
       {!embedded && <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>}
       <Card className="el-form">
         {!embedded && <div className="el-field">
+          {/* Projects only: asking across all recordings comes when the server can; until then it isn't offered at all. */}
           <Select label="Ask about" value={chosen?.id ?? ""} onChange={choose} options={projects.map((p) => ({ value: p.id, label: p.name }))} />
-          <span className="el-field__hint">All recordings (not available yet)</span>
         </div>}
         <TextArea label="Your question" value={question} placeholder="What did Bilal Traders agree on payment?" rows={3}
           onChange={(e) => setQuestion(e.target.value)}
