@@ -152,7 +152,8 @@ class CallsPageParityTest : ScreenTest() {
     fun todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps() {
         val today = mutableMapOf<String, Step>()
         val v2 = mutableMapOf<String, Step>()
-        // One walk on today's page, then the same walk on the v2 page from the same starting settings.
+        // One walk on today's page, then the same walk on the v2 page, each from the walked settings' defaults.
+        startFromDefaults()
         showBoth()
         today += ParityKit.firstSeen(compose, Step.entries, ::run)
         assertEquals(today.toString(), true, today.size > 30)
@@ -162,6 +163,16 @@ class CallsPageParityTest : ScreenTest() {
 
     /** The v2 page's walk, in a second composition from the start (settings back to their defaults first). */
     private fun v2Walk(into: MutableMap<String, Step>) {
+        startFromDefaults()
+        page = 1
+        compose.waitForIdle()
+        into += ParityKit.firstSeen(compose, Step.entries, ::run)
+    }
+
+    private var page by androidx.compose.runtime.mutableIntStateOf(0)
+
+    /** The walked settings at their defaults, as the view model shows them (whatever an earlier test left). */
+    private fun startFromDefaults() {
         val d = AppSettings()
         vm.updateSettings {
             it.copy(
@@ -171,13 +182,12 @@ class CallsPageParityTest : ScreenTest() {
                 deletePhoneAppCopy = d.deletePhoneAppCopy
             )
         }
-        pumpUntil("defaults") { vm.settings.value.extraCallApps.isEmpty() && vm.settings.value.phoneCalls != "always" }
-        page = 1
-        compose.waitForIdle()
-        into += ParityKit.firstSeen(compose, Step.entries, ::run)
+        pumpUntil("defaults") {
+            val s = vm.settings.value
+            s.extraCallApps.isEmpty() && s.phoneCalls == d.phoneCalls && s.phoneAppImport == d.phoneAppImport &&
+                s.deletePhoneAppCopy == d.deletePhoneAppCopy
+        }
     }
-
-    private var page by androidx.compose.runtime.mutableIntStateOf(0)
 
     private fun showBoth() = show {
         if (page == 0) {

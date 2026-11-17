@@ -196,14 +196,30 @@ class VendorNamesTest {
     private fun resourceStrings(): List<Pair<String, String>> = sourceSets.flatMap { set ->
         set.walkTopDown()
             .filter { (it.extension == "xml" && "/res/" in it.path.replace('\\', '/')) || it.name == "AndroidManifest.xml" }
-            .flatMap { file ->
-                // A string the key step owns is left out by its name, in any language; everything else is read.
-                val text = Regex("""<string name="([^"]+)"[^>]*>[^<]*</string>""").replace(file.readText()) {
-                    if (it.groupValues[1] in groqKeyStepKeys) "" else it.value
-                }
-                Regex(">([^<>]+)<|=\"([^\"]+)\"").findAll(text).map { (it.groupValues[1].ifEmpty { it.groupValues[2] }) }
-                    .map { "${set.name}/${file.name}: $it" to it }.toList()
-            }.toList()
+            .flatMap { file -> resourceTexts(file.readText()).map { "${set.name}/${file.name}: $it" to it } }
+            .toList()
+    }
+
+    /**
+     * The texts of one resource file. A string the key step owns (by its name, in any language) is still read, with only
+     * the word Groq taken out, so any other vendor name in it is caught.
+     */
+    private fun resourceTexts(xml: String): List<String> {
+        val text = Regex("""<string name="([^"]+)"[^>]*>[^<]*</string>""").replace(xml) {
+            if (it.groupValues[1] in groqKeyStepKeys) it.value.replace(Regex("(?i)\\bgroq\\b"), "") else it.value
+        }
+        return Regex(">([^<>]+)<|=\"([^\"]+)\"").findAll(text).map { it.groupValues[1].ifEmpty { it.groupValues[2] } }.toList()
+    }
+
+    @Test
+    fun `a key step string may name Groq and nothing else, in every language`() {
+        val texts = resourceTexts(
+            """<resources><string name="v2_tr_key_open">Open console.groq.com</string>
+            <string name="v2_tr_key_field">Groq یا OpenAI کی کلید</string><string name="other">Groq key</string></resources>"""
+        )
+        // The Groq-only line passes; OpenAI in a key step string, and Groq in any other string, are caught.
+        assertTrue("Open console..com" in texts)
+        assertEquals(listOf(" یا OpenAI کی کلید", "Groq key"), texts.filter { names.containsMatchIn(it) })
     }
 
     @Test

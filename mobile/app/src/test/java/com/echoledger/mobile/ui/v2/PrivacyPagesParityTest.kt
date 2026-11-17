@@ -353,6 +353,25 @@ class PrivacyPagesParityTest : ScreenTest() {
     private fun waitFor(words: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasText(words)).fetchSemanticsNodes().isNotEmpty() }
 
     @Test
+    fun everyReasonAppLockCantBeUsedHasItsOwnWords() {
+        // Every REASON_ the lock's availability can give (AppLock.kt), found by name so a new one can't be missed.
+        val reasons = Class.forName("com.echoledger.mobile.ui.AppLockKt").declaredFields
+            .filter { it.name.startsWith("REASON_") }
+            .map { field ->
+                field.isAccessible = true
+                field.get(null) as String
+            }
+        assertTrue(reasons.toString(), reasons.size >= 2)
+        assertEquals(reasons.toSet(), com.echoledger.mobile.ui.v2.settings.LOCK_REASONS.keys)
+        val words = com.echoledger.mobile.ui.v2.settings.LOCK_REASONS.values
+        assertEquals("one string each", words.size, words.toSet().size)
+        for (language in EchoLanguage.entries) {
+            val res = V2Testing.resources(language)
+            assertEquals(words.size, words.map(res::getString).toSet().size)
+        }
+    }
+
+    @Test
     fun trashTimeInWords() {
         val res = V2Testing.resources(EchoLanguage.English)
         val words = { h: Int -> com.echoledger.mobile.ui.v2.library.keepWords(res, h) }
