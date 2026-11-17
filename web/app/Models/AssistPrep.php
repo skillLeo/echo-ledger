@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Models\Concerns\BelongsToWorkspace;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -72,6 +73,12 @@ final class AssistPrep extends Model
             'scheduled_at' => 'datetime',
             'armed_until' => 'datetime',
         ];
+    }
+
+    /** @return BelongsTo<Client, $this> the project (`project_id` in the API) */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Client::class, 'client_id');
     }
 
     /** @return BelongsToMany<ClientFile, $this> */

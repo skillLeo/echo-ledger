@@ -11,6 +11,7 @@ use App\Models\Client;
 use App\Models\ClientFile;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
+use App\Services\Assist\AssistRecords;
 use App\Services\Assist\PromptPack;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -83,11 +84,7 @@ final class AssistPrepController extends Controller
     /** DELETE /api/assist/preps/{id} */
     public function destroy(Request $request, string $id): Response
     {
-        $prep = $this->find($request, $id);
-        // The texts go now; the soft-deleted row keeps only what a session started from it points at.
-        $prep->forceFill(array_fill_keys(AssistPrep::TEXT_FIELDS, null))->save();
-        $prep->documents()->detach();
-        $prep->delete();
+        AssistRecords::erasePrep($this->find($request, $id));
 
         return response()->noContent();
     }
