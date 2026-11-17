@@ -350,6 +350,11 @@ fn ladder_config() -> RelayConfig {
         model.long_context = None;
     }
     config.budget.expected_output_tokens = 32;
+    // Short longest answers: a mode's worst case (both models, the longest answer) stays near its usual reserve, so the
+    // budget steps down mode by mode as it is spent.
+    for mode in Mode::LADDER {
+        config.modes.get_mut(mode).max_output_tokens = 40;
+    }
     config
 }
 
@@ -633,4 +638,22 @@ async fn usage_and_shown_texts_are_reported_for_the_server() {
     assert_eq!(texts.len(), 1, "only shown suggestions have a text");
     assert_eq!(texts[0].text, mock_reply(Purpose::Answer, QUESTION));
     assert_eq!(texts[0].turn_id.as_deref(), Some("o-14"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_provider_that_panics_mid_suggestion_falls_back_instead_of_hanging() {
+    let h = harness(RelayConfig::built_in());
+    let mut fast = claims("s-attempt-panic");
+    fast.modes = vec![Mode::Fast];
+    let mut s = h.connect(fast);
+    ready(&mut s).await;
+    s.send(json!({"type": "context_update", "settings": {"mode": "fast"}})).await;
+    settle().await;
+    h.mock(ProviderKind::Anthropic).push(MockBehavior::Panic);
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let end = s.until("suggestion_end").await.pop().unwrap();
+    assert_eq!((end["status"].as_str(), end["model"].as_str()), (Some("done"), Some("openai/gpt-oss-120b")));
+    // Charged and its reservation released: the next question runs in Fast as before.
+    s.send(final_turn("o-2", "other", QUESTION)).await;
+    assert_eq!(s.until("suggestion_end").await.pop().unwrap()["status"], "done");
 }

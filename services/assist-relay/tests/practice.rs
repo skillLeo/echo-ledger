@@ -200,8 +200,8 @@ async fn facts_calls_with_budget(cents_left: u64, session: &str) -> (usize, bool
 
 #[tokio::test(start_paused = true)]
 async fn a_background_call_that_could_cross_the_budget_is_skipped() {
-    // 3 cents left: a Fast suggestion fits, a facts call at its longest (4 cents) does not.
-    assert_eq!(facts_calls_with_budget(3, "s-budget-tight").await, (0, false));
+    // 7 cents: Fast fits (its worst case is 6 cents), a facts call at its worst (8 cents) beside Fast's reserve does not.
+    assert_eq!(facts_calls_with_budget(7, "s-budget-tight").await, (0, false));
     // With room, the same call runs.
     assert_eq!(facts_calls_with_budget(100, "s-budget-room").await, (1, true));
 }
@@ -339,27 +339,47 @@ async fn practice_stops_after_three_failed_tries_at_a_question() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_background_call_in_flight_never_moves_the_mode() {
-    let h = harness(pricey_output());
-    let mut token = claims("s-no-flap");
-    token.modes = vec![Mode::Fast];
-    // 10 cents: a facts call at its worst (8 cents) fits beside one Fast suggestion (1.6 cents).
-    token.budget.cents_left = 10;
+async fn suggestions_beside_background_calls_never_cross_the_budget_and_never_move_the_mode() {
+    let mut config = pricey_output();
+    // The slow facts call waits for Haiku instead of timing out to the fallback.
+    config.models.get_mut("claude-haiku-5-5").unwrap().first_token_timeout_ms = 30_000;
+    let h = harness(config);
+    let mut token = claims("s-gate");
+    // 15 cents. Balanced runs (one worst case: 8 cents). A slow facts call holds 8 cents while questions come.
+    token.budget.cents_left = 15;
+    let budget_micros = 150_000;
     let mut s = h.connect(token);
-    ready_now(&mut s).await;
-    // The facts call is slow: it is in flight while two questions are answered.
+    assert_eq!(s.next().await["mode"], "balanced");
+    s.drain(Duration::from_millis(200)).await;
     h.mock(assist_relay::domain::ProviderKind::Anthropic).push(assist_relay::provider::MockBehavior::Late(Duration::from_secs(20)));
     for (i, line) in ["I can start on the 3rd.", "My rate is 35 dollars an hour.", "The first build takes 2 weeks."].iter().enumerate() {
         s.send(final_turn(&format!("m-{i}"), "me", line)).await;
     }
     let mut seen = Vec::new();
-    for turn in ["o-1", "o-2"] {
-        s.send(final_turn(turn, "other", "What is your notice period?")).await;
-        seen.extend(s.until("suggestion_end").await);
+    for turn in 0..6 {
+        s.send(final_turn(&format!("o-{turn}"), "other", "What is your notice period?")).await;
+        let reply = s.next().await;
+        if reply["type"] == "suggestion_start" {
+            seen.push(reply.clone());
+            seen.extend(s.until("suggestion_end").await);
+        } else {
+            seen.push(reply);
+        }
+        assert!(h.state.registry.spent("s-gate") <= budget_micros);
     }
+    // Balanced's worst case doesn't fit beside the facts call: Fast takes the questions, silently.
+    let starts = of_type(&seen, "suggestion_start");
+    assert!(!starts.is_empty() && starts.iter().all(|m| m["mode"] == "fast"), "{starts:?}");
+    // When even Fast's worst case doesn't fit, the question is refused for now (retry), the mode unchanged.
+    let refused = of_type(&seen, "error");
+    assert!(refused.iter().any(|e| e["code"] == "budget_exhausted" && e["retry"] == true), "{seen:?}");
     seen.extend(s.drain(Duration::from_secs(25)).await);
-    assert!(of_type(&seen, "mode_changed").is_empty(), "the reservation moved the mode: {:?}", of_type(&seen, "mode_changed"));
+    assert!(of_type(&seen, "mode_changed").is_empty(), "no mode_changed: {:?}", of_type(&seen, "mode_changed"));
     assert!(h.reports.reports().iter().any(|r| matches!(r, Report::Facts(_))), "the facts call finished");
+    assert!(h.state.registry.spent("s-gate") <= budget_micros, "spent {}", h.state.registry.spent("s-gate"));
+    // With the facts call done and its reservation released, Balanced answers again.
+    s.send(final_turn("o-9", "other", "What is your notice period?")).await;
+    assert_eq!(s.next().await["mode"], "balanced");
 }
 
 #[tokio::test(start_paused = true)]

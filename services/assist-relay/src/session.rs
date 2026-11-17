@@ -49,6 +49,9 @@ pub mod close {
     pub const REPLACED: u16 = 4409;
 }
 
+/// The warm-up's key among the reservations.
+const WARM_KEY: &str = "warm";
+
 /// Tries at one practice question before practice stops.
 const PRACTICE_ATTEMPTS: u32 = 3;
 
@@ -283,6 +286,36 @@ enum Feed {
     Stream { id: String, attempt: u32, at: Instant, item: Item },
     Warmed { model: String, result: Result<Usage, ProviderError> },
     Task { kind: TaskKind, run: TaskRun },
+}
+
+/// Ends a suggestion attempt with an error when its task ends without sending its last item (it panicked).
+struct AttemptGuard {
+    feed: mpsc::Sender<Feed>,
+    id: Option<String>,
+    attempt: u32,
+}
+
+impl Drop for AttemptGuard {
+    fn drop(&mut self) {
+        if let Some(id) = self.id.take() {
+            let item = Item::Error(ProviderError::Unavailable);
+            let _ = self.feed.try_send(Feed::Stream { id, attempt: self.attempt, at: Instant::now(), item });
+        }
+    }
+}
+
+/// Sends the warm-up's failure when its task ends without a result (it panicked).
+struct WarmGuard {
+    feed: mpsc::Sender<Feed>,
+    model: Option<String>,
+}
+
+impl Drop for WarmGuard {
+    fn drop(&mut self) {
+        if let Some(model) = self.model.take() {
+            let _ = self.feed.try_send(Feed::Warmed { model, result: Err(ProviderError::Unavailable) });
+        }
+    }
 }
 
 /// Sends a background task's failure to its session when the task ends without sending its result (it panicked).
@@ -917,18 +950,42 @@ impl Engine {
         }
         let config = self.config();
         let pack = self.deps.pack.get();
-        let plan = config.modes.get(mode);
         let builder = ContextBuilder { pack: &pack, config: &config.context };
-        let context = Arc::new(builder.build(&self.call, &self.transcript, origin.task(), plan.transcript));
-        let upgrade = plan
-            .upgrade
-            .clone()
-            .filter(|model| {
+        // A hard gate on the budget actually free (background calls and other suggestions in flight held back): this
+        // suggestion's worst case must fit. If the mode's doesn't, a cheaper allowed mode takes this one suggestion,
+        // without mode_changed (it passes as the reservations are released); if none fits, it is refused for now.
+        let cheaper = allowed_modes(&config, &self.claims).into_iter().filter(|m| *m < mode);
+        let mut chosen = None;
+        for candidate in std::iter::once(mode).chain(cheaper) {
+            let plan = config.modes.get(candidate);
+            if !self.model_allowed(&plan.primary) {
+                continue;
+            }
+            let context = Arc::new(builder.build(&self.call, &self.transcript, origin.task(), plan.transcript));
+            let upgrade = plan.upgrade.clone().filter(|model| {
                 matches!(origin, Origin::Speculative { .. } | Origin::Final { .. } | Origin::HelpNow { .. })
                     && self.model_allowed(model)
                     && self.is_hard(origin.question())
             });
-        let fallback = plan.fallback.clone().filter(|model| self.model_allowed(model));
+            let fallback = plan.fallback.clone().filter(|model| self.model_allowed(model));
+            let base = self.worst_case(&plan.primary, fallback.as_deref(), &context, plan.max_output_tokens);
+            let with_upgrade =
+                base.saturating_add(upgrade.as_deref().map_or(0, |model| self.worst_case(model, None, &context, plan.max_output_tokens)));
+            let free = self.remaining();
+            if with_upgrade <= free {
+                chosen = Some((candidate, plan.clone(), context, upgrade, fallback));
+                break;
+            }
+            if base <= free {
+                // No room for the upgrade beside the draft: the draft alone, in this mode.
+                chosen = Some((candidate, plan.clone(), context, None, fallback));
+                break;
+            }
+        }
+        let Some((mode, plan, context, upgrade, fallback)) = chosen else {
+            self.error(ErrorMessage::new("budget_exhausted", "Not enough budget is free for a suggestion right now. Try again in a moment.").retry());
+            return;
+        };
         let id = self.next_id();
         self.suggestions += 1;
         self.emit(ServerMessage::SuggestionStart(SuggestionStart {
@@ -968,6 +1025,9 @@ impl Engine {
         let config = self.config();
         let provider = config.model(&model).map_or(ProviderKind::Anthropic, |spec| spec.provider);
         let max_output_tokens = config.modes.get(mode).max_output_tokens;
+        // Held back from the budget until the suggestion is charged (charge() releases it).
+        let worst = self.worst_case(&model, fallback.as_deref(), &context, max_output_tokens);
+        self.reserved.insert(id.clone(), worst);
         let task = self.spawn_attempt(&id, 1, &model, &context, max_output_tokens, &origin);
         let active = Active {
             id: id.clone(),
@@ -1022,6 +1082,9 @@ impl Engine {
         let id = id.to_owned();
         tokio::spawn(async move {
             use futures_util::StreamExt;
+            // A panic (or an abort) ends the attempt with an error item, so the suggestion and its reservation are
+            // never left hanging; for an attempt the session gave up, the item is ignored.
+            let mut guard = AttemptGuard { feed: feed.clone(), id: Some(id.clone()), attempt };
             let mut stream = provider.stream(request);
             let mut waiting_for_text = true;
             loop {
@@ -1040,6 +1103,9 @@ impl Engine {
                     Ok(Some(Err(error))) => Item::Error(error),
                 };
                 let last = matches!(item, Item::End | Item::Error(_));
+                if last {
+                    guard.id = None;
+                }
                 if feed.send(Feed::Stream { id: id.clone(), attempt, at, item }).await.is_err() || last {
                     return;
                 }
@@ -1429,7 +1495,31 @@ impl Engine {
     // -----------------------------------------------------------------------------------------------------------
 
     /// Adds what a request cost to the session's spend (kept by the registry across reconnects).
+    /// One suggestion's worst case in `mode` with the session's context as it is: the primary and the fallback, no
+    /// cache, the mode's longest answer (the upgrade is not counted: without room, a draft runs without it).
+    fn mode_worst(&self, mode: Mode, fixed: u32) -> u64 {
+        let config = self.config();
+        let plan = config.modes.get(mode);
+        let ledger: u32 = self.call.facts.iter().map(|f| estimate_tokens(&f.text) + 2).sum::<u32>() + estimate_tokens(&self.call.summary);
+        let tokens = fixed + ledger + self.transcript.tokens(plan.transcript) + QUESTION_TOKENS;
+        std::iter::once(plan.primary.as_str())
+            .chain(plan.fallback.as_deref())
+            .map(|m| config.model(m).map_or(u64::MAX / 16, |spec| estimate_micros(spec, tokens, 0, false, plan.max_output_tokens)))
+            .fold(0u64, u64::saturating_add)
+    }
+
+    /// A model's worst case for a context: no cache, the longest answer; with its fallback, both (both can bill).
+    fn worst_case(&self, model: &str, fallback: Option<&str>, context: &Context, max_output_tokens: u32) -> u64 {
+        let config = self.config();
+        let tokens = context.tokens();
+        std::iter::once(model)
+            .chain(fallback)
+            .map(|m| config.model(m).map_or(u64::MAX / 16, |spec| estimate_micros(spec, tokens, 0, false, max_output_tokens)))
+            .fold(0u64, u64::saturating_add)
+    }
+
     fn charge(&mut self, active: &Active) -> UsageReport {
+        self.reserved.remove(&active.id);
         let (usage, estimated) = active.usage();
         let cost = self.config().model(&active.model).map_or(0, |spec| cost_micros(spec, &usage));
         self.add_spend(cost, &active.model);
@@ -1518,7 +1608,8 @@ impl Engine {
         let config = self.config();
         let allowed = allowed_modes(&config, &self.claims);
         let reserve = config.budget.reserve_suggestions;
-        let (mode, cause) = choose_mode(self.requested, &allowed, self.budget_left(), reserve, |mode| self.estimate(mode, fixed));
+        let (mode, cause) =
+            choose_mode(self.requested, &allowed, self.budget_left(), reserve, |mode| self.estimate(mode, fixed), |mode| self.mode_worst(mode, fixed));
         (mode, Some(cause))
     }
 
@@ -1899,16 +1990,26 @@ impl Engine {
             purpose: Purpose::Warm,
             question: String::new(),
         };
+        // The warm-up spends too (a cache write): it starts only when its worst case fits what is free, and holds it.
+        let tokens = request.context.tokens();
+        let worst = estimate_micros(spec, tokens, tokens, false, 0);
+        if self.reserved.contains_key(WARM_KEY) || worst > self.remaining() {
+            return;
+        }
+        self.reserved.insert(WARM_KEY.to_owned(), worst);
         let provider = self.deps.providers.get(spec.provider);
         let feed = self.feed_tx.clone();
         self.last_warm = Some(Instant::now());
         tokio::spawn(async move {
+            let mut guard = WarmGuard { feed: feed.clone(), model: Some(model.clone()) };
             let result = provider.warm(request).await;
+            guard.model = None;
             let _ = feed.send(Feed::Warmed { model, result }).await;
         });
     }
 
     fn on_warmed(&mut self, model: String, result: Result<Usage, ProviderError>) {
+        self.reserved.remove(WARM_KEY);
         let (cost, error) = match result {
             Ok(usage) => (self.config().model(&model).map_or(0, |spec| cost_micros(spec, &usage)), None),
             Err(error) => (0, Some(error.code())),

@@ -163,6 +163,15 @@ impl ModesConfig {
             Mode::Max => &self.max,
         }
     }
+
+    pub fn get_mut(&mut self, mode: Mode) -> &mut ModePlan {
+        match mode {
+            Mode::Fast => &mut self.fast,
+            Mode::Balanced => &mut self.balanced,
+            Mode::Deep => &mut self.deep,
+            Mode::Max => &mut self.max,
+        }
+    }
 }
 
 /// How much of the transcript a mode sends: the recent turns only, or the older blocks as well.
