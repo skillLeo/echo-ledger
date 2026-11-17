@@ -42,6 +42,48 @@ pub fn scaled_size(base: (f64, f64), text_scale: f64) -> (f64, f64) {
     ((base.0 * scale).round(), (base.1 * scale).round())
 }
 
+/// Whether a window `current` (logical) is to change to `wanted` (pure): more than a pixel apart either way.
+pub fn needs_resize(current: (f64, f64), wanted: (f64, f64)) -> bool {
+    (current.0 - wanted.0).abs() > 1.0 || (current.1 - wanted.1).abs() > 1.0
+}
+
+/// The pill or the after-call card at the size for the system's text size now (D-141). Read again each time one is
+/// shown and at every screen check while one is built (`keep_on_screen`), so a change in Settings reaches it without a
+/// restart. The pill keeps its centre; the card stays docked bottom-right.
+pub fn fit_to_text_size<R: Runtime>(app: &AppHandle<R>, label: &str) {
+    let base = match label {
+        PILL => PILL_SIZE,
+        REVIEW => REVIEW_SIZE,
+        _ => return,
+    };
+    let Some(window) = app.get_webview_window(label) else { return };
+    let (Ok(scale), Ok(inner)) = (window.scale_factor(), window.inner_size()) else { return };
+    let current = (f64::from(inner.width) / scale, f64::from(inner.height) / scale);
+    let wanted = scaled_size(base, text_scale());
+    if !needs_resize(current, wanted) {
+        return;
+    }
+    let before = frame_of(&window);
+    // `set_size` and the frame read back for docking go through the same event-loop queue, in order.
+    if window.set_size(LogicalSize::new(wanted.0, wanted.1)).is_err() {
+        return;
+    }
+    if label == REVIEW {
+        dock_on_primary(&window, Corner::BottomRight);
+    } else if let Some(((x, y), _)) = before {
+        // Frames are in physical pixels on Windows, in points on a Mac.
+        let unit = if cfg!(target_os = "macos") { 1.0 } else { scale };
+        put(&window, (x - ((wanted.0 - current.0) / 2.0 * unit).round() as i32, y));
+    }
+}
+
+/// [`fit_to_text_size`] on a task of its own: it waits for the main thread, and a window is shown from places that
+/// may hold a lock.
+fn fit_to_text_size_later(app: &AppHandle, label: &'static str) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { fit_to_text_size(&app, label) });
+}
+
 /// The system's text size as a factor: Windows' "Make text bigger" (Accessibility › Text size, 100–225 %); 1.0 on a
 /// Mac, whose windows follow the display's scale instead.
 pub fn text_scale() -> f64 {
@@ -383,6 +425,7 @@ fn keep_on_screen<R: Runtime>(app: &AppHandle<R>) {
     let Some(desk) = Desk::read(&first) else { return };
     let rects = desk.rects();
     for label in WINDOWS {
+        fit_to_text_size(app, label);
         let Some(window) = app.get_webview_window(label) else { continue };
         if let Some((position, size)) = frame_of(&window)
             && let Some(at) = rescue(&rects, position, size)
@@ -493,6 +536,7 @@ fn make_click_through(app: &AppHandle, label: &str) {
 pub fn set_pill_visible(app: &AppHandle, visible: bool) {
     if visible {
         lifecycle::show(app, PILL, "pill");
+        fit_to_text_size_later(app, PILL);
     }
     lifecycle::emit(app, PILL, "pill:visibility", visible);
     if !visible {
@@ -526,6 +570,7 @@ pub fn show_after_call(app: &AppHandle, state: &crate::after_call::AfterCallStat
         });
     } else {
         lifecycle::show(app, REVIEW, "after_call");
+        fit_to_text_size_later(app, REVIEW);
         lifecycle::emit(app, REVIEW, "aftercall:state", state);
     }
 }
@@ -555,6 +600,15 @@ mod tests {
         assert_eq!(scaled_size(REVIEW_SIZE, 2.25), (720.0, 336.0), "Windows goes to 225 %: the card stops at twice");
         assert_eq!(scaled_size(PILL_SIZE, 0.5), PILL_SIZE, "never smaller than at 100 %");
         assert_eq!(scaled_size(PILL_SIZE, f64::NAN), PILL_SIZE);
+    }
+
+    #[test]
+    fn a_text_size_changed_in_settings_resizes_a_shown_window_once() {
+        let at_100 = scaled_size(PILL_SIZE, 1.0);
+        assert!(needs_resize(at_100, scaled_size(PILL_SIZE, 1.5)), "the text grew while it was shown");
+        assert!(!needs_resize(scaled_size(PILL_SIZE, 1.5), scaled_size(PILL_SIZE, 1.5)), "then left alone at each check");
+        assert!(!needs_resize((352.4, 83.6), at_100), "a scale's rounding is no change");
+        assert!(needs_resize(scaled_size(REVIEW_SIZE, 2.0), scaled_size(REVIEW_SIZE, 1.0)), "and back when it shrank");
     }
 
     #[test]
