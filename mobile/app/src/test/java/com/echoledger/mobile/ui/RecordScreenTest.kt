@@ -294,9 +294,14 @@ class RecordScreenTest : ScreenTest() {
 
         compose.onNodeWithText("Discard").click()
         awaitText("Discarding 1 call")
-        assertNotNull("nothing is deleted while Undo is offered", app.peekRecording("call-1"))
-        compose.mainClock.advanceTimeBy(5_100)
-        awaitUi("the recording to be deleted") { app.peekRecording("call-1") == null }
+        // The screen's clock stands still from here: only the test moves it, so the undo time itself is checked.
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeBy(4_700)
+        awaitAppIdle()
+        assertNotNull("nothing is deleted while Undo is offered (just before 5 s)", app.peekRecording("call-1"))
+        compose.mainClock.advanceTimeBy(400)
+        pumpUntil("the recording to be deleted at 5 s") { app.peekRecording("call-1") == null }
+        compose.mainClock.autoAdvance = true
         awaitText("Nothing waiting")
 
         assertFalse(app.graph.recordings.encryptedFile("call-1").exists())

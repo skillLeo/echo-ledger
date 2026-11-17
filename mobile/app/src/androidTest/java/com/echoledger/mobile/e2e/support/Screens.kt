@@ -6,7 +6,7 @@ import java.util.regex.Pattern
 
 /** Library screen helpers. */
 object Library {
-    const val SEARCH_HINT = "Search transcripts and titles"
+    const val SEARCH_HINT = "Search recordings and transcripts"
 
     fun searchField(): UiObject2 = Ui.await(By.clazz("android.widget.EditText"), Ui.NORMAL, "the library search field")
 

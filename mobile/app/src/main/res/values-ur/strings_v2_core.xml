@@ -102,10 +102,10 @@
     <string name="v2_vm_uploading_not_deleted">یہ ابھی اپ لوڈ ہو رہی ہے، اس لیے حذف نہیں ہوئی۔ تھوڑی دیر میں آپ کی لائبریری میں ہو گی۔</string>
     <string name="v2_vm_key_removed">کی ہٹا دی گئی</string>
     <string name="v2_vm_key_saved">کی محفوظ ہو گئی۔ نئی ریکارڈنگز کا ٹرانسکرپٹ اسی سے بنے گا۔</string>
-    <string name="v2_vm_offline">آف لائن۔ آخری بار سنک ہونے والی لائبریری دکھائی جا رہی ہے۔</string>
+    <string name="v2_vm_offline">آف لائن: آخری بار سنک ہونے والی لائبریری دکھائی جا رہی ہے۔</string>
     <string name="v2_vm_rename_in_console">نام کنسول میں بدلیں: اکاؤنٹ ← ڈیوائسز۔</string>
     <string name="v2_vm_renamed">نام بدل گیا</string>
-    <string name="v2_vm_restored_uploads">واپس آ گئی، اب اپ لوڈ ہو رہی ہے</string>
+    <string name="v2_vm_restored_uploads">واپس آ گئی: اب اپ لوڈ ہو رہی ہے</string>
     <string name="v2_vm_restored">واپس آ گئی</string>
     <string name="v2_vm_saved_to_library">آپ کی لائبریری میں محفوظ ہو گئی</string>
     <string name="v2_vm_sent_one">1 شخص کو بھیج دی گئی</string>

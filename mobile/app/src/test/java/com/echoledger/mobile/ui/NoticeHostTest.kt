@@ -47,13 +47,13 @@ class NoticeHostTest : ScreenTest() {
     @Test
     fun `a tap goes where the message is about and closes it`() {
         showHost()
-        host.show(Notice("Restored — it uploads now", target = NoticeTarget.Library))
+        host.show(Notice("Restored: it uploads now", target = NoticeTarget.Library))
 
-        compose.onNodeWithText("Restored — it uploads now").performClick()
+        compose.onNodeWithText("Restored: it uploads now").performClick()
         compose.waitForIdle()
 
         assertEquals(listOf<NoticeTarget>(NoticeTarget.Library), opened)
-        gone("Restored — it uploads now")
+        gone("Restored: it uploads now")
     }
 
     @Test

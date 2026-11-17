@@ -40,7 +40,8 @@ class EmptyLibraryTest : E2eTest() {
         Ui.awaitText("No recordings yet")
         Ui.snapshot("library-empty")
         assertTrue(Ui.has("Calls, meetings and voice notes you capture will appear here."))
-        assertTrue(Ui.has("Recordings from your phone, computer and the web"))
+        // The Library's own title bar (its old subtitle went with the v1.3 redesign).
+        assertTrue(Ui.has("Library"))
         listOf("All", "Phone", "Desktop", "Web").forEach { assertTrue("filter chip $it", Ui.has(it)) }
         Ui.awaitDescription("Sync")
         Ui.awaitText(Library.SEARCH_HINT)
@@ -63,11 +64,13 @@ class EmptyLibraryTest : E2eTest() {
     @Test
     fun theAppOffersCallSetupBecauseTheCaptureHelperIsNotRunning() {
         launchPaired()
-        Ui.awaitText("WhatsApp calls are not being recorded")
-        Ui.clickText("Set up call recording →")
-        Ui.awaitText("Setup")
-        Ui.awaitTextContaining("Call capture")
-        Ui.clickDescription("Back")
+        // Since v1.5 the banner names what stops calls being recorded, and Fix opens the Ready check (P-017: one line
+        // above the problems, never the first problem twice).
+        Ui.awaitTextContaining("Calls are not being recorded")
+        Ui.clickText("Fix")
+        Ui.awaitText("Ready check")
+        Ui.awaitText("Calls are not being recorded")
+        Ui.device.pressBack()
         Ui.awaitText("Library")
     }
 }
@@ -126,7 +129,7 @@ class LibraryTest : E2eTest() {
         Ui.awaitText("Nothing matches")
         Ui.clickText("Desktop")
         Ui.awaitText(SeedData.SILENT)
-        Ui.clickText("All")
+        Ui.clickText("All recordings")
         Ui.awaitText(SeedData.FAILED)
     }
 
@@ -171,7 +174,7 @@ class LibraryTest : E2eTest() {
         Ui.device.pressHome()
         Shell.setNetwork(false)
         Ui.launchApp()
-        Ui.awaitText("Offline — showing the last synced library", Ui.LONG)
+        Ui.awaitText("Offline: showing the last synced library", Ui.LONG)
         Ui.snapshot("library-offline")
         assertTrue("cached library is still shown", Ui.has(SeedData.SILENT))
         Shell.setNetwork(true)
