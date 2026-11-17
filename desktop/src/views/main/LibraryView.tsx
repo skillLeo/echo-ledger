@@ -973,9 +973,16 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (!transcript) return null;
     try {
       const id = transcript.id;
+      const session = current;
       const result = await api.replaceInTranscript(id, find, replace, matchCase, wholeWord);
-      // The count is for the transcript the find bar is on; once another recording is open there is none to give.
-      if (shownTranscript.current !== id) return null;
+      // The count is for the transcript the find bar is on; once another recording is open the bar has gone with it, so
+      // a notice names the recording and says what was replaced there (the bar's own words).
+      if (shownTranscript.current !== id) {
+        const n = result.replaced;
+        const what = n === 0 ? "Nothing matched" : n === 1 ? "Replaced 1 time" : `Replaced ${n} times`;
+        doneNotice(session, false, `${what}.`, (name) => `${what} in “${name}”`);
+        return null;
+      }
       setTranscript(result.transcript);
       return result.replaced;
     } catch (e) {

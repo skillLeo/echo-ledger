@@ -1338,11 +1338,11 @@ describe("transcript tools in the library (B6-B12)", () => {
       expect(notify).toHaveBeenCalledWith("The original transcript is back", false, undefined);
     });
 
-    it("Replace all gives no count for a transcript no longer open, and leaves the open one as it is", async () => {
+    it.each([[1, "Replaced 1 time"], [0, "Nothing matched"], [3, "Replaced 3 times"]])("Replace all answered once another recording is open (%i): a notice says how many and where, no count in a bar, the open one as it is", async (replaced, words) => {
       TRANSCRIPTS["tr-d"] = D();
       let answer: (v: unknown) => void = () => undefined;
       respondWith("transcript_replace", () => new Promise((r) => { answer = r; }));
-      await renderLibrary();
+      const { notify } = await renderLibrary();
       await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
       fireEvent.click(within(detail()).getByRole("button", { name: "Find and replace" }));
       fireEvent.change(within(detail()).getByLabelText("Find"), { target: { value: "Sam" } });
@@ -1351,9 +1351,10 @@ describe("transcript tools in the library (B6-B12)", () => {
       await flushAsync();
       await selectItem("Voice note from Sam", "Remember to call back.");
       const t = TRANSCRIPTS["tr-a"];
-      await act(async () => answer({ replaced: 1, transcript: { ...t, segments: [{ ...t.segments[0], text: "Hello, this is Samuel." }, ...t.segments.slice(1)] } }));
+      await act(async () => answer({ replaced, transcript: { ...t, segments: [{ ...t.segments[0], text: "Hello, this is Samuel." }, ...t.segments.slice(1)] } }));
       await flushAsync();
       expect(screen.queryByText(/^Replaced 1 time\.$/)).toBeNull();
+      expect(notify).toHaveBeenCalledWith(`${words} in “Zoom with Acme”`, false, { kind: "recording", id: "a" });
       expect(within(detail()).getByText("Remember to call back.")).toBeInTheDocument();
       expect(within(detail()).queryByText("Hello, this is Samuel.")).toBeNull();
     });
