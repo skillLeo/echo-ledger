@@ -299,6 +299,17 @@ class CaptureSession extends Model
         return app(SettingsRepository::class)->trashKeepHours();
     }
 
+    /** The bin's time as people read it: whole days in days ("30 days", "1 day"), otherwise hours ("48 hours"). */
+    public static function binDuration(): string
+    {
+        $hours = self::binHours();
+        if ($hours % 24 === 0 && $hours > 24) {
+            return ($hours / 24).' days';
+        }
+
+        return $hours === 24 ? '1 day' : ($hours === 1 ? '1 hour' : $hours.' hours');
+    }
+
     /** In the undo bin: deleted, media not erased yet, and still within the bin's hours. */
     public function restorable(): bool
     {

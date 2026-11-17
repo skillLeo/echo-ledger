@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\ApiError;
 use App\Filament\Admin\Pages\Plans;
 use App\Filament\Admin\Pages\Settings;
+use App\Models\AssistSession;
 use App\Models\AuditEvent;
 use App\Models\CaptureSession;
 use App\Models\Plan;
@@ -17,6 +19,8 @@ use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 uses(ApiClient::class);
+
+require_once __DIR__.'/../Assist/Support/assist_helpers.php';
 
 /*
  * The owner's decisions of 2026-11-17, editable by an admin: Trash keeps a deleted recording 48 hours (Admin › Settings
@@ -63,6 +67,14 @@ describe('Trash', function () {
         expect($old->fresh()->restorable())->toBeTrue();
     });
 
+    it('says the server\'s Trash time in the privacy policy: whole days in days, else hours', function () {
+        foreach ([720 => '30 days', 48 => '2 days', 36 => '36 hours', 24 => '1 day', 1 => '1 hour'] as $hours => $words) {
+            // The repository is scoped: the one this request uses, each time.
+            app(SettingsRepository::class)->set('trash.keep_hours', $hours);
+            $this->get(route('legal.privacy'))->assertOk()->assertSee("deleted ones wait {$words} in the undo bin");
+        }
+    });
+
     it('never reads outside 1 to 720 hours, whatever is stored', function () {
         $settings = app(SettingsRepository::class);
         $settings->set('trash.keep_hours', 5000);
@@ -100,11 +112,32 @@ describe('Live Assist plan limits', function () {
 
         $pro = $pro->fresh();
         expect(AssistPlans::config('pro', $pro))->toMatchArray(['seconds' => 480 * 60, 'cents' => 2050, 'practice' => ['seconds' => 7200, 'cents' => 200]])
-            ->and(AuditEvent::query()->where('event', 'plan_changed')->exists())->toBeTrue();
+            ->and(AuditEvent::query()->where('event', 'plan_changed')->latest('id')->value('meta')['changes']['assist_minutes'] ?? null)->toBe(['from' => 300, 'to' => 480]);
+        // The changed fields with their old and new values; unchanged ones are not listed.
+        $changes = AuditEvent::query()->where('event', 'plan_changed')->latest('id')->value('meta')['changes'];
+        expect($changes)->toHaveKeys(['assist_minutes', 'assist_usd', 'practice_minutes', 'practice_usd'])->not->toHaveKey('name');
 
         Livewire::test(Plans::class)->callTableAction('edit', $pro, ['assist_minutes' => null, 'assist_usd' => null])->assertHasNoTableActionErrors();
         // Empty: config/assist.php's value for the plan.
         expect(AssistPlans::config('pro', $pro->fresh()))->toMatchArray(['seconds' => 5 * 3600, 'cents' => 1500]);
+    });
+
+    it('stops at nothing left, never below, when a plan is lowered under this month\'s use', function () {
+        $device = assistPerson('pro');
+        Plan::query()->where('key', 'pro')->update(['assist_minutes' => 300]);
+        AssistSession::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'mode' => 'fast', 'practice' => false,
+            'platform' => 'desktop', 'status' => 'ended', 'started_at' => now()->startOfMonth()->addHour(), 'ended_at' => now()->startOfMonth()->addHours(7), 'seconds_used' => 6 * 3600]);
+        $plans = app(AssistPlans::class);
+
+        expect($plans->left((int) $device->workspace_id, (int) $device->user_id, false)['seconds_left'])->toBe(0);
+        try {
+            $plans->assertLeft((int) $device->workspace_id, (int) $device->user_id, false);
+            $this->fail('Live Assist started past its allowance.');
+        } catch (ApiError $e) {
+            expect($e->getStatusCode())->toBe(402)->and($e->apiCode())->toBe('budget_exhausted');
+        }
+        $this->api(Fx::token($device))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])
+            ->assertStatus(402)->assertJsonPath('code', 'budget_exhausted');
     });
 
     it('migrates up and down: only the plans change, and down drops the columns', function () {

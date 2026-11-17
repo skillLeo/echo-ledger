@@ -273,9 +273,19 @@ class Plans extends Page implements HasTable
                     ->fillForm(fn (Plan $record): array => self::toForm($record))
                     ->action(function (Plan $record, array $data): void {
                         // An archived plan is neither offered nor the default until it is brought back.
-                        $record->update([...self::fromForm($data), ...($record->isArchived() ? ['is_default' => false, 'on_offer' => false] : [])]);
+                        $values = [...self::fromForm($data), ...($record->isArchived() ? ['is_default' => false, 'on_offer' => false] : [])];
+                        $before = $record->only(array_keys($values));
+                        $record->update($values);
                         self::keepOneDefault($record);
-                        app(AuditLog::class)->record('plan_changed', (int) auth()->id(), $record, "Plan {$record->name} changed");
+                        // The fields that changed, each with its old and new value.
+                        $after = $record->fresh()?->only(array_keys($values)) ?? [];
+                        $changes = [];
+                        foreach ($after as $field => $new) {
+                            if (json_encode($before[$field] ?? null) !== json_encode($new)) {
+                                $changes[$field] = ['from' => $before[$field] ?? null, 'to' => $new];
+                            }
+                        }
+                        app(AuditLog::class)->record('plan_changed', (int) auth()->id(), $record, Str::limit("Plan {$record->name} changed".($changes !== [] ? ': '.implode(', ', array_keys($changes)) : ''), 250, '…'), ['changes' => $changes]);
                         Notification::make()->title("Plan {$record->name} saved")->success()->send();
                     }),
                 Action::make('duplicate')->label('Duplicate')->icon(Heroicon::OutlinedDocumentDuplicate)->color('gray')
