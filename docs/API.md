@@ -772,9 +772,10 @@ again when its copy is older.
   device discards them, nothing is uploaded.
 - `PUT /api/call-rules/default` `{"action": "ask|keep_audio|transcribe|dont_record"}`;
   `PUT /api/call-rules/short-calls` `{"keep": true|false}`;
-  `PUT /api/call-rules/groups/{saved_contacts|unknown_numbers|favourites}` and
-  `PUT /api/call-rules/sources/{zoom|google_meet|microsoft_teams|slack|whatsapp_desktop}` `{"action": "…"}` (the four
-  actions; `DELETE` on the same path removes the rule);
+  `PUT /api/call-rules/groups/{group}` (`saved_contacts`, `unknown_numbers` or `favourites`) and
+  `PUT /api/call-rules/sources/{source}` (`zoom`, `google_meet`, `microsoft_teams`, `slack` or `whatsapp_desktop`)
+  `{"action": "…"}` (the four actions; `DELETE /api/call-rules/groups/{group}` and `DELETE /api/call-rules/sources/{source}`
+  remove the rule; another group or source is `404`);
   `PUT /api/call-rules/contacts` `{"key": "tel:+923001234567", "name": "Ahmed", "action": "…"}` (create or change; `key`
   is what the device calls this person: `tel:` plus the number in E.164, `wa:` plus the number, or `app:` plus a stable
   id of the device's contacts; lowercase, 3–120 characters; `name` ≤ 120) and `DELETE /api/call-rules/contacts?key=…`.
@@ -847,8 +848,8 @@ like any deletion. The retention in days:
 - `GET /api/account/privacy` — `config:read` → `200 {"audio_retention": {"choice": "plan" | 7 | 14 | 30 | 60 | 90 | 180 | 365 |
   "never", "days": 30 | null, "allowance_days": 30 | null, "options": [7, 14, 30, 60, 90, 180, 365], "never_allowed":
   false}, "storage": {"used_bytes": 2254857830, "audio_only_bytes": 1181116006, "limit_bytes": 10737418240 | null}}`.
-  `days` is the effective retention (`null` = Never). `PUT` the same path with `{"audio_retention_choice": "plan" | 7 | … |
-  "never"}` → the same document; `422 above_plan` for a choice longer than the allowance, `422 never_not_allowed`.
+  `days` is the effective retention (`null` = Never). `PUT /api/account/privacy` — `config:read` with
+  `{"audio_retention_choice": "plan" | 7 | … | "never"}` → the same document; `422 above_plan` for a choice longer than the allowance, `422 never_not_allowed`.
 - `GET /api/me/entitlements`: `limits` gains `"audio_retention_days": {"limit": 30 | null}` (`null` = Never) and the feature
   `auto_transcribe` (paid; Free has none). `GET /api/storage` gains `"audio_only_bytes"` and `"audio_retention_days"`.
 - `GET /api/config` gains `"call_rules": {"revision": 7, "default": "ask", "short_calls_keep": false}`; missing on an

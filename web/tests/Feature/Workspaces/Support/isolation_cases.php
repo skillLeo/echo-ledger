@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
+use App\Models\CallRule;
 use App\Models\MissedRecording;
 use App\Models\Screen;
 use App\Models\SentItem;
@@ -308,6 +309,33 @@ function isoApiCases(array $b): array
         // Since 2.0.0-a: "Switch back to classic" changes only the calling device's own person (no id in the request);
         // the answer is that person's flags. The test checks afterwards that Bob's setting did not move.
         'api.account.ui' => ['PUT', '/api/account/ui', ['classic' => true], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('ui_classic') === true],
+        // Since 2.1.0-a: call rules and audio retention belong to the calling person; B's never change or show.
+        'api.call-rules' => ['GET', '/api/call-rules', [], 'list'],
+        'api.call-rules.resolve' => ['GET', '/api/call-rules/resolve?source=zoom&key=tel:%2B923001234567', [], 'list'],
+        'api.call-rules.default' => ['PUT', '/api/call-rules/default', ['action' => 'keep_audio', 'user_id' => $b['bob']->id],
+            fn (TestResponse $r): bool => $r->status() === 200 && $b['bob']->fresh()->after_call_default === null],
+        'api.call-rules.short-calls' => ['PUT', '/api/call-rules/short-calls', ['keep' => false, 'user_id' => $b['bob']->id],
+            fn (TestResponse $r): bool => $r->status() === 200 && $b['bob']->fresh()->short_calls_keep === null],
+        'api.call-rules.groups' => ['PUT', '/api/call-rules/groups/favourites', ['action' => 'dont_record', 'user_id' => $b['bob']->id],
+            fn (TestResponse $r): bool => $r->status() === 200 && CallRule::query()->where('user_id', $b['bob']->id)->doesntExist()],
+        'api.call-rules.sources' => ['PUT', '/api/call-rules/sources/zoom', ['action' => 'keep_audio', 'user_id' => $b['bob']->id],
+            fn (TestResponse $r): bool => $r->status() === 200 && CallRule::query()->where('user_id', $b['bob']->id)->doesntExist()],
+        'api.call-rules.groups.delete' => ['DELETE', '/api/call-rules/groups/favourites', [],
+            fn (TestResponse $r): bool => $r->status() === 200 && CallRule::query()->where('user_id', $b['bob']->id)->doesntExist()],
+        'api.call-rules.sources.delete' => ['DELETE', '/api/call-rules/sources/zoom', [],
+            fn (TestResponse $r): bool => $r->status() === 200 && CallRule::query()->where('user_id', $b['bob']->id)->doesntExist()],
+        'api.call-rules.contacts.put' => ['PUT', '/api/call-rules/contacts', ['key' => 'tel:+923001234567', 'action' => 'keep_audio', 'user_id' => $b['bob']->id],
+            fn (TestResponse $r): bool => $r->status() === 200 && CallRule::query()->where('user_id', $b['bob']->id)->doesntExist()],
+        'api.call-rules.contacts.delete' => ['DELETE', '/api/call-rules/contacts?key=tel:%2B923009999999', [],
+            fn (TestResponse $r): bool => $r->status() === 200 && CallRule::query()->where('user_id', $b['bob']->id)->doesntExist()],
+        'api.account.privacy' => ['GET', '/api/account/privacy', [], 'list'],
+        'api.account.privacy.put' => ['PUT', '/api/account/privacy', ['audio_retention_choice' => 7, 'user_id' => $b['bob']->id],
+            fn (TestResponse $r): bool => $r->status() === 200 && $b['bob']->fresh()->audio_retention_choice === null],
+        'api.sessions.choice' => ['POST', "/api/sessions/{$s}/choice", ['choice' => 'delete'], 404],
+        'api.sessions.transcribe.estimate' => ['POST', '/api/sessions/transcribe/estimate', ['ids' => [$s]],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('count') === 0],
+        'api.sessions.transcribe' => ['POST', '/api/sessions/transcribe', ['ids' => [$s], 'max_minutes' => 1000],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('started') === 0],
         // Entitlements (v1.6): only the device's own person in its own workspace, never B's numbers or names.
         'api.me.entitlements' => ['GET', '/api/me/entitlements', [], 'list'],
         // A person's own key: only ever their own (no id in the request); a wrong key says so and changes nothing of B.

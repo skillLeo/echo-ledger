@@ -14,6 +14,8 @@ use App\Enums\TranscriptStatus;
 use App\Models\Concerns\BelongsToWorkspace;
 use App\Models\Concerns\OwnedByMaker;
 use App\Models\Scopes\WorkspaceScope;
+use App\Services\CallRules\AudioCleanup;
+use App\Services\CallRules\ChoiceLog;
 use App\Services\ProviderCopyEraser;
 use App\Services\Screens\ScreenStore;
 use App\Services\SettingsRepository;
@@ -70,6 +72,10 @@ use Illuminate\Support\Carbon;
  * @property Carbon $created_at
  * @property Carbon $updated_at
  * @property Carbon|null $deleted_at
+ * @property string|null $choice since 2.1.0-a: transcribe | keep_audio (null = made before, or not a call)
+ * @property string|null $choice_by rule | user | timeout | default
+ * @property Carbon|null $choice_at
+ * @property bool $needs_action kept as audio by default or the countdown, not looked at yet
  * @property-read User $user
  * @property-read Device|null $device
  * @property-read Client|null $client
@@ -353,6 +359,12 @@ class CaptureSession extends Model
         });
         // A delete (tombstone) erases the provider's copy at once; our own encrypted copy waits 48 hours in the undo
         // bin (B17), then RetentionPolicy::emptyBin() erases it.
+        // Since 2.1.0-a: a call with an after-call choice deleted by its person counts in the admin's numbers.
+        static::deleted(function (CaptureSession $session): void {
+            if (! $session->isForceDeleting() && $session->choice !== null && ! AudioCleanup::$running) {
+                ChoiceLog::record($session, ChoiceLog::DELETED, 'user');
+            }
+        });
         static::deleting(function (CaptureSession $session): void {
             if (! $session->isForceDeleting()) {
                 app(ProviderCopyEraser::class)->eraseFor($session);
@@ -379,6 +391,8 @@ class CaptureSession extends Model
             'pauses' => 'array',
             'language_marks' => 'array',
             'reference_set_at' => 'datetime',
+            'choice_at' => 'datetime',
+            'needs_action' => 'boolean',
             'speaker_names' => 'array',
             'pinned' => 'boolean',
             'title_auto' => 'boolean',

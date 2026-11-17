@@ -27,6 +27,7 @@ use App\Services\Assist\AssistReportAi;
 use App\Services\Assist\ClaudeAssistAskAi;
 use App\Services\Assist\ClaudeAssistReportAi;
 use App\Services\AuditLog;
+use App\Services\CallRules\AudioRetention;
 use App\Services\ClientAi\ClaudeClientAi;
 use App\Services\ClientAi\ClientAi;
 use App\Services\ClientAi\ClientWorkspace;
@@ -107,6 +108,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(TitleWriter::class, ClaudeTitleWriter::class);
         // Caches each member's role for one request (C9: no query per table row).
         $this->app->scoped(Workspaces::class);
+        // Since 2.1.0-a: which workspaces are shared is read once per request (every library item asks).
+        $this->app->scoped(AudioRetention::class);
         $this->app->scoped(SttManager::class);
         $this->app->scoped(InterfaceFlags::class);
         $this->app->scoped(TranscriptionSpeed::class);

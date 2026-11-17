@@ -159,6 +159,22 @@ function abilityRoutes(): array
         'write to support' => ['POST', '/api/support/messages', 'sessions:write'],
         'assist: start a session' => ['POST', '/api/assist/sessions', 'stt:token'],
         'assist: refresh its tokens' => ['POST', "/api/assist/sessions/{$id}/token", 'stt:token'],
+        // Since 2.1.0-a: call rules and audio retention (config:read), the after-call choice and Transcribe many.
+        'call rules' => ['GET', '/api/call-rules', 'config:read'],
+        'call rules: resolve' => ['GET', '/api/call-rules/resolve', 'config:read'],
+        'call rules: default' => ['PUT', '/api/call-rules/default', 'config:read'],
+        'call rules: short calls' => ['PUT', '/api/call-rules/short-calls', 'config:read'],
+        'call rules: a group' => ['PUT', "/api/call-rules/groups/{$id}", 'config:read'],
+        'call rules: a group removed' => ['DELETE', "/api/call-rules/groups/{$id}", 'config:read'],
+        'call rules: a source' => ['PUT', "/api/call-rules/sources/{$id}", 'config:read'],
+        'call rules: a source removed' => ['DELETE', "/api/call-rules/sources/{$id}", 'config:read'],
+        'call rules: a contact' => ['PUT', '/api/call-rules/contacts', 'config:read'],
+        'call rules: a contact removed' => ['DELETE', '/api/call-rules/contacts', 'config:read'],
+        'privacy' => ['GET', '/api/account/privacy', 'config:read'],
+        'privacy: change' => ['PUT', '/api/account/privacy', 'config:read'],
+        'after-call choice' => ['POST', "/api/sessions/{$id}/choice", 'sessions:write'],
+        'transcribe many: estimate' => ['POST', '/api/sessions/transcribe/estimate', 'sessions:write'],
+        'transcribe many' => ['POST', '/api/sessions/transcribe', 'sessions:write'],
     ];
 }
 

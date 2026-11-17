@@ -249,6 +249,8 @@ final class Entitlements
                 'devices' => ['limit' => $limit('devices'), 'used' => $limits->devicesUsed($workspaceId, $user->id)],
                 'storage_bytes' => ['limit' => $limit('storage_bytes'), 'used' => $limits->storageUsed($workspaceId)],
                 'retention_days' => ['limit' => $limit('retention_days')],
+                // Since 2.1.0-a: audio-only recordings are cleaned up after it; null = Never.
+                'audio_retention_days' => ['limit' => $limit('audio_retention_days')],
                 'seats' => ['limit' => $limit('seats'), 'used' => $limits->seatsUsed($workspaceId)],
                 'max_file_minutes' => ['limit' => $limit('max_file_minutes')],
                 'uploads_per_day' => ['limit' => $limit('uploads_per_day'), 'used' => $limits->uploadsToday($workspaceId, $user->id)],

@@ -38,6 +38,7 @@ final class Features
         'premium_engines' => ['name' => 'Premium engines', 'description' => 'Extra transcription engines for the hardest calls and languages.', 'cost' => self::PAID],
         'live_translate' => ['name' => 'Live Translate', 'description' => 'Live subtitles in your language for games and videos.', 'cost' => self::PAID],
         'ai_notes' => ['name' => 'AI notes', 'description' => 'Project notes, memory and Ask about a project.', 'cost' => self::PAID],
+        'auto_transcribe' => ['name' => 'Transcribe automatically', 'description' => 'Call rules and your default can transcribe a call by themselves, without asking.', 'cost' => self::PAID],
     ];
 
     /** The limits a plan sets, with the plan column each one is kept in. */
@@ -46,6 +47,7 @@ final class Features
         'devices' => 'max_devices',
         'storage_bytes' => 'storage_bytes',
         'retention_days' => 'retention_days',
+        'audio_retention_days' => 'audio_retention_days',
         'seats' => 'seats',
         'max_file_minutes' => 'max_file_minutes',
         'uploads_per_day' => 'uploads_per_day',
@@ -58,6 +60,7 @@ final class Features
         'devices' => 'Devices',
         'storage_bytes' => 'Storage',
         'retention_days' => 'Keeps recordings (days)',
+        'audio_retention_days' => 'Keeps audio-only recordings (days)',
         'seats' => 'People',
         'max_file_minutes' => 'Longest recording (minutes)',
         'uploads_per_day' => 'Recordings a day',

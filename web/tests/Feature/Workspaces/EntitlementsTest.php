@@ -78,7 +78,7 @@ describe('GET /api/me/entitlements', function () {
             ->and($body['limits'])->toBe([
                 'monthly_minutes' => ['limit' => 0, 'used' => 0, 'resets_at' => now('Asia/Karachi')->startOfMonth()->addMonthNoOverflow()->toAtomString()], 'devices' => ['limit' => 2, 'used' => 1],
                 'storage_bytes' => ['limit' => 1073741824, 'used' => 0], 'retention_days' => ['limit' => 30],
-                'seats' => ['limit' => 1, 'used' => 1], 'max_file_minutes' => ['limit' => 180],
+                'audio_retention_days' => ['limit' => null], 'seats' => ['limit' => 1, 'used' => 1], 'max_file_minutes' => ['limit' => 180],
                 'uploads_per_day' => ['limit' => 50, 'used' => 1], 'ai_usd_month' => ['limit' => 0, 'used' => 0],
             ])
             ->and($body['engines'])->toBe(['own_groq', 'on_device'])

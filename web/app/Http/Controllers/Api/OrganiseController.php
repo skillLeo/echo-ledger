@@ -10,6 +10,7 @@ use App\Http\Resources\LibraryItemResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
+use App\Services\CallRules\AudioCleanup;
 use App\Services\LibraryOrganiser;
 use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\Teammates;
@@ -104,6 +105,8 @@ final class OrganiseController extends Controller
 
         return response()->json([
             'views' => $this->organiser->counts($workspaceId, $data['tz'] ?? null),
+            // Since 2.1.0-a: audio that will be cleaned up within 3 days (Home's one quiet line).
+            'cleanup_soon' => app(AudioCleanup::class)->soon($workspaceId, $this->device($request)->user),
             'labels' => $this->organiser->labels($workspaceId),
             // Since v1.5: the smart folders, counted like GET /api/library?folder=… lists them (`shared`: sent to this person).
             'folders' => [...$this->organiser->folderCounts($workspaceId), 'shared' => app(Teammates::class)->sharedCount($this->device($request)->user)],

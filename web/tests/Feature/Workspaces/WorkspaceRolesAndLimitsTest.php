@@ -220,7 +220,7 @@ describe('plan limits', function () {
             ->and($plan->retention_days)->toBeNull()
             ->and($plan->seats)->toBeNull()
             ->and($plan->aiCredits())->toBeNull()
-            ->and($plan->featureMap())->toBe(['platform_transcription' => true, 'views' => true, 'double_check' => true, 'screen_moments' => true, 'connector' => true, 'team' => true, 'premium_engines' => true, 'live_translate' => true, 'ai_notes' => true]);
+            ->and($plan->featureMap())->toBe(['platform_transcription' => true, 'views' => true, 'double_check' => true, 'screen_moments' => true, 'connector' => true, 'team' => true, 'premium_engines' => true, 'live_translate' => true, 'ai_notes' => true, 'auto_transcribe' => true]);
     });
 
     it('refuses streaming tokens once the workspace used its monthly minutes, and only for that workspace', function () {

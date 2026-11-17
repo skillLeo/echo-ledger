@@ -29,7 +29,7 @@ use ZipArchive;
  */
 final class LibraryOrganiser
 {
-    public const VIEWS = ['today', 'this_week', 'waiting', 'bookmarked', 'failed', 'pinned'];
+    public const VIEWS = ['today', 'this_week', 'waiting', 'bookmarked', 'failed', 'pinned', 'starred', 'audio_only', 'transcribed', 'needs_action'];
 
     /**
      * Smart folders (since v1.5): computed views of the library, never copies. `shared` is what others sent the
@@ -96,6 +96,14 @@ final class LibraryOrganiser
             'failed' => $query->where(fn (Builder $q) => $q->where($q->qualifyColumn('status'), SessionStatus::Failed->value)
                 ->orWhereHas('recordings', fn (Builder $r) => $r->where('upload_status', UploadStatus::Failed->value))),
             'pinned' => $query->where($query->qualifyColumn('pinned'), true),
+            // Since 2.1.0-a (saved views): starred is pinned; audio only is kept as audio and not protected from clean-up
+            // by a star or Keep; transcribed has a finished transcript.
+            'starred' => $query->where($query->qualifyColumn('pinned'), true),
+            'audio_only' => $query->where($query->qualifyColumn('choice'), 'keep_audio')
+                ->where($query->qualifyColumn('pinned'), false)->where($query->qualifyColumn('keep_forever'), false)
+                ->whereDoesntHave('finalTranscript', fn (Builder $t): Builder => $t->where('status', '!=', TranscriptStatus::Failed->value)),
+            'transcribed' => $query->whereHas('finalTranscript', fn (Builder $t): Builder => $t->where('status', TranscriptStatus::Completed->value)),
+            'needs_action' => $query->where($query->qualifyColumn('needs_action'), true),
             // Since v2.0 (the v2.0 Library's saved view): recordings kept with audio but no finished transcript yet.
             'untranscribed' => $query->where($query->qualifyColumn('status'), SessionStatus::Completed->value)
                 ->whereDoesntHave('finalTranscript', fn (Builder $t): Builder => $t->where('status', TranscriptStatus::Completed->value)),

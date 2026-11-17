@@ -1,11 +1,19 @@
 {
     "views": {
         "today": 0,
-        "this_week": 2,
+        "this_week": 1,
         "waiting": 0,
         "bookmarked": 0,
         "failed": 0,
-        "pinned": 0
+        "pinned": 0,
+        "starred": 0,
+        "audio_only": 0,
+        "transcribed": 5,
+        "needs_action": 0
+    },
+    "cleanup_soon": {
+        "count": 0,
+        "on": null
     },
     "labels": [
         {

@@ -140,7 +140,7 @@ it('finds a vendor name and lets the Free plan\'s own Groq key be', function () 
 
 it('names and describes every feature in plain words, under the keys the apps know', function () {
     expect(Features::keys())->toBe(['record', 'organise', 'search', 'share_links', 'export', 'ready_check', 'platform_transcription', 'views',
-        'double_check', 'screen_moments', 'connector', 'team', 'premium_engines', 'live_translate', 'ai_notes']);
+        'double_check', 'screen_moments', 'connector', 'team', 'premium_engines', 'live_translate', 'ai_notes', 'auto_transcribe']);
     foreach (Features::all() as $key => $feature) {
         expect(vendorNamesIn($feature['name'].' | '.$feature['description']))->toBe([], $key);
     }

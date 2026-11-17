@@ -23,6 +23,7 @@ use App\Models\SessionMarker;
 use App\Models\SessionOpen;
 use App\Models\Transcript;
 use App\Services\Callers\CallerMatcher;
+use App\Services\CallRules\SessionChoice;
 use App\Services\ChunkedUploadService;
 use App\Services\EngineWait;
 use App\Services\FinalTranscriptCoordinator;
@@ -106,6 +107,7 @@ final class SessionController extends Controller
             'language' => ['nullable', 'string', 'max:16'],
             'artifacts' => ['sometimes', 'array', 'min:1', 'max:3'],
             'skip_duplicate' => ['sometimes', 'boolean'],
+            ...self::choiceRules(),
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),
             ...CallerMatcher::rules(),
@@ -122,6 +124,7 @@ final class SessionController extends Controller
                 // Since v1.6 finishing it this way is checked against the plan's longest recording too.
                 app(PlanLimits::class)->assertFileMinutes($device->workspace_id, self::longestOf($data), $device->user_id);
                 $existing = $lifecycle->finish($device, $existing, $data);
+                app(SessionChoice::class)->fromDevice($existing, $data['choice'] ?? null, $data['choice_by'] ?? null);
             }
 
             return $this->sessionCreatedResponse($existing, $stt, 200);
@@ -142,6 +145,7 @@ final class SessionController extends Controller
 
         try {
             $session = $withArtifacts ? $lifecycle->createWithArtifacts($device, $data) : $lifecycle->open($device, $data);
+            app(SessionChoice::class)->fromDevice($session, $data['choice'] ?? null, $data['choice_by'] ?? null);
         } catch (UniqueConstraintViolationException $e) {
             // Two requests with the same client_ref at once (an app that started the same upload twice): the other one
             // made it a moment ago, so this one answers with it, as a repeated request does (it was a 500).
@@ -194,6 +198,7 @@ final class SessionController extends Controller
             'client_id' => ['nullable', 'string', 'size:26'],
             'language' => ['nullable', 'string', 'max:16'],
             'artifacts' => ['required', 'array', 'min:1', 'max:3'],
+            ...self::choiceRules(),
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),
             ...CallerMatcher::rules(),
@@ -201,7 +206,20 @@ final class SessionController extends Controller
         $this->assertArtifactRoles($data['artifacts']);
         app(PlanLimits::class)->assertFileMinutes($device->workspace_id, self::longestOf($data), $device->user_id);
 
-        return $this->sessionCreatedResponse($lifecycle->finish($device, $session, $data), $stt, 200);
+        $session = $lifecycle->finish($device, $session, $data);
+        app(SessionChoice::class)->fromDevice($session, $data['choice'] ?? null, $data['choice_by'] ?? null);
+
+        return $this->sessionCreatedResponse($session->refresh(), $stt, 200);
+    }
+
+    /**
+     * Since 2.1.0-a: the choice a device made by a rule or the countdown, sent with its create or finish.
+     *
+     * @return array<string, list<mixed>>
+     */
+    private static function choiceRules(): array
+    {
+        return ['choice' => ['sometimes', 'nullable', Rule::in(SessionChoice::CHOICES)], 'choice_by' => ['sometimes', 'nullable', Rule::in(SessionChoice::BY)]];
     }
 
     /**

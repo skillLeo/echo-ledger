@@ -10,6 +10,7 @@ use App\Models\Device;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\CallRules\CallRules;
 use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\System\PlatformNotices;
 use App\Services\Usage\UsageSummary;
@@ -101,6 +102,12 @@ final class DeviceConfigPayload
             'maintenance' => app(PlatformNotices::class)->maintenance(),
             // Since 2.0.0-b: how long a deleted recording can be restored, the bin's own length (never a fixed number).
             'trash' => ['keep_hours' => CaptureSession::binHours()],
+            // Since 2.1.0-a: the call rules' revision (fetch GET /api/call-rules when newer), default and short calls.
+            'call_rules' => [
+                'revision' => (int) $device->user->call_rules_revision,
+                'default' => $device->user->after_call_default ?? 'transcribe',
+                'short_calls_keep' => app(CallRules::class)->keepsShortCalls($device->user),
+            ],
             // Since 2.0.0-a (docs/API.md "Interface flags"): each flag's answer for this person in this workspace, and
             // whether they chose "Switch back to classic".
             ...self::uiFlags($device->user, $device->workspace_id),

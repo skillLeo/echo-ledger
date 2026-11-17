@@ -15,6 +15,7 @@ use App\Enums\UploadStatus;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Services\CallRules\SessionChoice;
 use App\Services\Entitlements\Entitlements;
 use App\Services\Usage\UsageLedger;
 use App\Stt\LanguageRouter;
@@ -62,6 +63,15 @@ final class FinalTranscriptCoordinator
         }
 
         $existing = $session->finalTranscript()->first();
+        // Since 2.1.0-a (call rules): a call kept as audio, by its choice or the person's default, waits for a choice.
+        if ($existing === null && ! app(SessionChoice::class)->mayTranscribe($session)) {
+            // Its audio is all in: the recording is done, as audio only.
+            if (in_array($session->status, [SessionStatus::Uploading, SessionStatus::Processing], true)) {
+                $session->update(['status' => SessionStatus::Completed]);
+            }
+
+            return null;
+        }
         if ($existing !== null && $existing->status !== TranscriptStatus::Failed) {
             // Still pending with no provider job: an inline attempt gave it back (or its job was lost). Queue it again,
             // at most once per window so repeated `complete` calls do not pile up jobs (each run is a no-op anyway).

@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $storage_bytes
  * @property int|null $max_devices
  * @property int|null $retention_days
+ * @property int|null $audio_retention_days since 2.1.0-a: audio-only recordings are cleaned up after it (null = Never)
  * @property int|null $seats
  * @property string|null $ai_credits_usd
  * @property array<string, bool>|null $features
@@ -55,7 +56,7 @@ class Plan extends Model
      * Features a plan can leave out: since v1.6 every paid feature of the registry (App\Services\Entitlements\Features);
      * the free ones are in every plan.
      */
-    public const FEATURES = ['platform_transcription', 'views', 'double_check', 'screen_moments', 'connector', 'team', 'premium_engines', 'live_translate', 'ai_notes'];
+    public const FEATURES = ['platform_transcription', 'views', 'double_check', 'screen_moments', 'connector', 'team', 'premium_engines', 'live_translate', 'ai_notes', 'auto_transcribe'];
 
     /** The four features the v1.5 apps read in `GET /api/config` (`plan.features`). */
     public const V15_FEATURES = ['live_translate', 'screen_moments', 'ai_notes', 'connector'];
@@ -74,6 +75,7 @@ class Plan extends Model
         'premium_engines' => 'Premium engines',
         'live_translate' => 'Live Translate',
         'ai_notes' => 'AI notes (project notes, memory and Ask)',
+        'auto_transcribe' => 'Transcribe automatically (call rules)',
     ];
 
     /** A feature's name in messages and on the Plans page, with the product's name where it has one. */
@@ -95,12 +97,15 @@ class Plan extends Model
         'max_devices' => 2, 'retention_days' => 30, 'seats' => 1, 'ai_credits_usd' => 0, 'price_usd' => 0, 'max_file_minutes' => 180, 'uploads_per_day' => 50,
         'on_offer' => true, 'engines' => ['own_groq', 'on_device'],
         'features' => ['platform_transcription' => false, 'views' => false, 'double_check' => false, 'screen_moments' => false, 'connector' => false,
-            'team' => false, 'premium_engines' => false, 'live_translate' => false, 'ai_notes' => false]];
+            'team' => false, 'premium_engines' => false, 'live_translate' => false, 'ai_notes' => false, 'auto_transcribe' => false],
+        'audio_retention_days' => 7];
 
     protected $fillable = ['key', 'name', 'price_usd', 'monthly_minutes', 'storage_bytes', 'max_devices', 'retention_days', 'seats', 'ai_credits_usd', 'features',
         'badge', 'color', 'description', 'price_label', 'sort_order', 'on_offer', 'is_default', 'trial_minutes', 'max_file_minutes', 'uploads_per_day', 'engines', 'retention_from', 'archived_at', 'price_amount', 'currency', 'price_pkr',
         // Since v2.0: Live Assist's monthly allowances (AssistPlans); empty is config/assist.php's value.
-        'assist_minutes', 'assist_usd', 'practice_minutes', 'practice_usd'];
+        'assist_minutes', 'assist_usd', 'practice_minutes', 'practice_usd',
+        // Since 2.1.0-a: days audio nobody transcribed is kept (null = Never).
+        'audio_retention_days'];
 
     protected static function booted(): void
     {

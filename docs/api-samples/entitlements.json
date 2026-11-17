@@ -112,6 +112,13 @@
             "description": "Project notes, memory and Ask about a project.",
             "cost": "paid",
             "lowest_plan": "business"
+        },
+        "auto_transcribe": {
+            "enabled": true,
+            "name": "Transcribe automatically",
+            "description": "Call rules and your default can transcribe a call by themselves, without asking.",
+            "cost": "paid",
+            "lowest_plan": "pro"
         }
     },
     "limits": {
@@ -130,6 +137,9 @@
         },
         "retention_days": {
             "limit": null
+        },
+        "audio_retention_days": {
+            "limit": 30
         },
         "seats": {
             "limit": null,
@@ -179,6 +189,7 @@
                 "devices": 2,
                 "storage_bytes": 1073741824,
                 "retention_days": 30,
+                "audio_retention_days": 7,
                 "seats": 1,
                 "max_file_minutes": 180,
                 "uploads_per_day": 50,
@@ -199,13 +210,15 @@
                 "views",
                 "double_check",
                 "screen_moments",
-                "connector"
+                "connector",
+                "auto_transcribe"
             ],
             "limits": {
                 "monthly_minutes": 600,
                 "devices": 5,
                 "storage_bytes": 21474836480,
                 "retention_days": 365,
+                "audio_retention_days": 30,
                 "seats": 1,
                 "max_file_minutes": 240,
                 "uploads_per_day": 200,
@@ -230,13 +243,15 @@
                 "team",
                 "premium_engines",
                 "live_translate",
-                "ai_notes"
+                "ai_notes",
+                "auto_transcribe"
             ],
             "limits": {
                 "monthly_minutes": 3000,
                 "devices": 5,
                 "storage_bytes": 107374182400,
                 "retention_days": 365,
+                "audio_retention_days": 30,
                 "seats": 10,
                 "max_file_minutes": 480,
                 "uploads_per_day": 500,

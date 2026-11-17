@@ -88,11 +88,7 @@ function registeredApiRoutes(): array
 const SERVED_BEFORE_DOCUMENTED = [
 ];
 
-const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate',
-    // Contract 2.1.0-a (call rules and audio clean-up), served as its steps land.
-    'DELETE /api/call-rules/contacts', 'GET /api/account/privacy', 'GET /api/call-rules', 'GET /api/call-rules/resolve',
-    'POST /api/sessions/transcribe/estimate', 'POST /api/sessions/{}/choice', 'PUT /api/call-rules/contacts',
-    'PUT /api/call-rules/default', 'PUT /api/call-rules/short-calls'];
+const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe-estimate'];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();

@@ -114,6 +114,22 @@ function secDeviceGuardedRoutes(): array
         'GET account' => ['GET', '/api/account', 'config:read'],
         // Since 2.0.0-a: the person's "Switch back to classic".
         'PUT account/ui' => ['PUT', '/api/account/ui', 'config:read'],
+        // Since 2.1.0-a: call rules, the person's audio retention, the after-call choice and Transcribe many.
+        'GET call-rules' => ['GET', '/api/call-rules', 'config:read'],
+        'GET call-rules/resolve' => ['GET', '/api/call-rules/resolve', 'config:read'],
+        'PUT call-rules/default' => ['PUT', '/api/call-rules/default', 'config:read'],
+        'PUT call-rules/short-calls' => ['PUT', '/api/call-rules/short-calls', 'config:read'],
+        'PUT call-rules/groups/{group}' => ['PUT', '/api/call-rules/groups/favourites', 'config:read'],
+        'DELETE call-rules/groups/{group}' => ['DELETE', '/api/call-rules/groups/favourites', 'config:read'],
+        'PUT call-rules/sources/{source}' => ['PUT', '/api/call-rules/sources/zoom', 'config:read'],
+        'DELETE call-rules/sources/{source}' => ['DELETE', '/api/call-rules/sources/zoom', 'config:read'],
+        'PUT call-rules/contacts' => ['PUT', '/api/call-rules/contacts', 'config:read'],
+        'DELETE call-rules/contacts' => ['DELETE', '/api/call-rules/contacts', 'config:read'],
+        'GET account/privacy' => ['GET', '/api/account/privacy', 'config:read'],
+        'PUT account/privacy' => ['PUT', '/api/account/privacy', 'config:read'],
+        'POST sessions/{id}/choice' => ['POST', '/api/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV/choice', 'sessions:write'],
+        'POST sessions/transcribe/estimate' => ['POST', '/api/sessions/transcribe/estimate', 'sessions:write'],
+        'POST sessions/transcribe' => ['POST', '/api/sessions/transcribe', 'sessions:write'],
         'DELETE account' => ['DELETE', '/api/account', 'sessions:write'],
         'POST account/export' => ['POST', '/api/account/export', 'library:read'],
         'GET account/export/{id}' => ['GET', '/api/account/export/'.Fx::MISSING_ID, 'library:read'],
@@ -215,7 +231,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(134);
+    expect($guarded)->toBe(149);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Assist\AssistSessionController;
 use App\Http\Controllers\Api\Assist\InternalAssistController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BinController;
+use App\Http\Controllers\Api\CallRulesController;
 use App\Http\Controllers\Api\ClientWorkspaceController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
@@ -98,6 +99,21 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');
         // Interface flags (2.0.0-a): the person's "Switch back to classic".
         Route::put('account/ui', [AccountController::class, 'ui'])->middleware('abilities:config:read')->name('api.account.ui');
+        // Since 2.1.0-a: call rules (the person's, all their devices) and their audio retention.
+        Route::middleware('abilities:config:read')->group(function (): void {
+            Route::get('call-rules', [CallRulesController::class, 'show'])->name('api.call-rules');
+            Route::get('call-rules/resolve', [CallRulesController::class, 'resolve'])->name('api.call-rules.resolve');
+            Route::put('call-rules/default', [CallRulesController::class, 'setDefault'])->name('api.call-rules.default');
+            Route::put('call-rules/short-calls', [CallRulesController::class, 'setShortCalls'])->name('api.call-rules.short-calls');
+            Route::put('call-rules/groups/{group}', [CallRulesController::class, 'group'])->name('api.call-rules.groups');
+            Route::delete('call-rules/groups/{group}', [CallRulesController::class, 'group'])->name('api.call-rules.groups.delete');
+            Route::put('call-rules/sources/{source}', [CallRulesController::class, 'source'])->name('api.call-rules.sources');
+            Route::delete('call-rules/sources/{source}', [CallRulesController::class, 'source'])->name('api.call-rules.sources.delete');
+            Route::put('call-rules/contacts', [CallRulesController::class, 'putContact'])->name('api.call-rules.contacts.put');
+            Route::delete('call-rules/contacts', [CallRulesController::class, 'deleteContact'])->name('api.call-rules.contacts.delete');
+            Route::get('account/privacy', [CallRulesController::class, 'privacy'])->name('api.account.privacy');
+            Route::put('account/privacy', [CallRulesController::class, 'putPrivacy'])->name('api.account.privacy.put');
+        });
         // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
         // Since v1.8 P6.3 (docs/API.md 2.0.0-d): inviting people, for owners and admins.
@@ -176,6 +192,10 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->middleware($own)->name('api.bin.destroy');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->middleware($own)->name('api.sessions.markers.store');
             Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->middleware($own)->name('api.sessions.retranscribe');
+            // Since 2.1.0-a: the after-call choice, and Transcribe many (the minutes first, then all or nothing).
+            Route::post('sessions/{id}/choice', [CallRulesController::class, 'choice'])->middleware($own)->name('api.sessions.choice');
+            Route::post('sessions/transcribe/estimate', [CallRulesController::class, 'estimate'])->middleware($own)->name('api.sessions.transcribe.estimate');
+            Route::post('sessions/transcribe', [CallRulesController::class, 'transcribeMany'])->middleware($own)->name('api.sessions.transcribe');
             Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->middleware($own)->name('api.sessions.markers.destroy');
             // Screen moments (v1.5): a screen comes off the recording's timeline (sending one is an upload route below).
             Route::delete('sessions/{id}/screens/{screen}', [ScreenController::class, 'destroy'])->middleware($own)->name('api.sessions.screens.destroy');

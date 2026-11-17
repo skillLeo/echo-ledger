@@ -9,6 +9,7 @@ use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Api\SessionController;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Services\CallRules\AudioRetention;
 use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
@@ -101,6 +102,10 @@ final class LibraryItemResource extends JsonResource
             'pinned' => (bool) $session->pinned,
             'keep' => (bool) $session->keep_forever,
             'labels' => $session->labelList(),
+            // Since 2.1.0-a: the after-call choice and the recording's audio clean-up state.
+            'choice' => $session->choice === null ? null : ['value' => $session->choice, 'by' => $session->choice_by,
+                'needs_action' => (bool) $session->needs_action, 'at' => $session->choice_at?->toAtomString()],
+            'retention' => app(AudioRetention::class)->state($session, null, $final?->status === TranscriptStatus::Completed),
             // Since v1.3: whether the asking user has opened it (the apps show a dot until then); left out where unknown.
             'opened' => $this->when($session->relationLoaded('opens'), fn (): bool => $session->opens->isNotEmpty()),
             'updated_at' => $session->updated_at->toAtomString(),

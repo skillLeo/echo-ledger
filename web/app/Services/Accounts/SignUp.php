@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
 use App\Services\AuditLog;
+use App\Services\CallRules\CallRules;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Support\Facades\DB;
@@ -131,6 +132,9 @@ final class SignUp
                 'has_password' => $via === 'password',
                 'terms_accepted_at' => $acceptedTerms ? now() : null,
                 'email_verified_at' => $emailVerified || ($invitation !== null && $this->invitations->matches($invitation, $email)) ? now() : null,
+                // Since 2.1.0-a (D4): a new account asks after a call and does not keep short calls; older ones keep today's behaviour.
+                'after_call_default' => CallRules::NEW_ACCOUNT_DEFAULT,
+                'short_calls_keep' => false,
             ])->save();
             // Since v1.5 a new account's own workspace is on the Free plan; since v1.6 on the default plan (Free).
             $this->workspaces->createFor($user, 'Personal', Plan::defaultPlan());

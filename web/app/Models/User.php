@@ -170,6 +170,9 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_super_admin' => 'boolean',
+            // Since 2.1.0-a (call rules): null = legacy (short calls kept).
+            'short_calls_keep' => 'boolean',
+            'call_rules_revision' => 'integer',
             'current_workspace_id' => 'integer',
             'deletion_requested_at' => 'datetime',
             'deletes_at' => 'datetime',
