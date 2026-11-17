@@ -921,11 +921,15 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     let permission = crate::screens::platform::macos::permission();
     #[cfg(not(target_os = "macos"))]
     let permission = true;
-    let lines = match platform {
+    let mut lines = match platform {
         Platform::Windows => super::win::lines(build, remote, settings.old_windows_sharing, mismatch, changed_outside),
         Platform::Mac => mac_lines(permission, super::watch::allowed(&choice, settings.share_one_window, false)),
         Platform::Other => Vec::new(),
     };
+    // A card or captions kept off because its flag did not hold: said first.
+    for label in privacy.held_back().iter().rev() {
+        lines.insert(0, super::win::Line::warning(&super::held_back_line(label)));
+    }
     let mac_version = os_version();
     // Read before the answer is put together: no lock is held while the displays are asked of the main thread below.
     let share = privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone();

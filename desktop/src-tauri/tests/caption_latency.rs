@@ -1,7 +1,8 @@
 //! Caption latency: speech to word on screen, measured. A WAV is fed through the live-caption pipeline in real time
 //! (10 ms chunks, as the capture hands them over) against a stand-in AssemblyAI v3 provider with realistic timings. Each
-//! caption goes the app's way to the windows (`stt::caption_event` into a `CaptionHub`, the overlay's target), and for
-//! each stretch of speech the time from its first chunk to its first interim word handed to the windows is taken apart
+//! caption goes the app's way to the windows (`stt::caption_event` into a `CaptionHub`, received on the overlay's
+//! channel), and for each stretch of speech the time from its first chunk to its first interim word received there is
+//! taken apart
 //! into the provider's share and the pipeline's own (framing, the socket both ways, parsing, the hub). The WAV is
 //! repeated until it holds at least 30 stretches, so p90 is not just the slowest one.
 //! Timings only: the words are numbered placeholders, never meeting text.
@@ -28,7 +29,8 @@ use tokio_tungstenite::tungstenite::Message;
 
 use desktop_lib::audio::types::Channel;
 use desktop_lib::net::models::{AudioSpec, Grant};
-use desktop_lib::stt::captions::{CaptionEvent, CaptionHub};
+use desktop_lib::stt::captions::CaptionHub;
+use tauri::ipc::{Channel as IpcChannel, InvokeResponseBody};
 use desktop_lib::stt::latency::{Probe, Spread};
 use desktop_lib::stt::stream::{SessionOptions, run_session_with, voiced};
 
@@ -255,23 +257,31 @@ async fn feed(grant: Grant, samples: &[i16], tail: Duration) -> Run {
     let sink = words.clone();
     let probe = Probe::new_registered();
     let options = SessionOptions::LIVE.with_probe(Some(probe.clone()));
-    // The app's way to the windows: the caption event, then the hub that fans it out to the overlay.
+    // The app's way to the windows: the caption event, the hub, and the overlay's channel, which timestamps each caption
+    // as it receives it (as the page would).
     let hub = CaptionHub::default();
+    hub.subscribe(
+        "overlay",
+        IpcChannel::new(move |body| {
+            let at = Instant::now();
+            let InvokeResponseBody::Json(json) = body else { return Ok(()) };
+            let value: serde_json::Value = serde_json::from_str(&json).unwrap_or_default();
+            let text = value.get("text").and_then(serde_json::Value::as_str).unwrap_or("");
+            if matches!(value.get("kind").and_then(serde_json::Value::as_str), Some("partial" | "final")) && !text.trim().is_empty() {
+                let newest = text.split_whitespace().last().and_then(|w| w.trim_end_matches('.').strip_prefix('w')).and_then(|n| n.parse().ok());
+                sink.lock().unwrap().push((at, newest));
+            }
+            Ok(())
+        }),
+    );
     let stream_start = (0, Instant::now());
     let session = tokio::spawn(run_session_with(
         grant,
         pcm_rx,
         stop_rx,
         move |event| {
-            let Some(caption) = desktop_lib::stt::caption_event(Channel::Mic, stream_start, &event) else { return };
-            let text = match &caption {
-                CaptionEvent::Partial { text, .. } | CaptionEvent::Final { text, .. } => text.clone(),
-                _ => String::new(),
-            };
-            hub.send(&["overlay"], caption);
-            if !text.trim().is_empty() {
-                let newest = text.split_whitespace().last().and_then(|w| w.trim_end_matches('.').strip_prefix('w')).and_then(|n| n.parse().ok());
-                sink.lock().unwrap().push((Instant::now(), newest));
+            if let Some(caption) = desktop_lib::stt::caption_event(Channel::Mic, stream_start, &event) {
+                hub.send(&["overlay"], caption);
             }
         },
         options,

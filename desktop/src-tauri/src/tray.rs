@@ -269,6 +269,8 @@ struct MenuShape {
     /// The main window in screen shares (v2.0): shown, with "Hide from screen shares" and its durations, or hidden with
     /// "Hidden until 14:30 · Show now". None: no line (before the first status).
     main_share: Option<MainShare>,
+    /// The card or the captions stay off because their flag did not hold ([`crate::privacy::held_back_line`]).
+    held_back: Option<String>,
     /// EchoLedger's windows are off the screen, and why.
     hidden: Option<Hidden>,
     /// Live Translate is listening ([`TRANSLATE_LISTENING`]).
@@ -454,6 +456,9 @@ fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
         Some(MainShare::Hidden(line)) => entries.push(item("share_show_now", line.clone())),
         None => {}
     }
+    if let Some(line) = &shape.held_back {
+        entries.push(Entry::Item { id: "held_back", label: line.clone(), enabled: false, checked: None });
+    }
     if shape.review > 0 {
         entries.push(item("review", format!("Review recordings ({})", shape.review)));
     }
@@ -624,6 +629,8 @@ pub struct Switches {
     pub calls_ready: Option<bool>,
     /// The main window in screen shares (v2.0).
     pub main_share: Option<MainShare>,
+    /// A card or captions kept off because its flag did not hold.
+    pub held_back: Option<String>,
     /// EchoLedger's windows are off the screen, and why.
     pub hidden: Option<Hidden>,
     /// Live Translate is listening to an app now.
@@ -651,6 +658,7 @@ pub fn update(app: &AppHandle, generation: u64, state: TrayState, paused: bool, 
         calls_ready: switches.calls_ready,
         viewer,
         main_share: switches.main_share,
+        held_back: switches.held_back,
         hidden: switches.hidden,
         translate: switches.translate,
     };
@@ -719,7 +727,7 @@ mod tests {
 
     #[test]
     fn recording_menu_shows_its_state_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None, main_share: Some(MainShare::Shown { call: false }), hidden: None, translate: false };
+        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None, main_share: Some(MainShare::Shown { call: false }), held_back: None, hidden: None, translate: false };
         let labels = labels(&shape);
         assert!(labels.contains(&"Stop recording".to_string()));
         assert!(labels.contains(&"Resume recording".to_string()));
@@ -740,6 +748,8 @@ mod tests {
         let hidden = labels(&MenuShape { main_share: Some(MainShare::Hidden("Hidden until 14:30 · Show now".into())), ..MenuShape::default() });
         assert!(hidden.contains(&"Hidden until 14:30 · Show now".to_string()));
         assert!(!hidden.iter().any(|l| l.starts_with("Hide from screen shares")));
+        let held = labels(&MenuShape { held_back: Some(crate::privacy::held_back_line(crate::privacy::ASSIST)), ..MenuShape::default() });
+        assert!(held.contains(&"The Live Assist card couldn't be hidden from screen shares, so it stays off.".to_string()), "the tray tells the person");
         let none = labels(&MenuShape::default());
         assert!(!none.iter().any(|l| l.contains("screen share")), "nothing before the first status");
         // Each duration's id stands for its choice; Custom… opens Settings.

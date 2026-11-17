@@ -464,7 +464,8 @@ fn show_during_screen_share_from_v1_8_keeps_echoledger_visible_in_shares() {
     // v1.8 "Show during screen share" on: the floating windows were in shares, and the main window always was.
     let s = Settings::from_value(json!({"serverUrl": "https://ledger.example.com", "contentProtection": false}));
     assert_eq!(s.hide_from_sharing, ShareHiding::Off);
-    // The default (hidden captions) moves to the new default: every window hidden.
+    // The default (hidden captions) moves to the new default: the other floating windows hidden (the card and the
+    // captions are hidden whatever this says, and the main window has its own choice).
     assert_eq!(Settings::from_value(json!({"contentProtection": true})).hide_from_sharing, ShareHiding::All);
     assert_eq!(Settings::from_value(json!({"autoMode": true})).hide_from_sharing, ShareHiding::All);
     // Once the new setting is in the file, the old key no longer counts.

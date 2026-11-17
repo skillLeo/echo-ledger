@@ -14,7 +14,8 @@
 //! - Share Check ([`check`]): a protected magenta test window and an unprotected green control, the screen captured
 //!   the way meeting apps capture it, the colours counted ([`pixels`]).
 //! - Mac safety net ([`bars`], [`watch`]): a whole-screen share in a meeting app not confirmed hidden on this Mac
-//!   takes the floating windows (and the main window with "All EchoLedger windows") off the screen until it is over.
+//!   takes the floating windows, the card and the captions (and the main window while the person hides it from
+//!   screen shares) off the screen until it is over.
 
 pub mod apps;
 pub mod bars;
@@ -140,6 +141,27 @@ pub fn old_windows_for(kind: Option<Kind>, old: crate::settings::OldWindowsShari
 /// Windows built off the screen and brought on by the privacy service only once their flag held (pure).
 pub fn reveals_itself(kind: Kind) -> bool {
     matches!(kind, Kind::Card | Kind::Captions)
+}
+
+/// What becomes of the card or the captions once their flag was set (on the main thread, just before showing).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reveal {
+    /// On the screen.
+    Show,
+    /// A reason to keep it off came meanwhile (Hide EchoLedger windows, a whole-screen share): it stays put away, and
+    /// the next reconcile brings it back through the same gate.
+    StayAway,
+    /// Its flag did not hold: it stays off, the person is told, and the next lifecycle point tries again.
+    HeldBack,
+}
+
+/// The line the tray and Settings › Screen-share privacy show while a window stays off because its flag did not hold.
+pub fn held_back_line(label: &str) -> String {
+    if label == crate::overlay::OVERLAY {
+        "The captions couldn't be hidden from screen shares, so they stay off.".into()
+    } else {
+        format!("The {} couldn't be hidden from screen shares, so it stays off.", window_name(label))
+    }
 }
 
 /// Whether the card or the captions may come on the screen once their flag was set (pure): a window shown in screen
@@ -315,6 +337,9 @@ pub struct Privacy {
     /// The card and the captions the person showed in screen shares, from that window's own badge. Kept in memory only:
     /// it ends when that window closes, and every start begins hidden.
     shown: Mutex<BTreeSet<share::Pinned>>,
+    /// The card and the captions kept off the screen because their flag did not hold (tried again at every
+    /// [`apply_all`]).
+    held_back: Mutex<BTreeSet<String>>,
     /// The safety net's last look saw a sharing bar on screen: "Show EchoLedger windows" can't bring them back now.
     bar_on_screen: AtomicBool,
 }
@@ -371,6 +396,39 @@ impl Privacy {
     pub fn wants(&self, label: &str, settings: &Settings, now: Instant, now_ms: i64) -> Option<bool> {
         let shown = (self.shown_in_shares(share::Pinned::Card), self.shown_in_shares(share::Pinned::Captions));
         Some(protected(self.kind_of(label)?, &Choice::of(settings, self.demo_active(now), now_ms, shown)))
+    }
+
+    /// What to do with the card or the captions on the main thread, right before showing: the reasons are read now, so
+    /// one that came after the reveal was scheduled keeps the window off.
+    pub fn reveal_decision(&self, kind: Kind, choice: &Choice, protect: bool, held: bool) -> Reveal {
+        if away(kind, &self.reasons(), choice, self.main_asked()) {
+            Reveal::StayAway
+        } else if may_reveal(protect, held) {
+            Reveal::Show
+        } else {
+            Reveal::HeldBack
+        }
+    }
+
+    /// Records what [`Privacy::reveal_decision`] decided for `label`: kept off (put away, or held back) or on.
+    pub fn revealed(&self, label: &str, reveal: Reveal) {
+        match reveal {
+            Reveal::Show => {
+                lock(&self.held_back).remove(label);
+                lock(&self.put_away).remove(label);
+            }
+            Reveal::StayAway => {
+                lock(&self.put_away).insert(label.to_string());
+            }
+            Reveal::HeldBack => {
+                lock(&self.held_back).insert(label.to_string());
+            }
+        }
+    }
+
+    /// The windows kept off because their flag did not hold, by label.
+    pub fn held_back(&self) -> Vec<String> {
+        lock(&self.held_back).iter().cloned().collect()
     }
 
     /// The person showed this window in screen shares, and it has not closed since.
@@ -543,11 +601,28 @@ fn built<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
 fn reveal_when_held<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, protect: bool) {
     let (handle, target) = (app.clone(), window.clone());
     let _ = window.run_on_main_thread(move || {
+        let Some(privacy) = handle.try_state::<Privacy>() else { return };
+        let Some(kind) = privacy.kind_of(target.label()) else { return };
         let held = flag_held_here(&handle, &target, protect);
-        if may_reveal(protect, held) {
-            put_away(&target, false);
-        } else if let Some(state) = handle.try_state::<crate::AppState>() {
-            diag::log(&state.data_dir, &format!("The {} stayed off the screen: its capture flag did not read back as set.", window_name(target.label())));
+        // The reasons are read again here: one that came since this was scheduled keeps the window off.
+        let reveal = privacy.reveal_decision(kind, &choice_now(&handle), protect, held);
+        let was_held_back = privacy.held_back().iter().any(|l| l == target.label());
+        privacy.revealed(target.label(), reveal);
+        match reveal {
+            Reveal::Show => put_away(&target, false),
+            Reveal::StayAway => {}
+            Reveal::HeldBack => {
+                if let Some(state) = handle.try_state::<crate::AppState>() {
+                    diag::log(&state.data_dir, &format!("The {} stayed off the screen: its capture flag did not read back as set.", window_name(target.label())));
+                }
+            }
+        }
+        if was_held_back != (reveal == Reveal::HeldBack) {
+            let _ = handle.emit("privacy:changed", ());
+            // The tray says it too (the app's own handle; a test runtime has no tray).
+            if let Some(app) = (&handle as &dyn std::any::Any).downcast_ref::<AppHandle>() {
+                crate::actions::emit_status(app);
+            }
         }
     });
 }
@@ -642,6 +717,15 @@ pub fn apply_all<R: Runtime>(app: &AppHandle<R>) {
     for (label, _) in privacy.registered() {
         if let (Some(window), Some(protect)) = (app.get_webview_window(&label), wanted_for(app, &label)) {
             enforce(app, &window, protect, &settings);
+        }
+    }
+    // A card or captions kept off because its flag did not hold: tried again at every lifecycle point.
+    for label in privacy.held_back() {
+        match (app.get_webview_window(&label), wanted_for(app, &label)) {
+            (Some(window), Some(protect)) => reveal_when_held(app, &window, protect),
+            _ => {
+                lock(&privacy.held_back).remove(&label);
+            }
         }
     }
     // The setting decides whether a share takes the main window off too.
@@ -742,6 +826,7 @@ pub fn destroyed<R: Runtime>(app: &AppHandle<R>, label: &str) {
     if let Some(privacy) = app.try_state::<Privacy>() {
         lock(&privacy.watch).forget(label);
         lock(&privacy.put_away).remove(label);
+        lock(&privacy.held_back).remove(label);
         if label == crate::lifecycle::MAIN {
             privacy.main_closed();
         }
@@ -1024,6 +1109,9 @@ pub fn reconcile<R: Runtime>(app: &AppHandle<R>) {
             if off && !taken && window.is_visible().unwrap_or(false) {
                 put_away(&window, true);
                 lock(&privacy.put_away).insert(label);
+            } else if !off && taken && reveals_itself(kind) {
+                // The card and the captions come back only through the gate: flag set, read back, reasons read again.
+                reveal_when_held(&handle, &window, wanted_for(&handle, &label).unwrap_or(true));
             } else if !off && taken {
                 put_away(&window, false);
                 lock(&privacy.put_away).remove(&label);
@@ -1244,11 +1332,44 @@ mod tests {
         let overlay = include_str!("../overlay/mod.rs");
         assert!(overlay.contains(".visible(!crate::privacy::reveals_itself(crate::privacy::kind_for(label)));"));
         let reveal = body_of(include_str!("mod.rs"), "fn reveal_when_held<");
-        let (held, on) = (reveal.find("flag_held_here(").unwrap(), reveal.find("put_away(&target, false)").unwrap());
-        assert!(held < on && reveal.contains("if may_reveal(protect, held)"));
+        let (held, decide, on) = (reveal.find("flag_held_here(").unwrap(), reveal.find("privacy.reveal_decision(").unwrap(), reveal.find("Reveal::Show => put_away(&target, false)").unwrap());
+        assert!(held < decide && decide < on, "flag set and read back, then the reasons read again, then on screen");
+        // Every way back on screen for the card and the captions goes through the gate: reconcile too.
+        let back = body_of(include_str!("mod.rs"), "pub fn reconcile<");
+        let gate = back.find("reveal_when_held(&handle, &window, wanted_for(&handle, &label).unwrap_or(true))").expect("reconcile uses the gate");
+        assert!(gate < back.rfind("put_away(&window, false)").unwrap(), "checked before the plain way back");
+        assert!(back.contains("!off && taken && reveals_itself(kind)"));
+        // A window held back is tried again at every lifecycle point.
+        assert!(body_of(include_str!("mod.rs"), "pub fn apply_all<").contains("for label in privacy.held_back()"));
         let flag = body_of(include_str!("mod.rs"), "fn flag_held_here<");
         assert!(flag.contains("set_and_read_back(app, window.label()"), "Windows: set and read back");
         assert!(flag.contains("read_flag_here(window) == Some(wanted)"), "macOS: read back");
+    }
+
+    #[test]
+    fn a_reason_that_comes_between_scheduling_and_showing_keeps_the_card_off() {
+        let privacy = Privacy::new();
+        let choice = choice(ShareHiding::All, false);
+        // Scheduled with nothing keeping it off; before the main thread runs it, the person hides EchoLedger's windows.
+        privacy.set_hidden(HideReason::Person, true);
+        let reveal = privacy.reveal_decision(Kind::Card, &choice, true, true);
+        assert_eq!(reveal, Reveal::StayAway);
+        privacy.revealed(ASSIST, reveal);
+        assert!(lock(&privacy.put_away).contains(ASSIST), "tracked, so reconcile brings it back through the gate");
+        // A whole-screen share instead: the same.
+        let privacy = Privacy::new();
+        privacy.set_hidden(HideReason::Share, true);
+        assert_eq!(privacy.reveal_decision(Kind::Captions, &choice, true, true), Reveal::StayAway);
+        // Nothing in the way: on screen when the flag held, held back when it did not.
+        let privacy = Privacy::new();
+        assert_eq!(privacy.reveal_decision(Kind::Card, &choice, true, true), Reveal::Show);
+        assert_eq!(privacy.reveal_decision(Kind::Card, &choice, true, false), Reveal::HeldBack);
+        privacy.revealed(ASSIST, Reveal::HeldBack);
+        assert_eq!(privacy.held_back(), [ASSIST.to_string()]);
+        privacy.revealed(ASSIST, Reveal::Show);
+        assert!(privacy.held_back().is_empty(), "the next try that holds brings it on");
+        assert_eq!(held_back_line(ASSIST), "The Live Assist card couldn't be hidden from screen shares, so it stays off.");
+        assert_eq!(held_back_line(crate::overlay::OVERLAY), "The captions couldn't be hidden from screen shares, so they stay off.");
     }
 
     #[test]
