@@ -190,7 +190,7 @@ pub fn until_words(hide: &MainHide, now: DateTime<Local>) -> String {
 }
 
 /// The two windows that are hidden from screen shares unless the person shows them, each on its own.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Pinned {
     /// The Live Assist answer card.
@@ -215,14 +215,6 @@ impl Pinned {
         }
     }
 
-    /// The person's explicit choice for this window: true only when they chose to show it in screen shares.
-    pub fn shown(self, settings: &crate::settings::Settings) -> bool {
-        match self {
-            Pinned::Card => settings.show_card_in_shares,
-            Pinned::Captions => settings.show_captions_in_shares,
-        }
-    }
-
     /// The window's own switch, in its own words.
     pub fn switch_label(self, shown: bool) -> &'static str {
         match (self, shown) {
@@ -242,34 +234,58 @@ pub enum WindowShare {
     Hidden,
     /// The system says it is in screen shares (the person chose so).
     Shown,
-    /// It should be hidden, but the system did not keep it hidden, or could not say.
+    /// Windows before 10 version 2004: people see a black box where the window is (WDA_MONITOR).
+    BlackBox,
+    /// It should be hidden, but the open window's flag did not read back as set, or the system could not say.
     CouldNotHide,
+    /// The window is not open: nothing to read. It opens hidden from screen shares (the choice to show it ends with it).
+    NotOpen,
 }
 
 impl WindowShare {
     pub fn badge(self) -> &'static str {
         match self {
-            WindowShare::Hidden => "Hidden from screen shares",
+            WindowShare::Hidden | WindowShare::NotOpen => "Hidden from screen shares",
             WindowShare::Shown => "Shown in screen shares",
+            WindowShare::BlackBox => "Shows as a black box",
             WindowShare::CouldNotHide => "Couldn't hide this from screen shares",
         }
     }
 }
 
+/// What the system reads back for a window's flag.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Read {
+    /// Left out of screen shares (macOS sharing type none, Windows WDA_EXCLUDEFROMCAPTURE).
+    Hidden,
+    /// A black box in screen shares (Windows WDA_MONITOR).
+    BlackBox,
+    /// In screen shares.
+    Shown,
+}
+
 /// The platform layer under a badge (macOS `NSWindow.sharingType`, Windows `Set/GetWindowDisplayAffinity`): mocked in
 /// tests.
 pub trait ShareFlag {
+    /// The window exists now.
+    fn is_open(&self, label: &str) -> bool;
     /// Sets the window's flag; false when the system refused.
     fn set_share_flag(&self, label: &str, hidden: bool) -> bool;
-    /// Reads the flag back: `Some(true)` left out of shares, `Some(false)` in them, none when the system did not say.
-    fn read_share_flag(&self, label: &str) -> Option<bool>;
+    /// Reads the flag back; none when the system did not say.
+    fn read_share_flag(&self, label: &str) -> Option<Read>;
 }
 
-/// The badge from what the system answered (pure): only a read-back that says hidden is Hidden. A window meant to be
-/// hidden whose set failed, whose read says shown, or whose read failed could not be hidden, and says so.
-pub fn window_share(wanted_hidden: bool, set_ok: bool, read: Option<bool>) -> WindowShare {
+/// The badge from what the system answered (pure). A window that is not open is NotOpen (never "couldn't hide": there
+/// is nothing to read). For an open one only a read-back is believed: hidden is Hidden, a black box is BlackBox; a
+/// window meant to be hidden whose set failed, whose read says shown, or whose read failed could not be hidden.
+pub fn window_share(open: bool, wanted_hidden: bool, set_ok: bool, read: Option<Read>) -> WindowShare {
+    if !open {
+        return WindowShare::NotOpen;
+    }
     match (wanted_hidden, read) {
-        (_, Some(true)) if set_ok || !wanted_hidden => WindowShare::Hidden,
+        (true, _) if !set_ok => WindowShare::CouldNotHide,
+        (_, Some(Read::Hidden)) => WindowShare::Hidden,
+        (_, Some(Read::BlackBox)) => WindowShare::BlackBox,
         (true, _) => WindowShare::CouldNotHide,
         (false, _) => WindowShare::Shown,
     }
@@ -277,8 +293,11 @@ pub fn window_share(wanted_hidden: bool, set_ok: bool, read: Option<bool>) -> Wi
 
 /// Sets one window's flag through the platform layer and reads it back.
 pub fn apply(flag: &dyn ShareFlag, label: &str, hidden: bool) -> WindowShare {
+    if !flag.is_open(label) {
+        return WindowShare::NotOpen;
+    }
     let set_ok = flag.set_share_flag(label, hidden);
-    window_share(hidden, set_ok, flag.read_share_flag(label))
+    window_share(true, hidden, set_ok, flag.read_share_flag(label))
 }
 
 #[cfg(test)]
@@ -392,6 +411,9 @@ mod tests {
     /// The platform layer, as the system would answer.
     #[derive(Default)]
     struct FakeFlag {
+        closed: bool,
+        /// Windows before 2004: a hidden flag reads back as a black box.
+        black_box: bool,
         refuse_set: bool,
         /// What the system reads back, by label; none when its call fails.
         keeps: bool,
@@ -400,6 +422,9 @@ mod tests {
     }
 
     impl ShareFlag for FakeFlag {
+        fn is_open(&self, _label: &str) -> bool {
+            !self.closed
+        }
         fn set_share_flag(&self, label: &str, hidden: bool) -> bool {
             if self.refuse_set {
                 return false;
@@ -407,8 +432,15 @@ mod tests {
             self.flags.borrow_mut().insert(label.into(), hidden && self.keeps);
             true
         }
-        fn read_share_flag(&self, label: &str) -> Option<bool> {
-            if self.read_fails { None } else { Some(*self.flags.borrow().get(label).unwrap_or(&false)) }
+        fn read_share_flag(&self, label: &str) -> Option<Read> {
+            if self.read_fails {
+                return None;
+            }
+            Some(match (*self.flags.borrow().get(label).unwrap_or(&false), self.black_box) {
+                (true, false) => Read::Hidden,
+                (true, true) => Read::BlackBox,
+                (false, _) => Read::Shown,
+            })
         }
     }
 
@@ -430,6 +462,22 @@ mod tests {
         assert_eq!(WindowShare::CouldNotHide.badge(), "Couldn't hide this from screen shares");
         assert_eq!(WindowShare::Hidden.badge(), "Hidden from screen shares");
         assert_eq!(WindowShare::Shown.badge(), "Shown in screen shares");
+        // Older Windows: a black box, said as such.
+        let old = FakeFlag { keeps: true, black_box: true, ..FakeFlag::default() };
+        assert_eq!(apply(&old, "overlay", true), WindowShare::BlackBox);
+        assert_eq!(WindowShare::BlackBox.badge(), "Shows as a black box");
+    }
+
+    #[test]
+    fn a_window_that_is_not_open_is_not_open_never_couldn_t_hide() {
+        // Settings asks about the card while no call is on: nothing to read, and it will open hidden.
+        let closed = FakeFlag { closed: true, keeps: false, read_fails: true, ..FakeFlag::default() };
+        assert_eq!(apply(&closed, "assist", true), WindowShare::NotOpen);
+        assert_eq!(WindowShare::NotOpen.badge(), "Hidden from screen shares");
+        assert_eq!(window_share(false, true, false, None), WindowShare::NotOpen);
+        // An open window that reads back wrong still says it could not be hidden.
+        assert_eq!(window_share(true, true, true, Some(Read::Shown)), WindowShare::CouldNotHide);
+        assert_eq!(window_share(true, true, true, None), WindowShare::CouldNotHide);
     }
 
     #[test]
@@ -440,7 +488,5 @@ mod tests {
         assert_eq!(Pinned::of_label(crate::overlay::PILL), None);
         assert_eq!(Pinned::Card.switch_label(false), "Show this card in screen shares");
         assert_eq!(Pinned::Captions.switch_label(true), "Hide captions from screen shares");
-        let s = crate::settings::Settings::default();
-        assert!(!Pinned::Card.shown(&s) && !Pinned::Captions.shown(&s), "hidden by default");
     }
 }

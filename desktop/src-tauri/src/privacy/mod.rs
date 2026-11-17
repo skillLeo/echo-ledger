@@ -90,20 +90,21 @@ pub struct Choice {
     pub demo: bool,
     /// The person hid the main window, and its time has not come.
     pub main_hidden: bool,
-    /// The person showed the Live Assist card in screen shares, on the card.
+    /// The person showed the Live Assist card in screen shares, on the card (until it closes; never kept).
     pub show_card: bool,
-    /// The person showed the captions in screen shares, on the captions.
+    /// The person showed the captions in screen shares, on the captions (until they close; never kept).
     pub show_captions: bool,
 }
 
 impl Choice {
-    pub fn of(settings: &Settings, demo: bool, now_ms: i64) -> Self {
+    /// `shown`: the card's and the captions' own choice now ([`Privacy::shown_in_shares`]).
+    pub fn of(settings: &Settings, demo: bool, now_ms: i64, shown: (bool, bool)) -> Self {
         Self {
             hiding: settings.hide_from_sharing,
             demo,
             main_hidden: share::main_hidden(settings.main_share_hide.as_ref(), now_ms),
-            show_card: settings.show_card_in_shares,
-            show_captions: settings.show_captions_in_shares,
+            show_card: shown.0,
+            show_captions: shown.1,
         }
     }
 
@@ -120,9 +121,31 @@ pub fn now_ms() -> i64 {
 
 /// The choices now.
 pub fn choice_now<R: Runtime>(app: &AppHandle<R>) -> Choice {
-    let demo = app.try_state::<Privacy>().is_some_and(|p| p.demo_active(Instant::now()));
+    let privacy = app.try_state::<Privacy>();
+    let demo = privacy.as_ref().is_some_and(|p| p.demo_active(Instant::now()));
+    let shown = privacy.as_ref().map_or((false, false), |p| (p.shown_in_shares(share::Pinned::Card), p.shown_in_shares(share::Pinned::Captions)));
     let now = now_ms();
-    app.try_state::<crate::AppState>().map_or_else(|| Choice::of(&Settings::default(), demo, now), |s| s.settings_with(|s| Choice::of(s, demo, now)))
+    app.try_state::<crate::AppState>().map_or_else(|| Choice::of(&Settings::default(), demo, now, shown), |s| s.settings_with(|s| Choice::of(s, demo, now, shown)))
+}
+
+/// The Windows-before-2004 choice a window of `kind` gets (pure): the card and the captions are a black box at least,
+/// whatever "On this Windows version" says; the others follow it.
+pub fn old_windows_for(kind: Option<Kind>, old: crate::settings::OldWindowsSharing) -> crate::settings::OldWindowsSharing {
+    match kind {
+        Some(Kind::Card | Kind::Captions) => crate::settings::OldWindowsSharing::BlackBox,
+        _ => old,
+    }
+}
+
+/// Windows built off the screen and brought on by the privacy service only once their flag held (pure).
+pub fn reveals_itself(kind: Kind) -> bool {
+    matches!(kind, Kind::Card | Kind::Captions)
+}
+
+/// Whether the card or the captions may come on the screen once their flag was set (pure): a window shown in screen
+/// shares on purpose at once; a hidden one only when its flag read back as set.
+pub fn may_reveal(protect: bool, held: bool) -> bool {
+    !protect || held
 }
 
 /// How long the tray's demo lasts.
@@ -289,6 +312,9 @@ pub struct Privacy {
     pub hide_timer: Mutex<share::MainHideTimer>,
     /// macOS: windows whose flag the system refused to set when EchoLedger last set it (the badge says it couldn't hide).
     pub set_failed: Mutex<BTreeSet<String>>,
+    /// The card and the captions the person showed in screen shares, from that window's own badge. Kept in memory only:
+    /// it ends when that window closes, and every start begins hidden.
+    shown: Mutex<BTreeSet<share::Pinned>>,
     /// The safety net's last look saw a sharing bar on screen: "Show EchoLedger windows" can't bring them back now.
     bar_on_screen: AtomicBool,
 }
@@ -343,7 +369,19 @@ impl Privacy {
 
     /// Whether `label` should be left out of shares now (none for a window that never registered).
     pub fn wants(&self, label: &str, settings: &Settings, now: Instant, now_ms: i64) -> Option<bool> {
-        Some(protected(self.kind_of(label)?, &Choice::of(settings, self.demo_active(now), now_ms)))
+        let shown = (self.shown_in_shares(share::Pinned::Card), self.shown_in_shares(share::Pinned::Captions));
+        Some(protected(self.kind_of(label)?, &Choice::of(settings, self.demo_active(now), now_ms, shown)))
+    }
+
+    /// The person showed this window in screen shares, and it has not closed since.
+    pub fn shown_in_shares(&self, which: share::Pinned) -> bool {
+        lock(&self.shown).contains(&which)
+    }
+
+    /// The window's own choice; false again when it closes ([`destroyed`]).
+    pub fn set_shown_in_shares(&self, which: share::Pinned, shown: bool) {
+        let mut set = lock(&self.shown);
+        if shown { set.insert(which) } else { set.remove(&which) };
     }
 
     /// Adds or removes a reason to keep the windows off the screen; true when that changed whether the floating windows
@@ -492,7 +530,47 @@ fn built<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
         if away(kind, &privacy.reasons(), &choice_now(app), privacy.main_asked()) {
             lock(&privacy.put_away).insert(label);
             put_away(window, true);
+        } else if reveals_itself(kind) {
+            // Built off the screen: they come on only once their flag reads back as set.
+            reveal_when_held(app, window, protect);
         }
+    }
+}
+
+/// The card and the captions, built off the screen: on the main thread their flag is set and read back, and only a
+/// flag that held (or a window shown in screen shares on purpose) brings the window on. One that did not hold stays off
+/// the screen, and the privacy log says so.
+fn reveal_when_held<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, protect: bool) {
+    let (handle, target) = (app.clone(), window.clone());
+    let _ = window.run_on_main_thread(move || {
+        let held = flag_held_here(&handle, &target, protect);
+        if may_reveal(protect, held) {
+            put_away(&target, false);
+        } else if let Some(state) = handle.try_state::<crate::AppState>() {
+            diag::log(&state.data_dir, &format!("The {} stayed off the screen: its capture flag did not read back as set.", window_name(target.label())));
+        }
+    });
+}
+
+/// On the main thread: sets the window's flag and reads it back; true when it reads as wanted.
+fn flag_held_here<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, protect: bool) -> bool {
+    #[cfg(windows)]
+    {
+        let (Ok(hwnd), Some(wanted)) = (window.hwnd(), affinity_for(app, window.label())) else { return false };
+        let _ = protect;
+        set_and_read_back(app, window.label(), hwnd.0 as isize, wanted)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app;
+        let set = window.set_content_protected(protect).is_ok();
+        let wanted = if protect { share::Read::Hidden } else { share::Read::Shown };
+        set && read_flag_here(window) == Some(wanted)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = (app, window, protect);
+        true
     }
 }
 
@@ -505,7 +583,8 @@ fn enforce<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, protect: b
         let Ok(hwnd) = window.hwnd() else { return };
         let hwnd = hwnd.0 as isize;
         let shielded = window.label() == crate::lifecycle::MAIN && app.try_state::<crate::AppState>().is_some_and(|s| s.screens.own_hidden());
-        let wanted = win::affinity(protect, shielded, win::System.build(), settings.old_windows_sharing);
+        let kind = app.try_state::<Privacy>().and_then(|p| p.kind_of(window.label()));
+        let wanted = win::affinity(protect, shielded, win::System.build(), old_windows_for(kind, settings.old_windows_sharing));
         let (app, label) = (app.clone(), window.label().to_string());
         let _ = window.run_on_main_thread(move || {
             set_and_read_back(&app, &label, hwnd, wanted);
@@ -552,7 +631,8 @@ pub fn affinity_for<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<u32> 
     let protect = wanted_for(app, label)?;
     let state = app.try_state::<crate::AppState>()?;
     let shielded = label == crate::lifecycle::MAIN && state.screens.own_hidden();
-    Some(win::affinity(protect, shielded, win::System.build(), state.settings().old_windows_sharing))
+    let kind = app.try_state::<Privacy>().and_then(|p| p.kind_of(label));
+    Some(win::affinity(protect, shielded, win::System.build(), old_windows_for(kind, state.settings().old_windows_sharing)))
 }
 
 /// Gives every built window the flag the setting wants now (after a settings change, the demo starting or ending).
@@ -665,6 +745,13 @@ pub fn destroyed<R: Runtime>(app: &AppHandle<R>, label: &str) {
         if label == crate::lifecycle::MAIN {
             privacy.main_closed();
         }
+        // The card's or the captions' choice to be shown ends with the window (the end of that call).
+        if let Some(which) = share::Pinned::of_label(label)
+            && privacy.shown_in_shares(which)
+        {
+            privacy.set_shown_in_shares(which, false);
+            let _ = app.emit("privacy:changed", ());
+        }
     }
 }
 
@@ -748,13 +835,12 @@ pub fn show_main_in_shares(app: &AppHandle, only: Option<share::MainHide>) -> cr
     Ok(())
 }
 
-/// The Live Assist card's or the captions' own switch: shown in screen shares only by this explicit choice.
+/// The Live Assist card's or the captions' own switch: shown in screen shares only by this explicit choice, until that
+/// window closes. Never saved.
 pub fn set_shown_in_shares(app: &AppHandle, which: share::Pinned, shown: bool) -> crate::error::AppResult<()> {
-    let updated = app.state::<crate::AppState>().update_settings(|s| match which {
-        share::Pinned::Card => s.show_card_in_shares = shown,
-        share::Pinned::Captions => s.show_captions_in_shares = shown,
-    })?;
-    choices_changed(app, &updated);
+    app.state::<Privacy>().set_shown_in_shares(which, shown);
+    apply_all(app);
+    crate::actions::emit_status(app);
     Ok(())
 }
 
@@ -785,7 +871,7 @@ pub fn spawn_main_hide_timer(app: AppHandle) {
 #[serde(rename_all = "camelCase")]
 pub struct WindowShareView {
     pub which: share::Pinned,
-    /// The person showed this window in screen shares (the saved choice).
+    /// The person showed this window in screen shares (until it closes).
     pub shown: bool,
     /// What the system reads back now.
     pub state: share::WindowShare,
@@ -799,6 +885,10 @@ pub struct SystemFlag<R: Runtime> {
 }
 
 impl<R: Runtime> share::ShareFlag for SystemFlag<R> {
+    fn is_open(&self, label: &str) -> bool {
+        self.app.get_webview_window(label).is_some()
+    }
+
     /// Setting goes through [`apply_all`]; what the system answered then is kept (macOS) or in the watch (Windows).
     fn set_share_flag(&self, label: &str, _hidden: bool) -> bool {
         let Some(privacy) = self.app.try_state::<Privacy>() else { return false };
@@ -808,7 +898,7 @@ impl<R: Runtime> share::ShareFlag for SystemFlag<R> {
         !matches!(lock(&privacy.watch).last.get(label), Some(win::Readback::Mismatch { .. }))
     }
 
-    fn read_share_flag(&self, label: &str) -> Option<bool> {
+    fn read_share_flag(&self, label: &str) -> Option<share::Read> {
         let window = self.app.get_webview_window(label)?;
         let (tx, rx) = std::sync::mpsc::channel();
         let target = window.clone();
@@ -821,22 +911,27 @@ impl<R: Runtime> share::ShareFlag for SystemFlag<R> {
     }
 }
 
-/// On the main thread: whether the system leaves this window out of screen shares (macOS `NSWindow.sharingType` is
-/// none; Windows `GetWindowDisplayAffinity` is not `WDA_NONE`); none when the system did not say.
-fn read_flag_here<R: Runtime>(window: &WebviewWindow<R>) -> Option<bool> {
+/// On the main thread: what the system says of this window in screen shares (macOS `NSWindow.sharingType` none is
+/// hidden; Windows `GetWindowDisplayAffinity`: WDA_EXCLUDEFROMCAPTURE hidden, WDA_MONITOR a black box); none when the
+/// system did not say.
+fn read_flag_here<R: Runtime>(window: &WebviewWindow<R>) -> Option<share::Read> {
     #[cfg(target_os = "macos")]
     {
         use objc2_app_kit::{NSWindow, NSWindowSharingType};
         let pointer = window.ns_window().ok()?;
         // SAFETY: Tauri hands out the window's own NSWindow, alive while `window` is, on the main thread here.
         let ns_window: &NSWindow = unsafe { &*(pointer as *const NSWindow) };
-        Some(ns_window.sharingType() == NSWindowSharingType::None)
+        Some(if ns_window.sharingType() == NSWindowSharingType::None { share::Read::Hidden } else { share::Read::Shown })
     }
     #[cfg(windows)]
     {
         use win::Affinity;
         let hwnd = window.hwnd().ok()?.0 as isize;
-        win::System.get(hwnd).map(|a| a != win::WDA_NONE)
+        win::System.get(hwnd).map(|a| match a {
+            win::WDA_NONE => share::Read::Shown,
+            win::WDA_MONITOR => share::Read::BlackBox,
+            _ => share::Read::Hidden,
+        })
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
@@ -847,17 +942,13 @@ fn read_flag_here<R: Runtime>(window: &WebviewWindow<R>) -> Option<bool> {
 
 /// The badge of the card or the captions now (asynchronous: the system is asked on the main thread).
 pub async fn window_share_now<R: Runtime>(app: &AppHandle<R>, which: share::Pinned) -> WindowShareView {
-    let shown = app.try_state::<crate::AppState>().is_some_and(|s| s.settings_with(|s| which.shown(s)));
+    let shown = app.try_state::<Privacy>().is_some_and(|p| p.shown_in_shares(which));
     let wanted_hidden = wanted_for(app, which.label()).unwrap_or(true);
     let flag = SystemFlag { app: app.clone() };
     let label = which.label();
-    let state = tauri::async_runtime::spawn_blocking(move || {
-        use share::ShareFlag;
-        let set_ok = flag.set_share_flag(label, wanted_hidden);
-        share::window_share(wanted_hidden, set_ok, flag.read_share_flag(label))
-    })
-    .await
-    .unwrap_or(if wanted_hidden { share::WindowShare::CouldNotHide } else { share::WindowShare::Shown });
+    let state = tauri::async_runtime::spawn_blocking(move || share::apply(&flag, label, wanted_hidden))
+        .await
+        .unwrap_or(if wanted_hidden { share::WindowShare::CouldNotHide } else { share::WindowShare::Shown });
     WindowShareView { which, shown, state, badge: state.badge(), switch_label: which.switch_label(shown) }
 }
 
@@ -1114,19 +1205,60 @@ mod tests {
         }
         // Only their own switch shows them, each on its own.
         privacy.set_demo(None);
-        let card = Settings { show_card_in_shares: true, ..Settings::default() };
-        assert_eq!(privacy.wants(ASSIST, &card, now, 0), Some(false));
-        assert_eq!(privacy.wants(crate::overlay::OVERLAY, &card, now, 0), Some(true), "the card's switch is not the captions'");
-        let captions = Settings { show_captions_in_shares: true, ..Settings::default() };
-        assert_eq!(privacy.wants(crate::overlay::OVERLAY, &captions, now, 0), Some(false));
-        assert_eq!(privacy.wants(ASSIST, &captions, now, 0), Some(true));
+        let settings = Settings::default();
+        privacy.set_shown_in_shares(share::Pinned::Card, true);
+        assert_eq!(privacy.wants(ASSIST, &settings, now, 0), Some(false));
+        assert_eq!(privacy.wants(crate::overlay::OVERLAY, &settings, now, 0), Some(true), "the card's switch is not the captions'");
+        privacy.set_shown_in_shares(share::Pinned::Card, false);
+        privacy.set_shown_in_shares(share::Pinned::Captions, true);
+        assert_eq!(privacy.wants(crate::overlay::OVERLAY, &settings, now, 0), Some(false));
+        assert_eq!(privacy.wants(ASSIST, &settings, now, 0), Some(true));
         // The main window's commands never touch them: its hide and show change `mainShareHide` alone.
         for name in ["pub fn hide_main(", "pub fn show_main_in_shares("] {
             let body = body_of(include_str!("mod.rs"), name);
-            assert!(!body.contains("show_card_in_shares") && !body.contains("show_captions_in_shares"), "{name}");
+            assert!(!body.contains("set_shown_in_shares"), "{name}");
         }
-        let set = body_of(include_str!("mod.rs"), "pub fn set_shown_in_shares(");
-        assert!(set.contains("share::Pinned::Card => s.show_card_in_shares = shown") && set.contains("share::Pinned::Captions => s.show_captions_in_shares = shown"));
+    }
+
+    #[test]
+    fn showing_the_card_or_the_captions_lasts_until_that_window_closes_and_never_past_a_start() {
+        // Every start begins hidden: nothing is read from the settings file.
+        let privacy = Privacy::new();
+        assert!(!privacy.shown_in_shares(share::Pinned::Card) && !privacy.shown_in_shares(share::Pinned::Captions));
+        privacy.set_shown_in_shares(share::Pinned::Captions, true);
+        assert!(privacy.shown_in_shares(share::Pinned::Captions));
+        // When the window goes, the choice goes with it (`destroyed`).
+        let gone = body_of(include_str!("mod.rs"), "pub fn destroyed<");
+        assert!(gone.contains("share::Pinned::of_label(label)") && gone.contains("privacy.set_shown_in_shares(which, false);"));
+        assert!(!include_str!("../settings.rs").contains("show_card_in_shares"), "never saved");
+    }
+
+    #[test]
+    fn the_card_and_the_captions_come_on_screen_only_after_their_flag_held() {
+        assert!(reveals_itself(Kind::Card) && reveals_itself(Kind::Captions));
+        assert!(!reveals_itself(Kind::Floating) && !reveals_itself(Kind::Main));
+        assert!(may_reveal(true, true), "hidden and held");
+        assert!(!may_reveal(true, false), "hidden but the flag did not hold: stays off");
+        assert!(may_reveal(false, false), "shown on purpose");
+        // Built with visible(false); in the order: the flag set and read back, then the window on.
+        let overlay = include_str!("../overlay/mod.rs");
+        assert!(overlay.contains(".visible(!crate::privacy::reveals_itself(crate::privacy::kind_for(label)));"));
+        let reveal = body_of(include_str!("mod.rs"), "fn reveal_when_held<");
+        let (held, on) = (reveal.find("flag_held_here(").unwrap(), reveal.find("put_away(&target, false)").unwrap());
+        assert!(held < on && reveal.contains("if may_reveal(protect, held)"));
+        let flag = body_of(include_str!("mod.rs"), "fn flag_held_here<");
+        assert!(flag.contains("set_and_read_back(app, window.label()"), "Windows: set and read back");
+        assert!(flag.contains("read_flag_here(window) == Some(wanted)"), "macOS: read back");
+    }
+
+    #[test]
+    fn the_card_and_the_captions_are_a_black_box_at_least_on_older_windows() {
+        use crate::settings::OldWindowsSharing::{BlackBox, Show};
+        assert_eq!(old_windows_for(Some(Kind::Card), Show), BlackBox);
+        assert_eq!(old_windows_for(Some(Kind::Captions), Show), BlackBox);
+        assert_eq!(old_windows_for(Some(Kind::Floating), Show), Show, "the others follow the setting");
+        assert_eq!(old_windows_for(None, Show), Show);
+        assert_eq!(win::affinity(true, false, Some(18_363), old_windows_for(Some(Kind::Card), Show)), win::WDA_MONITOR);
     }
 
     #[test]

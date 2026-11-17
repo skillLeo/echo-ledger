@@ -115,15 +115,34 @@ describe("the card's and the captions' badge", () => {
     expect(screen.getByTestId("window-share-badge")).toHaveAccessibleName("Shown in screen shares");
   });
 
-  it("from Settings names the window it means", async () => {
+  it("from Settings names the window, never shows it, and can only hide it again", async () => {
     respond("privacy_window_share", view({ which: "captions", switchLabel: "Show captions in screen shares" }));
-    respond("privacy_window_share_set", view({ which: "captions", shown: true, state: "shown", badge: "Shown in screen shares" }));
     render(<PinnedShareControl which="captions" />);
     await act(flushAsync);
     expect(callsOf("privacy_window_share")).toEqual([{ which: "captions" }]);
-    fireEvent.click(screen.getByRole("button", { name: "Show captions in screen shares" }));
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByText("Show them from the captions' badge.")).toBeInTheDocument();
+    cleanup();
+    respond("privacy_window_share", view({ which: "captions", shown: true, state: "shown", badge: "Shown in screen shares", switchLabel: "Hide captions from screen shares" }));
+    respond("privacy_window_share_set", view({ which: "captions" }));
+    render(<PinnedShareControl which="captions" />);
     await act(flushAsync);
-    expect(callsOf("privacy_window_share_set")).toEqual([{ which: "captions", shown: true }]);
+    fireEvent.click(screen.getByRole("button", { name: "Hide captions from screen shares" }));
+    await act(flushAsync);
+    expect(callsOf("privacy_window_share_set")).toEqual([{ which: "captions", shown: false }]);
+  });
+
+  it("says a window that is not open is hidden, and an older Windows' black box as such", async () => {
+    respond("privacy_window_share", view({ state: "not_open", badge: "Hidden from screen shares" }));
+    render(<PinnedShareControl which="card" />);
+    await act(flushAsync);
+    expect(screen.getByTestId("window-share-card")).toHaveTextContent("Hidden from screen shares");
+    expect(screen.queryByText(/Couldn't hide/)).toBeNull();
+    cleanup();
+    respond("privacy_window_share", view({ state: "black_box", badge: "Shows as a black box" }));
+    render(<WindowShareBadge />);
+    await act(flushAsync);
+    expect(screen.getByTestId("window-share-badge")).toHaveAccessibleName("Shows as a black box");
   });
 });
 

@@ -501,6 +501,27 @@ fn a_per_window_share_switch_is_changed_only_by_its_own_window_or_the_main_windo
 }
 
 #[test]
+fn only_the_card_or_the_captions_themselves_show_them_and_the_main_window_may_only_hide_them() {
+    use crate::privacy::share::Pinned;
+    let main = crate::lifecycle::MAIN;
+    // The main window naming the card (or the captions) with shown: true is refused.
+    for which in [Pinned::Card, Pinned::Captions] {
+        assert!(pinned_for_set(main, Some(which), true).is_err(), "{which:?}: never shown from the main window");
+        assert_eq!(pinned_for_set(main, Some(which), false).unwrap(), which, "{which:?}: hidden again from Settings");
+    }
+    assert_eq!(pinned_for_set(crate::privacy::ASSIST, None, true).unwrap(), Pinned::Card, "the card's own badge");
+    assert_eq!(pinned_for_set(crate::overlay::OVERLAY, None, true).unwrap(), Pinned::Captions, "the captions' own badge");
+    assert!(pinned_for_set(crate::privacy::ASSIST, Some(Pinned::Captions), true).is_err());
+    assert!(include_str!("../commands.rs").contains("let which = pinned_for_set(window.label(), which, shown)?;"), "the command uses the rule");
+}
+
+#[test]
+fn only_the_main_window_closes_the_share_notice() {
+    let body = body_of(include_str!("../commands.rs"), "pub fn share_notice_dismiss(");
+    assert!(body.find("crate::privacy::from_main_window(window.label())?").unwrap() < body.find("dismiss_share_notice").unwrap());
+}
+
+#[test]
 fn the_share_notice_is_said_once_and_closing_it_remembers() {
     let state = Settings { share_notice: true, ..Settings::default() };
     assert_eq!(state.share_notice.then_some(crate::privacy::share::SHARE_NOTICE), Some("EchoLedger now shows in screen shares unless you hide it."));

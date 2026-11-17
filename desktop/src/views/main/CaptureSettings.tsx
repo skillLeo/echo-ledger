@@ -343,19 +343,15 @@ export function CaptionPreview({ style }: { style: CaptionStyle }) {
   );
 }
 
-/** Whether the captions show in a screen share (pure): only the person's own choice on the captions shows them. */
-export function captionsShareLine(shown: Settings["showCaptionsInShares"]): string {
-  return shown
-    ? "Captions show in screen shares, as you chose on the captions. Hide them from their badge or in Settings › Screen-share privacy."
-    : "Captions are hidden from screen shares unless you show them from their badge.";
-}
+/** Whether the captions show in a screen share: hidden, unless the person shows them from their badge (until they close). */
+export const CAPTIONS_SHARE_LINE = "Captions are hidden from screen shares unless you show them from their badge, until they close.";
 
 /** Recording › Captions. */
 export function CaptionsPage({ settings, patch, onStyle }: { settings: Settings; patch: Patch; onStyle: () => void }) {
   return (
     <>
       <CaptionPreview style={settings.captionStyle} />
-      <Section footer={<><p>{captionsShareLine(settings.showCaptionsInShares)}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
+      <Section footer={<><p>{CAPTIONS_SHARE_LINE}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
         <SwitchRow id="captions.enabled" on={settings.captionsOnRecord} onChange={(v) => void patch({ captionsOnRecord: v })} />
         <LinkRow id="captions.style" onOpen={onStyle} chevron />
       </Section>

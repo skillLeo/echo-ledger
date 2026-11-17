@@ -1,7 +1,9 @@
 //! Caption latency: speech to word on screen, measured. A WAV is fed through the live-caption pipeline in real time
-//! (10 ms chunks, as the capture hands them over) against a stand-in AssemblyAI v3 provider with realistic timings, and
-//! for each stretch of speech the time from its first chunk to its first interim word is taken apart into the
-//! provider's share and the pipeline's own (framing, the socket both ways, parsing, the hand-over to the caption code).
+//! (10 ms chunks, as the capture hands them over) against a stand-in AssemblyAI v3 provider with realistic timings. Each
+//! caption goes the app's way to the windows (`stt::caption_event` into a `CaptionHub`, the overlay's target), and for
+//! each stretch of speech the time from its first chunk to its first interim word handed to the windows is taken apart
+//! into the provider's share and the pipeline's own (framing, the socket both ways, parsing, the hub). The WAV is
+//! repeated until it holds at least 30 stretches, so p90 is not just the slowest one.
 //! Timings only: the words are numbered placeholders, never meeting text.
 //!
 //! - CI: the pipeline's own share must stay at or under 150 ms p90 (`PIPELINE_P90_MAX`).
@@ -24,9 +26,10 @@ use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 
+use desktop_lib::audio::types::Channel;
 use desktop_lib::net::models::{AudioSpec, Grant};
+use desktop_lib::stt::captions::{CaptionEvent, CaptionHub};
 use desktop_lib::stt::latency::{Probe, Spread};
-use desktop_lib::stt::protocol::SttEvent;
 use desktop_lib::stt::stream::{SessionOptions, run_session_with, voiced};
 
 const RATE: usize = 16_000;
@@ -39,13 +42,27 @@ const FRAME_MS: u32 = 50;
 const PIPELINE_P90_MAX: u64 = 150;
 /// Silence before speech for it to count as a new stretch.
 const ONSET_GAP_MS: usize = 300;
+/// Stretches of speech measured at least, so p90 is a percentile and not the slowest one.
+const MIN_STRETCHES: usize = 30;
+
+/// The WAV again and again until it holds at least [`MIN_STRETCHES`] stretches of speech.
+fn repeated(samples: Vec<i16>) -> Vec<i16> {
+    let per = onsets(&samples).len().max(1);
+    let times = MIN_STRETCHES.div_ceil(per);
+    let mut out = Vec::with_capacity(samples.len() * times);
+    for _ in 0..times {
+        out.extend(&samples);
+        out.extend(std::iter::repeat_n(0i16, RATE * ONSET_GAP_MS / 1000));
+    }
+    out
+}
 
 // ---- Audio ----------------------------------------------------------------------------------------------------------
 
 /// Speech-like audio: voiced stretches (a 140 Hz voice with its harmonics and a syllable rhythm) between pauses, the
 /// way a person talks. Deterministic, so CI measures the same signal every time.
 fn speech_like() -> Vec<i16> {
-    let pattern_ms = [(1200, 600), (900, 700), (1500, 500), (800, 900), (1300, 600), (1000, 700), (1100, 800), (900, 600)];
+    let pattern_ms = [(900, 450), (700, 500), (1100, 400), (600, 550), (1000, 450), (800, 500), (850, 600), (700, 450)];
     let mut out = vec![0i16; RATE / 2];
     for (speech, pause) in pattern_ms {
         let n = RATE * speech / 1000;
@@ -238,14 +255,21 @@ async fn feed(grant: Grant, samples: &[i16], tail: Duration) -> Run {
     let sink = words.clone();
     let probe = Probe::new_registered();
     let options = SessionOptions::LIVE.with_probe(Some(probe.clone()));
+    // The app's way to the windows: the caption event, then the hub that fans it out to the overlay.
+    let hub = CaptionHub::default();
+    let stream_start = (0, Instant::now());
     let session = tokio::spawn(run_session_with(
         grant,
         pcm_rx,
         stop_rx,
         move |event| {
-            if let SttEvent::Partial { text } | SttEvent::Final { text, .. } = &event
-                && !text.trim().is_empty()
-            {
+            let Some(caption) = desktop_lib::stt::caption_event(Channel::Mic, stream_start, &event) else { return };
+            let text = match &caption {
+                CaptionEvent::Partial { text, .. } | CaptionEvent::Final { text, .. } => text.clone(),
+                _ => String::new(),
+            };
+            hub.send(&["overlay"], caption);
+            if !text.trim().is_empty() {
                 let newest = text.split_whitespace().last().and_then(|w| w.trim_end_matches('.').strip_prefix('w')).and_then(|n| n.parse().ok());
                 sink.lock().unwrap().push((Instant::now(), newest));
             }
@@ -281,9 +305,9 @@ fn report(name: &str, values: &[u64]) -> Spread {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn speech_to_word_against_a_realistic_provider_and_the_pipeline_s_own_share_stays_under_150_ms() {
     let dir = tempfile::tempdir().unwrap();
-    let samples = the_wav(dir.path());
+    let samples = repeated(the_wav(dir.path()));
     let starts = onsets(&samples);
-    assert!(starts.len() >= 5, "a WAV with several stretches of speech: {starts:?}");
+    assert!(starts.len() >= MIN_STRETCHES, "at least {MIN_STRETCHES} stretches of speech: {}", starts.len());
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -313,7 +337,7 @@ async fn speech_to_word_against_a_realistic_provider_and_the_pipeline_s_own_shar
         provider_share.push(share);
         pipeline.push(total.saturating_sub(share));
     }
-    assert!(whole.len() >= starts.len() - 1, "a word for every stretch of speech: {} of {}", whole.len(), starts.len());
+    assert!(whole.len() >= MIN_STRETCHES, "a word for every stretch of speech: {} of {}", whole.len(), starts.len());
 
     let total = report("speech to first interim word (stand-in provider)", &whole);
     report("  the provider's share", &provider_share);
@@ -395,7 +419,7 @@ async fn real_grant() -> Grant {
 async fn speech_to_word_against_the_real_provider() {
     common::init_tls();
     let dir = tempfile::tempdir().unwrap();
-    let samples = real_speech(dir.path());
+    let samples = repeated(real_speech(dir.path()));
     let starts = onsets(&samples);
     let run = feed(real_grant().await, &samples, Duration::from_secs(3)).await;
     // For each stretch: its first word that came after it began and before the next one began.

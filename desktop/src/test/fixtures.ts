@@ -107,8 +107,6 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     autoMode: true,
     hideFromSharing: "all",
     mainShareHide: null,
-    showCardInShares: false,
-    showCaptionsInShares: false,
     shareNotice: false,
     oldWindowsSharing: "black_box",
     shareOneWindow: false,

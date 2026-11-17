@@ -283,26 +283,41 @@ fn on_stt_event(app: &AppHandle, channel: Channel, targets: &[&str], record_turn
     }
 }
 
-fn on_caption(app: &AppHandle, channel: Channel, targets: &[&str], record_turns: bool, stream: (u64, Instant), event: SttEvent) {
-    let hub = app.state::<CaptionHub>();
+/// The caption event a provider event becomes for the windows (pure apart from the clock): the speaker and channel
+/// of `channel`, a final's times on the recording timeline. None for the session's own events. The latency harness
+/// sends these through a [`CaptionHub`] exactly as the app does.
+pub fn caption_event(channel: Channel, stream: (u64, Instant), event: &SttEvent) -> Option<CaptionEvent> {
     let speaker = channel.speaker().to_string();
     let index = (channel.index() + 1) as u8;
+    match event {
+        SttEvent::Partial { text } => Some(CaptionEvent::Partial { speaker, channel: index, text: text.clone() }),
+        SttEvent::Final { text, start_ms, end_ms } => {
+            let arrived_ms = stream.1.elapsed().as_millis() as u64;
+            let (start, end) = captions::turn_times(stream.0, *start_ms, *end_ms, arrived_ms);
+            Some(CaptionEvent::Final { speaker, channel: index, text: text.clone(), start_ms: start, end_ms: end })
+        }
+        SttEvent::Error(message) => Some(CaptionEvent::Status { live: false, recording: false, provider: None, message: Some(message.clone()) }),
+        SttEvent::Started | SttEvent::Terminated => None,
+    }
+}
+
+fn on_caption(app: &AppHandle, channel: Channel, targets: &[&str], record_turns: bool, stream: (u64, Instant), event: SttEvent) {
+    let hub = app.state::<CaptionHub>();
+    let caption = caption_event(channel, stream, &event);
     // Screen moments: "look at this page" in a recording's captions takes a screen (since v1.5).
     if record_turns && let SttEvent::Partial { text } | SttEvent::Final { text, .. } = &event {
         app.state::<crate::AppState>().screens.heard(text);
     }
-    match event {
-        SttEvent::Partial { text } => {
+    match (&event, &caption) {
+        (SttEvent::Partial { text }, _) => {
             // Live Assist (1.9.0-e): the other person's words as they come; never the microphone's.
             if record_turns {
-                let line = app.state::<crate::AppState>().assist.heard_partial(channel, &text);
+                let line = app.state::<crate::AppState>().assist.heard_partial(channel, text);
                 crate::assist::live::emit_line(app, line);
             }
-            hub.send(targets, CaptionEvent::Partial { speaker, channel: index, text })
         }
-        SttEvent::Final { text, start_ms, end_ms } => {
-            let arrived_ms = stream.1.elapsed().as_millis() as u64;
-            let (start, end) = captions::turn_times(stream.0, start_ms, end_ms, arrived_ms);
+        (SttEvent::Final { text, .. }, Some(CaptionEvent::Final { start_ms: start, end_ms: end, .. })) => {
+            let (start, end, text) = (*start, *end, text.clone());
             if record_turns {
                 // Live Assist: every finished turn, the microphone's as context.
                 let line = app.state::<crate::AppState>().assist.heard_final(channel, &text, start, end);
@@ -311,11 +326,12 @@ fn on_caption(app: &AppHandle, channel: Channel, targets: &[&str], record_turns:
                 state.captions.lock().unwrap().push(FinalTurn { wall_ms: now_ms(), channel, text: text.clone(), start_ms: start, end_ms: end });
             } else {
                 let state = app.state::<crate::AppState>();
-                state.dictation_text.lock().unwrap().push(text.clone());
+                state.dictation_text.lock().unwrap().push(text);
             }
-            hub.send(targets, CaptionEvent::Final { speaker, channel: index, text, start_ms: start, end_ms: end });
         }
-        SttEvent::Error(message) => hub.send(targets, CaptionEvent::Status { live: false, recording: false, provider: None, message: Some(message) }),
-        SttEvent::Started | SttEvent::Terminated => {}
+        _ => {}
+    }
+    if let Some(caption) = caption {
+        hub.send(targets, caption);
     }
 }

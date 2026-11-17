@@ -26,8 +26,6 @@ fn customised() -> Settings {
         auto_mode: false,
         hide_from_sharing: ShareHiding::Floating,
         main_share_hide: Some(crate::privacy::share::MainHide { until: crate::privacy::share::HideUntil::At { at_ms: 1_795_000_000_000 }, since_ms: 1_794_999_100_000 }),
-        show_card_in_shares: true,
-        show_captions_in_shares: true,
         share_notice: true,
         old_windows_sharing: OldWindowsSharing::Show,
         share_one_window: true,
@@ -99,7 +97,7 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert!(s.pins.is_empty());
     assert!(s.captions_on_record, "captions open with a recording");
     assert!(s.auto_mode, "auto mode is on");
-    assert_eq!(s.hide_from_sharing, ShareHiding::All, "every window is hidden from screen sharing");
+    assert_eq!(s.hide_from_sharing, ShareHiding::All, "the other floating windows are hidden from screen sharing");
     assert_eq!(s.old_windows_sharing, OldWindowsSharing::BlackBox);
     assert!(!s.share_one_window);
     assert!(!s.send_diagnostics, "diagnostics are sent only once the person turns them on");
@@ -206,14 +204,12 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "shareNotice",
             "shareOneWindow",
             "shortcuts",
-            "showCaptionsInShares",
-            "showCardInShares",
             "siteRules",
             "skipCallsShorterThanS",
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 52, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 50, "section 4.7 of the IPC contract");
     assert_eq!(v["mainShareHide"], json!({"until": {"kind": "at", "at_ms": 1_795_000_000_000_i64}, "sinceMs": 1_794_999_100_000_i64}));
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
@@ -482,11 +478,13 @@ fn show_during_screen_share_from_v1_8_keeps_echoledger_visible_in_shares() {
 fn defaults_show_the_main_window_and_hide_the_card_and_the_captions() {
     let s = Settings::default();
     assert_eq!(s.main_share_hide, None, "the main window is shown in screen shares");
-    assert!(!s.show_card_in_shares, "the Live Assist card is hidden from screen shares");
-    assert!(!s.show_captions_in_shares, "the captions are hidden from screen shares");
     assert!(!s.share_notice, "a new install has nothing to be told");
     let fresh = Settings::from_value(json!({}));
-    assert!(fresh.main_share_hide.is_none() && !fresh.show_card_in_shares && !fresh.show_captions_in_shares && !fresh.share_notice);
+    assert!(fresh.main_share_hide.is_none() && !fresh.share_notice);
+    // The card's and the captions' choice is never kept in the file: it lasts until that window closes, and every start
+    // begins hidden (privacy::Privacy::shown_in_shares).
+    let saved = serde_json::to_value(&s).unwrap();
+    assert!(saved.get("showCardInShares").is_none() && saved.get("showCaptionsInShares").is_none());
 }
 
 #[test]
@@ -505,8 +503,6 @@ fn the_old_share_setting_migrates_to_main_shown_and_card_and_captions_hidden() {
     for file in table {
         let s = Settings::from_value(file.clone());
         assert_eq!(s.main_share_hide, None, "{file}: the main window is shown");
-        assert!(!s.show_card_in_shares, "{file}: the card is hidden");
-        assert!(!s.show_captions_in_shares, "{file}: the captions are hidden");
         assert!(s.share_notice, "{file}: told once");
     }
     // The other floating windows keep what the person had.
@@ -517,12 +513,10 @@ fn the_old_share_setting_migrates_to_main_shown_and_card_and_captions_hidden() {
     let path = dir.path().join("settings.json");
     let mut s = Settings::from_value(json!({"hideFromSharing": "all"}));
     s.share_notice = false;
-    s.show_card_in_shares = true;
     s.main_share_hide = Some(crate::privacy::share::MainHide { until: crate::privacy::share::HideUntil::UntilOff, since_ms: 5 });
     s.save(&path).unwrap();
     let again = Settings::load(&path);
     assert!(!again.share_notice, "shown once, remembered");
-    assert!(again.show_card_in_shares, "the person's own choice on the card is kept");
     assert_eq!(again.main_share_hide, s.main_share_hide);
 }
 

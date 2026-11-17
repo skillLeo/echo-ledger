@@ -115,7 +115,7 @@ export function useWindowShare(which: PinnedWindow | null): [WindowShareView | n
 }
 
 /** The badge's short word (the full sentence is its label). */
-export const SHORT: Record<WindowShareState, string> = { hidden: "Hidden", shown: "Shown", could_not_hide: "Couldn't hide" };
+export const SHORT: Record<WindowShareState, string> = { hidden: "Hidden", shown: "Shown", black_box: "Black box", could_not_hide: "Couldn't hide", not_open: "Hidden" };
 
 /** The badge on the Live Assist card and the captions: what the system reads back; a click opens the window's own
  * switch. A hit region (`data-hit`), so it stays clickable in a click-through window. */
@@ -132,7 +132,7 @@ export function WindowShareBadge({ compact = true }: { compact?: boolean }) {
     <span className="window-share" data-hit>
       <button type="button" className={`window-share-badge ${view.state}`} data-testid="window-share-badge" data-hit aria-label={view.badge} title={view.badge}
         aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <span aria-hidden="true">{view.state === "hidden" ? "◐" : view.state === "shown" ? "◉" : "!"}</span>
+        <span aria-hidden="true">{view.state === "hidden" || view.state === "not_open" ? "◐" : view.state === "shown" ? "◉" : view.state === "black_box" ? "■" : "!"}</span>
         {!compact || view.state === "could_not_hide" ? <span className="window-share-label">{view.state === "could_not_hide" ? view.badge : SHORT[view.state]}</span> : null}
       </button>
       {open && (
@@ -146,19 +146,28 @@ export function WindowShareBadge({ compact = true }: { compact?: boolean }) {
   );
 }
 
-/** Settings: the card's or the captions' badge and its switch, from the main window (it names the window). */
+/** Where showing it is done: on that window's own badge, never from here. */
+export const SHOW_FROM_BADGE: Record<PinnedWindow, string> = {
+  card: "Show it from the card's badge during a call.",
+  captions: "Show them from the captions' badge.",
+};
+
+/** Settings: the card's or the captions' real state, from the main window (it names the window). From here it can only
+ * be hidden again; showing it is done on that window's own badge. */
 export function PinnedShareControl({ which }: { which: PinnedWindow }) {
   const [view, setView] = useWindowShare(which);
   const [problem, setProblem] = useState<string | null>(null);
   if (!view) return null;
-  const flip = () => {
+  const hide = () => {
     setProblem(null);
-    void api.privacyWindowShareSet(!view.shown, which).then(setView).catch((e) => setProblem(errorMessage(e)));
+    void api.privacyWindowShareSet(false, which).then(setView).catch((e) => setProblem(errorMessage(e)));
   };
   return (
     <>
       <span className={`window-share-badge ${view.state}`} data-testid={`window-share-${which}`}>{view.badge}</span>
-      <button type="button" className="btn compact" onClick={flip}>{view.switchLabel}</button>
+      {view.shown
+        ? <button type="button" className="btn compact" onClick={hide}>{view.switchLabel}</button>
+        : <span className="set-value">{SHOW_FROM_BADGE[which]}</span>}
       {problem && <span className="privacy-line warning" role="alert">{problem}</span>}
     </>
   );

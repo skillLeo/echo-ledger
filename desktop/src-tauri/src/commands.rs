@@ -3310,11 +3310,11 @@ pub async fn privacy_window_share(app: AppHandle, window: WebviewWindow, which: 
     Ok(crate::privacy::window_share_now(&app, which).await)
 }
 
-/// The card's or the captions' own switch: "Show this card in screen shares" or hide it again. Only that window itself,
-/// or the main window naming it, may change it: no other window and no other setting.
+/// The card's or the captions' own switch: "Show this card in screen shares" or hide it again. Showing comes only from
+/// that window's own badge; the main window, naming it, may only hide it again. No other window and no other setting.
 #[tauri::command]
 pub async fn privacy_window_share_set(app: AppHandle, window: WebviewWindow, which: Option<crate::privacy::share::Pinned>, shown: bool) -> AppResult<crate::privacy::WindowShareView> {
-    let which = pinned_for(window.label(), which)?;
+    let which = pinned_for_set(window.label(), which, shown)?;
     crate::privacy::set_shown_in_shares(&app, which, shown)?;
     Ok(crate::privacy::window_share_now(&app, which).await)
 }
@@ -3330,9 +3330,20 @@ pub fn pinned_for(label: &str, which: Option<crate::privacy::share::Pinned>) -> 
     }
 }
 
-/// The one-time notice ("EchoLedger now shows in screen shares unless you hide it.") was closed.
+/// Which window a per-window switch changes (pure): as [`pinned_for`], and showing only from that window itself. The
+/// main window may hide the card or the captions again, never show them.
+pub fn pinned_for_set(label: &str, which: Option<crate::privacy::share::Pinned>, shown: bool) -> AppResult<crate::privacy::share::Pinned> {
+    let pinned = pinned_for(label, which)?;
+    if shown && crate::privacy::share::Pinned::of_label(label) != Some(pinned) {
+        return Err(AppError::msg("Show it in screen shares from its own badge, on that window."));
+    }
+    Ok(pinned)
+}
+
+/// The one-time notice ("EchoLedger now shows in screen shares unless you hide it.") was closed. Only the main window.
 #[tauri::command]
-pub fn share_notice_dismiss(app: AppHandle) -> AppResult<()> {
+pub fn share_notice_dismiss(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
+    crate::privacy::from_main_window(window.label())?;
     crate::privacy::dismiss_share_notice(&app)
 }
 

@@ -387,8 +387,6 @@ export interface Settings {
   autoMode: boolean;
   hideFromSharing: ShareHiding; // since v1.8.1, replaces contentProtection; since v2.0 the other floating windows only
   mainShareHide: MainShareHide | null; // since v2.0: the main window hidden from screen shares, and until when
-  showCardInShares: boolean; // since v2.0: only by the person's choice on the Live Assist card
-  showCaptionsInShares: boolean; // since v2.0: only by the person's choice on the captions
   shareNotice: boolean; // the one-time notice after the v2.0 update
   oldWindowsSharing: OldWindowsSharing; // Windows before build 19041
   shareOneWindow: boolean; // "I share one window or a tab" (macOS)
@@ -1565,10 +1563,10 @@ export type HideFor =
 /** The two windows hidden from screen shares unless the person shows them, each on its own. */
 export type PinnedWindow = "card" | "captions";
 /** What the system reads back for that window: never only the saved choice. */
-export type WindowShareState = "hidden" | "shown" | "could_not_hide";
+export type WindowShareState = "hidden" | "shown" | "black_box" | "could_not_hide" | "not_open";
 export interface WindowShareView {
   which: PinnedWindow;
-  /** The person showed it in screen shares (the saved choice). */
+  /** The person showed it in screen shares from its own badge (until it closes; never saved). */
   shown: boolean;
   state: WindowShareState;
   badge: string;
@@ -1680,7 +1678,7 @@ export const api = {
   privacyMainShow: () => invoke<PrivacyStatus>("privacy_main_show"),
   /** The card's or the captions' real state, read back from the system; the main window names the one it means. */
   privacyWindowShare: (which: PinnedWindow | null = null) => invoke<WindowShareView>("privacy_window_share", { which }),
-  /** That window's own switch: shown in screen shares only by this explicit choice. */
+  /** That window's own switch: shown in screen shares only from its own badge; the main window may only hide it. */
   privacyWindowShareSet: (shown: boolean, which: PinnedWindow | null = null) => invoke<WindowShareView>("privacy_window_share_set", { which, shown }),
   shareNoticeDismiss: () => invoke<void>("share_notice_dismiss"),
   /** The latency probe (development only): word `id` is on screen. */

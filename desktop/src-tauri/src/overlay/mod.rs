@@ -208,7 +208,9 @@ fn build_window<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64)) -
         .focused(false)
         .focusable(false)
         .accept_first_mouse(true)
-        .visible(true);
+        // The card and the captions are built off the screen: the privacy service brings them on once their capture
+        // flag reads back as set (privacy::reveal_when_held).
+        .visible(!crate::privacy::reveals_itself(crate::privacy::kind_for(label)));
     crate::privacy::window(app, builder, label, crate::privacy::kind_for(label), |b| b)
 }
 

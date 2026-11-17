@@ -264,11 +264,6 @@ pub struct Settings {
     pub hide_from_sharing: ShareHiding,
     /// The main window is hidden from screen shares, and until when (v2.0); none: shown in screen shares (the default).
     pub main_share_hide: Option<crate::privacy::share::MainHide>,
-    /// The Live Assist answer card is shown in screen shares: only by the person's choice on that card, never by another
-    /// setting or a migration. Hidden by default.
-    pub show_card_in_shares: bool,
-    /// The captions are shown in screen shares: only by the person's choice on the captions. Hidden by default.
-    pub show_captions_in_shares: bool,
     /// The one-time notice on the main window after the v2.0 update ([`crate::privacy::share::SHARE_NOTICE`]); cleared
     /// once closed or answered.
     pub share_notice: bool,
@@ -363,8 +358,6 @@ impl Default for Settings {
             auto_record_apps: HashMap::new(),
             hide_from_sharing: ShareHiding::All,
             main_share_hide: None,
-            show_card_in_shares: false,
-            show_captions_in_shares: false,
             share_notice: false,
             old_windows_sharing: OldWindowsSharing::BlackBox,
             share_one_window: false,
@@ -437,8 +430,9 @@ impl Settings {
         // window was in them anyway: that person keeps seeing both, so Off. Everyone else gets the new default (All).
         let showed_in_shares = !file.contains_key("hideFromSharing") && file.get("contentProtection") == Some(&Value::Bool(false));
         // A file from before v2.0's per-window choices (any of "all", "floating", "off", or v1.8's key): the main window is
-        // shown in screen shares, the Live Assist card and the captions are hidden, and the person is told once.
-        let before_per_window = (file.contains_key("hideFromSharing") || file.contains_key("contentProtection")) && !file.contains_key("showCardInShares");
+        // shown in screen shares, and the person is told once. (The Live Assist card and the captions are hidden at every
+        // start: showing them is never kept in this file.)
+        let before_per_window = (file.contains_key("hideFromSharing") || file.contains_key("contentProtection")) && !file.contains_key("shareNotice");
         // v1.5's "Keep automatically" reads as Ask me: the person is told once.
         let kept_automatically = file.get("afterCall").and_then(Value::as_str) == Some("keep");
         let Ok(Value::Object(mut merged)) = serde_json::to_value(Self::default()) else { return Self::default() };
@@ -483,8 +477,6 @@ impl Settings {
         }
         if before_per_window {
             settings.main_share_hide = None;
-            settings.show_card_in_shares = false;
-            settings.show_captions_in_shares = false;
             settings.share_notice = true;
         }
         for action in crate::shortcuts::ADDED_LATER {
