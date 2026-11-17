@@ -678,21 +678,35 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [views]);
+  // The transcript on screen and the latest press, for answers that come back late: an answer for another recording
+  // is dropped (D-157), and a failure only sets Original back when nothing was pressed since.
+  const shownTranscript = useRef(transcriptId);
+  shownTranscript.current = transcriptId;
+  const viewPress = useRef(0);
   const chooseView = async (view: "original" | TranscriptView) => {
+    const press = ++viewPress.current;
     setShowAs(view);
-    if (view === "original" || !transcriptId || views?.status === "ready") return;
+    const id = transcriptId;
+    if (view === "original" || !id || views?.status === "ready") return;
+    const stillHere = () => shownTranscript.current === id;
+    const backToOriginal = () => {
+      if (stillHere() && viewPress.current === press) setShowAs("original");
+    };
     try {
-      let state = await api.transcriptViews(transcriptId);
+      let state = await api.transcriptViews(id);
+      if (!stillHere()) return;
       // A recording a teammate sent is only read: its views show once its owner has them made.
       if (readOnly && (state.status === "none" || state.status === "failed")) {
-        setShowAs("original");
+        backToOriginal();
         return;
       }
-      if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(transcriptId);
+      if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(id);
+      if (!stillHere()) return;
       setViews(state);
     } catch (e) {
+      if (!stillHere()) return;
       notify(errorMessage(e), true);
-      setShowAs("original");
+      backToOriginal();
     }
   };
   const viewText = (i: number): string | null => (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] ?? null : null);
