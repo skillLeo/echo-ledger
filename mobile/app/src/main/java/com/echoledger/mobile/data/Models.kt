@@ -69,7 +69,7 @@ data class ServerConfig(
     /** Since 2.0.0-a: this person chose "Switch back to classic" (every `ui_v2.*` flag then answers off). */
     @SerialName("ui_classic") @Serializable(with = LenientTrue::class) val uiClassic: Boolean = false,
     /** Since 2.0.0-b: how long a deleted recording can be restored; null on an older server (48 hours). */
-    val trash: TrashConfig? = null
+    @Serializable(with = LenientTrash::class) val trash: TrashConfig? = null
 )
 
 /** `GET /api/config` `trash` (since 2.0.0-b). */
@@ -105,6 +105,26 @@ object LenientFlags : kotlinx.serialization.KSerializer<Map<String, Boolean>> {
     /** An exact JSON `true`: never the string "true", 1 or null. */
     fun isTrue(value: JsonElement): Boolean =
         value is kotlinx.serialization.json.JsonPrimitive && !value.isString && value.content == "true"
+}
+
+/**
+ * `trash` read leniently (2.0.0-b): `keep_hours` counts only as a positive whole number; anything else (a string, a
+ * fraction, null, a malformed `trash`) is the default 48 hours and never breaks the config read.
+ */
+object LenientTrash : kotlinx.serialization.KSerializer<TrashConfig> {
+    override val descriptor = TrashConfig.serializer().descriptor
+
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): TrashConfig {
+        val element =
+            (decoder as? kotlinx.serialization.json.JsonDecoder)?.decodeJsonElement()
+                ?: return TrashConfig.serializer().deserialize(decoder)
+        val hours = ((element as? kotlinx.serialization.json.JsonObject)?.get("keep_hours") as? kotlinx.serialization.json.JsonPrimitive)
+            ?.takeUnless { it.isString }?.content?.toIntOrNull()?.takeIf { it > 0 }
+        return TrashConfig(hours ?: TrashConfig.DEFAULT_HOURS)
+    }
+
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: TrashConfig) =
+        TrashConfig.serializer().serialize(encoder, value)
 }
 
 /** A boolean read like [LenientFlags]: only an exact `true` is true; anything else is false and never an error. */

@@ -174,6 +174,19 @@ class SetupScreenTest : ScreenTest() {
     }
 
     @Test
+    fun `how the helper was started is kept at every connection and read by the Ready check`() {
+        assertEquals(null, com.echoledger.mobile.recording.ReadinessWatch.lastMethod(app))
+        app.graph.helper.attach(StubHelper(), source = "shizuku")
+        assertEquals(com.echoledger.mobile.privilege.HelperMethod.Shizuku, com.echoledger.mobile.recording.ReadinessWatch.lastMethod(app))
+        app.graph.helper.attach(StubHelper(), source = "adb")
+        assertEquals(com.echoledger.mobile.privilege.HelperMethod.Computer, com.echoledger.mobile.recording.ReadinessWatch.lastMethod(app))
+        val readiness = com.echoledger.mobile.core.Readiness.evaluate(
+            com.echoledger.mobile.recording.ReadinessWatch.facts(app, runBlocking { app.graph.settings.current() }, app.graph.helper)
+        )
+        assertEquals(com.echoledger.mobile.privilege.HelperMethod.Computer, readiness.helperMethod)
+    }
+
+    @Test
     fun `a running helper says call capture is on, without its source or user id (P-020)`() {
         app.graph.helper.attach(StubHelper(), source = "shizuku")
         showSetup(caps(sdk = 34))

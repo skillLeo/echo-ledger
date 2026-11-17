@@ -31,6 +31,22 @@ class ProblemsTest : AppTest() {
             Problems.CERTIFICATE,
             Problems.text(javax.net.ssl.SSLPeerUnverifiedException("Certificate pinning failure!"), fallback)
         )
+        assertEquals(
+            "a handshake refused for the certificate",
+            Problems.CERTIFICATE,
+            Problems.text(
+                javax.net.ssl.SSLHandshakeException("Handshake failed").apply {
+                    initCause(java.security.cert.CertificateException("Trust anchor for certification path not found."))
+                },
+                fallback
+            )
+        )
+        assertEquals(
+            "a handshake cut for any other reason",
+            Problems.OFFLINE,
+            Problems.text(javax.net.ssl.SSLHandshakeException("Connection closed by peer"), fallback)
+        )
+        assertEquals("a secure connection reset", Problems.OFFLINE, Problems.text(javax.net.ssl.SSLException("Connection reset"), fallback))
         assertEquals("the client's own words stay", EMPTY_ANSWER, Problems.text(IOException(EMPTY_ANSWER), fallback))
         assertEquals(Problems.SIGN_IN, Problems.text(NotPairedException(), fallback))
         assertEquals(Problems.SERVER, Problems.text(ApiException(500, "Server Error", null), fallback))

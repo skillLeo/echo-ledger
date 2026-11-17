@@ -74,6 +74,22 @@ class V2WiringTest : AppTest() {
         assertEquals(72, config.trash?.keepHours)
         assertEquals("the rest of the config is read as before", 30, config.retentionDays)
 
+        // Trash's keep time: only a positive whole number counts; the config is read whatever it holds.
+        listOf(
+            """"trash": null""",
+            """"trash": {"keep_hours": "48"}""",
+            """"trash": {"keep_hours": 48.5}""",
+            """"trash": "always"""",
+            """"trash": {"keep_hours": -3}""",
+            """"ui_flags": null"""
+        ).forEach { extra ->
+            val read = parse(extra)
+            assertEquals(extra, 30, read.retentionDays)
+            assertEquals(extra, 48, read.trash?.keepHours ?: 48)
+            assertTrue(extra, read.uiFlags.isEmpty())
+        }
+        assertEquals(36, parse(""""trash": {"keep_hours": 36}""").trash?.keepHours)
+
         val broken = parse(""""ui_flags": "everything", "ui_classic": 1""")
         assertTrue(broken.uiFlags.isEmpty())
         assertFalse(broken.uiClassic)

@@ -67,8 +67,8 @@ class NotPairedException : IOException("This phone is not signed in to an EchoLe
 
 const val HTTPS_ONLY = "The server address must use https://"
 const val EMPTY_ANSWER = "Your server sent an empty answer. Try again in a minute."
-const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. Update EchoLedger, or sign out and sign in again " +
-    "with the right server address."
+const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. If this Wi-Fi has a sign-in page, open it first; " +
+    "otherwise update EchoLedger."
 
 /** A server answer other than 2xx/401: `code` is the machine-readable reason, `retryAfterSeconds` the `Retry-After` delay. */
 class ApiException(

@@ -30,8 +30,11 @@ object Problems {
             else -> VendorNames.plain(e.message?.takeUnless(::technical), fallback)
         }
 
-        // A pinned certificate that does not match: never "can't reach", which would send people looking at the network.
-        is javax.net.ssl.SSLException -> CERTIFICATE
+        // A certificate the phone does not accept: never "can't reach", which would send people looking at the network.
+        // Any other failure of the secure connection (reset, cut, timed out) is the connection's.
+        is javax.net.ssl.SSLPeerUnverifiedException -> CERTIFICATE
+
+        is javax.net.ssl.SSLHandshakeException -> if (causedByCertificate(e)) CERTIFICATE else OFFLINE
 
         // The client's own sentences for an empty or unreadable answer are for people already.
         is IOException -> e.message?.takeIf { it == EMPTY_ANSWER || it == UNREADABLE_ANSWER } ?: OFFLINE
@@ -43,6 +46,9 @@ object Problems {
 
         else -> fallback
     }
+
+    private fun causedByCertificate(e: Throwable): Boolean =
+        generateSequence(e.cause) { it.cause }.take(8).any { it is java.security.cert.CertificateException }
 
     /** A server answer without words for people: "Request failed (404)", or an exception's text passed through. */
     private fun technical(message: String): Boolean = message.startsWith("Request failed (") ||
