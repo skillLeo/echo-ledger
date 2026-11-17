@@ -46,11 +46,12 @@ final class AssistPlans
 
     /**
      * What is left this month of the live allowance, or of Practice's: assist seconds and model budget in US cents
-     * (never below 0). Each counts only its own kind of session, and the usage of those sessions.
+     * (never below 0). Each counts only its own kind of session, and the usage of those sessions (pending reservations
+     * too), less what the relay tokens of the sessions still on granted and they have not spent yet (held()).
      *
      * @return array{seconds_left: int, cents_left: int}
      */
-    public function left(int $workspaceId, int $userId, bool $practice): array
+    public function left(int $workspaceId, int $userId, bool $practice, ?string $exceptClaimOf = null): array
     {
         $plan = $this->for($workspaceId);
         $allowance = $practice ? $plan['practice'] : ['seconds' => $plan['seconds'], 'cents' => $plan['cents']];
@@ -65,8 +66,30 @@ final class AssistPlans
 
         return [
             'seconds_left' => max(0, $allowance['seconds'] - $seconds),
-            'cents_left' => max(0, (int) floor($allowance['cents'] - $spent * 100)),
+            // Rounded first: $4.98 in decimals is 497.99999… cents in floats, which floor() would make one cent less.
+            'cents_left' => max(0, (int) floor(round($allowance['cents'] - $spent * 100, 6)) - $this->held($userId, $practice, $exceptClaimOf)),
         ];
+    }
+
+    /**
+     * What the relay may still spend of what its tokens granted, in cents: for each session still on (of this kind),
+     * the budget its last token claimed less what the session spent since, never below 0; a token past its lifetime
+     * holds nothing. [$except] is the session whose own claim is being made again (a token refresh).
+     */
+    private function held(int $userId, bool $practice, ?string $except): int
+    {
+        $held = 0;
+        AssistSession::query()->withoutGlobalScopes()->where('user_id', $userId)->where('practice', $practice)->where('status', 'active')
+            ->whereNotNull('claimed_cents')->where('claimed_at', '>', now()->subSeconds((int) config('assist.token_ttl_seconds', 900)))
+            ->when($except !== null, fn ($q) => $q->whereKeyNot($except))
+            ->each(function (AssistSession $session) use (&$held): void {
+                // After the claim, strictly: a call in the same second may predate it, and counting it as spent from the
+                // claim would hold back too little.
+                $since = (float) AssistUsage::query()->where('assist_session_id', $session->id)->where('occurred_at', '>', $session->claimed_at)->sum('cost_usd');
+                $held += max(0, (int) $session->claimed_cents - (int) ceil($since * 100));
+            });
+
+        return $held;
     }
 
     /** `402 budget_exhausted` when the month's assist time or model budget (live, or Practice's) is used up. */
