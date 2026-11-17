@@ -199,7 +199,17 @@ fn main() -> ExitCode {
         judge.failures.iter().for_each(|f| text.push_str(&format!("- {f}\n")));
     }
     // The practice questions: five per case from the real models, checked for invented names and numbers.
-    text.push_str(&runtime.block_on(assist_relay::eval::practice::run_live(config.clone(), practice_providers, &practice_cases, 5)));
+    let practice_judge = o.judge.then(|| {
+        let options = config.model(JUDGE_MODEL).map(|spec| spec.options.clone()).unwrap_or_default();
+        (judge_provider.clone(), JUDGE_MODEL.to_owned(), options)
+    });
+    text.push_str(&runtime.block_on(assist_relay::eval::practice::run_live(
+        config.clone(),
+        practice_providers,
+        &practice_cases,
+        5,
+        practice_judge.as_ref(),
+    )));
     if !harness.is_empty() {
         text.push_str("\nTurns that got no suggestion or an error:\n\n");
         harness.iter().for_each(|p| text.push_str(&format!("- {p}\n")));

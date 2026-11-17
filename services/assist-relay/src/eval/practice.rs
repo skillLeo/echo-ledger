@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
+use super::contains_word;
 use super::score::{NumberCheck, Sources, quantities};
 use crate::auth::{AUDIENCE, BudgetClaim, Claims};
 use crate::config::{MockLatency, RelayConfig, Secret, Shared};
@@ -61,25 +62,43 @@ pub fn load_dir(dir: &Path) -> Result<Vec<PracticeCase>, String> {
         .collect()
 }
 
-/// Capitalised words that are not names.
+/// Capitalised words that are not names: the usual openers of a question, and common words.
 const NOT_NAMES: &[&str] = &[
-    "i", "i'm", "i've", "i'd", "me", "my", "you", "your", "what", "how", "why", "when", "where", "which", "who", "tell",
-    "can", "could", "would", "do", "did", "have", "has", "is", "are", "please", "okay", "if", "in", "on", "at", "for",
-    "and", "or", "the", "a", "an", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
-    "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november",
-    "december", "english", "urdu", "arabic", "ai", "ok",
+    "i", "i'm", "i've", "i'd", "me", "my", "you", "your", "you're", "you've", "we", "we're", "our", "us", "they", "it",
+    "this", "that", "these", "there", "tell", "describe", "walk", "give", "imagine", "suppose", "let's", "let", "say",
+    "talk", "share", "explain", "why", "what", "how", "when", "where", "who", "whom", "whose", "which", "do", "does",
+    "did", "have", "has", "had", "can", "could", "would", "will", "should", "is", "are", "was", "were", "please",
+    "okay", "if", "in", "on", "at", "for", "as", "after", "before", "now", "next", "finally", "so", "and", "but",
+    "also", "great", "thanks", "good", "right", "sure", "yes", "no", "any", "last", "first", "looking", "thinking",
+    "the", "a", "an", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "january",
+    "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+    "english", "urdu", "arabic", "ai", "ok",
 ];
 
-/// What a question invents, against what is known when it is asked.
+/// Words that state something bad happened to Me or was done by Me (an invented negative, unless the material says
+/// so).
+const NEGATIVES: &[&str] = &[
+    "fired", "sacked", "dismissed", "laid off", "let you go", "let go", "terminated", "demoted", "failed", "failure",
+    "complaint", "complaints", "warning", "lied", "cheated", "arrested", "missed", "late", "quit", "resigned",
+    "mistake", "mistakes", "blamed", "rejected", "poor performance", "struggled",
+];
+
+/// Words that make a question hypothetical or open ("a time you missed a deadline" asks, it does not claim).
+const HYPOTHETICAL: &[&str] = &[
+    "if", "would", "could", "imagine", "suppose", "ever", "a time", "any", "what happens", "how do you handle",
+    "how would", "what would",
+];
+
+/// What a question invents, against what is known when it is asked: numbers and names that aren't there, and bad
+/// things about Me that the material doesn't say.
 pub fn invented(question: &str, known: &Sources) -> Vec<String> {
     let mut found: Vec<String> = quantities(question, false)
         .iter()
         .filter(|q| known.check(q) != NumberCheck::Known)
         .map(|q| format!("the number {}", q.value))
         .collect();
-    for sentence in question.split(['.', '?', '!', ':', '\n']) {
-        let words: Vec<&str> = sentence.split_whitespace().collect();
-        for word in words.iter().skip(1) {
+    for sentence in question.split(['.', '?', '!', ':', ';', '\n']) {
+        for word in sentence.split(|c: char| c.is_whitespace() || c == ',') {
             let word = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '\'');
             let starts_upper = word.chars().next().is_some_and(char::is_uppercase);
             let lower = word.to_lowercase();
@@ -87,7 +106,16 @@ pub fn invented(question: &str, known: &Sources) -> Vec<String> {
                 found.push(format!("the name {word}"));
             }
         }
+        let lower = sentence.to_lowercase();
+        let hypothetical = HYPOTHETICAL.iter().any(|h| contains_word(&lower, h));
+        for negative in NEGATIVES {
+            if !hypothetical && contains_word(&lower, negative) && !negative.split(' ').all(|w| known.has_word(w)) {
+                found.push(format!("the claim \"{negative}\""));
+            }
+        }
     }
+    found.sort();
+    found.dedup();
     found
 }
 
@@ -253,17 +281,44 @@ pub async fn ci_check(cases: &[PracticeCase]) -> Vec<String> {
     problems
 }
 
-/// A live run: `count` questions per case from the real models, and what they invented.
-pub async fn run_live(config: RelayConfig, providers: Providers, cases: &[PracticeCase], count: usize) -> String {
+/// The model judge for practice questions in a live run (`--judge`).
+pub type PracticeJudge = (Arc<dyn crate::provider::Provider>, String, toml::Table);
+
+/// A live run: `count` questions per case from the real models, what the rules find invented, and with `judge` the
+/// model judge's verdict on each question too.
+pub async fn run_live(config: RelayConfig, providers: Providers, cases: &[PracticeCase], count: usize, judge: Option<&PracticeJudge>) -> String {
     let state = state(config, providers);
-    let mut text = String::from("\n## Practice questions\n\nEach question checked against what was known when it was asked (the brief, the documents, Me's answers): numbers and names that aren't there.\n\n| Case | Questions | Inventing | Details |\n|---|---|---|---|\n");
+    let mut text = String::from(
+        "\n## Practice questions\n\nEach question checked against what was known when it was asked (the brief, the documents, Me's \
+         answers): numbers, names and bad things about Me that aren't there (rules), and, with the judge, anything else \
+         it presents as a fact.\n\n| Case | Questions | Inventing (rules) | Inventing (judge) | Details |\n|---|---|---|---|---|\n",
+    );
     for case in cases {
         match run_case(&state, None, case, Questions::Live, count).await {
             Ok(asked) => {
-                let bad: Vec<String> = asked.iter().filter(|(_, i)| !i.is_empty()).map(|(q, i)| format!("\"{q}\": {}", i.join(", "))).collect();
-                text.push_str(&format!("| {} | {} | {} | {} |\n", case.id, asked.len(), bad.len(), if bad.is_empty() { "none".into() } else { bad.join("<br>") }));
+                let mut details = Vec::new();
+                let rules = asked.iter().filter(|(_, i)| !i.is_empty()).count();
+                for (question, invented) in asked.iter().filter(|(_, i)| !i.is_empty()) {
+                    details.push(format!("rules: \"{question}\": {}", invented.join(", ")));
+                }
+                let mut judged = "not run".to_owned();
+                if let Some((provider, model, options)) = judge {
+                    let mut failed = 0;
+                    for (index, (question, _)) in asked.iter().enumerate() {
+                        let known = known_from(case, &case.answers[..index.min(case.answers.len())]);
+                        let material = format!("{}\nThe question:\n{question}", known.text());
+                        let (passed, verdict) = super::judge::ask(provider, model, options, super::judge::PRACTICE_RULES, material).await;
+                        if !passed {
+                            failed += 1;
+                            details.push(format!("judge: \"{question}\": {verdict}"));
+                        }
+                    }
+                    judged = failed.to_string();
+                }
+                let details = if details.is_empty() { "none".into() } else { details.join("<br>") };
+                text.push_str(&format!("| {} | {} | {rules} | {judged} | {details} |\n", case.id, asked.len()));
             }
-            Err(error) => text.push_str(&format!("| {} | - | - | {error} |\n", case.id)),
+            Err(error) => text.push_str(&format!("| {} | - | - | - | {error} |\n", case.id)),
         }
     }
     text
@@ -273,6 +328,21 @@ pub async fn run_live(config: RelayConfig, providers: Providers, cases: &[Practi
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn the_judge_reads_pass_and_fail() {
+        let config = RelayConfig::built_in();
+        let (providers, mocks) = Providers::mock(&config, Arc::new(MockStats::default()));
+        let provider = providers.get(ProviderKind::Anthropic);
+        let options = toml::Table::new();
+        mocks[&ProviderKind::Anthropic].push(MockBehavior::Reply("PASS".into()));
+        mocks[&ProviderKind::Anthropic].push(MockBehavior::Reply("FAIL: Careem is not in the brief".into()));
+        let rules = super::super::judge::PRACTICE_RULES;
+        let ask = |m: &str| super::super::judge::ask(&provider, "claude-sonnet-5-5", &options, rules, m.to_owned());
+        assert_eq!(ask("Tell me about yourself?").await, (true, "PASS".to_owned()));
+        let (passed, verdict) = ask("Careem let you go. Why?").await;
+        assert!(!passed && verdict.contains("Careem"));
+    }
+
     #[test]
     fn names_and_numbers_not_in_the_material_are_invented() {
         let mut known = Sources::default();
@@ -281,5 +351,12 @@ mod tests {
         assert!(invented("Tell me about your time at Google?", &known).iter().any(|i| i.contains("Google")));
         assert!(invented("How did you lead a team of 12 developers?", &known).iter().any(|i| i.contains("12")));
         assert!(invented("Tell me about yourself. What do you enjoy in Flutter?", &known).is_empty());
+        // A name at the start of a sentence, a salary in words, an invented negative.
+        assert!(invented("Careem let you go. Why?", &known).iter().any(|i| i.contains("Careem")));
+        assert!(invented("Sana, your manager, says you were late.", &known).iter().any(|i| i.contains("Sana")));
+        assert!(!invented("Are you expecting fifty thousand a month?", &known).is_empty());
+        assert!(!invented("Is a six-figure salary what you want?", &known).is_empty());
+        assert!(invented("Why were you fired from Nuqta Labs?", &known).iter().any(|i| i.contains("fired")));
+        assert!(invented("Tell me about a time you missed a deadline.", &known).is_empty(), "hypothetical");
     }
 }

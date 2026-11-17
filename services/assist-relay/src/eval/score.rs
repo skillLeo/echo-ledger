@@ -79,6 +79,11 @@ impl Sources {
         self.check(q) == NumberCheck::Known
     }
 
+    /// What is known, as text (lowercased), for the model judge.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
     /// Whether a word (or its singular) is anywhere in what is known.
     pub fn has_word(&self, word: &str) -> bool {
         contains_word(&self.text, word) || word.strip_suffix('s').is_some_and(|stem| stem.len() > 2 && contains_word(&self.text, stem))
@@ -237,6 +242,8 @@ fn unit_of(word: &str) -> Option<&'static str> {
         "store" | "stores" | "restaurant" | "restaurants" => "store",
         "city" | "cities" => "city",
         "country" | "countries" => "country",
+        // "a six-figure salary".
+        "figure" | "figures" => "figure",
         _ => return None,
     })
 }
@@ -317,11 +324,13 @@ pub fn quantities(text: &str, known: bool) -> Vec<Quantity> {
             Token::Stop => continue,
         };
         let mut rest = &tokens[index + 1..];
+        let mut scaled = false;
         if let Some(Token::Word(word)) = rest.first()
             && let Some((_, scale)) = SCALES.iter().find(|(w, _)| w == word)
         {
             value *= scale;
             rest = &rest[1..];
+            scaled = true;
         }
         let before = index.checked_sub(1).and_then(|j| match &tokens[j] {
             Token::Word(w) => unit_of(w).filter(|u| ["pkr", "usd", "gbp", "riyal", "aed"].contains(u)),
@@ -341,7 +350,8 @@ pub fn quantities(text: &str, known: bool) -> Vec<Quantity> {
             })
             .last();
         let unit = if percent { Some("percent") } else { after.or(currency).or(before) };
-        if is_word && unit.is_none() && (urdu || !known) {
+        // A number word counts with a unit, or with a scale ("fifty thousand" is an amount whatever follows).
+        if is_word && unit.is_none() && !scaled && (urdu || !known) {
             continue;
         }
         let noun = match (unit, rest.first()) {
