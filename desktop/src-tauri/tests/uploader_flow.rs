@@ -1988,16 +1988,16 @@ async fn a_recording_made_under_one_account_is_not_sent_after_another_signs_in()
     std::fs::create_dir_all(&recording).unwrap();
     let primary = write_file(&recording, "recording.flac", 2_500, 7);
     let (server, _) = Flow::new(1_000, vec![Slot::fresh("primary", 2_500)]).start();
-    let hassam = Owner::new(&server.base_url(), Some("hassam@example.test"));
+    let ayesha = Owner::new(&server.base_url(), Some("ayesha@example.test"));
     let sara = Owner::new(&server.base_url(), Some("sara@example.test"));
-    hassam.save(data.path()).unwrap();
+    ayesha.save(data.path()).unwrap();
     UploadQueue { items: vec![pending(&recording, primary)] }.save(&paths::uploads(data.path())).unwrap();
 
-    // Hassam signs out, Sara signs in on the same computer: the upload worker sends what `sendable` gives it.
-    assert!(hand_over(data.path(), Some(&hassam), &sara).unwrap());
+    // Ayesha signs out, Sara signs in on the same computer: the upload worker sends what `sendable` gives it.
+    assert!(hand_over(data.path(), Some(&ayesha), &sara).unwrap());
     let queue = UploadQueue::load(&paths::uploads(data.path()));
-    assert!(queue.sendable(Some(&sara)).is_empty(), "Hassam's recording does not go into Sara's library");
-    assert_eq!(queue.ui_items(Some(&sara))[0].held_for.as_deref(), Some("hassam@example.test"));
+    assert!(queue.sendable(Some(&sara)).is_empty(), "Ayesha's recording does not go into Sara's library");
+    assert_eq!(queue.ui_items(Some(&sara))[0].held_for.as_deref(), Some("ayesha@example.test"));
     assert_eq!(queue.held(Some(&sara)), 1);
     for id in queue.sendable(Some(&sara)) {
         let mut item = queue.items.iter().find(|i| i.id() == id).unwrap().clone();
@@ -2005,11 +2005,11 @@ async fn a_recording_made_under_one_account_is_not_sent_after_another_signs_in()
     }
     assert!(server.requests().is_empty(), "nothing was sent");
 
-    // Hassam signs in again: it goes up as his.
-    assert!(hand_over(data.path(), Some(&sara), &hassam).unwrap());
+    // Ayesha signs in again: it goes up as hers.
+    assert!(hand_over(data.path(), Some(&sara), &ayesha).unwrap());
     let queue = UploadQueue::load(&paths::uploads(data.path()));
-    assert_eq!(queue.sendable(Some(&hassam)), ["r1"]);
-    assert_eq!(queue.ui_items(Some(&hassam))[0].held_for, None);
+    assert_eq!(queue.sendable(Some(&ayesha)), ["r1"]);
+    assert_eq!(queue.ui_items(Some(&ayesha))[0].held_for, None);
     assert_eq!(upload(&api(&server), &queue.items[0]).await.unwrap(), SESSION_ID);
 }
 

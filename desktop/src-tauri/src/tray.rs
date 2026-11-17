@@ -271,6 +271,8 @@ struct MenuShape {
     share_demo: Option<bool>,
     /// EchoLedger's windows are off the screen, and why.
     hidden: Option<Hidden>,
+    /// Live Translate is listening ([`TRANSLATE_LISTENING`]).
+    translate: bool,
 }
 
 /// Why EchoLedger's windows are off the screen, as the tray says it.
@@ -359,6 +361,9 @@ fn item(id: &'static str, label: impl Into<String>) -> Entry {
 /// already running when the role changed can still be stopped.
 fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
     let mut entries = vec![item("open", "Open EchoLedger")];
+    if shape.translate {
+        entries.push(item("translate_stop", TRANSLATE_LISTENING));
+    }
     // "Hide EchoLedger windows", and while they are off what took them off and how to bring them back.
     match shape.hidden {
         None => entries.push(item("hide_windows", "Hide EchoLedger windows")),
@@ -485,6 +490,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         crate::actions::review_waiting(&app);
                         Ok(())
                     }
+                    "translate_stop" => {
+                        crate::translate::stop(&app);
+                        crate::actions::emit_status(&app);
+                        Ok(())
+                    }
                     "hide_windows" => {
                         crate::privacy::set_hidden(&app, crate::privacy::HideReason::Person, true);
                         Ok(())
@@ -573,7 +583,13 @@ pub struct Switches {
     pub share_demo: Option<bool>,
     /// EchoLedger's windows are off the screen, and why.
     pub hidden: Option<Hidden>,
+    /// Live Translate is listening to an app now.
+    pub translate: bool,
 }
+
+/// While Live Translate runs, whatever its window shows (hidden, or every EchoLedger window off the screen): the tray
+/// always says it is listening, with Stop.
+pub const TRANSLATE_LISTENING: &str = "Live Translate is listening · Stop";
 
 /// Applies a new state to the tray: icon, tooltip and menu, each only when it changed. `generation`: the status read it
 /// comes from ([`next_generation`]), so an older one queued behind it never draws over it; `mic_note`: the recording is a
@@ -593,6 +609,7 @@ pub fn update(app: &AppHandle, generation: u64, state: TrayState, paused: bool, 
         viewer,
         share_demo: switches.share_demo,
         hidden: switches.hidden,
+        translate: switches.translate,
     };
     // The tray is drawn on the main thread and never waited for: a sync command there (Hide EchoLedger windows, a setting)
     // refreshes the status while other threads (the safety net, uploads) do too, so nobody holds the tray's locks while
@@ -658,7 +675,7 @@ mod tests {
 
     #[test]
     fn recording_menu_shows_its_state_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None, share_demo: Some(false), hidden: None };
+        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None, share_demo: Some(false), hidden: None, translate: false };
         let labels = labels(&shape);
         assert!(labels.contains(&"Stop recording".to_string()));
         assert!(labels.contains(&"Resume recording".to_string()));
@@ -714,6 +731,25 @@ mod tests {
         assert!(matches!(recording, Entry::Item { ref label, enabled: true, .. } if label == "Stop voice note"));
         let call = mic_note_entry(&MenuShape { recording: true, ..MenuShape::default() });
         assert!(matches!(call, Entry::Item { enabled: false, .. }), "a call recording is not stopped from this line");
+    }
+
+    #[test]
+    fn the_tray_says_live_translate_is_listening_with_stop_whatever_its_window_shows() {
+        let off = labels(&MenuShape::default());
+        assert!(!off.iter().any(|l| l.contains("Live Translate")));
+        let on = labels(&MenuShape { translate: true, ..MenuShape::default() });
+        assert_eq!(on[1], "Live Translate is listening · Stop", "right under Open EchoLedger");
+        // With every EchoLedger window hidden, and on a viewer's computer, it is still said.
+        let hidden = labels(&MenuShape { translate: true, hidden: Some(Hidden::Person), ..MenuShape::default() });
+        assert!(hidden.contains(&TRANSLATE_LISTENING.to_string()) && hidden.contains(&"Show EchoLedger windows".to_string()));
+        let viewer = labels(&MenuShape { translate: true, viewer: Some("You are a viewer.".into()), ..MenuShape::default() });
+        assert!(viewer.contains(&TRANSLATE_LISTENING.to_string()));
+        // Its line stops Live Translate.
+        let source = include_str!("tray.rs");
+        let arm = &source[source.find("\"translate_stop\" =>").unwrap()..];
+        assert!(arm[..arm.find("Ok(())").unwrap()].contains("crate::translate::stop(&app)"));
+        let commands = include_str!("commands.rs");
+        assert!(commands.contains("translate: crate::translate::is_running()"), "the status says whether it runs");
     }
 
     #[test]

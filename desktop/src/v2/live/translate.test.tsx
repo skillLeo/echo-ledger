@@ -170,13 +170,13 @@ describe("Live Translate in the Live tab follows the plan", () => {
     expect(callsOf("translate_apps")).toHaveLength(0);
   });
 
-  it("on a Mac it says it isn't there yet, instead of an empty list of apps", async () => {
+  it("on a Mac older than macOS 14.2 it says it needs 14.2, instead of an empty list of apps", async () => {
     render(<LiveV2 status={makeStatus({ platform: "macos" })} {...props} />);
     await act(flushAsync);
     const row = within(screen.getByRole("list", { name: "During a call" })).getByRole("button", { name: "Live Translate" });
-    expect(row).toHaveAccessibleDescription(/Live Translate isn't on the Mac yet/);
+    expect(row).toHaveAccessibleDescription(/Live Translate needs macOS 14.2 or later/);
     fireEvent.click(row);
-    expect(within(screen.getByRole("region", { name: "Live Translate" })).getByRole("status")).toHaveTextContent("Live Translate isn't on the Mac yet");
+    expect(within(screen.getByRole("region", { name: "Live Translate" })).getByRole("status")).toHaveTextContent("Live Translate needs macOS 14.2 or later");
     expect(callsOf("translate_apps")).toHaveLength(0);
   });
 
@@ -184,7 +184,7 @@ describe("Live Translate in the Live tab follows the plan", () => {
     respond("live_translate_status", { available: false, reason: "platform" });
     render(<LiveV2 status={makeStatus({ platform: "windows" })} {...props} />);
     await act(flushAsync);
-    expect(within(screen.getByRole("list", { name: "During a call" })).getByRole("button", { name: "Live Translate" })).toHaveAccessibleDescription(/isn't on the Mac yet/);
+    expect(within(screen.getByRole("list", { name: "During a call" })).getByRole("button", { name: "Live Translate" })).toHaveAccessibleDescription(/needs macOS 14.2 or later/);
     expect(translateAvailability(null, "windows", true)).toEqual({ available: true, reason: null });
     expect(translateAvailability(null, "windows", false)).toEqual({ available: false, reason: "plan" });
   });

@@ -14,7 +14,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 const run = <T,>(fn: () => Promise<T>) => fn();
 
 function feed(over: Partial<TranslateFeed> = {}): TranslateFeed {
-  return { mode: "game", app: "Valorant", text: "", partial: "", original: "", status: "live", notice: null, locked: true, hidden: false, ...over };
+  return { mode: "game", app: "Valorant", text: "", partial: "", original: "", status: "live", notice: null, locked: true, hidden: false, hide_keys: "Ctrl+Shift+H", lock_keys: "Ctrl+Shift+T", ...over };
 }
 
 beforeEach(() => {
@@ -181,7 +181,20 @@ describe("Live Translate overlay", () => {
     fireEvent.click(screen.getByRole("button", { name: "Done (Ctrl+Shift+T)" }));
     expect(callsOf("translate_toggle_lock")).toHaveLength(1);
 
-    await act(async () => emitEvent(TRANSLATE_FEED, feed({ hidden: true })));
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ hidden: true, hide_keys: "Ctrl+Shift+H" })));
+    // Hidden, it still listens: never nothing on screen.
+    expect(container).not.toBeEmptyDOMElement();
+    expect(screen.getByRole("status")).toHaveTextContent("Live Translate is listening · Ctrl+Shift+H to show");
+    expect(screen.queryByText("No connection — retrying")).toBeNull();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ hidden: true, hide_keys: "⌘⇧H" })));
+    expect(screen.getByRole("status")).toHaveTextContent("Live Translate is listening · ⌘⇧H to show");
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ hidden: false, locked: false, lock_keys: "⌘⇧T" })));
+    expect(screen.getByRole("button", { name: "Done (⌘⇧T)" })).toBeInTheDocument();
+    // Ended on its own, even while hidden: never the listening pill; the overlay leaves the reason to the panel.
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "ended", hidden: true, notice: "This app stopped playing sound. Play something in it, then start Live Translate again." })));
+    expect(screen.queryByText(/is listening/)).toBeNull();
+    expect(container).toBeEmptyDOMElement();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "stopped" })));
     expect(container).toBeEmptyDOMElement();
   });
 

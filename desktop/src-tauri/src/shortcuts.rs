@@ -44,7 +44,7 @@ impl Action {
     ];
 
     /// Defaults (Cmd on macOS). Copying uses Alt+Shift: Ctrl+Shift+C opens DevTools in every browser (B19). Record now
-    /// is Ctrl / ⌘ + Alt + R (Phase 1C, chosen by Hassam over Ctrl+Shift+R, the browsers' hard reload); on a Mac Safari
+    /// is Ctrl / ⌘ + Alt + R (Phase 1C, chosen by the owner over Ctrl+Shift+R, the browsers' hard reload); on a Mac Safari
     /// uses ⌘⌥R to reload from the server, which Settings says next to it; it can be changed or cleared there. Hide all
     /// is Ctrl / ⌘ + Alt + Shift + P ("private"): three modifiers like Start / stop saving and Copy, so no browser, Office
     /// or system key uses it; not ⌘⌥H (Hide Others on a Mac, one slip from hiding every other app) and not Ctrl+Shift+H

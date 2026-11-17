@@ -22,7 +22,7 @@ fn authed(server: &MockServer) -> ApiClient {
 }
 
 fn sign_in<'a>(otp: Option<&'a str>) -> PasswordSignIn<'a> {
-    PasswordSignIn { email: "hassam@example.test", password: "correct horse", otp, name: "Studio Mac" }
+    PasswordSignIn { email: "ayesha@example.test", password: "correct horse", otp, name: "Studio Mac" }
 }
 
 #[tokio::test]
@@ -36,7 +36,7 @@ async fn a_password_sign_in_sends_the_account_and_this_computer_and_gets_a_token
 
     let sent = &server.requests_to("POST", "/api/auth/password")[0];
     let body = sent.json();
-    assert_eq!(body["email"], "hassam@example.test");
+    assert_eq!(body["email"], "ayesha@example.test");
     assert_eq!(body["password"], "correct horse");
     assert!(body["otp"].is_null(), "no code until the server asks for one");
     assert_eq!(body["name"], "Studio Mac");
@@ -146,11 +146,11 @@ async fn the_browser_s_code_and_this_computer_s_verifier_are_exchanged_for_a_tok
 
 #[tokio::test]
 async fn the_account_page_reads_the_account_and_hides_on_an_older_server() {
-    let account = json!({"name": "Hassam", "email": "hassam@example.test", "email_verified": true, "two_factor": true, "google": false,
+    let account = json!({"name": "Ayesha", "email": "ayesha@example.test", "email_verified": true, "two_factor": true, "google": false,
         "created_at": "2026-11-01T09:00:00+00:00", "workspace": {"id": "01JF", "name": "Acme team", "role": "viewer"}, "deletes_at": null});
     let server = MockServer::start(Router::new().fixed("GET", "/api/account", Reply::json(200, account)));
     let got = authed(&server).account().await.unwrap().expect("an account");
-    assert_eq!(got.email, "hassam@example.test");
+    assert_eq!(got.email, "ayesha@example.test");
     assert!(got.two_factor && !got.google);
     assert_eq!(got.workspace.as_ref().map(|w| w.role.as_str()), Some("viewer"));
     assert_eq!(server.requests()[0].header("authorization"), Some(format!("Bearer {TOKEN}").as_str()));
@@ -164,7 +164,7 @@ async fn the_account_page_reads_the_account_and_hides_on_an_older_server() {
 
 #[tokio::test]
 async fn the_avatar_menu_and_the_switcher_read_staff_and_workspaces_when_the_server_sends_them() {
-    let account = json!({"name": "Hassam", "email": "h@example.test", "workspace": {"id": 1, "name": "Personal", "role": "owner"},
+    let account = json!({"name": "Ayesha", "email": "a@example.test", "workspace": {"id": 1, "name": "Personal", "role": "owner"},
         "is_super_admin": true,
         "workspaces": [{"id": 1, "name": "Personal", "role": "owner", "current": true}, {"id": 2, "name": "Acme team", "role": "member"}, "not a workspace"]});
     let server = MockServer::start(Router::new().fixed("GET", "/api/account", Reply::json(200, account)));

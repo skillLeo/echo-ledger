@@ -978,12 +978,12 @@ mod tests {
 
     #[test]
     fn nothing_in_a_report_names_a_person() {
-        assert_eq!(scrub("could not open /Users/hassam/Library/x.wav now"), "could not open ~/Library/x.wav now");
+        assert_eq!(scrub("could not open /Users/ayesha/Library/x.wav now"), "could not open ~/Library/x.wav now");
         assert_eq!(scrub("/home/someone/a and /Users/other"), "~/a and ~");
         assert_eq!(scrub("two\nlines   here"), "two lines here");
         assert_eq!(scrub(&"x".repeat(500)).chars().count(), DETAIL_MAX);
 
-        let mac = FakeMac { peak: Err("cannot read /Users/hassam/Music/test".into()), ..FakeMac::default() };
+        let mac = FakeMac { peak: Err("cannot read /Users/ayesha/Music/test".into()), ..FakeMac::default() };
         let report = CheckReport {
             items: run(&mac),
             stopped: None,
@@ -994,7 +994,7 @@ mod tests {
             sent_at: None,
         };
         let text = report_text(&report);
-        assert!(!text.contains("hassam") && !text.contains("/Users/"), "{text}");
+        assert!(!text.contains("ayesha") && !text.contains("/Users/"), "{text}");
         assert!(text.contains("App 1.5.0 · macOS 15.1 · Mac14,2"), "{text}");
         assert!(text.contains("✓ macOS version (ok)"), "{text}");
         assert!(text.contains("✗ Microphone test (failed)"), "{text}");

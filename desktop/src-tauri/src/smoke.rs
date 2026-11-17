@@ -144,6 +144,16 @@ pub fn step(phases: &[(&str, Phase)], since_beat: Duration, last_said: &[String]
     }
 }
 
+/// A pause of the async runtime longer than this is warned about on a passing run, so a near-stall shows in CI history.
+pub const PAUSE_WARN: Duration = Duration::from_secs(3);
+
+/// The ok line's words for the runtime's longest pause, and the warning above [`PAUSE_WARN`] (pure).
+pub fn pause_words(longest: Duration) -> (String, Option<String>) {
+    let seconds = format!("{:.1} s", longest.as_secs_f64());
+    let warning = (longest > PAUSE_WARN).then(|| format!("warning: the async runtime paused for {seconds} (a run fails at {} s)", STALL.as_secs()));
+    (format!("longest pause {seconds}"), warning)
+}
+
 /// The settle period after every window is ready (pure): passed once the runtime stayed alive for [`SETTLE`] in a row
 /// (`alive_for`); a [`STALL`]-length gap fails it; else it goes on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -214,11 +224,14 @@ pub fn drive(app: tauri::AppHandle) {
         labels.extend(overlay::WINDOWS);
         let (mut last_said, mut said_at) = (Vec::new(), Instant::now());
         let (mut beat, mut beat_at) = (beats.load(std::sync::atomic::Ordering::SeqCst), Instant::now());
+        // The runtime's longest pause seen, said on the ok line (and warned about above PAUSE_WARN).
+        let mut longest = Duration::ZERO;
         loop {
             let now_beat = beats.load(std::sync::atomic::Ordering::SeqCst);
             if now_beat != beat {
                 (beat, beat_at) = (now_beat, Instant::now());
             }
+            longest = longest.max(beat_at.elapsed());
             match step(&lifecycle::phases(&app, &labels), beat_at.elapsed(), &last_said, said_at.elapsed()) {
                 Step::Done => break,
                 Step::Failed(label) => {
@@ -242,6 +255,7 @@ pub fn drive(app: tauri::AppHandle) {
             if now_beat != beat {
                 (beat, beat_at) = (now_beat, Instant::now());
             }
+            longest = longest.max(beat_at.elapsed());
             if beat_at.elapsed() > ALIVE {
                 alive_since = Instant::now();
             }
@@ -251,7 +265,11 @@ pub fn drive(app: tauri::AppHandle) {
                 Settle::Going => std::thread::sleep(POLL),
             }
         }
-        say(&format!("ok: {} windows ready in {} ms, the async runtime alive {} s after", labels.len(), started.elapsed().as_millis(), SETTLE.as_secs()));
+        let (pause, warning) = pause_words(longest);
+        if let Some(warning) = warning {
+            say(&warning);
+        }
+        say(&format!("ok: {} windows ready in {} ms, the async runtime alive {} s after; {pause}", labels.len(), started.elapsed().as_millis(), SETTLE.as_secs()));
         // A Mac: the app runs as a normal one, its quit answer is in and the floating windows are panels.
         #[cfg(target_os = "macos")]
         {
@@ -411,6 +429,14 @@ mod tests {
         assert_eq!(settle(Duration::from_millis(250), s(2)), Settle::Going);
         assert_eq!(settle(STALL, s(4)), Settle::Stalled, "a stall during the settle period");
         assert!(ALIVE == HEARTBEAT * 4 && SETTLE < TIMEOUT - STALL);
+        // The longest pause is said on the ok line, and warned about above 3 s without failing.
+        assert_eq!(pause_words(Duration::from_millis(300)), ("longest pause 0.3 s".to_string(), None));
+        assert_eq!(pause_words(PAUSE_WARN).1, None);
+        assert_eq!(pause_words(Duration::from_millis(14_200)), ("longest pause 14.2 s".to_string(), Some("warning: the async runtime paused for 14.2 s (a run fails at 20 s)".to_string())));
+        let source = include_str!("smoke.rs");
+        let drive = &source[source.find("pub fn drive(").unwrap()..];
+        let drive = &drive[..drive.find("\n}\n").unwrap()];
+        assert_eq!(drive.matches("longest = longest.max(beat_at.elapsed());").count(), 2, "measured while waiting and while settling");
         assert_eq!(step(&[("main", Phase::Absent), ("pill", Phase::Ready)], s(0), &[], s(0)), Step::Failed("main".into()));
         // A stalled runtime while a window is still being built is its own failure, at once.
         assert_eq!(step(&one_left, STALL, &[], s(0)), Step::Stalled(vec!["pill".into()]));
