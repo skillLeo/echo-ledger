@@ -298,15 +298,36 @@ fn plain_error(code: &str, retry: bool) -> RelayError {
     RelayError { code: code.into(), message: String::new(), retry, suggestion_id: None, in_reply_to: None, fatal: !retry }
 }
 
+/// A stream's last word to the session, said exactly once: by [`StreamEnd::finish`], or when the task ends any other
+/// way (it panicked, or a dropped connection) as a dropped stream, so the session's count of open streams always goes
+/// down and the suggestion it was writing leaves the card.
+struct StreamEnd {
+    to: Option<mpsc::UnboundedSender<FromStream>>,
+}
+
+impl StreamEnd {
+    fn finish(mut self, last: FromStream) {
+        if let Some(to) = self.to.take() {
+            let _ = to.send(last);
+        }
+    }
+}
+
+impl Drop for StreamEnd {
+    fn drop(&mut self) {
+        if let Some(to) = self.to.take() {
+            let _ = to.send(FromStream::Done { dropped: true });
+        }
+    }
+}
+
 /// One message's stream: posted, then each event to the session as it comes, until `end`.
 async fn stream(api: Arc<ApiClient>, live_url: String, message: ClientMessage, to: mpsc::UnboundedSender<FromStream>) {
+    let end = StreamEnd { to: Some(to.clone()) };
     let body = serde_json::to_string(&message).unwrap_or_default();
     let response = match api.assist_live(&live_url, body).await {
         Ok(response) => response,
-        Err(error) => {
-            let _ = to.send(FromStream::Refused(message, error));
-            return;
-        }
+        Err(error) => return end.finish(FromStream::Refused(message, error)),
     };
     let mut reader = SseReader::default();
     let mut bytes = response.bytes_stream();
@@ -318,15 +339,14 @@ async fn stream(api: Arc<ApiClient>, live_url: String, message: ClientMessage, t
         };
         for event in events {
             if event.event == "end" {
-                let _ = to.send(FromStream::Done { dropped: false });
-                return;
+                return end.finish(FromStream::Done { dropped: false });
             }
             if let Some((_, message)) = super::protocol::parse(&event.data) {
                 let _ = to.send(FromStream::Message(message));
             }
         }
     }
-    let _ = to.send(FromStream::Done { dropped: true });
+    end.finish(FromStream::Done { dropped: true });
 }
 
 #[cfg(test)]
@@ -409,6 +429,23 @@ mod tests {
         let call = &api[api.find("pub async fn assist_live(").unwrap()..];
         let call = &call[..call.find("\n    }\n").unwrap()];
         assert!(call.contains(".live\n") && !call.contains("self.http"), "the call uses the stream client: {call}");
+    }
+
+    #[tokio::test]
+    async fn a_stream_task_that_panics_still_counts_as_ended_and_dropped() {
+        let (to, mut from) = mpsc::unbounded_channel::<FromStream>();
+        let task = tokio::spawn(async move {
+            let _end = StreamEnd { to: Some(to) };
+            panic!("a stream task failed");
+        });
+        assert!(task.await.unwrap_err().is_panic());
+        assert!(matches!(from.recv().await, Some(FromStream::Done { dropped: true })), "the session hears it ended");
+        assert!(from.recv().await.is_none(), "said once");
+        // A stream that finished says only its own last word.
+        let (to, mut from) = mpsc::unbounded_channel::<FromStream>();
+        StreamEnd { to: Some(to) }.finish(FromStream::Done { dropped: false });
+        assert!(matches!(from.recv().await, Some(FromStream::Done { dropped: false })));
+        assert!(from.recv().await.is_none());
     }
 
     #[test]
