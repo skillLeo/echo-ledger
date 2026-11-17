@@ -4,6 +4,7 @@
 //! exclusive-fullscreen games hide every overlay, so the UI says borderless or windowed. Nothing is stored.
 
 pub mod gate;
+pub mod players;
 pub mod protocol;
 
 use std::sync::atomic::{AtomicBool, Ordering};
