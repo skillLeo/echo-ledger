@@ -68,30 +68,14 @@ export function forgetPictures(): void {
 }
 
 // ---- Meeting assets (v1.8 P4.2) ---------------------------------------------------------------------------------
-// The server names each screen and says what was said around it (`file_name`, `said`). Until a server sends them the
-// app works them out the same way from what it has, so the screens read the same either way.
+// The server names each screen (`file_name`, shown as it sends it, and not at all until it does: the app never makes up
+// a name the meeting folder won't use) and says what was said around it (`said`). Until a server sends `said` the app
+// works it out the same way from the transcript at hand.
 
 /** What was said this long before and after a screen. */
 export const SAID_WINDOW_MS = 15_000;
 /** At most this many characters of it. */
 export const SAID_CHARS = 600;
-const SLUG_CHARS = 40;
-
-/** "orders-page": the description in lowercase Latin letters and digits joined by dashes, cut at a word. */
-export function screenSlug(description: string | null | undefined): string {
-  let slug = (description ?? "").slice(0, 120).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  if (slug.length > SLUG_CHARS) slug = slug.slice(0, SLUG_CHARS + 1).replace(/-[^-]*$/, "").replace(/-+$/, "");
-  return slug || "screen";
-}
-
-/** "S07_14-32_orders-page.webp": its number (as many digits as the last one needs, at least two), moment and slug. */
-export function screenFileName(screen: Pick<ScreenMoment, "index" | "at_ms" | "description" | "file_name">, count: number): string {
-  if (screen.file_name) return screen.file_name;
-  const digits = Math.max(2, String(Math.max(count, screen.index)).length);
-  return `S${String(screen.index).padStart(digits, "0")}_${timestamp(screen.at_ms).replace(/:/g, "-")}_${screenSlug(screen.description)}.webp`;
-}
-
 /** The lines said within 15 s of a screen, as "Speaker: words" lines, at most 600 characters; null when none. */
 export function saidAround(atMs: number, lines: readonly { speaker: string; start_ms: number; end_ms: number; text: string }[]): string | null {
   const said = lines

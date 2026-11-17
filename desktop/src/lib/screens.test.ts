@@ -1,6 +1,6 @@
 // Screen moments in the transcript and Copy for AI (since v1.5): the same placement and wording as the phone.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { forgetPictures, PICTURES_KEPT, saidAround, saidLines, screenAlt, screenFileName, screenLabel, screenMarker, screenPicture, screenSaid, screensByLine, screensBySession } from "./screens";
+import { forgetPictures, PICTURES_KEPT, saidAround, saidLines, screenAlt, screenLabel, screenMarker, screenPicture, screenSaid, screensByLine, screensBySession } from "./screens";
 import { copiedTranscript, DEFAULT_UNSURE } from "./format";
 import type { ProjectScreen } from "./ipc";
 import { callsOf, fail, resetTauriMock, respondWith } from "../test/tauri";
@@ -102,20 +102,7 @@ describe("pictures", () => {
 });
 
 // The server's own cases (web/tests/Feature/Api/ScreenAssetsTest.php): the app's stand-in reads the same.
-describe("a screen's file name and what was said around it (v1.8 P4.2)", () => {
-  it("names it by its number, moment and description, as the server does", () => {
-    expect(screenFileName(makeScreen(7, 872_000, { description: "Orders page, client points at Submit" }), 12)).toBe("S07_14-32_orders-page-client-points-at-submit.webp");
-    expect(screenFileName(makeScreen(7, 3_872_000), 120)).toBe("S007_1-04-32_screen.webp");
-    expect(screenFileName(makeScreen(1, 5_000, { description: "Ein Bild: Übersicht & Kosten / 2026" }), 1)).toBe("S01_0-05_ein-bild-ubersicht-kosten-2026.webp");
-    expect(screenFileName(makeScreen(3, 0, { description: "The invoice settings page with the tax rate dropdown open and highlighted" }), 9))
-      .toBe("S03_0-00_the-invoice-settings-page-with-the-tax.webp");
-    expect(screenFileName(makeScreen(4, 0, { description: "آرڈرز کا صفحہ" }), 9)).toBe("S04_0-00_screen.webp");
-  });
-
-  it("uses the server's name when it sends one", () => {
-    expect(screenFileName(makeScreen(1, 5_000, { file_name: "S01_0-05_a-slide-with-a-price.png" }), 1)).toBe("S01_0-05_a-slide-with-a-price.png");
-  });
-
+describe("what was said around a screen (v1.8 P4.2)", () => {
   it("gives what was said within 15 seconds, speaker by speaker, at most 600 characters", () => {
     const lines = [
       { speaker: "Omar", start_ms: 30_000, end_ms: 44_999, text: "Too early." },

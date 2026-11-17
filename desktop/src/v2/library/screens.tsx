@@ -4,7 +4,7 @@
 // (today's usePicture); a link that has run out (30 minutes) has the list read again once, for fresh links.
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import type { ScreenMoment } from "../../lib/ipc";
-import { saidLines, screenAlt, screenFileName, screenLabel } from "../../lib/screens";
+import { saidLines, screenAlt, screenLabel } from "../../lib/screens";
 import { usePicture } from "../../views/main/ScreenMoments";
 import { Button, Dialog, Icon, Icons } from "../components";
 
@@ -58,7 +58,7 @@ export function LineScreens({ screens, onOpen }: { screens: ScreenMoment[]; onOp
 
 /**
  * The screen enlarged: previous and next (also the arrow keys), what it shows, what was said around it, the text on
- * it and its file name; Play from here and Delete screen.
+ * it and its file name (the server's, once it sends one); Play from here and Delete screen.
  */
 export function ScreenViewerV2({ screens, index, said, onIndex, onClose, onPlay, onDelete, onExpired }: {
   screens: ScreenMoment[];
@@ -131,7 +131,7 @@ export function ScreenViewerV2({ screens, index, said, onIndex, onClose, onPlay,
             <p dir="auto">{screen.ocr_text}</p>
           </details>
         )}
-        <p className="el-caption el-secondary">File name <span className="el-num" dir="ltr">{screenFileName(screen, screens.length)}</span></p>
+        {screen.file_name && <p className="el-caption el-secondary">File name <span className="el-num" dir="ltr">{screen.file_name}</span></p>}
       </div>
     </Dialog>
   );

@@ -193,7 +193,8 @@ describe("LibraryV2", () => {
       fireEvent.click(within(viewer).getByRole("button", { name: "Next screen" }));
       const second = screen.getByRole("dialog", { name: "Screen 2 · 0:07" });
       expect(within(second).getByRole("region", { name: "What was said" })).toHaveTextContent("Me: Assalam o alaikum, Bilal sahib.Bilal Qureshi: Walaikum assalam. The fabric is ready.");
-      expect(second).toHaveTextContent("S02_0-07_the-bank-s-lc-form.webp");
+      // No file name until the server sends one: never a name the meeting folder won't use.
+      expect(second).not.toHaveTextContent("File name");
       fireEvent.keyDown(within(second).getByRole("region", { name: "What was said" }), { key: "ArrowRight" });
       const third = screen.getByRole("dialog", { name: "Screen 3 · 1:00" });
       expect(within(third).getByRole("region", { name: "What was said" })).toHaveTextContent("Nothing was said within 15 seconds of this screen.");
