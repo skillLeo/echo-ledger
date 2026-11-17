@@ -22,6 +22,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -40,7 +41,8 @@ class AssistStartScreenTest {
 
     private val res get() = ApplicationProvider.getApplicationContext<Application>().resources
 
-    private val outDir = File("build/screenshots/assist-start")
+    private val outDir =
+        File(File(System.getProperty("screenshots.dir") ?: "build/screenshots").parentFile!!.parentFile, "v2/gate3/phone/live-assist")
 
     private val taps = mutableListOf<String>()
 
@@ -120,15 +122,52 @@ class AssistStartScreenTest {
     }
 
     @Test
+    fun aMonoRecordingsCardSaysAutomaticSuggestionsArePaused() {
+        val state = com.echoledger.mobile.ui.v2.assist.AssistCard.reduce(
+            listOf(
+                com.echoledger.mobile.ui.v2.assist.AssistMessage.Ready(
+                    "s1",
+                    com.echoledger.mobile.ui.v2.assist.LiveMode.Balanced,
+                    emptyList(),
+                    false,
+                    null
+                ),
+                com.echoledger.mobile.ui.v2.assist.AssistMessage.AutoPaused
+            )
+        )
+        assertTrue(state.autoPaused)
+        show { com.echoledger.mobile.ui.v2.assist.V2AssistCard(state, true, {}, {}, {}) }
+        compose.onNodeWithText(res.getString(R.string.v2_assist_auto_paused)).assertIsDisplayed()
+        compose.onNodeWithText(res.getString(R.string.v2_assist_help_now)).assertIsDisplayed()
+    }
+
+    @Test
     fun screenshots() {
-        var ui by mutableStateOf<AssistStartUi>(AssistStartUi.CanStart())
+        var ui by mutableStateOf<AssistStartUi?>(AssistStartUi.CanStart())
         var dark by mutableStateOf(false)
         var language by mutableStateOf(EchoLanguage.English)
-        compose.setContent { EchoV2Theme(darkTheme = dark, language = language) { Screen(ui) } }
+        val monoCard = com.echoledger.mobile.ui.v2.assist.AssistCard.reduce(
+            listOf(
+                com.echoledger.mobile.ui.v2.assist.AssistMessage.Ready(
+                    "s1",
+                    com.echoledger.mobile.ui.v2.assist.LiveMode.Balanced,
+                    emptyList(),
+                    false,
+                    null
+                ),
+                com.echoledger.mobile.ui.v2.assist.AssistMessage.AutoPaused
+            )
+        )
+        compose.setContent {
+            EchoV2Theme(darkTheme = dark, language = language) {
+                ui?.let { Screen(it) } ?: com.echoledger.mobile.ui.v2.assist.V2AssistCard(monoCard, true, {}, {}, {})
+            }
+        }
         val states = listOf(
-            "start" to AssistStartUi.CanStart(),
+            "start-screen" to AssistStartUi.CanStart(),
             "needs-recording" to AssistStartUi.NeedsRecording,
-            "on" to AssistStartUi.On(true)
+            "running" to AssistStartUi.On(true),
+            "card-mono" to null
         )
         for ((name, state) in states) {
             for (d in listOf(false, true)) {
@@ -137,7 +176,7 @@ class AssistStartScreenTest {
                     dark = d
                     language = l
                     compose.waitForIdle()
-                    val file = "assist-$name-${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}.png"
+                    val file = "$name-${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}.png"
                     compose.onRoot().captureRoboImage(File(outDir, file))
                 }
             }

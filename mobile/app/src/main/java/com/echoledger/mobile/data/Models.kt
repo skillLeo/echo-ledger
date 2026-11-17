@@ -97,7 +97,7 @@ data class AssistStartDto(val session: AssistSessionInfoDto, val relay: AssistRe
 
 /** `POST /api/assist/sessions/{id}/token`. */
 @Serializable
-data class AssistTokenDto(val relay: AssistRelayDto)
+data class AssistTokenDto(val relay: AssistRelayDto, val plan: AssistPlanDto? = null)
 
 /** `GET /api/config` `trash` (since 2.0.0-b). */
 @Serializable

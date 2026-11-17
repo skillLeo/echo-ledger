@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextDirection
 import com.echoledger.mobile.R
 import com.echoledger.mobile.assist.AssistHub
 import com.echoledger.mobile.ui.v2.components.EchoButton
@@ -76,7 +77,12 @@ fun V2AssistStartScreen(
                 is AssistStartUi.CanStart -> {
                     Body(stringResource(R.string.v2_assist_start_intro))
                     Text(stringResource(R.string.v2_assist_consent_label), style = EchoV2.type.label, color = c.textSecondary)
-                    Body(stringResource(R.string.v2_assist_consent))
+                    // The sentence to say is English in every language: laid out left to right, so its "?" stays at the end.
+                    Text(
+                        stringResource(R.string.v2_assist_consent),
+                        style = EchoV2.type.body.copy(textDirection = TextDirection.Ltr),
+                        color = c.textPrimary
+                    )
                     ui.problem?.let { Text(it, style = EchoV2.type.body, color = c.danger) }
                     if (ui.busy) {
                         Body(stringResource(R.string.v2_assist_start_busy))

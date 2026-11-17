@@ -1135,7 +1135,7 @@ class RecordingService : LifecycleService() {
         }
         session.serverSessionId = outcome.sessionId
         if (!session.active) return
-        if (capture === session) AssistHub.recordingSession(outcome.sessionId)
+        if (capture === session) AssistHub.recordingSession(outcome.sessionId, bothSides = session.channels == 2)
         val token = when (outcome) {
             is CaptionTokens.Outcome.Token -> outcome.token
 

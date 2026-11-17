@@ -23,7 +23,14 @@ import okhttp3.WebSocketListener
  * The relay block of a session start or token refresh, with the relay host's pins (`relay_pins` in `GET /api/config`,
  * contract 1.9.0-g: never the server's own pins). The token stays out of [toString].
  */
-data class RelayGrant(val url: String, val token: String, val expiresAt: String?, val pins: List<String>) {
+data class RelayGrant(
+    val url: String,
+    val token: String,
+    val expiresAt: String?,
+    val pins: List<String>,
+    /** This month's assist time left (`plan.seconds_left`), when the answer gave it. */
+    val secondsLeft: Long? = null
+) {
     override fun toString(): String = "RelayGrant($url, expires $expiresAt, ${pins.size} pins)"
 }
 

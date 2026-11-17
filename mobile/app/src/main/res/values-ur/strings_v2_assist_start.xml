@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The v2 screens' words (assist_start). values/ is English, values-ur/ Urdu: keep the keys the same. -->
 <resources>
-    <string name="v2_assist_start_intro">جب دوسرا شخص بات کرے تو آپ کی کال کے اوپر ایک کارڈ پر تجاویز آتی ہیں۔ یہ صرف آپ دیکھتے ہیں، اور اسکرین شیئر کرنے پر یہ چھپ جاتا ہے۔</string>
+    <string name="v2_assist_start_intro">جب دوسرا شخص بات کرے تو آپ کی کال کے اوپر ایک نجی کارڈ پر تجاویز آتی ہیں، جو اسکرین شیئر کرنے پر چھپ جاتا ہے۔</string>
     <string name="v2_assist_start_needs_recording">لائیو اسسٹ ریکارڈنگ کے الفاظ کے ساتھ چلتا ہے۔ پہلے اپنی کال یا میٹنگ ریکارڈ کرنا شروع کریں۔</string>
     <string name="v2_assist_start_record">ابھی ریکارڈ کریں</string>
     <string name="v2_assist_start_now">ابھی شروع کریں</string>
@@ -14,4 +14,5 @@
     <string name="v2_assist_start_end_other">اسے ختم کر کے یہاں شروع کریں</string>
     <string name="v2_assist_start_no_overlay">کال کے اوپر کارڈ دکھانے کے لیے EchoLedger کو دوسری ایپس کے اوپر آنے کی اجازت دیں۔</string>
     <string name="v2_assist_start_allow">اجازت دیں</string>
+    <string name="v2_assist_auto_paused">خودکار تجاویز کے لیے کال کی دونوں طرفیں الگ الگ ریکارڈ ہونی چاہئیں۔ جب ضرورت ہو تو \'ابھی مدد کریں\' دبائیں۔</string>
 </resources>

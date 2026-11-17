@@ -194,6 +194,14 @@ private fun AssistExpanded(
             if (!noteSeen && state.meetingType != null) {
                 Reminder(state.meetingType, onCopyConsent, onOk = { noteSeen = true })
             }
+            if (state.autoPaused) {
+                Text(
+                    stringResource(R.string.v2_assist_auto_paused),
+                    style = EchoV2.type.meta,
+                    color = c.textSecondary,
+                    modifier = Modifier.padding(horizontal = EchoTokens.Space.s16)
+                )
+            }
             state.modeChange?.let { change ->
                 modeNote(change)?.let {
                     Text(

@@ -42,8 +42,12 @@ object AssistHub {
         data class Failed(val words: String) : Start
     }
 
+    /** Both sides of the recording under way are recorded apart (a mono recording pauses automatic suggestions). */
+    @Volatile private var stereo = true
+
     /** The recording's server session is known (captions started), or the recording ended (null; the session ends too). */
-    fun recordingSession(id: String?) {
+    fun recordingSession(id: String?, bothSides: Boolean = true) {
+        stereo = bothSides
         recording.value = id
         if (id == null) current.value?.end()
     }
@@ -67,7 +71,7 @@ object AssistHub {
         translateTo: String? = null,
         endOther: Boolean = false,
         build: (AssistServer, RelayGrant, String, Long?) -> PhoneAssist = { server, grant, id, seconds ->
-            PhoneAssist(id, grant, meetingType, server, scope, translateTo, seconds)
+            PhoneAssist(id, grant, meetingType, server, scope, translateTo, seconds, autoSuggestions = stereo)
         }
     ): Start {
         current.value?.let { return Start.Started(it) }

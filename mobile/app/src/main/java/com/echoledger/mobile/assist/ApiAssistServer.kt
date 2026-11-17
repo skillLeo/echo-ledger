@@ -9,8 +9,8 @@ class ApiAssistServer(
     private val relayPins: suspend () -> List<String>
 ) : AssistServer {
     override suspend fun token(sessionId: String): RelayGrant? = runCatching {
-        val relay = (api() ?: return null).assistToken(sessionId).relay
-        RelayGrant(relay.url, relay.token, relay.expiresAt, relayPins())
+        val answer = (api() ?: return null).assistToken(sessionId)
+        RelayGrant(answer.relay.url, answer.relay.token, answer.relay.expiresAt, relayPins(), answer.plan?.secondsLeft)
     }.getOrNull()
 
     override suspend fun turns(sessionId: String, rows: List<TurnRow>): Boolean = runCatching {

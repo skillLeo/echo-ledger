@@ -131,7 +131,12 @@ class PhoneAssist(
     secondsLeft: Long? = null,
     private val elapsed: () -> Long = android.os.SystemClock::elapsedRealtime,
     relayPolicy: RelayPolicy = RelayPolicy(),
-    clock: () -> Long = System::currentTimeMillis
+    clock: () -> Long = System::currentTimeMillis,
+    /**
+     * Both sides recorded apart. A mono recording has one mixed channel, so the person's own words would ask for
+     * suggestions (the contract forbids that): the session starts with `settings.assist = paused`; Help me now works.
+     */
+    private val autoSuggestions: Boolean = true
 ) : AssistAdapter {
     private val history = ArrayDeque<AssistMessage>()
     private val flow = MutableSharedFlow<AssistMessage>(extraBufferCapacity = 512)
@@ -149,7 +154,8 @@ class PhoneAssist(
 
     private val relay = RelayClient(
         grant = grant,
-        refresh = { server.token(sessionId) },
+        // Each new token also brings this month's assist time for the card.
+        refresh = { server.token(sessionId)?.also { fresh -> fresh.secondsLeft?.let { emit(AssistMessage.Budget(it, null)) } } },
         scope = scope,
         meetingType = meetingType,
         policy = relayPolicy,
@@ -165,6 +171,10 @@ class PhoneAssist(
 
     /** Connects to the relay and starts sending the turns in batches. */
     fun start() {
+        if (!autoSuggestions) {
+            relay.send(ClientMessage.ContextUpdate(PAUSED))
+            emit(AssistMessage.AutoPaused)
+        }
         relay.start()
         batcher = scope.launch {
             while (isActive) {
@@ -271,5 +281,15 @@ class PhoneAssist(
     companion object {
         /** The messages a card opened late replays (a session's suggestions and lines, the oldest go first). */
         const val HISTORY = 2_000
+
+        /** `context_update.settings` with automatic suggestions paused. */
+        val PAUSED = kotlinx.serialization.json.buildJsonObject {
+            put(
+                "settings",
+                kotlinx.serialization.json.buildJsonObject {
+                    put("assist", kotlinx.serialization.json.JsonPrimitive("paused"))
+                }
+            )
+        }
     }
 }

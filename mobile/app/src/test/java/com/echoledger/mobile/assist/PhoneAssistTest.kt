@@ -48,8 +48,9 @@ class PhoneAssistTest {
     private inner class Server : AssistServer {
         val rows = CopyOnWriteArrayList<TurnRow>()
         var acceptTurns = true
+        var grant: RelayGrant? = null
 
-        override suspend fun token(sessionId: String): RelayGrant? = null
+        override suspend fun token(sessionId: String): RelayGrant? = grant
 
         override suspend fun turns(sessionId: String, rows: List<TurnRow>): Boolean {
             calls += "turns"
@@ -104,8 +105,39 @@ class PhoneAssistTest {
 
     private val wsUrl get() = server.url("/v1/assist").toString().replaceFirst("http://", "ws://")
 
-    private fun session(api: Server = Server(), translateTo: String? = null) =
-        PhoneAssist("s1", RelayGrant(wsUrl, "t1", null, emptyList()), null, api, scope, translateTo, secondsLeft = 3600, elapsed = { 0 })
+    private fun session(api: Server = Server(), translateTo: String? = null, autoSuggestions: Boolean = true) = PhoneAssist(
+        "s1",
+        RelayGrant(wsUrl, "t1", null, emptyList()),
+        null,
+        api,
+        scope,
+        translateTo,
+        secondsLeft = 3600,
+        elapsed = { 0 },
+        autoSuggestions = autoSuggestions
+    )
+
+    /** The relay side, saying ready with [ready] (its own JSON) as soon as the phone connects. */
+    private fun acceptWith(ready: String) {
+        server.enqueue(
+            MockResponse.Builder().webSocketUpgrade(
+                object : WebSocketListener() {
+                    override fun onOpen(webSocket: WebSocket, response: Response) {
+                        sockets += webSocket
+                        webSocket.send(ready)
+                    }
+
+                    override fun onMessage(webSocket: WebSocket, text: String) {
+                        frames += Json.parseToJsonElement(text).jsonObject
+                    }
+
+                    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                        webSocket.close(code, null)
+                    }
+                }
+            ).build()
+        )
+    }
 
     private fun next(): JsonObject = frames.poll(5, TimeUnit.SECONDS) ?: error("no frame from the phone")
 
@@ -165,6 +197,44 @@ class PhoneAssistTest {
     }
 
     @Test
+    fun `a mono recording starts with automatic suggestions paused, and the card says so`() = runBlocking {
+        accept()
+        val assist = session(autoSuggestions = false)
+        assist.start()
+        val first = next()
+        assertEquals("context_update", first.s("type"))
+        assertEquals("paused", first["settings"]!!.jsonObject.s("assist"))
+        assertTrue(AssistMessage.AutoPaused in assist.snapshot())
+        // Help me now still asks.
+        assist.send(SendKind.HelpNow)
+        assertEquals(SendKind.HelpNow.wire, next().s("type"))
+        assist.end()
+    }
+
+    @Test
+    fun `both sides recorded apart, nothing is paused`() = runBlocking {
+        accept()
+        val assist = session()
+        assist.start()
+        assist.send(SendKind.HelpNow)
+        assertEquals(SendKind.HelpNow.wire, next().s("type"))
+        assertFalse(AssistMessage.AutoPaused in assist.snapshot())
+        assist.end()
+    }
+
+    @Test
+    fun `every token refresh brings the month's assist time to the card`() = runBlocking {
+        val expires = java.time.Instant.ofEpochMilli(System.currentTimeMillis() + 120_000 + 200).toString()
+        acceptWith("""{"type":"ready","seq":1,"session_id":"s1","mode":"balanced","resumed":false,"expires_at":"$expires"}""")
+        val api = Server().apply { grant = RelayGrant(wsUrl, "t2", null, emptyList(), secondsLeft = 1200) }
+        val assist = session(api)
+        assist.start()
+        assertEquals("token_refresh", next().s("type"))
+        assertEquals(AssistMessage.Budget(1200, null), assist.snapshot().filterIsInstance<AssistMessage.Budget>().last())
+        assist.end()
+    }
+
+    @Test
     fun `a suggestion is reported shown once, with its render time`() {
         val assist = session()
         assist.reportShown("g1", 180)
@@ -209,7 +279,7 @@ class PhoneAssistTest {
             val client = ApiClient(api.url("/").toString(), emptyList(), "7|token")
             val pins = listOf("sha256/" + "A".repeat(43) + "=")
             assertEquals(AssistHub.Start.NoRecording, AssistHub.start(client, pins, scope))
-            AssistHub.recordingSession("rec-1")
+            AssistHub.recordingSession("rec-1", bothSides = false)
             assertEquals(AssistHub.Start.NotSetUp, AssistHub.start(client, emptyList(), scope))
             assertEquals(0, api.requestCount)
 
@@ -222,6 +292,8 @@ class PhoneAssistTest {
             assertEquals("false", body.s("practice"))
             assertEquals(started.assist, AssistHub.active.value)
 
+            // A mono recording: automatic suggestions paused from the start.
+            assertEquals("paused", next()["settings"]!!.jsonObject.s("assist"))
             // Captions now reach it; the recording's end ends it and the hub forgets it.
             AssistHub.caption(other = true, "Hello?", final = true, startMs = 0, endMs = 500)
             assertEquals("turn_final", next().s("type"))
@@ -307,6 +379,17 @@ class PhoneAssistTest {
             val (actionPath, actionBody) = bodies.poll(5, TimeUnit.SECONDS)!!.split(" ", limit = 2)
             assertEquals("/api/assist/sessions/a1/suggestions/g1/action", actionPath)
             assertEquals("140", Json.parseToJsonElement(actionBody).jsonObject.s("render_ms"))
+
+            // A token refresh carries the month's assist time.
+            api.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse = MockResponse.Builder().code(200)
+                    .addHeader("Content-Type", "application/json")
+                    .body("""{"relay":{"url":"wss://relay.example/v1/assist","token":"t9"},"stt":null,"plan":{"seconds_left":900}}""")
+                    .build()
+            }
+            val fresh = server.token("a1")!!
+            assertEquals("t9", fresh.token)
+            assertEquals(900L, fresh.secondsLeft)
         } finally {
             api.close()
         }
