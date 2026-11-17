@@ -1,7 +1,7 @@
 // How long a deleted recording can be restored: the server's setting (contract 2.0.0-b), read by the core
 // (`trash_keep_hours`). Until the core answers (an older core has no such command), the sentences say 48 hours, the
 // server's own default. Only the number comes from the server; every sentence keeps its words.
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "./ipc";
 import { useEffect, useState } from "react";
 
 /** The server's default (CaptureSession::BIN_HOURS) and the fallback while the core cannot say. */
@@ -15,7 +15,7 @@ const valid = (h: unknown): h is number => typeof h === "number" && Number.isInt
 export async function trashKeepHours(): Promise<number | null> {
   if (known !== null) return known;
   try {
-    const h = await invoke<unknown>("trash_keep_hours");
+    const h: unknown = await api.trashKeepHours();
     if (valid(h)) known = h;
   } catch {
     // An older core: the fallback stands.

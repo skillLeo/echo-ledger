@@ -122,23 +122,33 @@ describe("the prep per contract 1.9.0-n", () => {
 
   it("409 session_active on Start now offers to end the running session and start this one", async () => {
     respond("assist_prep_save", { ...PREP, id: "pr9", status: "draft" });
-    let first = true;
     respondWith("assist_start", () => {
-      if (first) { first = false; throw { code: "session_active", message: "Another session is running." }; }
-      return { session_id: "as-2", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false };
+      throw { code: "session_active", session_id: "as-0", practice: true, text: "Your practice session is still running.", action: "End practice and start" };
     });
-    respond("assist_end", null);
+    respond("assist_start_replacing", { session_id: "as-2", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false });
     const onStarted = vi.fn();
     render(<PrepScreen projects={[]} onBack={vi.fn()} onStarted={onStarted} />);
     fireEvent.click(screen.getByRole("button", { name: "Start now" }));
     await act(flushAsync);
-    expect(screen.getByRole("alert")).toHaveTextContent("Another Live Assist session is running.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Your practice session is still running.");
     expect(onStarted).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "End it and start this one" }));
+    fireEvent.click(screen.getByRole("button", { name: "End practice and start" }));
     await act(flushAsync);
-    expect(callsOf("assist_end")).toHaveLength(1);
-    expect(callsOf("assist_start")).toHaveLength(2);
+    expect(callsOf("assist_start_replacing")).toEqual([{ sessionId: "as-0", prepId: "pr9", mode: "balanced", practice: false, clientRef: null }]);
     expect(onStarted).toHaveBeenCalled();
+  });
+
+  it("Keep running on the prep keeps the running session", async () => {
+    respond("assist_prep_save", { ...PREP, id: "pr9", status: "draft" });
+    respondWith("assist_start", () => { throw { code: "session_active", session_id: "as-0", practice: false, text: "Another Live Assist session is running.", action: "End it and start this one" }; });
+    respond("assist_keep_running", null);
+    render(<PrepScreen projects={[]} onBack={vi.fn()} onStarted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start now" }));
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "Keep running" }));
+    await act(flushAsync);
+    expect(callsOf("assist_keep_running")).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 

@@ -2,8 +2,7 @@
 // now asks, with Always transcribe one press away. Closing it keeps Ask me; either answer clears it for good (the core's
 // after_call_notice_answer). The same notice as today's banner, in the new shell.
 import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { errorMessage, type AppStatus } from "../../lib/ipc";
+import { api, errorMessage, type AppStatus } from "../../lib/ipc";
 import { Banner, Button, Icons } from "../components";
 
 export function AfterCallNoticeV2({ text, onStatus }: { text: string | null | undefined; onStatus: (status: AppStatus) => void }) {
@@ -17,7 +16,7 @@ export function AfterCallNoticeV2({ text, onStatus }: { text: string | null | un
     setBusy(true);
     setError(null);
     try {
-      onStatus(await invoke<AppStatus>("after_call_notice_answer", { alwaysTranscribe }));
+      onStatus(await api.afterCallNoticeAnswer(alwaysTranscribe));
       if (alwaysTranscribe) setDone("Every call is now transcribed.");
     } catch (e) {
       setError(errorMessage(e));

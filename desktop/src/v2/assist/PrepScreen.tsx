@@ -6,7 +6,8 @@ import { api, errorMessage, type ClientFile } from "../../lib/ipc";
 import { Badge, Button, Card, Checkbox, EmptyState, Icons, Loading, Segmented, Select, Skeleton, TextArea, TextField } from "../components";
 import { assist, type AssistMode, type HintLevel, type LanguageHelp, type MeetingType, type Prep, type PrepDraft } from "./adapter";
 import { CONSENT_LINE, INTERVIEW_NOTE } from "./AssistCard";
-import { errorWords, isSessionActive } from "./card";
+import { errorWords, isSessionActive, sessionActiveOf } from "./card";
+import type { SessionActive } from "./adapter";
 
 export const MEETING_TYPES: readonly { value: MeetingType; label: string }[] = [
   { value: "interview", label: "Interview" },
@@ -68,7 +69,7 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
   const [error, setError] = useState<string | null>(null);
   const [scheduleAt, setScheduleAt] = useState(prep?.scheduled_at?.slice(0, 16) ?? "");
   /** 409 session_active on Start now: the prep to start once the running session has ended. */
-  const [activeFor, setActiveFor] = useState<string | null>(null);
+  const [activeFor, setActiveFor] = useState<{ prepId: string; running: SessionActive } | null>(null);
   /** documents_too_large (1.9.0-n): from attaching, or from the relay when the session sends them; the old ones stay. */
   const [docsTooLarge, setDocsTooLarge] = useState(false);
 
@@ -128,7 +129,7 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
       onStarted();
     } catch (e) {
       if (!isSessionActive(e)) throw e;
-      setActiveFor(prepId);
+      setActiveFor({ prepId, running: sessionActiveOf(e) });
     }
   });
   const tooLong = (["goals", "done", "not_done", "to_discuss", "instructions"] as const).find((k) => draft[k].length > MAX);
@@ -218,11 +219,18 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
       {error && <p className="el-field__error" role="alert">{error}</p>}
       {activeFor && (
         <div className="el-consent" role="alert">
-          <span>Another Live Assist session is running.</span>
+          <span>{activeFor.running.text}</span>
           <span className="el-page__actions">
             <Button size="sm" variant="primary" loading={busy === "start"} loadingLabel="Starting…"
-              onClick={() => { const id = activeFor; setActiveFor(null); void run("start", async () => { await assist.end(); await startNow(id); }); }}>End it and start this one</Button>
-            <Button size="sm" variant="quiet" onClick={() => setActiveFor(null)}>Keep it</Button>
+              onClick={() => {
+                const { prepId, running } = activeFor;
+                setActiveFor(null);
+                void run("start", async () => {
+                  await assist.startReplacing(running.session_id, prepId, draft.mode);
+                  onStarted();
+                });
+              }}>{activeFor.running.action}</Button>
+            <Button size="sm" variant="quiet" onClick={() => { setActiveFor(null); void run("keep", () => assist.keepRunning()); }}>Keep running</Button>
           </span>
         </div>
       )}
