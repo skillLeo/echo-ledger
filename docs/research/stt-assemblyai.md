@@ -58,6 +58,18 @@
 | `universal-streaming-english` | Universal-Streaming English | en | ≤100, +$0.04/h | $0.15/h | [pricing][pricing] |
 | `universal-streaming-multilingual` | Universal-Streaming Multilingual | en, es, de, fr, pt, it | ≤100, included | $0.15/h | [pricing][pricing] |
 
+**Update 2026-11-18 (checked on [ws spec][ws], [model select][smodel], [models][models]):** the streaming `speech_model`
+enum is now `universal-3-6-pro` (default), `assemblyai-stt-3-7-realtime` and `assemblyai-stt-3-7-realtime-agent`. The
+Universal-Streaming models above (and 3.5 Pro) are no longer documented; the server no longer offers them and reads a
+stored one as `universal-3-6-pro`.
+- `assemblyai-stt-3-7-realtime` ("built for notetakers and ambient transcription"; the server's "Fast English captions",
+  English-only recordings): partials while speech is in progress (`include_partial_turns`, on by default); accepts `mode`
+  (`min_latency`, `balanced`, `max_accuracy`; `manual` is refused with 3006), `max_turn_silence`, `vad_threshold`,
+  `keyterms_prompt`, `language_codes` and `speaker_labels`; `min_turn_silence` below 320 ms has no effect ("the
+  end-of-turn check never runs before 320 ms of silence"), and `interruption_delay` and Voice Focus do not apply. The
+  same 32 languages as 3.6 Pro ([multilingual][smulti]).
+- `assemblyai-stt-3-7-realtime-agent`: for voice agents (`manual` turn mode, Voice Focus); not used.
+
 - Streaming diarization costs +$0.12/h on all streaming models ([pricing][pricing]). We don't need it because we use two channels.
 - **Latency** ([benchmarks][sbench], May 2026). Emission P50/P90: Universal Streaming English 317/597 ms, Multilingual 303/535 ms. Time-to-complete-turn P50/P90: Universal-Streaming English 649/990 ms, Universal-3.5 Pro 568/829 ms. The docs say published 3.6 Pro figures are "not yet available". U3.5 Pro emits segment-level partials, not word-by-word ones, so emission latency is N/A for it. The 3.6 Pro partial cadence is **UNVERIFIED** (not benchmarked yet).
 - U3.6 Pro adds 13 languages over 3.5 Pro, including `ur`, `ko`, `ru` and `fa` ([multilingual][smulti]).
