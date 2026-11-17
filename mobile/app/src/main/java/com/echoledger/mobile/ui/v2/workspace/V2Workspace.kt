@@ -370,11 +370,13 @@ private fun Rules(vm: MainViewModel, project: ClientDto) {
                     // One tap removes it; Undo adds the same kind and value back and says how that went.
                     toasts.showUndo(removed, undo) {
                         scope.launch {
+                            val before = vm.message.value
                             val back = vm.addFilingRule(project.id, rule.kind, rule.value)
                             if (back != null) {
                                 rules = rules.orEmpty() + back
-                            } else {
-                                vm.consumeMessage() // said here instead, once
+                            } else if (vm.message.value != null && vm.message.value !== before) {
+                                // Only the message this re-add set: it's said here instead, once. Any other stays.
+                                vm.consumeMessage()
                             }
                             toasts.show(if (back != null) restored else notRestored)
                         }

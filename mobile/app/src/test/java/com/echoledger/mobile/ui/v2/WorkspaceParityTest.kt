@@ -276,6 +276,17 @@ class WorkspaceParityTest : ScreenTest() {
                 }
             }
             if ("ClientFiles.KINDS.forEach" in body) com.echoledger.mobile.ui.ClientFiles.KINDS.forEach { found += "button: ${it.second}" }
+            // Every control call is accounted for: a field per label, a TextButton per button word, one chip row for
+            // the kinds, and no checkbox or switch (one added later fails here until it is mapped).
+            fun count(call: String) = Regex("(?<![A-Za-z])" + Regex.escape(call)).findAll(body).count()
+            val labels = Regex("""label = \{ Text\(""").findAll(body).count()
+            val words = Regex("""Text\("[^"]*"\)""").findAll(body).count() - labels -
+                Regex("""title = \{ Text\(""").findAll(body).count()
+            assertEquals("$dialog: fields", labels, count("OutlinedTextField("))
+            assertEquals("$dialog: buttons", words, count("TextButton("))
+            assertEquals("$dialog: chips", if ("ClientFiles.KINDS.forEach" in body) 1 else 0, count("EchoFilterChip("))
+            assertEquals("$dialog: checkboxes", 0, count("Checkbox("))
+            assertEquals("$dialog: switches", 0, count("Switch("))
         }
         return found
     }
