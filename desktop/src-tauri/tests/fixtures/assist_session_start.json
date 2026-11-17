@@ -1,0 +1,4 @@
+{"session": {"id": "01JCASSIST0SESSION00000001", "auto_saved": true, "mode": "balanced", "practice": false},
+ "relay": {"url": "wss://relay.example/v1/assist", "token": "relay-token-1", "expires_at": "2026-11-17T10:15:00Z"},
+ "stt": {"provider": "soniox", "ws_url": "wss://stt.example/transcribe", "token": "stt-token-1", "expires_at": "2026-11-17T10:15:00Z", "translate_other": true},
+ "plan": {"modes": ["fast", "balanced"], "seconds_left": 31200}}

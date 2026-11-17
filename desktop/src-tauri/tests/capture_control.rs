@@ -168,6 +168,7 @@ fn past_two_hundred_pauses_the_last_gap_keeps_the_total() {
 #[test]
 fn markers_and_pauses_are_sent_only_when_there_are_some() {
     let mut create = CreateSessionRequest {
+        transcribe: true,
         client_ref: "r".into(),
         source_app: "zoom".into(),
         client_id: None,
@@ -192,6 +193,7 @@ fn markers_and_pauses_are_sent_only_when_there_are_some() {
     assert_eq!(body["pauses"], json!([{"at_ms": 7, "paused_ms": 3}]));
 
     let finish = FinishSessionRequest {
+        transcribe: true,
         ended_at: "2026-10-25T09:10:00Z".into(),
         duration_ms: 600_000,
         title: None,

@@ -122,23 +122,89 @@ describe("the prep per contract 1.9.0-n", () => {
 
   it("409 session_active on Start now offers to end the running session and start this one", async () => {
     respond("assist_prep_save", { ...PREP, id: "pr9", status: "draft" });
-    let first = true;
     respondWith("assist_start", () => {
-      if (first) { first = false; throw { code: "session_active", message: "Another session is running." }; }
-      return { session_id: "as-2", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false };
+      throw { code: "session_active", session_id: "as-0", practice: true, text: "Your practice session is still running.", action: "End practice and start" };
     });
-    respond("assist_end", null);
+    respond("assist_start_replacing", { session_id: "as-2", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false });
     const onStarted = vi.fn();
     render(<PrepScreen projects={[]} onBack={vi.fn()} onStarted={onStarted} />);
     fireEvent.click(screen.getByRole("button", { name: "Start now" }));
     await act(flushAsync);
-    expect(screen.getByRole("alert")).toHaveTextContent("Another Live Assist session is running.");
+    expect(screen.getByRole("alert")).toHaveTextContent("Your practice session is still running.");
     expect(onStarted).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "End practice and start" }));
+    await act(flushAsync);
+    expect(callsOf("assist_start_replacing")).toEqual([{ sessionId: "as-0", prepId: "pr9", mode: "balanced", practice: false, clientRef: null }]);
+    expect(onStarted).toHaveBeenCalled();
+  });
+
+  it("Keep running on the prep keeps the running session", async () => {
+    respond("assist_prep_save", { ...PREP, id: "pr9", status: "draft" });
+    respondWith("assist_start", () => { throw { code: "session_active", session_id: "as-0", practice: false, text: "Another Live Assist session is running.", action: "End it and start this one" }; });
+    respond("assist_keep_running", null);
+    render(<PrepScreen projects={[]} onBack={vi.fn()} onStarted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start now" }));
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "Keep running" }));
+    await act(flushAsync);
+    expect(callsOf("assist_keep_running")).toHaveLength(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("ending the running session from the prep", () => {
+  it("asks the core which session runs here when the refusal names none; never ends a guess", async () => {
+    const { activeSessionId, NOT_HERE } = await import("../assist/adapter");
+    expect(activeSessionId({ messages: [{ type: "ready", session_id: "as-1" }, { type: "turn" }, { type: "ready", session_id: "as-2" }] })).toBe("as-2");
+    expect(activeSessionId(null)).toBeNull();
+
+    respond("assist_prep_save", { ...PREP, id: "pr9", status: "draft" });
+    respondWith("assist_start", () => { throw { code: "session_active", practice: false, text: "Another Live Assist session is running.", action: "End it and start this one" }; });
+    respond("assist_state", { messages: [{ type: "ready", session_id: "as-local", mode: "fast", requested_mode: "fast", allowed_modes: ["fast"], resumed: false, practice: false }], hint_level: "full", paused: false, muted_until: null, meeting_type: null });
+    respond("assist_start_replacing", { session_id: "as-2", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false });
+    const onStarted = vi.fn();
+    const { unmount } = render(<PrepScreen projects={[]} onBack={vi.fn()} onStarted={onStarted} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start now" }));
+    await act(flushAsync);
     fireEvent.click(screen.getByRole("button", { name: "End it and start this one" }));
     await act(flushAsync);
-    expect(callsOf("assist_end")).toHaveLength(1);
-    expect(callsOf("assist_start")).toHaveLength(2);
-    expect(onStarted).toHaveBeenCalled();
+    expect(callsOf("assist_start_replacing")).toEqual([{ sessionId: "as-local", prepId: "pr9", mode: "balanced", practice: false, clientRef: null }]);
+    expect(callsOf("assist_end")).toHaveLength(0);
+    unmount();
+
+    resetTauriMock();
+    respond("get_settings", makeSettings());
+    respond("assist_prep_save", { ...PREP, id: "pr9", status: "draft" });
+    respondWith("assist_start", () => { throw { code: "session_active", practice: false, text: "Another Live Assist session is running.", action: "End it and start this one" }; });
+    respond("assist_state", null);
+    render(<PrepScreen projects={[]} onBack={vi.fn()} onStarted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start now" }));
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "End it and start this one" }));
+    await act(flushAsync);
+    expect(callsOf("assist_start_replacing")).toHaveLength(0);
+    expect(callsOf("assist_end")).toHaveLength(0);
+    expect(screen.getByRole("alert")).toHaveTextContent(NOT_HERE);
+  });
+
+  it("leaving the prep while it asks keeps the running session", async () => {
+    respond("assist_prep_save", { ...PREP, id: "pr9", status: "draft" });
+    respondWith("assist_start", () => { throw { code: "session_active", session_id: "as-0", practice: false, text: "Another Live Assist session is running.", action: "End it and start this one" }; });
+    respond("assist_keep_running", null);
+    const { unmount } = render(<PrepScreen projects={[]} onBack={vi.fn()} onStarted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start now" }));
+    await act(flushAsync);
+    unmount();
+    await flushAsync();
+    expect(callsOf("assist_keep_running")).toHaveLength(1);
+  });
+
+  it("leaving the prep after the question was answered keeps nothing extra", async () => {
+    respond("assist_keep_running", null);
+    const { unmount } = render(<PrepScreen projects={[]} onBack={vi.fn()} onStarted={vi.fn()} />);
+    unmount();
+    await flushAsync();
+    expect(callsOf("assist_keep_running")).toHaveLength(0);
   });
 });
 

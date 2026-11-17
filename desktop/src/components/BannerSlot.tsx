@@ -16,6 +16,8 @@ export const BANNER_ORDER = [
   "maintenance",
   "budget",
   "update-ready",
+  // "Keep automatically" became Ask me (contract 1.8.0-e): said once.
+  "after-call",
   "announcement",
 ] as const;
 

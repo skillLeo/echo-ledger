@@ -1075,6 +1075,34 @@ async fn caption_turns_are_posted_as_the_live_transcript_after_the_audio() {
 }
 
 #[tokio::test]
+async fn a_call_saved_as_audio_only_asks_for_no_transcript_and_posts_no_captions() {
+    let dir = tempfile::tempdir().unwrap();
+    let primary = write_file(dir.path(), "recording.flac", 500, 27);
+    let (server, _) = Flow::new(1_000, vec![Slot::fresh("primary", 500)]).start();
+    let mut item = pending(dir.path(), primary);
+    item.live_segments = segments();
+    item.transcribe = false;
+    upload(&api(&server), &item).await.unwrap();
+
+    let request = server.requests_to("POST", "/api/sessions")[0].json();
+    assert_eq!(request["transcribe"], false, "contract 1.8.0-e");
+    assert!(server.requests_to("POST", "/api/recordings/REC-primary/complete").len() == 1, "the audio still uploads");
+    assert!(
+        server.requests_to("POST", &format!("/api/sessions/{SESSION_ID}/transcripts")).is_empty(),
+        "\"Not transcribed\" means no transcript of any kind"
+    );
+}
+
+#[tokio::test]
+async fn a_transcribed_call_leaves_the_choice_out_for_older_servers() {
+    let dir = tempfile::tempdir().unwrap();
+    let primary = write_file(dir.path(), "recording.flac", 500, 28);
+    let (server, _) = Flow::new(1_000, vec![Slot::fresh("primary", 500)]).start();
+    upload(&api(&server), &pending(dir.path(), primary)).await.unwrap();
+    assert!(server.requests_to("POST", "/api/sessions")[0].json().get("transcribe").is_none(), "absent means transcribe");
+}
+
+#[tokio::test]
 async fn the_live_provider_defaults_to_assemblyai() {
     let dir = tempfile::tempdir().unwrap();
     let primary = write_file(dir.path(), "recording.flac", 500, 24);
@@ -1284,8 +1312,23 @@ async fn an_open_session_is_finished_instead_of_creating_a_new_one() {
     assert_eq!(body["ended_at"], "2026-10-24T09:42:10+00:00");
     assert_eq!(body["artifacts"][0]["role"], "primary");
     assert!(body.get("client_ref").is_none() && body.get("started_at").is_none());
+    assert!(body.get("transcribe").is_none(), "a transcribed call leaves the choice out");
     assert_eq!(stored.lock().unwrap().len(), 2, "both chunks went to the finished session's slot");
     assert_eq!(item.created_session_id.as_deref(), Some(SESSION_ID));
+}
+
+#[tokio::test]
+async fn an_open_session_saved_as_audio_only_is_finished_without_a_transcript() {
+    let dir = tempfile::tempdir().unwrap();
+    let flow = Flow::new(1_000, vec![Slot::fresh("primary", 800)]).v1_1();
+    let config = config_of(&flow.config);
+    let (server, _) = flow.start();
+    let mut item = recorded_call(dir.path(), 800);
+    item.server_session_id = Some(OPEN_ID.into());
+    item.transcribe = false;
+    let (result, _) = attempt(&server, &config, &mut item).await;
+    result.unwrap();
+    assert_eq!(server.requests_to("POST", &format!("/api/sessions/{OPEN_ID}/finish"))[0].json()["transcribe"], false);
 }
 
 #[tokio::test]

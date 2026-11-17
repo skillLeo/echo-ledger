@@ -47,7 +47,7 @@ describe("the card's rules (1.9.0-f)", () => {
     const s = play([READY, start("s1"), token("s1", "Half"),
       { type: "error", code: "provider_error", message: "That suggestion didn't come through.", retry: true, suggestion_id: "s1", in_reply_to: null, fatal: false }]);
     expect(shown(s)).toMatchObject({ text: "", status: "failed" });
-    expect(s.error).toEqual({ text: "That suggestion didn't come through.", fatal: false, suggestionId: "s1", code: "provider_error" });
+    expect(s.error).toEqual({ text: "Something went wrong with Live Assist.", fatal: false, suggestionId: "s1", code: "provider_error" });
   });
 
   it("mode_changed says why, in words; requested says nothing; captions only says captions go on", () => {
@@ -215,7 +215,8 @@ describe("contract 1.9.0-n on the card", () => {
       expect(words).not.toContain(code);
       expect(words).not.toBe("relay text");
     }
-    expect(errorWords("provider_not_configured", false, "Live Assist isn't available right now.")).toBe("Live Assist isn't available right now.");
+    expect(errorWords("provider_not_configured", false, "Groq key missing")).toBe("Live Assist isn't set up on this server yet.");
+    expect(errorWords("something_new", true, "raw relay text")).toBe("Something went wrong with Live Assist.");
     expect(play([READY, err("bad_message", false)]).error).toBeNull();
   });
 
@@ -228,10 +229,25 @@ describe("contract 1.9.0-n on the card", () => {
   });
 
   it("session_active is recognised from an error message or a rejection", () => {
-    expect(play([READY, err("session_active", false)]).sessionActive).toBe(true);
+    expect(play([READY, err("session_active", false)]).sessionActive).toEqual({
+      session_id: null, practice: false, text: "Another Live Assist session is running.", action: "End it and start this one",
+    });
+    const fromCore = play([{ type: "session_active", session_id: "as-0", practice: true, text: "Your practice session is still running.", action: "End practice and start" }]);
+    expect(fromCore.sessionActive).toEqual({ session_id: "as-0", practice: true, text: "Your practice session is still running.", action: "End practice and start" });
     expect(isSessionActive({ code: "session_active", message: "x" })).toBe(true);
     expect(isSessionActive("Another session: session_active")).toBe(true);
     expect(isSessionActive({ code: "budget_exhausted" })).toBe(false);
+  });
+});
+
+describe("session_active only after a start from the card", () => {
+  it("a session_active error without a start from the card asks nothing", () => {
+    const a = { onSend: vi.fn(), onMode: vi.fn(), onHint: vi.fn(), onMute: vi.fn(), onHide: vi.fn(), onCopyConsent: vi.fn(), onStartOffer: vi.fn(), onDismissOffer: vi.fn(), onEndAndStart: vi.fn(), onKeepRunning: vi.fn() };
+    const err: AssistMessage = { type: "error", code: "session_active", message: "x", retry: false, suggestion_id: null, in_reply_to: null, fatal: false };
+    const { container } = render(<AssistCard state={play([err])} hint="full" muted={false} actions={a} />);
+    expect(container).toBeEmptyDOMElement();
+    render(<AssistCard state={{ ...play([err]), pendingStart: { prepId: "pr1", clientRef: "rec-7" } }} hint="full" muted={false} actions={a} />);
+    expect(screen.getByRole("button", { name: "End it and start this one" })).toBeInTheDocument();
   });
 });
 
@@ -258,13 +274,11 @@ describe("the offer and session_active in the assist window", () => {
     expect(screen.queryByText(/Start Live Assist for/)).toBeNull();
   });
 
-  it("409 session_active: End it and start this one ends the running session, then starts this one", async () => {
-    let first = true;
+  it("409 session_active: the core's words and button; it ends the running session and starts this one in one step", async () => {
     respondWith("assist_start", () => {
-      if (first) { first = false; throw { code: "session_active", message: "Another session is running." }; }
-      return { session_id: "as-2", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false };
+      throw { code: "session_active", session_id: "as-0", practice: false, text: "Another Live Assist session is running.", action: "End it and start this one" };
     });
-    respond("assist_end", null);
+    respond("assist_start_replacing", { session_id: "as-2", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false });
     render(<AssistApp />);
     await act(flushAsync);
     await act(() => emitEvent("assist:message", offer));
@@ -273,10 +287,101 @@ describe("the offer and session_active in the assist window", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Another Live Assist session is running.");
     fireEvent.click(screen.getByRole("button", { name: "End it and start this one" }));
     await act(flushAsync);
-    expect(callsOf("assist_end")).toHaveLength(1);
-    expect(callsOf("assist_start")).toEqual([
-      { prepId: "pr1", mode: null, practice: false, clientRef: "rec-7" },
-      { prepId: "pr1", mode: null, practice: false, clientRef: "rec-7" },
-    ]);
+    expect(callsOf("assist_start")).toEqual([{ prepId: "pr1", mode: null, practice: false, clientRef: "rec-7" }]);
+    expect(callsOf("assist_start_replacing")).toEqual([{ sessionId: "as-0", prepId: "pr1", mode: null, practice: false, clientRef: "rec-7" }]);
+  });
+});
+
+describe("a replacement hands over the card (both apps)", () => {
+  const base = play([READY, start("s1"), token("s1", "Offer the 40% advance."), { type: "suggestion_end", suggestion_id: "s1", status: "done" }]);
+
+  it("the replaced suggestion stays until the replacement's first token", () => {
+    const waiting = play([start("s2", { kind: "upgrade", replaces: "s1" })], base);
+    expect(shown(waiting)!.id).toBe("s1");
+    expect(shown(waiting)!.text).toBe("Offer the 40% advance.");
+    const handed = play([token("s2", "Offer 40% in advance, the rest against the bill of lading.")], waiting);
+    expect(shown(handed)!.id).toBe("s2");
+  });
+
+  it("or until its own superseded end, whichever comes first, and the card is never blank", () => {
+    const streaming = play([READY, start("s1"), token("s1", "Draft")]);
+    const waiting = play([start("s2", { replaces: "s1" })], streaming);
+    expect(shown(waiting)!.text).toBe("Draft");
+    const ended = play([{ type: "suggestion_end", suggestion_id: "s1", status: "superseded" }], waiting);
+    expect(shown(ended)!.id).toBe("s2");
+    expect(shown(ended)!.status).toBe("streaming");
+    render(<AssistCard state={ended} hint="full" muted={false} actions={{ onSend: vi.fn(), onMode: vi.fn(), onHint: vi.fn(), onMute: vi.fn(), onHide: vi.fn(), onCopyConsent: vi.fn(), onStartOffer: vi.fn(), onDismissOffer: vi.fn(), onEndAndStart: vi.fn(), onKeepRunning: vi.fn() }} />);
+    expect(screen.getByText("Writing a suggestion")).toBeInTheDocument();
+  });
+
+  it("a new question's suggestion (replaces: null) takes the card at once; resumed clears it", () => {
+    const next = play([start("s3", { turn_id: "t2" })], base);
+    expect(shown(next)!.id).toBe("s3");
+    expect(shown(play([{ ...READY, resumed: true } as AssistMessage], next))).toBeNull();
+  });
+});
+
+describe("the shown report", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    respond("assist_state", null);
+    respond("set_hit_regions", null);
+    respond("assist_shown", null);
+    respond("ui_flags", { ui_flags: { live_assist: true, "ui_v2.live": true } });
+  });
+
+  it("reports a suggestion once, when its first text is drawn, with the time since its start", async () => {
+    render(<AssistApp />);
+    await act(flushAsync);
+    for (const m of [READY, start("s1")]) await act(() => emitEvent("assist:message", m));
+    expect(callsOf("assist_shown")).toHaveLength(0);
+    await act(() => emitEvent("assist:message", token("s1", "Ask for ")));
+    await act(() => emitEvent("assist:message", token("s1", "the LC copy.")));
+    await act(flushAsync);
+    const calls = callsOf("assist_shown");
+    expect(calls).toHaveLength(1);
+    expect(calls[0].suggestionId).toBe("s1");
+    expect(typeof calls[0].renderMs).toBe("number");
+    expect(calls[0].renderMs as number).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("Keep running", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    respond("assist_state", null);
+    respond("set_hit_regions", null);
+    respond("assist_keep_running", null);
+    respond("assist_card_hide", null);
+    respond("ui_flags", { ui_flags: { live_assist: true, "ui_v2.live": true } });
+    respondWith("assist_start", () => {
+      throw { code: "session_active", session_id: "as-0", practice: false, text: "Another Live Assist session is running.", action: "End it and start this one" };
+    });
+  });
+  const offer: AssistMessage = { type: "offer", prep_id: "pr1", title: "Interview at Mehran Foods", client_ref: "rec-7", caller: null };
+  const ask = async () => {
+    render(<AssistApp />);
+    await act(flushAsync);
+    await act(() => emitEvent("assist:message", offer));
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    await act(flushAsync);
+  };
+
+  it("sits next to End it and start this one and keeps the running session", async () => {
+    await ask();
+    const buttons = within(screen.getByRole("alert")).getAllByRole("button").map((b) => b.textContent);
+    expect(buttons).toEqual(["End it and start this one", "Keep running"]);
+    fireEvent.click(screen.getByRole("button", { name: "Keep running" }));
+    await act(flushAsync);
+    expect(callsOf("assist_keep_running")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "End it and start this one" })).toBeNull();
+  });
+
+  it("closing the card while it asks counts as Keep running", async () => {
+    await ask();
+    fireEvent.click(screen.getByRole("button", { name: "Hide the card" }));
+    await act(flushAsync);
+    expect(callsOf("assist_keep_running")).toHaveLength(1);
+    expect(callsOf("assist_card_hide")).toHaveLength(1);
   });
 });
