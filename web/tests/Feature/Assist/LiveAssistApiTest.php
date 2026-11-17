@@ -275,6 +275,25 @@ describe('starting a session', function () {
         $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast', 'recording_session_id' => $recording->id])
             ->assertCreated()->assertJsonPath('stt', null);
     });
+
+    it('never fails a token refresh because the captions are down: stt is null and the session goes on (1.9.0-j)', function () {
+        $api = $this->api(Fx::token(assistPerson('pro')));
+        $id = $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertCreated()->assertJsonPath('stt.token', 'temp:abc')->json('session.id');
+
+        Http::swap(new HttpFactory);
+        Http::fake(fn () => Http::response('down', 500));
+        $refresh = $api->postJson("/api/assist/sessions/{$id}/token")->assertOk()->assertJsonPath('stt', null);
+        expect(relayClaims($refresh->json('relay.token'))['sid'])->toBe($id);
+        app(CredentialVault::class)->forget('soniox', 'api_key');
+        $api->postJson("/api/assist/sessions/{$id}/token")->assertOk()->assertJsonPath('stt', null);
+        $api->getJson("/api/assist/sessions/{$id}")->assertJsonPath('status', 'active');
+
+        // Back up: the next refresh has captions again.
+        app(CredentialVault::class)->put('soniox', 'api_key', 'snx-test-key-0123456789');
+        Http::swap(new HttpFactory);
+        Http::fake(['api.soniox.com/*' => Http::response(['api_key' => 'temp:back', 'expires_at' => '2026-12-01T10:10:00Z'])]);
+        $api->postJson("/api/assist/sessions/{$id}/token")->assertOk()->assertJsonPath('stt.token', 'temp:back');
+    });
 });
 
 describe('the budget', function () {
