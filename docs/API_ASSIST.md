@@ -58,13 +58,13 @@ body, another workspace's ids answer `404`, errors as `{"message", "code"}`.
 - Text is user data: it is encrypted at rest on the server, never logged by the relay, never used for training, and
   deleted with the session or the account.
 
-## Plans (decided 2026-11-16, D5; config values, editable in the admin panel)
+## Plans (decided 2026-11-16, D5; revised 2026-11-17; per-plan values, editable in Admin › Plans)
 
 | Plan | Live modes | Practice | Monthly allowance |
 |---|---|---|---|
-| Free | none | yes | 30 minutes of Practice |
-| Pro (Rs 2,999) | `fast`, `balanced` | yes | 10 assist-hours |
-| Ultra (Rs 12,499) | `fast`, `balanced`, `deep`, `max` | yes | 40 assist-hours, fair use |
+| Free | none | yes | 30 minutes of Practice, AI budget $1 |
+| Pro (Rs 2,999) | `fast`, `balanced` | yes | 5 assist-hours, AI budget $15 |
+| Ultra (Rs 12,499) | `fast`, `balanced`, `deep`, `max` | yes | 10 assist-hours, AI budget $60 |
 
 Every LLM and STT call goes through the per-user budget and usage ledger (feature `live_assist`). An assist-hour is
 wall-clock session time with the relay connected.
