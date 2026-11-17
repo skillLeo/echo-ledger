@@ -84,8 +84,11 @@ class CallsPageParityTest : ScreenTest() {
             }
 
             Step.Importing -> {
+                // Importing is on by default, so the press turns it off: wait for the change itself. Waiting for "on"
+                // passed only when the check ran before the write landed (a race, failing about 3 runs in 4).
+                val before = vm.settings.value.phoneAppImport
                 press("Import the Phone app's recordings")
-                pumpUntil("importing") { vm.settings.value.phoneAppImport }
+                pumpUntil("importing switched") { vm.settings.value.phoneAppImport != before }
             }
 
             Step.Dialog -> press("Import the recording of your call at 08:00")

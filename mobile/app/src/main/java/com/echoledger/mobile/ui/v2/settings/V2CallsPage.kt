@@ -142,7 +142,11 @@ fun CallsPage(
                         context.startForegroundService(
                             com.echoledger.mobile.recording.RecordingService.intent(
                                 context,
-                                if (on) com.echoledger.mobile.recording.RecordingService.ACTION_ARM else com.echoledger.mobile.recording.RecordingService.ACTION_DISARM
+                                if (on) {
+                                    com.echoledger.mobile.recording.RecordingService.ACTION_ARM
+                                } else {
+                                    com.echoledger.mobile.recording.RecordingService.ACTION_DISARM
+                                }
                             )
                         )
                     },
