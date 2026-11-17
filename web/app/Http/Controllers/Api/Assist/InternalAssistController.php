@@ -11,6 +11,7 @@ use App\Models\AssistSuggestion;
 use App\Models\AssistUsage;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\UsageLedgerEntry;
+use App\Services\Assist\AssistPlans;
 use App\Services\CredentialVault;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
@@ -110,6 +111,8 @@ final class InternalAssistController extends Controller
                 'provider' => $data['provider'],
                 'model' => $data['model'],
                 'mode' => $data['mode'],
+                // The plan as it is now (the session's own if it changed since): what the admin panel's cost per plan counts.
+                'plan' => app(AssistPlans::class)->for($session->workspace_id)['claim'],
                 'kind' => $data['kind'],
                 'trigger' => $data['trigger'] ?? null,
                 'outcome' => $data['outcome'] ?? null,

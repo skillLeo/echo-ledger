@@ -1313,13 +1313,17 @@ it('adds Live Assist\'s tables and takes them away again', function () {
 /** Migrations after Live Assist's report columns (v1.9 L7); add later ones here. */
 const AFTER_ASSIST_REPORTS = 0;
 
-it('adds the memory lines\' link to a Live Assist report, and takes it away again', function () {
+it('adds the memory lines\' link to a Live Assist report and the plans its numbers ran on, and takes them away again', function () {
     $db = cycleConnection();
     cycleArtisan('migrate:fresh');
     cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_ASSIST_REPORTS]);
     expect($db->getSchemaBuilder()->hasColumn('client_memory_items', 'assist_session_id'))->toBeFalse()
+        ->and($db->getSchemaBuilder()->hasColumn('assist_sessions', 'plan'))->toBeFalse()
+        ->and($db->getSchemaBuilder()->hasColumn('assist_usage', 'plan'))->toBeFalse()
         ->and($db->getSchemaBuilder()->hasTable('assist_sessions'))->toBeTrue();
 
     cycleArtisan('migrate', ['--step' => 1]);
-    expect($db->getSchemaBuilder()->hasColumn('client_memory_items', 'assist_session_id'))->toBeTrue();
+    expect($db->getSchemaBuilder()->hasColumn('client_memory_items', 'assist_session_id'))->toBeTrue()
+        ->and($db->getSchemaBuilder()->hasColumn('assist_sessions', 'plan'))->toBeTrue()
+        ->and($db->getSchemaBuilder()->hasColumn('assist_usage', 'plan'))->toBeTrue();
 });

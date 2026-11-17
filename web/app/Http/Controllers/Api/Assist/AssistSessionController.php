@@ -80,6 +80,7 @@ final class AssistSessionController extends Controller
                 'assist_prep_id' => $prep?->id,
                 'capture_session_id' => $recording?->id,
                 'mode' => $mode,
+                'plan' => $this->plans->for($device->workspace_id)['claim'],
                 'practice' => $practice,
                 'platform' => (string) $data['platform'],
                 'auto_saved' => $prep !== null,

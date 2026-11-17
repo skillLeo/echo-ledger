@@ -7,8 +7,9 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Live Assist's report (v1.9 L7): the project memory lines a session's report added, so making the report again (or
- * the call's own notes) replaces only its own lines.
+ * Live Assist's report and its numbers (v1.9 L7, L8): the project memory lines a session's report added, so making the
+ * report again (or the call's own notes) replaces only its own lines; and the plan a session and each model call ran
+ * on (free, pro, ultra), so the admin panel's cost per plan stays as it was when the plan changes.
  */
 return new class extends Migration
 {
@@ -17,10 +18,24 @@ return new class extends Migration
         Schema::table('client_memory_items', function (Blueprint $table): void {
             $table->string('assist_session_id', 26)->nullable()->index();
         });
+        Schema::table('assist_sessions', function (Blueprint $table): void {
+            $table->string('plan', 10)->nullable()->after('mode');
+        });
+        Schema::table('assist_usage', function (Blueprint $table): void {
+            $table->string('plan', 10)->nullable()->after('mode');
+            $table->index('occurred_at');
+        });
     }
 
     public function down(): void
     {
+        Schema::table('assist_usage', function (Blueprint $table): void {
+            $table->dropIndex(['occurred_at']);
+            $table->dropColumn('plan');
+        });
+        Schema::table('assist_sessions', function (Blueprint $table): void {
+            $table->dropColumn('plan');
+        });
         Schema::table('client_memory_items', function (Blueprint $table): void {
             $table->dropIndex(['assist_session_id']);
             $table->dropColumn('assist_session_id');
