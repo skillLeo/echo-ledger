@@ -20,8 +20,8 @@ export function SecurityPageV2({ account, run, onSignedOut, onActivity }: { acco
   return (
     <>
       <Group footer={<p>Sign-in codes go to {account.email}. The password and two-step sign-in are changed on the website.</p>}>
-        <ListRow compact anchor="security.password" title={setting("security.password").title} label="Password, opens in browser" onClick={web} />
-        <ListRow compact anchor="security.two_step" title={setting("security.two_step").title} label="Two-step sign-in, opens in browser" value={account.two_factor ? "On" : "Off"} onClick={web} />
+        <ListRow compact anchor="security.password" title={setting("security.password").title} label="Password, opens in browser" meta="Opens the website" chevron onClick={web} />
+        <ListRow compact anchor="security.two_step" title={setting("security.two_step").title} label="Two-step sign-in, opens in browser" meta="Opens the website" value={account.two_factor ? "On" : "Off"} chevron onClick={web} />
         <ListRow compact anchor="security.google" title={setting("security.google").title} value={account.google ? "Connected" : "Not connected"} />
         <LinkSetting id="security.activity" onOpen={onActivity} />
       </Group>
