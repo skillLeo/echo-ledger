@@ -31,6 +31,14 @@ final class ConsoleV2
         return self::flag('ui_v2.library');
     }
 
+    /** The admin panel on the design values (ui_v2.admin), for the member of staff signed in to it. */
+    public static function admin(): bool
+    {
+        $user = auth()->user();
+
+        return $user instanceof User && Filament::getCurrentPanel()?->getId() === 'admin' && app(InterfaceFlags::class)->active('ui_v2.admin', $user);
+    }
+
     /** Whether any of the console's v2.0 parts is on: the design values load then. */
     public static function any(): bool
     {

@@ -1,9 +1,9 @@
 {{--
-    The v2.0 console's design values (tokens/ → resources/css/tokens.css, through resources/css/v2/console.css), only
-    while a v2.0 part is on for the person. tokens.css follows data-theme on the root; Filament marks dark mode with
+    The v2.0 design values (tokens/ → resources/css/tokens.css): resources/css/v2/console.css for the console while a
+    v2.0 part is on for the person, admin.css for the admin panel under ui_v2.admin. tokens.css follows data-theme on the root; Filament marks dark mode with
     the "dark" class, so the two are kept the same here, also when the theme changes on the page.
 --}}
-@vite('resources/css/v2/console.css')
+@vite('resources/css/v2/'.($sheet ?? 'console').'.css')
 {{--
     The Urdu face for Arabic script only (as the meeting pack's ARABIC_SCRIPT_RANGE): Latin letters and digits in an
     Urdu page fall through to the console's own face, instead of a Nastaliq font installed on the computer.

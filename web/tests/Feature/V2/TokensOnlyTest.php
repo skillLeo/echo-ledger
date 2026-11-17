@@ -118,19 +118,21 @@ it('catches each planted case', function () {
         ->and(consoleV2Findings("{{ __('Saved!') }}", false))->not->toBe([]);
 });
 
-it('loads tokens.css first, so a token\'s change reaches the console, and keeps the font family in one token', function () {
-    $css = consoleV2Sources()['resources/css/v2/console.css'];
-
+it('loads tokens.css first, so a token\'s change reaches the console and the admin panel, and keeps the font family in one token', function () {
+    $sources = consoleV2Sources();
+    $css = implode("\n", array_filter($sources, fn (string $name): bool => str_ends_with($name, '.css'), ARRAY_FILTER_USE_KEY));
     preg_match_all('/font-family\s*:\s*([^;]+);/', $css, $families);
 
-    expect($css)->toStartWith('/*')->toContain("@import '../tokens.css';")
+    expect($sources['resources/css/v2/values.css'])->toContain("@import '../tokens.css';")
+        ->and($sources['resources/css/v2/console.css'])->toContain("@import './values.css';")
+        ->and($sources['resources/css/v2/admin.css'])->toContain("@import './values.css';")
         ->and($families[1])->not->toBe([])
         ->and(array_filter($families[1], fn (string $value): bool => ! str_starts_with(trim($value), 'var(--el-font-family-')))->toBe([])
         ->and((string) file_get_contents(resource_path('css/tokens.css')))->toContain('--el-font-family-sans:');
 });
 
 it('uses at most three corner radii and the pill, and only the three floating shadows', function () {
-    $css = consoleV2Sources()['resources/css/v2/console.css'];
+    $css = implode("\n", array_filter(consoleV2Sources(), fn (string $name): bool => str_ends_with($name, '.css'), ARRAY_FILTER_USE_KEY));
     $tokens = (string) file_get_contents(resource_path('css/tokens.css'));
     // What a radius or a component radius token resolves to ("8px"), so two names of one value count once.
     preg_match_all('/--(el-(?:radius-[a-z]+|component-[a-z-]+-radius)):\s*([^;]+);/', $tokens, $defined);

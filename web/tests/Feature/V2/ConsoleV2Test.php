@@ -284,3 +284,26 @@ it('counts the console\'s questions in the API\'s per-person ask limit, both way
     $token = $device->createToken('device', Device::ABILITIES)->plainTextToken;
     $this->withToken($token)->postJson("/api/clients/{$client->id}/ask", ['question' => 'Anything?'])->assertStatus(429);
 });
+
+describe('the admin panel', function () {
+    it('takes the design values under ui_v2.admin in the same frame', function () {
+        Filament::setCurrentPanel('admin');
+        expect((string) $this->get('/admin')->assertOk()->getContent())->not->toContain('root.dataset.theme');
+
+        consoleV2For($this->admin, ['ui_v2.admin']);
+        $html = (string) $this->get('/admin')->assertOk()->getContent();
+
+        // the classic sidebar and top bar, no v2.0 module navigation (AdminClassicGoldenTest compares the whole page)
+        expect($html)->toContain('root.dataset.theme')->toContain('el-sb')->not->toContain('v2-sb')->not->toContain('data-module=');
+    });
+
+    it('leaves the console alone under ui_v2.admin, and the admin panel alone under the console\'s flags', function () {
+        consoleV2For($this->admin, ['ui_v2.admin']);
+        expect((string) $this->get('/app')->assertOk()->getContent())->not->toContain('root.dataset.theme');
+
+        consoleV2For($this->admin, ['ui_v2.shell', 'ui_v2.library']);
+        app(InterfaceFlags::class)->set('ui_v2.admin', false, 0, [], []);
+        Filament::setCurrentPanel('admin');
+        expect((string) $this->get('/admin')->assertOk()->getContent())->not->toContain('root.dataset.theme');
+    });
+});
