@@ -7,7 +7,7 @@ import { useReadyReport } from "../../views/main/ReadyCheck";
 import { accessOf, usePermissions } from "../../views/main/Permissions";
 import { permissionKinds } from "../setup/SetupHealth";
 import { useEntitlements } from "../../lib/entitlements";
-import { Badge, Button, Card, Icon, Icons, List, ListRow, Loading, Progress, SkeletonRow, Status } from "../components";
+import { Badge, Button, Card, EmptyState, Icon, Icons, List, ListRow, Loading, Progress, SkeletonRow, Status } from "../components";
 import { shellStatus } from "../shell/status";
 import { isUntranscribed, rowModel } from "../library/model";
 import { minutesLine } from "../settings/AccountCard";
@@ -55,18 +55,23 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
   const [permissions] = usePermissions();
   const entitlements = useEntitlements();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
+  const [itemsFailed, setItemsFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [skipped, setSkipped] = useState<SkippedItem[]>([]);
 
   useEffect(() => {
-    api.library().then(setItems, () => setItems([]));
+    setItemsFailed(false);
+    api.library().then((list) => setItems(Array.isArray(list) ? list : []), () => setItemsFailed(true));
     api.skippedList().then((s) => setSkipped(Array.isArray(s) ? s : []), () => undefined);
-  }, []);
+  }, [attempt]);
 
   const strip = shellStatus(status);
   const kinds = permissionKinds(status.platform);
   const permissionsOk = permissions ? kinds.every((k) => accessOf(permissions, k) === "allowed") : null;
   const live = (items ?? []).filter((i) => !i.deleted);
-  const list = checklist({ permissionsOk, ready: report?.ready ?? status.callsReady ?? null, recordings: items ? live.length : null });
+  // The checklist waits for what it is made of, so nothing shows as "To do" only because it is still being read.
+  const known = permissions !== null && (report !== null || status.callsReady != null) && items !== null;
+  const list = known ? checklist({ permissionsOk, ready: report?.ready ?? status.callsReady ?? null, recordings: live.length }) : null;
   const actions = needsAction({
     failed: status.failedUploads,
     waiting: status.pendingDecisions,
@@ -130,7 +135,10 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
           <Button size="sm" variant="quiet" onClick={onLibrary}>Open Library</Button>
         </div>
         <Card>
-          {!items ? (
+          {itemsFailed && !items ? (
+            <EmptyState tone="error" icon={Icons.ErrorIcon} title="Recent recordings didn't load"
+              body="EchoLedger couldn't read the library. Recordings on this computer are safe." action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
+          ) : !items ? (
             <Loading label="Loading recent recordings"><div className="el-group__rows">{Array.from({ length: 3 }, (_, i) => <SkeletonRow key={i} />)}</div></Loading>
           ) : recent.length === 0 ? (
             <p className="el-group__note el-home-empty el-secondary">Your recordings appear here once you record a call or import a file.</p>

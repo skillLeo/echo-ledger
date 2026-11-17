@@ -3,7 +3,7 @@
 // consent line with Copy, then Start now (recording and assist at once) or Schedule.
 import { useEffect, useState } from "react";
 import { api, errorMessage, type ClientFile } from "../../lib/ipc";
-import { Badge, Button, Card, Checkbox, EmptyState, Icons, Segmented, Select, TextArea, TextField } from "../components";
+import { Badge, Button, Card, Checkbox, EmptyState, Icons, Loading, Segmented, Select, Skeleton, TextArea, TextField } from "../components";
 import { assist, type AssistMode, type HintLevel, type LanguageHelp, type MeetingType, type Prep, type PrepDraft } from "./adapter";
 import { CONSENT_LINE, INTERVIEW_NOTE } from "./AssistCard";
 
@@ -61,19 +61,23 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
   const [draft, setDraft] = useState<PrepDraft>(() => (prep ? { ...prep } : newDraft()));
   const [saved, setSaved] = useState<Prep | null>(prep);
   const [files, setFiles] = useState<ClientFile[] | null>(null);
+  const [filesFailed, setFilesFailed] = useState(false);
+  const [filesAttempt, setFilesAttempt] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scheduleAt, setScheduleAt] = useState(prep?.scheduled_at?.slice(0, 16) ?? "");
   const set = <K extends keyof PrepDraft>(key: K, value: PrepDraft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
   useEffect(() => {
-    if (!draft.project_id) return setFiles(null);
+    setFiles(null);
+    setFilesFailed(false);
+    if (!draft.project_id) return;
     let live = true;
-    api.clientWorkspace(draft.project_id).then((w) => live && setFiles(w.data.files.filter((f) => f.status === "ready")), () => live && setFiles([]));
+    api.clientWorkspace(draft.project_id).then((w) => live && setFiles((w?.data?.files ?? []).filter((f) => f.status === "ready")), () => live && setFilesFailed(true));
     return () => {
       live = false;
     };
-  }, [draft.project_id]);
+  }, [draft.project_id, filesAttempt]);
 
   const run = async (key: string, fn: () => Promise<void>) => {
     setBusy(key);
@@ -123,8 +127,11 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
         <Card className="el-form">
           {!draft.project_id ? (
             <p className="el-secondary">Link a project to use its files: a job description, a proposal, last month's invoices.</p>
+          ) : filesFailed ? (
+            <EmptyState tone="error" icon={Icons.ErrorIcon} title="The project's files didn't load"
+              body="The session works without them; you can attach them later." action={<Button onClick={() => setFilesAttempt((n) => n + 1)}>Try again</Button>} />
           ) : files === null ? (
-            <p className="el-secondary">Reading the project's files</p>
+            <Loading label="Reading the project's files"><Skeleton width="medium" /><Skeleton width="long" /></Loading>
           ) : files.length === 0 ? (
             <EmptyState icon={Icons.TranscriptIcon} title="No files in this project" body="Add files to the project, then attach them here." />
           ) : (

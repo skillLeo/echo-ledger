@@ -4,7 +4,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api, type AppStatus, type Settings } from "../../lib/ipc";
 import { prettyShortcut, formatWhen } from "../../lib/format";
-import { Badge, Button, Card, Icons, List, ListRow, Status } from "../components";
+import { Badge, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, Status } from "../components";
 import { shellStatus } from "../shell/status";
 import { assist, type Prep } from "../assist/adapter";
 import { MEETING_TYPES, PrepScreen } from "../assist/PrepScreen";
@@ -26,6 +26,8 @@ export type LiveV2Props = {
 export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCaptions, onSettings, translate }: LiveV2Props) {
   const [prep, setPrep] = useState<Prep | "new" | null>(null);
   const [upcoming, setUpcoming] = useState<Prep[] | null>(null);
+  const [upcomingFailed, setUpcomingFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [translateOpen, setTranslateOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
 
@@ -34,8 +36,9 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
   }, []);
   useEffect(() => {
     if (!assistOn || prep) return;
-    assist.preps("scheduled").then((p) => setUpcoming(Array.isArray(p) ? p : []), () => setUpcoming([]));
-  }, [assistOn, prep]);
+    setUpcomingFailed(false);
+    assist.preps("scheduled").then((p) => setUpcoming(Array.isArray(p) ? p : []), () => setUpcomingFailed(true));
+  }, [assistOn, prep, attempt]);
 
   if (prep) {
     return <PrepScreen prep={prep === "new" ? null : prep} projects={projects} onBack={() => setPrep(null)} onStarted={() => setPrep(null)} />;
@@ -76,16 +79,23 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
             <Button size="sm" variant="primary" onClick={() => setPrep("new")}>New session</Button>
           </div>
           <Card>
+            {upcomingFailed && !upcoming ? (
+              <EmptyState tone="error" icon={Icons.ErrorIcon} title="Sessions didn't load"
+                body="EchoLedger couldn't reach the server. You can still start a new session." action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
+            ) : !upcoming ? (
+              <Loading label="Loading sessions"><div className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /></div></Loading>
+            ) : (
             <List label="Upcoming sessions" className="el-group__rows">
-              {(upcoming ?? []).length === 0 ? (
+              {upcoming.length === 0 ? (
                 <ListRow compact icon={Icons.CalendarIcon} iconStyle="plain" title="No sessions scheduled"
                   meta="Prepare a call: who it's with, your goals and documents. Suggestions appear on a card only you can see." onClick={() => setPrep("new")} />
-              ) : (upcoming ?? []).map((p) => (
+              ) : upcoming.map((p) => (
                 <ListRow key={p.id} compact icon={Icons.ClockIcon} iconStyle="plain" title={p.title || typeLabel(p.meeting_type)}
                   meta={[typeLabel(p.meeting_type), p.counterpart, p.scheduled_at ? formatWhen(p.scheduled_at) : null].filter(Boolean).join(" · ")}
                   badge={p.status === "armed" ? <Badge tone="accent">Ready</Badge> : undefined} chevron onClick={() => setPrep(p)} />
               ))}
             </List>
+            )}
           </Card>
         </section>
       )}

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import MainApp from "../../views/main/MainApp";
-import { flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeEntitlements, makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { HomeV2, checklist, needsAction } from "./HomeV2";
@@ -75,6 +75,41 @@ describe("HomeV2", () => {
     expect(screen.getByRole("region", { name: "Status" })).toHaveTextContent("Recording 02:14");
     fireEvent.click(screen.getByRole("button", { name: "Stop and save" }));
     expect(p.onStop).toHaveBeenCalled();
+  });
+});
+
+describe("Home's states", () => {
+  const props = () => ({
+    onRecord: vi.fn(), onStop: vi.fn(), onSetup: vi.fn(), onReadyCheck: vi.fn(), onOpenRecording: vi.fn(), onLibrary: vi.fn(), onAction: vi.fn(), onPlan: vi.fn(),
+  });
+
+  it("loading: still shapes for the recordings, and no checklist until its parts are read", () => {
+    respond("library_list", new Promise(() => undefined));
+    render(<HomeV2 status={makeStatus({ platform: "macos", callsReady: null })} {...props()} />);
+    expect(screen.getByRole("status", { busy: true })).toHaveTextContent("Loading recent recordings");
+    expect(screen.queryByRole("list", { name: "Get started" })).toBeNull();
+  });
+
+  it("error: the recordings say they didn't load, with Try again", async () => {
+    fail("library_list", "offline");
+    render(<HomeV2 status={makeStatus({ platform: "macos" })} {...props()} />);
+    await act(flushAsync);
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Recent recordings didn't load");
+    respond("library_list", ITEMS);
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await act(flushAsync);
+    expect(screen.getByRole("list", { name: "Recent recordings" })).toBeInTheDocument();
+  });
+
+  it("empty: no recordings yet says where they will appear; nothing to act on shows no list", async () => {
+    respond("library_list", []);
+    respond("skipped_list", []);
+    respond("permissions_status", { microphone: "allowed", systemAudio: "allowed", screen: "allowed", browserAutomation: true, platform: "macos" });
+    render(<HomeV2 status={makeStatus({ platform: "macos" })} {...props()} />);
+    await act(flushAsync);
+    expect(screen.getByText("Your recordings appear here once you record a call or import a file.")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Needs action" })).toBeNull();
   });
 });
 

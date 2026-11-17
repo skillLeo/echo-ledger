@@ -131,6 +131,41 @@ describe("the Live tab", () => {
   });
 });
 
+describe("the Live tab's and the prep's states", () => {
+  const props = () => ({ onRecord: vi.fn(), onVoiceNote: vi.fn(), onCaptions: vi.fn(), onSettings: vi.fn() });
+
+  it("sessions: loading, then an error with Try again, never a false 'none scheduled'", async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    const { respondWith } = await import("../../test/tauri");
+    respondWith("assist_preps_list", () => new Promise((r) => (answer = r)));
+    render(<LiveV2 status={makeStatus()} assistOn projects={[]} {...props()} />);
+    await act(flushAsync);
+    expect(screen.getByRole("status", { busy: true })).toHaveTextContent("Loading sessions");
+    expect(screen.queryByText("No sessions scheduled")).toBeNull();
+    await act(async () => answer([]));
+    expect(screen.getByRole("button", { name: "No sessions scheduled" })).toBeInTheDocument();
+  });
+
+  it("sessions that fail to load say so", async () => {
+    fail("assist_preps_list", "offline");
+    render(<LiveV2 status={makeStatus()} assistOn projects={[]} {...props()} />);
+    await act(flushAsync);
+    expect(screen.getByRole("alert")).toHaveTextContent("Sessions didn't load");
+    expect(screen.queryByText("No sessions scheduled")).toBeNull();
+  });
+
+  it("the prep's documents: loading, and an error that doesn't claim the project is empty", async () => {
+    fail("client_workspace", "offline");
+    render(<PrepScreen projects={[{ id: "c1", name: "Qureshi Textiles" }]} onBack={vi.fn()} onStarted={vi.fn()} />);
+    fireEvent.click(screen.getByRole("combobox", { name: /Project/ }));
+    fireEvent.click(screen.getByRole("option", { name: "Qureshi Textiles" }));
+    expect(screen.getByRole("status", { busy: true })).toHaveTextContent("Reading the project's files");
+    await act(flushAsync);
+    expect(screen.getByRole("alert")).toHaveTextContent("The project's files didn't load");
+    expect(screen.queryByText("No files in this project")).toBeNull();
+  });
+});
+
 describe("the app with ui_v2.live", () => {
   it("the shell's Live opens the Live tab", async () => {
     respond("app_status", makeStatus());
