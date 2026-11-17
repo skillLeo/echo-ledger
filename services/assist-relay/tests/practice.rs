@@ -451,6 +451,54 @@ async fn a_held_question_is_dropped_once_me_starts_speaking() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_held_question_is_dropped_when_the_app_disconnects() {
+    let mut config = pricey_output();
+    config.models.get_mut("claude-haiku-5-5").unwrap().first_token_timeout_ms = 30_000;
+    config.budget.reserve_suggestions = 1;
+    let h = harness(config);
+    let mut token = claims("s-held-gone");
+    token.budget.cents_left = 16;
+    let mut s = h.connect(token);
+    assert_eq!(s.next().await["mode"], "balanced");
+    s.drain(Duration::from_millis(200)).await;
+    h.mock(assist_relay::domain::ProviderKind::Anthropic).push(assist_relay::provider::MockBehavior::Late(Duration::from_secs(20)));
+    for (i, line) in ["I can start on the 3rd.", "My rate is 35 dollars an hour.", "The first build takes 2 weeks."].iter().enumerate() {
+        s.send(final_turn(&format!("m-{i}"), "me", line)).await;
+    }
+    let mut held = false;
+    for turn in 0..30 {
+        s.send(final_turn(&format!("o-{turn}"), "other", "What is your notice period?")).await;
+        match s.next_within(Duration::from_secs(1)).await {
+            Some(reply) if reply["type"] == "suggestion_start" => drop(s.until("suggestion_end").await),
+            Some(reply) => panic!("unexpected {reply}"),
+            None => {
+                held = true;
+                break;
+            }
+        }
+    }
+    assert!(held, "a question was held");
+    let answers = || h.mock(assist_relay::domain::ProviderKind::Anthropic).requests().iter().filter(|(_, p)| *p == Purpose::Answer).count();
+    let (asked, spent) = (answers(), h.state.registry.spent("s-held-gone"));
+    // The app goes away; the facts call finishes within the resume grace and releases its hold.
+    drop(s);
+    tokio::time::sleep(Duration::from_secs(25)).await;
+    assert!(h.reports.reports().iter().any(|r| matches!(r, Report::Facts(_))), "the facts call finished");
+    assert_eq!(answers(), asked, "no suggestion started for no one");
+    // Nothing but the facts call was charged after the app left.
+    let facts_micros: u64 = h
+        .reports
+        .reports()
+        .iter()
+        .filter_map(|r| match r {
+            Report::Usage(u) if u.kind == assist_relay::protocol::SuggestionKind::Facts => Some((u.cost_usd * 1_000_000.0).round() as u64),
+            _ => None,
+        })
+        .sum();
+    assert_eq!(h.state.registry.spent("s-held-gone") - spent, facts_micros);
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_background_task_that_panics_frees_its_reservation_and_its_busy_flag() {
     let h = harness(pricey_output());
     let mut token = practice_claims("s-panic");

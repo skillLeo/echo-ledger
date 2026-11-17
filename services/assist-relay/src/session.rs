@@ -648,6 +648,8 @@ impl Engine {
         if self.conn.take().is_none() {
             return;
         }
+        // No one is there to see a held question answered.
+        self.pending = None;
         self.cancel_all();
         self.spec = None;
         self.token_deadline = None;
@@ -962,7 +964,7 @@ impl Engine {
     /// since its question (the moment has passed). A newer question already replaced it in `start`.
     fn retry_pending(&mut self) {
         let Some((origin, t0, replaces)) = self.pending.take() else { return };
-        if self.last_me_speech.is_some_and(|at| at > t0) {
+        if self.conn.is_none() || self.last_me_speech.is_some_and(|at| at > t0) {
             return;
         }
         self.start(origin, t0, replaces);
