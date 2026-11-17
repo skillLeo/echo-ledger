@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import com.echoledger.mobile.ui.EchoLedgerTheme
 import com.echoledger.mobile.ui.MainViewModel
 import org.junit.After
@@ -19,12 +19,14 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34], qualifiers = "w411dp-h2400dp-mdpi")
 abstract class ScreenTest : AppTest() {
     /**
-     * Effects (a LaunchedEffect's load, a rememberCoroutineScope's call) resume on the main thread, as in the app: the
-     * test dispatcher otherwise lets an effect resume on the background thread its `withContext(Dispatchers.IO)` call
-     * finished on, and the screen state it writes there may never reach the screen (P-078).
+     * Effects (a LaunchedEffect's load, a rememberCoroutineScope's call) resume on the main thread, as in the app. The
+     * first rule's test dispatcher let an effect resume on the background thread its `withContext(Dispatchers.IO)`
+     * call finished on, and the screen state it wrote there sometimes never reached the screen (P-078, P-100). Its
+     * effect context could not change that: the rule puts its own dispatcher after it. This rule queues the resumed
+     * effect with the test clock instead, and [pumpUntil] runs that queue on the main thread.
      */
     @get:Rule
-    val compose = createComposeRule(kotlinx.coroutines.Dispatchers.Main)
+    val compose = createComposeRule()
 
     protected lateinit var vm: MainViewModel
     private var showing by mutableStateOf(true)
@@ -32,6 +34,7 @@ abstract class ScreenTest : AppTest() {
     @Before
     fun createViewModel() {
         vm = MainViewModel(app).clearedAfterTest()
+        pumpStep = { compose.waitForIdle() }
     }
 
     protected fun show(content: @Composable () -> Unit) {
@@ -43,5 +46,6 @@ abstract class ScreenTest : AppTest() {
     fun closeScreen() {
         showing = false
         compose.waitForIdle()
+        pumpStep = null
     }
 }
