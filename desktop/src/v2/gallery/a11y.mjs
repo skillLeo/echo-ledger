@@ -80,6 +80,9 @@ const SCREENS = [
   ["a-set-screen", `${app("settings")}&plan=pro`, async (page) => { await page.getByRole("button", { name: "Screen moments", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-excluded", `${app("settings")}&plan=pro`, async (page) => { await page.getByRole("button", { name: "Screen moments", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Never capture these apps", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-storage", `${app("settings")}&plan=pro`, async (page) => { await page.getByRole("button", { name: "Storage", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-appearance", app("settings"), async (page) => { await page.getByRole("button", { name: "Appearance", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-shortcuts", app("settings"), async (page) => { await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-shortcuts-mac", app("settings-mac"), async (page) => { await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Change Dictation", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-controls", app("controls"), async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 

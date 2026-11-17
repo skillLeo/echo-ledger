@@ -894,7 +894,9 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 /* Microphone & audio: the two level bars and the test's result. */
 .el-meters { display: inline-flex; align-items: center; gap: var(--el-space-8); }
 .el-meter { display: inline-block; inline-size: calc(var(--el-space-64) * 1.5); block-size: var(--el-space-8); border-radius: var(--el-radius-full); background: var(--el-role-border-default); overflow: hidden; }
-.el-meter__fill { display: block; block-size: 100%; background: var(--el-role-accent-default); }
+/* The fill is scaled (lib/motion fillWidth), so it grows from the start edge, not the middle. */
+.el-meter__fill { display: block; block-size: 100%; background: var(--el-role-accent-default); transform-origin: left center; }
+[dir="rtl"] .el-meter__fill { transform-origin: right center; }
 .el-test-result { display: grid; gap: var(--el-space-8); }
 .el-test-result > p { margin: 0; }
 .el-test-result audio { inline-size: 100%; }
@@ -903,3 +905,12 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-meter--full .el-meter__fill { background: var(--el-role-danger-default); }
 .el-storage-value--warn { color: var(--el-role-warning-default); }
 .el-storage-value--full { color: var(--el-role-danger-default); }
+.el-kbd { display: inline-block; padding: var(--el-space-2) var(--el-space-8); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); font-family: var(--el-font-family-mono); font-size: var(--el-text-mono-size); line-height: var(--el-text-mono-line); white-space: nowrap; }
+.el-setting__actions { display: inline-flex; align-items: center; gap: var(--el-space-8); }
+.el-shortcut-note { color: var(--el-role-warning-default); white-space: normal; }
+/* A shortcut's keys and buttons go under its name when the row is too narrow for both (zoomed, a narrow window). */
+.el-shortcuts .el-row { flex-wrap: wrap; row-gap: var(--el-space-4); }
+.el-shortcuts .el-row__main { flex: 1 1 calc(var(--el-space-64) * 3); }
+.el-shortcuts .el-row__value { max-inline-size: none; margin-inline-start: auto; }
+
+.el-shortcuts .el-button[aria-pressed="true"] { background: var(--el-role-accent-soft); color: var(--el-role-accent-text); border-color: var(--el-role-accent-default); }

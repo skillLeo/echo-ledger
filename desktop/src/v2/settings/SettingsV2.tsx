@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage, type Settings, type StorageInfo } from "../../lib/ipc";
 import { fileSize } from "../../lib/format";
 import { searchSettings } from "../../lib/settingsIndex";
-import { SETTINGS, breadcrumbOf, type SettingEntry } from "../../lib/settingsRegistry";
+import { SETTINGS, breadcrumbOf, titleV2, type SettingEntry } from "../../lib/settingsRegistry";
 import { ROOT_ICONS } from "../../components/Icons";
 import { getThemeChoice } from "../../lib/theme";
 import { useEntitlements } from "../../lib/entitlements";
@@ -117,7 +117,7 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
           <Card>
             <List label="Results" className="el-group__rows">
               {answer.settings.map((r) => (
-                <ListRow key={r.entry.id} compact title={r.entry.title} meta={r.breadcrumb || undefined} chevron onClick={() => go(r.entry)} />
+                <ListRow key={r.entry.id} compact title={titleV2(r.entry)} meta={r.breadcrumb || undefined} chevron onClick={() => go(r.entry)} />
               ))}
               {answer.help.length > 0 && <ListSection title="Help" />}
               {answer.help.map((r) => (
@@ -128,7 +128,7 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
         ) : (
           <EmptyState icon={Icons.SearchIcon} title="No settings match" body="Try another word, such as language, storage or captions."
             action={answer.closest.length > 0
-              ? <div className="el-filterbar" role="group" aria-label="Closest matches">{answer.closest.map((e) => <Chip key={e.id} label={e.title} onToggle={() => go(e)} />)}</div>
+              ? <div className="el-filterbar" role="group" aria-label="Closest matches">{answer.closest.map((e) => <Chip key={e.id} label={titleV2(e)} onToggle={() => go(e)} />)}</div>
               : <Button onClick={() => setQuery("")}>Clear search</Button>} />
         )
       ) : (

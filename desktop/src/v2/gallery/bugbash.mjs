@@ -86,6 +86,9 @@ const CASES = [
   ["a-set-screen", "app", `${app("settings")}&plan=pro`, ["en"], async (page) => { await page.getByRole("button", { name: "Screen moments", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-excluded", "app", `${app("settings")}&plan=pro`, ["en"], async (page) => { await page.getByRole("button", { name: "Screen moments", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Never capture these apps", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-storage", "app", `${app("settings")}&plan=pro`, ["en"], async (page) => { await page.getByRole("button", { name: "Storage", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-appearance", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Appearance", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-shortcuts", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-shortcuts-mac", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Change Dictation", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-controls", "app", app("controls"), ["en"], async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 const THEMES = ["light", "dark"];

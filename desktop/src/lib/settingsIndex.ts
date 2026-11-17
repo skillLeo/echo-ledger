@@ -92,7 +92,7 @@ interface Indexed {
 }
 
 function indexEntry(entry: SettingEntry): Indexed {
-  const titles = [entry.title, ...(entry.aliases ?? [])].map(normalise);
+  const titles = [entry.title, ...(entry.titleV2 ? [entry.titleV2] : []), ...(entry.aliases ?? [])].map(normalise);
   const words = (list: readonly string[] | undefined) => (list ?? []).flatMap(tokens).filter(indexable);
   const withOptions = entry.kind === "choice" || entry.kind === "segmented";
   const keywordList = [...(entry.keywords ?? []), ...(entry.ru ?? []), ...(entry.ur ?? [])];

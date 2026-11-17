@@ -18,19 +18,25 @@ import { SharePrivacyPageV2, ShareCheckPageV2 } from "./SharePrivacyV2";
 import { NotificationsPageV2 } from "./NotificationsV2";
 import { ExcludedAppsPageV2, MicrophonePageV2, ScreenMomentsPageV2 } from "./RecordingInputV2";
 import { StoragePageV2 } from "./StorageV2";
+import { AppearancePageV2, ShortcutsPageV2, useThemeChoice } from "./AppV2";
+import type { ThemeChoice } from "../../../lib/theme";
 
-export function SettingsPagesV2({ section, onHome, run, status, onUnpaired }: {
+export function SettingsPagesV2({ section, onHome, run, status, onUnpaired, theme, onTheme }: {
   section: { id: string; seq: number };
   onHome: () => void;
   run: Run;
   status: AppStatus;
   /** The app's status after signing out (Sign out everywhere). */
   onUnpaired: (s: AppStatus) => void;
+  /** The app's theme and how to change it, so the top bar's toggle and Appearance agree (else the page keeps its own). */
+  theme?: ThemeChoice;
+  onTheme?: (t: ThemeChoice) => void;
 }) {
   const start = sectionTarget(section.id);
   const [page, setPage] = useState(start?.page ?? "voice");
   const [target, setTarget] = useState<{ id: string; seq: number } | null>(start?.setting ? { id: start.setting, seq: section.seq } : null);
-  const { settings, patch } = useSettings(run);
+  const { settings, patch, setSettings } = useSettings(run);
+  const [themeChoice, chooseTheme] = useThemeChoice(theme, onTheme);
   const entitlements = useEntitlements();
   const [account, setAccount] = useAccount();
   const platform = status.platform;
@@ -70,6 +76,8 @@ export function SettingsPagesV2({ section, onHome, run, status, onUnpaired }: {
       case "screen": return <ScreenMomentsPageV2 settings={settings} patch={patch} onExcluded={() => open("screen.excluded")} />;
       case "screen.excluded": return <ExcludedAppsPageV2 settings={settings} patch={patch} platform={platform} />;
       case "storage": return <StoragePageV2 limitBytes={entitlements?.limits.storage_bytes?.limit ?? status.plan.storageBytes} />;
+      case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} />;
+      case "shortcuts": return <ShortcutsPageV2 settings={settings} status={status} run={run} onSettings={setSettings} />;
       case "calls.sites": return <CallSitesPageV2 rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules })} />;
       default: return null;
     }

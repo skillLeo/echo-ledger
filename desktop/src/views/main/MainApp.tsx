@@ -803,7 +803,7 @@ export default function MainApp() {
                 : section.id === "help" && helpV2Reachable(ui.flags)
                   ? <HelpV2 platform={status.platform} onBack={onHome} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })} />
                   : hasV2Page(section.id)
-                    ? <SettingsPagesV2 section={section} onHome={onHome} run={run} status={status} onUnpaired={setStatus} />
+                    ? <SettingsPagesV2 section={section} onHome={onHome} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>

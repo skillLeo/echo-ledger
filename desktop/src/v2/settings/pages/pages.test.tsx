@@ -4,10 +4,12 @@ import type { ReactElement } from "react";
 import type { AppStatus, PermissionsStatus, ScreensStatus, Settings, SettingsPatch } from "../../../lib/ipc";
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../../test/tauri";
 import { answerConfirm } from "../../../test/confirm";
-import { collectControls, stale, type ControlRole, type RolelessField } from "../../../test/parity";
+import { collectControls, disabledSwitches, stale, type ControlRole, type RolelessField } from "../../../test/parity";
 import { makeItem, makeMicUser, makeSettings, makeStatus, sampleEntitlements } from "../../../test/fixtures";
 import { resetEntitlementsForTests } from "../../../lib/entitlements";
-import { LanguagePage, WordsPage } from "../../../views/main/AppSettings";
+import { AppearancePage, LanguagePage, ShortcutsPage, WordsPage } from "../../../views/main/AppSettings";
+import { getThemeChoice } from "../../../lib/theme";
+import { loadPreferences } from "../../../lib/shell";
 import { TranscriptionKeyPage } from "../../../views/main/Upgrade";
 import { ConsentPage, PrivacyPage, SecurityPage } from "../../../views/main/AccountSettings";
 import { LockPage, NotificationsPage, StoragePage } from "../../../views/main/SecuritySettings";
@@ -15,7 +17,8 @@ import { resetTrashKeepHoursForTests } from "../../../lib/trash";
 import type { Account } from "../../../lib/ipc";
 import MainApp from "../../../views/main/MainApp";
 import { CallSitesPage, CallsPage, CaptionStylePage, CaptionsPage, MicrophonePage } from "../../../views/main/CaptureSettings";
-import { ExcludedAppsPage, ScreenMomentsPage } from "../../../views/main/ScreenSettings";
+import { ExcludedAppsPage, MONTHLY_NOTE, ScreenMomentsPage, TARGET_HINT, WINDOWS_WHOLE_SCREEN, screensBlocked } from "../../../views/main/ScreenSettings";
+import { setting } from "../../../lib/settingsRegistry";
 import { HistoryPage, ReplacementsPage, SnippetsPage, VoicePage } from "../../../views/main/DictationSettings";
 import { SettingsPagesV2 } from "./SettingsPagesV2";
 import { hasV2Page, sectionTarget } from "./route";
@@ -72,7 +75,8 @@ describe("which sections open a v2 page", () => {
     expect(hasV2Page("calls")).toBe(true);
     expect(hasV2Page("lock")).toBe(true);
     expect(hasV2Page("notifications")).toBe(true);
-    expect(hasV2Page("appearance")).toBe(false);
+    expect(hasV2Page("appearance")).toBe(true);
+    expect(hasV2Page("help")).toBe(false);
     expect(hasV2Page("nonsense")).toBe(false);
   });
 });
@@ -517,7 +521,8 @@ describe("Storage v2", () => {
     expect(Number(meter.getAttribute("aria-valuenow"))).toBeGreaterThan(0);
     expect(screen.getByText("1,234 recordings")).toBeInTheDocument();
     expect(screen.getByText("1 year")).toBeInTheDocument();
-    expect(screen.getAllByText(/72 hours/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/3 days/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Trash")).toBeInTheDocument();
   });
 
   it("says the same facts as today's page (today's says the Bin keeps 2 days; v2 says Trash, with the server's hours)", async () => {
@@ -538,6 +543,88 @@ describe("Storage v2", () => {
   });
 });
 
+describe("Appearance v2", () => {
+  it("theme, sidebar, density and clock are kept on this computer and followed at once; Reset puts them back", async () => {
+    localStorage.clear();
+    const followed = vi.fn();
+    window.addEventListener("echoledger:preferences", followed);
+    await show("appearance");
+    const group = (name: string) => within(screen.getByRole("radiogroup", { name }));
+    fireEvent.click(group("Theme").getByRole("radio", { name: "Dark" }));
+    fireEvent.click(group("Sidebar style").getByRole("radio", { name: "Soft grey" }));
+    fireEvent.click(group("Density").getByRole("radio", { name: "Compact" }));
+    fireEvent.click(group("Times").getByRole("radio", { name: "24-hour" }));
+    expect(getThemeChoice()).toBe("dark");
+    expect(loadPreferences()).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24" });
+    expect(document.documentElement.dataset.density).toBe("compact");
+    expect(followed).toHaveBeenCalledTimes(3);
+    expect(group("Theme").getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
+    answerConfirm().mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    await act(flushAsync);
+    expect(getThemeChoice()).toBe("system");
+    expect(loadPreferences()).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12" });
+    window.removeEventListener("echoledger:preferences", followed);
+  });
+
+  it("the app's theme is the one shown, and a change goes to the app (the top bar's toggle agrees)", async () => {
+    const onTheme = vi.fn();
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "appearance", seq: 1 }} onHome={vi.fn()} run={run} status={makeStatus()} onUnpaired={vi.fn()} theme="light" onTheme={onTheme} /></div>);
+    await act(flushAsync);
+    const theme = within(screen.getByRole("radiogroup", { name: "Theme" }));
+    expect(theme.getByRole("radio", { name: "Light" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(theme.getByRole("radio", { name: "Dark" }));
+    expect(onTheme).toHaveBeenCalledWith("dark");
+  });
+});
+
+describe("Keyboard shortcuts v2", () => {
+  const key = (init: KeyboardEventInit) => act(async () => { window.dispatchEvent(new KeyboardEvent("keydown", init)); await flushAsync(); });
+
+  it("Change listens for the keys and saves them; Escape stops listening; Clear empties one; Reset asks", async () => {
+    respondWith("set_shortcut", ({ action, accelerator }) => ({ ...SETTINGS, shortcuts: { ...SETTINGS.shortcuts, [action as string]: accelerator } }));
+    respond("reset_shortcuts", SETTINGS);
+    await show("shortcuts");
+    fireEvent.click(screen.getByRole("button", { name: "Change Record now" }));
+    expect(screen.getByText("Press keys… (Esc cancels)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change Record now" })).toHaveAttribute("aria-pressed", "true");
+    await key({ key: "Escape", code: "Escape" });
+    expect(screen.queryByText("Press keys… (Esc cancels)")).toBeNull();
+    expect(callsOf("set_shortcut")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Change Record now" }));
+    await key({ key: "Shift", code: "ShiftLeft", shiftKey: true, ctrlKey: true });
+    expect(callsOf("set_shortcut")).toEqual([]);
+    await key({ key: "k", code: "KeyK", shiftKey: true, ctrlKey: true });
+    expect(callsOf("set_shortcut")).toEqual([{ action: "record_now", accelerator: "CommandOrControl+Shift+K" }]);
+    expect(screen.getByText("Ctrl + Shift + K")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear Dictation" }));
+    await act(flushAsync);
+    expect(callsOf("set_shortcut")[1]).toEqual({ action: "dictation", accelerator: "" });
+    expect(screen.queryByRole("button", { name: "Clear Capture a voice note" })).toBeNull();
+    const asked = answerConfirm();
+    asked.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    await act(flushAsync);
+    expect(asked.mock.calls[0][0]).toBe("Reset Keyboard shortcuts to defaults?");
+    expect(callsOf("reset_shortcuts")).toHaveLength(1);
+  });
+
+  it("says when another app has a shortcut or the system refused it, and lists a Mac's own keys with ⌘", async () => {
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "shortcuts", seq: 1 }} onHome={vi.fn()} run={run}
+      status={makeStatus({ platform: "macos", shortcutErrors: [["dictation", "Another app already uses this shortcut."]] })} onUnpaired={vi.fn()} /></div>);
+    await act(flushAsync);
+    expect(screen.getByText("Another app already uses this shortcut.")).toBeInTheDocument();
+    expect(screen.getByText("⌘K")).toBeInTheDocument();
+    expect(screen.getByText("⌘Q")).toBeInTheDocument();
+    expect(screen.getByText("Quit EchoLedger; a running recording is saved first")).toBeInTheDocument();
+  });
+
+  it("warns when a shortcut is one browsers use", async () => {
+    await show("shortcuts");
+    expect(screen.getByText(/This shortcut also opens the element picker \(DevTools\) in browsers; EchoLedger takes it over\./)).toBeInTheDocument();
+  });
+});
+
 /**
  * Parity with today's pages: each page is rendered as today's and as the v2 page in each of its states (the page as it
  * opens, then each dialog and form opened, from a fresh page each time), and every control today's page shows in a
@@ -553,6 +640,10 @@ describe("parity with today's Settings pages, in every state", () => {
     name: string; section: string; platform?: string; settings?: Partial<Settings>; entitlements?: ReturnType<typeof sampleEntitlements>; account?: Account;
     lock?: { hasPin: boolean }; status?: Partial<AppStatus>; permissions?: Partial<PermissionsStatus>; screens?: Partial<ScreensStatus>;
     today: (settings: Settings) => ReactElement; stalesOk?: boolean; steps?: Step[]; map?: Record<string, [ControlRole | RolelessField, string | RegExp]>;
+    /** Lines the page may say (its footer's): in every state, the ones today's page shows must be the ones the v2 page shows. */
+    lines?: readonly string[];
+    /** Today's controls whose names carry data (a date, an amount), matched by pattern. */
+    mapLike?: readonly [RegExp, [ControlRole, string | RegExp]][];
   };
   const press = (name: string | RegExp, role: ControlRole = "button"): Act => async () => {
     fireEvent.click(screen.getAllByRole(role, { name })[0]);
@@ -567,6 +658,16 @@ describe("parity with today's Settings pages, in every state", () => {
     for (const a of acts) await a();
   };
   const reset: Step = { name: "Reset to defaults", today: press("Reset to defaults") };
+  const SCREENS_OK: ScreensStatus = { supported: true, platform: "windows", borderless: false, permission: true, inPlan: true, onServer: true };
+  const SCREEN_LINES = [
+    screensBlocked({ ...SCREENS_OK, onServer: false })!, screensBlocked({ ...SCREENS_OK, inPlan: false })!, screensBlocked({ ...SCREENS_OK, supported: false })!,
+    setting("screen.enabled").description!,
+    TARGET_HINT.meeting_window, TARGET_HINT.whole_screen + WINDOWS_WHOLE_SCREEN, TARGET_HINT.whole_screen,
+    "Windows 11 captures without the yellow border. If it still shows, allow borderless capture for EchoLedger in Windows Settings.",
+    "Windows 10 draws a yellow border around the meeting window while screens are on. Windows 11 captures without it.",
+    MONTHLY_NOTE, `macOS asks once for the Screen Recording permission. ${MONTHLY_NOTE}`,
+    "Turn on EchoLedger in System Settings › Privacy & Security › Screen & System Audio Recording, then open EchoLedger again.",
+  ];
   const withKey = () => { const e = sampleEntitlements("free"); e.transcription_key = { provider: "groq", set: true, last4: "9xQ2" }; return e; };
   const PAGES: Page[] = [
     { name: "Voice notes & dictation", section: "voice", today: (st) => <VoicePage settings={st} patch={patch} onOpen={() => undefined} />, steps: [reset],
@@ -629,6 +730,9 @@ describe("parity with today's Settings pages, in every state", () => {
       ["Mac, permission not given", "macos", { platform: "macos", permission: false }, {}, "pro"],
       ["not in the plan", "windows", { platform: "windows", permission: true }, {}, "free"],
       ["server without it", "windows", { platform: "windows", permission: true, onServer: false }, {}, "pro"],
+      ["the server says not in the plan, the plan has it", "windows", { platform: "windows", permission: true, inPlan: false }, {}, "pro"],
+      ["this computer can't capture", "windows", { platform: "windows", permission: true, supported: false }, {}, "pro"],
+      ["Mac, allowed", "macos", { platform: "macos", permission: true }, {}, "pro"],
     ] as const).map(([label, platform, screens, settings, plan]): Page => ({
       name: `Screen moments, ${label}`, section: "screen", platform, screens, settings, entitlements: sampleEntitlements(plan),
       today: (st) => <ScreenMomentsPage settings={st} patch={patch} onExcluded={() => undefined} />,
@@ -638,25 +742,34 @@ describe("parity with today's Settings pages, in every state", () => {
       ],
       map: { "combobox: Capture": ["combobox", /^Capture/], "button: Never capture these apps0 apps": ["button", "Never capture these apps"],
         "button: Never capture these apps3 apps": ["button", "Never capture these apps"], "button: Keep screen moments, in Pro": ["button", "Keep screen moments, in Pro"] },
-      stalesOk: true,
+      stalesOk: true, lines: SCREEN_LINES,
     })),
     { name: "Never capture these apps", section: "screen.excluded", today: (st) => <ExcludedAppsPage settings={st} patch={patch} platform="windows" />,
       steps: [{ name: "an app typed", today: type("App or process name", "Signal.exe") }] },
+    { name: "Appearance", section: "appearance",
+      today: () => <AppearancePage theme="system" onTheme={() => undefined} prefs={{ sidebarStyle: "light", density: "comfortable", clock: "12" }} setPref={() => undefined} />, steps: [reset] },
+    ...(["windows", "macos"] as const).map((platform): Page => ({
+      name: `Keyboard shortcuts, ${platform}`, section: "shortcuts", platform,
+      today: (st) => <ShortcutsPage settings={st} status={makeStatus({ platform })} run={run} onSettings={() => undefined} />,
+      steps: [{ name: "Change, listening", today: press("Change Record now") }, reset],
+    })),
     { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
       map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] },
       steps: [{ name: "Sign out everywhere", today: press("Sign out everywhere") }] },
   ];
 
   /** The controls on screen and the confirm questions asked, after `step` (none: the page as it opens). */
-  const capture = async (render_: () => void, step: Act | null): Promise<{ controls: string[]; asked: string[] }> => {
+  const capture = async (render_: () => void, step: Act | null): Promise<{ controls: string[]; asked: string[]; off: string[]; text: string }> => {
     const asked = answerConfirm();
     asked.mockReturnValue(false);
     render_();
     await act(flushAsync);
     if (step) await step();
     const controls = [...collectControls(new Set())];
+    const off = disabledSwitches();
+    const text = (document.body.textContent ?? "").replace(/\s+/g, " ");
     cleanup();
-    return { controls, asked: asked.mock.calls.map((c) => c[0]) };
+    return { controls, asked: asked.mock.calls.map((c) => c[0]), off, text };
   };
 
   it.each(PAGES.map((p) => [p.name, p] as const))("%s", async (_, page) => {
@@ -678,7 +791,8 @@ describe("parity with today's Settings pages, in every state", () => {
           status={makeStatus({ platform: (page.platform ?? "windows") as "windows", ...page.status })} onUnpaired={vi.fn()} /></div>);
       }, step ? step.v2 ?? step.today : null);
       const v2Has = (control: string) => {
-        const [role, name] = page.map?.[control] ?? [control.split(": ")[0] as ControlRole | RolelessField, control.slice(control.indexOf(": ") + 2)];
+        const [role, name] = page.map?.[control] ?? page.mapLike?.find(([re]) => re.test(control))?.[1]
+          ?? [control.split(": ")[0] as ControlRole | RolelessField, control.slice(control.indexOf(": ") + 2)];
         return v2.controls.some((c) => {
           const [r, n] = [c.split(": ")[0], c.slice(c.indexOf(": ") + 2)];
           return r === role && (typeof name === "string" ? n === name : name.test(n));
@@ -686,6 +800,12 @@ describe("parity with today's Settings pages, in every state", () => {
       };
       expect(today.controls.filter((c) => !v2Has(c)), `${page.name}: ${state}`).toEqual([]);
       expect(v2.asked, `${page.name}: ${state}, the question asked`).toEqual(today.asked);
+      expect(today.off.filter((c) => !v2.off.includes(c)), `${page.name}: ${state}, switches that can't be changed`).toEqual([]);
+      if (page.lines) {
+        const said = (text: string) => page.lines!.filter((l) => text.includes(l.replace(/\s+/g, " ")));
+        expect(said(v2.text), `${page.name}: ${state}, what it says`).toEqual(said(today.text));
+        expect(said(today.text).length, `${page.name}: ${state}, says something`).toBeGreaterThan(0);
+      }
     }
     // A mapping shared by several states of a page only has to match in one of them.
     if (!page.stalesOk) expect(stale([...seen], Object.keys(page.map ?? {}))).toEqual([]);
