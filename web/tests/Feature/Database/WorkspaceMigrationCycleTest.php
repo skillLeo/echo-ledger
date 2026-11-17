@@ -1393,6 +1393,19 @@ it('adds Live Assist\'s limits to the plans with the owner\'s values, and takes 
 /** The design switch is two migrations (columns, then values): roll both back with 2 + this. */
 const AFTER_DESIGN_SWITCH = 0;
 
+/** Runs the design switch's two migrations' up() again on the cycle database, as a deploy that stopped half-way would. */
+function rerunDesignSwitch(): void
+{
+    $default = config('database.default');
+    config(['database.default' => 'cycle']);
+    try {
+        (require base_path('database/migrations/2026_12_19_000001_add_design_switch_columns.php'))->up();
+        (require base_path('database/migrations/2026_12_19_000002_fill_design_switch.php'))->up();
+    } finally {
+        config(['database.default' => $default]);
+    }
+}
+
 it('maps classic to the design choice, opens the new screens on opt-in, and goes back', function () {
     $db = cycleConnection();
     cycleArtisan('migrate:fresh');
@@ -1401,35 +1414,52 @@ it('maps classic to the design choice, opens the new screens on opt-in, and goes
     $now = now();
     $classic = $db->table('users')->insertGetId(['name' => 'Classic', 'email' => 'classic@example.test', 'password' => 'x', 'ui_classic' => true, 'created_at' => $now, 'updated_at' => $now]);
     $plain = $db->table('users')->insertGetId(['name' => 'Plain', 'email' => 'plain@example.test', 'password' => 'x', 'ui_classic' => false, 'created_at' => $now, 'updated_at' => $now]);
+    $row = fn (string $flag, bool $everyone = false, int $percent = 0, string $workspaces = '[]', string $people = '[]'): array => ['flag' => $flag, 'everyone' => $everyone,
+        'percent' => $percent, 'workspace_ids' => $workspaces, 'user_ids' => $people, 'created_at' => $now, 'updated_at' => $now];
     $db->table('interface_flags')->insert([
-        ['flag' => 'ui_v2.home', 'everyone' => true, 'percent' => 0, 'workspace_ids' => '[]', 'user_ids' => '[]', 'created_at' => $now, 'updated_at' => $now],
-        ['flag' => 'ui_v2.library', 'everyone' => false, 'percent' => 0, 'workspace_ids' => '[]', 'user_ids' => '[7]', 'created_at' => $now, 'updated_at' => $now],
-        ['flag' => 'live_assist', 'everyone' => false, 'percent' => 0, 'workspace_ids' => '[]', 'user_ids' => '[]', 'created_at' => $now, 'updated_at' => $now],
+        $row('ui_v2.home', everyone: true),
+        $row('ui_v2.library', people: '[7]'),
+        $row('ui_v2.ask', workspaces: '[3,4]'),
+        $row('ui_v2.live', percent: 25, people: '[9]'),
+        $row('live_assist', people: '[5,6]'),
     ]);
 
     cycleArtisan('migrate', ['--step' => 1]);
-    // Run again (a deploy that stopped half-way): nothing changes.
-    $default = config('database.default');
-    config(['database.default' => 'cycle']);
-    (require base_path('database/migrations/2026_12_19_000001_add_design_switch_columns.php'))->up();
-    (require base_path('database/migrations/2026_12_19_000002_fill_design_switch.php'))->up();
-    config(['database.default' => $default]);
-    DB::purge('cycle');
     $availability = fn (string $flag): ?string => $db->table('interface_flags')->where('flag', $flag)->value('availability');
+    $column = fn (string $flag, string $name): mixed => $db->table('interface_flags')->where('flag', $flag)->value($name);
     expect($db->table('users')->where('id', $classic)->value('ui_design'))->toBe('classic')
         ->and($db->table('users')->where('id', $plain)->value('ui_design'))->toBeNull()
         ->and($availability('ui_v2.home'))->toBe('everyone')
-        ->and($availability('ui_v2.library'))->toBe('opt_in')
-        ->and($db->table('interface_flags')->where('flag', 'ui_v2.library')->value('user_ids'))->toBe('[7]')
+        ->and($availability('ui_v2.library'))->toBe('opt_in')->and($column('ui_v2.library', 'user_ids'))->toBe('[7]')
+        ->and($availability('ui_v2.ask'))->toBe('opt_in')->and($column('ui_v2.ask', 'workspace_ids'))->toBe('[3,4]')
+        ->and($availability('ui_v2.live'))->toBe('opt_in')->and((int) $column('ui_v2.live', 'percent'))->toBe(25)->and($column('ui_v2.live', 'user_ids'))->toBe('[9]')
+        ->and($availability('live_assist'))->toBe('off')->and($column('live_assist', 'user_ids'))->toBe('[5,6]')
         ->and($availability('ui_v2.shell'))->toBe('opt_in')
-        ->and($availability('live_assist'))->toBe('off')
         ->and($db->table('interface_flags')->whereIn('flag', ['ui_v2.shell', 'ui_v2.website', 'ui_v2.admin'])->count())->toBe(3);
+
+    // Changes made after the deploy, on purpose: an admin's choices (one of them "off") and a person's own.
+    $db->table('interface_flags')->where('flag', 'ui_v2.settings')->update(['availability' => 'everyone', 'everyone' => true]);
+    $db->table('interface_flags')->where('flag', 'ui_v2.shell')->update(['availability' => 'off']);
+    $db->table('interface_flags')->where('flag', 'ui_v2.library')->update(['user_ids' => '[7,8]']);
+    $db->table('users')->where('id', $plain)->update(['ui_design' => 'v2']);
+    $snapshot = fn (): array => [
+        $db->table('interface_flags')->orderBy('flag')->get()->map(fn (object $r): array => (array) $r)->all(),
+        $db->table('users')->orderBy('id')->get(['id', 'ui_classic', 'ui_design'])->map(fn (object $r): array => (array) $r)->all(),
+    ];
+    $before = $snapshot();
+
+    // Run both again (a deploy that stopped half-way): every row and every choice stays as it is.
+    rerunDesignSwitch();
+    expect($snapshot())->toBe($before)
+        ->and($availability('ui_v2.shell'))->toBe('off')->and($availability('ui_v2.settings'))->toBe('everyone')
+        ->and($db->table('users')->where('id', $plain)->value('ui_design'))->toBe('v2');
 
     cycleArtisan('migrate:rollback', ['--step' => 2 + AFTER_DESIGN_SWITCH]);
     expect($db->getSchemaBuilder()->hasColumn('users', 'ui_design'))->toBeFalse()
         ->and($db->getSchemaBuilder()->hasColumn('interface_flags', 'availability'))->toBeFalse()
         ->and((bool) $db->table('users')->where('id', $classic)->value('ui_classic'))->toBeTrue()
-        ->and((bool) $db->table('interface_flags')->where('flag', 'ui_v2.home')->value('everyone'))->toBeTrue();
+        ->and((bool) $db->table('interface_flags')->where('flag', 'ui_v2.home')->value('everyone'))->toBeTrue()
+        ->and($column('live_assist', 'user_ids'))->toBe('[5,6]');
 
     cycleArtisan('migrate', ['--step' => 1]);
     expect($db->getSchemaBuilder()->hasColumn('users', 'ui_design'))->toBeTrue();

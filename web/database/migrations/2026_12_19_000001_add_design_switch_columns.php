@@ -7,8 +7,8 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /*
- * The design switch both ways (contract 2.0.0-g), the columns: interface_flags.availability (off, opt_in, everyone)
- * and users.ui_design (classic, v2 or null). The values are 2026_12_19_000002's. Safe to run again: each column is
+ * The design switch both ways (contract 2.0.0-g), the columns: interface_flags.availability (off, opt_in, everyone;
+ * null = not filled yet, read as before 2.0.0-g) and users.ui_design (classic, v2 or null). The values are 2026_12_19_000002's. Safe to run again: each column is
  * added only when missing and dropped only when present.
  */
 return new class extends Migration
@@ -17,7 +17,8 @@ return new class extends Migration
     {
         if (! Schema::hasColumn('interface_flags', 'availability')) {
             Schema::table('interface_flags', function (Blueprint $table): void {
-                $table->string('availability', 16)->default('off');
+                // No default: "off" is also an admin's choice, so only null says "not filled yet".
+                $table->string('availability', 16)->nullable();
             });
         }
         if (! Schema::hasColumn('users', 'ui_design')) {

@@ -16,7 +16,7 @@ use Illuminate\Support\Carbon;
  * @property int $percent 0–100: the share of accounts, the same accounts every time
  * @property list<int>|null $workspace_ids
  * @property list<int>|null $user_ids
- * @property string $availability since 2.0.0-g: off | opt_in | everyone
+ * @property string|null $availability since 2.0.0-g: off | opt_in | everyone (null: not filled, read as before)
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */

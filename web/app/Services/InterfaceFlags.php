@@ -136,7 +136,10 @@ final class InterfaceFlags
             || self::bucket($flag, $scope->userId) < max(0, min(100, $rule->percent));
     }
 
-    /** A row's availability; one saved before 2.0.0-g reads from its "everyone". live_assist has no opt_in. */
+    /**
+     * A row's availability. Null (a row not filled by the 2.0.0-g migration, or made without it) reads as before
+     * 2.0.0-g: everyone when its "everyone" is on, else off. live_assist has no opt_in.
+     */
     public static function availabilityOf(InterfaceFlag $rule): string
     {
         $availability = in_array($rule->availability ?? null, self::AVAILABILITIES, true) ? $rule->availability : ($rule->everyone ? 'everyone' : 'off');

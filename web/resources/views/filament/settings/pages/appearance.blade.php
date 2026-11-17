@@ -40,7 +40,7 @@
     <x-el.section :footer="__('See the redesigned screens, here and in the apps. You can switch back to classic at any time.')">
         <button type="button" class="el-set-row" id="setting-appearance.design" wire:click="tryNewDesign" data-design-switch="v2">
             <span class="el-set-text"><span class="el-set-title">{{ __('Try the new design') }}</span></span>
-            <span class="el-set-control" aria-hidden="true">@svg('heroicon-o-chevron-right', ['class' => 'el-set-chevron v2-icon-flip', 'aria-hidden' => 'true'])</span>
+            <span class="el-set-control" aria-hidden="true">@svg('heroicon-o-chevron-right', ['class' => 'el-set-chevron v2-icon-flip'])</span>
         </button>
     </x-el.section>
 @elseif ($design['can_switch_back'])
@@ -48,7 +48,7 @@
     <x-el.section :footer="__('Turns the redesigned screens off for you, here and in the apps. You can try them again at any time.')">
         <button type="button" class="el-set-row" id="setting-appearance.design" wire:click="switchBackToClassic" data-design-switch="classic">
             <span class="el-set-text"><span class="el-set-title">{{ __('Switch back to classic') }}</span></span>
-            <span class="el-set-control" aria-hidden="true">@svg('heroicon-o-chevron-right', ['class' => 'el-set-chevron v2-icon-flip', 'aria-hidden' => 'true'])</span>
+            <span class="el-set-control" aria-hidden="true">@svg('heroicon-o-chevron-right', ['class' => 'el-set-chevron v2-icon-flip'])</span>
         </button>
     </x-el.section>
 @endif
