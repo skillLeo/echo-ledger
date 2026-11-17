@@ -485,8 +485,10 @@ you afterwards. Choose how in **Settings → Calls & meetings → After a call**
   shows for 6 seconds. **Undo** deletes it; nothing has been uploaded yet.
 - **Ask me**: a small after-call card with the title, **✓** (keep) and **Discard** (a bin on the computer, **✕** on
   the phone). Tap the title to rename it or pick a client. On the computer, **Discard** can be undone for a few
-  seconds: **"Discarded · Call with Omar · 4:12 · Undo"** shows, and nothing is deleted until it goes. If you do
-  nothing, the call is kept after 10 seconds.
+  seconds: **"Discarded · Call with Omar · 4:12 · Undo"** shows, and nothing is deleted until it goes. On the computer,
+  if you do nothing, the card waits 12 seconds and then saves the audio without transcribing it (**Save audio**; the
+  card says **"Saved as audio"**). The call then waits in the Library's **Not transcribed**, where **Transcribe**
+  starts its transcript.
 
 Calls are **skipped** quietly, with no question: a call that was never answered (on the phone), a call shorter than
 **Skip calls shorter than** (10 seconds by default), and a call where nobody spoke. Activity shows one line,

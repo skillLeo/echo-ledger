@@ -129,6 +129,24 @@ function abilityRoutes(): array
         'delete your account' => ['DELETE', '/api/account', 'sessions:write'],
         'export your data' => ['POST', '/api/account/export', 'library:read'],
         'your export' => ['GET', "/api/account/export/{$id}", 'library:read'],
+        // Since v1.9 (L1): Live Assist, behind the live_assist flag (the ability is checked first).
+        'assist: list preps' => ['GET', '/api/assist/preps', 'library:read'],
+        'assist: a prep' => ['GET', "/api/assist/preps/{$id}", 'library:read'],
+        'assist: list sessions' => ['GET', '/api/assist/sessions', 'library:read'],
+        'assist: a session' => ['GET', "/api/assist/sessions/{$id}", 'library:read'],
+        'assist: a report' => ['GET', "/api/assist/sessions/{$id}/report", 'library:read'],
+        'assist: save a prep' => ['POST', '/api/assist/preps', 'sessions:write'],
+        'assist: change a prep' => ['PATCH', "/api/assist/preps/{$id}", 'sessions:write'],
+        'assist: delete a prep' => ['DELETE', "/api/assist/preps/{$id}", 'sessions:write'],
+        'assist: attach documents' => ['POST', "/api/assist/preps/{$id}/documents", 'sessions:write'],
+        'assist: detach a document' => ['DELETE', "/api/assist/preps/{$id}/documents/{$id}", 'sessions:write'],
+        'assist: arm a prep' => ['POST', "/api/assist/preps/{$id}/arm", 'sessions:write'],
+        'assist: send turns' => ['POST', "/api/assist/sessions/{$id}/turns", 'sessions:write'],
+        'assist: end a session' => ['POST', "/api/assist/sessions/{$id}/end", 'sessions:write'],
+        'assist: delete a session' => ['DELETE', "/api/assist/sessions/{$id}", 'sessions:write'],
+        'assist: what was done with a suggestion' => ['POST', "/api/assist/sessions/{$id}/suggestions/{$id}/action", 'sessions:write'],
+        'assist: start a session' => ['POST', '/api/assist/sessions', 'stt:token'],
+        'assist: refresh its tokens' => ['POST', "/api/assist/sessions/{$id}/token", 'stt:token'],
     ];
 }
 
@@ -146,7 +164,7 @@ describe('route coverage', function () {
         expect($declared)->toBe($tested);
     });
 
-    it('leaves only registration, account sign-in and its options, signed audio and provider webhooks reachable without a token', function () {
+    it('leaves only registration, account sign-in and its options, signed audio, provider webhooks and the relay\'s signed API reachable without a token', function () {
         $open = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/') && ! in_array('auth:sanctum', $route->gatherMiddleware(), true))
             ->map(fn ($route) => $route->methods()[0].' /'.$route->uri())
@@ -154,6 +172,7 @@ describe('route coverage', function () {
 
         expect($open)->toBe([
             'GET /api/auth/options',
+            'GET /api/internal/assist/providers',
             'GET /api/recordings/{recording}/audio',
             'POST /api/auth/code',
             'POST /api/auth/code/verify',
@@ -162,6 +181,11 @@ describe('route coverage', function () {
             'POST /api/auth/sign-up',
             'POST /api/auth/start',
             'POST /api/devices/register',
+            // Since v1.9 (L1): the Live Assist relay's internal API, HMAC-signed by the relay (VerifyAssistRelay).
+            'POST /api/internal/assist/facts',
+            'POST /api/internal/assist/suggestions',
+            'POST /api/internal/assist/summary',
+            'POST /api/internal/assist/usage',
             'POST /api/webhooks/stt/{provider}',
         ]);
     });

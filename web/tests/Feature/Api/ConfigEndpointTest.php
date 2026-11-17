@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
@@ -37,6 +38,22 @@ describe('the device block', function () {
         $time = $this->getJson('/api/config')->json('server_time');
 
         expect($time)->toMatch(Fixtures::ISO_8601)->and(strtotime($time))->toBe(now()->getTimestamp());
+    });
+});
+
+describe('the trash', function () {
+    it('says how long a deleted recording can be restored, from the bin\'s own length (2.0.0-b)', function () {
+        $keep = $this->getJson('/api/config')->assertOk()->json('trash.keep_hours');
+
+        expect($keep)->toBe(CaptureSession::BIN_HOURS);
+        // And the bin really keeps a deleted recording that long: restorable just before, not just after.
+        $session = CaptureSession::factory()->create(['user_id' => $this->device->user_id, 'workspace_id' => $this->device->workspace_id]);
+        $session->delete();
+        $this->freezeTime();
+        CaptureSession::withTrashed()->whereKey($session->id)->update(['deleted_at' => now()->subHours($keep)->addMinute()]);
+        expect(CaptureSession::withTrashed()->find($session->id)->restorable())->toBeTrue();
+        CaptureSession::withTrashed()->whereKey($session->id)->update(['deleted_at' => now()->subHours($keep)->subMinute()]);
+        expect(CaptureSession::withTrashed()->find($session->id)->restorable())->toBeFalse();
     });
 });
 

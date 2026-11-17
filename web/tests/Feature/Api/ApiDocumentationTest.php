@@ -84,7 +84,31 @@ function registeredApiRoutes(): array
  */
 /** v1.6 P1: the contract is written first; each route leaves this list when it is served. */
 /** Routes served before docs/API.md names them (a branch ahead of the contract); empty when they agree. */
-const SERVED_BEFORE_DOCUMENTED = [];
+const SERVED_BEFORE_DOCUMENTED = [
+    // Live Assist (v1.9 L1): its contract is docs/API_ASSIST.md until the L1 merge moves it into docs/API.md.
+    'DELETE /api/assist/preps/{}',
+    'DELETE /api/assist/preps/{}/documents/{}',
+    'DELETE /api/assist/sessions/{}',
+    'GET /api/assist/preps',
+    'GET /api/assist/preps/{}',
+    'GET /api/assist/sessions',
+    'GET /api/assist/sessions/{}',
+    'GET /api/assist/sessions/{}/report',
+    'GET /api/internal/assist/providers',
+    'PATCH /api/assist/preps/{}',
+    'POST /api/assist/preps',
+    'POST /api/assist/preps/{}/arm',
+    'POST /api/assist/preps/{}/documents',
+    'POST /api/assist/sessions',
+    'POST /api/assist/sessions/{}/end',
+    'POST /api/assist/sessions/{}/suggestions/{}/action',
+    'POST /api/assist/sessions/{}/token',
+    'POST /api/assist/sessions/{}/turns',
+    'POST /api/internal/assist/facts',
+    'POST /api/internal/assist/suggestions',
+    'POST /api/internal/assist/summary',
+    'POST /api/internal/assist/usage',
+];
 
 const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate'];
 

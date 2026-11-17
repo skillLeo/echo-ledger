@@ -40,6 +40,12 @@ final class SettingsRepository
         'soniox.async_model' => 'stt-async-v5',          // docs: soniox.com/docs/stt/models (2026-10)
         // Live Translate (plan B): the phone streams to Soniox with a temporary key; nothing passes through here.
         'live_translate.model' => 'stt-rt-v5',
+        // Since v1.9 (L1): the Live Assist relay's host; the apps get wss://<host>/v1/assist. Null: it cannot start.
+        'relay.url' => null,
+        // Since 1.9.0-g: the relay host's public-key pins (primary and backup), sent while live_assist is on.
+        'relay.pins' => [],
+        // A fingerprint of the relay secret once the relay signed with it (App\Services\Assist\RelaySecret::signing).
+        'relay.secret_seen' => null,
         'live_translate.monthly_usd' => 10.0,           // Live Translate's own monthly cap (warn at 80 %, pause at 100 %)
         'live_translate.game_target' => 'en',
         'live_translate.game_spoken' => ['ar', 'en'],
@@ -209,6 +215,18 @@ final class SettingsRepository
         $pins = $this->get('app.pins', []);
 
         // A malformed stored pin would make every pinned connection fail on the devices: hand out only valid ones.
+        return is_array($pins) ? array_values(array_filter($pins, CertificatePin::isValid(...))) : [];
+    }
+
+    /**
+     * The Live Assist relay host's pins (since 1.9.0-g), only valid ones, as pins().
+     *
+     * @return list<string>
+     */
+    public function relayPins(): array
+    {
+        $pins = $this->get('relay.pins', []);
+
         return is_array($pins) ? array_values(array_filter($pins, CertificatePin::isValid(...))) : [];
     }
 
