@@ -4,7 +4,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { AfterCallNotice } from "./AfterCallNotice";
 import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { resetClosedBanners } from "../../components/StateBanner";
-import { NO_TARGET } from "../../lib/notice";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
