@@ -334,6 +334,11 @@ function isoApiCases(array $b): array
         'api.workspace.invitations.destroy' => ['DELETE', "/api/workspace/invitations/{$b['bobInvitation']->id}", [], 404],
         'api.workspace.invite-links.store' => ['POST', '/api/workspace/invite-links', ['role' => 'viewer'], fn (TestResponse $r): bool => in_array($r->status(), [201, 403], true)],
         'api.workspace.invite-links.destroy' => ['DELETE', "/api/workspace/invite-links/{$b['bobLink']->id}", [], 404],
+        // Since v1.8 P6.4: the guide and the release notes are the server's, the same for everyone; support writes A's own.
+        'api.help.guides' => ['GET', '/api/help/guides?q=call', [], 'list'],
+        'api.help.guides.show' => ['GET', '/api/help/guides/after-a-call', [], 'list'],
+        'api.help.whats-new' => ['GET', '/api/help/whats-new', [], 'list'],
+        'api.support.messages' => ['POST', '/api/support/messages', ['subject' => 'Hi', 'message' => 'A question', 'include_device_report' => true], fn (TestResponse $r): bool => $r->status() === 202],
         // Since v1.9 (L1): Live Assist. Lists hold only Alice's own; Bob's prep and session are the same 404 as unknown ids.
         'api.assist.preps' => ['GET', '/api/assist/preps', [], 'list'],
         'api.assist.preps.store' => ['POST', '/api/assist/preps', ['meeting_type' => 'general'], fn (TestResponse $r): bool => $r->status() === 201],

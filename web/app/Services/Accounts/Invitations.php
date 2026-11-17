@@ -104,13 +104,15 @@ final class Invitations
     /** The newest usable invitation for an address (a Google sign-up while only invited people may sign up). */
     public function pendingFor(string $email): ?WorkspaceInvitation
     {
+        // Only one whose sender may still invite (since v1.8 P6.3): a removed or deleted sender's lets nobody in.
         return WorkspaceInvitation::query()->where('email', Str::lower(trim($email)))->whereNull('accepted_at')
-            ->where('expires_at', '>', now())->latest('id')->first();
+            ->where('expires_at', '>', now())->latest('id')->with('workspace')->limit(20)->get()
+            ->first(fn (WorkspaceInvitation $i): bool => self::inviterMay($i, $i->workspace));
     }
 
     public function matches(WorkspaceInvitation $invitation, string $email): bool
     {
-        return $invitation->usable() && hash_equals($invitation->email, Str::lower(trim($email)));
+        return $invitation->usable() && hash_equals($invitation->email, Str::lower(trim($email))) && self::inviterMay($invitation, $invitation->workspace);
     }
 
     /**

@@ -88,9 +88,7 @@ function registeredApiRoutes(): array
 const SERVED_BEFORE_DOCUMENTED = [
 ];
 
-const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate',
-    // v1.8 P6.4 (2.0.0-d): help and support, until they are served.
-    'GET /api/help/guides', 'GET /api/help/guides/{}', 'GET /api/help/whats-new', 'POST /api/support/messages'];
+const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate'];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();
