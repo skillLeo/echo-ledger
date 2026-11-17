@@ -33,6 +33,21 @@ async fn the_config_brings_the_flags_known_ones_only() {
 }
 
 #[tokio::test]
+async fn the_relay_is_pinned_with_its_own_keys_never_the_server_s() {
+    let server = MockServer::start(Router::new().fixed("GET", "/api/config", Reply::json(200, fixture("config_ui_flags.json"))));
+    let config = client(&server).config().await.unwrap();
+    let relay = desktop_lib::assist::relay_pins(Some(&config));
+    assert_eq!(relay, ["sha256/RELAYPRIMARYPIN0000000000000000000000000000=", "sha256/RELAYBACKUPPIN00000000000000000000000000000="], "contract 1.9.0-g");
+    assert!(!config.pins.is_empty() && relay.iter().all(|pin| !config.pins.contains(pin)), "the server's pins are not the relay's");
+    let older: ServerConfig = serde_json::from_value(fixture("config.json")).unwrap();
+    assert!(desktop_lib::assist::relay_pins(Some(&older)).is_empty(), "no relay_pins: Live Assist can't connect yet");
+    assert!(desktop_lib::assist::relay_pins(None).is_empty());
+    let mut odd = fixture("config_ui_flags.json");
+    odd["relay_pins"] = json!("sha256/NOT-A-LIST");
+    assert!(serde_json::from_value::<ServerConfig>(odd).unwrap().relay_pins.is_empty(), "a malformed list never breaks the config");
+}
+
+#[tokio::test]
 async fn an_older_server_without_flags_has_every_flag_off() {
     let server = MockServer::start(Router::new().fixed("GET", "/api/config", Reply::json(200, fixture("config.json"))));
     let config = client(&server).config().await.unwrap();

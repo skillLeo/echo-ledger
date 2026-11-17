@@ -45,8 +45,13 @@ pub struct ServerConfig {
     pub providers: HashMap<String, ProviderConfig>,
     #[serde(default)]
     pub captions: CaptionsConfig,
+    /// The server's own public keys (the device security list).
     #[serde(default)]
     pub pins: Vec<String>,
+    /// The Live Assist relay host's public keys, its key and a backup (contract 1.9.0-g): sent while `live_assist` is on
+    /// for the person. Empty or missing means Live Assist can't connect yet; never the server's `pins`.
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub relay_pins: Vec<String>,
     /// `"1.1"` on v1.1 servers, absent on v1 servers (docs/API.md "Conventions").
     #[serde(default, deserialize_with = "lenient")]
     pub api_version: Option<String>,

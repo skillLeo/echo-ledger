@@ -2558,8 +2558,9 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
     Ok(crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic))
 }
 
-/// Starts a Live Assist session (docs/API_ASSIST.md 1.9.0-e), only while the server's `live_assist` flag is on: the
-/// server first (`POST /api/assist/sessions`), then the relay. Suggestions reach the window as `assist:suggestion_start`,
+/// Starts a Live Assist session (docs/API_ASSIST.md 1.9.0-g), only while the server's `live_assist` flag is on: the
+/// server first (`POST /api/assist/sessions`), then the relay, pinned with the config's `relay_pins` (none refuses the
+/// connection in plain words). Suggestions reach the window as `assist:suggestion_start`,
 /// `assist:token`, `assist:suggestion_end`, `assist:skip` and `assist:mode_changed`, the connection as `assist:state`.
 #[tauri::command]
 pub async fn assist_start(
@@ -2572,7 +2573,8 @@ pub async fn assist_start(
     let state = app.state::<AppState>();
     let api = std::sync::Arc::new(state.api()?);
     let flags = crate::ui_flags::cached(&state);
-    let pins = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|c| c.pins.clone()).unwrap_or_default();
+    // The relay host's own pins (`relay_pins`, contract 1.9.0-g); none refuses the connection in plain words.
+    let pins = crate::assist::relay_pins(state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref());
     let practice = practice.unwrap_or(false);
     let request = crate::net::models::AssistStartRequest {
         prep_id,

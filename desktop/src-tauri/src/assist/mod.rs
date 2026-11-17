@@ -11,6 +11,12 @@ pub mod protocol;
 pub mod session;
 pub mod turns;
 
+/// The relay host's pins from the last config (`relay_pins`, contract 1.9.0-g), never the server's own `pins`; empty
+/// before the first config or from a server without them, which refuses the connection.
+pub fn relay_pins(config: Option<&crate::net::models::ServerConfig>) -> Vec<String> {
+    config.map(|c| c.relay_pins.clone()).unwrap_or_default()
+}
+
 /// Whether Live Assist may run for this person: the server's `live_assist` flag (contract 2.0.0-a), never decided here.
 pub fn enabled(flags: &crate::ui_flags::UiFlags) -> bool {
     flags.is_on("live_assist")

@@ -3,7 +3,7 @@
 //!
 //! - connects to `relay.url` with the relay token as `Authorization: Bearer`, TCP_NODELAY on the socket (the relay's
 //!   load test found Nagle's delay cost 20–30 ms a suggestion), over `wss://` with the relay's public key pinned like
-//!   the server's (its key and a backup, from the device security list); no pins or another key refuse the
+//!   the server's (its key and a backup, `relay_pins` in `GET /api/config`, 1.9.0-g); no pins or another key refuse the
 //!   connection in plain words, and recording goes on unaffected. Plain `ws://` only to this computer, in debug builds
 //!   and tests;
 //! - waits for `ready`, then sends what waits, paced to its `limits.messages_per_second`, with a `seq` per connection
@@ -34,8 +34,8 @@ use super::protocol::{ClientMessage, ServerMessage, parse};
 
 pub type Socket = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
-/// The relay block of `POST /api/assist/sessions` and of each token refresh, with the relay's pins (the device
-/// security list, `config.pins`: its key and a backup).
+/// The relay block of `POST /api/assist/sessions` and of each token refresh, with the relay's pins (`relay_pins` in
+/// `GET /api/config`, contract 1.9.0-g: its key and a backup; never the server's `pins`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct RelayGrant {
     pub url: String,
