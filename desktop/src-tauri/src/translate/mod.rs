@@ -59,6 +59,15 @@ pub struct Feed {
     pub notice: Option<String>,
     pub locked: bool,
     pub hidden: bool,
+    /// The keys that show it again and that lock or move it, as this system writes them (⌘⇧H, Ctrl+Shift+H): hidden,
+    /// the window still says it is listening, and how to bring it back.
+    pub hide_keys: String,
+    pub lock_keys: String,
+}
+
+/// The keys of a Live Translate action as this system writes them, tight for the small window: "⌘⇧H", "Ctrl+Shift+H".
+pub fn keys(action: crate::shortcuts::Action, macos: bool) -> String {
+    action.default_accelerator().map(|a| crate::shortcuts::label(a, macos).replace(" + ", "+")).unwrap_or_default()
 }
 
 /// `translate_start`: which app (pid and name), Game or Watch, the language to write in, the languages people speak
@@ -336,6 +345,8 @@ where
         app: name,
         status: "listening".into(),
         locked: true,
+        hide_keys: keys(crate::shortcuts::Action::TranslateHide, cfg!(target_os = "macos")),
+        lock_keys: keys(crate::shortcuts::Action::TranslateLock, cfg!(target_os = "macos")),
         ..Default::default()
     }));
     *running()
@@ -523,6 +534,15 @@ fn tail(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_keys_are_written_as_each_system_writes_them() {
+        use crate::shortcuts::Action;
+        assert_eq!(keys(Action::TranslateHide, false), "Ctrl+Shift+H");
+        assert_eq!(keys(Action::TranslateLock, false), "Ctrl+Shift+T");
+        assert_eq!(keys(Action::TranslateHide, true), "⌘⇧H");
+        assert_eq!(keys(Action::TranslateLock, true), "⌘⇧T");
+    }
 
     #[test]
     fn live_translate_says_why_it_cannot_start() {

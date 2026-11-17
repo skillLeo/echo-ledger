@@ -20,6 +20,9 @@ export interface TranslateFeed {
   notice: string | null;
   locked: boolean;
   hidden: boolean;
+  /** The keys that show it again and that lock or move it, as this system writes them ("⌘⇧H", "Ctrl+Shift+H"). */
+  hide_keys: string;
+  lock_keys: string;
 }
 
 export const TRANSLATE_FEED = "translate-feed";
