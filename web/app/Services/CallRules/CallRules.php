@@ -61,9 +61,10 @@ final class CallRules
         return $user->short_calls_keep ?? true;
     }
 
-    public function setDefault(User $user, string $action): void
+    /** [$workspaceId]: the workspace the asking device belongs to, whose plan decides auto_transcribe. */
+    public function setDefault(User $user, string $action, int $workspaceId): void
     {
-        $this->assertAction($user, $action);
+        $this->assertAction($user, $action, $workspaceId);
         $user->forceFill(['after_call_default' => $action])->save();
         $this->bump($user);
     }
@@ -75,7 +76,7 @@ final class CallRules
     }
 
     /** Creates or changes a rule; `null` action removes it ("Use my default"). */
-    public function setRule(User $user, string $kind, string $key, ?string $action, ?string $name = null): void
+    public function setRule(User $user, int $workspaceId, string $kind, string $key, ?string $action, ?string $name = null): void
     {
         $key = self::normaliseKey($kind, $key);
         if ($action === null) {
@@ -84,7 +85,7 @@ final class CallRules
 
             return;
         }
-        $this->assertAction($user, $action);
+        $this->assertAction($user, $action, $workspaceId);
         DB::transaction(function () use ($user, $kind, $key, $action, $name): void {
             $existing = CallRule::query()->where('user_id', $user->id)->where('kind', $kind)->where('key', $key)->lockForUpdate()->first();
             if ($existing === null && $kind === 'contact'
@@ -102,7 +103,7 @@ final class CallRules
      *
      * @return array{action: string, by: string}
      */
-    public function resolve(User $user, ?string $source = null, ?string $contactKey = null, ?string $group = null): array
+    public function resolve(User $user, int $workspaceId, ?string $source = null, ?string $contactKey = null, ?string $group = null): array
     {
         $rules = CallRule::query()->where('user_id', $user->id)->get();
         $find = fn (string $kind, ?string $key): ?string => $key === null ? null
@@ -117,16 +118,21 @@ final class CallRules
             default => ['transcribe', 'legacy'],
         };
         // On a plan without auto_transcribe a stored "transcribe" asks instead (legacy keeps today's behaviour).
-        if ($action === 'transcribe' && $by !== 'legacy' && ! $this->autoTranscribe($user)) {
+        if ($action === 'transcribe' && $by !== 'legacy' && ! $this->autoTranscribe($user, $workspaceId)) {
             $action = 'ask';
         }
 
         return ['action' => $action, 'by' => $by];
     }
 
-    public function autoTranscribe(User $user): bool
+    /**
+     * Whether "Transcribe automatically" is in the plan of [$workspaceId]: always the workspace of the recording or of
+     * the asking device, never the person's current one (a person in a paid and a Free workspace must not carry one
+     * plan's feature to the other's recordings).
+     */
+    public function autoTranscribe(User $user, int $workspaceId): bool
     {
-        return $this->entitlements->allows((int) $user->current_workspace_id, $user->id, 'auto_transcribe');
+        return $this->entitlements->allows($workspaceId, $user->id, 'auto_transcribe');
     }
 
     public static function validKey(string $key): bool
@@ -139,13 +145,13 @@ final class CallRules
         return $kind === 'contact' ? mb_strtolower($key) : $key;
     }
 
-    private function assertAction(User $user, string $action): void
+    private function assertAction(User $user, string $action, int $workspaceId): void
     {
         if (! in_array($action, self::ACTIONS, true)) {
             throw new ApiError(422, 'invalid_action', 'That is not one of the choices.');
         }
-        if ($action === 'transcribe' && ! $this->autoTranscribe($user)) {
-            $this->entitlements->assertFeature((int) $user->current_workspace_id, $user->id, 'auto_transcribe');
+        if ($action === 'transcribe' && ! $this->autoTranscribe($user, $workspaceId)) {
+            $this->entitlements->assertFeature($workspaceId, $user->id, 'auto_transcribe');
         }
     }
 

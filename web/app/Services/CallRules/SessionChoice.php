@@ -52,7 +52,8 @@ final class SessionChoice
         }
         $user = $session->user ?? User::query()->find($session->user_id);
         $default = $user?->after_call_default;
-        if ($default === null || ($default === 'transcribe' && app(CallRules::class)->autoTranscribe($user))) {
+        // The recording's own workspace decides auto_transcribe, never the person's current one.
+        if ($default === null || ($default === 'transcribe' && app(CallRules::class)->autoTranscribe($user, (int) $session->workspace_id))) {
             return true;
         }
         $session->forceFill(['choice' => 'keep_audio', 'choice_by' => 'default', 'choice_at' => now(), 'needs_action' => true])->saveQuietly();

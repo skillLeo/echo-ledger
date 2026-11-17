@@ -36,8 +36,9 @@ final class CallRulesController extends Controller
     public function setDefault(Request $request): JsonResponse
     {
         $data = $request->validate(['action' => ['required', 'string']]);
-        $user = $this->device($request)->user;
-        $this->rules->setDefault($user, $data['action']);
+        $device = $this->device($request);
+        $user = $device->user;
+        $this->rules->setDefault($user, $data['action'], (int) $device->workspace_id);
 
         return response()->json($this->rules->document($user));
     }
@@ -77,8 +78,9 @@ final class CallRulesController extends Controller
             'action' => ['required', 'string'],
         ]);
         $this->assertKey($data['key']);
-        $user = $this->device($request)->user;
-        $this->rules->setRule($user, 'contact', $data['key'], $data['action'], $data['name'] ?? null);
+        $device = $this->device($request);
+        $user = $device->user;
+        $this->rules->setRule($user, (int) $device->workspace_id, 'contact', $data['key'], $data['action'], $data['name'] ?? null);
 
         return response()->json($this->rules->document($user));
     }
@@ -88,8 +90,9 @@ final class CallRulesController extends Controller
     {
         $data = $request->validate(['key' => ['required', 'string', 'min:3', 'max:120']]);
         $this->assertKey($data['key']);
-        $user = $this->device($request)->user;
-        $this->rules->setRule($user, 'contact', $data['key'], null);
+        $device = $this->device($request);
+        $user = $device->user;
+        $this->rules->setRule($user, (int) $device->workspace_id, 'contact', $data['key'], null);
 
         return response()->json($this->rules->document($user));
     }
@@ -103,7 +106,9 @@ final class CallRulesController extends Controller
             'group' => ['nullable', Rule::in(CallRules::GROUPS)],
         ]);
 
-        return response()->json($this->rules->resolve($this->device($request)->user, $data['source'] ?? null, $data['key'] ?? null, $data['group'] ?? null));
+        $device = $this->device($request);
+
+        return response()->json($this->rules->resolve($device->user, (int) $device->workspace_id, $data['source'] ?? null, $data['key'] ?? null, $data['group'] ?? null));
     }
 
     /** POST /api/sessions/{id}/choice */
@@ -175,12 +180,13 @@ final class CallRulesController extends Controller
 
     private function named(Request $request, string $kind, string $key): JsonResponse
     {
-        $user = $this->device($request)->user;
+        $device = $this->device($request);
+        $user = $device->user;
         if ($request->isMethod('DELETE')) {
-            $this->rules->setRule($user, $kind, $key, null);
+            $this->rules->setRule($user, (int) $device->workspace_id, $kind, $key, null);
         } else {
             $data = $request->validate(['action' => ['required', 'string']]);
-            $this->rules->setRule($user, $kind, $key, $data['action']);
+            $this->rules->setRule($user, (int) $device->workspace_id, $kind, $key, $data['action']);
         }
 
         return response()->json($this->rules->document($user));
