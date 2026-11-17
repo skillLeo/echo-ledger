@@ -547,3 +547,47 @@ async fn a_background_task_that_panics_frees_its_reservation_and_its_busy_flag()
     let question = s.next().await;
     assert_eq!((question["type"].as_str(), question["index"].as_u64()), (Some("practice_question"), Some(1)), "{question}");
 }
+
+fn pricey_input() -> RelayConfig {
+    let mut config = RelayConfig::built_in();
+    for spec in config.models.values_mut() {
+        spec.price.input = 10.0;
+        spec.price.cache_read = 0.0;
+        spec.price.cache_write = 0.0;
+        spec.price.output = 0.0;
+        spec.long_context = None;
+    }
+    config
+}
+
+/// A session with (or without) a long CV, then three lines: the mode it ran in and how many facts calls started.
+async fn facts_beside_a_document(cents_left: u64, session: &str, document: bool) -> (String, usize) {
+    let h = harness(pricey_input());
+    let mut token = claims(session);
+    token.budget.cents_left = cents_left;
+    let mut s = h.connect(token);
+    let mut mode = s.next().await["mode"].as_str().unwrap_or_default().to_owned();
+    let documents = if document { json!([{"id": "cv", "title": "CV", "text": "Payments, refunds and payouts. ".repeat(400)}]) } else { json!([]) };
+    s.send(json!({"type": "context_update", "documents": documents})).await;
+    for m in s.drain(Duration::from_millis(200)).await {
+        if m["type"] == "mode_changed" {
+            mode = m["mode"].as_str().unwrap_or_default().to_owned();
+        }
+    }
+    for (i, line) in ["I can start on the 3rd.", "My rate is 35 dollars an hour.", "The first build takes 2 weeks."].iter().enumerate() {
+        s.send(final_turn(&format!("m-{i}"), "me", line)).await;
+    }
+    s.drain(Duration::from_secs(3)).await;
+    let facts = h.mock(assist_relay::domain::ProviderKind::Anthropic).requests().iter().filter(|(_, p)| *p == Purpose::Facts).count();
+    (mode, facts)
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_reserved_suggestions_worst_case_counts_the_documents() {
+    // Input priced, output free: a long CV makes every suggestion dearer, not the facts call (its context has no
+    // documents). At 30 cents the facts call fits beside three Balanced suggestions without the CV, not with it.
+    assert_eq!(facts_beside_a_document(30, "s-doc-none", false).await, ("balanced".to_owned(), 1));
+    assert_eq!(facts_beside_a_document(30, "s-doc-cv", true).await, ("balanced".to_owned(), 0));
+    // With room for both, it runs.
+    assert_eq!(facts_beside_a_document(60, "s-doc-room", true).await, ("balanced".to_owned(), 1));
+}

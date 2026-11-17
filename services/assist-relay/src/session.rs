@@ -268,6 +268,14 @@ impl Active {
 }
 
 /// A finished suggestion, kept for rewrites and for `replaces`.
+/// The fixed part of a request (rules to memory): its estimated tokens, for the mode choice, and their upper bound
+/// (`text::upper_tokens`), for budget bounds. Measured together, so neither is ever missing.
+#[derive(Debug, Clone, Copy)]
+struct Fixed {
+    tokens: u32,
+    upper: u32,
+}
+
 #[derive(Clone)]
 struct Finished {
     id: String,
@@ -393,9 +401,8 @@ pub(crate) struct Engine {
     grace_deadline: Option<Instant>,
     call: CallContext,
     transcript: Transcript,
-    fixed_tokens: Option<u32>,
-    /// The fixed part's upper bound (`text::upper_tokens`), for the mode's worst case.
-    fixed_upper: Option<u32>,
+    /// The fixed part's size (rules to memory), measured once per context change (`fixed()`).
+    fixed: Option<Fixed>,
     requested: Mode,
     effective: EffectiveMode,
     paused: bool,
@@ -478,8 +485,7 @@ impl Engine {
             grace_deadline: None,
             call: CallContext::default(),
             transcript,
-            fixed_tokens: None,
-            fixed_upper: None,
+            fixed: None,
             requested: Mode::Balanced,
             effective: EffectiveMode::CaptionsOnly,
             paused: false,
@@ -800,8 +806,7 @@ impl Engine {
             }
         }
         if fixed_changed {
-            self.fixed_tokens = None;
-            self.fixed_upper = None;
+            self.fixed = None;
             self.warm();
         }
     }
@@ -1554,11 +1559,11 @@ impl Engine {
     /// Adds what a request cost to the session's spend (kept by the registry across reconnects).
     /// One suggestion's worst case in `mode` with the session's context as it is: the primary and the fallback, no
     /// cache, the mode's longest answer (the upgrade is not counted: without room, a draft runs without it).
-    fn mode_worst(&self, mode: Mode, _fixed: u32) -> u64 {
+    fn mode_worst(&self, mode: Mode, fixed: Fixed) -> u64 {
         let config = self.config();
         let plan = config.modes.get(mode);
         // Upper bounds throughout, as the gate counts them (`text::upper_tokens`).
-        let fixed = self.fixed_upper.unwrap_or(0);
+        let fixed = fixed.upper;
         let ledger: u32 =
             self.call.facts.iter().map(|f| upper_tokens(&f.text) + 2).sum::<u32>() + upper_tokens(&self.call.summary);
         let tokens = fixed + ledger + self.transcript.upper_tokens(plan.transcript) + QUESTION_TOKENS * 2;
@@ -1623,10 +1628,10 @@ impl Engine {
         self.budget_left().saturating_sub(reserved)
     }
 
-    /// Tokens of the fixed part (rules to memory), built once per context change.
-    fn fixed_tokens(&mut self) -> u32 {
-        if let Some(tokens) = self.fixed_tokens {
-            return tokens;
+    /// The fixed part (rules to memory), measured once per context change.
+    fn fixed(&mut self) -> Fixed {
+        if let Some(fixed) = self.fixed {
+            return fixed;
         }
         let config = self.config();
         let pack = self.deps.pack.get();
@@ -1634,9 +1639,9 @@ impl Engine {
         let builder = ContextBuilder { pack: &pack, config: &config.context };
         let context = builder.build(&self.call, &empty, Task::HelpNow { latest: None }, TranscriptScope::Recent);
         let tokens = context.cacheable_tokens();
-        self.fixed_tokens = Some(tokens);
-        self.fixed_upper = Some(context.upper_cacheable_tokens());
-        tokens
+        let fixed = Fixed { tokens, upper: context.upper_cacheable_tokens() };
+        self.fixed = Some(fixed);
+        fixed
     }
 
     fn estimate(&self, mode: Mode, fixed: u32) -> u64 {
@@ -1670,12 +1675,18 @@ impl Engine {
         if self.assist_used_up {
             return (EffectiveMode::CaptionsOnly, None);
         }
-        let fixed = self.fixed_tokens();
+        let fixed = self.fixed();
         let config = self.config();
         let allowed = allowed_modes(&config, &self.claims);
         let reserve = config.budget.reserve_suggestions;
-        let (mode, cause) =
-            choose_mode(self.requested, &allowed, self.budget_left(), reserve, |mode| self.estimate(mode, fixed), |mode| self.mode_worst(mode, fixed));
+        let (mode, cause) = choose_mode(
+            self.requested,
+            &allowed,
+            self.budget_left(),
+            reserve,
+            |mode| self.estimate(mode, fixed.tokens),
+            |mode| self.mode_worst(mode, fixed),
+        );
         (mode, Some(cause))
     }
 
@@ -1752,7 +1763,7 @@ impl Engine {
         // Room for the suggestions too: the budget's reserve in the mode that runs (one suggestion in Fast).
         let keep = match self.effective.mode() {
             Some(mode) => {
-                let fixed = self.fixed_tokens();
+                let fixed = self.fixed();
                 let count = if mode == Mode::Fast { 1 } else { u64::from(config.budget.reserve_suggestions) };
                 // The gate's own measure: what a suggestion in this mode may cost at most.
                 self.mode_worst(mode, fixed).saturating_mul(count)
