@@ -161,8 +161,11 @@ internal fun EchoColors.withScheme(scheme: ColorScheme): EchoColors = copy(
 fun EchoColors.toScheme(): ColorScheme {
     val base = if (isDark) darkColorScheme() else lightColorScheme()
     return base.copy(
-        primary = accentStrong,
-        onPrimary = onAccent,
+        // Dark (since v1.8.1, bug P-014): the stock text buttons, dialog buttons, links and focused labels read the
+        // primary, and #3E63DD gave them 3.0 to 3.6:1 there; the light accent text gives over 7:1. Our own filled
+        // buttons still use accentStrong.
+        primary = if (isDark) accentText else accentStrong,
+        onPrimary = if (isDark) bg else onAccent,
         primaryContainer = accentSoft,
         // Material picks secondaryContainer for selected chips and segments: ours, not its default lavender.
         secondaryContainer = accentSoft,

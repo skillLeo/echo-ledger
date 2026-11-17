@@ -9,8 +9,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -143,14 +145,14 @@ fun RecordSheet(
                 AppCallCapture.VOICE_ONLY -> "Calls: your voice only"
                 AppCallCapture.BOTH_SIDES -> if (autoRecordOn) "Calls: auto-record on" else "Calls: ready"
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
                 ModeTile(Icons.Rounded.Mic, "Voice & files", "Record or import", Modifier.weight(1f)) { onPick(RecordMode.VOICE) }
                 ModeTile(Icons.Rounded.Call, "Calls & meetings", calls, Modifier.weight(1f)) { onPick(RecordMode.CALLS) }
             }
             // Since v1.5: a plan without Live Translate shows neither mode; since v1.6 they show with the plan's badge.
             if (!liveTranslate && liveTranslateLock != null) {
                 Spacer(Modifier.height(Space.s3))
-                Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
                     ModeTile(Icons.Rounded.SportsEsports, "Game translate", liveTranslateLock.badge, Modifier.weight(1f)) {
                         onLocked(liveTranslateLock)
                     }
@@ -161,7 +163,7 @@ fun RecordSheet(
             }
             if (liveTranslate) Spacer(Modifier.height(Space.s3))
             if (liveTranslate) {
-                Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
                     val translating by com.echoledger.mobile.translate.LiveTranslateService.state.collectAsState()
                     // What Soniox said last time it refused ("Needs Soniox credit"), until a session runs again.
                     val blocked = com.echoledger.mobile.translate.TranslateStatus.blocked(androidx.compose.ui.platform.LocalContext.current)
@@ -195,10 +197,12 @@ fun RecordSheet(
 private fun ModeTile(icon: ImageVector, name: String, status: String, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val c = LocalEchoColors.current
     val type = LocalEchoType.current
-    // A fixed 112 dp tile (since 1.3.2: a flexible spacer stretched each tile to the whole sheet).
+    // At least 112 dp (since 1.3.2: a flexible spacer stretched each tile to the whole sheet); since v1.8.1 (bug P-012) it
+    // grows with large text so the status line is never cut off.
     Column(
         modifier
-            .height(112.dp)
+            .fillMaxHeight()
+            .heightIn(min = 112.dp)
             .clip(RoundedCornerShape(Radius.md))
             .background(c.surface2)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
@@ -214,7 +218,7 @@ private fun ModeTile(icon: ImageVector, name: String, status: String, modifier: 
         }
         Column {
             Text(name, style = type.bodyL, color = if (enabled) c.text else c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(status, style = type.labelM, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(status, style = type.labelM, color = c.textMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
     }
 }
