@@ -288,6 +288,19 @@ enum Feed {
     Task { kind: TaskKind, run: TaskRun },
 }
 
+/// A guard's last word to its session, from a destructor: at once when the channel has room, otherwise from a task
+/// of its own that waits for room (a closed channel means the session is gone, and nothing is lost).
+fn deliver(feed: &mpsc::Sender<Feed>, item: Feed) {
+    if let Err(mpsc::error::TrySendError::Full(item)) = feed.try_send(item)
+        && let Ok(runtime) = tokio::runtime::Handle::try_current()
+    {
+        let feed = feed.clone();
+        runtime.spawn(async move {
+            let _ = feed.send(item).await;
+        });
+    }
+}
+
 /// Ends a suggestion attempt with an error when its task ends without sending its last item (it panicked).
 struct AttemptGuard {
     feed: mpsc::Sender<Feed>,
@@ -299,7 +312,7 @@ impl Drop for AttemptGuard {
     fn drop(&mut self) {
         if let Some(id) = self.id.take() {
             let item = Item::Error(ProviderError::Unavailable);
-            let _ = self.feed.try_send(Feed::Stream { id, attempt: self.attempt, at: Instant::now(), item });
+            deliver(&self.feed, Feed::Stream { id, attempt: self.attempt, at: Instant::now(), item });
         }
     }
 }
@@ -313,7 +326,7 @@ struct WarmGuard {
 impl Drop for WarmGuard {
     fn drop(&mut self) {
         if let Some(model) = self.model.take() {
-            let _ = self.feed.try_send(Feed::Warmed { model, result: Err(ProviderError::Unavailable) });
+            deliver(&self.feed, Feed::Warmed { model, result: Err(ProviderError::Unavailable) });
         }
     }
 }
@@ -328,7 +341,7 @@ impl Drop for TaskGuard {
     fn drop(&mut self) {
         if let Some(kind) = self.kind.take() {
             let run = TaskRun { result: Err(ProviderError::Unavailable), abandoned: Vec::new() };
-            let _ = self.feed.try_send(Feed::Task { kind, run });
+            deliver(&self.feed, Feed::Task { kind, run });
         }
     }
 }
@@ -2052,5 +2065,27 @@ fn plain_error(error: ProviderError) -> String {
         ProviderError::Unavailable | ProviderError::RateLimited | ProviderError::Protocol => {
             "The model is not available right now. Try again in a moment.".to_owned()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_guard_s_message_waits_for_room_instead_of_being_lost() {
+        let (feed, mut rx) = mpsc::channel::<Feed>(1);
+        let warmed = |model: &str| Feed::Warmed { model: model.into(), result: Err(ProviderError::Unavailable) };
+        deliver(&feed, warmed("first"));
+        // The channel is full: the second waits in a task of its own.
+        deliver(&feed, warmed("second"));
+        let mut models = Vec::new();
+        for _ in 0..2 {
+            match rx.recv().await {
+                Some(Feed::Warmed { model, .. }) => models.push(model),
+                _ => panic!("a warmed message"),
+            }
+        }
+        assert_eq!(models, ["first", "second"]);
     }
 }
