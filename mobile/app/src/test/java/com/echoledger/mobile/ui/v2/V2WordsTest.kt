@@ -64,11 +64,89 @@ class V2WordsTest {
         assertEquals(48, trashKeepHours(null, listOf(BinItemDto("01JY", "Voice note"))))
     }
 
+    /**
+     * The Kotlin string literals in [text], as written (templates kept), skipping the strings inside `${…}` and the
+     * ones only compared with (`== "delete"`).
+     */
+    private fun literals(text: String): List<String> {
+        val out = mutableListOf<String>()
+        var i = 0
+        while (i < text.length) {
+            if (text[i] != '"') {
+                i++
+                continue
+            }
+            val sb = StringBuilder()
+            val start = i
+            i++
+            var depth = 0
+            while (i < text.length) {
+                val ch = text[i]
+                when {
+                    depth == 0 && ch == '\\' && i + 1 < text.length -> {
+                        sb.append(text[i + 1])
+                        i += 2
+                        continue
+                    }
+
+                    depth == 0 && ch == '"' -> break
+
+                    ch == '$' && i + 1 < text.length && text[i + 1] == '{' -> {
+                        depth++
+                        sb.append("\${")
+                        i += 2
+                        continue
+                    }
+
+                    depth > 0 && ch == '}' -> depth--
+                }
+                sb.append(ch)
+                i++
+            }
+            val before = text.substring(0, start).trimEnd()
+            if (!before.endsWith("==") && !before.endsWith("!=")) out += sb.toString()
+            i++
+        }
+        return out
+    }
+
+    /**
+     * Every sentence MainViewModel puts in its message: the literals of `_message.value =`, `say(`, `showMessage(` and
+     * `workspaceCall(` (its failure sentence),
+     * with the statement's continuation lines (an if/else over several lines).
+     */
+    private fun viewModelSentences(): Set<String> {
+        val lines = File("src/main/java/com/echoledger/mobile/ui/MainViewModel.kt").readLines()
+        val marker = Regex("""_message\.value\s*=|\bsay\(|showMessage\(|workspaceCall\(""")
+        fun indent(s: String) = s.length - s.trimStart().length
+        return lines.indices.flatMap { i ->
+            val m = marker.find(lines[i]) ?: return@flatMap emptyList()
+            val text = StringBuilder(lines[i].substring(m.range.first))
+            var j = i + 1
+            while (j < lines.size && lines[j].isNotBlank() && indent(lines[j]) > indent(lines[i])) text.append('\n').append(lines[j++])
+            literals(text.toString())
+        }.filter { it.any(Char::isLetter) }.toSet()
+    }
+
     @Test
-    fun everyMappedViewModelSentenceIsOneItReallySays() {
-        val source = File("src/main/java/com/echoledger/mobile/ui/MainViewModel.kt").readText()
-        val missing = VmMessages.known.filterNot { "\"$it\"" in source }
-        assertTrue("no longer in MainViewModel: $missing", missing.isEmpty())
+    fun everySentenceTheViewModelSaysHasAKeyOrIsListedAsEnglishOnly() {
+        val sentences = viewModelSentences()
+        assertTrue("found only ${sentences.size}", sentences.size > 30)
+        val templates = VmMessages.templates.map { it.source }.toSet()
+        val missing = sentences.filterNot { it in VmMessages.known || it in templates || it in VmMessages.englishOnly }
+        assertTrue("no key and not English-only: $missing", missing.isEmpty())
+    }
+
+    @Test
+    fun everyMappedSentenceAndTemplateIsOneTheViewModelReallySays() {
+        val sentences = viewModelSentences()
+        val gone = VmMessages.known.filterNot { it in sentences } + VmMessages.templates.map { it.source }.filterNot { it in sentences }
+        assertTrue("no longer in MainViewModel: $gone", gone.isEmpty())
+        // Each template filled in reads back through its own pattern.
+        for (t in VmMessages.templates) {
+            val sample = t.sample ?: t.source.replace(Regex("""\$\{[^}]*\}|\$[a-z]+"""), "3")
+            assertTrue("${t.source} -> $sample", t.pattern.matches(sample))
+        }
     }
 
     @Test
@@ -77,6 +155,7 @@ class V2WordsTest {
         assertEquals("واپس آ گئی", VmMessages.localize(ur, "Restored"))
         assertEquals("ayesha@bilaltraders.pk کے طور پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in as ayesha@bilaltraders.pk"))
         assertEquals("3 لوگوں کو بھیج دی گئی", VmMessages.localize(ur, "Sent to 3 people"))
+        assertEquals("\u2066echoledger.pk\u2069 پر سائن ان ہو گیا", VmMessages.localize(ur, "Signed in to echoledger.pk"))
         // A server's own words have no key and show as they are.
         assertEquals(
             "Monthly limit reached — raise it in Settings",

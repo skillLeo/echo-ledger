@@ -1,10 +1,12 @@
 package com.echoledger.mobile.ui.v2
 
 import android.app.Application
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.ReadyFix
 import com.echoledger.mobile.ui.v2.setup.HealthChecks
@@ -47,18 +49,48 @@ class SetupHealthTest {
     }
 
     @Test
-    fun afterARestartOnlyStartShizukuIsLeft() {
+    fun afterARestartWirelessDebuggingComesFirstThenStart() {
         val f = SetupHealthFixtures.afterRestart
         val steps = ShizukuWizard.steps(f)
-        // Pairing survives the restart: developer options, Shizuku and pairing stay done.
-        assertEquals(listOf(StepState.Done, StepState.Done, StepState.Done, StepState.Current), steps.take(4).map { it.state })
-        assertEquals("start", current(f))
+        // Pairing survives the restart (Shizuku was used here); whether Shizuku allows EchoLedger is unknown while it is stopped.
+        assertEquals(
+            listOf(StepState.Done, StepState.Done, StepState.Done, StepState.Current, StepState.Unknown, StepState.Todo),
+            steps.map { it.state }
+        )
+        val start = steps.first { it.key == "start" }
+        assertEquals(R.string.v2_setup_step_start_wireless_first, start.detail)
+        assertEquals(StepAction.OpenWireless, start.action)
         val helper = check(f, "helper")
         assertEquals(R.string.v2_setup_fail_helper_after_restart, helper.title)
         assertEquals(ReadyFix.OPEN_SHIZUKU, helper.fix)
         assertEquals(R.string.v2_setup_status_needs, HealthChecks.status(f))
-        // Nothing else is reported broken by the restart.
         assertTrue(HealthChecks.of(f).filter { it.key != "helper" }.all { it.ok })
+        // With Wireless debugging back on, the step is Open Shizuku.
+        assertEquals(
+            StepAction.OpenShizuku,
+            ShizukuWizard.steps(SetupHealthFixtures.afterRestartWirelessOn).first {
+                it.key == "start"
+            }.action
+        )
+    }
+
+    @Test
+    fun theComputerMethodAfterARestartGetsItsOwnStep() {
+        val steps = ShizukuWizard.steps(SetupHealthFixtures.computerAfterRestart)
+        assertEquals(listOf("computer"), steps.map { it.key })
+        assertEquals(StepAction.ComputerMethod, steps.single().action)
+        assertEquals(ReadyFix.SET_UP, check(SetupHealthFixtures.computerAfterRestart, "helper").fix)
+    }
+
+    @Test
+    fun pairingNeedsEvidenceThatShizukuWasUsed() {
+        assertEquals("pair", current(SetupHealthFixtures.ranOnceNoEvidence))
+    }
+
+    @Test
+    fun developerOptionsFollowAndroidsSwitchNotHistory() {
+        val steps = ShizukuWizard.steps(SetupHealthFixtures.developerOff)
+        assertEquals(StepState.Current, steps.first { it.key == "developer" }.state)
     }
 
     @Test
@@ -105,13 +137,43 @@ class SetupHealthTest {
         var fixed: ReadyFix? = null
         compose.setContent {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
-                V2SetupHealthContent(SetupHealthFixtures.afterRestart, null, { ran = it }, { fixed = it }, {}, {})
+                V2SetupHealthContent(SetupHealthFixtures.afterRestartWirelessOn, null, { ran = it }, { fixed = it }, {}, {})
             }
         }
         compose.onNodeWithText("Start Shizuku").assertExists()
+        // Whether Shizuku allows EchoLedger can't be known while Shizuku is stopped.
+        compose.onNodeWithText("Known once Shizuku is running").assertExists()
         compose.onAllNodesWithText("Open Shizuku")[0].performClick()
         assertEquals(StepAction.OpenShizuku, ran)
         compose.onAllNodesWithText("Open Shizuku")[1].performClick()
         assertEquals(ReadyFix.OPEN_SHIZUKU, fixed)
+    }
+
+    @Test
+    @Config(qualifiers = "w411dp-h640dp-mdpi")
+    fun setUpOnACheckBringsTheWizardIntoView() {
+        var fixed: ReadyFix? = null
+        compose.setContent {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                V2SetupHealthContent(SetupHealthFixtures.fresh, null, {}, { fixed = it }, {}, {})
+            }
+        }
+        compose.onNodeWithText("Set up").performScrollTo().performClick()
+        compose.onNodeWithText("Turn on Developer options").assertIsDisplayed()
+        // Handled here, not passed on as a fix that does nothing.
+        assertEquals(null, fixed)
+    }
+
+    @Test
+    fun setUpAfterARestartWithTheComputerMethodOpensItsStep() {
+        var ran: StepAction? = null
+        compose.setContent {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                V2SetupHealthContent(SetupHealthFixtures.computerAfterRestart, null, { ran = it }, {}, {}, {})
+            }
+        }
+        compose.onNodeWithText("Set up").performClick()
+        assertEquals(StepAction.ComputerMethod, ran)
+        compose.onNodeWithText("Start the helper from the computer again").assertExists()
     }
 }

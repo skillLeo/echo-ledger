@@ -40,8 +40,8 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 /**
  * The recording pill on the v2 components (behind `ui_v2.recording_controls`, docs/PLAN_V1_8.md 1.3): "● 02:14 · Omar".
  * It floats over other apps, so it always uses the dark roles. It draws [state] from the existing PillMachine and sends
- * its [PillEvent]s back; the host window and the machine stay as they are. A tap opens Captions, Pause, Language,
- * Discard (with Undo while it counts down), Stop (two taps) and Hide.
+ * its [PillEvent]s back. A component only: the pill window draws it once the phone core wires it. A tap opens Captions,
+ * Pause, Language, Discard (with Undo while it counts down), Stop (two taps) and Hide.
  */
 @Composable
 fun V2RecordingPill(state: PillState, nowMs: Long, title: String?, onEvent: (PillEvent) -> Unit, modifier: Modifier = Modifier) {

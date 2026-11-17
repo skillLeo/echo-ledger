@@ -17,16 +17,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +56,7 @@ import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.settings.highlightedIf
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
+import kotlinx.coroutines.launch
 
 private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
 
@@ -72,11 +77,13 @@ fun rememberSetupFacts(vm: MainViewModel, recheck: Int): SetupFacts {
     val settings by vm.settings.collectAsState()
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { resumed++ }
+    LaunchedEffect(helper) { HelperMethodMemory.remember(context, helper) }
     return remember(helper, arm, settings, recheck, resumed) {
         SetupFacts(
             ready = ReadinessWatch.facts(context, settings, app.graph.helper),
             developerOptions = globalOn(context, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED),
-            wirelessDebugging = globalOn(context, "adb_wifi_enabled")
+            wirelessDebugging = globalOn(context, "adb_wifi_enabled"),
+            method = HelperMethodMemory.method(helper.source.takeIf { helper.connected }) ?: HelperMethodMemory.last(context)
         )
     }
 }
@@ -86,7 +93,7 @@ fun rememberSetupFacts(vm: MainViewModel, recheck: Int): SetupFacts {
  * and every health check with its fix. Built on the Ready check and the existing helper actions of the view model.
  */
 @Composable
-fun V2SetupHealthScreen(vm: MainViewModel, highlight: String?, onSignIn: () -> Unit, onTestCall: () -> Unit, onBack: () -> Unit) {
+fun V2SetupHealthScreen(vm: MainViewModel, highlight: String?, onClassicSetup: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     var recheck by remember { mutableIntStateOf(0) }
     val facts = rememberSetupFacts(vm, recheck)
@@ -108,6 +115,9 @@ fun V2SetupHealthScreen(vm: MainViewModel, highlight: String?, onSignIn: () -> U
                 StepAction.OpenShizuku -> openShizuku()
 
                 StepAction.AllowShizuku, StepAction.StartHelper -> vm.connectShizuku()
+
+                // The computer method's command and its copy button live on the classic setup screen.
+                StepAction.ComputerMethod -> onClassicSetup()
             }
             recheck++
         },
@@ -119,11 +129,10 @@ fun V2SetupHealthScreen(vm: MainViewModel, highlight: String?, onSignIn: () -> U
 
                 ReadyFix.RESTART_HELPER -> vm.restartHelper()
 
+                // The content brings the wizard into view itself, or sends the computer method's step here.
                 ReadyFix.SET_UP -> Unit
 
-                ReadyFix.SIGN_IN -> onSignIn()
-
-                ReadyFix.TEST -> onTestCall()
+                ReadyFix.SIGN_IN, ReadyFix.TEST -> onClassicSetup()
 
                 ReadyFix.MICROPHONE -> permission.launch(Manifest.permission.RECORD_AUDIO)
 
@@ -164,7 +173,18 @@ fun V2SetupHealthContent(
     val c = EchoV2.colors
     val checks = HealthChecks.of(facts)
     val steps = ShizukuWizard.steps(facts)
-    val showWizard = facts.callsPossible && steps.any { it.state != StepState.Done }
+    val showWizard = facts.callsPossible && !facts.helperReady
+    val wizard = remember { BringIntoViewRequester() }
+    val scope = rememberCoroutineScope()
+    // "Set up" on a check opens the wizard: brought into view, or the computer method's step when that is how this
+    // phone was set up.
+    val fix: (ReadyFix) -> Unit = { f ->
+        if (f == ReadyFix.SET_UP && showWizard) {
+            if (facts.method == HelperMethod.Computer) onStep(StepAction.ComputerMethod) else scope.launch { wizard.bringIntoView() }
+        } else {
+            onFix(f)
+        }
+    }
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(stringResource(R.string.v2_setup_title), onBack = onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
@@ -188,7 +208,7 @@ fun V2SetupHealthContent(
                 )
             }
             if (showWizard) {
-                Column(Modifier.highlightedIf(highlight == "setup.helper")) {
+                Column(Modifier.bringIntoViewRequester(wizard).highlightedIf(highlight == "setup.helper")) {
                     EchoSectionHeader(stringResource(R.string.v2_setup_helper))
                     Text(
                         stringResource(R.string.v2_setup_helper_intro),
@@ -201,7 +221,7 @@ fun V2SetupHealthContent(
             }
             Column(Modifier.highlightedIf(highlight == "setup.checks")) {
                 EchoSectionHeader(stringResource(R.string.v2_setup_checks))
-                checks.forEach { CheckRow(it, onFix) }
+                checks.forEach { CheckRow(it, fix) }
             }
             EchoButton(
                 stringResource(R.string.v2_setup_check_again),
@@ -219,14 +239,11 @@ private fun StepRow(number: Int, step: WizardStep, onStep: (StepAction) -> Unit)
     val c = EchoV2.colors
     val current = step.state == StepState.Current
     val stateWords = stringResource(
-        if (step.state ==
-            StepState.Done
-        ) {
-            R.string.v2_setup_done
-        } else if (current) {
-            R.string.v2_setup_next
-        } else {
-            R.string.v2_set_value_off
+        when (step.state) {
+            StepState.Done -> R.string.v2_setup_done
+            StepState.Current -> R.string.v2_setup_next
+            StepState.Unknown -> R.string.v2_setup_step_unknown
+            StepState.Todo -> R.string.v2_set_value_off
         }
     )
     Row(
@@ -242,10 +259,10 @@ private fun StepRow(number: Int, step: WizardStep, onStep: (StepAction) -> Unit)
                 .background(if (current) c.accent else c.bgSubtle, CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            if (step.state == StepState.Done) {
-                Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.md), tint = c.success)
-            } else {
-                Text(number.toString(), style = EchoV2.type.mono, color = if (current) c.textOnAccent else c.textSecondary)
+            when (step.state) {
+                StepState.Done -> Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.md), tint = c.success)
+                StepState.Unknown -> Text("?", style = EchoV2.type.mono, color = c.textSecondary)
+                else -> Text(number.toString(), style = EchoV2.type.mono, color = if (current) c.textOnAccent else c.textSecondary)
             }
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
@@ -260,6 +277,9 @@ private fun StepRow(number: Int, step: WizardStep, onStep: (StepAction) -> Unit)
                     c.textPrimary
                 }
             )
+            if (step.state == StepState.Unknown) {
+                Text(stateWords, style = EchoV2.type.meta, color = c.textSecondary)
+            }
             if (current) {
                 Text(stringResource(step.detail), style = EchoV2.type.meta, color = c.textSecondary)
                 EchoButton(stringResource(step.actionLabel), { onStep(step.action) }, Modifier.padding(top = EchoTokens.Space.s4))

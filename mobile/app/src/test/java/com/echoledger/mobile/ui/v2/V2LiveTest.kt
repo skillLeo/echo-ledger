@@ -39,7 +39,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** The recording pill and the after-call card on the v2 components: their events, their words, and how they look. */
+/**
+ * The recording pill and the after-call card as components: the events and callbacks they send, their words, and how
+ * they look. They are not wired to the recording service or the after-call window here; that, and the test of the real
+ * pause, stop and delayed delete, comes with the wiring in the phone core.
+ */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi", application = Application::class)
@@ -79,7 +83,7 @@ class V2LiveTest {
     }
 
     @Test
-    fun theCardDeletesWithTheDelayedDeleteAndUndoes() {
+    fun theCardsDeleteAndUndoCallTheirHostAndSwitchMode() {
         var mode by mutableStateOf(AfterCallMode.Ask)
         var deleted = 0
         var undone = 0

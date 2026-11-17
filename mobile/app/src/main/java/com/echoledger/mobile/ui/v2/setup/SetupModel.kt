@@ -5,27 +5,42 @@ import com.echoledger.mobile.core.Readiness
 import com.echoledger.mobile.core.ReadyFacts
 import com.echoledger.mobile.core.ReadyFix
 
+/** How this phone's capture helper was last started: through Shizuku on the phone, or with the computer (ADB). */
+enum class HelperMethod { Shizuku, Computer }
+
 /**
  * What Setup & health looks at: the Ready check's facts (read live on the phone by ReadinessWatch, never cached, so
- * they are right after a restart) plus two of Android's own switches the wizard shows.
+ * they are right after a restart), two of Android's own switches read live, and how the helper was last started
+ * ([method], remembered by [HelperMethodMemory]; null when it never ran here).
  */
-data class SetupFacts(val ready: ReadyFacts, val developerOptions: Boolean, val wirelessDebugging: Boolean) {
+data class SetupFacts(
+    val ready: ReadyFacts,
+    val developerOptions: Boolean,
+    val wirelessDebugging: Boolean,
+    val method: HelperMethod? = null
+) {
     val callsPossible: Boolean get() = ready.capabilities.helperInBuild && ready.capabilities.callCaptureSupportedByOs
+
+    /** The helper is running and current: nothing to set up. */
+    val helperReady: Boolean get() = ready.capabilities.helperConnected && !ready.helperStale
 }
 
-/** Where a wizard step stands. */
-enum class StepState { Done, Current, Todo }
+/** Where a wizard step stands. [Unknown]: the phone can't tell yet (Shizuku's permission, while Shizuku is stopped). */
+enum class StepState { Done, Current, Todo, Unknown }
 
 /** What a wizard step's button does. */
-enum class StepAction { OpenSettings, GetShizuku, OpenWireless, OpenShizuku, AllowShizuku, StartHelper }
+enum class StepAction { OpenSettings, GetShizuku, OpenWireless, OpenShizuku, AllowShizuku, StartHelper, ComputerMethod }
 
-/** One step of the Shizuku wizard, with its words. */
+/** One step of the wizard, with its words. */
 data class WizardStep(val key: String, val title: Int, val detail: Int, val action: StepAction, val actionLabel: Int, val state: StepState)
 
 /**
- * The Android capture helper's wizard: Developer options, Shizuku, pairing with Wireless debugging, Shizuku started,
- * EchoLedger allowed, the helper started. Each step is done from the live facts. Pairing survives a restart (the phone
- * keeps it), but Shizuku does not run again until Start is tapped: after a restart the wizard points at that one step.
+ * The Android capture helper's wizard. Every step is decided from what the phone shows now, never from history alone:
+ * Developer options from Android's own switch; Shizuku installed from the package; paired only with evidence that
+ * Shizuku was used (it runs now, or it is installed and the helper was last started through it); started while
+ * Shizuku runs; allowed only while Shizuku can answer (else unknown); the helper while it runs. After a restart
+ * Wireless debugging is off, so the start step says to turn it on first. A phone set up with the computer method gets
+ * that method's one step instead.
  */
 object ShizukuWizard {
     private class Def(val key: String, val title: Int, val detail: Int, val action: StepAction, val label: Int)
@@ -33,15 +48,38 @@ object ShizukuWizard {
     fun steps(f: SetupFacts): List<WizardStep> {
         val r = f.ready
         val helper = r.capabilities.helperConnected
-        val paired = helper || r.shizukuRunning || r.helperEverConnected
-        val done = listOf(
-            helper || paired || f.developerOptions,
-            helper || r.shizukuInstalled,
-            paired,
-            helper || r.shizukuRunning,
-            helper || r.shizukuAllowed,
-            helper && !r.helperStale
-        )
+        if (f.method == HelperMethod.Computer && !helper) {
+            return listOf(
+                WizardStep(
+                    "computer",
+                    R.string.v2_setup_step_computer,
+                    R.string.v2_setup_step_computer_detail,
+                    StepAction.ComputerMethod,
+                    R.string.v2_setup_action_show_command,
+                    StepState.Current
+                )
+            )
+        }
+        val viaShizuku = helper && f.method == HelperMethod.Shizuku
+        val paired = r.shizukuRunning || viaShizuku || (r.shizukuInstalled && f.method == HelperMethod.Shizuku)
+        val started = r.shizukuRunning || viaShizuku
+        val startDef = if (!started && !f.wirelessDebugging) {
+            Def(
+                "start",
+                R.string.v2_setup_step_start,
+                R.string.v2_setup_step_start_wireless_first,
+                StepAction.OpenWireless,
+                R.string.v2_setup_action_open_wireless
+            )
+        } else {
+            Def(
+                "start",
+                R.string.v2_setup_step_start,
+                R.string.v2_setup_step_start_detail,
+                StepAction.OpenShizuku,
+                R.string.v2_setup_fix_open_shizuku
+            )
+        }
         val defs = listOf(
             Def(
                 "developer",
@@ -64,13 +102,7 @@ object ShizukuWizard {
                 StepAction.OpenWireless,
                 R.string.v2_setup_action_open_wireless
             ),
-            Def(
-                "start",
-                R.string.v2_setup_step_start,
-                R.string.v2_setup_step_start_detail,
-                StepAction.OpenShizuku,
-                R.string.v2_setup_fix_open_shizuku
-            ),
+            startDef,
             Def(
                 "allow",
                 R.string.v2_setup_step_allow,
@@ -86,10 +118,24 @@ object ShizukuWizard {
                 R.string.v2_setup_fix_start
             )
         )
-        val current = done.indexOfFirst { !it }
+        // null: unknown for now.
+        val done: List<Boolean?> = listOf(
+            f.developerOptions || helper,
+            r.shizukuInstalled || viaShizuku,
+            paired,
+            started,
+            when {
+                viaShizuku -> true
+                r.shizukuRunning -> r.shizukuAllowed
+                else -> null
+            },
+            f.helperReady
+        )
+        val current = done.indexOfFirst { it == false }
         return defs.mapIndexed { i, d ->
             val state = when {
-                done[i] -> StepState.Done
+                done[i] == true -> StepState.Done
+                done[i] == null -> StepState.Unknown
                 i == current -> StepState.Current
                 else -> StepState.Todo
             }

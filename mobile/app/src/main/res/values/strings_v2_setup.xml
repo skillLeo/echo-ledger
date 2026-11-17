@@ -21,6 +21,11 @@
     <string name="v2_setup_step_pair_detail">In Shizuku tap Pairing. Then in Developer options › Wireless debugging tap Pair device with pairing code, and type the 6-digit code into Shizuku\'s notification. Once only.</string>
     <string name="v2_setup_step_start">Start Shizuku</string>
     <string name="v2_setup_step_start_detail">Open Shizuku and tap Start. Android turns Wireless debugging off at every restart, so this is the one tap after a restart.</string>
+    <string name="v2_setup_step_start_wireless_first">Wireless debugging is off. Turn it on first (Developer options › Wireless debugging), then open Shizuku and tap Start.</string>
+    <string name="v2_setup_step_unknown">Known once Shizuku is running</string>
+    <string name="v2_setup_step_computer">Start the helper from the computer again</string>
+    <string name="v2_setup_step_computer_detail">This phone was set up with the computer method. After a restart, run the command from the computer again, or set up Shizuku so it takes one tap on the phone.</string>
+    <string name="v2_setup_action_show_command">Show the command</string>
     <string name="v2_setup_step_allow">Allow EchoLedger in Shizuku</string>
     <string name="v2_setup_step_allow_detail">Shizuku asks once: choose Allow all the time.</string>
     <string name="v2_setup_step_helper">Start the capture helper</string>

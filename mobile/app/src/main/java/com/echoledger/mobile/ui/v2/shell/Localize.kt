@@ -73,23 +73,89 @@ object VmMessages {
         "The views could not be started." to R.string.v2_vm_views_not_started,
         "This phone was signed out on the server. Sign in again." to R.string.v2_vm_signed_out,
         "This recording has no audio on the server." to R.string.v2_vm_no_audio_on_server,
+        "1 recording updated" to R.string.v2_vm_one_updated,
+        "Sign in on this phone first." to R.string.v2_vm_sign_in_first,
+        // The workspace calls' own failure sentences (when the server gave no plain one).
+        "It could not be removed." to R.string.v2_vm_ws_it_could_not_be_removed,
+        "It could not be saved." to R.string.v2_vm_ws_it_could_not_be_saved,
+        "It could not be sent." to R.string.v2_vm_ws_it_could_not_be_sent,
+        "It could not be stopped." to R.string.v2_vm_ws_it_could_not_be_stopped,
+        "Shared with me could not be loaded." to R.string.v2_vm_ws_shared_with_me_could_not_be_loaded,
+        "Signing out failed." to R.string.v2_vm_ws_signing_out_failed,
+        "The AI assistant could not answer right now. Try again in a minute." to R.string.v2_vm_ws_the_ai_assistant_could_not_answer_right,
+        "The account could not be deleted." to R.string.v2_vm_ws_the_account_could_not_be_deleted,
+        "The account could not be loaded." to R.string.v2_vm_ws_the_account_could_not_be_loaded,
+        "The brief could not be made again." to R.string.v2_vm_ws_the_brief_could_not_be_made_again,
+        "The brief could not be saved." to R.string.v2_vm_ws_the_brief_could_not_be_saved,
+        "The export could not be checked." to R.string.v2_vm_ws_the_export_could_not_be_checked,
+        "The export could not be started." to R.string.v2_vm_ws_the_export_could_not_be_started,
+        "The file could not be removed." to R.string.v2_vm_ws_the_file_could_not_be_removed,
+        "The files could not be added." to R.string.v2_vm_ws_the_files_could_not_be_added,
+        "The filing rules could not be loaded." to R.string.v2_vm_ws_the_filing_rules_could_not_be_loaded,
+        "The instructions could not be saved." to R.string.v2_vm_ws_the_instructions_could_not_be_saved,
+        "The line could not be added." to R.string.v2_vm_ws_the_line_could_not_be_added,
+        "The line could not be removed." to R.string.v2_vm_ws_the_line_could_not_be_removed,
+        "The line could not be saved." to R.string.v2_vm_ws_the_line_could_not_be_saved,
+        "The links could not be loaded." to R.string.v2_vm_ws_the_links_could_not_be_loaded,
+        "The notes could not be started." to R.string.v2_vm_ws_the_notes_could_not_be_started,
+        "The project could not be deleted." to R.string.v2_vm_ws_the_project_could_not_be_deleted,
+        "The project could not be moved." to R.string.v2_vm_ws_the_project_could_not_be_moved,
+        "The project could not be renamed." to R.string.v2_vm_ws_the_project_could_not_be_renamed,
+        "The project's workspace could not be loaded." to R.string.v2_vm_ws_the_project_s_workspace_could_not_be_loa,
+        "The report could not be sent." to R.string.v2_vm_ws_the_report_could_not_be_sent,
+        "The request link could not be made." to R.string.v2_vm_ws_the_request_link_could_not_be_made,
+        "The request link could not be turned off." to R.string.v2_vm_ws_the_request_link_could_not_be_turned_off,
+        "The request links could not be loaded." to R.string.v2_vm_ws_the_request_links_could_not_be_loaded,
+        "The rule could not be added." to R.string.v2_vm_ws_the_rule_could_not_be_added,
+        "The rule could not be removed." to R.string.v2_vm_ws_the_rule_could_not_be_removed,
+        "The setting could not be saved." to R.string.v2_vm_ws_the_setting_could_not_be_saved,
+        "The suggestion could not be saved." to R.string.v2_vm_ws_the_suggestion_could_not_be_saved,
+        "The text could not be made." to R.string.v2_vm_ws_the_text_could_not_be_made,
+        "Project deleted" to R.string.v2_vm_ws_project_deleted,
         "Welcome to EchoLedger" to R.string.v2_vm_welcome
     )
 
-    private val patterns = listOf(
-        Regex("""Signed in as (.+)""") to R.string.v2_vm_signed_in_as,
-        Regex("""Sent to (\d+) people""") to R.string.v2_vm_sent_many,
-        Regex("""Added “(.+)” to the vocabulary""") to R.string.v2_vm_term_added,
-        Regex("""Re-transcribing in (.+)\. The current transcript stays until the new one is ready\.""") to R.string.v2_vm_retranscribing
+    /**
+     * The view model's sentences with a value in them: the exact Kotlin template in MainViewModel.kt (the test finds
+     * each there), the pattern that reads it back, and the key that says it in the screen's language.
+     */
+    class Template(val source: String, val pattern: Regex, val key: Int, val sample: String? = null)
+
+    val templates = listOf(
+        Template("Signed in to \${payload.url.removePrefix(\"https://\")}", Regex("""Signed in to (.+)"""), R.string.v2_vm_signed_in_to),
+        Template("Signed in as \${email.trim()}", Regex("""Signed in as (.+)"""), R.string.v2_vm_signed_in_as),
+        Template("Signed in as \$email", Regex("""Signed in as (.+)"""), R.string.v2_vm_signed_in_as),
+        Template("Sent to \$sent people", Regex("""Sent to (\d+) people"""), R.string.v2_vm_sent_many),
+        Template(
+            " · \${countLabel(answer.movedSessions)} moved to the Inbox",
+            Regex("""Project deleted · (\d+ recordings?) moved to the Inbox"""),
+            R.string.v2_vm_project_deleted_moved,
+            sample = "Project deleted · 3 recordings moved to the Inbox"
+        ),
+        Template("\$changed deleted", Regex("""(\d+) deleted"""), R.string.v2_vm_many_deleted),
+        Template("\$changed recordings updated", Regex("""(\d+) recordings updated"""), R.string.v2_vm_many_updated),
+        Template("Added “\${term.trim()}” to the vocabulary", Regex("""Added “(.+)” to the vocabulary"""), R.string.v2_vm_term_added),
+        Template(
+            "Re-transcribing in \${Languages.label(language)}. The current transcript stays until the new one is ready.",
+            Regex("""Re-transcribing in (.+)\. The current transcript stays until the new one is ready\."""),
+            R.string.v2_vm_retranscribing
+        )
     )
+
+    /**
+     * Sentences the view model can say that stay in English on purpose. A new sentence must get a key or be listed
+     * here (V2WordsTest). The transcription-key refusal names an engine, which the owner's screens no longer do; it
+     * stays English until the view model's own words change.
+     */
+    val englishOnly: Set<String> = setOf("Groq did not accept that key. Copy it again from console.groq.com.")
 
     /** The English sentences that have a key (the test checks each against the view model's source). */
     val known: Set<String> get() = exact.keys
 
     fun localize(res: Resources, english: String): String {
         exact[english]?.let { return res.getString(it) }
-        for ((re, id) in patterns) {
-            re.matchEntire(english)?.let { m -> return res.getString(id, m.groupValues[1]) }
+        for (t in templates) {
+            t.pattern.matchEntire(english)?.let { m -> return res.getString(t.key, m.groupValues[1]) }
         }
         return english
     }

@@ -33,6 +33,7 @@ import com.echoledger.mobile.ui.v2.library.V2LibraryScreen
 import com.echoledger.mobile.ui.v2.library.V2RecordingScreen
 import com.echoledger.mobile.ui.v2.library.V2TrashScreen
 import com.echoledger.mobile.ui.v2.settings.V2SettingsScreen
+import com.echoledger.mobile.ui.v2.setup.HelperMethodMemory
 import com.echoledger.mobile.ui.v2.setup.V2SetupHealthScreen
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2
@@ -91,12 +92,21 @@ fun EchoV2Shell(
         val toasts = rememberEchoToastState()
         CompositionLocalProvider(LocalEchoToasts provides toasts) {
             MessagesToToasts(vm, toasts)
+            RememberHelperMethod(vm)
             Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
                 ShellBody(vm, flags, classic, onSwitchToClassic)
                 EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
             }
         }
     }
+}
+
+/** Keeps how the capture helper was started (Shizuku or the computer), for Setup & health after a restart. */
+@Composable
+private fun RememberHelperMethod(vm: MainViewModel) {
+    val helper by vm.helper.collectAsState()
+    val context = LocalContext.current
+    LaunchedEffect(helper) { HelperMethodMemory.remember(context.applicationContext, helper) }
 }
 
 /** The view model's one-line messages ("Restored", "Offline …") become toasts, so there is one feedback system. */
@@ -210,6 +220,6 @@ private fun SetupPage(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
         // Sign-in and the test call live on the classic setup screens until their own v2 pages exist.
         classic.setup { if (flags.isOn(UiFlags.SETUP_HEALTH)) classicSetup = false else onBack() }
     } else {
-        V2SetupHealthScreen(vm, highlight, onSignIn = { classicSetup = true }, onTestCall = { classicSetup = true }, onBack = onBack)
+        V2SetupHealthScreen(vm, highlight, onClassicSetup = { classicSetup = true }, onBack = onBack)
     }
 }

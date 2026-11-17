@@ -21,6 +21,11 @@
     <string name="v2_setup_step_pair_detail">شیزوکو میں Pairing پر ٹیپ کریں۔ پھر ڈیولپر آپشنز ‹ وائرلیس ڈیبگنگ میں \'پیئرنگ کوڈ سے جوڑیں\' پر ٹیپ کریں اور 6 ہندسوں کا کوڈ شیزوکو کی اطلاع میں لکھیں۔ صرف ایک بار۔</string>
     <string name="v2_setup_step_start">شیزوکو شروع کریں</string>
     <string name="v2_setup_step_start_detail">شیزوکو کھولیں اور Start پر ٹیپ کریں۔ اینڈرائیڈ ہر ری اسٹارٹ پر وائرلیس ڈیبگنگ بند کر دیتا ہے، اس لیے ری اسٹارٹ کے بعد بس یہی ایک ٹیپ ہے۔</string>
+    <string name="v2_setup_step_start_wireless_first">وائرلیس ڈیبگنگ بند ہے۔ پہلے اسے آن کریں (ڈیولپر آپشنز ‹ وائرلیس ڈیبگنگ)، پھر شیزوکو کھول کر Start دبائیں۔</string>
+    <string name="v2_setup_step_unknown">شیزوکو چلنے پر معلوم ہو گا</string>
+    <string name="v2_setup_step_computer">کمپیوٹر سے ہیلپر دوبارہ شروع کریں</string>
+    <string name="v2_setup_step_computer_detail">یہ فون کمپیوٹر کے طریقے سے سیٹ اپ ہوا تھا۔ ری اسٹارٹ کے بعد کمپیوٹر سے کمانڈ دوبارہ چلائیں، یا شیزوکو سیٹ اپ کریں تاکہ فون پر ایک ٹیپ کافی ہو۔</string>
+    <string name="v2_setup_action_show_command">کمانڈ دکھائیں</string>
     <string name="v2_setup_step_allow">شیزوکو میں EchoLedger کو اجازت دیں</string>
     <string name="v2_setup_step_allow_detail">شیزوکو ایک بار پوچھے گا: \'ہمیشہ اجازت دیں\' چنیں۔</string>
     <string name="v2_setup_step_helper">کیپچر ہیلپر شروع کریں</string>

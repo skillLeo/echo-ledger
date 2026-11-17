@@ -56,8 +56,9 @@ fun afterCallTitle(res: Resources, rec: LocalRecording): String = rec.title?.tak
 /**
  * The after-call card on the v2 components (behind `ui_v2.after_call`, docs/PLAN_V1_8.md 1.1): the source, "Omar Khan ·
  * 4:12" (tap to rename or pick a project), and Delete · Save audio · Transcribe, with a thin line for the time left.
- * Delete is the delayed delete of v1.1 (P-003): the host keeps the call as "discarding" and shows [AfterCallMode.Deleted]
- * with Undo; nothing is gone until that time ends. [onTranscribe] is null until the host can transcribe from here.
+ * A component only: the after-call window draws it once the phone core wires it. [onDelete] is meant for v1.1's
+ * delayed delete (P-003): the host keeps the call as "discarding", shows [AfterCallMode.Deleted] with Undo, and nothing
+ * is gone until that time ends. [onTranscribe] is null until the host can transcribe from here.
  * It sits over the end-call screen, so it always uses the dark roles.
  */
 @Composable
