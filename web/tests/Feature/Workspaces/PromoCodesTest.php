@@ -201,6 +201,27 @@ describe('an upgrade request with a code', function () {
 });
 
 describe('the admin panel', function () {
+    it('saves a new code on the plan the Plan select shows when it is left untouched', function () {
+        $this->actingAs(promoStaff('billing'), 'web');
+        Filament::setCurrentPanel('admin');
+        $first = Plan::query()->where('on_offer', true)->whereNull('archived_at')->where('key', '!=', Plan::FREE)
+            ->orderBy('sort_order')->orderBy('id')->value('key');
+
+        Livewire::test(PromoCodesPage::class)
+            ->mountAction('create')
+            ->assertSchemaStateSet(['plan' => $first], 'mountedActionSchema0')
+            ->callMountedAction()
+            ->assertHasActionErrors(['code']); // only the code is missing: the plan is filled
+
+        Livewire::test(PromoCodesPage::class)
+            ->mountAction('create')
+            ->setActionData(['code' => 'UNTOUCHED1'])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        expect(PromoCode::query()->where('code', 'UNTOUCHED1')->value('plan'))->toBe($first)->and($first)->not->toBeNull();
+    });
+
     it('lets staff with Make and change plans create, edit and switch off codes, with their uses', function () {
         $this->actingAs($staff = promoStaff('billing'), 'web');
         Filament::setCurrentPanel('admin');
