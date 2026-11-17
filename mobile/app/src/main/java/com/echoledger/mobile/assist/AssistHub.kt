@@ -58,10 +58,11 @@ object AssistHub {
     }
 
     /**
-     * Starts a session on the recording under way, on the transport the server picks (contract 1.9.0-q): the relay, or
-     * HTTP mode. [relayPins]: the last config's `relay_pins`; without them the relay can't be trusted, so only HTTP mode
-     * is offered, and a server that needs the relay is [Start.NotSetUp]. [endOther]: a `409` first ends the running
-     * session (the person said so), then starts again.
+     * Starts a session on the recording under way, on the transport the server picks (contract 1.9.0-q). The phone
+     * always offers both, relay first: the relay is the normal path, and HTTP mode is only the server's emergency
+     * fallback, never the phone's own choice. [relayPins]: the last config's `relay_pins`; a session the server puts on
+     * the relay while there are none can't be trusted, so it is ended and [Start.NotSetUp]. [endOther]: a `409` first
+     * ends the running session (the person said so), then starts again.
      */
     suspend fun start(
         api: ApiClient,
@@ -78,7 +79,7 @@ object AssistHub {
     ): Start {
         current.value?.let { return Start.Started(it) }
         val recordingId = recording.value ?: return Start.NoRecording
-        val transports = if (relayPins.isEmpty()) listOf("http") else listOf("relay", "http")
+        val transports = listOf("relay", "http")
         val started = try {
             api.startAssist(prepId, mode, recordingId, practice = false, transports = transports)
         } catch (e: ApiException) {
@@ -90,9 +91,6 @@ object AssistHub {
                 }
 
                 e.status == 409 -> return Start.Busy
-
-                // The server uses the relay, and this phone has no pins for it yet.
-                e.status == 426 && "relay" !in transports -> return Start.NotSetUp
 
                 e.status == 426 || e.code == "app_update_required" -> return Start.Refused(UPDATE_APP)
 

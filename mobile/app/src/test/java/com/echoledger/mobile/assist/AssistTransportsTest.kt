@@ -311,10 +311,10 @@ class AssistTransportsTest {
         }
         val client = ApiClient(api.url("/").toString(), emptyList(), "7|token")
         AssistHub.recordingSession("rec-1")
-        // No relay pins: HTTP mode needs none (the server's own pins apply).
+        // The phone offers the relay first; the server falls back to HTTP mode, which needs no relay pins.
         val started = AssistHub.start(client, emptyList(), scope) as AssistHub.Start.Started
         val body = Json.parseToJsonElement(requests.poll(5, TimeUnit.SECONDS)!!.body!!.utf8()).jsonObject
-        assertEquals(listOf("http"), body["transports"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(listOf("relay", "http"), body["transports"]!!.jsonArray.map { it.jsonPrimitive.content })
         val ready = history(started.assist).filterIsInstance<AssistMessage.Ready>().single()
         assertEquals("a1", ready.sessionId)
         assertEquals("fast", ready.mode.name.lowercase())
@@ -338,11 +338,13 @@ class AssistTransportsTest {
         val offered = Json.parseToJsonElement(requests.poll(5, TimeUnit.SECONDS)!!.body!!.utf8()).jsonObject
         assertEquals(listOf("relay", "http"), offered["transports"]!!.jsonArray.map { it.jsonPrimitive.content })
 
-        // Without relay pins only HTTP mode was offered: a server on the relay can't be trusted by this phone yet.
+        // Without relay pins the phone still offers the relay first, so an app too old reads the same.
         assertEquals(
-            AssistHub.Start.NotSetUp,
+            AssistHub.Start.Refused("Live Assist needs the latest version of the app."),
             AssistHub.start(ApiClient(old.url("/").toString(), emptyList(), "7|token"), emptyList(), scope)
         )
+        val again = Json.parseToJsonElement(requests.poll(5, TimeUnit.SECONDS)!!.body!!.utf8()).jsonObject
+        assertEquals(listOf("relay", "http"), again["transports"]!!.jsonArray.map { it.jsonPrimitive.content })
 
         val down =
             rest(

@@ -280,10 +280,11 @@ class PhoneAssistTest {
             val pins = listOf("sha256/" + "A".repeat(43) + "=")
             assertEquals(AssistHub.Start.NoRecording, AssistHub.start(client, pins, scope))
             AssistHub.recordingSession("rec-1", bothSides = false)
-            // Without relay pins only HTTP mode is offered; a session the server put on the relay anyway is ended at once.
+            // The relay is always offered first (HTTP mode is the server's fallback, never the phone's choice); a session
+            // the server puts on the relay while this phone has no relay pins can't be trusted, so it is ended at once.
             assertEquals(AssistHub.Start.NotSetUp, AssistHub.start(client, emptyList(), scope))
             val offered = Json.parseToJsonElement(requests.poll(5, TimeUnit.SECONDS)!!.body!!.utf8()).jsonObject
-            assertEquals(listOf("http"), offered["transports"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(listOf("relay", "http"), offered["transports"]!!.jsonArray.map { it.jsonPrimitive.content })
             assertEquals("/api/assist/sessions/a1/end", requests.poll(5, TimeUnit.SECONDS)!!.url.encodedPath)
             assertNull(AssistHub.active.value)
 
