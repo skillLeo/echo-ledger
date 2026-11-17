@@ -1781,7 +1781,8 @@ fn main_window_handle(app: &AppHandle) -> isize {
     }
 }
 /// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
-pub const SESSION_PATCH_KEYS: [&str; 5] = ["title", "client_id", "pinned", "keep", "labels"];
+/// `language` (since v1.2) changes the recording's language without re-transcribing it.
+pub const SESSION_PATCH_KEYS: [&str; 6] = ["title", "client_id", "pinned", "keep", "labels", "language"];
 pub const CLIENT_PATCH_KEYS: [&str; 8] = ["name", "color", "avatar", "pinned", "language", "ai_notes", "parent_id", "screens"];
 pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
@@ -1831,8 +1832,10 @@ pub async fn sessions_bulk(app: AppHandle, ids: Vec<String>, action: String, cli
 /// Saves the finished transcripts of the selected recordings as one zip file where the person chooses; returns its
 /// path, or `None` when they cancel.
 #[tauri::command]
-pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -> AppResult<Option<String>> {
+pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String, view: Option<String>) -> AppResult<Option<String>> {
     ensure_unlocked(&app.state::<AppState>())?;
+    // Show as: each transcript in the view on screen where it is ready (anything else: their own words).
+    let view = view.filter(|v| EXPORT_VIEWS.contains(&v.as_str()));
     if !BULK_EXPORT_FORMATS.contains(&format.as_str()) {
         return Err(AppError::msg("That export format is not available."));
     }
@@ -1840,10 +1843,46 @@ pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -
         return Err(AppError::msg(format!("Choose between 1 and {MAX_BULK} recordings.")));
     }
     let state = app.state::<AppState>();
-    let (bytes, filename) = state.api()?.export_sessions(&ids, &format).await?;
+    let (bytes, filename) = state.api()?.export_sessions_as(&ids, &format, view.as_deref()).await?;
     let Some(path) = crate::files::ask_save_path(&app, &filename, "Zip archive").await else { return Ok(None) };
     std::fs::write(&path, bytes)?;
     Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// The most recordings one Transcribe selected or estimate takes (the server's limit).
+pub const MAX_TRANSCRIBE: usize = 50;
+
+/// Checks a selection to transcribe or estimate before anything is sent (pure).
+pub fn check_transcribe(ids: &[String]) -> AppResult<()> {
+    if ids.is_empty() || ids.len() > MAX_TRANSCRIBE {
+        return Err(AppError::msg(format!("Choose between 1 and {MAX_TRANSCRIBE} recordings.")));
+    }
+    Ok(())
+}
+
+/// Transcribe on an audio-only recording (since v1.8): its transcript starts now; the library shows it processing.
+#[tauri::command]
+pub async fn session_transcribe(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let answer = app.state::<AppState>().api()?.transcribe_session(&id).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(answer)
+}
+
+/// Transcribe selected (since v1.8): `{started, skipped, minutes}`; nothing starts when the minutes left can't cover
+/// them all.
+#[tauri::command]
+pub async fn sessions_transcribe(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
+    check_transcribe(&ids)?;
+    let answer = app.state::<AppState>().api()?.transcribe_sessions(&ids).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(answer)
+}
+
+/// What Transcribe selected would use, shown before it starts: `{minutes, minutes_left, items}`.
+#[tauri::command]
+pub async fn sessions_transcribe_estimate(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
+    check_transcribe(&ids)?;
+    app.state::<AppState>().api()?.transcribe_estimate(&ids).await
 }
 
 /// The body of `POST /api/clients`: a trimmed name, and `parent_id` only for a subfolder (a top-level project sends

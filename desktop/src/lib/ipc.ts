@@ -11,6 +11,20 @@ export type OldWindowsSharing = "black_box" | "show";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 /** After a call (contract 1.8.0-e): `ask` (default), a small chip that saves the audio by itself after 12 s, not
  * transcribed; `always_transcribe` or `always_audio`, kept at once with "Saved · Undo". v1.5's `keep` reads as `ask`. */
+/** A Show as view an export can be in. */
+export type ExportView = "roman" | "english" | "urdu";
+/** `sessions_transcribe` (docs/API.md "Audio only"). */
+export interface TranscribeStarted {
+  started: string[];
+  skipped: { id: string; code: string }[];
+  minutes: number;
+}
+/** `sessions_transcribe_estimate`. */
+export interface TranscribeEstimate {
+  minutes: number;
+  minutes_left: number | null;
+  items: { id: string; minutes: number }[];
+}
 export type AfterCall = "ask" | "always_transcribe" | "always_audio";
 /** Why an automatic call was skipped quietly (v1.5): shorter than the setting, or nobody spoke on either side. */
 export type SkipReason = "too_short" | "no_speech";
@@ -1000,6 +1014,8 @@ export interface SessionOrganisePatch {
   labels?: string[];
   /** Never deleted by retention (B17). */
   keep?: boolean;
+  /** The recording's language, changed without re-transcribing it (null: automatic). */
+  language?: TranscriptionLanguage | null;
 }
 export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "delete";
 /** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
@@ -1726,7 +1742,16 @@ export const api = {
   bulkSessions: (ids: string[], action: BulkAction, clientId: string | null = null, label: string | null = null) =>
     invoke<number>("sessions_bulk", { ids, action, clientId, label }),
   /** One zip file, saved where the person chooses; null when they cancel the save dialog. */
-  exportSessions: (ids: string[], format: BulkExportFormat) => invoke<string | null>("sessions_export", { ids, format }),
+  /** The finished transcripts of the selected recordings in one zip; `view` (roman | english | urdu) exports each one
+   * whose Show as view is ready in it. */
+  exportSessions: (ids: string[], format: BulkExportFormat, view: ExportView | null = null) => invoke<string | null>("sessions_export", { ids, format, view }),
+  /** Transcribe on an audio-only recording (since v1.8): its transcript starts now. */
+  sessionTranscribe: (id: string) => invoke<Record<string, unknown>>("session_transcribe", { id }),
+  /** Transcribe selected (1-50): which started, which were skipped and why, and the minutes. Nothing starts when the
+   * minutes left can't cover them all (`budget_exceeded`, said in minutes). */
+  sessionsTranscribe: (ids: string[]) => invoke<TranscribeStarted>("sessions_transcribe", { ids }),
+  /** What Transcribe selected would use and the minutes left this month (null = no limit), before it starts. */
+  sessionsTranscribeEstimate: (ids: string[]) => invoke<TranscribeEstimate>("sessions_transcribe_estimate", { ids }),
   /** A new project; `parentId` makes it a subfolder (since v1.5). */
   createClient: (name: string, color: string | null = null, avatar: string | null = null, parentId: string | null = null) =>
     invoke<{ data: ClientFolder }>("client_create", { name, color, avatar, parentId }),
