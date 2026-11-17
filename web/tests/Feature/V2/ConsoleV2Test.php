@@ -11,8 +11,10 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\V2RecordingMoments;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\Screen;
 use App\Models\User;
 use App\Services\CredentialVault;
 use App\Services\InterfaceFlags;
@@ -216,4 +218,42 @@ it('decides the v2.0 parts per person, in the customer console only', function (
 
     Filament::setCurrentPanel('admin');
     expect(ConsoleV2::any())->toBeFalse();
+});
+
+describe('Moments', function () {
+    it('lists the recording\'s screens with their file name and what was said around them, and opens one large', function () {
+        consoleV2For($this->admin);
+        $recording = $this->sessionWithTranscript($this->admin, [
+            ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 870_000, 'end_ms' => 874_000, 'text' => 'This is the invoice page'],
+            ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 875_000, 'end_ms' => 879_000, 'text' => 'Press Pay at the bottom'],
+            ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 1_200_000, 'end_ms' => 1_202_000, 'text' => 'Much later'],
+        ], ['title' => 'Invoice walkthrough', 'status' => SessionStatus::Completed, 'duration_ms' => 1_300_000]);
+        Screen::query()->withoutGlobalScopes()->create(['workspace_id' => $recording->workspace_id, 'capture_session_id' => $recording->id,
+            'at_ms' => 872_000, 'width' => 1920, 'height' => 1080, 'trigger' => 'change', 'sha256' => hash('sha256', 'a'), 'mime' => 'image/webp', 'bytes' => 1,
+            'description' => "The client's invoice page with the Pay button"]);
+
+        $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $recording->id]);
+
+        $page->assertSee('Screen 1')->assertSee('14:32')->assertSee("The client's invoice page with the Pay button")
+            ->assertSee('S01_14-32_the-clients-invoice-page-with-the-pay.webp')
+            ->assertSee('Said around it')->assertSee('Me: This is the invoice page')->assertSee('Client: Press Pay at the bottom')
+            ->assertSee('Play from here')->assertSee('?t=872000', false);
+        // Only what was said within 15 seconds of the screen.
+        expect(V2RecordingMoments::for($recording->fresh())[0]['said'])->toBe("Me: This is the invoice page\nClient: Press Pay at the bottom");
+    });
+
+    it('says when a recording has no moments', function () {
+        consoleV2For($this->admin);
+
+        $this->panelComponent(ViewCaptureSession::class, ['record' => v2Recording($this->admin)->id])->assertSee('No moments in this recording');
+    });
+});
+
+it('shows the workspace and its role in Urdu under the new frame', function () {
+    consoleV2For($this->admin, ['ui_v2.shell']);
+    $this->admin->forceFill(['console_preferences' => ['shell' => ['app_language' => 'ur']]])->save();
+
+    $html = (string) $this->actingAs($this->admin->fresh(), 'web')->get('/app')->assertOk()->getContent();
+
+    expect($html)->toContain('ذاتی')->toContain('مالک')->not->toContain('>Personal<');
 });

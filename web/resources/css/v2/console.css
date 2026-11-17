@@ -1297,3 +1297,176 @@ html .fi-body .el-player .el-chip {
         display: none;
     }
 }
+
+/* ================================================================== 6. Moments */
+
+.v2-moment-list {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-component-card-radius);
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-moment {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--el-space-16);
+    padding: var(--el-space-16);
+}
+
+.v2-moment + .v2-moment {
+    border-top: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-moment-thumb {
+    flex: none;
+    width: calc(var(--el-space-64) * 3);
+    overflow: hidden;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-moment-thumb img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.v2-moment-main {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--el-space-8);
+}
+
+.v2-moment-head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-8);
+}
+
+.v2-moment-head .v2-mono {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-moment-about {
+    color: var(--el-role-text-primary);
+}
+
+.v2-moment-said {
+    padding: var(--el-space-8) var(--el-space-12);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-subtle);
+    white-space: pre-line;
+}
+
+.v2-moment-said .v2-group-title {
+    margin-bottom: var(--el-space-4);
+    padding: 0;
+}
+
+.v2-moment-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--el-space-16);
+}
+
+.v2-moment-foot .v2-link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-4);
+}
+
+.v2-moment-foot .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-moment-file {
+    overflow: hidden;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-moment-file:hover {
+    color: var(--el-role-text-primary);
+    text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+    .v2-moment {
+        flex-direction: column;
+    }
+
+    .v2-moment-thumb {
+        width: 100%;
+    }
+}
+
+/* the screen opened large: a floating layer over a scrim */
+.v2-viewer {
+    position: fixed;
+    inset: 0;
+    z-index: var(--el-layer-dialog);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--el-space-16);
+    background-color: var(--el-role-scrim-default);
+}
+
+.v2-viewer-box {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-12);
+    width: 100%;
+    max-width: calc(var(--el-space-64) * 18);
+    max-height: 100%;
+    padding: var(--el-space-16);
+    border-radius: var(--el-component-dialog-radius);
+    background-color: var(--el-role-bg-overlay);
+    box-shadow: var(--el-shadow-2);
+}
+
+.v2-viewer-head {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-12);
+}
+
+.v2-viewer-head .v2-row-title {
+    flex: 1;
+}
+
+.v2-viewer-body {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-height: 0;
+}
+
+.v2-viewer-body img {
+    flex: 1;
+    min-width: 0;
+    max-height: calc(var(--el-space-64) * 9);
+    object-fit: contain;
+    border-radius: var(--el-radius-sm);
+}
+
+.v2-viewer-body .v2-icon-btn:disabled {
+    color: var(--el-role-text-disabled);
+}
+
+[dir='rtl'] .v2-viewer-body .v2-icon-flip {
+    transform: scaleX(-1);
+}

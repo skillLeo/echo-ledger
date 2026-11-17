@@ -48,9 +48,9 @@ final class CaptureSessionInfolist
     }
 
     /**
-     * The v2.0 recording page (ui_v2.library), as the apps draw it: tabs Transcript · Summary · Ask · Details. The
-     * transcript keeps its docked player and its Screens; the summary is the call notes; Ask asks the recording's
-     * project; Details holds the facts.
+     * The v2.0 recording page (ui_v2.library), as the apps draw it: tabs Transcript · Summary · Ask · Moments ·
+     * Details. The transcript keeps its docked player; the summary is the call notes; Ask asks the recording's project;
+     * Moments are its screens with what was said around them; Details holds the facts.
      */
     private static function v2(Schema $schema): Schema
     {
@@ -70,6 +70,9 @@ final class CaptureSessionInfolist
                 ]),
                 Tab::make(__('Ask'))->id('ask')->schema([
                     ViewEntry::make('ask')->hiddenLabel()->view('filament.v2.recording-ask'),
+                ]),
+                Tab::make(__('Moments'))->id('moments')->schema([
+                    ViewEntry::make('moments')->hiddenLabel()->view('filament.v2.recording-moments'),
                 ]),
                 Tab::make(__('Details'))->id('details')->schema([self::details()]),
             ]),

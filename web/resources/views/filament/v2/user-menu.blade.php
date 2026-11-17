@@ -27,7 +27,7 @@
                     <span class="v2-um-name">{{ $name }}</span>
                     <span class="v2-um-email" dir="ltr">{{ $user->email }}</span>
                 </span>
-                <span class="v2-chip">{{ $context->plan()->name }}</span>
+                <span class="v2-chip">{{ __($context->plan()->name) }}</span>
             </a>
         </x-filament::dropdown.list>
         <x-filament::dropdown.list>
