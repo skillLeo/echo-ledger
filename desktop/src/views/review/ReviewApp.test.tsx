@@ -202,11 +202,11 @@ describe("Ask-me chip", () => {
     expect(chip()).not.toBeInTheDocument();
   });
 
-  it("says Saved as audio, with the check, when the core saves the chip by itself once its time is up, and not when it goes earlier", async () => {
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
+  it("says Audio saved, with the check, when the core saves the chip by itself once its time is up, and not when it goes earlier", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 12_500) }));
     await emitEvent("aftercall:state", makeAfterCallState());
-    expect(keptChip()).toHaveTextContent(/^Saved as audio·/);
-    expect(keptChip()).toHaveAccessibleName(/^Saved as audio: /);
+    expect(keptChip()).toHaveTextContent(/^Audio saved·/);
+    expect(keptChip()).toHaveAccessibleName(/^Audio saved: /);
     expect(keptChip()).not.toHaveTextContent(/Kept/);
     await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
 
@@ -242,7 +242,7 @@ describe("Ask-me chip", () => {
   });
 
   it("goes straight from the chip to Kept when the core keeps it by itself: it never starts to leave first", async () => {
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 12_500) }));
     const shown = chip()!;
     const classes = classesOf(shown);
     await emitEvent("aftercall:state", makeAfterCallState());
@@ -256,7 +256,7 @@ describe("Ask-me chip", () => {
     ["its title", /rename or choose a project/, "pending_open"],
   ] as const)("leaves without saying Kept when the person answered with %s, also when its time ran out meanwhile", async (_how, name, command) => {
     const answer = waitingCommand(command);
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 12_500) }));
     const classes = classesOf(chip()!);
     fireEvent.click(button(name));
     await flushAsync();
@@ -267,13 +267,13 @@ describe("Ask-me chip", () => {
     expect(classes()).toEqual(["after-pill chip", "after-pill chip leaving"]);
   });
 
-  it("still shows the core's Saved as audio after an answer that failed", async () => {
+  it("still shows the core's Audio saved after an answer that failed", async () => {
     fail("after_call_discard", "Could not discard.");
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 12_500) }));
     fireEvent.click(button("Discard"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not discard.");
     await emitEvent("aftercall:state", makeAfterCallState());
-    expect(keptChip()).toHaveTextContent(/^Saved as audio·/);
+    expect(keptChip()).toHaveTextContent(/^Audio saved·/);
   });
 
   it("a new chip ends the kept one's moment, and only the kept one says Kept", async () => {
@@ -295,6 +295,13 @@ describe("Ask-me chip", () => {
     await flushAsync();
     expect(chip()).not.toBeInTheDocument();
     expect(callsOf("pending_keep")).toHaveLength(0);
+  });
+
+  it("labels the countdown with what happens at its end", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", { deadlineAt: new Date(Date.now() + 9_400).toISOString() }) }));
+    const timer = screen.getByRole("timer");
+    expect(timer).toHaveAccessibleName("Saves the audio in 10 s");
+    expect(timer).toHaveAttribute("title", "Saves the audio in 10 s");
   });
 
   it("draws the timer line over the time that is left, from where it is", async () => {

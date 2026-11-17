@@ -27,8 +27,8 @@ const EMPTY: AfterCallState = { saved: null, discarded: null, ask: null };
 /**
  * The `review` window (360 x 168, bottom-right, near the tray): what shows after a call (v1.5) and the ask chip for an
  * unrecognised app. "Keep automatically" shows a one-line toast, "Saved · Call with Omar · 4:12 · Undo", for 6 s; "Ask
- * me" shows a pill-size chip with the title, ✓ Keep and a labelled Discard (a trash, never ×: one click) that keeps the
- * recording by itself after 10 s (a thin line counts down), and its title opens the recording in the main window to
+ * me" shows a pill-size chip with the title, ✓ Keep and a labelled Discard (a trash, never ×: one click) that saves the
+ * audio by itself after 12 s, not transcribed (a thin line counts down, "Saves the audio in N s"), and its title opens the recording in the main window to
  * rename it or pick a project. Discard deletes nothing at once: "Discarded · … · Undo" shows for 6 s and Undo puts
  * the chip back; the core deletes the files only once that time is over. The core decides what is
  * shown (`aftercall:state`); the window never takes focus, so everything works on click and only what is visible is
@@ -71,7 +71,7 @@ export default function ReviewApp() {
   const [held, setHeld] = useState<PendingItem | null>(null);
   // The chip kept last: it says Kept, with its check, from then until it has left.
   const [keptId, setKeptId] = useState<string | null>(null);
-  // Kept by the core because nobody answered in time: saved as audio only, not transcribed (v1.8 P1).
+  // Taken by the core because nobody answered in time: the audio is saved, not transcribed (v1.8 P1).
   const [audioId, setAudioId] = useState<string | null>(null);
   const keptByAnswer = useCallback((id: string) => {
     setAudioId(null);
@@ -109,7 +109,7 @@ export default function ReviewApp() {
   const discarded = usePresence(state.discarded ?? null);
   const chip = usePresence(held && (!state.ask || state.ask.id === held.id) ? held : state.ask);
   const chipKept = !!chip.item && chip.item.id === keptId;
-  const keptWord = chipKept && chip.item?.id === audioId ? "Saved as audio" : "Kept";
+  const keptWord = chipKept && chip.item?.id === audioId ? "Audio saved" : "Kept";
 
   // The interface flags are read again each time the window shows something, before it is drawn (v2/flags.ts).
   const windowShown = useWindowShown();
@@ -252,7 +252,7 @@ function KeepChip({ item, kept, keptWord = "Kept", leaving, onGone, onAnswer, on
   item: PendingItem;
   /** Kept: the check pops in where the app's icon was and the chip says so, then it leaves. */
   kept: boolean;
-  /** What a kept chip says: "Kept", or "Saved as audio" when its time ran out with no answer. */
+  /** What a kept chip says: "Kept", or "Audio saved" when its time ran out with no answer. */
   keptWord?: string;
   leaving: boolean;
   onGone: (id: string) => void;
@@ -264,6 +264,13 @@ function KeepChip({ item, kept, keptWord = "Kept", leaving, onGone, onAnswer, on
   const busy = useRef(false);
   // Read once: a window built mid-countdown starts the line where the time is.
   const [left] = useState(() => secondsLeft(item.deadlineAt, Date.now()) ?? CHIP_SECONDS);
+  // The countdown says what happens at its end, once a second.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const countdown = `Saves the audio in ${Math.ceil(secondsLeft(item.deadlineAt, now) ?? left)} s`;
 
   const act = async (command: () => Promise<unknown>, keeping = false) => {
     if (busy.current) return;
@@ -316,7 +323,7 @@ function KeepChip({ item, kept, keptWord = "Kept", leaving, onGone, onAnswer, on
           <TrashIcon size={13} /><span>Discard</span>
         </button>
       </span>
-      <span className="after-progress" aria-hidden="true">
+      <span className="after-progress" role="timer" aria-label={countdown} title={countdown}>
         <span style={{ animationDuration: `${left}s`, "--from": String(Math.min(1, left / CHIP_SECONDS)) } as CSSProperties} />
       </span>
     </section>
