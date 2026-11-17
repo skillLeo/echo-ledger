@@ -938,18 +938,30 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   };
 
   const openSuggestions = useMemo(() => (transcript?.suggestions ?? []).filter((s) => s.status === "open"), [transcript]);
+  /**
+   * A change's notice: today's words while its recording is still open; once another is open, the recording named and
+   * the notice a way back to it.
+   */
+  const doneNotice = (session: { id: string; title?: string | null } | null, open: boolean, here: string, away: (name: string) => string) => {
+    if (open || !session) notify(here, false, NO_TARGET);
+    else notify(away(recordingName(session.title)), false, { kind: "recording", id: session.id });
+  };
+
   const decideSuggestion = async (suggestion: TranscriptSuggestion, accept: boolean) => {
     if (!transcript) return;
     setSuggestBusy(true);
     try {
       const id = transcript.id;
+      const session = current;
       const next = await api.decideSuggestion(id, suggestion.id, accept);
-      if (shownTranscript.current === id) {
+      const open = shownTranscript.current === id;
+      if (open) {
         setTranscript(next);
         // The next open fix (if any) stays one click away; the decided one closes.
         setOpenSuggestion(null);
       }
-      notify(accept ? `Changed to “${suggestion.to}”` : "Suggestion dismissed", false, NO_TARGET);
+      doneNotice(session, open, accept ? `Changed to “${suggestion.to}”` : "Suggestion dismissed",
+        (name) => (accept ? `Changed to “${suggestion.to}” in “${name}”` : `Suggestion dismissed in “${name}”`));
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {
@@ -962,7 +974,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     try {
       const id = transcript.id;
       const result = await api.replaceInTranscript(id, find, replace, matchCase, wholeWord);
-      if (shownTranscript.current === id) setTranscript(result.transcript);
+      // The count is for the transcript the find bar is on; once another recording is open there is none to give.
+      if (shownTranscript.current !== id) return null;
+      setTranscript(result.transcript);
       return result.replaced;
     } catch (e) {
       notify(errorMessage(e), true);
@@ -974,13 +988,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (!transcript) return;
     try {
       const id = transcript.id;
+      const session = current;
       const restored = await api.restoreTranscript(id);
       // Done either way; shown only while that transcript is still open.
-      if (shownTranscript.current === id) {
+      const open = shownTranscript.current === id;
+      if (open) {
         setTranscript(restored);
         setPanel(null);
       }
-      notify("The original transcript is back", false, NO_TARGET);
+      doneNotice(session, open, "The original transcript is back", (name) => `The original transcript of “${name}” is back`);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -990,9 +1006,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (!current) return false;
     try {
       const id = current.id;
+      const session = current;
       const saved = await api.renameSpeakers(id, names, remember);
-      if (shownSession.current === id) setSpeakerNames(saved.speaker_names ?? {});
-      notify("Speaker names saved", false, NO_TARGET);
+      const open = shownSession.current === id;
+      if (open) setSpeakerNames(saved.speaker_names ?? {});
+      doneNotice(session, open, "Speaker names saved", (name) => `Speaker names saved for “${name}”`);
       return true;
     } catch (e) {
       notify(errorMessage(e), true);

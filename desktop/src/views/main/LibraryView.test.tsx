@@ -1305,6 +1305,60 @@ describe("transcript tools in the library (B6-B12)", () => {
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("Saved to"), false, undefined);
   });
 
+  describe("a change answered after another recording opened", () => {
+    const D = () => makeTranscript({ id: "tr-d", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "Remember to call back." }] });
+    const restoreOn = async () => {
+      TRANSCRIPTS["tr-a"] = { ...TRANSCRIPTS["tr-a"], edited_at: "2026-10-25T10:00:00Z" };
+      TRANSCRIPTS["tr-d"] = D();
+      respond("transcript_revisions", { data: [] });
+      answerConfirm().mockReturnValue(true);
+      const view = await renderLibrary();
+      await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
+      fireEvent.click(within(detail()).getByRole("button", { name: "History" }));
+      await flushAsync();
+      fireEvent.click(within(detail()).getByRole("button", { name: "Restore original" }));
+      await flushAsync();
+      return view;
+    };
+
+    it("Restore names the recording it was for and leads back to it; while it is open, today's words", async () => {
+      let answer: (v: unknown) => void = () => undefined;
+      respondWith("transcript_restore", () => new Promise((r) => { answer = r; }));
+      const { notify } = await restoreOn();
+      await selectItem("Voice note from Sam", "Remember to call back.");
+      await act(async () => answer(TRANSCRIPTS["tr-a"]));
+      await flushAsync();
+      expect(notify).toHaveBeenCalledWith("The original transcript of “Zoom with Acme” is back", false, { kind: "recording", id: "a" });
+      expect(within(detail()).getByText("Remember to call back.")).toBeInTheDocument();
+    });
+
+    it("Restore while its recording is still open says what it always said", async () => {
+      respond("transcript_restore", TRANSCRIPTS["tr-a"]);
+      const { notify } = await restoreOn();
+      expect(notify).toHaveBeenCalledWith("The original transcript is back", false, undefined);
+    });
+
+    it("Replace all gives no count for a transcript no longer open, and leaves the open one as it is", async () => {
+      TRANSCRIPTS["tr-d"] = D();
+      let answer: (v: unknown) => void = () => undefined;
+      respondWith("transcript_replace", () => new Promise((r) => { answer = r; }));
+      await renderLibrary();
+      await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
+      fireEvent.click(within(detail()).getByRole("button", { name: "Find and replace" }));
+      fireEvent.change(within(detail()).getByLabelText("Find"), { target: { value: "Sam" } });
+      fireEvent.change(within(detail()).getByLabelText("Replace with"), { target: { value: "Samuel" } });
+      fireEvent.click(within(detail()).getByRole("button", { name: "Replace all" }));
+      await flushAsync();
+      await selectItem("Voice note from Sam", "Remember to call back.");
+      const t = TRANSCRIPTS["tr-a"];
+      await act(async () => answer({ replaced: 1, transcript: { ...t, segments: [{ ...t.segments[0], text: "Hello, this is Samuel." }, ...t.segments.slice(1)] } }));
+      await flushAsync();
+      expect(screen.queryByText(/^Replaced 1 time\.$/)).toBeNull();
+      expect(within(detail()).getByText("Remember to call back.")).toBeInTheDocument();
+      expect(within(detail()).queryByText("Hello, this is Samuel.")).toBeNull();
+    });
+  });
+
   it("finds a moment in any transcript and opens the recording there", async () => {
     respond("search_library", { data: [{ session: ITEMS[2], hit_count: 1,
       hits: [{ transcript_id: "tr-c", kind: "final", segment_index: 0, start_ms: 65_000, end_ms: 66_000, speaker: "Client", snippet: "the invoice is late", highlights: [[4, 7]] }] }], next_page: null });
