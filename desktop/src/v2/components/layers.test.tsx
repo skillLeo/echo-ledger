@@ -107,6 +107,70 @@ describe("Toast", () => {
   });
 });
 
+describe("Toast from the keyboard", () => {
+  const platform = (name: string) => vi.spyOn(navigator, "platform", "get").mockReturnValue(name);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("Ctrl+Z on Windows (Cmd+Z on a Mac) runs Undo once and closes the toast", () => {
+    platform("Win32");
+    const onUndo = vi.fn();
+    const onClose = vi.fn();
+    const { unmount } = render(<Toast message="Voice note moved to Trash" duration={0} onAction={onUndo} onClose={onClose} />);
+    expect(screen.getByRole("button", { name: "Undo" })).toHaveAttribute("aria-keyshortcuts", "Control+Z");
+    fireEvent.keyDown(document.body, { key: "z", metaKey: true });
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true, shiftKey: true });
+    expect(onUndo).not.toHaveBeenCalled();
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    unmount();
+    platform("MacIntel");
+    const onMacUndo = vi.fn();
+    render(<Toast message="Voice note moved to Trash" duration={0} onAction={onMacUndo} onClose={() => undefined} />);
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(onMacUndo).not.toHaveBeenCalled();
+    fireEvent.keyDown(document.body, { key: "Z", metaKey: true });
+    expect(onMacUndo).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves Cmd/Ctrl+Z to a text field, and to a toast whose action isn't Undo", () => {
+    platform("Win32");
+    const onAction = vi.fn();
+    render(<><input aria-label="Title" /><Toast message="Restored" actionLabel="Open" duration={0} onAction={onAction} onClose={() => undefined} /></>);
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(onAction).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Open" })).not.toHaveAttribute("aria-keyshortcuts");
+  });
+
+  it("doesn't take Ctrl+Z from a field being typed in", () => {
+    platform("Win32");
+    const onUndo = vi.fn();
+    render(<><input aria-label="Title" /><Toast message="Moved to Trash" duration={0} onAction={onUndo} onClose={() => undefined} /></>);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Title" }), { key: "z", ctrlKey: true });
+    expect(onUndo).not.toHaveBeenCalled();
+  });
+
+  it("F6 moves focus to the toast and F6 again back to where it was", () => {
+    render(<><Button>Delete</Button><ToastRegion><Toast message="Moved to Trash" duration={0} onAction={() => undefined} onClose={() => undefined} /></ToastRegion></>);
+    const from = screen.getByRole("button", { name: "Delete" });
+    from.focus();
+    fireEvent.keyDown(from, { key: "F6" });
+    expect(screen.getByRole("button", { name: "Undo" })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Undo" }), { key: "F6" });
+    expect(from).toHaveFocus();
+  });
+
+  it("only the newest toast answers", () => {
+    platform("Win32");
+    const first = vi.fn();
+    const second = vi.fn();
+    render(<><Toast message="One" duration={0} onAction={first} onClose={() => undefined} /><Toast message="Two" duration={0} onAction={second} onClose={() => undefined} /></>);
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("FilterBar and Chip", () => {
   it("quick filters are pressed toggles in a named group; applied filters have a named remove button", () => {
     const onToggle = vi.fn();
