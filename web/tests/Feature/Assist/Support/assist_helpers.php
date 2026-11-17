@@ -7,6 +7,7 @@ use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\Assist\AssistAskAi;
 use App\Services\Assist\AssistReportAi;
+use App\Services\Assist\RelayHealth;
 use App\Services\Assist\RelaySecret;
 use App\Services\CredentialVault;
 use App\Services\InterfaceFlags;
@@ -20,13 +21,22 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 const ASSIST_SECRET = 'relay-secret-for-the-tests-0123456789-abcdef';
 
-/** The relay set up: its host and its secret; and the captions' provider, which answers with a streaming key. */
-function assistRelaySetUp(): void
+/**
+ * The relay set up: its host and its secret; and the captions' provider, which answers with a streaming key. With
+ * [$healthy] the relay answers its health check (1.9.0-q: Automatic picks it while it does); false leaves its answers
+ * to the test. Its host resolves to a public address: tests never ask DNS.
+ */
+function assistRelaySetUp(bool $healthy = true): void
 {
     app(SettingsRepository::class)->set('relay.url', 'relay.example.com');
     app(RelaySecret::class)->rotate(ASSIST_SECRET);
     app(CredentialVault::class)->put('soniox', 'api_key', 'snx-test-key-0123456789');
+    RelayHealth::$resolveUsing = fn (string $host): array => ['93.184.215.14'];
     Http::fake(['api.soniox.com/*' => Http::response(['api_key' => 'temp:abc', 'expires_at' => '2026-12-01T10:10:00Z'])]);
+    if ($healthy) {
+        Http::fake(['relay.example.com/healthz' => Http::response(['status' => 'ok', 'version' => '1.0.2'])]);
+        app(RelayHealth::class)->record(['ok' => true, 'version' => '1.0.2']);
+    }
 }
 
 /** A person on [$plan] with a device, and the live_assist flag on for them (unless [$flag] is false). */

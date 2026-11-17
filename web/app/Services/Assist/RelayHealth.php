@@ -60,18 +60,74 @@ class RelayHealth
         if ($host === null) {
             return ['ok' => false, 'host' => '', 'version' => null, 'ms' => 0, 'error' => 'No relay address is set.', 'at' => now()->getTimestamp()];
         }
+
+        return $this->record(['host' => $host, ...self::probe($host)]);
+    }
+
+    /**
+     * One health check of [$host], guarded against reaching anything inside the server's own network: the host is
+     * resolved here, refused when any of its addresses is private, loopback, link-local or reserved, and the request
+     * goes to the checked address only (pinned, no redirects).
+     *
+     * @return array{ok: bool, version: ?string, ms: int, error: ?string, at: int}
+     */
+    public static function probe(string $host): array
+    {
         $started = microtime(true);
+        $done = fn (bool $ok, ?string $version, ?string $error): array => [
+            'ok' => $ok, 'version' => $version, 'ms' => (int) round((microtime(true) - $started) * 1000), 'error' => $error, 'at' => now()->getTimestamp(),
+        ];
+        $addresses = self::resolve($host);
+        if ($addresses === []) {
+            return $done(false, null, 'The relay\'s address could not be found.');
+        }
+        foreach ($addresses as $ip) {
+            if (! self::isPublic($ip)) {
+                return $done(false, null, 'The relay\'s address points inside a private network; it must be a public server.');
+            }
+        }
+        $ip = $addresses[0];
         try {
             $response = Http::timeout(self::TIMEOUT_SECONDS)->connectTimeout(self::TIMEOUT_SECONDS)->acceptJson()
-                ->withOptions(['allow_redirects' => false])->get("https://{$host}/healthz");
-            $ok = $response->successful() && $response->json('status') === 'ok';
+                ->withOptions(['allow_redirects' => false, 'curl' => [CURLOPT_RESOLVE => ["{$host}:443:".(str_contains($ip, ':') ? "[{$ip}]" : $ip)]]])
+                ->get("https://{$host}/healthz");
+            $ok = $response->status() === 200 && $response->json('status') === 'ok';
             $version = is_string($response->json('version')) ? mb_substr((string) $response->json('version'), 0, 40) : null;
-            $error = $ok ? null : "The relay answered HTTP {$response->status()}.";
+
+            return $done($ok, $version, $ok ? null : "The relay answered HTTP {$response->status()}.");
         } catch (Throwable) {
-            [$ok, $version, $error] = [false, null, 'The relay did not answer.'];
+            return $done(false, null, 'The relay did not answer.');
+        }
+    }
+
+    /** Resolves [$host] to its IPv4 and IPv6 addresses (tests replace this with $resolveUsing). */
+    public static ?\Closure $resolveUsing = null;
+
+    /** @return list<string> */
+    public static function resolve(string $host): array
+    {
+        if (self::$resolveUsing !== null) {
+            return array_values((self::$resolveUsing)($host));
+        }
+        if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+            return [$host];
+        }
+        $v4 = gethostbynamel($host) ?: [];
+        $v6 = array_column(@dns_get_record($host, DNS_AAAA) ?: [], 'ipv6');
+
+        return array_values(array_unique([...$v4, ...$v6]));
+    }
+
+    /** True for a public unicast address: not private, loopback, link-local, unspecified or otherwise reserved. */
+    public static function isPublic(string $ip): bool
+    {
+        // IPv4 mapped in IPv6 (::ffff:10.0.0.1) is judged as the IPv4 address.
+        if (preg_match('/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i', $ip, $m) === 1) {
+            $ip = $m[1];
         }
 
-        return $this->record(['ok' => $ok, 'host' => $host, 'version' => $version, 'ms' => (int) round((microtime(true) - $started) * 1000), 'error' => $error, 'at' => now()->getTimestamp()]);
+        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false
+            && preg_match('/^(0\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|169\.254\.|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/i', $ip) !== 1;
     }
 
     /**

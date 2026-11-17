@@ -337,11 +337,15 @@ describe('starting a session', function () {
         expect(AssistSession::query()->withoutGlobalScopes()->find($bobSession)->status)->toBe('active');
     });
 
-    it('answers 503 while the relay is not set up, and creates nothing', function () {
+    it('without a relay, runs HTTP mode, and refuses an app that knows only the relay in plain words, creating nothing', function () {
         app(SettingsRepository::class)->set('relay.url', null);
-        $this->api(Fx::token(assistPerson()))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true])
-            ->assertStatus(503)->assertJsonPath('code', 'provider_not_configured');
+        $api = $this->api(Fx::token(assistPerson()));
+        $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true])
+            ->assertStatus(426)->assertJsonPath('code', 'app_update_required')->assertJsonPath('message', 'Live Assist needs the latest version of the app.');
         expect(AssistSession::query()->withoutGlobalScopes()->count())->toBe(0);
+
+        $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true, 'transports' => ['relay', 'http']])
+            ->assertCreated()->assertJsonPath('transport', 'http')->assertJsonPath('relay', null);
     });
 
     it('refuses Practice, and a live session without a recording, while the captions cannot be given, and creates nothing', function () {

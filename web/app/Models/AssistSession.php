@@ -26,6 +26,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $plan the sold plan's key it started on (free, pro, business, personal, …)
  * @property bool $practice
  * @property string $platform
+ * @property string $transport relay | http (since 1.9.0-q), chosen at the start
  * @property bool $auto_saved
  * @property string $status active | ended
  * @property Carbon $started_at
@@ -53,7 +54,7 @@ final class AssistSession extends Model
     public const PLATFORMS = ['desktop', 'android', 'ios', 'web'];
 
     protected $fillable = [
-        'workspace_id', 'user_id', 'device_id', 'assist_prep_id', 'capture_session_id', 'mode', 'plan', 'practice', 'platform', 'auto_saved',
+        'workspace_id', 'user_id', 'device_id', 'assist_prep_id', 'capture_session_id', 'mode', 'plan', 'practice', 'platform', 'transport', 'auto_saved',
         'status', 'started_at', 'last_token_at', 'claimed_cents', 'claimed_at', 'ended_at', 'seconds_used', 'report_status', 'report_requeued_at', 'report', 'summary', 'facts', 'facts_at', 'summary_at', 'report_rev',
     ];
 

@@ -17,6 +17,7 @@ use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
@@ -309,6 +310,7 @@ describe('the admin panel', function () {
             ->set('data.relay_url', 'https://Relay.Example.org/anything')->call('save')->assertHasNoErrors();
         expect(app(SettingsRepository::class)->get('relay.url'))->toBe('relay.example.org');
 
+        Http::fake(['relay.example.org/healthz' => Http::response(['status' => 'ok'])]);
         $answer = $this->api(Fx::token(assistPerson()))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true]);
         $answer->assertCreated()->assertJsonPath('relay.url', 'wss://relay.example.org/v1/assist');
 

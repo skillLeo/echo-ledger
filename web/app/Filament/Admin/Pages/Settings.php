@@ -60,7 +60,6 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -777,9 +776,19 @@ class Settings extends Page
         return $routes;
     }
 
-    /** "Check relay": asks the relay at the address in the form (saved or not) and shows how it answered. */
+    /**
+     * "Check relay": asks the relay at the address in the form (saved or not) and shows how it answered. Guarded like
+     * every relay check (RelayHealth::probe: public addresses only, pinned, no redirects) and limited to 6 a minute.
+     */
     public function checkRelay(): void
     {
+        $key = 'check-relay:'.auth()->id();
+        if (RateLimiter::tooManyAttempts($key, 6)) {
+            Notification::make()->title('Wait a moment')->body('Check the relay again in '.RateLimiter::availableIn($key).' seconds.')->warning()->send();
+
+            return;
+        }
+        RateLimiter::hit($key, 60);
         $typed = trim((string) ($this->data['relay_url'] ?? ''));
         $url = RelayToken::url($typed);
         if ($url === null) {
@@ -788,34 +797,12 @@ class Settings extends Page
             return;
         }
         $host = (string) parse_url($url, PHP_URL_HOST);
-        $settings = app(SettingsRepository::class);
-        $saved = $settings->get('relay.url');
         // The check is remembered for the saved address only: a typed one is asked, not remembered.
-        $result = $saved === $host ? app(RelayHealth::class)->check() : self::probeRelay($host);
+        $result = app(SettingsRepository::class)->get('relay.url') === $host ? app(RelayHealth::class)->check() : RelayHealth::probe($host);
         if ($result['ok']) {
             Notification::make()->title('The relay is up')->body("{$host} answered in {$result['ms']} ms".($result['version'] !== null ? " (version {$result['version']})." : '.'))->success()->send();
         } else {
             Notification::make()->title('The relay is down')->body("{$host}: ".($result['error'] ?? 'no answer.').' Automatic uses this server meanwhile; Dedicated relay refuses to start.')->danger()->send();
-        }
-    }
-
-    /**
-     * A one-off health check of a relay address not saved yet.
-     *
-     * @return array{ok: bool, version: ?string, ms: int, error: ?string}
-     */
-    private static function probeRelay(string $host): array
-    {
-        $started = microtime(true);
-        try {
-            $response = Http::timeout(RelayHealth::TIMEOUT_SECONDS)->connectTimeout(RelayHealth::TIMEOUT_SECONDS)
-                ->acceptJson()->withOptions(['allow_redirects' => false])->get("https://{$host}/healthz");
-            $ok = $response->successful() && $response->json('status') === 'ok';
-
-            return ['ok' => $ok, 'version' => is_string($response->json('version')) ? mb_substr((string) $response->json('version'), 0, 40) : null,
-                'ms' => (int) round((microtime(true) - $started) * 1000), 'error' => $ok ? null : "The relay answered HTTP {$response->status()}."];
-        } catch (Throwable) {
-            return ['ok' => false, 'version' => null, 'ms' => (int) round((microtime(true) - $started) * 1000), 'error' => 'The relay did not answer.'];
         }
     }
 
