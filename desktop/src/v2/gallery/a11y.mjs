@@ -221,7 +221,7 @@ try {
   await browser.close();
   await server.close();
 }
-await writeFile(join(out, `report${only ? `-${only}` : ""}.json`), JSON.stringify(report, null, 1));
+await writeFile(join(out, `report${only ? `-${only}` : ""}.json`), `${JSON.stringify(report, null, 1)}\n`);
 const serious = report.axe.flatMap((r) => (r.violations ?? []).filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${r.name}/${r.theme}: ${v.id} (${v.impact}) ×${v.nodes.length}`));
 const other = report.axe.flatMap((r) => (r.violations ?? []).filter((v) => v.impact !== "serious" && v.impact !== "critical").map((v) => `${r.name}/${r.theme}: ${v.id} (${v.impact}) ×${v.nodes.length}`));
 console.log(`axe: ${report.axe.length} pages, ${serious.length} serious or critical, ${other.length} moderate or minor`);
