@@ -9,7 +9,8 @@ export type ShareHiding = "all" | "floating" | "off";
 /** Windows before 10 version 2004: a black box where EchoLedger is, or the window as it is. */
 export type OldWindowsSharing = "black_box" | "show";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
-/** After a call (v1.5): kept at once with "Saved · Undo", or a small chip that keeps it by itself after 10 s. */
+/** After a call (v1.5): kept at once with "Saved · Undo", or a small chip that saves the audio by itself after 12 s,
+ * not transcribed (v1.8 P1). */
 export type AfterCall = "keep" | "ask";
 /** Why an automatic call was skipped quietly (v1.5): shorter than the setting, or nobody spoke on either side. */
 export type SkipReason = "too_short" | "no_speech";

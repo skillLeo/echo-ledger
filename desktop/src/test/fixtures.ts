@@ -225,9 +225,9 @@ export function makeSavedToast(overrides: Partial<SavedToast> = {}, now = Date.n
   };
 }
 
-/** The Ask-me chip of a WhatsApp call, kept by itself 10 s from `now`. */
+/** The Ask-me chip of a WhatsApp call, whose audio is saved by itself (not transcribed) 12 s from `now`. */
 export function makeChipItem(id = "pend-1", overrides: Partial<PendingItem> = {}, now = Date.now()): PendingItem {
-  return makePendingItem(id, { sourceApp: "whatsapp", durationMs: 252_000, deadlineAt: new Date(now + 10_000).toISOString(), ...overrides });
+  return makePendingItem(id, { sourceApp: "whatsapp", durationMs: 252_000, deadlineAt: new Date(now + 12_000).toISOString(), ...overrides });
 }
 
 /** A 6-second WhatsApp call skipped as too short, restorable until a day after 09:12 on 24 Oct 2026. */

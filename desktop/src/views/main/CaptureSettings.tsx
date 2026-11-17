@@ -52,7 +52,7 @@ const optionDefault = (id: string) => setting(id).options?.find((o) => o.default
 
 const AFTER_CALL_HINT: Record<Settings["afterCall"], string> = {
   keep: "Each call is saved at once. A small “Saved, Undo” shows near the tray for a few seconds.",
-  ask: "A small prompt near the tray asks Keep or Discard, and keeps the call by itself after 10 seconds.",
+  ask: "A small prompt near the tray asks Keep or Discard, and saves the audio by itself after 12 seconds (not transcribed; transcribe it later from the Library).",
 };
 /** A Mac has no tray: the window is in the corner of the screen. */
 export function afterCallHint(choice: Settings["afterCall"], platform: string): string {
