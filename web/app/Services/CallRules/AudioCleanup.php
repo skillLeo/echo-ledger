@@ -8,7 +8,9 @@ use App\Enums\SessionStatus;
 use App\Enums\TranscriptStatus;
 use App\Models\CaptureSession;
 use App\Models\User;
+use App\Services\ActivityFeed;
 use App\Services\RetentionPolicy;
+use App\Services\SettingsRepository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
@@ -79,6 +81,45 @@ final class AudioCleanup
         }
 
         return ['count' => $count, 'on' => $first?->toAtomString()];
+    }
+
+    /**
+     * The weekly summary (quiet: one Activity entry, no push): for each person with audio going within a week, how
+     * many and from which day. Once a week per person. Returns how many people were told.
+     */
+    public function weeklySummary(): int
+    {
+        $limit = now()->addDays(7);
+        $weekStart = now()->startOfWeek();
+        $byUser = [];
+        self::candidates()->with('user')->chunkById(200, function (Collection $sessions) use (&$byUser, $limit): void {
+            foreach ($sessions as $session) {
+                $on = $this->removalDay($session, $session->user);
+                if ($on !== null && $on->lessThanOrEqualTo($limit)) {
+                    $entry = $byUser[$session->user_id] ?? ['user' => $session->user, 'count' => 0, 'on' => $on];
+                    $entry['count']++;
+                    $entry['on'] = $on->lessThan($entry['on']) ? $on : $entry['on'];
+                    $byUser[$session->user_id] = $entry;
+                }
+            }
+        });
+        $told = 0;
+        foreach ($byUser as $entry) {
+            $user = $entry['user'];
+            if ($user->notifications()->where('created_at', '>=', $weekStart)->get()
+                ->contains(fn ($n): bool => ActivityFeed::kindOf($n) === 'audio_cleanup')) {
+                continue;
+            }
+            $count = $entry['count'];
+            $day = $entry['on']->copy()->timezone(app(SettingsRepository::class)->displayTimezone())->format('l');
+            app(ActivityFeed::class)->post($user, 'audio_cleanup',
+                $count === 1 ? '1 recording will be removed on '.$day : $count.' recordings will be removed on '.$day,
+                'Audio nobody transcribed is cleaned up after its days. Transcribe, star or keep what you need.',
+                null, 'heroicon-o-archive-box', null, '/app/sessions?view=audio_only');
+            $told++;
+        }
+
+        return $told;
     }
 
     private function removalDay(CaptureSession $session, ?User $user): ?Carbon

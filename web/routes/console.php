@@ -36,6 +36,8 @@ Schedule::command('recordings:recover')->everyFiveMinutes()->withoutOverlapping(
 Schedule::command('sessions:sweep-open')->everyFifteenMinutes()->withoutOverlapping(10);
 
 Schedule::command('recordings:retention')->hourly()->withoutOverlapping(30);
+// Since 2.1.0-a: audio nobody transcribed, past its retention, goes to Trash (daily); the weekly summary on Mondays.
+Schedule::command('recordings:audio-cleanup')->dailyAt('03:20')->withoutOverlapping(60);
 
 // Since v1.5: accounts past their 7-day deletion grace are erased; "Export my data" ZIPs go 24 hours after they are made.
 Schedule::command('echoledger:erase-accounts')->hourly()->withoutOverlapping(60);

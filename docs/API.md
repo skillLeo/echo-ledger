@@ -826,7 +826,7 @@ limit; ids that are not audio only, or not the person's, are left out of `items`
 (show the new number and ask again), `403 limit_reached` when they do not fit (nothing starts: all or nothing),
 `200 {"started": 5}`. The apps always show the estimate and `minutes_left` before the button.
 
-**Audio clean-up.** Once a day (the existing queue and cron) every recording that is **audio only**, **not starred**
+**Audio clean-up.** Once a day (`recordings:audio-cleanup` at 03:20 server time, from the existing cron) every recording that is **audio only**, **not starred**
 (`pinned`), **not kept** and **not in a shared workspace**, and whose `choice.at` is older than the person's retention
 in days, goes to Trash and then follows the Trash rule (`trash.keep_hours`, the owner's setting, 48 hours unless
 changed): erased for good with its audio files, waveforms, pictures and the engines' copies. Transcribed, starred, kept
@@ -841,7 +841,8 @@ like any deletion. The retention in days:
 - **Change to the retention of 1.5 (B17, `retention_days`, D1):** until 2.1.0-a it moved *every* recording that was not
   kept to the bin after the general or plan days, transcribed ones too. Since 2.1.0-a it never moves a recording with a
   finished transcript, a starred (`pinned`) one or one in a shared workspace; it still moves audio nobody transcribed
-  (no transcript, or a failed one) that is not kept, after the same days.
+  (no transcript, or a failed one) that is not kept, after the same days. A recording kept as audio by an after-call
+  choice (`choice.value` `keep_audio`) follows only the audio clean-up's days, so "Never" means never.
 - Warning: three days before, `cleanup_soon` (above) shows on Home and the console's Home line; once a week (Monday)
   one Activity entry says how many will go and on which day. No push for any item, ever.
 

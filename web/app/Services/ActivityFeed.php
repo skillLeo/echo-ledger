@@ -58,7 +58,9 @@ final class ActivityFeed
      * staff asking the person for another payment receipt; since v1.8 a call an app saw but did not record.
      */
     public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you',
-        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage', 'cost_alert', 'upgrade_receipt_requested', 'missed_recording'];
+        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage', 'cost_alert', 'upgrade_receipt_requested', 'missed_recording',
+        // Since 2.1.0-a: once a week, how much audio nobody transcribed will be cleaned up, and when (never one per item).
+        'audio_cleanup'];
 
     /** Read notifications are kept this long, unread ones twice as long. */
     public const KEEP_DAYS = 90;

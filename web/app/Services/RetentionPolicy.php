@@ -121,6 +121,8 @@ final class RetentionPolicy
         $query->where('keep_forever', false)->where('pinned', false)->where('status', '!=', SessionStatus::Recording->value)
             ->whereDoesntHave('finalTranscript', fn (Builder $t) => $t->where('status', TranscriptStatus::Completed->value))
             ->whereNotIn('workspace_id', self::sharedWorkspaces())
+            // Kept as audio by an after-call choice: the audio clean-up's own days decide (CallRules\AudioCleanup).
+            ->where(fn (Builder $q) => $q->whereNull('choice')->orWhere('choice', '!=', 'keep_audio'))
             ->where('created_at', '<', now()->subDays($days))
             ->chunkById(100, function (Collection $sessions) use (&$moved): void {
                 foreach ($sessions as $session) {
