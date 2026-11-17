@@ -139,6 +139,14 @@ early). The new token must name the same session and user and not be older than 
 Failure: `error token_refresh_rejected` (`retry: false`, `fatal: false`, `in_reply_to` the refresh's `seq`); the old
 token stays valid until it expires.
 
+### `practice_next` (practice sessions)
+
+`{"type": "practice_next", "seq": 14}`: in a session whose token has `practice: true`, the next practice question.
+Send it to start, and again when the person has finished answering (the app decides when: the answer may be several
+`me` finals). Answer: `practice_question`, or `practice_done` when every question was asked. Errors: `not_practice`
+(a live session), `practice_busy` (the last one is still being written; `retry: true`), `budget_exhausted` (the
+Practice allowance is used up).
+
 ## Relay → app
 
 ### `ready`
@@ -221,6 +229,23 @@ used up). The steps are `max` → `deep` → `balanced` → `fast` → `captions
 suggestions but keeps the connection, the transcript and the context, so suggestions resume when a new token brings
 budget. Captions never stop.
 
+### `practice_question` and `practice_done`
+
+```json
+{"type": "practice_question", "seq": 40, "question_id": "pq-1f3a-9", "turn_id": "q-1", "index": 1, "total": 8,
+ "text": "Tell me about a project you are proud of, and what your part in it was?"}
+{"type": "practice_done", "seq": 90, "asked": 8}
+```
+
+The relay plays Them for the brief's meeting type (the interviewer, the manager, the client) and writes each question
+from the brief and the documents (the job description or the client's brief), one or two sentences, from easier to
+harder, sometimes following up on the last answer, never repeating one. The question is the `other` turn `turn_id` of
+the transcript: a hint for it follows as for any question (`suggestion_start` with that `turn_id`), unless the app
+paused suggestions (`settings.assist: paused`) to practise without help. The person answers by voice: the speech
+engine's text as `me` finals, as in a call. **The app sends each question to the server with its batched turns**:
+`channel: "other"`, `client_ref` = `question_id`, the `text`, `is_question: true`; the relay does not post turns.
+`total` is the relay's setting (`[practice] questions`, 8).
+
 ### `error`
 
 ```json
@@ -241,6 +266,8 @@ error answers. `fatal: true` means the relay closes the connection next.
 | `provider_not_configured` | The model's provider has no key on the server. Message: "Live Assist is not set up on the server yet. Ask your admin." (no vendor name) | no | Show the message |
 | `provider_unavailable`, `provider_timeout` | The model failed, after the fallback model if any | yes | Show the message; help now may work |
 | `model_declined` | The model declined, after the fallback model if any | no | Show the message |
+| `not_practice` | `practice_next` in a live session | no | Nothing |
+| `practice_busy` | `practice_next` while the last question is still being written | yes | Wait for `practice_question` |
 | `token_refresh_rejected` | `token_refresh` with a bad, expired, older or other token | no | Get a new token from the server |
 | `token_expired` (fatal) | The token expired without a refresh | yes | Reconnect with a new token; the session resumes |
 | `token_missing`, `token_invalid`, `wrong_session` (fatal) | A failed first-message `auth` | no | Get a new token |
@@ -285,6 +312,46 @@ gpt-oss-120b on Groq).
 - Without a fallback (or when it fails too), the suggestion ends with an `error` (`retry: true` except for
   `model_declined` and `provider_not_configured`).
 
+## The facts ledger and the running summary
+
+The relay keeps both for every session (plan L2), in the background with the Fast model (its fallback when it fails),
+never holding up a suggestion and not in `captions_only`:
+
+- **Facts:** after every 3 final lines of either channel (backchannels like "okay" don't count), the relay asks for the
+  new facts in them (what was said, asked, agreed or promised, figures exactly as said, `Them:` / `Me:` lines), adds
+  them to the session's ledger, which the next suggestions read, and posts the whole ledger to the server
+  (`POST /api/internal/assist/facts`).
+- **Summary:** at most every 5 minutes, when the call moved on, the relay rewrites the running summary from the last
+  one and the new lines, and posts it (`POST /api/internal/assist/summary`).
+- A `context_update` with `facts` or `summary` from the app still replaces what the relay has; the relay carries on
+  from there.
+- Each call is charged to the session's spend and reported as usage (`kind` `facts` or `summary`; practice questions
+  `practice_question`). The settings are `[background]` in `config/relay.toml`.
+
+## What the relay needs from the server (L7)
+
+The post-call report is the server's queue job (plan L7). For it, and for practice, the relay needs:
+
+1. **`POST /api/internal/assist/facts`** (HMAC, as the other internal endpoints): `{"session_id", "facts": ["Them:
+   the budget is 8,000 USD (minute 2)", …], "at"}`. The whole ledger each time: replace what is stored (encrypted).
+   The report's "mistakes against the facts ledger, and promises I made" reads it.
+2. **`POST /api/internal/assist/summary`**: `{"session_id", "summary", "at"}`. Replace; the report's summary starts
+   from it.
+3. **`POST /api/internal/assist/usage`** also accepts `kind` `practice_question`, `facts` and `summary` (with `trigger`
+   `practice`, `facts`, `summary`, `mode` `fast`, `suggestion_id` `pq-…`, `facts-…`, `summary-…`; idempotent per id),
+   and bills them to the session like suggestions: Practice ones to the Practice allowance.
+4. **Practice start** (`POST /api/assist/sessions` with `"practice": true`): a token with `practice: true`,
+   `modes: ["fast"]` on every plan, Free included, `models` with the Fast mode's primary and fallback models, and the
+   budget (`seconds_left`, `cents_left`) from the Practice allowance (Free: 30 minutes a month), not the live one.
+5. **Turns:** accept the practice questions the app posts in its batched turns (`channel: "other"`, `client_ref` =
+   the `question_id`, `is_question: true`), so the report's Q&A table pairs each question (the `other` turn `q-N`)
+   with what I said after it (the `me` turns) and the hint shown (the suggestion with that `turn_id`, from
+   `POST /api/internal/assist/suggestions`).
+6. **The model catalog** (`GET /api/internal/assist/providers`) carries `hold_until_complete` per model (true for
+   Claude Sonnet 5.5 and Opus 5.5), and the Fast mode's models, which the relay's own calls use.
+7. **The contract**: `practice_next`, `practice_question`, `practice_done`, the error codes `not_practice` and
+   `practice_busy`, and the usage kinds above.
+
 ## Close codes
 
 | Code | Meaning |
@@ -302,7 +369,5 @@ The relay never sends `1000` itself.
 
 1. **First render:** the plan's telemetry includes "first render", which only the app knows. Report it with the
    batched turns to the server, or add `rendered {"suggestion_id", "first_render_ms"}` (app → relay)?
-2. **Facts ledger and running summary:** written by the relay's background jobs (every 3 final turns, every ~5
-   minutes) through the internal API, or by the server? Until then the app sends both in `context_update`.
-3. **Second screen (L6):** a linked phone is a second connection to the same session that only receives. That needs
+2. **Second screen (L6):** a linked phone is a second connection to the same session that only receives. That needs
    a viewer role in the token, since today a second connection takes over (`4409`).
