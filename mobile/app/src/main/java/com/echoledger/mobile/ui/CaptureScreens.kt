@@ -530,7 +530,7 @@ internal fun PhoneAppRecordingsBlock(
  * Play to listen first, so the person knows it is that call's before EchoLedger takes it in.
  */
 @Composable
-private fun ImportRecordingDialog(
+internal fun ImportRecordingDialog(
     candidate: com.echoledger.mobile.calls.PhoneAppRecordings.Candidate,
     time: String,
     fileOf: (suspend (Context, Long) -> com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile?)?,
