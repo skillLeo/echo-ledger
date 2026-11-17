@@ -419,7 +419,8 @@
 .el-empty__action { margin-block-start: var(--el-space-8); }
 
 /* ---- Tabs and Segmented ------------------------------------------------------------------------------------- */
-.el-tabs__list { display: flex; gap: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); overflow-x: auto; }
+/* Tabs wrap rather than scroll: at large text in a narrow window every tab stays in sight. */
+.el-tabs__list { display: flex; flex-wrap: wrap; gap: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-tab {
   position: relative;
   min-block-size: var(--el-component-button-height);

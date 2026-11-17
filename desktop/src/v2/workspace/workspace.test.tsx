@@ -20,6 +20,7 @@ const WS: ClientWorkspace = {
     line("m1", "decision", "40% in advance, the balance against the bill of lading", { source: { type: "call", id: "bilal", at_ms: 31_000 } }),
     line("m2", "question", "Which bank opens the LC?"),
     line("m3", "decision", "Packing done by 21 March", { pinned: true }),
+    line("m4", "change", "Delivery moved to the 25th", { happened_on: "2026-11-14" }),
   ],
   notes: [],
   files: [
@@ -47,7 +48,7 @@ const show = async (p = props()) => {
 
 describe("memory groups", () => {
   it("puts lines under their kind, pinned first", () => {
-    expect(memoryGroups(WS.memory).map((g) => [g.heading, g.lines.map((l) => l.id)])).toEqual([["Decisions", ["m3", "m1"]], ["Open questions", ["m2"]]]);
+    expect(memoryGroups(WS.memory).map((g) => [g.heading, g.lines.map((l) => l.id)])).toEqual([["Decisions", ["m3", "m1"]], ["Changes", ["m4"]], ["Open questions", ["m2"]]]);
   });
 });
 
@@ -88,6 +89,8 @@ describe("the project's page", () => {
     const memory = screen.getByRole("list", { name: "Memory" });
     expect(within(memory).getByText("Decisions")).toBeInTheDocument();
     expect(within(memory).getByText("From a call at 0:31")).toBeInTheDocument();
+    expect(within(memory).getByText("Pinned")).toBeInTheDocument();
+    expect(within(memory).getByText("14 Nov")).toBeInTheDocument();
     fireEvent.click(within(memory).getByRole("button", { name: "Open" }));
     expect(p.onOpenRecording).toHaveBeenCalledWith("bilal", 31_000);
     fireEvent.click(within(memory).getAllByRole("button", { name: "Pin" })[0]);

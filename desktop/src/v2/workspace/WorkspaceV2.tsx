@@ -4,7 +4,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { api, errorMessage, type ClientFile, type ClientWorkspace, type LibraryItem, type MemoryKind, type MemoryLine } from "../../lib/ipc";
 import { projectRecordings } from "../../lib/projects";
-import { timestamp } from "../../lib/format";
+import { rowDate, timestamp } from "../../lib/format";
 import {
   Badge, Banner, Button, Card, Dialog, EmptyState, Icons, List, ListRow, ListSection, Loading, Select, SkeletonRow, Tabs, TextArea, Toast, ToastRegion,
 } from "../components";
@@ -185,9 +185,9 @@ function Memory({ projectId, ws, onChanged, onOpenRecording, say }: {
               {groups.map((g) => [
                 <ListSection key={g.kind} title={g.heading} />,
                 ...g.lines.map((line) => (
-                  <ListRow key={line.id} compact iconStyle="plain" icon={line.pinned ? Icons.CheckIcon : Icons.TranscriptIcon}
+                  <ListRow key={line.id} compact iconStyle="plain" icon={Icons.TranscriptIcon}
                     title={line.text}
-                    meta={[line.pinned ? "Pinned" : null, line.happened_on, line.source?.type === "call" ? `From a call${line.source.at_ms != null ? ` at ${timestamp(line.source.at_ms)}` : ""}` : line.source?.type === "file" ? "From a file" : null].filter(Boolean).join(" · ") || undefined}
+                    meta={[line.pinned ? "Pinned" : null, line.happened_on ? rowDate(line.happened_on) : null, line.source?.type === "call" ? `From a call${line.source.at_ms != null ? ` at ${timestamp(line.source.at_ms)}` : ""}` : line.source?.type === "file" ? "From a file" : null].filter(Boolean).join(" · ") || undefined}
                     control={
                       <span className="el-row__buttons">
                         {line.source?.type === "call" && line.source.id && (
