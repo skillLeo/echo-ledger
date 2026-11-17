@@ -151,6 +151,9 @@ class WorkspaceParityTest : ScreenTest() {
     }
 
     private companion object {
+        /** How far before a Text( the source is read for "label = {" or "title = {". */
+        const val LOOK_BACK = 16
+
         /** The controls of today's three text-field dialogs (ClientWorkspace.kt: BriefEditor, MemoryAdder, InstructionsDialog). */
         val DIALOGS = setOf(
             "textbox: Goal",
@@ -170,19 +173,6 @@ class WorkspaceParityTest : ScreenTest() {
             "button: Add",
             "textbox: Name",
             "textbox: Text"
-        )
-
-        /** What in ClientWorkspace.kt makes each of them, so the list above can't drift from today's dialogs. */
-        val DIALOG_SOURCE = listOf(
-            "label = { Text(\"Goal\") }",
-            "label = { Text(\"\$heading (one per line)\") }",
-            "Text(\"Save\")",
-            "Text(\"Cancel\")",
-            "ClientFiles.KINDS.forEach",
-            "label = { Text(\"Line\") }",
-            "Text(\"Add\")",
-            "label = { Text(\"Name\") }",
-            "label = { Text(\"Text\") }"
         )
     }
 
@@ -258,18 +248,41 @@ class WorkspaceParityTest : ScreenTest() {
         "button: Proforma March.pdf · page 2" to not("a file source opens nothing on either page; the new page lists it without a tap")
     )
 
+    /**
+     * The controls of today's three text-field dialogs, read from their source (ClientWorkspace.kt): every Text inside
+     * BriefEditor, MemoryAdder and InstructionsDialog is a field's label ("label = { Text(…) }"), the dialog's title
+     * ("title = { … }", not a control) or a button; the brief's "$heading (one per line)" fields and the kind chips
+     * (ClientFiles.KINDS) are expanded from the data they're made from.
+     */
+    private fun dialogControlsInSource(): Set<String> {
+        val source = java.io.File("src/main/java/com/echoledger/mobile/ui/ClientWorkspace.kt").readText()
+        val found = mutableSetOf<String>()
+        for (dialog in listOf("BriefEditor", "MemoryAdder", "InstructionsDialog")) {
+            val from = source.indexOf("private fun $dialog(")
+            assertTrue("$dialog is gone from ClientWorkspace.kt", from >= 0)
+            val body = source.substring(from, source.indexOf("\n}\n", from))
+            for (m in Regex("""Text\("([^"]*)"\)""").findAll(body)) {
+                val before = body.substring(maxOf(0, m.range.first - LOOK_BACK), m.range.first)
+                val words = m.groupValues[1]
+                when {
+                    before.contains("title = {") -> Unit
+
+                    before.contains("label = {") && words == "\$heading (one per line)" ->
+                        com.echoledger.mobile.data.BriefSections().lists().forEach { found += "textbox: ${it.first} (one per line)" }
+
+                    before.contains("label = {") -> found += "textbox: $words"
+
+                    else -> found += "button: $words"
+                }
+            }
+            if ("ClientFiles.KINDS.forEach" in body) com.echoledger.mobile.ui.ClientFiles.KINDS.forEach { found += "button: ${it.second}" }
+        }
+        return found
+    }
+
     @Test
     fun todaysDialogsAreTheOnesListed() {
-        val source = java.io.File("src/main/java/com/echoledger/mobile/ui/ClientWorkspace.kt").readText()
-        assertEquals(emptyList<String>(), DIALOG_SOURCE.filter { it !in source })
-        assertEquals(
-            listOf("Decisions", "Open questions", "Changes", "Scope"),
-            com.echoledger.mobile.ui.ClientFiles.KINDS.map { it.second }
-        )
-        assertEquals(
-            listOf("Scope", "Constraints", "Deadlines", "Budget", "People", "Glossary"),
-            com.echoledger.mobile.data.BriefSections().lists().map { it.first }
-        )
+        assertEquals(DIALOGS.sorted(), dialogControlsInSource().sorted())
     }
 
     @Test

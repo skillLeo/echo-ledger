@@ -241,10 +241,10 @@ fun V2ScreenViewer(
                 moment.said.isNotEmpty() -> Column {
                     moment.said.forEach { line ->
                         EchoTranscriptLine(
-                            speakerName(line.speaker, text),
+                            line.speaker,
                             line.atMs?.let { formatClock(it) }.orEmpty(),
                             line.text,
-                            isMe = line.speaker == Speakers.ME
+                            isMe = line.speaker == text.me
                         )
                     }
                 }
@@ -265,13 +265,16 @@ fun V2ScreenViewer(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
                 )
             }
-            EchoSectionHeader(stringResource(R.string.v2_screens_file))
-            Text(
-                moment.fileName,
-                style = EchoV2.type.metaLatin,
-                color = c.textSecondary,
-                modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
-            )
+            // The file name only when the server gives one (its name in the meeting folder).
+            moment.fileName?.let { name ->
+                EchoSectionHeader(stringResource(R.string.v2_screens_file))
+                Text(
+                    name,
+                    style = EchoV2.type.metaLatin,
+                    color = c.textSecondary,
+                    modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
+                )
+            }
         }
         if (moments.size > 1) {
             Row(

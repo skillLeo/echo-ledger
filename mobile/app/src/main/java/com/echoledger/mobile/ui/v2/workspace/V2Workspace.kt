@@ -71,7 +71,6 @@ import com.echoledger.mobile.ui.v2.components.EchoTextField
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.components.formatClock
 import com.echoledger.mobile.ui.v2.library.LibraryModel
-import com.echoledger.mobile.ui.v2.library.ScreenAssets
 import com.echoledger.mobile.ui.v2.library.ScreenMoment
 import com.echoledger.mobile.ui.v2.library.ScreenPicture
 import com.echoledger.mobile.ui.v2.library.V2ScreenViewer
@@ -157,7 +156,7 @@ fun V2WorkspaceScreen(
 
     viewing?.let { (list, index) ->
         V2ScreenViewer(
-            moments = list.map { ScreenMoment(it.screen(), ScreenAssets.fileName(it.screen(), list.size), emptyList()) },
+            moments = list.map { ScreenMoment(it.screen(), fileName = null, said = emptyList()) },
             startIndex = index,
             onPlayFrom = { at ->
                 viewing = null
@@ -356,11 +355,31 @@ private fun Rules(vm: MainViewModel, project: ClientDto) {
             modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
         )
     }
+    val toasts = LocalEchoToasts.current
+    val undo = stringResource(R.string.v2_ws_undo)
+    val restored = stringResource(R.string.v2_ws_rule_restored)
+    val notRestored = stringResource(R.string.v2_ws_rule_not_restored)
     list.forEach { rule ->
         val label = ruleLabel(rule)
+        val removed = stringResource(R.string.v2_ws_rule_removed, label)
         EchoSettingRow(label, trailing = {
             EchoIconButton(EchoIcons.Delete, stringResource(R.string.v2_ws_remove_rule, label), {
-                scope.launch { if (vm.deleteFilingRule(project.id, rule.id)) rules = list - rule }
+                scope.launch {
+                    if (!vm.deleteFilingRule(project.id, rule.id)) return@launch
+                    rules = rules.orEmpty() - rule
+                    // One tap removes it; Undo adds the same kind and value back and says how that went.
+                    toasts.showUndo(removed, undo) {
+                        scope.launch {
+                            val back = vm.addFilingRule(project.id, rule.kind, rule.value)
+                            if (back != null) {
+                                rules = rules.orEmpty() + back
+                            } else {
+                                vm.consumeMessage() // said here instead, once
+                            }
+                            toasts.show(if (back != null) restored else notRestored)
+                        }
+                    }
+                }
             })
         })
     }

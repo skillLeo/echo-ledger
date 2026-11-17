@@ -1,10 +1,13 @@
 package com.echoledger.mobile.ui.v2
 
 import android.content.ClipboardManager
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -19,6 +22,7 @@ import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.ui.v2.components.EchoToastHost
 import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
@@ -55,11 +59,15 @@ class WorkspaceTest : ScreenTest() {
     private fun open() {
         show {
             EchoV2Theme(darkTheme = dark, language = language) {
-                CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
-                    V2WorkspaceScreen(vm, project, onBack = {}, onOpenProject = {}, onOpenRecording = {}, onOpenAt = { id, ms ->
-                        opened +=
-                            id to ms
-                    })
+                val toasts = rememberEchoToastState()
+                CompositionLocalProvider(LocalEchoToasts provides toasts) {
+                    Box {
+                        V2WorkspaceScreen(vm, project, onBack = {}, onOpenProject = {}, onOpenRecording = {}, onOpenAt = { id, ms ->
+                            opened +=
+                                id to ms
+                        })
+                        EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
+                    }
                 }
             }
         }
@@ -150,6 +158,33 @@ class WorkspaceTest : ScreenTest() {
         press("Memory & instructions")
         pressIcon("Open the call at 0:31")
         assertEquals(listOf("s1" to 31_000L), opened)
+    }
+
+    @Test
+    fun aRemovedRuleComesBackWithUndoAndSaysSo() {
+        server.on("DELETE", "/api/clients/$project/rules/7", FakeServer.empty(204))
+        server.on("POST", "/api/clients/$project/rules", FakeServer.json(200, """{"data":{"id":9,"kind":"title","value":"Qureshi"}}"""))
+        open()
+        waitFor("Title contains “Qureshi”")
+        pressIcon("Remove the rule Title contains “Qureshi”")
+        waitFor("Rule removed: Title contains “Qureshi”")
+        compose.onAllNodes(hasText("Undo") and hasClickAction()).onFirst().performClick()
+        waitFor("Rule restored")
+        val body = server.requestsTo("POST", "/api/clients/$project/rules").single().bodyText()
+        assertTrue(body, body.contains("\"kind\":\"title\"") && body.contains("\"value\":\"Qureshi\""))
+        compose.onAllNodes(hasContentDescription("Remove the rule Title contains “Qureshi”")).onFirst().assertExists()
+    }
+
+    @Test
+    fun aRuleThatCantComeBackSaysSo() {
+        server.on("DELETE", "/api/clients/$project/rules/7", FakeServer.empty(204))
+        server.on("POST", "/api/clients/$project/rules", FakeServer.json(500, """{"message":"down"}"""))
+        open()
+        waitFor("Title contains “Qureshi”")
+        pressIcon("Remove the rule Title contains “Qureshi”")
+        waitFor("Rule removed")
+        compose.onAllNodes(hasText("Undo") and hasClickAction()).onFirst().performClick()
+        waitFor("The rule couldn't be restored. Add it again below.")
     }
 
     @Test

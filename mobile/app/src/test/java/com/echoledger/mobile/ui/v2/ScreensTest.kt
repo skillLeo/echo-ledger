@@ -47,6 +47,7 @@ import java.io.File
 import java.time.ZonedDateTime
 import java.util.Locale
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -110,25 +111,16 @@ class ScreensTest {
         }
 
     @Test
-    fun aScreensFileNameIsItsNumberTimeAndASlugAsTheServerMakesIt() {
-        // The server's own examples (web/tests/Feature/Api/ScreenAssetsTest.php).
-        assertEquals(
-            "S07_14-32_orders-page-client-points-at-submit.webp",
-            ScreenAssets.fileName(screen("x", 7, 872_000, "Orders page, client points at Submit"), count = 12)
-        )
-        assertEquals("S007_1-04-32_screen.webp", ScreenAssets.fileName(screen("x", 7, 3_872_000, null), count = 120))
-        assertEquals(
-            "S01_0-05_ein-bild-ubersicht-kosten-2026.png",
-            ScreenAssets.fileName(screen("x", 1, 5_000, "Ein Bild: Übersicht & Kosten / 2026", url = "https://x/a.png?sig=1"), count = 1)
-        )
-        assertEquals(
-            "S03_0-00_the-invoice-settings-page-with-the-tax.webp",
-            ScreenAssets.fileName(screen("x", 3, 0, "The invoice settings page with the tax rate dropdown open and highlighted"), count = 9)
-        )
-        assertEquals("S01_0-26_the-clients-purchase-order-po-2291-with.webp", ScreenAssets.moments(screens, lines).first().fileName)
-        // The server's name wins once the phone reads it.
-        assertEquals("S01_0-26_po.webp", ScreenAssets.fileName(screens[0], serverName = "S01_0-26_po.webp"))
-        assertEquals("screen", ScreenAssets.slug("   "))
+    fun noFileNameIsMadeUpAndWhatWasSaidIsCappedLikeTheServers() {
+        // The name is the server's only (file_name); none until the phone reads it.
+        assertEquals(listOf<String?>(null, null), ScreenAssets.moments(screens, lines).map { it.fileName })
+        // At most 600 characters as "Speaker: words" lines, the last kept one ending in "…".
+        val long = (1..12).map { SegmentDto(1, "Me", 20_000L + it, 20_500L + it, "x".repeat(60)) }
+        val said = ScreenAssets.said(screens[0], long) { if (it == "Me") "You" else it }
+        val text = said.joinToString("\n") { "${it.speaker}: ${it.text}" }
+        assertEquals(ScreenAssets.SAID_CHARS, text.length)
+        assertTrue(text.endsWith("…"))
+        assertEquals("You", said.first().speaker)
     }
 
     @Test
@@ -167,12 +159,28 @@ class ScreensTest {
     fun theViewerShowsWhatWasSaidPlaysFromItsMomentAndMovesOn() {
         val played = mutableListOf<Long>()
         var closed = false
-        show { V2ScreenViewer(ScreenAssets.moments(screens, lines), 0, { played += it }, { closed = true }) }
+        show {
+            V2ScreenViewer(
+                ScreenAssets.moments(screens, lines) {
+                    if (it ==
+                        "Me"
+                    ) {
+                        "You"
+                    } else {
+                        it
+                    }
+                },
+                0,
+                { played += it },
+                { closed = true }
+            )
+        }
         compose.onNodeWithText("1 of 2").assertExists()
         compose.onNodeWithText("What was said").assertExists()
         compose.onNodeWithText("It is Rs 4,200 a carton, on the PO you shared.").assertExists()
         compose.onNodeWithText("PO-2291 Basmati 40 cartons Rs 4,200").performScrollTo().assertExists()
-        compose.onNodeWithText("S01_0-26_the-clients-purchase-order-po-2291-with.webp").performScrollTo().assertExists()
+        // No file name until the server sends one.
+        compose.onNodeWithText("File").assertDoesNotExist()
         compose.onNodeWithText("Play from here").performScrollTo().performClick()
         assertEquals(listOf(26_000L), played)
         compose.onNodeWithContentDescription("Previous screen").assertIsNotEnabled()

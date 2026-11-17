@@ -44,6 +44,10 @@
     <string name="v2_ws_rule_hint_contact">فون نمبر یا ای میل</string>
     <string name="v2_ws_rule_hint_app">ایپ (مثلاً whatsapp_business)</string>
     <string name="v2_ws_add_rule">اصول شامل کریں</string>
+    <string name="v2_ws_rule_removed">اصول ہٹا دیا گیا: %1$s</string>
+    <string name="v2_ws_rule_restored">اصول واپس آ گیا</string>
+    <string name="v2_ws_rule_not_restored">اصول واپس نہیں آ سکا۔ اسے نیچے دوبارہ شامل کریں۔</string>
+    <string name="v2_ws_undo">واپس کریں</string>
     <string name="v2_ws_rule_label_title">عنوان میں “%1$s” ہو</string>
     <string name="v2_ws_rule_label_contact">رابطہ %1$s</string>
     <string name="v2_ws_rule_label_app">%1$s سے</string>

@@ -111,7 +111,7 @@ fun V2RecordingScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, 
     CompositionLocalProvider(LocalScreenPictures provides { link -> vm.screenImage(link) }) {
         viewing?.let { start ->
             V2ScreenViewer(
-                moments = remember(screens, segments) { ScreenAssets.moments(screens, segments) },
+                moments = remember(screens, segments, text) { ScreenAssets.moments(screens, segments) { speakerName(it, text) } },
                 startIndex = start,
                 onPlayFrom = { at ->
                     player.seekTo(at)

@@ -44,6 +44,10 @@
     <string name="v2_ws_rule_hint_contact">Phone number or email</string>
     <string name="v2_ws_rule_hint_app">App (for example whatsapp_business)</string>
     <string name="v2_ws_add_rule">Add rule</string>
+    <string name="v2_ws_rule_removed">Rule removed: %1$s</string>
+    <string name="v2_ws_rule_restored">Rule restored</string>
+    <string name="v2_ws_rule_not_restored">The rule couldn\'t be restored. Add it again below.</string>
+    <string name="v2_ws_undo">Undo</string>
     <string name="v2_ws_rule_label_title">Title contains “%1$s”</string>
     <string name="v2_ws_rule_label_contact">Contact %1$s</string>
     <string name="v2_ws_rule_label_app">From %1$s</string>
