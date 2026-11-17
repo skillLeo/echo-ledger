@@ -17,7 +17,7 @@ type Patch = (p: SettingsPatch) => Promise<boolean>;
 const options = <T extends string>(id: string) => (setting(id).options ?? []).map((o) => [o.value as T, o.label] as const);
 
 /** What the page says first: what EchoLedger does (the last check's own sentence follows; never a promise beyond it). */
-export const SHARE_PRIVACY_INTRO = "EchoLedger hides its windows from screen sharing and checks on this computer that it works.";
+export const SHARE_PRIVACY_INTRO = "EchoLedger hides its windows from screen sharing and checks on this computer whether it works.";
 /** The first line while Hide from screen sharing is off: nothing is hidden, so nothing is promised. */
 export const SHARE_PRIVACY_OFF = "Hide from screen sharing is off: EchoLedger's windows show in a screen share.";
 /** With only the floating windows hidden: what shows and what doesn't. */

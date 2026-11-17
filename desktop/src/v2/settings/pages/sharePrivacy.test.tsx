@@ -8,7 +8,7 @@ import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from ".
 import { makePrivacyStatus, makeSettings } from "../../../test/fixtures";
 import { collectControls, findControls, stale, type ControlRole } from "../../../test/parity";
 import { setting } from "../../../lib/settingsRegistry";
-import { GUIDED_ALONE, HIDDEN_WHILE_SHARING, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, SHARE_PRIVACY_INTRO, SHARE_PRIVACY_OFF, ShareCheckPage, SharePrivacyPage } from "../../../views/main/PrivacySettings";
+import { GUIDED_ALONE, HIDDEN_WHILE_SHARING, LAST_CHECK_SENTENCE, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, SHARE_PRIVACY_INTRO, SHARE_PRIVACY_OFF, ShareCheckPage, SharePrivacyPage } from "../../../views/main/PrivacySettings";
 import { ShareCheckPageV2, SharePrivacyPageV2 } from "./SharePrivacyV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../../test/tauri")).coreModule);
@@ -157,11 +157,13 @@ describe("Screen-share privacy v2", () => {
 
 describe("the page promises no more than the last check saw", () => {
   const OLD = [/people see your other apps/i, /not EchoLedger\./, /notes stay on your screen/i, /keeps its windows out of screen shares in Zoom/i,
-    /invisible/i, /undetectable/i, /only you can see/i];
+    /invisible/i, /undetectable/i, /only you can see/i,
+    // The opening sentence never assumes the check passed: a visible or black-box result follows it.
+    /checks .* that it works/];
   const hidings = ["all", "floating", "off"] as const;
   const badges = ["private", "visible", "not_checked", "black_box"] as const;
   it.each(hidings.flatMap((hiding) => badges.map((badge) => [hiding, badge] as const)))("hiding %s, badge %s: today's page, onboarding and the v2 page", async (hiding, badge) => {
-    expect(SHARE_PRIVACY_INTRO).toBe("EchoLedger hides its windows from screen sharing and checks on this computer that it works.");
+    expect(SHARE_PRIVACY_INTRO).toBe("EchoLedger hides its windows from screen sharing and checks on this computer whether it works.");
     // One sentence for what EchoLedger does; what the last check saw is said once, in its own sentence.
     expect(SHARE_PRIVACY_INTRO).not.toMatch(/last check/i);
     expect(SHARE_PRIVACY_OFF).toBe("Hide from screen sharing is off: EchoLedger's windows show in a screen share.");
@@ -192,6 +194,8 @@ describe("the page promises no more than the last check saw", () => {
           private: "The last check saw EchoLedger's windows hidden from the screen share.",
         }[badge];
         expect(text, `${name}: ${badge}`).toContain(said);
+        // ...and none of the other results.
+        for (const [other, sentence] of Object.entries(LAST_CHECK_SENTENCE)) if (other !== badge) expect(text, `${name}: ${badge}, not ${other}`).not.toContain(sentence);
         // Only the floating windows hidden: the main window shows.
         if (hiding === "floating") expect(text, name).toContain("The main window is visible in screen share");
       }

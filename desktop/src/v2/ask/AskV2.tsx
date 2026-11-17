@@ -1,7 +1,7 @@
 // Ask in the new look (ui_v2.ask, docs/v2/IA.md 4), the same as the phone's Ask v2: pick what to ask about, ask in
 // your own words, get the answer with the recordings and files it comes from (a recording opens at its moment). The
-// server answers per project today (`client_ask`, POST /api/clients/{id}/ask), so the scope is a project; "All
-// recordings" is said, not offered, until the server can.
+// server answers per project today (`client_ask`, POST /api/clients/{id}/ask), so the scope is a project. "All
+// recordings" isn't offered or mentioned at all until the server can ask across them.
 import { useState } from "react";
 import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type ClientAnswer } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
