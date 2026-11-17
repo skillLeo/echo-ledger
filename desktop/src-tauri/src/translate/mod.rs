@@ -646,6 +646,10 @@ async fn run_session<F, Fut>(
             continue;
         };
         attempt = 0;
+        // Stopped while it connected: nothing captured before Stop goes out after it, not even the stream's config.
+        if stop.load(Ordering::SeqCst) {
+            break 'outer;
+        }
         let (mut sink, mut stream) = ws.split();
         if sink
             .send(Message::Text(protocol::config(&token, speed).into()))
@@ -660,17 +664,24 @@ async fn run_session<F, Fut>(
             emit(&f);
         }
         for frame in first {
+            if stop.load(Ordering::SeqCst) {
+                break 'outer;
+            }
             let _ = sink.send(Message::Binary(pcm_bytes(&frame).into())).await;
         }
         let mut last_audio = Instant::now();
         let mut keepalive = tokio::time::interval(KEEPALIVE_EVERY);
         loop {
+            // A stop ends it at once, first: never a frame, a reply or a keepalive after Stop.
             tokio::select! {
+                biased;
+                () = wake.notified() => break 'outer,
                 frame = rx.recv() => {
                     let Some(frame) = frame else { break 'outer };
                     if stop.load(Ordering::SeqCst) { break 'outer; }
                     let out = gate.offer(frame);
                     for f in out.frames {
+                        if stop.load(Ordering::SeqCst) { break 'outer; }
                         last_audio = Instant::now();
                         if sink.send(Message::Binary(pcm_bytes(&f).into())).await.is_err() { break; }
                     }
@@ -926,12 +937,108 @@ mod tests {
         assert_eq!(session.matches("tokio::time::sleep(").count(), 2, "both back-offs");
         assert!(session.contains("unless_stopped(&stop, &wake, fetch_token())") && session.matches("fetch_token()").count() == 1);
         assert!(session.contains("unless_stopped(&stop, &wake, connect)"));
+        // Nothing captured before Stop goes out after it: stop is read after the connect, before the config, before
+        // each frame, and the live loop's first arm is the stop.
+        let connected = &session[session.find("let Ok((ws, _)) = connected else {").unwrap()..];
+        let check = connected.find("if stop.load(Ordering::SeqCst) {\n            break 'outer;").expect("stop read after the connect");
+        assert!(check < connected.find("protocol::config(&token, speed)").unwrap(), "before the config goes");
+        let live = &session[session.find("loop {\n            // A stop ends it at once").unwrap()..];
+        let arms = &live[live.find("tokio::select! {").unwrap()..live.find("frame = rx.recv()").unwrap()];
+        assert!(arms.contains("biased;") && arms.contains("() = wake.notified() => break 'outer,"), "the stop is the live loop's first arm: {arms}");
+        assert_eq!(session.matches("Message::Binary(").count(), session.matches("if stop.load(Ordering::SeqCst) { break 'outer; }\n                        last_audio").count() + 1);
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         let thread = &thread[..thread.find("\n}").unwrap()];
         assert!(thread.find("stop.store(true, Ordering::SeqCst);") < thread.find("wake.notify_one();"), "the capture's own end wakes the session");
         let halt = &source[source.find("fn halt(run: &Running)").unwrap()..];
         let halt = &halt[..halt.find("\n}").unwrap()];
         assert!(halt.find("run.stop.store(true") < halt.find("run.wake.notify_one();"), "{halt}");
+    }
+
+    /// A Soniox stand-in on this computer: runs a session against it until `stop_at` says, and gives what the session
+    /// sent it and how long the session took to end after Stop. `in_handshake`: Stop lands while the connect completes
+    /// (stop set as the session's connect is decided, before its config could go); else once the session is live.
+    // The handshake callback's error type is tungstenite's, as it is.
+    #[allow(clippy::result_large_err)]
+    fn session_against_a_local_stream(in_handshake: bool) -> (Vec<Message>, Duration) {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let wake = Arc::new(Notify::new());
+        let feed: Arc<Mutex<Feed>> = Arc::default();
+        *running().lock().unwrap() = Some(Running { stop: stop.clone(), wake: wake.clone(), feed: feed.clone(), window: 1 });
+        let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
+        let url = format!("ws://{}", listener.local_addr().unwrap());
+        let (got_tx, mut got_rx) = mpsc::unbounded_channel::<Message>();
+        let server_stop = stop.clone();
+        let server = runtime.spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_hdr_async(socket, |_: &_, response| {
+                if in_handshake {
+                    // Stop between the connect's race and what follows it: only the flag is seen from here on.
+                    server_stop.store(true, Ordering::SeqCst);
+                }
+                Ok(response)
+            })
+            .await
+            .unwrap();
+            while let Some(Ok(message)) = ws.next().await {
+                if !matches!(message, Message::Close(_)) {
+                    let _ = got_tx.send(message);
+                }
+            }
+        });
+        let token = LiveTranslateToken {
+            api_key: "test".into(),
+            expires_at: String::new(),
+            websocket_url: url,
+            model: "stt-rt".into(),
+            translation: protocol::TranslationConfig { kind: "one_way".into(), target_language: "en".into() },
+            language_hints: Vec::new(),
+        };
+        let (tx, rx) = mpsc::channel::<Vec<i16>>(64);
+        let speech: Vec<i16> = gate::to_pcm16(&(0..FRAME_SAMPLES).map(|i| 0.5 * (i as f32 * 200.0 * std::f32::consts::TAU / 16_000.0).sin()).collect::<Vec<_>>(), 16_000);
+        // One frame of speech: the session's first; the live loop then has nothing to read.
+        tx.try_send(speech).unwrap();
+        let session = runtime.spawn(run_session(|_: &Feed| {}, rx, stop.clone(), wake, feed, Mode::Game, Speed::default(), move || {
+            let token = token.clone();
+            async move { Ok(token) }
+        }));
+        let pressed = if in_handshake {
+            Instant::now()
+        } else {
+            // Live: the config and the speech went out; then Stop, with the capture still open and nothing more to read.
+            let first = runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), got_rx.recv()).await }).expect("the config arrives");
+            assert!(matches!(first, Some(Message::Text(_))), "the config first: {first:?}");
+            let audio = runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), got_rx.recv()).await }).expect("the speech arrives");
+            assert!(matches!(audio, Some(Message::Binary(_))), "then the speech: {audio:?}");
+            let pressed = Instant::now();
+            stop_session();
+            pressed
+        };
+        runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), session).await }).expect("the session ended").unwrap();
+        let ended_after = pressed.elapsed();
+        runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), server).await }).expect("the stream closed").unwrap();
+        drop(tx);
+        *running().lock().unwrap() = None;
+        let mut after = Vec::new();
+        while let Ok(message) = got_rx.try_recv() {
+            after.push(message);
+        }
+        (after, ended_after)
+    }
+
+    #[test]
+    fn stop_just_after_the_connect_sends_nothing() {
+        let (sent, _) = session_against_a_local_stream(true);
+        assert!(sent.is_empty(), "nothing goes out after Stop, not even the config: {sent:?}");
+    }
+
+    #[test]
+    fn stop_while_live_ends_the_stream_at_once() {
+        // Nothing to read, no reply, the keepalive 10 s off: only the stop arm ends it this soon.
+        let (sent, ended_after) = session_against_a_local_stream(false);
+        assert!(ended_after < Duration::from_millis(200), "the session ended {ended_after:?} after Stop");
+        assert!(sent.iter().all(|m| !matches!(m, Message::Text(t) if t.as_str() == protocol::KEEPALIVE)), "{sent:?}");
     }
 
     #[test]
