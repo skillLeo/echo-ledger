@@ -148,5 +148,27 @@
         @endif
     </x-filament::section>
 
+    {{-- Since v1.8 P4.1: what screen moments really take, per meeting hour. --}}
+    <x-filament::section heading="Screen moments" description="Recordings with screens that started in this period. Numbers only." data-usage-screens>
+        @if ($screens['screens'] === 0)
+            <p style="font-size:.85rem;opacity:.7;margin:0">No screens in this period.</p>
+        @else
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:1rem">
+                @foreach ([
+                    ['Screens', number_format($screens['screens']), number_format($screens['recordings']).' recordings, '.number_format($screens['hours'], 1).' h'],
+                    ['Average screen', \Illuminate\Support\Number::fileSize((int) $screens['avg_bytes'], 1), 'stored with its thumbnail: '.\Illuminate\Support\Number::fileSize((int) $screens['avg_stored_bytes'], 1)],
+                    ['Per meeting hour', $screens['screens_per_hour'] !== null ? number_format($screens['screens_per_hour'], 1).' screens' : '—', 'at most 120 an hour'],
+                    ['Storage per hour', $screens['mb_per_hour'] !== null ? number_format($screens['mb_per_hour'], 1).' MB' : '—', 'pictures and thumbnails'],
+                ] as [$label, $value, $hint])
+                    <div>
+                        <div style="font-size:.8rem;opacity:.7">{{ $label }}</div>
+                        <div style="font-size:1.25rem;font-weight:600;font-variant-numeric:tabular-nums">{{ $value }}</div>
+                        <div style="font-size:.75rem;opacity:.7">{{ $hint }}</div>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+    </x-filament::section>
+
     @include('filament.pages.usage-people', ['people' => $report['people'], 'description' => 'Everyone on the server who used something in this period. Numbers only, never what they recorded.'])
 </div>

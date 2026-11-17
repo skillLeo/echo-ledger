@@ -104,7 +104,8 @@ final class PaymentProofs
             } else {
                 [$width, $height] = self::reencode($path, $stored);
                 try {
-                    ScreenStore::writeThumbnail($stored, $thumb);
+                    // A receipt's thumbnail stays 480 px (screens' became 320 in v1.8 P4.1).
+                    ScreenStore::writeThumbnail($stored, $thumb, 480);
                 } catch (UnreadablePicture) {
                     throw self::refused('unreadable', 'The picture could not be read. Add a screenshot or the PDF from your bank app.');
                 }
