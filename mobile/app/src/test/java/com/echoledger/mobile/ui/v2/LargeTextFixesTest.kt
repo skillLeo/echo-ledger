@@ -100,4 +100,30 @@ class LargeTextFixesTest {
             assertTrue("$l: a line or two", compose.onNodeWithText(minutes, useUnmergedTree = true).layout().lineCount <= 2)
         }
     }
+
+    @Test
+    fun aLiveTabExplanationNeverEndsOnOneWordAlone() {
+        language = EchoLanguage.Urdu
+        show { com.echoledger.mobile.ui.v2.live.V2LiveTab(liveAssist = true, liveTranslate = true, onOpen = {}) }
+        val res = V2Testing.resources(EchoLanguage.Urdu)
+        val lines = listOf(
+            com.echoledger.mobile.R.string.v2_livetab_record_help,
+            com.echoledger.mobile.R.string.v2_livetab_voice_note_help,
+            com.echoledger.mobile.R.string.v2_livetab_translate_help,
+            com.echoledger.mobile.R.string.v2_livetab_dictation_help,
+            com.echoledger.mobile.R.string.v2_livetab_captions_help,
+            com.echoledger.mobile.R.string.v2_assist_start_help
+        )
+        // P-088: at 200 % the Urdu explanations ended with one word alone on their last line ("ریکارڈ").
+        for (s in listOf(1f, 1.3f, 2f)) {
+            at(s)
+            for (id in lines) {
+                val words = res.getString(id)
+                val layout = compose.onNodeWithText(words, useUnmergedTree = true).layout()
+                if (layout.lineCount < 2) continue
+                val last = words.substring(layout.getLineStart(layout.lineCount - 1), layout.getLineEnd(layout.lineCount - 1)).trim()
+                assertTrue("$s: \"$words\" ends on \"$last\"", last.contains(' '))
+            }
+        }
+    }
 }
