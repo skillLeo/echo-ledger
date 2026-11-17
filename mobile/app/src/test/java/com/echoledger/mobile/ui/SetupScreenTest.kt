@@ -269,6 +269,7 @@ class SetupScreenTest : ScreenTest() {
         ).assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
 
+        compose.waitForIdle()
         assertEquals(1, backTaps)
         assertTrue(vm.message.value == null)
     }

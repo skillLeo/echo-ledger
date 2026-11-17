@@ -96,6 +96,7 @@ class SecurityCentreTest : ScreenTest() {
         pumpUntil("the devices to show") { runCatching { compose.onNodeWithText("Pixel 9 · this phone").assertExists() }.isSuccess }
         compose.onNodeWithText("Recording deleted: Acme kickoff · Work laptop").assertExists()
         compose.onNodeWithContentDescription("Sign out Work laptop").performClick()
+        compose.waitForIdle()
         assertTrue(revoked.isEmpty())
         compose.onNodeWithText("Sign out now").performClick()
         pumpUntil("the device to be revoked") { revoked == listOf("d2") && loads == 2 }

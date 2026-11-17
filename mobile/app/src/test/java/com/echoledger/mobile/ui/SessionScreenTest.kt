@@ -340,6 +340,7 @@ class SessionScreenTest : ScreenTest() {
         awaitText("Groq did not accept your key. Check it in Transcription key, then try again.")
         compose.onAllNodesWithText("Retry").assertCountEquals(0)
         compose.onNodeWithText("Check your key").performClick()
+        compose.waitForIdle()
         assertEquals("key", settingsOpened)
         assertTrue(server.requestsTo("POST", "/api/sessions/.+/retranscribe").isEmpty())
     }
@@ -518,6 +519,7 @@ class SessionScreenTest : ScreenTest() {
 
         compose.onNodeWithContentDescription("More").performClick()
         compose.onNodeWithText("Delete").performClick()
+        compose.waitForIdle()
         assertEquals(
             "nothing is deleted before the user confirms",
             0,

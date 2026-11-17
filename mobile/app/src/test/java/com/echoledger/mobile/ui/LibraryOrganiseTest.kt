@@ -307,6 +307,7 @@ class LibraryOrganiseTest : ScreenTest() {
         compose.onNodeWithContentDescription("More actions").performClick()
         compose.onNodeWithText("Export as Text").performClick()
         compose.onNodeWithContentDescription("Delete").performClick()
+        compose.waitForIdle()
         assertFalse(events.contains("delete"))
         compose.onNodeWithText("Delete 2 (restorable for 48 hours)").performClick()
         compose.onNodeWithContentDescription("Leave selection").performClick()

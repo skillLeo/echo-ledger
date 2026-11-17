@@ -95,6 +95,7 @@ class RetentionTest : ScreenTest() {
         compose.onAllNodesWithTextFirst("Restore").performClick()
         pumpUntil("the first to be restored") { restored == listOf("s1") }
         compose.onNodeWithText("Delete now").performClick()
+        compose.waitForIdle()
         assertTrue(erased.isEmpty())
         compose.onNodeWithText("Erase now").performClick()
         pumpUntil("the second to be erased") { erased == listOf("s2") }

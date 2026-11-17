@@ -131,6 +131,7 @@ class CaptureUiTest : ScreenTest() {
         compose.onNodeWithText("Finish the current recording to run a test.").assertExists()
         compose.onNodeWithText("Warn me when the other side is silent").assertExists()
         compose.onNodeWithText("Automatic").performClick()
+        compose.waitForIdle()
         assertEquals(null, settings().inputDevice)
     }
 
