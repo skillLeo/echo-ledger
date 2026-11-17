@@ -96,6 +96,17 @@ describe("v2 uses tokens only", () => {
   });
 });
 
+describe("rows that wrap", () => {
+  it("Settings, Live, Home and Help let a compact row's name and line wrap and its control go under the name; the Library's rows don't", () => {
+    const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
+    const scope = ":is([data-v2=settings], [data-v2=settings-page], [data-v2=live], [data-v2=home], [data-v2=help]) .el-row--compact";
+    expect(css).toContain(`${scope} { flex-wrap: wrap;`);
+    expect(css).toContain(`${scope} :is(.el-row__title, .el-row__meta-text) { white-space: normal;`);
+    expect(css).toContain(".el-setting__select { min-inline-size: min(calc(var(--el-space-64) * 3.5), 100%); }");
+    expect(css).not.toMatch(/\[data-v2=library\][^{]*\{[^}]*white-space: normal/);
+  });
+});
+
 describe("scaled fills", () => {
   it("a meter's fill (scaled by lib/motion fillWidth) grows from the start edge, in both directions", () => {
     const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
