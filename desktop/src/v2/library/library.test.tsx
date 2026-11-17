@@ -375,6 +375,13 @@ describe("LibraryV2", () => {
     const empty = screen.getByRole("region", { name: "Trash is empty" });
     expect(empty).toHaveTextContent("Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.");
     expect(document.body).not.toHaveTextContent(/30 days/);
+    // The header's Trash button stays pressed while Trash is open; pressing it again goes back to the recordings.
+    expect(screen.getByRole("button", { name: "Trash" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Trash" })).toHaveAttribute("aria-pressed", "false");
   });
 
   describe("parity rows that had no test (docs/v2/audit/parity.csv)", () => {

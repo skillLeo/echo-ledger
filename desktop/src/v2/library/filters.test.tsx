@@ -245,6 +245,14 @@ describe("Find in the Library", () => {
     fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Move to Trash" }));
     await act(flushAsync);
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["c", "d"], action: "delete", clientId: null, label: null }]);
+    // A folded section shows no box to pick it.
+    // (Today is still folded from the start.)
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    expect(screen.queryByRole("checkbox", { name: /Today/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
+    expect(screen.getByRole("checkbox", { name: "Select all in Today" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
     // Folding a section with picked rows drops them from the selection.
     fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
     fireEvent.click(screen.getByRole("button", { name: "Ali" }), { metaKey: true });

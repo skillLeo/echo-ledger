@@ -150,7 +150,6 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
       setSyncing(false);
     }
   };
-  /** The list as drawn: the view, the filters, the search, then sorted and in sections. */
   /**
    * The list as drawn: the view, the filters, the search, then sorted and in sections. `rows` are the rows on screen
    * (folded sections left out): the only ones selection, Select all, a Shift-range and Delete can reach. `matching`
@@ -645,7 +644,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
               g.label ? (
                 <ListSection key={g.key} title={g.label} count={g.items.length} collapsed={collapsed.has(g.key)}
                   onToggle={() => setCollapsed((c) => { const n = new Set(c); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })}
-                  pick={selecting ? {
+                  // A folded section's rows can't be picked: its box shows only while it is open.
+                  pick={selecting && !collapsed.has(g.key) ? {
                     state: groupPick(g.items, picked), label: groupPick(g.items, picked) === "all" ? `Clear ${g.label}` : `Select all in ${g.label}`,
                     onToggle: () => setPicked((p) => toggleGroup(g.items, p)),
                   } : undefined} />
