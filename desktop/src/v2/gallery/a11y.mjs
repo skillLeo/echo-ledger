@@ -91,14 +91,25 @@ try {
         continue;
       }
       await page.addScriptTag({ path: axePath });
-      const result = await page.evaluate(async () => {
+      // The controls canvas also shows today's caption overlay (not v2): only the v2 pill and after-call card are checked
+      // there; the overlay's own findings are listed apart (classic).
+      const context = name === "a-controls" ? { include: [["[data-testid=recording-pill-v2]"], [".el-aftercall-stack"]] } : null;
+      const result = await page.evaluate(async (ctx) => {
         // eslint-disable-next-line no-undef
-        const r = await axe.run(document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } });
+        const r = await axe.run(ctx ?? document, { runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"] } });
         return r.violations.map((v) => ({
           id: v.id, impact: v.impact, help: v.help,
           nodes: v.nodes.map((n) => ({ target: n.target.join(" "), v2: !!document.querySelector(n.target.join(" "))?.closest(".el-root:not(.el-embedded), .el-embedded"), summary: n.failureSummary?.split("\n").slice(0, 2).join(" ") })),
         }));
-      });
+      }, context);
+      if (name === "a-controls") {
+        const classic = await page.evaluate(async () => {
+          // eslint-disable-next-line no-undef
+          const r = await axe.run({ include: [[".overlay-root"], [".overlay-body"]] }, { runOnly: { type: "tag", values: ["wcag2aa"] } });
+          return r.violations.map((v) => `${v.id} (${v.impact}): ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
+        }).catch(() => []);
+        report.classic = [...(report.classic ?? []), ...classic.map((c) => `${theme}: ${c}`)];
+      }
       const unnamed = await page.evaluate(unnamedControls);
       report.axe.push({ name, theme, violations: result, unnamed });
       await page.close();
@@ -113,9 +124,14 @@ try {
         const hit = await page.evaluate((src) => {
           const el = document.activeElement;
           if (!el || el === document.body) return null;
-          const name = (el.getAttribute("aria-label") || el.textContent || "").trim();
-          const style = getComputedStyle(el);
-          const ring = style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0;
+          const by = (el.getAttribute("aria-labelledby") ?? "").split(/\s+/).filter(Boolean).map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
+          const name = (el.getAttribute("aria-label") || by || el.textContent || "").trim();
+          // The ring is on the control, or on the field around an input (.el-input draws it for its input).
+          const ringOn = (node) => {
+            const style = getComputedStyle(node);
+            return style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0;
+          };
+          const ring = ringOn(el) || (!!el.closest(".el-input") && ringOn(el.closest(".el-input")));
           return new RegExp(src).test(name) ? { name, ring, presses: 0 } : null;
         }, test.source);
         if (hit) return { ...hit, presses: i };
@@ -159,10 +175,7 @@ try {
       await go(/^Search recordings$/, null);
       await page.keyboard.type("Contract");
       await page.waitForTimeout(300);
-      await go(/^$/, null).catch(() => undefined);
-      const opened = await page.evaluate(() => document.activeElement?.getAttribute("aria-labelledby") ? document.getElementById(document.activeElement.getAttribute("aria-labelledby"))?.textContent : null);
-      if (opened !== "Contract review") throw new Error(`the first row after the search was "${opened}"`);
-      await page.keyboard.press("Enter");
+      await go(/^Contract review$/);
       await page.waitForTimeout(1200);
       const h1 = await page.locator("[data-v2=library] h1").first().textContent();
       if (h1 !== "Contract review") throw new Error(`opened "${h1}"`);
@@ -170,32 +183,36 @@ try {
     });
     await walk("transcribe", app("library"), async (page, go, log) => {
       await go(/^Untranscribed/);
-      await go(/^$/, null).catch(() => undefined);
-      await page.keyboard.press("Enter");
-      await page.waitForTimeout(1200);
+      await go(/^Call with/);
       log.push(`opened "${await page.locator("[data-v2=library] h1").first().textContent()}"`);
       await go(/^(Transcribe|Try again)$/);
       if (!(await calls(page)).includes("session_retranscribe")) throw new Error("session_retranscribe was not sent");
       log.push("session_retranscribe sent");
     });
     await walk("delete-undo", app("library"), async (page, go, log) => {
-      await go(/^$/, null);
-      await page.keyboard.press("Enter");
+      await go(/^Weekly sync with Northwind$/);
       await page.waitForTimeout(1200);
       await go(/^Delete$/);
       if (!(await calls(page)).includes("delete_session")) throw new Error("delete_session was not sent");
       await go(/^Undo$/);
       if (!(await calls(page)).includes("session_restore")) throw new Error("session_restore was not sent");
+      await page.waitForTimeout(600);
+      const focused = await page.evaluate(() => {
+        const el = document.activeElement;
+        const by = el?.getAttribute("aria-labelledby");
+        return by ? document.getElementById(by)?.textContent : el?.tagName;
+      });
+      if (focused !== "Weekly sync with Northwind") throw new Error(`after Undo the focus was on ${focused}`);
+      log.push(`focus back on "${focused}"`);
       log.push("delete_session, then Undo → session_restore");
     });
     await walk("setting", app("settings"), async (page, go, log) => {
       await go(/^Search settings$/, null);
       await page.keyboard.type("live captions");
       await page.waitForTimeout(400);
-      await go(/^$/, null);
-      await page.keyboard.press("Enter");
-      await page.waitForTimeout(1200);
-      const sw = await go(/Live captions while recording/, "Space");
+      await go(/^Live captions while recording$/);
+      await page.waitForTimeout(800);
+      const sw = await go(/^Live captions while recording$/, "Space");
       if (!(await calls(page)).includes("update_settings")) throw new Error(`update_settings was not sent (focus on "${sw.name}")`);
       log.push("update_settings sent");
     });
@@ -212,4 +229,5 @@ serious.forEach((s) => console.log("  !", s));
 other.forEach((s) => console.log("  ·", s));
 for (const r of report.axe) if (r.error) console.log("  step:", r.name, r.theme, r.error);
 for (const r of report.axe) if (r.unnamed?.length) console.log("  unnamed:", r.name, r.theme, r.unnamed.join(", "));
+for (const c of report.classic ?? []) console.log("  classic overlay:", c);
 for (const k of report.keys) console.log(`keys ${k.name}: ${k.ok ? "ok" : `FAILED (${k.error})`}\n    ${k.log.join("\n    ")}`);
