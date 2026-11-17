@@ -11,6 +11,7 @@ import {
   Badge, Button, Chip, Dialog, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
+import { ScreensMark } from "./screens";
 import { binHours, binSentence, dayGroups, rowModel, viewCounts, viewItems, type SavedView } from "./model";
 import { RecordingPage } from "./RecordingPage";
 
@@ -227,7 +228,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
                 const r = rowModel(item);
                 return (
                   <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={r.meta}
-                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined}
+                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined} mark={r.screens ? <ScreensMark count={r.screens} /> : undefined}
                     endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
                     rowId={item.id} onClick={() => setOpenId(item.id)} />
                 );

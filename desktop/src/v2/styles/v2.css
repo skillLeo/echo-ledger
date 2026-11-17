@@ -679,7 +679,7 @@ button.el-step__head { cursor: pointer; }
 .el-drop--over { border-color: var(--el-role-accent-default); background: var(--el-role-accent-soft); }
 .el-mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
 /* A switch with its words across a card: the words at the start, the switch at the end. */
-.el-form > .el-check-row { display: flex; justify-content: space-between; gap: var(--el-space-16); }
+.el-form > .el-check-row:has(> .el-toggle) { display: flex; justify-content: space-between; gap: var(--el-space-16); }
 .el-ai-off { flex-direction: row; align-items: center; justify-content: space-between; }
 .el-workspace-add { border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-ask__answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -762,3 +762,69 @@ button.el-step__head { cursor: pointer; }
 }
 .el-progress__fill { display: block; block-size: 100%; background: var(--el-role-accent-default); border-radius: inherit; }
 .el-empty--error .el-empty__icon { color: var(--el-role-danger-default); }
+
+/* Meeting assets (v1.8 P4.3): the screens mark on a row. */
+.el-row__mark { flex: none; display: inline-flex; }
+.el-screens-mark { display: inline-flex; align-items: center; gap: var(--el-space-2); color: var(--el-role-text-secondary); }
+
+/* Meeting assets: thumbnails, the Screens strip under a recording's title, the screens in the transcript, the viewer. */
+.el-screen-thumb {
+  display: grid; gap: var(--el-space-4);
+  inline-size: calc(var(--el-space-64) * 2.5);
+  padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start;
+  cursor: zoom-in; border-radius: var(--el-radius-sm);
+}
+.el-screen-thumb__picture {
+  position: relative; display: grid; place-items: center;
+  inline-size: 100%; aspect-ratio: 16 / 9; overflow: hidden;
+  border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm);
+  background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary);
+}
+.el-screen-thumb__picture img { inline-size: 100%; block-size: 100%; object-fit: cover; display: block; }
+.el-screen-thumb__wait { position: absolute; inset: 0; block-size: auto; }
+.el-screen-thumb:hover .el-screen-thumb__picture { border-color: var(--el-role-border-strong); }
+.el-screen-thumb__label { color: var(--el-role-text-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-screens-strip { display: grid; gap: var(--el-space-4); margin-block-end: var(--el-space-16); min-inline-size: 0; }
+.el-screens-strip__title { margin: 0; font-size: var(--el-text-body-size); }
+.el-screens-strip__list {
+  display: flex; gap: var(--el-space-12); margin: 0; padding: var(--el-space-4); list-style: none;
+  overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: inline proximity;
+}
+.el-screens-strip__list > li { flex: none; scroll-snap-align: start; }
+.el-line-screens { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--el-space-12); margin: var(--el-space-8) 0 0; padding: 0; list-style: none; }
+.el-dialog--wide { inline-size: min(100%, calc(var(--el-space-64) * 15)); }
+.el-screen-viewer { display: grid; gap: var(--el-space-12); }
+.el-screen-viewer__stage { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--el-space-8); }
+.el-screen-viewer__picture {
+  display: grid; place-items: center;
+  background: var(--el-role-bg-subtle); border-radius: var(--el-radius-md); overflow: hidden;
+}
+.el-screen-viewer__picture img { max-inline-size: 100%; max-block-size: calc(var(--el-space-64) * 8); inline-size: auto; block-size: auto; display: block; }
+.el-screen-viewer__wait { inline-size: 100%; block-size: calc(var(--el-space-64) * 4); }
+.el-screen-viewer__said { display: grid; gap: var(--el-space-4); }
+.el-said { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-4); }
+.el-screen-viewer__text summary { cursor: pointer; color: var(--el-role-text-secondary); }
+.el-screen-viewer__text p { margin-block-start: var(--el-space-8); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Help (v1.8 P6.4): the guides, a guide to read, what's new, contact support. */
+.el-help { display: grid; gap: var(--el-space-16); }
+.el-help__guide > h2 { margin: 0; }
+.el-help__guide > h2:focus { outline: none; }
+.el-help__guide > h2:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-help__release { display: grid; gap: var(--el-space-4); padding: var(--el-space-16); }
+.el-help__guide > .el-page__back { justify-self: start; }
+.el-help__release > h2 { margin: 0; font-size: var(--el-text-body-size); }
+.el-help__sent { display: grid; gap: var(--el-space-8); justify-items: start; }
+.el-help__sent > h2 { margin: 0; font-size: var(--el-text-body-size); }
+.el-markdown { display: grid; gap: var(--el-space-12); min-inline-size: 0; overflow-wrap: anywhere; }
+.el-markdown > * { margin: 0; }
+.el-markdown h3, .el-markdown h4, .el-markdown h5, .el-markdown h6 { font-size: var(--el-text-body-size); margin-block-start: var(--el-space-8); }
+.el-markdown ul, .el-markdown ol { padding-inline-start: var(--el-space-24); display: grid; gap: var(--el-space-4); }
+.el-markdown ul { list-style: disc; }
+.el-markdown ol { list-style: decimal; }
+.el-markdown blockquote { padding-inline-start: var(--el-space-12); color: var(--el-role-text-secondary); }
+.el-markdown__table { overflow-x: auto; }
+.el-markdown table { border-collapse: collapse; inline-size: 100%; font-size: var(--el-text-caption-size); }
+.el-markdown th, .el-markdown td { text-align: start; vertical-align: top; padding: var(--el-space-8); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-code { font-family: var(--el-font-family-mono); font-size: var(--el-text-caption-size); background: var(--el-role-bg-subtle); border-radius: var(--el-radius-sm); padding-inline: var(--el-space-4); }
+pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }

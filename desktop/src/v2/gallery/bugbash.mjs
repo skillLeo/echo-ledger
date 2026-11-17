@@ -33,6 +33,8 @@ const CASES = [
   ["g-assist", "gallery", "?v2gallery&screen=assist", ["en"]],
   ["a-library", "app", app("library"), ["en"]],
   ["a-recording", "app", app("library"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
+  ["a-recording-screens", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); }],
+  ["a-screen-viewer", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); await page.getByRole("region", { name: /screens?$/ }).getByRole("button").first().click(); await page.waitForTimeout(800); }],
   ["a-trash", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Trash", exact: true }).click(); await page.waitForTimeout(1200); }],
   ["a-home", "app", app("library"), ["en"], nav("Home")],
   ["a-live", "app", app("library"), ["en"], nav("Live")],
@@ -53,6 +55,10 @@ const CASES = [
   ["a-settings", "app", app("settings"), ["en"]],
   ["a-settings-page", "app", app("settings"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
   ["a-setup", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Setup & health" }).click(); await page.waitForTimeout(1500); }],
+  ["a-help", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); }],
+  ["a-help-guide", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "After a call", exact: true }).click(); await page.waitForTimeout(800); }],
+  ["a-whats-new", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "What's new" }).click(); await page.waitForTimeout(800); }],
+  ["a-contact", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "Contact support" }).click(); await page.waitForTimeout(500); }],
   ["a-controls", "app", app("controls"), ["en"], async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 const THEMES = ["light", "dark"];
@@ -83,7 +89,9 @@ function audit() {
     const hiddenForEye = (e) => { for (let p = e; p; p = p.parentElement) if (getComputedStyle(p).clipPath !== "none") return true; return false; };
     return r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none" && !el.closest(".el-visually-hidden") && !hiddenForEye(el);
   };
-  const scope = [...document.querySelectorAll(".el-root *")].filter(visible);
+  // With a modal open, only the modal counts: the page behind it is covered by its scrim.
+  const modal = document.querySelector(".el-root [aria-modal=true]");
+  const scope = [...(modal ?? document).querySelectorAll(modal ? "*" : ".el-root *")].filter(visible);
   for (const el of scope) {
     const s = getComputedStyle(el);
     const clips = s.overflowX === "hidden" || s.overflowX === "clip";
