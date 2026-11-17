@@ -195,7 +195,7 @@ impl fmt::Debug for TranscriptTurn {
 }
 
 impl TranscriptTurn {
-    fn line(&self) -> String {
+    pub fn line(&self) -> String {
         let who = match self.channel {
             Channel::Me => "Me",
             Channel::Other => "Them",

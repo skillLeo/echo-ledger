@@ -119,6 +119,15 @@ impl MockProvider {
     }
 }
 
+/// The mock's practice questions, in order.
+pub const PRACTICE: [&str; 5] = [
+    "Tell me about yourself and your current role?",
+    "What is a project you are proud of, and what was your part in it?",
+    "How do you handle a deadline you cannot meet?",
+    "Why are you interested in this role?",
+    "What would you do in your first month here?",
+];
+
 /// The mock's answer: SKIP for words that are not a question, otherwise a short answer in the output contract's shape.
 pub fn mock_reply(purpose: Purpose, question: &str) -> String {
     let normalized = normalize(question);
@@ -136,6 +145,18 @@ pub fn mock_reply(purpose: Purpose, question: &str) -> String {
         Purpose::Formal => "Certainly, I would be glad to explain.\n- **Experience**: two similar projects".to_owned(),
         Purpose::Translate => "اردو: وہ آپ کے تجربے کے بارے میں پوچھ رہے ہیں۔\nSay: I have two years of experience.".to_owned(),
         Purpose::Warm => String::new(),
+        // `question` is the question's number.
+        Purpose::PracticeQuestion => {
+            let index: usize = question.trim().parse().unwrap_or(1);
+            PRACTICE[(index.max(1) - 1) % PRACTICE.len()].to_owned()
+        }
+        // `question` is the new lines of the call: each line with a number becomes a fact.
+        Purpose::Facts => {
+            let facts: Vec<String> =
+                question.lines().filter(|line| line.chars().any(|c| c.is_ascii_digit())).map(|line| line.trim().to_owned()).collect();
+            if facts.is_empty() { "NONE".to_owned() } else { facts.join("\n") }
+        }
+        Purpose::Summary => format!("The call so far: {} new lines, starting with {}.", question.lines().count(), topic),
     }
 }
 

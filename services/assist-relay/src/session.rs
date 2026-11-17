@@ -24,12 +24,13 @@ use crate::budget::{Cause, allowed_modes, choose_mode, cost_micros, estimate_mic
 use crate::config::{RelayConfig, Shared, TranscriptScope};
 use crate::context::{CallContext, Context, ContextBuilder, RewriteKind, Task, Transcript, TranscriptTurn};
 use crate::domain::{Channel, EffectiveMode, LanguageHelp, Mode, ProviderKind};
-use crate::internal::{Report, ReportSink, SuggestionText, UsageRecord};
+use crate::background::{self, TaskKind, TaskOutcome};
+use crate::internal::{FactsReport, Report, ReportSink, SuggestionText, SummaryReport, UsageRecord};
 use crate::pack::Pack;
 use crate::protocol::{
     ClientMessage, ContextUpdate, EndStatus, ErrorMessage, Latency, ModeChanged, ModeReason, PROTOCOL_VERSION, Ready,
     ReadyLimits, ServerMessage, Skip, SuggestionEnd, SuggestionKind, SuggestionStart, TokenChunk, TokenRefreshed,
-    TurnMessage, UsageReport,
+    Fact, PracticeDone, PracticeQuestion, TurnMessage, UsageReport,
 };
 use crate::provider::{CompletionRequest, ProviderError, Providers, Purpose, StreamEvent, Usage};
 use crate::registry::{Ledger, Registry};
@@ -278,6 +279,7 @@ struct Speculation {
 enum Feed {
     Stream { id: String, attempt: u32, at: Instant, item: Item },
     Warmed { model: String, result: Result<Usage, ProviderError> },
+    Task { kind: TaskKind, result: Result<TaskOutcome, ProviderError> },
 }
 
 enum Item {
@@ -348,6 +350,16 @@ pub(crate) struct Engine {
     feed_tx: mpsc::Sender<Feed>,
     feed_rx: mpsc::Receiver<Feed>,
     suggestions: u64,
+    /// Practice: the questions asked, and one being written.
+    practice_asked: Vec<String>,
+    practice_busy: bool,
+    /// Final lines since the last facts call and the last summary, and whether one is running.
+    facts_lines: Vec<String>,
+    facts_busy: bool,
+    summary_lines: Vec<String>,
+    summary_busy: bool,
+    /// The running summary is written again from this moment.
+    summary_due: Instant,
 }
 
 async fn next_inbound(conn: &mut Option<Attached>) -> Option<Inbound> {
@@ -367,6 +379,7 @@ async fn sleep_until(deadline: Option<Instant>) {
 impl Engine {
     pub(crate) fn new(registry: Arc<Registry>, generation: u64, claims: Claims, ledger: Ledger) -> Self {
         let deps = registry.deps().clone();
+        let summary_every = Duration::from_secs(deps.config.get().background.summary_every_secs);
         let (feed_tx, feed_rx) = mpsc::channel(1024);
         let transcript = Transcript::new(&deps.config.get().context);
         let nonce = format!("{:x}", (unix_now().unsigned_abs() << 16) ^ generation);
@@ -405,6 +418,13 @@ impl Engine {
             feed_tx,
             feed_rx,
             suggestions: 0,
+            practice_asked: Vec::new(),
+            practice_busy: false,
+            facts_lines: Vec::new(),
+            facts_busy: false,
+            summary_lines: Vec::new(),
+            summary_busy: false,
+            summary_due: Instant::now() + summary_every,
         }
     }
 
@@ -634,6 +654,7 @@ impl Engine {
             }
             ClientMessage::Cancel(cancel) => self.on_cancel(cancel.suggestion_id),
             ClientMessage::TokenRefresh(refresh) => self.on_token_refresh(&refresh.token),
+            ClientMessage::PracticeNext(_) => self.on_practice_next(),
         }
         self.replying_to = None;
     }
@@ -755,12 +776,12 @@ impl Engine {
         if text.is_empty() {
             return;
         }
-        self.transcript.push(TranscriptTurn {
-            turn_id: turn.turn_id.clone(),
-            channel: turn.channel,
-            text: text.clone(),
-            start_ms: turn.start_ms,
-        });
+        let final_turn = TranscriptTurn { turn_id: turn.turn_id.clone(), channel: turn.channel, text: text.clone(), start_ms: turn.start_ms };
+        // "Okay", "theek hai": nothing for the facts or the summary, so they don't bring the next call closer.
+        if !is_backchannel(&text) {
+            self.background_line(final_turn.line());
+        }
+        self.transcript.push(final_turn);
         if turn.channel == Channel::Me {
             self.last_me_speech = Some(at);
             return;
@@ -1003,6 +1024,7 @@ impl Engine {
     fn on_feed(&mut self, feed: Feed) {
         match feed {
             Feed::Warmed { model, result } => self.on_warmed(model, result),
+            Feed::Task { kind, result } => self.on_task(kind, result),
             Feed::Stream { id, attempt, at, item } => {
                 if self.active.get(&id).is_none_or(|active| active.attempt != attempt) {
                     return;
@@ -1506,6 +1528,210 @@ impl Engine {
     fn on_assist_time_up(&mut self) {
         self.assist_used_up = true;
         self.evaluate_mode(Why::Spend);
+    }
+
+    // -----------------------------------------------------------------------------------------------------------
+    // Practice, the facts ledger and the running summary (src/background.rs)
+    // -----------------------------------------------------------------------------------------------------------
+
+    /// The Fast model and its fallback, as far as the token allows them: the models of the relay's own calls.
+    fn background_models(&self) -> Vec<String> {
+        let config = self.config();
+        let plan = config.modes.get(Mode::Fast);
+        [Some(&plan.primary), plan.fallback.as_ref()].into_iter().flatten().filter(|m| self.model_allowed(m)).cloned().collect()
+    }
+
+    fn spawn_task(&mut self, kind: TaskKind, context: Context, question: String, max_output_tokens: u32) -> bool {
+        let models = self.background_models();
+        if models.is_empty() {
+            return false;
+        }
+        let (providers, config, feed) = (self.deps.providers.clone(), self.config(), self.feed_tx.clone());
+        let purpose = kind.purpose();
+        tokio::spawn(async move {
+            let result = background::run(providers, config, models, Arc::new(context), purpose, question, max_output_tokens).await;
+            let _ = feed.send(Feed::Task { kind, result }).await;
+        });
+        true
+    }
+
+    /// A final line of the call (or a practice question): counted toward the next facts call and summary.
+    fn background_line(&mut self, line: String) {
+        self.facts_lines.push(line.clone());
+        self.summary_lines.push(line);
+        self.run_background();
+    }
+
+    /// Starts the facts call after enough new final lines, and the summary when it is due; never while the budget
+    /// leaves captions only.
+    fn run_background(&mut self) {
+        if self.effective == EffectiveMode::CaptionsOnly || self.conn.is_none() {
+            return;
+        }
+        let config = self.config();
+        if !self.facts_busy && self.facts_lines.len() >= config.background.facts_every_finals.max(1) as usize {
+            let lines = std::mem::take(&mut self.facts_lines);
+            let context = background::facts_context(&self.call, &lines);
+            let id = format!("facts-{}", self.next_id());
+            self.facts_busy = self.spawn_task(TaskKind::Facts { id }, context, lines.join("\n"), config.background.max_output_tokens);
+        }
+        if !self.summary_busy && !self.summary_lines.is_empty() && Instant::now() >= self.summary_due {
+            let lines = std::mem::take(&mut self.summary_lines);
+            let context = background::summary_context(&self.call, &lines);
+            let id = format!("summary-{}", self.next_id());
+            self.summary_busy = self.spawn_task(TaskKind::Summary { id }, context, lines.join("\n"), config.background.max_output_tokens);
+            self.summary_due = Instant::now() + Duration::from_secs(config.background.summary_every_secs);
+        }
+    }
+
+    fn on_practice_next(&mut self) {
+        if !self.claims.practice {
+            self.error(ErrorMessage::new("not_practice", "This is not a practice session."));
+            return;
+        }
+        if self.practice_busy {
+            self.error(ErrorMessage::new("practice_busy", "The next question is on its way.").retry());
+            return;
+        }
+        let config = self.config();
+        let total = config.practice.questions;
+        let asked = u32::try_from(self.practice_asked.len()).unwrap_or(u32::MAX);
+        if asked >= total {
+            self.emit(ServerMessage::PracticeDone(PracticeDone { asked }));
+            return;
+        }
+        if self.effective == EffectiveMode::CaptionsOnly {
+            self.error(ErrorMessage::new("budget_exhausted", "Practice is off: this session's allowance is used up."));
+            return;
+        }
+        let index = asked + 1;
+        let lines: Vec<String> = self.transcript.latest().iter().map(TranscriptTurn::line).collect();
+        let context = background::practice_context(&self.call, &self.practice_asked, &lines, index, total);
+        let question_id = format!("pq-{}", self.next_id());
+        self.practice_busy = self.spawn_task(TaskKind::PracticeQuestion { question_id, index }, context, index.to_string(), config.practice.max_output_tokens);
+        if !self.practice_busy {
+            self.error(ErrorMessage::new("provider_not_configured", plain_error(ProviderError::NotConfigured(ProviderKind::Anthropic))));
+        }
+    }
+
+    fn on_task(&mut self, kind: TaskKind, result: Result<TaskOutcome, ProviderError>) {
+        match &kind {
+            TaskKind::PracticeQuestion { .. } => self.practice_busy = false,
+            TaskKind::Facts { .. } => self.facts_busy = false,
+            TaskKind::Summary { .. } => self.summary_busy = false,
+        }
+        let outcome = match result {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                self.deps.telemetry.event(&SessionEvent::Background {
+                    session: self.session_id.clone(),
+                    task: kind.trigger(),
+                    model: String::new(),
+                    cost_micros: 0,
+                    error: Some(error.code()),
+                });
+                if let TaskKind::PracticeQuestion { .. } = kind {
+                    let message = ErrorMessage::new(error.code(), plain_error(error));
+                    self.error(if retryable(error) { message.retry() } else { message });
+                }
+                return;
+            }
+        };
+        let cost = self.config().model(&outcome.model).map_or(0, |spec| cost_micros(spec, &outcome.usage));
+        self.add_spend(cost, &outcome.model);
+        self.record_task(&kind, &outcome, cost);
+        let now = iso8601(unix_now());
+        match kind {
+            TaskKind::PracticeQuestion { question_id, index } => {
+                let Some(question) = background::clean_question(&outcome.text) else {
+                    self.error(ErrorMessage::new("provider_unavailable", plain_error(ProviderError::Protocol)).retry());
+                    return;
+                };
+                let turn_id = format!("q-{index}");
+                self.emit(ServerMessage::PracticeQuestion(PracticeQuestion {
+                    question_id,
+                    turn_id: turn_id.clone(),
+                    index,
+                    total: self.config().practice.questions,
+                    text: question.clone(),
+                }));
+                self.practice_asked.push(question.clone());
+                let turn = TranscriptTurn { turn_id: turn_id.clone(), channel: Channel::Other, text: question.clone(), start_ms: None };
+                self.background_line(turn.line());
+                self.transcript.push(turn);
+                // A hint for the question, as for any question, unless I paused suggestions.
+                if self.suggestions_on() {
+                    self.start(Origin::Final { turn_id, text: question }, Instant::now(), None);
+                }
+            }
+            TaskKind::Facts { .. } => {
+                let limit = self.config().limits.max_facts;
+                let known: Vec<String> = self.call.facts.iter().map(|f| crate::text::normalize(&f.text)).collect();
+                let mut added = false;
+                for fact in background::parse_facts(&outcome.text) {
+                    if !known.contains(&crate::text::normalize(&fact)) {
+                        let id = format!("r{}", self.call.facts.len() + 1);
+                        self.call.facts.push(Fact { id: Some(id), text: fact });
+                        added = true;
+                    }
+                }
+                if self.call.facts.len() > limit {
+                    let excess = self.call.facts.len() - limit;
+                    self.call.facts.drain(..excess);
+                }
+                if added {
+                    let facts = self.call.facts.iter().map(|f| f.text.clone()).collect();
+                    self.deps.reports.report(Report::Facts(FactsReport { session_id: self.session_id.clone(), facts, at: now }));
+                }
+            }
+            TaskKind::Summary { .. } => {
+                if let Some(summary) = background::clean_summary(&outcome.text) {
+                    self.call.summary = summary.clone();
+                    self.deps.reports.report(Report::Summary(SummaryReport { session_id: self.session_id.clone(), summary, at: now }));
+                }
+            }
+        }
+        self.evaluate_mode(Why::Spend);
+    }
+
+    /// The usage of one of the relay's own calls, for the server's ledger (kind practice_question, facts or summary).
+    fn record_task(&self, kind: &TaskKind, outcome: &TaskOutcome, cost: u64) {
+        let suggestion_kind = match kind {
+            TaskKind::PracticeQuestion { .. } => SuggestionKind::PracticeQuestion,
+            TaskKind::Facts { .. } => SuggestionKind::Facts,
+            TaskKind::Summary { .. } => SuggestionKind::Summary,
+        };
+        let usage = UsageReport {
+            input_tokens: outcome.usage.input_tokens,
+            cached_input_tokens: outcome.usage.cached_input_tokens,
+            cache_write_tokens: outcome.usage.cache_write_tokens,
+            output_tokens: outcome.usage.output_tokens,
+            cost_usd: micros_to_usd(cost),
+            estimated: false,
+        };
+        self.deps.reports.report(Report::Usage(UsageRecord {
+            suggestion_id: kind.id().to_owned(),
+            session_id: self.session_id.clone(),
+            model: outcome.model.clone(),
+            provider: outcome.provider,
+            mode: Mode::Fast,
+            kind: suggestion_kind,
+            trigger: kind.trigger(),
+            outcome: "done",
+            fallback: outcome.fallback_used,
+            tokens: UsageRecord::tokens_of(&usage),
+            cost_usd: usage.cost_usd,
+            estimated: false,
+            latency: Latency::default(),
+            at: iso8601(unix_now()),
+        }));
+        self.deps.telemetry.event(&SessionEvent::Background {
+            session: self.session_id.clone(),
+            task: kind.trigger(),
+            model: outcome.model.clone(),
+            cost_micros: cost,
+            error: None,
+        });
     }
 
     // -----------------------------------------------------------------------------------------------------------

@@ -41,7 +41,43 @@ pub struct RelayConfig {
     pub limits: Limits,
     pub modes: ModesConfig,
     pub upgrade: UpgradeConfig,
+    #[serde(default)]
+    pub practice: PracticeConfig,
+    #[serde(default)]
+    pub background: BackgroundConfig,
     pub models: BTreeMap<String, ModelSpec>,
+}
+
+/// Practice sessions: the relay asks the questions.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PracticeConfig {
+    /// Questions in one practice session; then `practice_done`.
+    pub questions: u32,
+    pub max_output_tokens: u32,
+}
+
+impl Default for PracticeConfig {
+    fn default() -> Self {
+        PracticeConfig { questions: 8, max_output_tokens: 120 }
+    }
+}
+
+/// The facts ledger and the running summary, written by the relay in the background (never blocking a suggestion).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BackgroundConfig {
+    /// New facts from the latest final turns, after this many of them.
+    pub facts_every_finals: u32,
+    /// The running summary, at most this often, when the call moved on.
+    pub summary_every_secs: u64,
+    pub max_output_tokens: u32,
+}
+
+impl Default for BackgroundConfig {
+    fn default() -> Self {
+        BackgroundConfig { facts_every_finals: 3, summary_every_secs: 300, max_output_tokens: 400 }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
