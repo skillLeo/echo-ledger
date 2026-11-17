@@ -72,6 +72,12 @@ sealed interface AssistMessage {
     data class Budget(val secondsLeft: Long?, val secondsTotal: Long?) : AssistMessage
     data object Ended : AssistMessage
 
+    /**
+     * The core's own (HTTP mode, contract 1.9.0-q): the stream writing these suggestions dropped, so they get no end and
+     * are cleared as after a resumed [Ready]; suggestions of other streams are left alone.
+     */
+    data class Lost(val suggestionIds: Set<String>) : AssistMessage
+
     /** The core's own: automatic suggestions are paused for this session (a mono recording); Help me now still works. */
     data object AutoPaused : AssistMessage
 
@@ -222,34 +228,23 @@ object AssistCard {
         is AssistMessage.Ready -> {
             // Resumed: a suggestion running when the connection dropped gets no end, so it is cleared now.
             val streaming = if (m.resumed) {
-                state.suggestions.filter {
-                    it.status == SuggestionStatus.Streaming
-                }.map { it.id }.toSet()
+                state.suggestions.filter { it.status == SuggestionStatus.Streaming }.map { it.id }.toSet()
             } else {
                 emptySet()
             }
-            val cleared = state.copy(
-                suggestions = state.suggestions.map {
-                    if (it.id in
-                        streaming
-                    ) {
-                        it.copy(text = "", status = SuggestionStatus.Cancelled)
-                    } else {
-                        it
-                    }
-                }
-            )
-            cleared.copy(
+            state.clear(streaming).copy(
                 sessionId = m.sessionId,
                 mode = m.mode,
                 allowedModes = m.allowedModes,
                 meetingType = m.meetingType ?: state.meetingType,
                 ended = false,
-                // Only a suggestion still streaming leaves the card; a finished one stays.
-                shownId = if (state.shownId in streaming) null else state.shownId,
                 problem = state.problem.takeIf { it != AssistProblem.Reconnecting && it != AssistProblem.Busy }
             )
         }
+
+        is AssistMessage.Lost -> state.clear(
+            state.suggestions.filter { it.id in m.suggestionIds && it.status == SuggestionStatus.Streaming }.map { it.id }.toSet()
+        )
 
         is AssistMessage.SuggestionStart -> {
             val s = Suggestion(m.suggestionId, m.turnId, m.kind, m.replaces, m.draft, "", SuggestionStatus.Streaming, m.receivedAtMs)
@@ -327,6 +322,16 @@ object AssistCard {
         is AssistMessage.PracticeQuestion -> state.copy(turns = state.turns + (m.turnId to m.text), practice = m.index to m.total)
 
         is AssistMessage.PracticeDone -> state.copy(practiceDone = m.asked)
+    }
+
+    /** Suggestions still streaming whose writer is gone: emptied; only such a suggestion leaves the card (a finished one stays). */
+    private fun CardState.clear(streaming: Set<String>): CardState = if (streaming.isEmpty()) {
+        this
+    } else {
+        copy(
+            suggestions = suggestions.map { if (it.id in streaming) it.copy(text = "", status = SuggestionStatus.Cancelled) else it },
+            shownId = if (shownId in streaming) null else shownId
+        )
     }
 
     fun reduce(messages: List<AssistMessage>, from: CardState = CardState()): CardState = messages.fold(from, ::reduce)
