@@ -27,10 +27,10 @@ import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import kotlin.coroutines.resume
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /** How a toast ended: its action was tapped, or it timed out or was replaced. */
 enum class EchoToastResult { Action, Dismissed }
@@ -39,8 +39,11 @@ enum class EchoToastResult { Action, Dismissed }
 class EchoToastData internal constructor(
     val message: String,
     val actionLabel: String?,
-    /** A fixed time on screen (a timer elsewhere that the toast must end with); null: the toast's own time. */
-    val durationMs: Long?,
+    /**
+     * When the toast must be gone, on [EchoToastState.clock] (a timer kept elsewhere, such as a delayed discard); null:
+     * the toast's own time.
+     */
+    val deadlineMs: Long?,
     private val continuation: CancellableContinuation<EchoToastResult>
 ) {
     fun performAction() {
@@ -52,22 +55,59 @@ class EchoToastData internal constructor(
     }
 }
 
-/** Shows toasts one after another. Hold it in the screen ([rememberEchoToastState]) and give it to [EchoToastHost]. */
+/**
+ * Shows toasts one after another. Hold it in the screen ([rememberEchoToastState]) and give it to [EchoToastHost].
+ * [clock] is the wall clock that deadlines are on.
+ */
 @Stable
-class EchoToastState {
+class EchoToastState(val clock: () -> Long = System::currentTimeMillis) {
     var current by mutableStateOf<EchoToastData?>(null)
         private set
-    private val queue = Mutex()
+
+    // One toast at a time; a toast with a deadline is first in line.
+    private val lock = Any()
+    private var busy = false
+    private val waiting = ArrayDeque<CompletableDeferred<Unit>>()
+
+    private suspend fun takeTurn(first: Boolean) {
+        val wait = synchronized(lock) {
+            if (!busy) {
+                busy = true
+                null
+            } else {
+                CompletableDeferred<Unit>().also { if (first) waiting.addFirst(it) else waiting.addLast(it) }
+            }
+        } ?: return
+        try {
+            wait.await()
+        } catch (e: CancellationException) {
+            // Still waiting: leave the line. Already given the turn: pass it on.
+            if (!synchronized(lock) { waiting.remove(wait) }) endTurn()
+            throw e
+        }
+    }
+
+    private fun endTurn() = synchronized(lock) {
+        val next = waiting.removeFirstOrNull()
+        if (next == null) busy = false else next.complete(Unit)
+    }
 
     /**
-     * Shows [message] (with [actionLabel] when given) until the action is tapped or its time runs out: [durationMs] when
-     * given (the toast then ends exactly with a timer kept elsewhere), else the toast's own time.
+     * Shows [message] (with [actionLabel] when given) until the action is tapped or its time runs out.
+     *
+     * With a [deadlineMs] (on [clock]) the toast belongs to a timer kept elsewhere: it never waits in the queue (it
+     * ends the toast on screen and shows at once), it is gone by its deadline, and when its turn comes after the
+     * deadline it is not shown at all ([EchoToastResult.Dismissed]). Without one it takes its turn and its own time.
      */
-    suspend fun show(message: String, actionLabel: String? = null, durationMs: Long? = null): EchoToastResult = queue.withLock {
+    suspend fun show(message: String, actionLabel: String? = null, deadlineMs: Long? = null): EchoToastResult {
+        if (deadlineMs != null) current?.takeIf { it.deadlineMs == null }?.dismiss()
+        takeTurn(first = deadlineMs != null)
         try {
-            suspendCancellableCoroutine { cont -> current = EchoToastData(message, actionLabel, durationMs, cont) }
+            if (deadlineMs != null && clock() >= deadlineMs) return EchoToastResult.Dismissed
+            return suspendCancellableCoroutine { cont -> current = EchoToastData(message, actionLabel, deadlineMs, cont) }
         } finally {
             current = null
+            endTurn()
         }
     }
 
@@ -88,7 +128,7 @@ fun EchoToastHost(state: EchoToastState, modifier: Modifier = Modifier) {
     val data = state.current ?: return
     val accessibility = LocalAccessibilityManager.current
     LaunchedEffect(data) {
-        val time = data.durationMs ?: accessibility?.calculateRecommendedTimeoutMillis(
+        val time = data.deadlineMs?.let { (it - state.clock()).coerceAtLeast(0) } ?: accessibility?.calculateRecommendedTimeoutMillis(
             EchoTokens.Component.toastDurationMs.toLong(),
             containsIcons = false,
             containsText = true,

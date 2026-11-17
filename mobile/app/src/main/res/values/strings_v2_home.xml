@@ -29,6 +29,9 @@
     <string name="v2_home_keep">Keep</string>
     <string name="v2_home_discard">Discard</string>
     <string name="v2_home_discarded">Call discarded</string>
+    <string name="v2_home_discarded_many">%1$d calls discarded</string>
+    <string name="v2_home_already_deleted">That call was already deleted.</string>
+    <string name="v2_home_some_already_deleted">Some of those calls were already deleted.</string>
     <string name="v2_home_untranscribed">%1$d recordings not transcribed</string>
     <string name="v2_home_untranscribed_one">1 recording not transcribed</string>
     <string name="v2_home_failed_transcripts">%1$d transcripts failed</string>

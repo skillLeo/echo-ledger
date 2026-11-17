@@ -28,7 +28,6 @@ import com.echoledger.mobile.ui.v2.components.EchoDestination
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoToastHost
 import com.echoledger.mobile.ui.v2.components.EchoToastState
-import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
 import com.echoledger.mobile.ui.v2.home.HomeActions
 import com.echoledger.mobile.ui.v2.home.V2HomeScreen
 import com.echoledger.mobile.ui.v2.library.SavedView
@@ -91,10 +90,12 @@ fun EchoV2Shell(
     classic: ClassicScreens,
     onSwitchToClassic: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    language: EchoLanguage = systemEchoLanguage()
+    language: EchoLanguage = systemEchoLanguage(),
+    /** The wall clock toast deadlines and delayed discards are on (tests give their own). */
+    clock: () -> Long = System::currentTimeMillis
 ) {
     EchoV2Theme(darkTheme = darkTheme, language = language) {
-        val toasts = rememberEchoToastState()
+        val toasts = remember { EchoToastState(clock) }
         CompositionLocalProvider(LocalEchoToasts provides toasts) {
             MessagesToToasts(vm, toasts)
             RememberHelperMethod(vm)

@@ -29,6 +29,9 @@
     <string name="v2_home_keep">رکھیں</string>
     <string name="v2_home_discard">ضائع کریں</string>
     <string name="v2_home_discarded">کال ضائع کر دی گئی</string>
+    <string name="v2_home_discarded_many">%1$d کالز ضائع کر دی گئیں</string>
+    <string name="v2_home_already_deleted">وہ کال پہلے ہی حذف ہو چکی تھی۔</string>
+    <string name="v2_home_some_already_deleted">ان میں سے کچھ کالز پہلے ہی حذف ہو چکی تھیں۔</string>
     <string name="v2_home_untranscribed">%1$d ریکارڈنگز کا ٹرانسکرپٹ باقی</string>
     <string name="v2_home_untranscribed_one">1 ریکارڈنگ کا ٹرانسکرپٹ باقی</string>
     <string name="v2_home_failed_transcripts">%1$d ٹرانسکرپٹ ناکام</string>

@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2
 
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -10,7 +11,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.work.WorkManager
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.echoledger.mobile.calls.DecisionTimeoutWorker
-import com.echoledger.mobile.calls.Decisions
 import com.echoledger.mobile.calls.DiscardLaterWorker
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
@@ -18,6 +18,7 @@ import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
+import com.echoledger.mobile.ui.v2.home.DISCARD_MARGIN_MS
 import com.echoledger.mobile.ui.v2.shell.ClassicScreens
 import com.echoledger.mobile.ui.v2.shell.EchoV2Shell
 import com.echoledger.mobile.ui.v2.shell.UiFlags
@@ -61,10 +62,20 @@ class V2ShellTest : ScreenTest() {
         runBlocking { app.graph.library.refresh() }
     }
 
+    /** The wall clock the shell's toasts and delayed discards use: the test's frame clock, so time is exact. */
+    private val wallBase = 1_763_366_400_000L
+    private val clock: () -> Long = { wallBase + compose.mainClock.currentTime }
+
     private fun shell(flags: UiFlags) = show {
-        EchoV2Shell(vm, flags, darkTheme = false, classic = classic, onSwitchToClassic = {
-            switched += it
-        }, language = EchoLanguage.English)
+        EchoV2Shell(
+            vm,
+            flags,
+            darkTheme = false,
+            classic = classic,
+            onSwitchToClassic = { switched += it },
+            language = EchoLanguage.English,
+            clock = clock
+        )
     }
 
     private val v2 = UiFlags(mapOf("ui_v2.shell" to true, "ui_v2.library" to true))
@@ -119,31 +130,28 @@ class V2ShellTest : ScreenTest() {
 
     private fun runWorker(worker: Class<out androidx.work.ListenableWorker>, id: String) = runBlocking {
         val input = androidx.work.workDataOf("recording_id" to id)
-        when (worker) {
-            DecisionTimeoutWorker::class.java -> TestListenableWorkerBuilder<DecisionTimeoutWorker>(
-                app
-            ).setInputData(input).build().doWork()
-
-            else -> TestListenableWorkerBuilder<DiscardLaterWorker>(app).setInputData(input).build().doWork()
+        if (worker == DecisionTimeoutWorker::class.java) {
+            TestListenableWorkerBuilder<DecisionTimeoutWorker>(app).setInputData(input).build().doWork()
+        } else {
+            TestListenableWorkerBuilder<DiscardLaterWorker>(app).setInputData(input).build().doWork()
         }
     }
 
-    private fun homeWithWaitingCall() {
+    private fun homeWithWaitingCalls(vararg ids: String) {
         seed()
-        app.storeRecording(id = "r-omar", state = "pending_decision")
+        ids.forEach { app.storeRecording(id = it, state = "pending_decision") }
         vm.reloadLocal()
-        compose.mainClock.autoAdvance = true
         shell(UiFlags(mapOf("ui_v2.shell" to true, "ui_v2.home" to true, "ui_v2.library" to true)))
         compose.onNodeWithText("Home").performClick()
-        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Discard").fetchSemanticsNode() }.isSuccess }
+        compose.waitUntil(5_000) { runCatching { compose.onAllNodesWithText("Discard")[ids.size - 1].fetchSemanticsNode() }.isSuccess }
+        compose.mainClock.autoAdvance = false
     }
 
-    private fun state() = app.graph.recordings.get("r-omar")?.state
+    private fun state(id: String = "r-omar") = app.graph.recordings.get(id)?.state
 
-    /** Waits for the phone's own work (storage, WorkManager) while the screen's clock stands still. */
-    private fun pumpFramesUntil(done: () -> Boolean) {
-        compose.mainClock.autoAdvance = false
-        compose.waitUntil(5_000) { done() }
+    /** Waits for the phone's own work (storage, WorkManager, the view model's queue) while the screen's clock stands still. */
+    private fun settle(done: () -> Boolean) {
+        pumpUntil("the phone's work") { done() }
         compose.mainClock.advanceTimeByFrame()
     }
 
@@ -155,33 +163,39 @@ class V2ShellTest : ScreenTest() {
         }
     }
 
-    private fun untilToastShows() = untilShown("Call discarded")
+    private fun shown(text: String) = runCatching { compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode() }.isSuccess
+
+    /** The toast's end time: the call's stored discard time less the margin. */
+    private fun deadline(id: String = "r-omar") =
+        java.time.Instant.parse(app.graph.recordings.get(id)!!.discardAt).toEpochMilli() - DISCARD_MARGIN_MS
+
+    private fun advanceTo(wallMs: Long) = compose.mainClock.advanceTimeBy(wallMs - clock())
+
+    private fun discard(index: Int = 0) =
+        compose.onAllNodesWithText("Discard", useUnmergedTree = true)[index].performScrollTo().performClick()
 
     @Test
     fun homeDiscardIsTheDelayedDiscardAndUndoBringsTheCallBack() {
-        homeWithWaitingCall()
-        compose.mainClock.autoAdvance = false
-        compose.onNodeWithText("Discard").performScrollTo().performClick()
+        homeWithWaitingCalls("r-omar")
+        discard()
         // Stored at once as discarding: it survives the process dying, and nothing is deleted yet.
-        pumpFramesUntil { state() == "discarding" }
-        untilToastShows()
+        settle { state() == "discarding" }
+        untilShown("Call discarded")
         compose.onNodeWithText("Undo").performClick()
-        pumpFramesUntil { state() == "pending_decision" }
-        // The call is back on Home once the toast has gone. When nobody undoes it, the discard worker ends it.
-        compose.mainClock.autoAdvance = true
-        pumpUntil("the call back in the queue") { vm.pending.value.any { it.id == "r-omar" && it.state == "pending_decision" } }
-        compose.waitForIdle()
-        compose.onNodeWithText("Discard").performScrollTo().performClick()
-        compose.waitUntil(5_000) { state() == "discarding" }
+        settle { state() == "pending_decision" && vm.pending.value.any { it.id == "r-omar" && it.state == "pending_decision" } }
+        // When nobody undoes it, the discard worker ends it.
+        untilShown("Discard")
+        discard()
+        settle { state() == "discarding" }
         runWorker(DiscardLaterWorker::class.java, "r-omar")
         assertEquals(null, state())
     }
 
     @Test
     fun theTenSecondKeepFiringDuringTheToastKeepsNothing() {
-        homeWithWaitingCall()
-        compose.onNodeWithText("Discard").performScrollTo().performClick()
-        compose.waitUntil(5_000) { state() == "discarding" }
+        homeWithWaitingCalls("r-omar")
+        discard()
+        settle { state() == "discarding" }
         // The keep timer was cancelled; even if it had already started, it finds the call discarding and leaves it.
         runWorker(DecisionTimeoutWorker::class.java, "r-omar")
         assertEquals("discarding", state())
@@ -190,33 +204,86 @@ class V2ShellTest : ScreenTest() {
 
     @Test
     fun undoInTheToastsLastSecondStillBringsTheCallBack() {
-        homeWithWaitingCall()
-        compose.mainClock.autoAdvance = false
-        compose.onNodeWithText("Discard").performScrollTo().performClick()
-        pumpFramesUntil { state() == "discarding" }
-        untilToastShows()
-        // The toast lasts until 2 s before the file's discard time; tap Undo 300 ms before it ends.
-        compose.mainClock.advanceTimeBy(Decisions.DISCARD_AFTER_MS - DISCARD_MARGIN - 300)
+        homeWithWaitingCalls("r-omar")
+        discard()
+        settle { state() == "discarding" }
+        untilShown("Call discarded")
+        advanceTo(deadline() - 300)
         compose.onNodeWithText("Undo").assertExists().performClick()
-        pumpFramesUntil { state() == "pending_decision" }
+        settle { state() == "pending_decision" }
         // The discard worker, had it run on time, finds the call waiting again and leaves it.
         runWorker(DiscardLaterWorker::class.java, "r-omar")
         assertEquals("pending_decision", state())
     }
 
     @Test
-    fun theToastEndsWithTheDiscardTimerNotAfterIt() {
-        homeWithWaitingCall()
-        compose.mainClock.autoAdvance = false
-        compose.onNodeWithText("Discard").performScrollTo().performClick()
-        pumpFramesUntil { state() == "discarding" }
-        untilToastShows()
-        compose.mainClock.advanceTimeBy(Decisions.DISCARD_AFTER_MS - DISCARD_MARGIN + 100)
-        compose.onNodeWithText("Call discarded", useUnmergedTree = true).assertDoesNotExist()
+    fun theToastIsGoneByItsEndTime() {
+        homeWithWaitingCalls("r-omar")
+        discard()
+        settle { state() == "discarding" }
+        untilShown("Call discarded")
+        advanceTo(deadline() + 50)
+        assertTrue(!shown("Call discarded"))
         assertEquals("discarding", state())
     }
 
-    private companion object {
-        const val DISCARD_MARGIN = 2_000L
+    @Test
+    fun aDiscardWhileAnotherToastShowsComesFirstAndEndsOnTime() {
+        homeWithWaitingCalls("r-omar")
+        vm.showMessage("Restored")
+        untilShown("Restored")
+        discard()
+        settle { state() == "discarding" }
+        untilShown("Call discarded")
+        // The other toast made way; the discard toast is gone by its own end time.
+        assertTrue(!shown("Restored"))
+        advanceTo(deadline() + 50)
+        assertTrue(!shown("Call discarded"))
+    }
+
+    @Test
+    fun twoDiscardsInARowShareOneToastThatEndsBeforeEitherCall() {
+        homeWithWaitingCalls("r-a", "r-b")
+        discard(0)
+        settle { state("r-a") == "discarding" }
+        untilShown("Call discarded")
+        compose.mainClock.advanceTimeBy(1_000)
+        discard(0)
+        settle { state("r-b") == "discarding" }
+        untilShown("2 calls discarded")
+        // Its end time is the earlier call's.
+        val end = minOf(deadline("r-a"), deadline("r-b"))
+        assertEquals(deadline("r-a"), end)
+        advanceTo(end - 300)
+        compose.onNodeWithText("Undo").performClick()
+        settle { state("r-a") == "pending_decision" && state("r-b") == "pending_decision" }
+    }
+
+    @Test
+    fun twoDiscardsInARowAreGoneByTheirEndTime() {
+        homeWithWaitingCalls("r-a", "r-b")
+        discard(0)
+        settle { state("r-a") == "discarding" }
+        untilShown("Call discarded")
+        compose.mainClock.advanceTimeBy(1_000)
+        discard(0)
+        settle { state("r-b") == "discarding" }
+        untilShown("2 calls discarded")
+        advanceTo(deadline("r-a") + 50)
+        assertTrue(!shown("2 calls discarded"))
+        assertTrue(!shown("Call discarded"))
+    }
+
+    @Test
+    fun aLateUndoSaysTheCallWasAlreadyDeleted() {
+        homeWithWaitingCalls("r-omar")
+        discard()
+        settle { state() == "discarding" }
+        untilShown("Call discarded")
+        // The worker got there first (the phone's clock jumped, say).
+        runWorker(DiscardLaterWorker::class.java, "r-omar")
+        compose.onNodeWithText("Undo").performClick()
+        untilShown("That call was already deleted.")
+        assertEquals(null, state())
     }
 }

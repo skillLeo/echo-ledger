@@ -65,7 +65,9 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -117,42 +119,71 @@ fun V2HomeScreen(vm: MainViewModel, initials: String, actions: HomeActions, modi
     val toasts = LocalEchoToasts.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current.applicationContext
-    val discardedWords = stringResource(R.string.v2_home_discarded)
-    val undo = EchoV2.strings.undo
+    val res = LocalContext.current.resources
+    val words = DiscardWords(
+        one = stringResource(R.string.v2_home_discarded),
+        many = { n -> res.getString(R.string.v2_home_discarded_many, n) },
+        undo = EchoV2.strings.undo,
+        alreadyOne = stringResource(R.string.v2_home_already_deleted),
+        alreadySome = stringResource(R.string.v2_home_some_already_deleted)
+    )
+    val batch = remember(toasts) { DiscardBatch(context, vm, toasts, scope) }
+    batch.words = words
     V2HomeContent(
         state = HomeModel.state(facts),
         initials = initials,
         actions = actions,
         onKeep = { vm.decide(it.id, keep = true) },
-        onDiscard = { rec -> scope.launch { discardWithUndo(context, vm, toasts, rec.id, discardedWords, undo) } },
+        onDiscard = { rec -> batch.discard(rec.id) },
         onRetryUploads = { vm.retryPending() },
         onRetryLibrary = { vm.refresh() },
         modifier = modifier
     )
 }
 
+/** The words of Home's discard toasts. */
+class DiscardWords(val one: String, val many: (Int) -> String, val undo: String, val alreadyOne: String, val alreadySome: String)
+
 /**
- * Discard with Undo, on the after-call card's delayed discard (v1.1, P-003): [Decisions.discardLater] at once, so the
- * call is "discarding" on the phone (the 10 s keep and the decision notification are cancelled, and it survives the
- * process dying); the toast ends exactly with that file's timer (its discard time, less the margin the worker keeps
- * after it); Undo calls [Decisions.undoDiscard]. The worker deletes it when the time is over.
+ * Home's Discard with Undo, on the delayed discard of v1.1 (P-003). [Decisions.discardLater] runs at once, so the call
+ * is "discarding" on the phone: the 10 s keep and the decision notification are cancelled, and it survives the process
+ * dying; the existing worker deletes it when its time is over. The toast's END TIME is the earliest stored discard time
+ * less [DISCARD_MARGIN_MS], on the same wall clock, so it is gone before any of its calls is; it never waits behind
+ * another toast. Discards in a row share one toast ("2 calls discarded · Undo") that undoes them all; Undo calls
+ * [Decisions.undoDiscard], and when a call was already gone the toast says so.
  */
-internal suspend fun discardWithUndo(
-    context: Context,
-    vm: MainViewModel,
-    toasts: EchoToastState,
-    id: String,
-    message: String,
-    undo: String,
-    nowMs: Long = System.currentTimeMillis()
+class DiscardBatch(
+    private val context: Context,
+    private val vm: MainViewModel,
+    private val toasts: EchoToastState,
+    private val scope: CoroutineScope
 ) {
-    val discarding = withContext(Dispatchers.IO) { Decisions.discardLater(context, id, nowMs) } ?: return
-    vm.reloadLocal()
-    val endsAt = runCatching { Instant.parse(discarding.discardAt).toEpochMilli() }.getOrNull() ?: return
-    val visible = (endsAt - DISCARD_MARGIN_MS - nowMs).coerceAtLeast(0)
-    if (toasts.show(message, undo, durationMs = visible) == EchoToastResult.Action) {
-        withContext(Dispatchers.IO) { Decisions.undoDiscard(context, id) }
+    /** The words in the screen's language, set on every composition. */
+    lateinit var words: DiscardWords
+
+    private val calls = mutableListOf<Pair<String, Long>>()
+    private var showing: Job? = null
+
+    fun discard(id: String) {
+        scope.launch {
+            val discarding = withContext(Dispatchers.IO) { Decisions.discardLater(context, id, toasts.clock()) } ?: return@launch
+            vm.reloadLocal()
+            val endsAt = runCatching { Instant.parse(discarding.discardAt).toEpochMilli() }.getOrNull() ?: return@launch
+            calls += id to endsAt
+            showing?.cancel()
+            showing = scope.launch { show(calls.toList()) }
+        }
+    }
+
+    private suspend fun show(batch: List<Pair<String, Long>>) {
+        val deadline = batch.minOf { it.second } - DISCARD_MARGIN_MS
+        val message = if (batch.size == 1) words.one else words.many(batch.size)
+        val result = toasts.show(message, words.undo, deadlineMs = deadline)
+        calls.removeAll(batch)
+        if (result != EchoToastResult.Action) return
+        val back = withContext(Dispatchers.IO) { batch.map { (id, _) -> Decisions.undoDiscard(context, id) } }
         vm.reloadLocal()
+        if (back.any { it == null }) toasts.show(if (batch.size == 1) words.alreadyOne else words.alreadySome)
     }
 }
 
