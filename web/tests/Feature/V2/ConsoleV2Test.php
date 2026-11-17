@@ -14,11 +14,13 @@ use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\V2RecordingMoments;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\Device;
 use App\Models\Screen;
 use App\Models\User;
 use App\Services\CredentialVault;
 use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\RateLimiter;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
 uses(AdminTestHelpers::class);
@@ -256,4 +258,29 @@ it('shows the workspace and its role in Urdu under the new frame', function () {
     $html = (string) $this->actingAs($this->admin->fresh(), 'web')->get('/app')->assertOk()->getContent();
 
     expect($html)->toContain('ذاتی')->toContain('مالک')->not->toContain('>Personal<');
+});
+
+it('counts the console\'s questions in the API\'s per-person ask limit, both ways', function () {
+    consoleV2For($this->admin, ['ui_v2.shell']);
+    app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+    $ai = fakeClientAi();
+    $client = Client::factory()->create(['user_id' => $this->admin->id, 'name' => 'Acme']);
+    // The bucket the API's throttle:ask uses for this person's devices.
+    $key = md5('ask'.'ask:u'.$this->admin->id);
+
+    $this->panelComponent(Ask::class)->set('question', 'When do we launch?')->call('ask')->assertHasNoErrors();
+    expect(RateLimiter::attempts($key))->toBe(1);
+
+    foreach (range(2, 20) as $i) {
+        RateLimiter::hit($key, 60);
+    }
+    $calls = count($ai->calls);
+    $this->panelComponent(Ask::class)->set('project', $client->id)->set('question', 'And the price?')->call('ask')
+        ->assertSee('Too many questions for now');
+    expect(count($ai->calls))->toBe($calls);
+
+    // A device of the same person is refused by the API too.
+    $device = Device::factory()->create(['user_id' => $this->admin->id]);
+    $token = $device->createToken('device', Device::ABILITIES)->plainTextToken;
+    $this->withToken($token)->postJson("/api/clients/{$client->id}/ask", ['question' => 'Anything?'])->assertStatus(429);
 });

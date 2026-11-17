@@ -11,7 +11,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * The classic console stays exactly as it is while the v2.0 flags are off (ui_v2.shell, ui_v2.library): Home, the
- * Library and a recording page, for fixed people and recordings at a fixed time, are compared with the HTML saved in
+ * Library, a recording page and Settings › Appearance, for fixed people and recordings at a fixed time, are compared with the HTML saved in
  * tests/Feature/V2/golden/ before the v2.0 console was built. Only what changes on every request is normalised (the
  * CSRF token, Livewire's snapshots and ids, record ids, signed links). A change to the classic console on purpose:
  * UPDATE_GOLDEN=1 php artisan test --filter=ClassicGolden, and say why in the commit.
@@ -36,6 +36,8 @@ function normaliseClassic(string $html, string $csrf = ''): string
     $html = preg_replace('/("csrf(?:Token)?"\s*:\s*")[^"]+"/', '$1CSRF"', (string) $html);
     $html = preg_replace('/wire:snapshot="[^"]*"/', 'wire:snapshot="SNAPSHOT"', (string) $html);
     $html = preg_replace('/wire:id="[^"]*"/', 'wire:id="WIREID"', (string) $html);
+    // Livewire names a component's scripts by a hash of its view's path: the same page in another checkout differs.
+    $html = preg_replace('/(&quot;)\d+-\d+(&quot;:&quot;)/', '$1SCRIPT$2', (string) $html);
     // Livewire's keys hold counters, random letters and hashes of record ids.
     $html = preg_replace('/wire:key="[^"]*"/', 'wire:key="KEY"', (string) $html);
     $html = preg_replace("/(livewireId: ')[A-Za-z0-9]+'/", "$1WIREID'", (string) $html);
@@ -77,6 +79,7 @@ dataset('classic pages', [
     'home' => ['home', fn (array $recordings): string => '/app'],
     'library' => ['library', fn (array $recordings): string => '/app/sessions'],
     'recording' => ['recording', fn (array $recordings): string => '/app/sessions/'.$recordings[0]->id],
+    'settings-appearance' => ['settings-appearance', fn (array $recordings): string => '/app/settings/appearance'],
 ]);
 
 // Each page is the first request of its test: Livewire adds its styles to the first page a process serves.
@@ -93,3 +96,10 @@ it('renders the classic page exactly as before v2.0 while the v2.0 flags are off
     expect(file_exists($file))->toBeTrue("no saved copy of {$name}: run with UPDATE_GOLDEN=1 once")
         ->and($html)->toBe(file_get_contents($file), "the classic {$name} page changed");
 })->with('classic pages');
+
+it('answers 403 for the v2.0 pages Ask and Live while the new frame is off', function () {
+    [$owner] = classicConsole();
+
+    $this->actingAs($owner, 'web')->get('/app/ask')->assertForbidden();
+    $this->actingAs($owner, 'web')->get('/app/live')->assertForbidden();
+});
