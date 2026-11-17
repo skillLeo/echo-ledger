@@ -19,8 +19,8 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
-        <!-- Explicit, so a test that depends on it (W-004, NotifyWhenReadyTest) runs the same on every machine. -->
-        <env name="APP_DEBUG" value="true"/>
+        <!-- Explicit and off, as in production, on every machine; a test that needs debug mode sets it itself. -->
+        <env name="APP_DEBUG" value="false"/>
         <env name="APP_KEY" value="base64:nYJMlZH4t0o8Y2b+j7Xj7NJ0vAjx7j19RBuNpPvvSaM="/>
         <env name="APP_URL" value="https://echoledger.test"/>
         <env name="ECHOLEDGER_RECORDINGS_KEY" value="RJy7M2dvgxA4hmts8F0LR6RtT3zXp9Ue/7ut0K8VkiU="/>

@@ -24,6 +24,14 @@ final class RelayToken
 
     public function __construct(private readonly RelaySecret $secret, private readonly AssistPlans $plans, private readonly SettingsRepository $settings) {}
 
+    /** `503 provider_not_configured` while the relay's address or secret is missing: checked before a session starts. */
+    public function assertReady(): void
+    {
+        if (self::url($this->settings->get('relay.url')) === null || $this->secret->signing() === null) {
+            throw new ApiError(503, 'provider_not_configured', 'Live Assist is not set up on the server yet.');
+        }
+    }
+
     /**
      * `{"url", "token", "expires_at"}` for [$session].
      *
@@ -32,7 +40,8 @@ final class RelayToken
     public function block(AssistSession $session): array
     {
         $url = self::url($this->settings->get('relay.url'));
-        $key = $this->secret->current();
+        // The previous secret during a rotation until the relay has the new one (RelaySecret::signing).
+        $key = $this->secret->signing();
         if ($url === null || $key === null) {
             throw new ApiError(503, 'provider_not_configured', 'Live Assist is not set up on the server yet.');
         }

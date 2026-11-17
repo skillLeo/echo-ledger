@@ -268,8 +268,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
 });
 
 // Live Assist's internal API (relay → server, docs/API_ASSIST.md "Internal"): HMAC-signed by the relay, never a device
-// token.
-Route::middleware([VerifyAssistRelay::class, 'throttle:assist-relay'])->prefix('internal/assist')->group(function (): void {
+// token. The limit comes first, so a flood of bad signatures is turned away before any HMAC is worked out.
+Route::middleware(['throttle:assist-relay', VerifyAssistRelay::class])->prefix('internal/assist')->group(function (): void {
     Route::get('providers', [InternalAssistController::class, 'providers'])->name('api.internal.assist.providers');
     Route::post('usage', [InternalAssistController::class, 'usage'])->name('api.internal.assist.usage');
     Route::post('suggestions', [InternalAssistController::class, 'suggestions'])->name('api.internal.assist.suggestions');

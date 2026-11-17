@@ -54,6 +54,28 @@ class ApiCredentials extends Page
         return StaffAccess::can('credentials.manage');
     }
 
+    /** A relay secret just generated, until its modal has read it (it is never kept beyond that). */
+    public ?string $newRelaySecret = null;
+
+    /** The new relay secret, shown once with a copy box; closing the modal forgets it. */
+    public function relaySecretShownAction(): Action
+    {
+        return Action::make('relaySecretShown')
+            ->modalHeading('New relay secret')
+            ->modalDescription('Give it to the relay now as relay_secret, and the old one as relay_secret_previous (see the relay\'s DEPLOY.md). It is not shown again. Until the relay signs with it, or for 15 minutes, the old one keeps working and still signs the relay tokens.')
+            ->fillForm(function (): array {
+                $secret = $this->newRelaySecret;
+                $this->newRelaySecret = null;
+
+                return ['secret' => $secret];
+            })
+            ->schema([TextInput::make('secret')->label('Relay secret')->readOnly()->copyable(copyMessage: 'Copied')
+                ->extraInputAttributes(['class' => 'font-mono', 'data-1p-ignore' => 'true', 'data-lpignore' => 'true'])])
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Done')
+            ->modalWidth('lg');
+    }
+
     public function mount(): void
     {
         $this->form->fill(); // intentionally empty: secrets are write-only
@@ -96,11 +118,10 @@ class ApiCredentials extends Page
                         ->modalDescription('Creates a new random secret. Webhooks already in flight will fail verification.')
                         ->action(function () use ($provider, $key, $vault): void {
                             if ("{$provider}.{$key}" === RelaySecret::PROVIDER.'.'.RelaySecret::CURRENT) {
-                                // The relay needs the value: shown once, here. The old one works 15 more minutes.
-                                $secret = app(RelaySecret::class)->rotate(null, (int) auth()->id());
-                                Notification::make()->title('New relay secret generated')->persistent()->success()
-                                    ->body('Give it to the relay now as relay_secret, and the old one as relay_secret_previous (see the relay\'s DEPLOY.md); it is not shown again. The old one keeps working here for 15 minutes. New secret: '.$secret)
-                                    ->send();
+                                // The relay needs the value: shown once, in a modal with a copy box (never in a stored
+                                // notification). The old one works 15 more minutes.
+                                $this->newRelaySecret = app(RelaySecret::class)->rotate(null, (int) auth()->id());
+                                $this->replaceMountedAction('relaySecretShown');
 
                                 return;
                             }

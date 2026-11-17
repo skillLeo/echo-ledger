@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\Assist;
 
 use App\Http\Controllers\Api\LiveTranslateTokenController;
-use App\Models\AssistSession;
 use App\Services\CredentialVault;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -14,15 +13,16 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * The captions block of a Live Assist session (docs/API_ASSIST.md `stt`): a short-lived streaming key, as Live
- * Translate gets one. Null when the speech provider is not set up or does not answer: the apps then keep their own
- * captions (POST /api/stt/token), and Live Assist still starts.
+ * Translate gets one. Null when the speech provider is not set up or does not answer. Only a session with a running
+ * recording may go on without it (the app's recording has its own captions); Practice, or a live session without a
+ * recording, is refused instead (AssistSessionController, 503 provider_not_configured).
  */
 final class AssistStt
 {
     public function __construct(private readonly CredentialVault $vault) {}
 
     /** @return array{provider: string, ws_url: string, token: string, expires_at: string, translate_other: bool}|null */
-    public function block(AssistSession $session, bool $translateOther): ?array
+    public function block(bool $translateOther, ?string $sessionId = null): ?array
     {
         $key = $this->vault->get('soniox', 'api_key');
         if ($key === null) {
@@ -34,7 +34,7 @@ final class AssistStt
                 ->post('https://api.soniox.com/v1/auth/temporary-api-key', ['usage_type' => 'transcribe_websocket', 'expires_in_seconds' => $ttl])
                 ->throw()->json();
         } catch (RequestException|ConnectionException $e) {
-            Log::warning('Live Assist: no streaming key for the captions', ['session' => $session->id, 'status' => $e instanceof RequestException ? $e->response->status() : null]);
+            Log::warning('Live Assist: no streaming key for the captions', ['session' => $sessionId, 'status' => $e instanceof RequestException ? $e->response->status() : null]);
 
             return null;
         }

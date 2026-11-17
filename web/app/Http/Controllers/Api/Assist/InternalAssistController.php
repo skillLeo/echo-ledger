@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\Assist;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\MakeAssistReportJob;
 use App\Models\AssistSession;
 use App\Models\AssistSuggestion;
 use App\Models\AssistUsage;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -70,11 +72,29 @@ final class InternalAssistController extends Controller
             'latency' => ['sometimes', 'nullable', 'array'],
             'at' => ['sometimes', 'nullable', 'date'],
         ]);
-        $session = $this->session((string) $data['session_id']);
+        // A session deleted since is still charged: deleting it never undoes what it spent.
+        $session = $this->session((string) $data['session_id'], withTrashed: true);
         if (AssistUsage::query()->where('suggestion_id', $data['suggestion_id'])->exists()) {
             return response()->json(['stored' => false]);
         }
         $at = isset($data['at']) ? Carbon::parse((string) $data['at'])->utc() : now();
+        try {
+            $this->record($session, $data, $at);
+        } catch (UniqueConstraintViolationException) {
+            // The same suggestion twice at once (the relay's retry racing the first): the first one counts.
+            return response()->json(['stored' => false]);
+        }
+
+        return response()->json(['stored' => true]);
+    }
+
+    /**
+     * Stores one suggestion's usage for [$session], and counts it in the month's usage ledger.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function record(AssistSession $session, array $data, Carbon $at): void
+    {
         DB::transaction(function () use ($data, $session, $at): void {
             AssistUsage::query()->create([
                 'assist_session_id' => $session->id,
@@ -119,8 +139,6 @@ final class InternalAssistController extends Controller
                 'occurred_at' => $at,
             ]);
         });
-
-        return response()->json(['stored' => true]);
     }
 
     /** POST /api/internal/assist/suggestions: the words of a suggestion that was shown, for the report. */
@@ -146,36 +164,68 @@ final class InternalAssistController extends Controller
                 'shown_at' => isset($data['at']) ? Carbon::parse((string) $data['at'])->utc() : now(),
             ],
         );
+        MakeAssistReportJob::stale($session);
 
         return response()->json(['stored' => true]);
     }
 
-    /** POST /api/internal/assist/facts: the facts ledger as it is now (it replaces the last one). */
+    /**
+     * POST /api/internal/assist/facts `{session_id, facts: [...], at}`: the whole facts ledger as it is now; it replaces
+     * the stored one (encrypted), unless the stored one was written later (a late retry changes nothing).
+     */
     public function facts(Request $request): JsonResponse
     {
         $data = $request->validate([
             'session_id' => ['required', 'string', 'max:26'],
             'facts' => ['present', 'array', 'max:500'],
-            'facts.*' => ['required'],
+            'facts.*' => ['required', 'string', 'max:2000'],
+            'at' => ['sometimes', 'nullable', 'date'],
         ]);
-        $facts = array_values(array_filter($data['facts'], fn (mixed $f): bool => (is_string($f) && mb_strlen($f) <= 2000) || is_array($f)));
-        $this->session((string) $data['session_id'])->forceFill(['facts' => $facts])->save();
 
-        return response()->json(['stored' => true]);
+        return $this->replace((string) $data['session_id'], 'facts', array_values($data['facts']), $data['at'] ?? null);
     }
 
-    /** POST /api/internal/assist/summary: the running summary as it is now. */
+    /**
+     * POST /api/internal/assist/summary `{session_id, summary, at}`: the running summary as it is now; it replaces the
+     * stored one (encrypted), unless the stored one was written later.
+     */
     public function summary(Request $request): JsonResponse
     {
-        $data = $request->validate(['session_id' => ['required', 'string', 'max:26'], 'summary' => ['present', 'nullable', 'string', 'max:20000']]);
-        $this->session((string) $data['session_id'])->forceFill(['summary' => $data['summary']])->save();
+        $data = $request->validate([
+            'session_id' => ['required', 'string', 'max:26'],
+            'summary' => ['present', 'nullable', 'string', 'max:20000'],
+            'at' => ['sometimes', 'nullable', 'date'],
+        ]);
 
-        return response()->json(['stored' => true]);
+        return $this->replace((string) $data['session_id'], 'summary', $data['summary'], $data['at'] ?? null);
     }
 
-    private function session(string $id): AssistSession
+    /** Stores [$value] as the session's [$field] (facts or summary) written at [$at], unless what is stored is newer. */
+    private function replace(string $sessionId, string $field, mixed $value, ?string $at): JsonResponse
     {
-        $session = AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->find($id);
+        $session = $this->session($sessionId);
+        $written = $at !== null ? Carbon::parse($at)->utc() : now();
+        $stored = DB::transaction(function () use ($session, $field, $value, $written): bool {
+            $locked = AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->lockForUpdate()->findOrFail($session->id);
+            $storedAt = $locked->getAttribute($field.'_at');
+            if ($storedAt instanceof Carbon && $storedAt->greaterThan($written)) {
+                return false;
+            }
+            $locked->forceFill([$field => $value, $field.'_at' => $written])->save();
+
+            return true;
+        });
+        if ($stored) {
+            MakeAssistReportJob::stale($session);
+        }
+
+        return response()->json(['stored' => $stored]);
+    }
+
+    /** The session the relay names: 404 when unknown, or deleted (except for usage, which is always charged). */
+    private function session(string $id, bool $withTrashed = false): AssistSession
+    {
+        $session = AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->when($withTrashed, fn ($q) => $q->withTrashed())->find($id);
         if (! $session instanceof AssistSession) {
             throw new NotFoundHttpException;
         }

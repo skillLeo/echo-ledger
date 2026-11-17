@@ -73,6 +73,8 @@ return [
     // The relay token's lifetime (the contract's ceiling), and how long a rotated-out secret still works.
     'token_ttl_seconds' => 900,
     'secret_overlap_seconds' => 900,
+    // The report waits this long after the end for the relay's last posts (a later one has it made again).
+    'report_delay_seconds' => 30,
     // A live session nobody refreshed a token for in this long is over (the app is gone).
     'abandoned_after_seconds' => 1200,
 ];

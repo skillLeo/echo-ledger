@@ -6,13 +6,16 @@ namespace App\Services\Assist;
 
 use App\Models\Credential;
 use App\Services\CredentialVault;
+use App\Services\SettingsRepository;
 use Illuminate\Support\Carbon;
 
 /**
  * The secret the server shares with the Live Assist relay (docs/API_ASSIST.md, API Credentials → `assist_relay`): it
  * signs the relay tokens (HS256) and the relay signs its internal requests with it (HMAC-SHA256). Generating a new one
  * keeps the old one as `previous_secret` for 15 minutes, so the relay can be given the new one without a gap: during
- * that time the server accepts either on the internal API, and the relay accepts tokens signed with either.
+ * that time the server accepts either on the internal API, and keeps signing the relay tokens with the old one until
+ * the relay's first request signed with the new one shows the relay has it (a relay not yet given the new secret
+ * would refuse every token signed with it).
  */
 final class RelaySecret
 {
@@ -22,10 +25,28 @@ final class RelaySecret
 
     public const PREVIOUS = 'previous_secret';
 
+    /** A fingerprint of the current secret once the relay signed a request with it (never the secret itself). */
+    public const SEEN = 'relay.secret_seen';
+
     /** The relay refuses a shorter secret (services/assist-relay/src/config.rs). */
     public const MIN_LENGTH = 32;
 
-    public function __construct(private readonly CredentialVault $vault) {}
+    public function __construct(private readonly CredentialVault $vault, private readonly SettingsRepository $settings) {}
+
+    /**
+     * The secret that signs relay tokens now: the previous one during the overlap until the relay has signed with the
+     * current one, the current one otherwise.
+     */
+    public function signing(): ?string
+    {
+        $current = $this->current();
+        $previous = $this->previous();
+        if ($current !== null && $previous !== null && ! $this->seen($current)) {
+            return $previous;
+        }
+
+        return $current;
+    }
 
     public function current(): ?string
     {
@@ -74,12 +95,29 @@ final class RelaySecret
     public function verifies(string $timestamp, string $method, string $path, string $body, string $signature): bool
     {
         $message = $timestamp."\n".strtoupper($method)."\n".$path."\n".$body;
-        foreach ($this->accepted() as $secret) {
+        foreach ($this->accepted() as $index => $secret) {
             if (hash_equals(hash_hmac('sha256', $message, $secret), strtolower($signature))) {
+                // The relay signed with the current secret: it has it, so the tokens are signed with it from now on.
+                if ($index === 0 && ! $this->seen($secret)) {
+                    $this->settings->set(self::SEEN, self::fingerprint($secret));
+                }
+
                 return true;
             }
         }
 
         return false;
+    }
+
+    private function seen(string $secret): bool
+    {
+        $seen = $this->settings->get(self::SEEN);
+
+        return is_string($seen) && hash_equals($seen, self::fingerprint($secret));
+    }
+
+    private static function fingerprint(string $secret): string
+    {
+        return hash_hmac('sha256', 'assist-relay-secret-seen', $secret);
     }
 }

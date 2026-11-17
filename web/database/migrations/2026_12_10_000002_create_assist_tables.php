@@ -64,7 +64,11 @@ return new class extends Migration
             $table->string('report_status', 10)->default('none');
             $table->longText('report')->nullable();
             $table->longText('summary')->nullable();
+            $table->timestamp('summary_at')->nullable();
             $table->longText('facts')->nullable();
+            $table->timestamp('facts_at')->nullable();
+            // Counts the relay's posts after the session ended: a report made from an older count is made again.
+            $table->unsignedInteger('report_rev')->default(0);
             $table->timestamps();
             $table->softDeletes();
             $table->index(['workspace_id', 'user_id', 'status']);
@@ -94,7 +98,8 @@ return new class extends Migration
             $table->string('mode', 10)->nullable();
             $table->string('model', 128)->nullable();
             $table->string('replaces', 128)->nullable();
-            $table->text('text')->nullable();
+            // Up to 20,000 characters, encrypted: more than a TEXT column holds.
+            $table->mediumText('text')->nullable();
             $table->string('action', 12)->nullable();
             $table->timestamp('action_at')->nullable();
             $table->timestamp('shown_at')->nullable();
