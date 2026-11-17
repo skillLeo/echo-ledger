@@ -57,6 +57,10 @@ VPS has one). A copy of it is useless on another machine. A new VPS gets the sec
 **Rotating the secret** (in a quiet hour: each relay restart reconnects the live calls). The relay goes first, the
 server second:
 
+> **More than one relay instance:** give EVERY instance the new secret as `relay_secret` and the old one as
+> `relay_secret_previous` before the first instance restarts. The server switches to the new secret on the first
+> request signed with it from any instance, so an instance still holding only the old secret would be refused.
+
 1. In the console, make the new `assist_relay` secret **without switching the server to it yet**: the server keeps
    signing tokens and checking internal requests with the old one.
 2. On the relay, encrypt the new secret as `relay_secret` and the old one as `relay_secret_previous`
