@@ -15,7 +15,6 @@ use App\Services\SettingsRepository;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
 
 /**
  * The post-call report of a Live Assist session (v1.9 L7, docs/PLAN_V1_9.md L7), made by MakeAssistReportJob:
@@ -222,21 +221,44 @@ final class AssistReport
         if (! $turns->contains('channel', 'me')) {
             return [$ai('skipped', 'nothing_said'), self::empty()];
         }
-        if ($runs >= (int) config('assist.report.max_runs', 3) && ($previous['ai']['status'] ?? null) === 'ready') {
-            return [$ai('ready', null, $previous['ai']['model'] ?? null), self::fromReport($previous)];
+        // Every billed attempt counts, a failed one too; after max_runs the last answer stays (or none).
+        if ($runs >= (int) config('assist.report.max_runs', 3)) {
+            return ($previous['ai']['status'] ?? null) === 'ready'
+                ? [$ai('ready', null, $previous['ai']['model'] ?? null), self::fromReport($previous)]
+                : [$ai('failed', 'unavailable'), self::empty()];
         }
-        if ($this->plans->left($session->workspace_id, $session->user_id, $session->practice)['cents_left'] <= 0) {
+        $input = $this->input($session, $prep, $turns, $qa);
+        // Asked only when its worst case fits what is left of the allowance (Practice's for Practice).
+        if (self::worstCaseCents($this->ai->inputChars($input)) > $this->plans->left($session->workspace_id, $session->user_id, $session->practice)['cents_left']) {
             return [$ai('skipped', 'budget'), self::empty()];
         }
         try {
-            $answer = $this->ai->write($this->input($session, $prep, $turns, $qa));
-        } catch (RuntimeException $e) {
-            return [$ai('failed', $e->getMessage() === ClaudeAssistReportAi::NOT_SET_UP ? 'not_set_up' : 'unavailable'), self::empty()];
+            $answer = $this->ai->write($input);
+        } catch (AssistReportFailed $e) {
+            if ($e->usage !== null) {
+                $runs++;
+                $this->charge($session, $e->usage, $runs);
+            }
+
+            return [['status' => 'failed', 'reason' => $e->getMessage() === ClaudeAssistReportAi::NOT_SET_UP ? 'not_set_up' : 'unavailable', 'model' => null, 'runs' => $runs], self::empty()];
         }
         $runs++;
         $this->charge($session, $answer, $runs);
 
-        return [['status' => 'ready', 'reason' => null, 'model' => $answer['model'], 'runs' => $runs], self::clean($answer['data'], $qa, $prep)];
+        return [['status' => 'ready', 'reason' => null, 'model' => $answer['model'], 'runs' => $runs], self::clean($answer['data'], $qa, $prep, $session->practice)];
+    }
+
+    /**
+     * The most a run can cost, in US cents: its input at about one token per two characters (written to the cache at
+     * worst) and the longest answer allowed, at the report model's price.
+     */
+    public static function worstCaseCents(int $inputChars): int
+    {
+        $price = (array) config('assist.models.'.config('assist.report.model', 'claude-sonnet-5-5').'.price', []);
+        $input = (int) ceil($inputChars / 2) * max((float) ($price['input'] ?? 0), (float) ($price['cache_write'] ?? 0));
+        $output = (int) config('assist.report.max_output_tokens', 6000) * (float) ($price['output'] ?? 0);
+
+        return (int) ceil(($input + $output) / 1_000_000 * 100);
     }
 
     /**
@@ -320,7 +342,7 @@ final class AssistReport
      * @param  list<array<string, mixed>>  $qa
      * @return array<string, mixed>
      */
-    private static function clean(array $data, array $qa, ?AssistPrep $prep): array
+    private static function clean(array $data, array $qa, ?AssistPrep $prep, bool $practice): array
     {
         $text = fn (mixed $v, int $max): string => is_string($v) ? mb_substr(trim($v), 0, $max) : '';
         $list = fn (mixed $v, int $count, int $max): array => array_values(array_filter(array_map(fn (mixed $s): string => $text($s, $max), array_slice(is_array($v) ? $v : [], 0, $count)), fn (string $s): bool => $s !== ''));
@@ -358,7 +380,8 @@ final class AssistReport
             'promises' => $list($data['promises'] ?? [], 10, 300),
             'grammar' => $pairs($data['grammar'] ?? [], ['said', 'better', 'why'], 3),
             'action_items' => $list($data['action_items'] ?? [], 8, 300),
-            'follow_up_email' => $text($email['body'] ?? '', 4000) !== '' ? ['subject' => $text($email['subject'] ?? '', 200), 'body' => $text($email['body'], 4000)] : null,
+            // Practice has no one to write to, whatever the model wrote.
+            'follow_up_email' => ! $practice && $text($email['body'] ?? '', 4000) !== '' ? ['subject' => $text($email['subject'] ?? '', 200), 'body' => $text($email['body'], 4000)] : null,
         ];
     }
 

@@ -15,7 +15,15 @@ interface AssistReportAi
      * @param  array<string, mixed>  $input  the session as AssistReport::aiInput() gives it
      * @return array{data: array<string, mixed>, model: string, tokens: array{input: int, cached: int, written: int, output: int}}
      *
-     * @throws \RuntimeException when the provider is not set up, refuses or cannot be reached (a plain message)
+     * @throws AssistReportFailed when the provider is not set up, refuses, cannot be reached or does not answer with the
+     *                            report (a plain message, and what the call cost when it was billed)
      */
     public function write(array $input): array;
+
+    /**
+     * How many characters a call with [$input] sends (the instructions and the input), for the run's worst-case cost.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    public function inputChars(array $input): int;
 }

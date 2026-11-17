@@ -20,6 +20,12 @@ final class MakeAssistReportJob implements ShouldQueue
 {
     use Queueable;
 
+    /** Once: a retry would bill the model again (a report made again is counted in its runs instead). */
+    public int $tries = 1;
+
+    /** Longer than one model request (ClaudeAssistReportAi::TIMEOUT_SECONDS), so the worker never cuts one off. */
+    public int $timeout = 420;
+
     public function __construct(public readonly string $sessionId) {}
 
     /** Queues the report of [$session], after the wait for the relay's last posts. */

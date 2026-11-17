@@ -87,6 +87,11 @@ function fakeAssistReportAi(?array $data = null, ?Throwable $fails = null): obje
 
         public function __construct(public ?array $data, public ?Throwable $fails) {}
 
+        public function inputChars(array $input): int
+        {
+            return mb_strlen((string) json_encode($input, JSON_UNESCAPED_UNICODE));
+        }
+
         public function write(array $input): array
         {
             $this->inputs[] = $input;
