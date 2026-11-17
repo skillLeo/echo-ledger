@@ -2,15 +2,15 @@
 // design shows it, from the same fixture data (scripts/screens/main.tsx), light and dark, into one picture each:
 // docs/v2/parity/desktop/<name>-<theme>.png. Every v2 merge request on the parity work shows the pictures of the
 // screens it touches.
-//   node src/v2/gallery/sidebyside.mjs [--screen=name] [--out=DIR]
+//   node scripts/sidebyside.mjs [--screen=name] [--out=DIR]
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FLAGS } from "./cases.mjs";
+import { FLAGS } from "../src/v2/gallery/cases.mjs";
 
-const desktop = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const desktop = join(dirname(fileURLToPath(import.meta.url)), "..");
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
 const out = resolve(arg("out") ?? join(desktop, "..", "docs", "v2", "parity", "desktop"));
 const only = arg("screen");

@@ -1794,3 +1794,9 @@ html[data-window="share-check-control"], html[data-window="share-check-control"]
    title in the link colour (D-090). */
 .set-row.set-action .set-title { color: var(--accent-text); font-weight: 600; }
 .set-row.set-action:disabled .set-title { color: var(--text-muted); }
+/* The first paint and a window that couldn't draw (index.html, WindowErrorBoundary): centred words on the window's own
+   background, in the theme the window uses. */
+.boot { display: flex; align-items: center; justify-content: center; height: 100%; background: var(--bg); color: var(--text-muted); }
+.boot--error > div { max-width: 420px; text-align: center; color: var(--text); }
+.boot--error p { margin: 0 0 8px; }
+.boot__detail { font-size: 12px; color: var(--text-muted); word-break: break-word; }
