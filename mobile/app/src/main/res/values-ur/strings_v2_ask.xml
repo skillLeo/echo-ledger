@@ -12,7 +12,11 @@
     <string name="v2_ask_sources">ماخذ</string>
     <string name="v2_ask_no_projects_title">ابھی کوئی پروجیکٹ نہیں</string>
     <string name="v2_ask_no_projects_body">پوچھیں کسی پروجیکٹ کی ریکارڈنگز پر کام کرتا ہے۔ پہلے لائبریری سے ریکارڈنگز کسی پروجیکٹ میں رکھیں۔</string>
-    <string name="v2_ask_error">جواب نہیں بن سکا۔ انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔</string>
+    <string name="v2_ask_error">جواب نہیں بن سکا۔ دوبارہ کوشش کریں۔</string>
+    <string name="v2_ask_offline">آپ آف لائن ہیں۔ انٹرنیٹ کنکشن چیک کریں اور دوبارہ پوچھیں۔</string>
+    <string name="v2_ask_answer_in">جواب کی زبان</string>
+    <string name="v2_ask_lang_en">انگریزی</string>
+    <string name="v2_ask_lang_roman_urdu">رومن اردو</string>
     <string name="v2_ask_empty_title">اپنی ریکارڈنگز سے پوچھیں</string>
     <string name="v2_ask_empty_body">پروجیکٹ چنیں، پھر اپنے الفاظ میں پوچھیں۔ جواب بتاتے ہیں کہ وہ کس ریکارڈنگ سے ہے۔</string>
 </resources>
