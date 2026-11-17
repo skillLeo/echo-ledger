@@ -19,6 +19,50 @@ use crate::text::estimate_tokens;
 /// The longest a background call may take, first token to last.
 const TASK_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Lines kept for the next facts call or summary, at most.
+pub const MAX_LINES: usize = 200;
+/// Their tokens, at most (about 12 turns of the longest the protocol allows).
+pub const MAX_LINE_TOKENS: u32 = 12_000;
+
+/// Final lines waiting for the next background call. Bounded by line count and tokens, the oldest dropped first, so
+/// a session where background calls can't run (captions only, no connection) never grows it.
+#[derive(Debug, Clone, Default)]
+pub struct LineBuffer {
+    lines: std::collections::VecDeque<(String, u32)>,
+    tokens: u32,
+}
+
+impl LineBuffer {
+    pub fn push(&mut self, line: String) {
+        let tokens = estimate_tokens(&line);
+        self.lines.push_back((line, tokens));
+        self.tokens = self.tokens.saturating_add(tokens);
+        while self.lines.len() > MAX_LINES || (self.tokens > MAX_LINE_TOKENS && self.lines.len() > 1) {
+            if let Some((_, dropped)) = self.lines.pop_front() {
+                self.tokens = self.tokens.saturating_sub(dropped);
+            }
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.lines.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.lines.is_empty()
+    }
+
+    pub fn tokens(&self) -> u32 {
+        self.tokens
+    }
+
+    /// The lines, emptying the buffer.
+    pub fn take(&mut self) -> Vec<String> {
+        self.tokens = 0;
+        std::mem::take(&mut self.lines).into_iter().map(|(line, _)| line).collect()
+    }
+}
+
 /// What a background call is for.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TaskKind {
@@ -266,6 +310,24 @@ pub async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ten_hours_of_lines_stay_bounded() {
+        let mut buffer = LineBuffer::default();
+        // Ten hours, a final every 5 seconds, each the longest the protocol allows.
+        let long = format!("[00:00] Them: {}", "word ".repeat(799));
+        for _ in 0..(10 * 3600 / 5) {
+            buffer.push(long.clone());
+            assert!(buffer.len() <= MAX_LINES && buffer.tokens() <= MAX_LINE_TOKENS + estimate_tokens(&long));
+        }
+        assert!(buffer.tokens() <= MAX_LINE_TOKENS, "{}", buffer.tokens());
+        for _ in 0..10_000 {
+            buffer.push("[00:00] Me: Okay, one moment.".into());
+        }
+        assert_eq!(buffer.len(), MAX_LINES);
+        assert_eq!(buffer.take().len(), MAX_LINES);
+        assert!(buffer.is_empty() && buffer.tokens() == 0);
+    }
 
     #[test]
     fn outputs_are_cleaned_to_what_may_be_kept() {

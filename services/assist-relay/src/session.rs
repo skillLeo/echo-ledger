@@ -24,7 +24,7 @@ use crate::budget::{Cause, allowed_modes, choose_mode, cost_micros, estimate_mic
 use crate::config::{RelayConfig, Shared, TranscriptScope};
 use crate::context::{CallContext, Context, ContextBuilder, RewriteKind, Task, Transcript, TranscriptTurn};
 use crate::domain::{Channel, EffectiveMode, LanguageHelp, Mode, ProviderKind};
-use crate::background::{self, TaskKind, TaskOutcome};
+use crate::background::{self, LineBuffer, TaskKind, TaskOutcome};
 use crate::internal::{FactsReport, Report, ReportSink, SuggestionText, SummaryReport, UsageRecord};
 use crate::pack::Pack;
 use crate::protocol::{
@@ -354,9 +354,9 @@ pub(crate) struct Engine {
     practice_asked: Vec<String>,
     practice_busy: bool,
     /// Final lines since the last facts call and the last summary, and whether one is running.
-    facts_lines: Vec<String>,
+    facts_lines: LineBuffer,
     facts_busy: bool,
-    summary_lines: Vec<String>,
+    summary_lines: LineBuffer,
     summary_busy: bool,
     /// The running summary is written again from this moment.
     summary_due: Instant,
@@ -420,9 +420,9 @@ impl Engine {
             suggestions: 0,
             practice_asked: Vec::new(),
             practice_busy: false,
-            facts_lines: Vec::new(),
+            facts_lines: LineBuffer::default(),
             facts_busy: false,
-            summary_lines: Vec::new(),
+            summary_lines: LineBuffer::default(),
             summary_busy: false,
             summary_due: Instant::now() + summary_every,
         }
@@ -1541,9 +1541,30 @@ impl Engine {
         [Some(&plan.primary), plan.fallback.as_ref()].into_iter().flatten().filter(|m| self.model_allowed(m)).cloned().collect()
     }
 
+    /// Starts one of the relay's own calls, unless no model is allowed or its cost could cross the budget left: the
+    /// same pricing as a suggestion's estimate, with the call's whole context as uncached input and its longest
+    /// answer as output, on the dearer of its models (`remaining()`).
     fn spawn_task(&mut self, kind: TaskKind, context: Context, question: String, max_output_tokens: u32) -> bool {
         let models = self.background_models();
         if models.is_empty() {
+            return false;
+        }
+        let config = self.config();
+        let tokens = context.tokens();
+        let worst = models
+            .iter()
+            .filter_map(|model| config.model(model))
+            .map(|spec| estimate_micros(spec, tokens, 0, false, max_output_tokens))
+            .max()
+            .unwrap_or(u64::MAX);
+        if worst > self.remaining() {
+            self.deps.telemetry.event(&SessionEvent::Background {
+                session: self.session_id.clone(),
+                task: kind.trigger(),
+                model: String::new(),
+                cost_micros: 0,
+                error: Some("budget"),
+            });
             return false;
         }
         let (providers, config, feed) = (self.deps.providers.clone(), self.config(), self.feed_tx.clone());
@@ -1570,13 +1591,13 @@ impl Engine {
         }
         let config = self.config();
         if !self.facts_busy && self.facts_lines.len() >= config.background.facts_every_finals.max(1) as usize {
-            let lines = std::mem::take(&mut self.facts_lines);
+            let lines = self.facts_lines.take();
             let context = background::facts_context(&self.call, &lines);
             let id = format!("facts-{}", self.next_id());
             self.facts_busy = self.spawn_task(TaskKind::Facts { id }, context, lines.join("\n"), config.background.max_output_tokens);
         }
         if !self.summary_busy && !self.summary_lines.is_empty() && Instant::now() >= self.summary_due {
-            let lines = std::mem::take(&mut self.summary_lines);
+            let lines = self.summary_lines.take();
             let context = background::summary_context(&self.call, &lines);
             let id = format!("summary-{}", self.next_id());
             self.summary_busy = self.spawn_task(TaskKind::Summary { id }, context, lines.join("\n"), config.background.max_output_tokens);
@@ -1608,9 +1629,13 @@ impl Engine {
         let lines: Vec<String> = self.transcript.latest().iter().map(TranscriptTurn::line).collect();
         let context = background::practice_context(&self.call, &self.practice_asked, &lines, index, total);
         let question_id = format!("pq-{}", self.next_id());
+        if self.background_models().is_empty() {
+            self.error(ErrorMessage::new("provider_not_configured", plain_error(ProviderError::NotConfigured(ProviderKind::Anthropic))));
+            return;
+        }
         self.practice_busy = self.spawn_task(TaskKind::PracticeQuestion { question_id, index }, context, index.to_string(), config.practice.max_output_tokens);
         if !self.practice_busy {
-            self.error(ErrorMessage::new("provider_not_configured", plain_error(ProviderError::NotConfigured(ProviderKind::Anthropic))));
+            self.error(ErrorMessage::new("budget_exhausted", "Practice is off: this session's allowance is used up."));
         }
     }
 

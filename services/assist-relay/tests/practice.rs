@@ -166,3 +166,65 @@ async fn the_running_summary_is_written_when_due_and_reported() {
     assert!(summary.summary.starts_with("The call so far: 2 new lines"), "{}", summary.summary);
     assert_eq!(MockStats::get(&h.stats.requests) as usize, h.mock(assist_relay::domain::ProviderKind::Anthropic).requests().len());
 }
+
+/// Every model's output at 100 USD per million tokens and input free: one suggestion (160 tokens) costs 1.6 cents, a
+/// background call at its longest (400 tokens) 4 cents.
+fn pricey_output() -> RelayConfig {
+    let mut config = RelayConfig::built_in();
+    for spec in config.models.values_mut() {
+        spec.price.input = 0.0;
+        spec.price.cache_read = 0.0;
+        spec.price.cache_write = 0.0;
+        spec.price.output = 100.0;
+        spec.long_context = None;
+    }
+    config
+}
+
+async fn facts_calls_with_budget(cents_left: u64, session: &str) -> (usize, bool) {
+    let h = harness(pricey_output());
+    let mut token = claims(session);
+    token.budget.cents_left = cents_left;
+    let mut s = h.connect(token);
+    let ready = s.next().await;
+    assert_ne!(ready["mode"], "captions_only", "suggestions are on: {ready}");
+    s.drain(Duration::from_millis(200)).await;
+    for (i, line) in ["I can start on the 3rd.", "My rate is 35 dollars an hour.", "The first build takes 2 weeks."].iter().enumerate() {
+        s.send(final_turn(&format!("m-{i}"), "me", line)).await;
+    }
+    s.drain(Duration::from_secs(3)).await;
+    let facts_requests = h.mock(assist_relay::domain::ProviderKind::Anthropic).requests().iter().filter(|(_, p)| *p == Purpose::Facts).count();
+    let reported = h.reports.reports().iter().any(|r| matches!(r, Report::Facts(_)));
+    (facts_requests, reported)
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_background_call_that_could_cross_the_budget_is_skipped() {
+    // 3 cents left: a Fast suggestion fits, a facts call at its longest (4 cents) does not.
+    assert_eq!(facts_calls_with_budget(3, "s-budget-tight").await, (0, false));
+    // With room, the same call runs.
+    assert_eq!(facts_calls_with_budget(100, "s-budget-room").await, (1, true));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_ten_hour_captions_only_session_makes_no_background_calls_and_stays_responsive() {
+    let h = harness(pricey_output());
+    let mut token = claims("s-captions");
+    token.budget.cents_left = 0;
+    let mut s = h.connect(token);
+    assert_eq!(s.next().await["mode"], "captions_only");
+    let long = "word ".repeat(799);
+    // Ten hours, a final every 5 seconds, each the longest the protocol allows.
+    for i in 0..(10 * 3600 / 5) {
+        let channel = if i % 2 == 0 { "other" } else { "me" };
+        s.send(json!({"type": "turn_final", "turn_id": format!("t-{i}"), "channel": channel, "text": format!("{i} {long}"),
+            "language": "en", "start_ms": i * 5000, "end_ms": i * 5000 + 4000}))
+        .await;
+        if i % 500 == 0 {
+            assert!(s.drain(Duration::from_millis(1)).await.is_empty());
+        }
+    }
+    assert_eq!(MockStats::get(&h.stats.requests), 0, "no suggestion and no background call in captions only");
+    s.send(json!({"type": "help_now"})).await;
+    assert_eq!(s.next().await["code"], "budget_exhausted", "the session still answers");
+}
