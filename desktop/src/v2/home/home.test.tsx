@@ -33,7 +33,7 @@ describe("Home's rules", () => {
 
   it("needs action shows only the kinds with something in them, in words", () => {
     expect(needsAction({ failed: 1, waiting: 0, untranscribed: 3, missed: 2 }).map((a) => a.title)).toEqual([
-      "1 recording didn't upload", "3 recordings aren't transcribed", "2 short calls were skipped today",
+      "1 recording didn't upload", "3 recordings aren't transcribed", "2 short calls were skipped in the last day",
     ]);
     expect(needsAction({ failed: 0, waiting: 0, untranscribed: 0, missed: 0 })).toEqual([]);
   });
@@ -61,7 +61,7 @@ describe("HomeV2", () => {
     fireEvent.click(within(needs).getByRole("button", { name: "1 recording isn't transcribed" }));
     expect(p.onAction).toHaveBeenCalledWith("untranscribed");
     expect(within(needs).getByRole("button", { name: "1 recording didn't upload" })).toBeInTheDocument();
-    expect(within(needs).getByRole("button", { name: "1 short call was skipped today" })).toBeInTheDocument();
+    expect(within(needs).getByRole("button", { name: "1 short call was skipped in the last day" })).toBeInTheDocument();
 
     fireEvent.click(within(screen.getByRole("list", { name: "Recent recordings" })).getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
     expect(p.onOpenRecording).toHaveBeenCalledWith("bilal");

@@ -6,7 +6,7 @@ import { RecordingScreen } from "./screens/Recording";
 import { SettingsScreen } from "./screens/Settings";
 import "./gallery.css";
 import { AssistCard } from "../assist/AssistCard";
-import { FIXTURE_SESSION } from "../assist/adapter";
+import { FIXTURE_SESSION } from "../assist/fixture";
 import { EMPTY_CARD, cardReducer } from "../assist/card";
 
 const noop = () => undefined;

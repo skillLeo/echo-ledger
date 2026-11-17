@@ -33,7 +33,7 @@ export function needsAction(input: { failed: number; waiting: number; untranscri
     { id: "failed", count: input.failed, title: plural(input.failed, "1 recording didn't upload", "# recordings didn't upload") },
     { id: "waiting", count: input.waiting, title: plural(input.waiting, "1 call waits for your decision", "# calls wait for your decision") },
     { id: "untranscribed", count: input.untranscribed, title: plural(input.untranscribed, "1 recording isn't transcribed", "# recordings aren't transcribed") },
-    { id: "missed", count: input.missed, title: plural(input.missed, "1 short call was skipped today", "# short calls were skipped today") },
+    { id: "missed", count: input.missed, title: plural(input.missed, "1 short call was skipped in the last day", "# short calls were skipped in the last day") },
   ];
   return all.filter((a) => a.count > 0);
 }

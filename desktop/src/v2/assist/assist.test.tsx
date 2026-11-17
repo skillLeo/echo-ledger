@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { FIXTURE_SESSION, fixtureStream, type AssistMessage } from "./adapter";
+import type { AssistMessage } from "./adapter";
+import { FIXTURE_SESSION, fixtureStream } from "./fixture";
 import { EMPTY_CARD, cardReducer, modeNote, parseSuggestion, shown, type CardState } from "./card";
 import { AssistCard, CONSENT_LINE, INTERVIEW_NOTE } from "./AssistCard";
 import AssistApp from "./AssistApp";

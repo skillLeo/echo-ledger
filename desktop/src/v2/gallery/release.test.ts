@@ -35,6 +35,8 @@ describe("a release build", () => {
       // The development-only flag override (v2/flags.ts) does not ship either.
       expect(chunk.code).not.toContain("uiflags");
       expect(chunk.code).not.toContain("assistfixture");
+      // The Live Assist fixture session (v2/assist/fixture.ts) is for development only.
+      expect(chunk.code).not.toContain("Tell me about a time you handled a difficult client.");
     }
     for (const asset of files.filter((f): f is OutputAsset => f.type === "asset")) {
       expect(asset.fileName).not.toMatch(/gallery/i);

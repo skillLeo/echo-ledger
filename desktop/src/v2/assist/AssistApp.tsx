@@ -7,7 +7,7 @@ import { useConcealed } from "../../lib/privacy";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
 import { errorMessage } from "../../lib/ipc";
 import { useUiFlags } from "../flags";
-import { assist, fixtureStream, type AssistMessage, type AssistMode, type HintLevel, type SendKind } from "./adapter";
+import { assist, type AssistMessage, type AssistMode, type HintLevel, type SendKind } from "./adapter";
 import { AssistCard, CONSENT_LINE } from "./AssistCard";
 import { EMPTY_CARD, cardReducer, type CardState } from "./card";
 import "../components";
@@ -25,7 +25,18 @@ export function useAssistCard(fixture: boolean): [CardState, (a: Action) => void
   const [hint, setHint] = useState<HintLevel>("outline");
   const [mutedUntil, setMutedUntil] = useState(0);
   useEffect(() => {
-    if (fixture) return fixtureStream(dispatch);
+    if (import.meta.env.DEV && fixture) {
+      // Development builds only: a release build drops this branch and never loads the fixture.
+      let stop: (() => void) | null = null;
+      let alive = true;
+      void import("./fixture").then((m) => {
+        if (alive) stop = m.fixtureStream(dispatch);
+      });
+      return () => {
+        alive = false;
+        stop?.();
+      };
+    }
     let alive = true;
     assist.state().then((snap) => {
       if (!alive || !snap) return;

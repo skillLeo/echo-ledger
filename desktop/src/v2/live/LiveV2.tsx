@@ -88,7 +88,7 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
             <List label="Upcoming sessions" className="el-group__rows">
               {upcoming.length === 0 ? (
                 <ListRow compact icon={Icons.CalendarIcon} iconStyle="plain" title="No sessions scheduled"
-                  meta="Prepare a call: who it's with, your goals and documents. Suggestions appear on a card only you can see." onClick={() => setPrep("new")} />
+                  meta="Prepare a call: who it's with, your goals and documents. Suggestions appear on a private card, hidden from screen share." onClick={() => setPrep("new")} />
               ) : upcoming.map((p) => (
                 <ListRow key={p.id} compact icon={Icons.ClockIcon} iconStyle="plain" title={p.title || typeLabel(p.meeting_type)}
                   meta={[typeLabel(p.meeting_type), p.counterpart, p.scheduled_at ? formatWhen(p.scheduled_at) : null].filter(Boolean).join(" · ")}

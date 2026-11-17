@@ -31,6 +31,14 @@ describe("the words the apps share", () => {
     expect(found).toEqual([]);
   });
 
+  it("never claims more privacy than the app gives: a private card is hidden from screen share, not invisible", () => {
+    // The new screens (v2/) talk about the Live Assist card and the overlays: "private" and "hidden from screen share".
+    const found = sources.filter(([name, text]) => /^v2[/\\]/.test(name) && /only you can see|invisible/i.test(text)).map(([name]) => name);
+    expect(found).toEqual([]);
+    const live = sources.find(([name]) => name.endsWith("LiveV2.tsx"))![1];
+    expect(live).toContain("Suggestions appear on a private card, hidden from screen share.");
+  });
+
   it("keeps Client as the speaker label of the other side of a call", () => {
     const record = sources.find(([name]) => name.endsWith("RecordView.tsx"))![1];
     expect(record).toContain('the other side of the call is "Client"');
