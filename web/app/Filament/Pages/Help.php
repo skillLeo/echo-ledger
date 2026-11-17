@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Exceptions\ApiError;
 use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Http\Controllers\Api\HelpController;
 use App\Models\User;
 use App\Services\Help\Guides;
@@ -18,7 +20,6 @@ use Filament\Forms\Components\TextInput;
 use Filament\Pages\Page;
 use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Url;
 
@@ -40,9 +41,6 @@ class Help extends Page
     protected static ?string $slug = 'help';
 
     protected string $view = 'filament.pages.help';
-
-    /** Messages one person may send an hour, as the apps may (the `support` limit). */
-    public const PER_HOUR = 5;
 
     #[Url(as: 'q')]
     public string $q = '';
@@ -88,14 +86,14 @@ class Help extends Page
                 ->action(function (array $data): void {
                     /** @var User $user */
                     $user = auth()->user();
-                    $key = 'support-console:'.$user->id;
-                    if (RateLimiter::tooManyAttempts($key, self::PER_HOUR)) {
-                        Notification::make()->title('Too many messages for now')->body('Try again in an hour, or write to '.app(SupportMessages::class)->address().'.')->danger()->send();
+                    // One count per person with the apps' (SupportMessages); a confirmed email first.
+                    try {
+                        app(SupportMessages::class)->send($user, (string) $data['subject'], (string) $data['message'], (bool) ($data['include_device_report'] ?? false));
+                    } catch (ApiError $e) {
+                        Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                         throw new Halt;
                     }
-                    RateLimiter::hit($key, 3600);
-                    app(SupportMessages::class)->send($user, (string) $data['subject'], (string) $data['message'], (bool) ($data['include_device_report'] ?? false));
                     Notification::make()->title('Message sent')->body('The reply comes to '.$user->email.'.')->success()->send();
                 }),
         ];

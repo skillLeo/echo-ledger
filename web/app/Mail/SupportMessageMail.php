@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Services\Assist\AssistRecords;
 use App\Support\Brand;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
@@ -40,10 +41,37 @@ final class SupportMessageMail extends Mailable implements ShouldBeEncrypted, Sh
 
     public function content(): Content
     {
+        // Their words shown as written, never read as Markdown or HTML: in code blocks, where nothing is a link (not even a
+        // bare address, which Markdown would otherwise link), an image, a heading or a tag. Names of their own: a public
+        // property of the mail is given to the view too, and would replace a value of the same name.
         return new Content(markdown: 'mail.support-message', with: [
-            'name' => $this->fromName, 'email' => $this->fromEmail, 'topic' => $this->topic, 'body' => $this->body,
+            'nameCode' => self::inline((string) preg_replace('/\s+/u', ' ', $this->fromName)), 'emailText' => AssistRecords::md($this->fromEmail),
+            'subjectBlock' => self::fenced($this->topic !== '' ? (string) preg_replace('/\s+/u', ' ', $this->topic) : 'A question'), 'messageBlock' => self::fenced($this->body),
             'platform' => $this->platform, 'reported' => $this->reports !== [],
         ]);
+    }
+
+    /** [$text] as a fenced code block whose fence is longer than any run of backticks in it. */
+    public static function fenced(string $text): string
+    {
+        $fence = str_repeat('`', max(3, self::longestRun($text) + 1));
+
+        return $fence."\n".str_replace(["\r\n", "\r"], "\n", trim($text))."\n".$fence;
+    }
+
+    /** [$text] as inline code, likewise fenced. */
+    public static function inline(string $text): string
+    {
+        $fence = str_repeat('`', self::longestRun($text) + 1);
+
+        return $fence.' '.$text.' '.$fence;
+    }
+
+    private static function longestRun(string $text): int
+    {
+        preg_match_all('/`+/', $text, $runs);
+
+        return max([0, ...array_map('strlen', $runs[0])]);
     }
 
     /** @return list<Attachment> the device reports, when ticked, as one JSON file */
