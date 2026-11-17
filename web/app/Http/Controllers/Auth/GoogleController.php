@@ -61,12 +61,6 @@ final class GoogleController extends Controller
             return $this->notLinked();
         }
         $request->session()->put('google.intent', $intent);
-        // Since v1.8 P6.3: an address with `?join=` keeps its invite link in the session for the callback, as the link's
-        // own page does (JoinSession); the sign-up page's Google button needs none (the session has it).
-        $join = $request->query('join');
-        if ($intent === 'sign-in' && is_string($join) && $join !== '') {
-            JoinSession::put(mb_substr($join, 0, 128));
-        }
         $provider = $this->google->provider();
         // Confirming it is you: Google asks which account, rather than taking whichever is open in the browser.
         if ($intent === 'confirm' && $provider instanceof AbstractProvider) {
@@ -127,7 +121,11 @@ final class GoogleController extends Controller
             $user = $signUp->create(['name' => $profile['name'], 'email' => $profile['email'], 'password' => Str::password(40), 'google_id' => $profile['id']], emailVerified: true, via: 'google');
         } catch (ApiError $e) {
             // By invitation, a link that closed or a team that filled meanwhile: no account, and why.
-            return $this->message($e->apiCode() === 'link_closed' ? 'This invite link is no longer open' : 'This team is full', $e->getMessage());
+            return $this->message(match ($e->apiCode()) {
+                'link_closed' => 'This invite link is no longer open',
+                'invitation_closed' => 'This invitation is no longer valid',
+                default => 'This team is full',
+            }, $e->getMessage());
         }
         if ($link !== null) {
             // Then the apps, as after the email code's sign-up (they joined already).

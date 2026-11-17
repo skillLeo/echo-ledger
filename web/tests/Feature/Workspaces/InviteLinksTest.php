@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
+use App\Services\Accounts\AccountEraser;
 use App\Services\Accounts\Invitations;
 use App\Services\Accounts\InviteLinks;
 use App\Services\Accounts\JoinSession;
@@ -327,5 +328,52 @@ describe('the link\'s token stays out of addresses', function () {
         expect($team->roleOf($member))->toBe(WorkspaceRole::Member)->and(session()->has('join.link'))->toBeFalse();
         // Used and forgotten: /join has nothing to show.
         $this->get(route('join.resume'))->assertStatus(410);
+    });
+});
+
+describe('email invitations while sign-up is by invitation', function () {
+    it('lets nobody in on an invitation whose sender is gone', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        [$owner, $team] = inviteTeam();
+        $admin = Fx::user();
+        app(Workspaces::class)->addMember($team, $admin, WorkspaceRole::Admin);
+        app(Invitations::class)->invite($team, $admin, 'orphan@example.test', WorkspaceRole::Member);
+        WorkspaceInvitation::query()->update(['invited_by' => null]);
+
+        expect(app(SignUp::class)->allows('orphan@example.test'))->toBeFalse()
+            ->and(app(Invitations::class)->pendingFor('orphan@example.test'))->toBeNull();
+        Livewire::test(Login::class)->fillForm(['email' => 'orphan@example.test'])->call('authenticate')->assertHasFormErrors(['email']);
+        expect(User::query()->where('email', 'orphan@example.test')->exists())->toBeFalse();
+    });
+
+    it('makes no account when the team filled before the invited person signed up', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        [$owner, $team] = inviteTeam();
+        app(Invitations::class)->invite($team, $owner, 'full@example.test', WorkspaceRole::Member);
+        Plan::query()->whereKey($team->plan_id)->update(['seats' => 1]);
+
+        expect(fn () => app(SignUp::class)->create(['name' => 'Full', 'email' => 'full@example.test', 'password' => 'x'], emailVerified: true, via: 'code'))
+            ->toThrow(ApiError::class);
+        expect(User::query()->where('email', 'full@example.test')->exists())->toBeFalse();
+    });
+
+    it('takes back an erased account\'s pending invitations, sent and received, and revokes its links', function () {
+        [$owner, $team] = inviteTeam();
+        $admin = Fx::user(['email' => 'leaving@example.test']);
+        app(Workspaces::class)->addMember($team, $admin, WorkspaceRole::Admin);
+        app(Invitations::class)->invite($team, $admin, 'sent@example.test', WorkspaceRole::Member);
+        ['link' => $link] = app(InviteLinks::class)->create($team, $admin, WorkspaceRole::Member, 7, null);
+        $other = Fx::user();
+        app(Invitations::class)->invite(Workspace::query()->findOrFail($other->current_workspace_id), $other, 'leaving@example.test', WorkspaceRole::Viewer);
+        app(Workspaces::class)->removeMember($team, $admin);
+        // The removal took back what they sent; the erasure takes the rest (one waiting for them, a link restored).
+        $link->forceFill(['revoked_at' => null])->save();
+        WorkspaceInvitation::query()->create(['workspace_id' => $team->id, 'email' => 'later@example.test', 'role' => 'member', 'token_hash' => hash('sha256', 'later'),
+            'invited_by' => $admin->id, 'expires_at' => now()->addDay()]);
+
+        app(AccountEraser::class)->erase($admin->fresh());
+
+        expect(WorkspaceInvitation::query()->whereIn('email', ['sent@example.test', 'later@example.test', 'leaving@example.test'])->count())->toBe(0)
+            ->and($link->fresh()->revoked_at)->not->toBeNull();
     });
 });

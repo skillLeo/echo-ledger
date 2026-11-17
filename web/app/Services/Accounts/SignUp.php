@@ -137,8 +137,12 @@ final class SignUp
             if ($invitation !== null && $this->invitations->matches($invitation, $email)) {
                 try {
                     $this->invitations->accept($invitation, $user);
-                } catch (ApiError) {
-                    // The team filled its seats meanwhile: the account is made all the same, without joining it.
+                } catch (ApiError $e) {
+                    // By invitation only, it was this account's only way in: no join, no account (the transaction
+                    // goes back). Open to anyone, the team filling meanwhile still leaves the account made.
+                    if ($this->mode() === self::INVITED) {
+                        throw $e;
+                    }
                 }
             } elseif (($link = $this->boundLink()) !== null) {
                 // Since v1.8 P6.3: the invite link the sign-up came with. join() checks it again with its rows locked.
