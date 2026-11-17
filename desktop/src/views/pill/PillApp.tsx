@@ -38,7 +38,11 @@ export const SCREEN_HOLD_TEXT: Record<ScreenHoldReason, string> = {
   permission: "paused: macOS needs the Screen Recording permission",
   hour_cap: "paused: 120 screens this hour",
   starting: "starting",
+  limit: "paused: this recording has reached its limit",
 };
+
+/** Said once under the pill when the server keeps no more screens of the recording (`409 too_many_screens`). */
+export const SCREENS_LIMIT_NOTE = "Screens paused: this recording has reached its limit";
 
 /** "Screens on · 3 kept. Click to pause screens" */
 export function screensChipText(screens: ScreensPill): string {
@@ -80,6 +84,9 @@ export default function PillApp() {
   const [screensNotice, setScreensNotice] = useState(false);
   /** "Screens on" was shown for this recording (once each). */
   const screensShown = useRef(false);
+  const [limitNotice, setLimitNotice] = useState(false);
+  /** The screens limit was said for this recording (once each). */
+  const limitShown = useRef(false);
   /** The person dismissed what a missing permission means for this recording. */
   const [missingDismissed, setMissingDismissed] = useState(false);
   const busy = useRef<Action | null>(null);
@@ -103,6 +110,8 @@ export default function PillApp() {
       setBluetooth(false);
       screensShown.current = false;
       setScreensNotice(false);
+      limitShown.current = false;
+      setLimitNotice(false);
       setMissingDismissed(false);
       return;
     }
@@ -114,6 +123,10 @@ export default function PillApp() {
     if (state.screens?.on && !screensShown.current) {
       screensShown.current = true;
       setScreensNotice(true);
+    }
+    if (state.screens?.reason === "limit" && !limitShown.current) {
+      limitShown.current = true;
+      setLimitNotice(true);
     }
   }, []);
 
@@ -195,12 +208,18 @@ export default function PillApp() {
     return () => window.clearTimeout(timer);
   }, [screensNotice]);
 
+  useEffect(() => {
+    if (!limitNotice) return;
+    const timer = window.setTimeout(() => setLimitNotice(false), SCREENS_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [limitNotice]);
+
   // Dismissed is for what was on the line: something new going missing during the recording is said again.
   const missingKinds = (live?.missing ?? []).map((m) => m.kind).join();
   useEffect(() => setMissingDismissed(false), [missingKinds]);
   const missing = shown && !missingDismissed ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
-  const tray = mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : screensNotice && shown && live?.screens?.on ? "screens" : null;
+  const tray = mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : limitNotice && shown ? "limit" : screensNotice && shown && live?.screens?.on ? "screens" : null;
   const concealed = useConcealed();
   useHitRegions([shown, confirming, tray, concealed]);
 
@@ -426,6 +445,13 @@ export default function PillApp() {
           <MonitorIcon size={14} />
           <span className="mark-text">Screens on for this meeting</span>
           <button type="button" className="rec-text-btn" onClick={toggleScreens}>Pause</button>
+        </div>
+      )}
+      {tray === "limit" && (
+        <div className="mark-tray note" data-hit data-testid="screens-limit-notice" role="status">
+          <MonitorIcon size={14} />
+          <span className="mark-text">{SCREENS_LIMIT_NOTE}</span>
+          <button type="button" className="rec-btn" aria-label="Dismiss notice" title="Dismiss" onClick={() => setLimitNotice(false)}><MinimizeIcon size={14} /></button>
         </div>
       )}
       {tray === "bluetooth" && (

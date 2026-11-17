@@ -11,36 +11,36 @@
 @endphp
 <section class="el-card" aria-labelledby="call-notes-heading" x-data="{ lang: @js($note?->language ?? 'en') }">
     <div class="el-card-head">
-        <h3 id="call-notes-heading" class="el-card-title">Call notes</h3>
+        <h3 id="call-notes-heading" class="el-card-title">{{ __('Call notes') }}</h3>
         @if ($note?->status === 'pending')
-            <span class="el-status el-status-brand el-status-spin">@svg('heroicon-o-arrow-path', ['aria-hidden' => 'true']) Writing</span>
+            <span class="el-status el-status-brand el-status-spin">@svg('heroicon-o-arrow-path', ['aria-hidden' => 'true']) {{ __('Writing') }}</span>
         @endif
     </div>
 
     @if ($note === null)
-        <p class="el-muted" style="font-size: 14px">Short notes of this call for {{ $client?->name }}: what was asked for, decisions, changes, what to confirm and your action items.</p>
+        <p class="el-muted" style="font-size: 14px">{{ __('Short notes of this call for :project: what was asked for, decisions, changes, what to confirm and your action items.', ['project' => $client?->name]) }}</p>
     @elseif ($note->status === 'pending')
         <div style="display: flex; flex-direction: column; gap: var(--space-2)" aria-hidden="true">
             <span class="el-skeleton" style="height: 12px; width: 40%"></span>
             <span class="el-skeleton" style="height: 14px; width: 92%"></span>
             <span class="el-skeleton" style="height: 14px; width: 76%"></span>
         </div>
-        <p class="el-sr" role="status">Writing the notes. This updates by itself.</p>
+        <p class="el-sr" role="status">{{ __('Writing the notes. This updates by itself.') }}</p>
     @elseif (in_array($note->status, ['failed', 'skipped'], true))
-        <p class="el-muted" style="font-size: 14px">{{ $note->errorForPeople() ?? 'The notes could not be written.' }}</p>
+        <p class="el-muted" style="font-size: 14px">{{ $note->errorForPeople() ?? __('The notes could not be written.') }}</p>
     @elseif ($sections === [])
-        <p class="el-muted" style="font-size: 14px">Nothing to note in this call.</p>
+        <p class="el-muted" style="font-size: 14px">{{ __('Nothing to note in this call.') }}</p>
     @else
         <div class="el-notes">
             @foreach ($sections as $section)
                 <div>
-                    <h4>{{ $section['heading'] }}</h4>
+                    <h4>{{ __($section['heading']) }}</h4>
                     <ul>
                         @foreach ($section['items'] as $item)
                             <li class="el-note-item">
                                 <span>
                                     @if (isset($item['kind']))<span class="el-faint">{{ ucfirst((string) $item['kind']) }}:</span> @endif{{ $item['text'] }}
-                                    @if ($item['verify'] ?? false) <span class="el-verify" title="Check this against the recording">verify</span>@endif
+                                    @if ($item['verify'] ?? false) <span class="el-verify" title="{{ __('Check this against the recording') }}">{{ __('verify') }}</span>@endif
                                     <a class="el-note-at" href="?t={{ (int) ($item['at_ms'] ?? 0) }}"
                                         x-on:click.prevent="$dispatch('el-seek', { ms: {{ (int) ($item['at_ms'] ?? 0) }} })"
                                         aria-label="Play from {{ \App\Services\ClientAi\ClientWorkspace::clock((int) ($item['at_ms'] ?? 0)) }}">{{ \App\Services\ClientAi\ClientWorkspace::clock((int) ($item['at_ms'] ?? 0)) }}</a>
@@ -56,11 +56,11 @@
     @if ($note?->status !== 'pending')
         <div style="display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-4)">
             <span class="el-seg" role="group" aria-label="Language of the notes">
-                <button type="button" x-on:click="lang = 'en'" :aria-pressed="lang === 'en'">English</button>
-                <button type="button" x-on:click="lang = 'roman_urdu'" :aria-pressed="lang === 'roman_urdu'">Roman Urdu</button>
+                <button type="button" x-on:click="lang = 'en'" :aria-pressed="lang === 'en'">{{ __('English') }}</button>
+                <button type="button" x-on:click="lang = 'roman_urdu'" :aria-pressed="lang === 'roman_urdu'">{{ __('Roman Urdu') }}</button>
             </span>
             <button type="button" class="el-pill el-pill-sm" x-on:click="$wire.writeNotes(lang)" wire:loading.attr="disabled" wire:target="writeNotes">
-                @svg('heroicon-o-sparkles', ['aria-hidden' => 'true']) {{ $note === null ? 'Write notes' : 'Write again' }}@if ($notesBadge) {!! $notesBadge->toHtml() !!}@endif
+                @svg('heroicon-o-sparkles', ['aria-hidden' => 'true']) {{ $note === null ? __('Write notes') : __('Write again') }}@if ($notesBadge) {!! $notesBadge->toHtml() !!}@endif
             </button>
         </div>
     @endif

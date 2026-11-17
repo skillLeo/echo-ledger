@@ -5,7 +5,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
-import { errorMessage } from "../../lib/ipc";
+import { announceReady, errorMessage } from "../../lib/ipc";
 import { useUiFlags } from "../flags";
 import { assist, type AssistMessage, type AssistMode, type HintLevel, type SendKind } from "./adapter";
 import { AssistCard, CONSENT_LINE } from "./AssistCard";
@@ -59,6 +59,9 @@ export function useAssistCard(fixture: boolean): [CardState, (a: Action) => void
       if (snap.muted_until) setMutedUntil(Date.parse(snap.muted_until));
     }).catch(() => undefined);
     const un = assist.listen((m) => alive && dispatch(m));
+    // The core builds this window like the others and waits for it to say it listens (C9), whatever the flags: until
+    // it does, the window is never let go after a session, and the smoke test waits for it.
+    announceReady([un], () => alive);
     return () => {
       alive = false;
       void un.then((f) => f()).catch(() => undefined);

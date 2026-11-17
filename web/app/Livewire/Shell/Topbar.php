@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Shell;
 
+use App\Filament\Support\ConsoleV2;
 use Filament\Livewire\Topbar as FilamentTopbar;
 use Illuminate\Contracts\View\View;
 
@@ -16,6 +17,7 @@ class Topbar extends FilamentTopbar
 {
     public function render(): View
     {
-        return view('filament.shell.topbar');
+        // Since v2.0: the new top bar under ui_v2.shell (the classic one otherwise, unchanged).
+        return view(ConsoleV2::shell() ? 'filament.v2.topbar' : 'filament.shell.topbar');
     }
 }

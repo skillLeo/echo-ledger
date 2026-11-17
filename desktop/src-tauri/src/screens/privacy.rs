@@ -119,6 +119,8 @@ pub enum HoldReason {
     Permission,
     /// 120 screens were kept in the last hour.
     HourCap,
+    /// The server keeps no more screens of this recording (`409 too_many_screens`): none for the rest of it.
+    Limit,
     /// The recording's project is still being checked.
     Starting,
 }
@@ -138,6 +140,8 @@ pub struct Facts {
     pub user_paused: bool,
     pub recording_paused: bool,
     pub capped: bool,
+    /// The server refused more screens of this recording (`409 too_many_screens`).
+    pub limited: bool,
 }
 
 /// The gate before the capture looks for its window.
@@ -164,6 +168,8 @@ pub fn gate(f: &Facts) -> Gate {
         return Gate::Off(*reason);
     }
     let hold = [
+        // Nothing the person does brings screens back for this recording, so it is said first.
+        (f.limited, HoldReason::Limit),
         (f.user_paused, HoldReason::You),
         (f.recording_paused, HoldReason::RecordingPaused),
         (!f.permission, HoldReason::Permission),
@@ -247,7 +253,7 @@ mod tests {
     }
 
     fn facts() -> Facts {
-        Facts { enabled: true, call: true, plan: true, server: true, project: Some(true), supported: true, keychain: true, permission: true, user_paused: false, recording_paused: false, capped: false }
+        Facts { enabled: true, call: true, plan: true, server: true, project: Some(true), supported: true, keychain: true, permission: true, user_paused: false, recording_paused: false, capped: false, limited: false }
     }
 
     fn window(title: &str, area: i64) -> WindowFacts {
@@ -311,6 +317,7 @@ mod tests {
         assert_eq!(gate(&Facts { recording_paused: true, ..facts() }), Gate::Hold(HoldReason::RecordingPaused));
         assert_eq!(gate(&Facts { permission: false, ..facts() }), Gate::Hold(HoldReason::Permission));
         assert_eq!(gate(&Facts { capped: true, ..facts() }), Gate::Hold(HoldReason::HourCap));
+        assert_eq!(gate(&Facts { limited: true, user_paused: true, capped: true, ..facts() }), Gate::Hold(HoldReason::Limit), "the server's limit outlasts every other reason");
     }
 
     #[test]

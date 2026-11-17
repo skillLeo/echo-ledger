@@ -10,6 +10,8 @@ import { afterEach, describe, expect, it } from "vitest";
 const check = resolve(__dirname, "../scripts/check-mac-signature.sh");
 const release = resolve(__dirname, "../scripts/release-mac.sh");
 const archiveCheck = resolve(__dirname, "../scripts/check-mac-archive.sh");
+/** The app version of this checkout, which release-mac.sh signs only under that version. */
+const CHECKOUT_VERSION = (JSON.parse(readFileSync(resolve(__dirname, "../src-tauri/tauri.conf.json"), "utf8")) as { version: string }).version;
 const PINNED = "e4e522f7ca98ac2aca82590ccb7bdf84fe84b7301e6462dba8dae44643393956";
 const SHA1 = "0123456789abcdef0123456789abcdef01234567";
 let dirs: string[] = [];
@@ -124,6 +126,33 @@ describe.runIf(process.platform !== "win32")("release-mac.sh", () => {
     const empty = run([folder, "1.8.1"], key);
     expect(empty.status).toBe(1);
     expect(empty.stderr).toContain("no *.dmg");
+  });
+
+  it("stops at the release gate before it checks or signs anything", () => {
+    const folder = mkdtempSync(join(tmpdir(), "release-mac-"));
+    dirs.push(folder);
+    writeFileSync(join(folder, "EchoLedger_1.8.1_aarch64.dmg"), "dmg");
+    writeFileSync(join(folder, "EchoLedger.app.tar.gz"), "tarball");
+    // A stand-in npx that records how it was run and fails like a blocked gate.
+    const bin = mkdtempSync(join(tmpdir(), "release-gate-bin-"));
+    dirs.push(bin);
+    const log = join(bin, "npx.log");
+    writeFileSync(join(bin, "npx"), `#!/bin/sh\necho "ECHOLEDGER_RELEASE=$ECHOLEDGER_RELEASE $*" > "${log}"\nexit 1\n`);
+    chmodSync(join(bin, "npx"), 0o755);
+    const key = { TAURI_SIGNING_PRIVATE_KEY: "key", TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "", PATH: `${bin}:${process.env.PATH}` };
+    // Another version than this checkout's: it stops before the gate, which would test another build.
+    const other = run([folder, "9.9.9"], key);
+    expect(other.status).toBe(1);
+    expect(other.stderr).toContain(`this checkout is version ${CHECKOUT_VERSION}, not 9.9.9`);
+    expect(existsSync(log), "the gate did not run").toBe(false);
+    const blocked = run([folder, CHECKOUT_VERSION], key);
+    expect(blocked.status).toBe(1);
+    expect(blocked.stderr).toContain("the release gate failed");
+    expect(readFileSync(log, "utf8").trim()).toBe("ECHOLEDGER_RELEASE=1 --no-install vitest run src/lib/releaseGate.test.ts");
+    expect(existsSync(join(folder, "release")), "nothing packed or signed").toBe(false);
+    const script = readFileSync(release, "utf8");
+    expect(script.indexOf('[ "$checkout" = "$version" ]')).toBeLessThan(script.indexOf("src/lib/releaseGate.test.ts) ||"));
+    expect(script.indexOf("src/lib/releaseGate.test.ts) ||")).toBeLessThan(script.indexOf('check-mac-archive.sh" "$tarball"'));
   });
 
   it("checks both apps with the pinned certificate before it signs a fresh archive of the checked app, binding the version", () => {

@@ -56,9 +56,10 @@ class OnboardingChecklistWidget extends Widget
         return array_map(
             fn (string $id): array => [
                 'id' => $id,
-                'title' => $copy[$id][0],
-                'hint' => $copy[$id][1],
-                'link' => $copy[$id][2],
+                // Since v2.0 in the console's language (English is unchanged).
+                'title' => __($copy[$id][0]),
+                'hint' => __($copy[$id][1]),
+                'link' => __($copy[$id][2]),
                 'url' => $copy[$id][3],
                 'done' => $status[$id] ?? false,
             ],

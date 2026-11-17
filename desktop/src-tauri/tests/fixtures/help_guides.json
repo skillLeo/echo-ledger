@@ -1,0 +1,6 @@
+{
+  "data": [
+    { "id": "after-a-call", "title": "After a call", "excerpt": "When a call ends, EchoLedger asks whether to keep it, or keeps it on its own." },
+    { "id": "live-captions", "title": "Live captions", "excerpt": "Captions show what both sides say while you record." }
+  ]
+}

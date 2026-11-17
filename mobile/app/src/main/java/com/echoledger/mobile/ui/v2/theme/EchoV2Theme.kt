@@ -228,9 +228,15 @@ class EchoV2Type(private val family: FontFamily, private val urdu: Boolean) {
         val base = if (latinInUrdu) {
             when (style) {
                 bodyStrong -> contentStrong
+
                 meta -> metaLatin
+
                 caption -> contentCaption
-                else -> EchoTokens.Type.bodyMobile.copy(fontFamily = FontFamily.Default)
+
+                body -> EchoTokens.Type.bodyMobile.copy(fontFamily = FontFamily.Default)
+
+                // Titles keep their size and weight in the system face.
+                else -> style.copy(fontFamily = FontFamily.Default)
             }
         } else {
             style

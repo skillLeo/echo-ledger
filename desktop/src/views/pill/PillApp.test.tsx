@@ -493,6 +493,24 @@ describe("Screens chip (v1.5)", () => {
     expect(chip()).toHaveAccessibleName("Screens paused: macOS needs the Screen Recording permission · 0 kept. Click to pause screens");
     await emitEvent("recording:state", makeRecordingState({ screens: { on: false, reason: "hour_cap", count: 120 } }));
     expect(chip()).toHaveAccessibleName("Screens paused: 120 screens this hour · 120 kept. Click to pause screens");
+    await emitEvent("recording:state", makeRecordingState({ screens: { on: false, reason: "limit", count: 400 } }));
+    expect(chip()).toHaveAccessibleName("Screens paused: this recording has reached its limit · 400 kept. Click to pause screens");
+  });
+
+  it("says once under the pill that the recording has reached its screens limit", async () => {
+    const limited = (count: number) => makeRecordingState({ screens: { on: false, reason: "limit", count } });
+    await renderPill(on(399));
+    await emitEvent("recording:state", limited(400));
+    expect(screen.getByTestId("screens-limit-notice")).toHaveTextContent("Screens paused: this recording has reached its limit");
+    fireEvent.click(within(screen.getByTestId("screens-limit-notice")).getByRole("button", { name: "Dismiss notice" }));
+    expect(screen.queryByTestId("screens-limit-notice")).not.toBeInTheDocument();
+    // The next once-a-second states say the same: it is not said again.
+    await emitEvent("recording:state", limited(400));
+    expect(screen.queryByTestId("screens-limit-notice")).not.toBeInTheDocument();
+    // A new recording can reach its own limit.
+    await emitEvent("recording:state", makeRecordingState({ active: false }));
+    await emitEvent("recording:state", limited(400));
+    expect(screen.getByTestId("screens-limit-notice")).toBeInTheDocument();
   });
 
   it("says Screens on under the pill once per recording, with Pause", async () => {

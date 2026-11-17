@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Filament\Widgets;
 
 use App\Enums\SourceDevice;
+use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\Tokens;
 use App\Models\CaptureSession;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Widgets\ChartWidget;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Carbon;
 
 /** Sessions per day over the last 14 days, one series per source device. */
@@ -24,6 +27,12 @@ class SessionsChart extends ChartWidget
     }
 
     protected ?string $heading = 'Recordings · last 14 days';
+
+    /** Since v2.0 in the console's language (English is unchanged). */
+    public function getHeading(): string|Htmlable|null
+    {
+        return __((string) $this->heading);
+    }
 
     protected ?string $pollingInterval = null;
 
@@ -46,12 +55,17 @@ class SessionsChart extends ChartWidget
         $dayIndex = [];
         for ($i = 0; $i < 14; $i++) {
             $day = $start->copy()->addDays($i);
-            $labels[] = $day->format('M j');
+            $labels[] = ConsoleV2::shell() ? $day->copy()->locale(app()->getLocale())->translatedFormat('j M') : $day->format('M j');
             $dayIndex[$day->format('Y-m-d')] = $i;
         }
 
         // The phone's palette: green for phones, indigo for computers, slate for web uploads.
         $colors = [SourceDevice::Phone->value => '#30A46C', SourceDevice::Desktop->value => '#3E63DD', SourceDevice::Web->value => '#8B8D98'];
+        // Since v2.0 (ui_v2.shell) the design values' roles, read from tokens.css: no indigo.
+        if (ConsoleV2::shell()) {
+            $colors = [SourceDevice::Phone->value => Tokens::colour('success-default'), SourceDevice::Desktop->value => Tokens::colour('accent-default'),
+                SourceDevice::Web->value => Tokens::colour('text-secondary')];
+        }
         $datasets = [];
         foreach (SourceDevice::cases() as $device) {
             $series = array_fill(0, 14, 0);
@@ -64,7 +78,7 @@ class SessionsChart extends ChartWidget
                 }
             }
             $datasets[] = [
-                'label' => $device->getLabel(),
+                'label' => __($device->getLabel()),
                 'data' => $series,
                 'backgroundColor' => $colors[$device->value],
                 'borderColor' => $colors[$device->value],
