@@ -174,7 +174,7 @@ class TranscriptionPagesParityTest : ScreenTest() {
             today = { SettingsScreen(vm, onSetup = {}, openPage = "key") },
             v2 = {
                 val settings by vm.settings.collectAsState()
-                KeyPage(vm, settings.plan, onBack = {})
+                KeyPage(vm, settings.plan, highlight = null, onBack = {})
             }
         )
         val where = mapOf(

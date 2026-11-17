@@ -117,7 +117,7 @@ data class V2Text(
             eraseBody = res.getString(R.string.v2_erase_body),
             trashEmptyTitle = res.getString(R.string.v2_trash_empty_title),
             trashError = res.getString(R.string.v2_trash_error),
-            trashKeeps = { a -> res.getString(R.string.v2_trash_keeps, a) },
+            trashKeeps = { a -> res.getString(R.string.v2_trash_keeps, com.echoledger.mobile.ui.v2.library.keepWords(res, a)) },
             erasesOn = { a -> res.getString(R.string.v2_erases_on, a) },
             share = res.getString(R.string.v2_share),
             transcript = res.getString(R.string.v2_transcript),

@@ -28,12 +28,14 @@ object ParityKit {
             c.getOrNull(SemanticsActions.OnClick) != null -> "button"
             else -> null
         }
-        val named = name(node) ?: node.parent?.children?.let { siblings ->
-            siblings.take(siblings.indexOfFirst { it.id == node.id }).lastOrNull { it.config.contains(SemanticsProperties.Text) }
-                ?.config?.get(SemanticsProperties.Text)?.firstOrNull()?.text
-        }
-        if (kind != null) named?.let { into += "$kind: $it" }
+        if (kind != null) nameOf(node)?.let { into += "$kind: $it" }
         node.children.forEach { visit(it, into) }
+    }
+
+    /** A control's name as [collect] gives it: its own words, else the words just before it. */
+    fun nameOf(node: SemanticsNode): String? = name(node) ?: node.parent?.children?.let { siblings ->
+        siblings.take(siblings.indexOfFirst { it.id == node.id }).lastOrNull { it.config.contains(SemanticsProperties.Text) }
+            ?.config?.get(SemanticsProperties.Text)?.firstOrNull()?.text
     }
 
     fun name(node: SemanticsNode): String? = node.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
@@ -47,16 +49,28 @@ object ParityKit {
      * Walks [steps] in order, running each one and collecting after it: each control ("kind: name") with the first step
      * it was seen in. A control seen only later, or already earlier, than its mapped step is a different page.
      */
-    fun <S> firstSeen(compose: ComposeContentTestRule, steps: List<S>, run: (S) -> Unit): Map<String, S> {
-        val first = linkedMapOf<String, S>()
+    fun <S> firstSeen(compose: ComposeContentTestRule, steps: List<S>, run: (S) -> Unit): Map<String, S> =
+        shownIn(compose, steps, run).mapValues { it.value.first() }
+
+    /** Walks [steps] like [firstSeen], with every step each control was on screen after (so what goes away counts too). */
+    fun <S> shownIn(compose: ComposeContentTestRule, steps: List<S>, run: (S) -> Unit): Map<String, List<S>> {
+        val shown = linkedMapOf<String, MutableList<S>>()
         for (step in steps) {
             run(step)
             val now = mutableSetOf<String>()
             collect(compose, now)
-            now.forEach { first.putIfAbsent(it, step) }
+            now.forEach { shown.getOrPut(it) { mutableListOf() } += step }
         }
-        return first
+        return shown
     }
+
+    /** Each mapped pair must be on screen after exactly the same steps on both pages (shown and gone alike). */
+    fun <S> presenceProblems(today: Map<String, List<S>>, v2: Map<String, List<S>>, where: Map<String, String>): List<String> =
+        where.mapNotNull { (old, new) ->
+            val was = today[old] ?: return@mapNotNull null
+            val now = v2[new].orEmpty()
+            if (was == now) null else "today after $was, v2 after $now: $new (for $old)"
+        }
 
     /**
      * The parity check: every control today's page shows is mapped (to the v2 control, "kind: name", or to a reason in

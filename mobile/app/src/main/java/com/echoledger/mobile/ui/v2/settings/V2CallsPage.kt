@@ -84,7 +84,7 @@ fun CallsPage(
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(stringResource(R.string.v2_set_page_calls), onBack = onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Column(Modifier.highlightedIf(highlight == "after-call")) {
+            Column(Modifier.highlightedIf(highlight == "calls.after")) {
                 EchoSectionHeader(stringResource(R.string.v2_calls_after_call))
                 EchoRadio(
                     settings.afterCall == PostCallPrompt.KEEP,
@@ -125,7 +125,7 @@ fun CallsPage(
                     EchoRadio(settings.undecidedKeepHours == hours, { update { it.copy(undecidedKeepHours = hours) } }, words)
                 }
             }
-            Column(Modifier.highlightedIf(highlight == "auto-apps")) {
+            Column(Modifier.highlightedIf(highlight == "calls.auto")) {
                 EchoSectionHeader(stringResource(R.string.v2_calls_auto_title))
                 if (!settings.autoRecordArmed) Note(stringResource(R.string.v2_calls_auto_off_note))
                 AutoRecordRules.APPS.forEach { app ->
