@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -127,10 +128,11 @@ fun V2AfterCallCard(
                     if (mode != AfterCallMode.Ask) EchoButton(EchoV2.strings.undo, onUndo, kind = EchoButtonKind.Quiet)
                 }
                 if (mode == AfterCallMode.Ask) {
-                    Row(
+                    // The buttons wrap onto a second line when they don't fit (Urdu, large text), never squeezing one.
+                    FlowRow(
                         Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Space.s8, vertical = EchoTokens.Space.s4),
                         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
+                        itemVerticalAlignment = Alignment.CenterVertically
                     ) {
                         EchoButton(
                             stringResource(R.string.v2_live_card_discard),

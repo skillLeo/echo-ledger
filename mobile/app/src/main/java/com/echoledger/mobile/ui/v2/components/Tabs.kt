@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -94,6 +95,7 @@ fun EchoSegmented(options: List<String>, selectedIndex: Int, onSelect: (Int) -> 
         color = c.bgSurface,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderStrong)
     ) {
+        val largeText = LocalDensity.current.fontScale >= LARGE_TEXT_SCALE
         Row(Modifier.height(IntrinsicSize.Min).selectableGroup()) {
             options.forEachIndexed { index, label ->
                 val selected = index == selectedIndex
@@ -109,7 +111,9 @@ fun EchoSegmented(options: List<String>, selectedIndex: Int, onSelect: (Int) -> 
                     horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (selected) Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
+                    // At large text sizes a third of the width can't hold the check and a word, so the tint alone marks
+                    // the choice there (screen readers still hear "selected").
+                    if (selected && !largeText) Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
                     Text(
                         label,
                         style = EchoV2.type.label,
@@ -204,3 +208,6 @@ fun EchoTopBar(
         actions()
     }
 }
+
+/** From this text size on (Android's 150 %), controls drop decoration to keep their words whole. */
+private const val LARGE_TEXT_SCALE = 1.5f
