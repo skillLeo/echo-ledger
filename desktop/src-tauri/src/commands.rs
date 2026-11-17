@@ -2100,7 +2100,7 @@ pub fn screens_pause(app: AppHandle, paused: bool) -> RecordingState {
 /// shows; `recording:state` then carries the new count. A press while screens are paused or held keeps nothing.
 #[tauri::command]
 pub fn screens_capture_now(app: AppHandle) -> RecordingState {
-    app.state::<AppState>().screens.capture_now();
+    let _ = crate::actions::capture_screen_now(&app);
     let now = recording_state_now(&app);
     let _ = app.emit("recording:state", &now);
     now

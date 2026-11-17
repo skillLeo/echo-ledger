@@ -3,7 +3,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** `translate_lock` and `translate_hide` (v1.3, Live Translate) are bound only while it runs and never shown in Settings. */
-export type ShortcutAction = "record_now" | "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "hide_all" | "translate_lock" | "translate_hide";
+export type ShortcutAction = "record_now" | "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "hide_all" | "capture_screen" | "translate_lock" | "translate_hide";
 /** "Hide EchoLedger from screen sharing" (since v1.8.1). */
 export type ShareHiding = "all" | "floating" | "off";
 /** Windows before 10 version 2004: a black box where EchoLedger is, or the window as it is. */
@@ -1505,6 +1505,8 @@ export interface EventPayloads {
   "app:status": AppStatus;
   "ui:flags": UiFlagsAnswer;
   "assist:message": AssistMessage;
+  /** "Capture screen now" kept the screen (the pill's flash); `count`: the recording's screens so far. */
+  "screens:captured": { count: number };
   /** The words, or (since v1.6.1) the words and where the notice goes (lib/notice.ts NoticePayload). */
   "app:error": string | { text: string; target?: unknown };
   "app:toast": string | { text: string; target?: unknown };

@@ -104,7 +104,7 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert_eq!(s.overlay_corner, Corner::BottomRight);
     assert_eq!(s.dictation_output, "type");
     assert_eq!(s.shortcuts, default_map());
-    assert_eq!(s.shortcuts.len(), 7, "voice note has no default shortcut");
+    assert_eq!(s.shortcuts.len(), 8, "voice note has no default shortcut");
     assert!(!s.ask_unknown_apps, "the unknown-app chip is off by default");
     assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
     assert!(!s.browser_automation, "reading browser tabs is opt-in");
@@ -425,9 +425,10 @@ fn an_unknown_shortcut_action_is_dropped_and_the_known_ones_are_kept() {
     let s = Settings::from_value(json!({
         "shortcuts": {"toggle_captions": "Ctrl+Shift+K", "pause_recording": "Ctrl+Shift+P", "voice_note": 42}
     }));
-    assert_eq!(s.shortcuts.len(), 3, "{:?}", s.shortcuts);
+    assert_eq!(s.shortcuts.len(), 4, "{:?}", s.shortcuts);
     assert_eq!(s.shortcuts[&Action::ToggleCaptions], "Ctrl+Shift+K");
     assert_eq!(s.shortcuts[&Action::HideAll], "CommandOrControl+Alt+Shift+P");
+    assert_eq!(s.shortcuts[&Action::CaptureScreen], "CommandOrControl+Alt+S", "Capture screen now, added later, too");
     assert_eq!(s.shortcuts[&Action::RecordNow], "CommandOrControl+Alt+R", "a shortcut added later gets its default");
 }
 

@@ -87,6 +87,7 @@ export const SHORTCUT_ACTIONS: readonly (readonly [string, string])[] = [
   ["voice_note", "Capture a voice note"],
   ["mark", "Bookmark this moment"],
   ["hide_all", "Hide EchoLedger windows"],
+  ["capture_screen", "Capture screen now"],
 ];
 
 /** The questions Help answers (desktop wording). */

@@ -25,6 +25,24 @@ use crate::stt::captions::{CaptionEvent, CaptionHub};
 
 const CAPTION_TARGETS: &[&str] = &[OVERLAY, "main"];
 
+/// "Capture screen now" (the shortcut and the pill): the running recording keeps the screen at its next sample;
+/// `screens:captured` follows once it is kept (the flash). Refused in plain words when nothing can be captured.
+pub fn capture_screen_now(app: &AppHandle) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    if !state.capture.is_recording() {
+        return Err(AppError::msg(CAPTURE_NEEDS_RECORDING));
+    }
+    if !state.screens.capture_now() {
+        return Err(AppError::msg(CAPTURE_SCREENS_OFF));
+    }
+    Ok(())
+}
+
+/// Capture screen now with no recording running.
+pub const CAPTURE_NEEDS_RECORDING: &str = "Start a recording to capture its screen.";
+/// Capture screen now while screen moments are off for this recording (Settings, the plan or a voice note).
+pub const CAPTURE_SCREENS_OFF: &str = "Screen moments are off for this recording.";
+
 pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
     let result = match (action, pressed) {
         (Action::ToggleCaptions, true) => toggle_captions(&app).await,
@@ -37,6 +55,7 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
             crate::privacy::toggle_hide_all(&app);
             Ok(())
         }
+        (Action::CaptureScreen, true) => capture_screen_now(&app),
         (Action::TranslateLock, true) => {
             crate::translate::toggle_lock(&app);
             Ok(())

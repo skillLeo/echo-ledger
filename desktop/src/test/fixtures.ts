@@ -101,6 +101,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
       dictation: "CommandOrControl+Shift+D",
       mark: "CommandOrControl+Shift+B",
       hide_all: "CommandOrControl+Alt+Shift+P",
+      capture_screen: "CommandOrControl+Alt+S",
     },
     captionsOnRecord: true,
     autoMode: true,

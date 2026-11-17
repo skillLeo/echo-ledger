@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio::{RecordingInfo, RecordingMode};
 use crate::net::api::ApiClient;
@@ -39,6 +39,9 @@ const SAMPLE_EVERY: Duration = Duration::from_millis(1_000);
 const PROJECT_CHECK_FOR: Duration = Duration::from_secs(10);
 /// How long the next try waits after the server could not answer (offline, away or slow).
 const PROJECT_RETRY_EVERY: Duration = Duration::from_secs(30);
+
+/// Sent when a screen asked for with "Capture screen now" was kept: `{"count": n}`, the recording's screens so far.
+pub const CAPTURED_EVENT: &str = "screens:captured";
 
 /// What the recording pill shows (`RecordingState.screens`); none while screens are off for this recording.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -500,7 +503,11 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, project: &AtomicU
                 Ok(encoded) if encoded.webp.len() <= encode::MAX_BYTES => {
                     match store.add(recording, key, &encoded.webp, at_ms, encoded.width, encoded.height, trigger.as_str(), Utc::now()) {
                         Ok(_) => {
-                            live.count.fetch_add(1, Ordering::SeqCst);
+                            let count = live.count.fetch_add(1, Ordering::SeqCst) + 1;
+                            // "Capture screen now" kept it: the pill flashes to confirm.
+                            if trigger == detect::Trigger::Manual {
+                                let _ = app.emit(CAPTURED_EVENT, serde_json::json!({ "count": count }));
+                            }
                         }
                         Err(e) => eprintln!("[echoledger] storing a screen: {e}"),
                     }
