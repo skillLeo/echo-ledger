@@ -89,6 +89,11 @@ const CASES = [
   ["a-set-appearance", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Appearance", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-shortcuts", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-shortcuts-mac", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Change Dictation", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-profile", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Profile", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-plan-free", "app", `${app("settings")}&plan=free`, ["en"], async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: /^See every feature/ }).click(); await page.waitForTimeout(500); }],
+  ["a-set-plan-pro", "app", `${app("settings")}&plan=pro`, ["en"], async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-plan-request", "app", `${app("settings")}&plan=free&request=awaiting_payment`, ["en"], async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-plan-near", "app", `${app("settings")}&plan=pro&near=1`, ["en"], async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-controls", "app", app("controls"), ["en"], async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 const THEMES = ["light", "dark"];

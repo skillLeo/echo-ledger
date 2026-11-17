@@ -5,13 +5,15 @@ import type { AppStatus, PermissionsStatus, ScreensStatus, Settings, SettingsPat
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../../test/tauri";
 import { answerConfirm } from "../../../test/confirm";
 import { collectControls, disabledSwitches, stale, type ControlRole, type RolelessField } from "../../../test/parity";
-import { makeItem, makeMicUser, makeSettings, makeStatus, sampleEntitlements } from "../../../test/fixtures";
+import { makeItem, makeMicUser, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../../test/fixtures";
 import { resetEntitlementsForTests } from "../../../lib/entitlements";
 import { AppearancePage, LanguagePage, ShortcutsPage, WordsPage } from "../../../views/main/AppSettings";
 import { getThemeChoice } from "../../../lib/theme";
 import { loadPreferences } from "../../../lib/shell";
 import { TranscriptionKeyPage } from "../../../views/main/Upgrade";
-import { ConsentPage, PrivacyPage, SecurityPage } from "../../../views/main/AccountSettings";
+import { ConsentPage, PrivacyPage, ProfilePage, SecurityPage } from "../../../views/main/AccountSettings";
+import { PlanUsagePage } from "../../../views/main/Upgrade";
+import { useUpgradeSheet } from "../../../lib/entitlements";
 import { LockPage, NotificationsPage, StoragePage } from "../../../views/main/SecuritySettings";
 import { resetTrashKeepHoursForTests } from "../../../lib/trash";
 import type { Account } from "../../../lib/ipc";
@@ -625,6 +627,96 @@ describe("Keyboard shortcuts v2", () => {
   });
 });
 
+describe("Profile v2", () => {
+  it("who is signed in, an unverified email, the workspace and role on a team, since when, and Edit profile on the website", async () => {
+    respond("account_get", { ...ACCOUNT, email_verified: false, created_at: "2025-03-04T10:00:00Z", workspace: { id: 1, name: "Qureshi Textiles", role: "admin" } });
+    respond("server_page_open", null);
+    await show("profile");
+    expect(screen.getByText("Ayesha Siddiqui")).toBeInTheDocument();
+    expect(screen.getByText("ayesha@qureshitextiles.pk")).toBeInTheDocument();
+    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getByText("Qureshi Textiles, Admin")).toBeInTheDocument();
+    expect(screen.getByText(/2025/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit profile, opens in browser" }));
+    await act(flushAsync);
+    expect(callsOf("server_page_open")).toEqual([{ page: "app/profile", serverUrl: null }]);
+  });
+
+  it("one's own workspace isn't named, and a verified email has no mark", async () => {
+    await show("profile");
+    expect(screen.queryByText("Not verified")).toBeNull();
+    expect(screen.queryByText("Workspace")).toBeNull();
+  });
+});
+
+describe("Plan & usage v2", () => {
+  const Sheet = () => {
+    const sheet = useUpgradeSheet();
+    return <output data-testid="sheet">{sheet ? `${sheet.plan ?? ""}|${sheet.step ?? ""}` : "closed"}</output>;
+  };
+  const showPlan = async (e: ReturnType<typeof sampleEntitlements>) => {
+    resetEntitlementsForTests(e);
+    respond("upgrade_request_latest", e.upgrade_request);
+    render(<div className="el-root"><Sheet /><SettingsPagesV2 section={{ id: "plan", seq: 1 }} onHome={vi.fn()} run={run} status={makeStatus()} onUnpaired={vi.fn()} /></div>);
+    await act(flushAsync);
+  };
+
+  it("Free: Upgrade opens the flow at Pro, Compare plans, the own key instead of minutes, and every feature in place", async () => {
+    await showPlan(sampleEntitlements("free"));
+    expect(screen.getByText("Free plan")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add key" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("pro|");
+    expect(screen.getByTestId("plan-pro")).toHaveTextContent("Choose Pro");
+    expect(screen.getByTestId("plan-ultra")).toHaveTextContent("Everything in Pro, plus:");
+    fireEvent.click(screen.getByRole("button", { name: /^See every feature/ }));
+    expect(screen.getByRole("table", { name: "Every feature" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^See every feature/ })).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Promo code" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("pro|choose");
+  });
+
+  it("Pro: minutes as a meter with their reset, amber from 80 % and red with what stops when storage is full", async () => {
+    const e = sampleEntitlements("pro");
+    e.limits.monthly_minutes = { limit: 600, used: 510, resets_at: "2026-12-01" };
+    e.limits.storage_bytes = { limit: 21474836480, used: 21474836480 };
+    await showPlan(e);
+    expect(screen.getByText("Pro plan")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upgrade to Ultra" })).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: /^Transcription, 510 of 600 minutes used/ })).toHaveAttribute("aria-valuenow", "85");
+    expect(screen.getByTestId("meter-monthly_minutes")).toHaveTextContent("You've used 85% of your minutes.");
+    expect(screen.getByTestId("meter-storage_bytes")).toHaveTextContent("New recordings can't upload until you free up space or upgrade.");
+    fireEvent.click(within(screen.getByTestId("meter-storage_bytes")).getByRole("button", { name: "upgrade" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("ultra|");
+  });
+
+  it("an open request: its card has the main button, no Upgrade anywhere, and Cancel request asks first", async () => {
+    respondWith("upgrade_request_cancel", ({ id }) => makeUpgradeRequest("cancelled", { id: id as string }));
+    respond("entitlements_get", sampleEntitlements("free"));
+    const e = { ...sampleEntitlements("free"), upgrade_request: makeUpgradeRequest("awaiting_payment") };
+    await showPlan(e);
+    expect(screen.getByTestId("upgrade-request")).toHaveAttribute("data-stage", "awaiting_payment");
+    fireEvent.click(screen.getByRole("button", { name: "Pro requested, Waiting for payment. Opens the request" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("|status");
+    expect(screen.queryByRole("button", { name: "Upgrade" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Payment details" }));
+    expect(screen.getByTestId("sheet")).toHaveTextContent("|pay");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel request" }));
+    expect(screen.getByRole("alertdialog", { name: "Cancel this request?" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancel request" }));
+    await act(flushAsync);
+    expect(callsOf("upgrade_request_cancel")).toEqual([{ id: e.upgrade_request!.id }]);
+  });
+
+  it("a team's member: the plan's facts, who manages it, and no button", async () => {
+    respond("account_get", { ...ACCOUNT, workspace: { id: 1, name: "Qureshi Textiles", role: "member" } });
+    await showPlan(sampleEntitlements("pro"));
+    expect(screen.getByText("Qureshi Textiles is on Pro. Its owner manages the plan.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Upgrade/ })).toBeNull();
+    expect(screen.queryByText("Payments")).toBeNull();
+  });
+});
+
 /**
  * Parity with today's pages: each page is rendered as today's and as the v2 page in each of its states (the page as it
  * opens, then each dialog and form opened, from a fresh page each time), and every control today's page shows in a
@@ -658,6 +750,38 @@ describe("parity with today's Settings pages, in every state", () => {
     for (const a of acts) await a();
   };
   const reset: Step = { name: "Reset to defaults", today: press("Reset to defaults") };
+  const PLAN_STATES = ((): [string, ReturnType<typeof sampleEntitlements>, string | null][] => {
+    const now = new Date().toISOString();
+    const at = (plan: "free" | "pro", stage: Parameters<typeof makeUpgradeRequest>[0]) =>
+      ({ ...sampleEntitlements(plan), upgrade_request: makeUpgradeRequest(stage, stage === "approved" || stage === "declined" ? { decided_at: now } : {}) });
+    const busy = sampleEntitlements("pro");
+    busy.limits.monthly_minutes = { limit: 600, used: 510, resets_at: "2026-12-01" };
+    busy.limits.storage_bytes = { limit: 21474836480, used: 21474836480 };
+    busy.limits.devices = { limit: 5, used: 5 };
+    busy.limits.uploads_per_day = { limit: 200, used: 190 };
+    const unlimited = sampleEntitlements("ultra");
+    unlimited.limits.monthly_minutes = { limit: null, used: 1200 };
+    const keyed = sampleEntitlements("free");
+    keyed.transcription_key = { provider: "groq", set: true, last4: "9xQ2" };
+    return [
+      ["Free", sampleEntitlements("free"), null], ["Free, key added", keyed, null], ["Pro", sampleEntitlements("pro"), null], ["Ultra, the top plan", sampleEntitlements("ultra"), null],
+      ["Pro, near and at its limits", busy, null], ["Ultra, minutes without a limit", unlimited, null],
+      ["Pro, a team's member", sampleEntitlements("pro"), "member"], ["Pro, a team's admin", sampleEntitlements("pro"), "admin"],
+      ["Free, request waiting for payment", at("free", "awaiting_payment"), null], ["Free, request in review", at("free", "in_review"), null],
+      ["Free, another receipt asked for", at("free", "needs_receipt"), null], ["Free, request not approved", at("free", "declined"), null],
+      ["Pro, request approved", at("pro", "approved"), null],
+    ];
+  })();
+  const PLAN_LINES = [
+    "Free plan", "Pro plan", "Ultra plan", "Transcripts use your own free Groq key.", "Qureshi Textiles is on Pro. Its owner manages the plan.", "You're on our top plan.",
+    "Paid until", "No end date", "There is nothing to cancel.", "Minutes reset on the 1st of each month. Unused minutes don't carry over.",
+    "Every plan can record, organise, search, share links and export.", "Your Groq key", "Key added", "Not added",
+    "No monthly limit", "You've used 85% of your minutes.", "New recordings can't upload until you free up space", "Sign out a device to add another.", "You've used 95% of your",
+    "Everything in Pro, plus:", "Payments are by bank transfer. We switch your plan on after we see the money in our account.",
+    "Waiting for payment", "In review", "Action needed", "Not approved", "Approved", "to our bank account, then add a screenshot of the receipt.",
+    "Your request is still open. You don't need to pay again.", "If you've paid, reply to our email with your transaction ID and we'll look again.",
+    "If you've already paid, add your receipt instead. Cancelling doesn't refund a payment.", "Uploads in the last 24 hours", "(yours)", "Shown below",
+  ];
   const SCREENS_OK: ScreensStatus = { supported: true, platform: "windows", borderless: false, permission: true, inPlan: true, onServer: true };
   const SCREEN_LINES = [
     screensBlocked({ ...SCREENS_OK, onServer: false })!, screensBlocked({ ...SCREENS_OK, inPlan: false })!, screensBlocked({ ...SCREENS_OK, supported: false })!,
@@ -752,6 +876,25 @@ describe("parity with today's Settings pages, in every state", () => {
       name: `Keyboard shortcuts, ${platform}`, section: "shortcuts", platform,
       today: (st) => <ShortcutsPage settings={st} status={makeStatus({ platform })} run={run} onSettings={() => undefined} />,
       steps: [{ name: "Change, listening", today: press("Change Record now") }, reset],
+    })),
+    ...([[false, null], [true, null], [true, { id: 1, name: "Qureshi Textiles", role: "admin" }]] as const).map(([unverified, workspace]): Page => {
+      const account: Account = { ...ACCOUNT, email_verified: !unverified, created_at: "2025-03-04T10:00:00Z", workspace: workspace && { ...workspace } };
+      return { name: `Profile${unverified ? ", email not verified" : ""}${workspace ? ", on a team" : ""}`, section: "profile", account,
+        today: () => <ProfilePage account={account} status={makeStatus()} run={run} />,
+        map: { "button: Edit profile, opens in browser": ["button", "Edit profile, opens in browser"] },
+        lines: ["Ayesha Siddiqui", "ayesha@qureshitextiles.pk", "Qureshi Textiles, Admin", "Your name and email are changed on the website."] };
+    }),
+    ...PLAN_STATES.map(([label, e, role]): Page => ({
+      name: `Plan & usage, ${label}`, section: "plan", entitlements: e,
+      account: role ? { ...ACCOUNT, workspace: { id: 1, name: "Qureshi Textiles", role } } : ACCOUNT,
+      today: () => <PlanUsagePage e={e} role={role} workspace={role ? "Qureshi Textiles" : null} onKey={() => undefined} />,
+      steps: [
+        { name: "every feature shown", today: press(/^See every feature/) },
+        ...(e.upgrade_request?.status === "awaiting_payment" ? [{ name: "Cancel request, asked", today: press("Cancel request") }] : []),
+      ],
+      lines: PLAN_LINES, stalesOk: true,
+      map: { "button: See every featureShown below": ["button", /^See every feature/], "button: See every feature": ["button", /^See every feature/] },
+      mapLike: [[/^button: Promo code/, ["button", "Promo code"]], [/^button: (Free|Pro|Ultra), 1 month/, ["button", /^(Free|Pro|Ultra), 1 month$/]]],
     })),
     { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
       map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] },

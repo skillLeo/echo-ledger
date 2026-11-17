@@ -15,6 +15,7 @@ export const V2_SETTINGS_PAGES: ReadonlySet<string> = new Set([
   "mic", "screen", "screen.excluded",
   "storage",
   "appearance", "shortcuts",
+  "profile", "plan",
 ]);
 
 /** The page a section opens and the setting to highlight there; null for an unknown section. */

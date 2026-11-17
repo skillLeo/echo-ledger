@@ -10,7 +10,9 @@ import { CallSitesPageV2, CallsPageV2 } from "./CallsV2";
 import { KeyPageV2, LanguagePageV2, WordsPageV2 } from "./TranscriptionV2";
 import { useEntitlements } from "../../../lib/entitlements";
 import type { AppStatus } from "../../../lib/ipc";
-import { useAccount } from "../../../views/main/AccountSettings";
+import { roleOf, useAccount } from "../../../views/main/AccountSettings";
+import { ProfilePageV2 } from "./ProfileV2";
+import { PlanPageV2 } from "./PlanV2";
 import { ConsentPageV2, PrivacyPageV2 } from "./PrivacyV2";
 import { LockPageV2 } from "./LockV2";
 import { SecurityPageV2, SignInActivityPageV2 } from "./SecurityV2";
@@ -78,6 +80,10 @@ export function SettingsPagesV2({ section, onHome, run, status, onUnpaired, them
       case "storage": return <StoragePageV2 limitBytes={entitlements?.limits.storage_bytes?.limit ?? status.plan.storageBytes} />;
       case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} />;
       case "shortcuts": return <ShortcutsPageV2 settings={settings} status={status} run={run} onSettings={setSettings} />;
+      case "profile": return account === undefined ? <PageLoading /> : account ? <ProfilePageV2 account={account} status={status} run={run} /> : null;
+      case "plan": return entitlements
+        ? <PlanPageV2 e={entitlements} role={roleOf(account, status)} workspace={account?.workspace?.name || status.plan.workspace || null} onKey={() => open("key")} />
+        : <PageLoading />;
       case "calls.sites": return <CallSitesPageV2 rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules })} />;
       default: return null;
     }

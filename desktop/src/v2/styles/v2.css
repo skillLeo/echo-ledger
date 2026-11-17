@@ -913,4 +913,27 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-shortcuts .el-row__main { flex: 1 1 calc(var(--el-space-64) * 3); }
 .el-shortcuts .el-row__value { max-inline-size: none; margin-inline-start: auto; }
 
+/* ---- Plan & usage ------------------------------------------------------------------------------------------- */
+.el-tabular { font-variant-numeric: tabular-nums; }
+.el-mono { font-family: var(--el-font-family-mono); }
+.el-pre-line { white-space: pre-line; }
+.el-plan-card { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-16); }
+.el-plan-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
+.el-plan-card__head--link { border: 0; padding: 0; background: transparent; color: inherit; text-align: start; cursor: pointer; font: inherit; }
+.el-plan-card__body { display: flex; flex-direction: column; gap: var(--el-space-4); }
+.el-plan-card__body p { margin: 0; }
+.el-plan-card__lines { margin: 0; padding-inline-start: var(--el-space-20); display: flex; flex-direction: column; gap: var(--el-space-4); }
+.el-plan-card__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block-start: var(--el-space-4); }
+#plans-above { display: flex; flex-direction: column; gap: var(--el-space-12); }
+.el-meter-row { flex-direction: column; align-items: stretch; gap: var(--el-space-4); }
+.el-meter-row__line { display: flex; align-items: baseline; justify-content: space-between; gap: var(--el-space-8); }
+.el-meter-row__value { color: var(--el-role-text-secondary); font-variant-numeric: tabular-nums; }
+.el-inline-action { border: 0; padding: 0; background: transparent; font: inherit; color: var(--el-role-accent-text); text-decoration: underline; cursor: pointer; }
+.el-table-wrap { overflow-x: auto; }
+.el-table { inline-size: 100%; border-collapse: collapse; }
+.el-table th, .el-table td { padding: var(--el-space-8) var(--el-space-12); text-align: start; border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-table thead th { font-weight: var(--el-text-body-strong-weight); }
+.el-table tbody th { font-weight: inherit; }
+.el-table tr:last-child th, .el-table tr:last-child td { border-block-end: 0; }
+.el-table__tick { display: inline-flex; color: var(--el-role-accent-default); }
 .el-shortcuts .el-button[aria-pressed="true"] { background: var(--el-role-accent-soft); color: var(--el-role-accent-text); border-color: var(--el-role-accent-default); }

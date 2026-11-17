@@ -83,6 +83,11 @@ const SCREENS = [
   ["a-set-appearance", app("settings"), async (page) => { await page.getByRole("button", { name: "Appearance", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-shortcuts", app("settings"), async (page) => { await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-shortcuts-mac", app("settings-mac"), async (page) => { await page.getByRole("button", { name: "Keyboard shortcuts", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Change Dictation", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-profile", app("settings"), async (page) => { await page.getByRole("button", { name: "Profile", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-plan-free", `${app("settings")}&plan=free`, async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: /^See every feature/ }).click(); await page.waitForTimeout(500); }],
+  ["a-set-plan-pro", `${app("settings")}&plan=pro`, async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-plan-request", `${app("settings")}&plan=free&request=awaiting_payment`, async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-plan-near", `${app("settings")}&plan=pro&near=1`, async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-controls", app("controls"), async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 
