@@ -81,6 +81,56 @@ class UploadWorkerTest : AppTest() {
 
     private fun recording() = app.graph.recordings.get(id)
 
+    // ---- a Discard after the call, during its upload (since v1.8.1) --------------------------------------------------
+
+    private fun discardWork(): List<androidx.work.WorkInfo> =
+        androidx.work.WorkManager.getInstance(app).getWorkInfosForUniqueWork("discard-$id").get(10, java.util.concurrent.TimeUnit.SECONDS)
+
+    @Test
+    fun `a call discarded before its upload runs sends nothing`() {
+        app.storeRecording(bytes = payload, state = "queued")
+        runBlocking { com.echoledger.mobile.calls.Decisions.discardLater(app, id) }
+        serveHealthyUpload()
+
+        assertEquals(ListenableWorker.Result.success(), run())
+        assertTrue("nothing reached the server", server.requests.isEmpty())
+        assertEquals(com.echoledger.mobile.calls.Decisions.DISCARDING, recording()?.state)
+        assertTrue(app.graph.recordings.encryptedFile(id).exists())
+    }
+
+    @Test
+    fun `a call discarded while it uploads stays discarded, and the server's copy goes too`() {
+        app.storeRecording(bytes = payload, state = "queued")
+        serveHealthyUpload()
+        // The person discards it while the chunks go up; the upload still finishes on the server.
+        server.on("POST", chunkRoute()) { request ->
+            if (request.headers["Upload-Chunk-Index"] == "1") runBlocking { com.echoledger.mobile.calls.Decisions.discardLater(app, id) }
+            FakeServer.json(200, ServerFixtures.chunkAck(listOf(request.headers["Upload-Chunk-Index"]!!.toInt()), 3))
+        }
+
+        assertEquals(ListenableWorker.Result.success(), run())
+        assertEquals("never put back to queued or uploading", com.echoledger.mobile.calls.Decisions.DISCARDING, recording()?.state)
+        assertTrue("the phone's copy waits for the Discard's own end", app.graph.recordings.encryptedFile(id).exists())
+        // The server's session is deleted (DiscardWorker waits for a connection, so it is still queued here).
+        assertEquals(androidx.work.WorkInfo.State.ENQUEUED, discardWork().single().state)
+
+        // Then the Discard ends: the phone's copy goes, and nothing kept the server's.
+        runBlocking { com.echoledger.mobile.calls.Decisions.finishDiscard(app, id) }
+        assertNull(recording())
+    }
+
+    @Test
+    fun `an upload that fails after a Discard leaves the call discarded`() {
+        app.storeRecording(bytes = payload, state = "queued")
+        server.on("POST", "/api/sessions") {
+            runBlocking { com.echoledger.mobile.calls.Decisions.discardLater(app, id) }
+            FakeServer.json(500, """{"message":"Server Error"}""")
+        }
+
+        assertEquals(ListenableWorker.Result.success(), run())
+        assertEquals(com.echoledger.mobile.calls.Decisions.DISCARDING, recording()?.state)
+    }
+
     // ---- success ----------------------------------------------------------------------------------------------------
 
     @Test
@@ -315,7 +365,8 @@ class UploadWorkerTest : AppTest() {
 
         val kept = recording()!!
         assertEquals("queued", kept.state)
-        assertEquals("Server Error", kept.lastError)
+        // A server's crash is said in plain words (P-024), never its "Server Error".
+        assertEquals(com.echoledger.mobile.core.Problems.SERVER, kept.lastError)
         assertTrue(chunks().isEmpty())
     }
 
@@ -340,7 +391,8 @@ class UploadWorkerTest : AppTest() {
             val kept = recording()
             assertNotNull("status $status must keep the recording", kept)
             assertEquals("status $status", "queued", kept!!.state)
-            assertEquals("try later", kept.lastError)
+            // The server's own words, except for its crashes (5xx: plain words, P-024).
+            assertEquals("status $status", if (status >= 500) com.echoledger.mobile.core.Problems.SERVER else "try later", kept.lastError)
         }
     }
 

@@ -305,19 +305,28 @@ fun SnippetsSection(list: List<Snippet>, onSave: (List<Snippet>) -> Unit) {
     }
 }
 
+/** Asked before Clear history: the dictations are on this phone only. */
+internal const val CLEAR_HISTORY_QUESTION = "Clear your recent dictations? They are kept only on this phone and can't be brought back."
+
 @Composable
 fun HistorySection(history: DictationHistory) {
     val context = LocalContext.current
     var entries by remember { mutableStateOf<List<HistoryEntry>>(history.all()) }
     var copied by remember { mutableStateOf<Int?>(null) }
+    // Since v1.8.1 (bug P-008): the dictations are kept on this phone only, so clearing them asks first.
+    var clearing by remember { mutableStateOf(false) }
+    if (clearing) {
+        ConfirmDialog(CLEAR_HISTORY_QUESTION, "Clear", onConfirm = {
+            clearing = false
+            history.clear()
+            entries = emptyList()
+        }, onDismiss = { clearing = false })
+    }
     SectionCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Recent dictations", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             if (entries.isNotEmpty()) {
-                TextButton(onClick = {
-                    history.clear()
-                    entries = emptyList()
-                }) { Text("Clear history") }
+                TextButton(onClick = { clearing = true }) { Text("Clear history") }
             }
         }
         Text("The last ${DictationHistory.LIMIT}, kept on this phone only.", color = Brand.Muted, fontSize = 12.sp)

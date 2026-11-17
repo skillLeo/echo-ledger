@@ -14,6 +14,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.calls.Decisions
 import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.core.RowProgress
 import com.echoledger.mobile.core.SharedNotes
@@ -44,26 +45,34 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val id = inputData.getString(KEY_ID) ?: return Result.failure()
         val graph = (applicationContext as EchoLedgerApp).graph
         val rec = graph.recordings.get(id) ?: return Result.success()
+        // Discarded after a call (since v1.8.1): nothing of it is sent, and its delete is the Discard's to make.
+        if (rec.state == Decisions.DISCARDING) return Result.success()
         if (!graph.recordings.encryptedFile(id).exists()) {
             // Nothing to send can ever appear again: fail at once instead of retrying for hours (A6.M1).
-            graph.recordings.update(id) { it.copy(state = "failed", lastError = MISSING_FILE) }
+            keep(id) { it.copy(state = "failed", lastError = MISSING_FILE) }
             return Result.failure()
         }
         val api = graph.api() ?: return Result.retry()
         // Since v1.5: a recording made under another account waits for it (core/Owner); it is sent again at its sign-in.
         val current = graph.settings.current().account
         Owner.heldFor(rec.owner, current)?.let { owner ->
-            graph.recordings.update(id) { it.copy(state = "queued", lastError = held(owner)) }
+            keep(id) { it.copy(state = "queued", lastError = held(owner)) }
             return Result.success()
         }
 
         return try {
-            graph.recordings.update(id) { it.copy(state = "uploading", lastError = null) }
+            val started = keep(id) { it.copy(state = "uploading", lastError = null) }
+            if (started?.state == Decisions.DISCARDING) return Result.success()
             when (upload(api, rec)) {
                 Outcome.READY -> {
+                    // The server now holds the (encrypted) copy, so the phone's goes, in one step with the check that
+                    // it was not discarded meanwhile; if it was, the server's copy goes too (the phone's with the Discard).
+                    if (graph.recordings.deleteIf(id) { it.state != Decisions.DISCARDING } == null) {
+                        discardedMeanwhile(id)
+                        return Result.success()
+                    }
                     // The Phone app's copy of an imported call may now be offered for deletion (when the person chose it).
                     com.echoledger.mobile.calls.PhoneAppRecordings.uploaded(applicationContext, id)
-                    graph.recordings.delete(id) // the server now holds the (encrypted) copy
                     runCatching { graph.library.refresh() }
                     WidgetStateStore.refresh(applicationContext)
                     Result.success()
@@ -71,8 +80,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
                 Outcome.STILL_VERIFYING -> {
                     // Re-checked on the next run without sending the chunks again.
-                    graph.recordings.update(id) { it.copy(state = "queued", lastError = null) }
-                    Result.retry()
+                    keep(id) { it.copy(state = "queued", lastError = null) }
+                    if (discardedMeanwhile(id)) Result.success() else Result.retry()
                 }
             }
         } catch (e: Throwable) {
@@ -81,25 +90,28 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             // runs it again (since v1.5; it showed "Upload failed (JobCancellationException)" when the share page was
             // left).
             if (e is kotlinx.coroutines.CancellationException || !currentCoroutineContext().isActive) {
-                graph.recordings.update(id) { it.copy(state = "queued", lastError = null) }
+                keep(id) { it.copy(state = "queued", lastError = null) }
+                // A Discard calls the upload off: a session this run opened on the server goes with the call.
+                discardedMeanwhile(id)
                 throw e as? kotlinx.coroutines.CancellationException ?: kotlinx.coroutines.CancellationException("upload stopped")
             }
+            if (discardedMeanwhile(id)) return Result.success()
             when (e) {
                 is NotPairedException -> {
-                    graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
+                    keep(id) { it.copy(state = "queued", lastError = e.message) }
                     Result.failure()
                 }
 
                 is ApiException -> onApiError(id, e)
 
                 is IOException -> {
-                    graph.recordings.update(id) { it.copy(state = "queued", lastError = friendly(e)) }
+                    keep(id) { it.copy(state = "queued", lastError = friendly(e)) }
                     if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
                 }
 
                 // Anything unexpected (an HTML page instead of JSON, a broken answer): never left "uploading" (A6.M1).
                 else -> {
-                    graph.recordings.update(id) { it.copy(state = "failed", lastError = friendly(e)) }
+                    keep(id) { it.copy(state = "failed", lastError = friendly(e)) }
                     Result.failure()
                 }
             }
@@ -122,9 +134,28 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
     private enum class Outcome { READY, STILL_VERIFYING }
 
+    /** Changes the recording unless it is on its way out ("discarding"): a Discard is never undone by the upload. */
+    private fun keep(id: String, change: (LocalRecording) -> LocalRecording): LocalRecording? =
+        (applicationContext as EchoLedgerApp).graph.recordings.update(id) { if (it.state == Decisions.DISCARDING) it else change(it) }
+
+    /** The server session this run created or finished, once it has one. */
+    private var session: String? = null
+
+    /**
+     * Whether the call was discarded while this run sent it (since v1.8.1). Then the session the run reached on the
+     * server is deleted too ([DiscardWorker]); the phone's copy is the Discard's to delete once its Undo time is over.
+     */
+    private fun discardedMeanwhile(id: String): Boolean {
+        val graph = (applicationContext as EchoLedgerApp).graph
+        if (graph.recordings.get(id)?.state != Decisions.DISCARDING) return false
+        (session ?: graph.recordings.get(id)?.serverSessionId)?.let { DiscardWorker.enqueue(applicationContext, id, it) }
+        return true
+    }
+
     private suspend fun upload(api: ApiClient, rec: LocalRecording): Outcome {
         val graph = (applicationContext as EchoLedgerApp).graph
         val created = createOrFinish(api, rec)
+        session = created.session.id
         // A voice note shared from another app: its page follows the server recording once the local copy is gone.
         SharedNotes.linkSession(applicationContext, rec.id, created.session.id)
         val primary = created.recordings.firstOrNull { it.role == "primary" }
@@ -164,7 +195,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
                 else -> return Outcome.STILL_VERIFYING
             }
-            graph.recordings.update(rec.id) { it.copy(state = "uploading") }
+            keep(rec.id) { it.copy(state = "uploading") }
         }
     }
 
@@ -272,23 +303,24 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val graph = (applicationContext as EchoLedgerApp).graph
         if (e.code == DUPLICATE) {
             // An imported file the Library already has: nothing is sent; the row says so until it is dismissed.
+            if (graph.recordings.get(id)?.state == Decisions.DISCARDING) return Result.success()
             graph.recordings.encryptedFile(id).delete()
-            graph.recordings.update(id) { it.copy(state = "duplicate", lastError = ALREADY_THERE) }
+            keep(id) { it.copy(state = "duplicate", lastError = ALREADY_THERE) }
             return Result.success()
         }
         // Since v1.6 (P2.7): an app below the server's minimum, or the server in maintenance, waits; never a failure.
         if (e.status == 426 || e.code == UPDATE_REQUIRED) {
-            graph.recordings.update(id) { it.copy(state = "queued", lastError = WAITS_FOR_UPDATE) }
+            keep(id) { it.copy(state = "queued", lastError = WAITS_FOR_UPDATE) }
             enqueueAfter(applicationContext, id, UPDATE_RECHECK_SECONDS)
             return Result.success()
         }
         if (e.status == 503 && e.code == MAINTENANCE) {
-            graph.recordings.update(id) { it.copy(state = "queued", lastError = WAITS_FOR_MAINTENANCE) }
+            keep(id) { it.copy(state = "queued", lastError = WAITS_FOR_MAINTENANCE) }
             enqueueAfter(applicationContext, id, (e.retryAfterSeconds ?: MAINTENANCE_RECHECK_SECONDS).coerceIn(60, 6 * 3600))
             return Result.success()
         }
         if (e.status == 429) {
-            graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
+            keep(id) { it.copy(state = "queued", lastError = com.echoledger.mobile.core.Problems.text(e, FAILED)) }
             val wait = e.retryAfterSeconds ?: 0
             if (wait <= SHORT_RETRY_SECONDS) return Result.retry()
             // Honour a long Retry-After: run again only after the server's delay.
@@ -298,10 +330,11 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         if (isPermanent(e.status)) {
             // The server understood and refused this recording (e.g. validation): retrying the same request can
             // never succeed, so show it as failed with the reason instead of "uploading" forever.
-            graph.recordings.update(id) { it.copy(state = "failed", lastError = e.message) }
+            keep(id) { it.copy(state = "failed", lastError = com.echoledger.mobile.core.Problems.text(e, FAILED)) }
             return Result.failure()
         }
-        graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
+        // The server's words when they are for people; a bare status or a 5xx in plain words (since v1.8.1, P-024).
+        keep(id) { it.copy(state = "queued", lastError = com.echoledger.mobile.core.Problems.text(e, FAILED)) }
         return if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
     }
 
@@ -331,7 +364,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
          */
         fun friendly(e: Throwable): String = when (e) {
             is javax.net.ssl.SSLException ->
-                "Your server's certificate could not be checked. Check the server address in You → General → This phone, then tap Retry."
+                "Your server's certificate could not be checked. Check the server address you signed in with, then tap Retry."
 
             is java.net.UnknownHostException, is java.net.ConnectException, is java.net.SocketTimeoutException,
             is java.net.NoRouteToHostException -> NO_CONNECTION

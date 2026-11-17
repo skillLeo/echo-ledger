@@ -4,6 +4,8 @@ import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
@@ -61,8 +63,82 @@ data class ServerConfig(
     /** Since v1.6: the admin's banner for everyone; null when there is none. */
     val announcement: AnnouncementDto? = null,
     /** Since v1.6: the server is in maintenance; null when it is not. */
-    val maintenance: MaintenanceDto? = null
+    val maintenance: MaintenanceDto? = null,
+    /** Since 2.0.0-a: the redesigned screens' flags for this person, read leniently (only an exact `true` is on). */
+    @SerialName("ui_flags") @Serializable(with = LenientFlags::class) val uiFlags: Map<String, Boolean> = emptyMap(),
+    /** Since 2.0.0-a: this person chose "Switch back to classic" (every `ui_v2.*` flag then answers off). */
+    @SerialName("ui_classic") @Serializable(with = LenientTrue::class) val uiClassic: Boolean = false,
+    /** Since 2.0.0-b: how long a deleted recording can be restored; null on an older server (48 hours). */
+    @Serializable(with = LenientTrash::class) val trash: TrashConfig? = null
 )
+
+/** `GET /api/config` `trash` (since 2.0.0-b). */
+@Serializable
+data class TrashConfig(@SerialName("keep_hours") val keepHours: Int = TrashConfig.DEFAULT_HOURS) {
+    companion object {
+        const val DEFAULT_HOURS = 48
+    }
+}
+
+/** `PUT /api/account/ui` (since 2.0.0-a): the person's flags and choice after "Switch back to classic" or its undo. */
+@Serializable
+data class UiChoiceDto(
+    @SerialName("ui_flags") @Serializable(with = LenientFlags::class) val uiFlags: Map<String, Boolean> = emptyMap(),
+    @SerialName("ui_classic") @Serializable(with = LenientTrue::class) val uiClassic: Boolean = false
+)
+
+/**
+ * Interface flags read leniently (2.0.0-a): only an exact JSON `true` is on. A flag the app doesn't know, a string, a
+ * number or null is off, and a malformed `ui_flags` (not an object) is no flags at all: it never breaks the config read.
+ */
+object LenientFlags : kotlinx.serialization.KSerializer<Map<String, Boolean>> {
+    private val map = MapSerializer(String.serializer(), Boolean.serializer())
+    override val descriptor = map.descriptor
+
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Map<String, Boolean> {
+        val element = (decoder as? kotlinx.serialization.json.JsonDecoder)?.decodeJsonElement() ?: return map.deserialize(decoder)
+        return (element as? kotlinx.serialization.json.JsonObject)?.mapValues { (_, value) -> isTrue(value) }.orEmpty()
+    }
+
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: Map<String, Boolean>) = map.serialize(encoder, value)
+
+    /** An exact JSON `true`: never the string "true", 1 or null. */
+    fun isTrue(value: JsonElement): Boolean =
+        value is kotlinx.serialization.json.JsonPrimitive && !value.isString && value.content == "true"
+}
+
+/**
+ * `trash` read leniently (2.0.0-b): `keep_hours` counts only as a positive whole number; anything else (a string, a
+ * fraction, null, a malformed `trash`) is the default 48 hours and never breaks the config read.
+ */
+object LenientTrash : kotlinx.serialization.KSerializer<TrashConfig> {
+    override val descriptor = TrashConfig.serializer().descriptor
+
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): TrashConfig {
+        val element =
+            (decoder as? kotlinx.serialization.json.JsonDecoder)?.decodeJsonElement()
+                ?: return TrashConfig.serializer().deserialize(decoder)
+        val hours = ((element as? kotlinx.serialization.json.JsonObject)?.get("keep_hours") as? kotlinx.serialization.json.JsonPrimitive)
+            ?.takeUnless { it.isString }?.content?.toIntOrNull()?.takeIf { it > 0 }
+        return TrashConfig(hours ?: TrashConfig.DEFAULT_HOURS)
+    }
+
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: TrashConfig) =
+        TrashConfig.serializer().serialize(encoder, value)
+}
+
+/** A boolean read like [LenientFlags]: only an exact `true` is true; anything else is false and never an error. */
+object LenientTrue : kotlinx.serialization.KSerializer<Boolean> {
+    override val descriptor = kotlinx.serialization.descriptors.PrimitiveSerialDescriptor(
+        "LenientTrue",
+        kotlinx.serialization.descriptors.PrimitiveKind.BOOLEAN
+    )
+
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Boolean =
+        (decoder as? kotlinx.serialization.json.JsonDecoder)?.decodeJsonElement()?.let(LenientFlags::isTrue) ?: decoder.decodeBoolean()
+
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: Boolean) = encoder.encodeBoolean(value)
+}
 
 /** `GET /api/config` `app_update` (since v1.6). [refused]: the server no longer takes this version's uploads. */
 @Serializable
