@@ -195,6 +195,9 @@ class HttpLiveClient(
     private suspend fun stream(id: Int, message: ClientMessage, begun: CompletableDeferred<Unit>) {
         val c = call(grant.liveUrl, message.body()) ?: return end(RelayEnd.NotTrusted)
         calls += c
+        // Ended with `end`: whatever it was writing was ended in this stream or by another one, whose end may still be on
+        // its way (a new question's `superseded`), so nothing is let go. Cut without `end`: what it wrote gets no end.
+        var ended = false
         try {
             withContext(Dispatchers.IO) {
                 c.execute().use { response ->
@@ -210,7 +213,10 @@ class HttpLiveClient(
                         val line = source.readUtf8Line() ?: break
                         when {
                             line.isEmpty() -> {
-                                if (event == "end") break
+                                if (event == "end") {
+                                    ended = true
+                                    break
+                                }
                                 if (data.isNotEmpty()) received(id, event, data.toString())
                                 event = null
                                 data.setLength(0)
@@ -237,7 +243,7 @@ class HttpLiveClient(
             if (!begun.isCompleted && !stopped && e is IOException) problem("connection_failed", CONNECTION_FAILED, retry = true)
         } finally {
             calls -= c
-            letGo(id)
+            if (ended) forget(id) else letGo(id)
         }
     }
 
@@ -271,7 +277,12 @@ class HttpLiveClient(
         }
     }
 
-    /** Stream [id] is over (ended, or dropped): a suggestion it was still writing gets no end, so the card clears it. */
+    /** Stream [id] ended with `end`: the suggestions it wrote are no longer its to let go. */
+    private fun forget(id: Int) {
+        synchronized(lock) { writing.entries.removeAll { it.value == id } }
+    }
+
+    /** Stream [id] dropped (no `end`): a suggestion it was still writing gets no end, so the card clears it. */
     private fun letGo(id: Int) {
         synchronized(lock) {
             val orphans = writing.filterValues { it == id }.keys.toSet()

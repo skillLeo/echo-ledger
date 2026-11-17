@@ -180,6 +180,25 @@ class HttpLiveClientTest {
     }
 
     @Test
+    fun `a stream that ends before the other stream's superseded end lets nothing go`() {
+        val live = client()
+        live.start()
+        live.send(ClientMessage.Command(SendKind.HelpNow))
+        val one = sse.next()
+        one.send(start("s-1"))
+        live.send(ClientMessage.Command(SendKind.HelpNow))
+        val two = sse.next()
+        two.send(start("s-2"))
+        waitFor("both starts") { cards().size == 2 }
+        // s-1's stream stops first; the end of s-1 arrives afterwards on s-2's stream.
+        one.end()
+        Thread.sleep(200)
+        two.send(msg("suggestion_end", "suggestion_id" to "s-1", "status" to "superseded"))
+        waitFor("the superseded end") { cards().size == 3 }
+        assertFalse(cards().any { it is AssistMessage.Lost })
+    }
+
+    @Test
     fun `the session is refreshed on time, and the new grant's address is used`() {
         val refreshes = AtomicInteger()
         val live = client(
