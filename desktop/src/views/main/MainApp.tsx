@@ -741,18 +741,20 @@ export default function MainApp() {
           aside={<LibraryColumn places={places} folder={libraryFolder} view={libraryView} onOpen={openPlace} projects={projects} expanded={expanded}
             onToggle={toggleExpanded} onProject={(id) => openProject(id)} />} />
       )}
-      {tab === "projects" && ui.flags["ui_v2.ask"] && projectId && (projects ?? []).some((p) => p.id === projectId) && (
-        <Suspense fallback={null}>
-          <div className="el-root el-embedded">
-            <WorkspaceV2 key={projectId} project={(projects ?? []).find((p) => p.id === projectId)!} onBack={() => openProject(null)}
-              onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
-          </div>
-        </Suspense>
-      )}
-      {tab === "projects" && !(ui.flags["ui_v2.ask"] && projectId && (projects ?? []).some((p) => p.id === projectId)) && (
+      {tab === "projects" && (
         <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
           projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
           requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
+          renderPage={ui.flags["ui_v2.ask"] ? (ctx) => (
+            <Suspense fallback={null}>
+              <div className="el-root el-embedded">
+                <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name }} parent={ctx.parent} folders={ctx.folders}
+                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} rules={ctx.rules}
+                  onBack={() => openProject(ctx.parent?.id ?? null)} onOpenProject={(id) => openProject(id)}
+                  onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
+              </div>
+            </Suspense>
+          ) : null}
           aside={<ProjectsColumn projects={projects} selectedId={projectId} expanded={expanded} onToggle={toggleExpanded} onOpen={openProject} onNew={newProject} />} />
       )}
       {tab === "record" && ui.flags["ui_v2.home"] && (

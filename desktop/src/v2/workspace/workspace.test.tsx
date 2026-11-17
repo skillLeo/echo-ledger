@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ClientWorkspace, MemoryLine } from "../../lib/ipc";
 import MainApp from "../../views/main/MainApp";
-import { callsOf, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { WorkspaceV2, memoryGroups } from "./WorkspaceV2";
 
@@ -170,5 +170,120 @@ describe("the app with ui_v2.ask", () => {
     await act(flushAsync);
     expect(await screen.findByRole("heading", { level: 1, name: "Qureshi Textiles" })).toBeInTheDocument();
     expect(document.querySelector("[data-v2=workspace]")).not.toBeNull();
+  });
+});
+
+describe("everything today's project page offers", () => {
+  const FOLDERS = [{ id: "c1a", name: "March order", count: 3 }];
+
+  it("the project menu, Share, folders and Back to the project it sits in", async () => {
+    const menu = [{ label: "Rename", onPick: vi.fn() }, { label: "Delete project…", danger: true, onPick: vi.fn() }];
+    const onShare = vi.fn();
+    const onOpenProject = vi.fn();
+    const p = props();
+    render(<WorkspaceV2 project={PROJECT} parent={{ id: "c0", name: "Textile clients" }} folders={FOLDERS} menu={menu} onShare={onShare} onOpenProject={onOpenProject} {...p} />);
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    expect(onShare).toHaveBeenCalled();
+    const opener = screen.getByRole("button", { name: "Project menu" });
+    fireEvent.click(opener);
+    const items = within(screen.getByRole("menu", { name: "Project menu" })).getAllByRole("menuitem");
+    expect(items.map((i) => i.textContent)).toEqual(["Rename", "Delete project…"]);
+    expect(items[0]).toHaveFocus();
+    fireEvent.keyDown(items[0], { key: "ArrowDown" });
+    expect(items[1]).toHaveFocus();
+    fireEvent.keyDown(items[1], { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(opener).toHaveFocus();
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete project…" }));
+    expect(menu[1].onPick).toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("list", { name: "Folders" })).getByRole("button", { name: "March order" }));
+    expect(onOpenProject).toHaveBeenCalledWith("c1a");
+    fireEvent.click(screen.getByRole("button", { name: "Textile clients" }));
+    expect(p.onBack).toHaveBeenCalled();
+  });
+
+  it("filing rules: listed, added, and a removed one comes back with Undo", async () => {
+    respond("client_rules", { data: [{ id: 7, kind: "title", value: "Qureshi" }] });
+    respond("client_rule_add", { data: { id: 8, kind: "app", value: "whatsapp" } });
+    respond("client_rule_delete", null);
+    render(<WorkspaceV2 project={PROJECT} rules {...props()} />);
+    await act(flushAsync);
+    const list = screen.getByRole("list", { name: "Qureshi Textiles filing rules" });
+    expect(within(list).getByText("Title contains “Qureshi”")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("combobox", { name: /Kind of rule/ }));
+    fireEvent.click(screen.getByRole("option", { name: "App" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
+    await act(flushAsync);
+    expect(callsOf("client_rule_add")).toEqual([{ id: "c1", kind: "app", value: "whatsapp" }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Rule added: From WhatsApp");
+
+    respond("client_rule_add", { data: { id: 9, kind: "title", value: "Qureshi" } });
+    fireEvent.click(within(list).getByRole("button", { name: "Remove the rule Title contains “Qureshi”" }));
+    await act(flushAsync);
+    expect(callsOf("client_rule_delete")).toEqual([{ id: "c1", rule: "7" }]);
+    const toast = screen.getByRole("status", { name: "Notifications" });
+    expect(toast).toHaveTextContent("Rule removed: Title contains “Qureshi”");
+    fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(callsOf("client_rule_add")[1]).toEqual({ id: "c1", kind: "title", value: "Qureshi" });
+    expect(screen.getByText("Title contains “Qureshi”")).toBeInTheDocument();
+  });
+
+  it("an older server without filing rules shows none", async () => {
+    respond("client_rules", null);
+    render(<WorkspaceV2 project={PROJECT} rules {...props()} />);
+    await act(flushAsync);
+    expect(screen.queryByRole("region", { name: "Filing rules" })).toBeNull();
+  });
+
+  it("two memory changes in flight both stay on screen", async () => {
+    let pin: (v: unknown) => void = () => undefined;
+    let add: (v: unknown) => void = () => undefined;
+    respondWith("client_memory_update", () => new Promise((r) => (pin = r)));
+    respondWith("client_memory_add", () => new Promise((r) => (add = r)));
+    await show();
+    fireEvent.click(screen.getByRole("tab", { name: "Memory & instructions" }));
+    fireEvent.click(within(screen.getByRole("list", { name: "Memory" })).getAllByRole("button", { name: "Pin" })[0]);
+    fireEvent.change(screen.getByRole("textbox", { name: "Add a line" }), { target: { value: "Insurance by the buyer" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add to memory" }));
+    await act(async () => add({ data: line("m8", "decision", "Insurance by the buyer") }));
+    await act(async () => pin({ data: { ...WS.memory[0], pinned: true } }));
+    const memory = screen.getByRole("list", { name: "Memory" });
+    expect(within(memory).getByText("Insurance by the buyer")).toBeInTheDocument();
+    expect(within(memory).getAllByText(/^Pinned/).length).toBe(2);
+  });
+});
+
+describe("the app's project page with ui_v2.ask keeps today's actions", () => {
+  it("the project menu opens today's dialogs (Rename)", async () => {
+    respond("app_status", makeStatus());
+    respond("library_refresh", ITEMS);
+    respond("get_settings", makeSettings());
+    respond("list_clients", { data: [{ id: "c1", name: "Qureshi Textiles" }, { id: "c1a", name: "March order", parent_id: "c1" }] });
+    respond("mic_users", []);
+    respond("session_detail", {});
+    respond("request_links", null);
+    respond("client_rules", { data: [] });
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.ask": true }, ui_classic: false });
+    respond("client_ask", { data: { answer: "x", citations: [{ type: "file", file_id: "f1", title: "Proforma March.pdf", page: 2 }] } });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    fireEvent.click(within(await screen.findByRole("navigation", { name: "Main" })).getByRole("button", { name: "Ask" }));
+    await act(flushAsync);
+    fireEvent.change(await screen.findByRole("textbox", { name: "Your question" }), { target: { value: "Which proforma?" } });
+    fireEvent.click(within(document.querySelector("[data-v2=ask]") as HTMLElement).getByRole("button", { name: "Ask" }));
+    await act(flushAsync);
+    fireEvent.click(within(screen.getByRole("list", { name: "From" })).getByRole("button", { name: "Proforma March.pdf" }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(await screen.findByRole("list", { name: "Folders" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Project menu" }));
+    expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toContain("Delete project…");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    expect(await screen.findByRole("dialog", { name: "Rename Qureshi Textiles" })).toBeInTheDocument();
   });
 });

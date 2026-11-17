@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PageHeader } from "../../components/Page";
 import { api, errorMessage, listenTo, type ClientFolder, type LibraryItem } from "../../lib/ipc";
-import { canAddSubfolder, hasSubfolders, projectLabel } from "../../lib/projects";
+import { canAddSubfolder, hasSubfolders, nestedCount, projectLabel } from "../../lib/projects";
 import { FolderIcon, LinkIcon, PlusIcon, RequestFilesIcon } from "../../components/Icons";
 import { ClientWorkspace } from "./ClientWorkspace";
 import { ProjectTree } from "./ProjectTree";
@@ -13,6 +13,17 @@ import { RulesSection } from "./FilingRules";
 import { ShareDialog } from "./ShareDialog";
 import { RequestLinksSheet } from "./RequestLinks";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+
+/** What a project's page in the new look needs from the Projects page: the project, where it sits, its folders, the
+ * project menu (whose dialogs this page keeps showing) and Share. */
+export interface ProjectPageContext {
+  project: ClientFolder;
+  parent: { id: string; name: string } | null;
+  folders: { id: string; name: string; count: number }[];
+  menu: { label: string; onPick: () => void; danger?: boolean }[];
+  onShare: (() => void) | null;
+  rules: boolean;
+}
 
 type Dialog =
   | { kind: "new"; parentId: string | null }
@@ -32,7 +43,7 @@ export function deletedText(name: string, answer: { moved_sessions?: number; mov
   return parts.join(" · ");
 }
 
-export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled, aiNotesInPlan = true, request = null, aside = null }: {
+export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled, aiNotesInPlan = true, request = null, aside = null, renderPage = null }: {
   notify: Notify;
   /** Every project; null while they load. */
   projects: ClientFolder[] | null;
@@ -58,6 +69,8 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   request?: { kind: "new"; seq: number } | null;
   /** The nested column (v1.6, P4.2): every project and "+ New project". */
   aside?: ReactNode;
+  /** A project's page in the new look (ui_v2.ask) in place of today's; the dialogs stay this page's. */
+  renderPage?: ((ctx: ProjectPageContext) => ReactNode) | null;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -199,6 +212,22 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
         <LinkIcon size={16} />Share
       </button>
     );
+    if (renderPage) {
+      const parent = project.parent_id ? list.find((p) => p.id === project.parent_id) ?? null : null;
+      return (
+        <>
+          {renderPage({
+            project,
+            parent: parent ? { id: parent.id, name: parent.name } : null,
+            folders: list.filter((p) => p.parent_id === project.id).map((p) => ({ id: p.id, name: p.name, count: nestedCount(p, items, list) })),
+            menu: menu.filter((m): m is { label: string; onPick: () => void; danger?: boolean } => !!m),
+            onShare: nested ? () => setDialog({ kind: "share", project, start: "link" }) : null,
+            rules: nested,
+          })}
+          {dialogs}
+        </>
+      );
+    }
     return (
       <div className="page-split">
       {aside}

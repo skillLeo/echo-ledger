@@ -181,6 +181,9 @@
 }
 .el-menu__option[data-active="true"] { background: var(--el-role-bg-subtle); }
 .el-menu__option[aria-selected="true"] { font-weight: var(--el-text-body-strong-weight); }
+.el-menu-anchor { position: relative; }
+.el-menu--end { inset-inline-start: auto; inset-inline-end: 0; min-inline-size: calc(var(--el-space-64) * 3.5); }
+.el-menu__option--danger { color: var(--el-role-danger-default); }
 .el-menu__check { inline-size: var(--el-space-16); color: var(--el-role-accent-text); }
 
 /* ---- ListRow ------------------------------------------------------------------------------------------------ */
@@ -666,6 +669,7 @@ button.el-step__head { cursor: pointer; }
 /* ---- Ask ------------------------------------------------------------------------------------------------- */
 .el-ask__row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--el-space-12); }
 .el-ask--embedded, .el-workspace-memory { display: flex; flex-direction: column; gap: var(--el-space-16); }
+.el-workspace-folders { margin-block-end: var(--el-space-16); }
 .el-workspace-add { border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-ask__answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 

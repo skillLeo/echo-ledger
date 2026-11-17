@@ -1,6 +1,8 @@
 // A project's page in the new look (Workspaces, IA 2.2; behind ui_v2.ask): Recordings · Ask · Memory & instructions,
 // on the project APIs today's page uses (library_list for its recordings, client_workspace for the brief, memory and
-// files, client_ask, client_memory_*, client_instructions_add, client_file_delete, client_brief_refresh).
+// files, client_ask, client_memory_*, client_instructions_add, client_file_delete, client_brief_refresh, client_rules).
+// Everything today's page offers is here too: its folders, filing rules, Share and the project menu (new folder,
+// rename, move, share, request files, delete), whose dialogs and their confirmations stay those of the Projects page.
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { api, errorMessage, type ClientFile, type ClientWorkspace, type LibraryItem, type MemoryKind, type MemoryLine } from "../../lib/ipc";
 import { projectRecordings } from "../../lib/projects";
@@ -8,6 +10,8 @@ import { rowDate, timestamp } from "../../lib/format";
 import {
   Badge, Banner, Button, Card, Dialog, EmptyState, Icons, List, ListRow, ListSection, Loading, Select, SkeletonRow, Tabs, TextArea, Toast, ToastRegion,
 } from "../components";
+import { Menu, type MenuItem } from "../components/Menu";
+import { RulesV2 } from "./Rules";
 import { dayGroups, rowModel } from "../library/model";
 import { AskV2 } from "../ask/AskV2";
 
@@ -34,22 +38,37 @@ export function memoryGroups(lines: readonly MemoryLine[]): { kind: MemoryKind; 
   })).filter((g) => g.lines.length > 0);
 }
 
+/** A change to the loaded workspace, made on the latest one, so two changes in flight never undo each other. */
+export type WorkspaceUpdate = (update: (current: ClientWorkspace) => ClientWorkspace) => void;
+
 export type WorkspaceV2Props = {
   project: { id: string; name: string };
+  /** The project it sits in; Back goes there (null: the Projects page). */
+  parent?: { id: string; name: string } | null;
+  /** Its folders, with how many recordings each holds. */
+  folders?: { id: string; name: string; count: number }[];
+  /** The project menu (Projects page's actions and dialogs). */
+  menu?: MenuItem[];
+  /** Share: a link to the project's recordings, or send it to a teammate. */
+  onShare?: () => void;
+  /** Filing rules are shown (a server with projects in folders). */
+  rules?: boolean;
   onBack: () => void;
+  onOpenProject?: (id: string) => void;
   onOpenRecording: (id: string, ms?: number) => void;
   onLibrary: () => void;
 };
 
-export function WorkspaceV2({ project, onBack, onOpenRecording, onLibrary }: WorkspaceV2Props) {
+export function WorkspaceV2({ project, parent = null, folders = [], menu = [], onShare, rules = false, onBack, onOpenProject, onOpenRecording, onLibrary }: WorkspaceV2Props) {
   const [tab, setTab] = useState<Tab>("recordings");
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [itemsFailed, setItemsFailed] = useState(false);
   const [ws, setWs] = useState<ClientWorkspace | null>(null);
   const [wsFailed, setWsFailed] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [message, setMessage] = useState<{ id: number; text: string } | null>(null);
-  const say = (text: string) => setMessage({ id: Date.now(), text });
+  const [message, setMessage] = useState<{ id: number; text: string; action?: { label: string; run: () => void } } | null>(null);
+  const say = (text: string, action?: { label: string; run: () => void }) => setMessage({ id: Date.now(), text, action });
+  const update: WorkspaceUpdate = useCallback((change) => setWs((cur) => (cur ? change(cur) : cur)), []);
 
   useEffect(() => {
     setItemsFailed(false);
@@ -65,15 +84,30 @@ export function WorkspaceV2({ project, onBack, onOpenRecording, onLibrary }: Wor
 
   return (
     <div className="el-page el-page--narrow" data-v2="workspace">
-      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>Projects</Button>
-      <header className="el-page__head">
+      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{parent ? parent.name : "Projects"}</Button>
+      <header className="el-page__head el-page__head--top">
         <div className="el-page__titles">
           <h1 className="el-title-l" dir="auto">{project.name}</h1>
           {own && <p className="el-secondary">{own.length === 1 ? "1 recording" : `${own.length} recordings`}</p>}
         </div>
+        <div className="el-page__actions">
+          {onShare && <Button icon={Icons.ShareIcon} onClick={onShare}>Share</Button>}
+          {menu.length > 0 && <Menu label="Project menu" items={menu} button={{ variant: "quiet", icon: Icons.MoreIcon }} />}
+        </div>
       </header>
       <Tabs label="Project" value={tab} onChange={setTab}
         tabs={[{ value: "recordings", label: "Recordings" }, { value: "ask", label: "Ask" }, { value: "memory", label: "Memory & instructions" }]}>
+        {tab === "recordings" && folders.length > 0 && (
+          <Card className="el-workspace-folders">
+            <List label="Folders" className="el-group__rows">
+              <ListSection title="Folders" />
+              {folders.map((f) => (
+                <ListRow key={f.id} compact iconStyle="plain" icon={Icons.FolderIcon} title={f.name} value={f.count ? String(f.count) : undefined} chevron
+                  onClick={onOpenProject ? () => onOpenProject(f.id) : undefined} />
+              ))}
+            </List>
+          </Card>
+        )}
         {tab === "recordings" && (
           itemsFailed && !items ? (
             <EmptyState tone="error" icon={Icons.ErrorIcon} title="The recordings didn't load" body="EchoLedger couldn't read the library. Recordings on this computer are safe."
@@ -99,6 +133,7 @@ export function WorkspaceV2({ project, onBack, onOpenRecording, onLibrary }: Wor
             </List>
           )
         )}
+        {tab === "recordings" && rules && <RulesV2 projectId={project.id} projectName={project.name} say={say} />}
         {tab === "ask" && (
           <AskV2 embedded projects={[project]} initialProjectId={project.id} onOpenAt={(id, ms) => onOpenRecording(id, ms)}
             onOpenProject={() => setTab("memory")} onLibrary={onLibrary} />
@@ -110,12 +145,12 @@ export function WorkspaceV2({ project, onBack, onOpenRecording, onLibrary }: Wor
           ) : !ws ? (
             <Loading label="Loading the project's memory"><Card><div className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /></div></Card></Loading>
           ) : (
-            <Memory projectId={project.id} ws={ws} onChanged={setWs} onOpenRecording={onOpenRecording} say={say} />
+            <Memory projectId={project.id} ws={ws} onChanged={update} onOpenRecording={onOpenRecording} say={say} />
           )
         )}
       </Tabs>
       <ToastRegion>
-        {message && <Toast key={message.id} message={message.text} onClose={() => setMessage(null)} />}
+        {message && <Toast key={message.id} message={message.text} actionLabel={message.action?.label} onAction={message.action?.run} onClose={() => setMessage(null)} />}
       </ToastRegion>
     </div>
   );
@@ -124,25 +159,31 @@ export function WorkspaceV2({ project, onBack, onOpenRecording, onLibrary }: Wor
 function Memory({ projectId, ws, onChanged, onOpenRecording, say }: {
   projectId: string;
   ws: ClientWorkspace;
-  onChanged: (ws: ClientWorkspace) => void;
+  onChanged: WorkspaceUpdate;
   onOpenRecording: (id: string, ms?: number) => void;
   say: (text: string) => void;
 }) {
   const [kind, setKind] = useState<MemoryKind>("decision");
   const [text, setText] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
+  // What is under way, by key: several changes can be in flight at once.
+  const [busySet, setBusySet] = useState<ReadonlySet<string>>(new Set());
+  const busy = (key: string) => busySet.has(key);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<{ kind: "memory"; line: MemoryLine } | { kind: "file"; file: ClientFile } | null>(null);
   const run = async (key: string, fn: () => Promise<void>) => {
-    setBusy(key);
+    setBusySet((cur) => new Set(cur).add(key));
     setError(null);
     try {
       await fn();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
-      setBusy(null);
+      setBusySet((cur) => {
+        const next = new Set(cur);
+        next.delete(key);
+        return next;
+      });
     }
   };
   const brief = ws.brief?.sections ?? null;
@@ -157,8 +198,11 @@ function Memory({ projectId, ws, onChanged, onOpenRecording, say }: {
         <div className="el-group__head">
           <h2 className="el-caption el-body-strong el-group__title">Brief</h2>
           {ws.ai.configured && !ws.brief?.edited && (
-            <Button size="sm" variant="quiet" loading={busy === "brief" || ws.brief?.status === "working"} loadingLabel="Writing…"
-              onClick={() => void run("brief", async () => onChanged({ ...ws, brief: (await api.refreshClientBrief(projectId)).data }))}>Write again</Button>
+            <Button size="sm" variant="quiet" loading={busy("brief") || ws.brief?.status === "working"} loadingLabel="Writing…"
+              onClick={() => void run("brief", async () => {
+                const brief = (await api.refreshClientBrief(projectId)).data;
+                onChanged((cur) => ({ ...cur, brief }));
+              })}>Write again</Button>
           )}
         </div>
         <Card className="el-form">
@@ -193,10 +237,10 @@ function Memory({ projectId, ws, onChanged, onOpenRecording, say }: {
                         {line.source?.type === "call" && line.source.id && (
                           <Button size="sm" variant="quiet" onClick={() => onOpenRecording(line.source!.id!, line.source!.at_ms ?? 0)}>Open</Button>
                         )}
-                        <Button size="sm" variant="quiet" aria-pressed={line.pinned} disabled={busy === line.id}
+                        <Button size="sm" variant="quiet" aria-pressed={line.pinned} disabled={busy(line.id)}
                           onClick={() => void run(line.id, async () => {
                             const next = (await api.updateClientMemory(projectId, line.id, { pinned: !line.pinned })).data;
-                            onChanged({ ...ws, memory: ws.memory.map((l) => (l.id === line.id ? next : l)) });
+                            onChanged((cur) => ({ ...cur, memory: cur.memory.map((l) => (l.id === line.id ? next : l)) }));
                           })}>{line.pinned ? "Unpin" : "Pin"}</Button>
                         <Button size="sm" variant="quiet" icon={Icons.TrashIcon} aria-label={`Delete "${line.text}"`} onClick={() => setRemoving({ kind: "memory", line })} />
                       </span>
@@ -210,7 +254,7 @@ function Memory({ projectId, ws, onChanged, onOpenRecording, say }: {
             if (!text.trim()) return;
             void run("add", async () => {
               const line = (await api.addClientMemory(projectId, kind, text.trim())).data;
-              onChanged({ ...ws, memory: [...ws.memory, line] });
+              onChanged((cur) => ({ ...cur, memory: [...cur.memory, line] }));
               setText("");
             });
           }}>
@@ -218,7 +262,7 @@ function Memory({ projectId, ws, onChanged, onOpenRecording, say }: {
               <Select label="Kind" value={kind} onChange={(v) => setKind(v as MemoryKind)} options={MEMORY_KINDS.map((k) => ({ value: k.value, label: k.label }))} />
               <TextArea label="Add a line" value={text} rows={2} placeholder="Payment: 40% in advance, the rest against the bill of lading." onChange={(e) => setText(e.target.value)} />
             </div>
-            <span><Button type="submit" disabled={!text.trim()} loading={busy === "add"} loadingLabel="Adding…">Add to memory</Button></span>
+            <span><Button type="submit" disabled={!text.trim()} loading={busy("add")} loadingLabel="Adding…">Add to memory</Button></span>
           </form>
         </Card>
       </section>
@@ -240,7 +284,7 @@ function Memory({ projectId, ws, onChanged, onOpenRecording, say }: {
             if (!instructions.trim()) return;
             void run("instructions", async () => {
               const file = (await api.addClientInstructions(projectId, instructions.trim())).data;
-              onChanged({ ...ws, files: [...ws.files, file] });
+              onChanged((cur) => ({ ...cur, files: [...cur.files, file] }));
               setInstructions("");
               say("Instructions saved");
             });
@@ -248,7 +292,7 @@ function Memory({ projectId, ws, onChanged, onOpenRecording, say }: {
             <TextArea label="Instructions for answers and notes" value={instructions} rows={3}
               hint="How this project's answers and call notes should be written: names to use, what to leave out."
               placeholder="Call the client Qureshi Sahib. Amounts in rupees." onChange={(e) => setInstructions(e.target.value)} />
-            <span><Button type="submit" disabled={!instructions.trim()} loading={busy === "instructions"} loadingLabel="Saving…">Save instructions</Button></span>
+            <span><Button type="submit" disabled={!instructions.trim()} loading={busy("instructions")} loadingLabel="Saving…">Save instructions</Button></span>
           </form>
         </Card>
       </section>
@@ -262,13 +306,13 @@ function Memory({ projectId, ws, onChanged, onOpenRecording, say }: {
             const r = removing;
             setRemoving(null);
             if (!r) return;
-            void run("remove", async () => {
+            void run(`remove-${r.kind === "memory" ? r.line.id : r.file.id}`, async () => {
               if (r.kind === "memory") {
                 await api.deleteClientMemory(projectId, r.line.id);
-                onChanged({ ...ws, memory: ws.memory.filter((l) => l.id !== r.line.id) });
+                onChanged((cur) => ({ ...cur, memory: cur.memory.filter((l) => l.id !== r.line.id) }));
               } else {
                 await api.deleteClientFile(projectId, r.file.id);
-                onChanged({ ...ws, files: ws.files.filter((f) => f.id !== r.file.id) });
+                onChanged((cur) => ({ ...cur, files: cur.files.filter((f) => f.id !== r.file.id) }));
               }
             });
           }}>Delete</Button>
