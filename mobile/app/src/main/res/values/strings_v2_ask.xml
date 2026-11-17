@@ -3,8 +3,6 @@
 <resources>
     <string name="v2_ask_title">Ask</string>
     <string name="v2_ask_scope">Ask about</string>
-    <string name="v2_ask_scope_all">All recordings</string>
-    <string name="v2_ask_scope_all_soon">All recordings (not available yet)</string>
     <string name="v2_ask_question">Your question</string>
     <string name="v2_ask_question_hint">What did Bilal Traders agree on payment?</string>
     <string name="v2_ask_ask_button">Ask</string>
