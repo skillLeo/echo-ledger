@@ -13,6 +13,7 @@ use App\Services\AuditLog;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
 /**
@@ -30,6 +31,20 @@ final class InviteLinks
     public const DAYS = [1, 7, 30];
 
     public const MAX_USES = 500;
+
+    /** What a link that is not open any more says (the /join page's plain sentence). */
+    public const CLOSED = 'This invite link is no longer open: it ended, it was revoked, or as many people as it allowed have joined. Ask for a new one.';
+
+    /**
+     * Whether the person who made [$link] may still invite to [$workspace] and give its role: someone removed,
+     * demoted or deleted since lets nobody in with it.
+     */
+    public static function creatorMayInvite(WorkspaceInviteLink $link, Workspace $workspace): bool
+    {
+        $creator = $link->created_by !== null ? User::query()->find($link->created_by) : null;
+
+        return $creator instanceof User && Gate::forUser($creator)->allows('invite', [$workspace]) && Gate::forUser($creator)->allows('assignRole', [$workspace, $link->role]);
+    }
 
     public function __construct(private readonly Workspaces $workspaces, private readonly PlanLimits $limits, private readonly AuditLog $audit) {}
 
@@ -69,7 +84,7 @@ final class InviteLinks
         }
         $link = WorkspaceInviteLink::query()->where('token_hash', hash('sha256', $token))->first();
 
-        return $link instanceof WorkspaceInviteLink && $link->usable() ? $link : null;
+        return $link instanceof WorkspaceInviteLink && $link->usable() && self::creatorMayInvite($link, $link->workspace) ? $link : null;
     }
 
     public function revoke(WorkspaceInviteLink $link, User $by): void
@@ -92,8 +107,8 @@ final class InviteLinks
             $workspace = Workspace::query()->whereKey($link->workspace_id)->lockForUpdate()->firstOrFail();
             $locked = WorkspaceInviteLink::query()->whereKey($link->id)->lockForUpdate()->firstOrFail();
             if ($workspace->roleOf($user) === null) {
-                if (! $locked->usable()) {
-                    throw new ApiError(410, 'link_closed', 'This invite link is no longer open. Ask for a new one.');
+                if (! $locked->usable() || ! self::creatorMayInvite($locked, $workspace)) {
+                    throw new ApiError(410, 'link_closed', self::CLOSED);
                 }
                 $this->limits->assertSeat($workspace->id);
                 $this->workspaces->addMember($workspace, $user, $locked->role);

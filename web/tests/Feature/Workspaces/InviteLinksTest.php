@@ -3,17 +3,20 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
+use App\Exceptions\ApiError;
 use App\Filament\Auth\Login;
 use App\Filament\Auth\Register;
 use App\Filament\Pages\GetTheApps;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Mail\EmailCodeMail;
 use App\Mail\InvitationMail;
+use App\Models\AuditEvent;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
+use App\Services\Accounts\Invitations;
 use App\Services\Accounts\InviteLinks;
 use App\Services\Accounts\SignUp;
 use App\Services\SettingsRepository;
@@ -182,5 +185,78 @@ describe('the console', function () {
         $link = WorkspaceInviteLink::query()->sole();
         Livewire::test(WorkspaceSettings::class)->assertSee('0 of 5 joined')->call('revokeLink', $link->id)->assertNotified('Invite link revoked');
         expect($link->fresh()->revoked_at)->not->toBeNull();
+    });
+});
+
+describe('when whoever invited may no longer invite', function () {
+    /** An admin of the team with an invite link and an email invitation of theirs. */
+    function adminInvites(Workspace $team): array
+    {
+        $admin = Fx::user(['name' => 'Ada Admin']);
+        app(Workspaces::class)->addMember($team, $admin, WorkspaceRole::Admin);
+        ['url' => $url, 'link' => $link] = app(InviteLinks::class)->create($team, $admin, WorkspaceRole::Member, 7, null);
+        $emailUrl = app(Invitations::class)->invite($team, $admin, 'invitee@example.test', WorkspaceRole::Member);
+
+        return [$admin, $url, $link, $emailUrl];
+    }
+
+    it('revokes the links and takes back the invitations of an admin who is removed, and says so in the audit log', function () {
+        [$owner, $team] = inviteTeam();
+        [$admin, $url, $link] = adminInvites($team);
+
+        app(Workspaces::class)->removeMember($team, $admin);
+
+        expect($link->fresh()->revoked_at)->not->toBeNull()->and(WorkspaceInvitation::query()->where('invited_by', $admin->id)->count())->toBe(0)
+            ->and(AuditEvent::query()->where('event', 'invitation_revoked')->latest('id')->value('summary'))->toContain('1 pending invitations taken back, 1 invite links revoked');
+        $this->get($url)->assertStatus(410)->assertSee('This invite link is no longer open');
+    });
+
+    it('does the same for an admin made a member, and keeps them for one who still invites', function () {
+        [$owner, $team] = inviteTeam();
+        [$admin, , $link] = adminInvites($team);
+        app(Workspaces::class)->setRole($team, $admin, WorkspaceRole::Admin);
+        expect($link->fresh()->revoked_at)->toBeNull()->and(WorkspaceInvitation::query()->count())->toBe(1);
+
+        app(Workspaces::class)->setRole($team, $admin, WorkspaceRole::Member);
+        expect($link->fresh()->revoked_at)->not->toBeNull()->and(WorkspaceInvitation::query()->count())->toBe(0);
+    });
+
+    it('lets nobody in on the word of someone who can no longer invite, even where nothing was revoked', function () {
+        [$owner, $team] = inviteTeam();
+        [$admin, $url, $link, $emailUrl] = adminInvites($team);
+        // Demoted behind the service's back (an old row, a direct change): the join and the acceptance check it again.
+        $team->members()->updateExistingPivot($admin->id, ['role' => WorkspaceRole::Member->value]);
+        app()->forgetInstance(Workspaces::class);
+
+        $this->actingAs($joiner = Fx::user(), 'web');
+        expect(fn () => app(InviteLinks::class)->join($link, $joiner))->toThrow(ApiError::class, 'no longer open');
+        $this->get($url)->assertStatus(410);
+        $invitation = WorkspaceInvitation::query()->sole();
+        expect(fn () => app(Invitations::class)->accept($invitation, Fx::user(['email' => 'invitee@example.test'])))
+            ->toThrow(ApiError::class, 'can no longer invite');
+        expect($team->roleOf($joiner))->toBeNull();
+
+        // A creator who is gone altogether.
+        ['link' => $orphan] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Viewer, 7, null);
+        $orphan->forceFill(['created_by' => null])->save();
+        expect(fn () => app(InviteLinks::class)->join($orphan, Fx::user()))->toThrow(ApiError::class);
+    });
+
+    it('refuses an email invitation carrying the admin role from someone who can no longer give it', function () {
+        [$owner, $team] = inviteTeam();
+        $coOwner = Fx::user();
+        app(Workspaces::class)->addMember($team, $coOwner, WorkspaceRole::Admin);
+        $team->members()->updateExistingPivot($coOwner->id, ['role' => WorkspaceRole::Owner->value]);
+        app()->forgetInstance(Workspaces::class);
+        $boss = Fx::user(['email' => 'boss@example.test']);
+        $emailUrl = app(Invitations::class)->invite($team, $coOwner, 'boss@example.test', WorkspaceRole::Admin);
+        // Now an admin: still invites, but may no longer make admins; the invitation stays and cannot be used.
+        app(Workspaces::class)->setRole($team, $coOwner, WorkspaceRole::Admin);
+        $invitation = WorkspaceInvitation::query()->sole();
+
+        $this->actingAs($boss, 'web');
+        $this->get($emailUrl)->assertStatus(410)->assertSee('This invitation is no longer valid');
+        expect(fn () => app(Invitations::class)->accept($invitation, $boss))->toThrow(ApiError::class);
+        expect($team->roleOf($boss))->toBeNull();
     });
 });

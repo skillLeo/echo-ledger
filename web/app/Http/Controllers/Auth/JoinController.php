@@ -73,7 +73,7 @@ final class JoinController extends Controller
 
     private function closed(): Response
     {
-        return response()->view('auth.message', ['title' => 'This invite link is no longer open', 'message' => 'It ended, it was revoked, or as many people as it allowed have joined. Ask for a new one.',
+        return response()->view('auth.message', ['title' => 'This invite link is no longer open', 'message' => InviteLinks::CLOSED,
             'back' => null, 'backLabel' => null], 410);
     }
 }

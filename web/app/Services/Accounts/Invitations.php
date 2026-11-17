@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Accounts;
 
 use App\Enums\WorkspaceRole;
+use App\Exceptions\ApiError;
 use App\Mail\InvitationMail;
 use App\Models\User;
 use App\Models\Workspace;
@@ -15,6 +16,7 @@ use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
@@ -96,7 +98,7 @@ final class Invitations
         }
         $invitation = WorkspaceInvitation::query()->where('token_hash', hash('sha256', $token))->first();
 
-        return $invitation instanceof WorkspaceInvitation && $invitation->usable() ? $invitation : null;
+        return $invitation instanceof WorkspaceInvitation && $invitation->usable() && self::inviterMay($invitation, $invitation->workspace) ? $invitation : null;
     }
 
     /** The newest usable invitation for an address (a Google sign-up while only invited people may sign up). */
@@ -111,17 +113,37 @@ final class Invitations
         return $invitation->usable() && hash_equals($invitation->email, Str::lower(trim($email)));
     }
 
-    /** Joins the workspace with the invited role, once; `403 seat_limit_reached` when its plan has no seat left. */
+    /**
+     * Joins the workspace with the invited role, once; `403 seat_limit_reached` when its plan has no seat left, and
+     * since v1.8 P6.3 `410 invitation_closed` when whoever invited may no longer invite there or give that role
+     * (removed, demoted or deleted since). The workspace's row is locked, so two cannot take its last seat.
+     */
     public function accept(WorkspaceInvitation $invitation, User $user): void
     {
-        $workspace = $invitation->workspace;
-        if ($workspace->roleOf($user) === null) {
-            $this->limits->assertSeat($workspace->id, $invitation->id);
-            $this->workspaces->addMember($workspace, $user, $invitation->role);
-        }
-        // The team they were invited to is what they came for.
-        $user->forceFill(['current_workspace_id' => $workspace->id])->save();
-        $invitation->forceFill(['accepted_at' => now()])->save();
-        $this->audit->record('member_added', $user->id, $workspace, "Joined {$workspace->name}");
+        DB::transaction(function () use ($invitation, $user): void {
+            $workspace = Workspace::query()->whereKey($invitation->workspace_id)->lockForUpdate()->firstOrFail();
+            if ($workspace->roleOf($user) === null) {
+                if (! self::inviterMay($invitation, $workspace)) {
+                    throw new ApiError(410, 'invitation_closed', self::CLOSED);
+                }
+                $this->limits->assertSeat($workspace->id, $invitation->id);
+                $this->workspaces->addMember($workspace, $user, $invitation->role);
+            }
+            // The team they were invited to is what they came for.
+            $user->forceFill(['current_workspace_id' => $workspace->id])->save();
+            $invitation->forceFill(['accepted_at' => now()])->save();
+            $this->audit->record('member_added', $user->id, $workspace, "Joined {$workspace->name}");
+        });
+    }
+
+    /** What an invitation that is no longer valid says (InvitationController's plain words). */
+    public const CLOSED = 'It was used already, it ended, it was taken back, or the person who sent it can no longer invite. Ask for a new one.';
+
+    /** Whether whoever sent [$invitation] may still invite to [$workspace] and give its role. */
+    public static function inviterMay(WorkspaceInvitation $invitation, Workspace $workspace): bool
+    {
+        $inviter = $invitation->invited_by !== null ? User::query()->find($invitation->invited_by) : null;
+
+        return $inviter instanceof User && Gate::forUser($inviter)->allows('invite', [$workspace]) && Gate::forUser($inviter)->allows('assignRole', [$workspace, $invitation->role]);
     }
 }

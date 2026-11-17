@@ -60,7 +60,9 @@ final class InvitationController extends Controller
         try {
             $this->invitations->accept($invitation, $user);
         } catch (ApiError $e) {
-            return $this->message(403, 'This workspace is full', $e->getMessage(), url('/app'), 'Open the console');
+            return $e->apiCode() === 'invitation_closed'
+                ? $this->message(410, 'This invitation is no longer valid', $e->getMessage())
+                : $this->message(403, 'This workspace is full', $e->getMessage(), url('/app'), 'Open the console');
         }
 
         // Since v1.8 P6.3: then the apps, as after a sign-up.
