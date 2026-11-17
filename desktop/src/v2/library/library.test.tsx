@@ -180,14 +180,60 @@ describe("LibraryV2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await act(flushAsync);
     expect(callsOf("delete_session")).toEqual([{ id: "bilal" }]);
+    // The deleted recording's place goes to the next one in the list.
+    expect(screen.getByRole("button", { name: "Voice note" })).toHaveFocus();
     const toast = screen.getByRole("status", { name: "Notifications" });
     expect(toast).toHaveTextContent('"Bilal Qureshi · Qureshi Textiles" moved to Trash');
     expect(screen.queryByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" })).toBeNull();
     respond("library_list", ITEMS);
+    // From the keyboard: focus on Undo, which leaves with the toast.
+    act(() => within(toast).getByRole("button", { name: "Undo" }).focus());
     fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
     await act(flushAsync);
     expect(callsOf("session_restore")).toEqual([{ id: "bilal" }]);
     expect(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" })).toBeInTheDocument();
+    // Keyboard focus comes back to the recording, never lost on the page.
+    expect(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" })).toHaveFocus();
+  });
+
+  it("moves focus once after Delete: a later reload never takes it from where it was put", async () => {
+    respond("session_detail", { playback_url: null });
+    respond("transcript_detail", makeTranscript({ id: "tr-bilal" }));
+    respond("delete_session", null);
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
+    await act(flushAsync);
+    respond("library_list", ITEMS.slice(1));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Voice note" })).toHaveFocus();
+    const search = screen.getByRole("searchbox");
+    act(() => search.focus());
+    await act(() => emitEvent("library:updated"));
+    await act(flushAsync);
+    expect(search).toHaveFocus();
+    // Even with focus lost to the page, a reload later doesn't move it.
+    act(() => search.blur());
+    await act(() => emitEvent("library:updated"));
+    await act(flushAsync);
+    expect(document.body).toHaveFocus();
+  });
+
+  it("after a mouse Undo (focus still on a row), focus stays where it is", async () => {
+    respond("session_detail", { playback_url: null });
+    respond("transcript_detail", makeTranscript({ id: "tr-bilal" }));
+    respond("delete_session", null);
+    respondWith("session_restore", () => ({ data: ITEMS[0] }));
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
+    await act(flushAsync);
+    respond("library_list", ITEMS.slice(1));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    respond("library_list", ITEMS);
+    fireEvent.click(within(screen.getByRole("status", { name: "Notifications" })).getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Voice note" })).toHaveFocus();
   });
 
   it("Trash lists deleted recordings to restore or delete forever after a confirmation", async () => {

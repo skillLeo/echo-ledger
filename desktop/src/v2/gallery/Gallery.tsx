@@ -31,6 +31,7 @@ export function Gallery({ screen, lang, state = "ready" }: Pick<GalleryParams, "
         {screen === "settings" && <SettingsScreen lang={lang} state={state} />}
         {screen === "assist" && (
           <div className="g-assist">
+            <h1 className="el-visually-hidden">Live Assist</h1>
             <AssistCard state={FIXTURE_SESSION.reduce(cardReducer, EMPTY_CARD)} hint="outline" muted={false}
               actions={{ onSend: noop, onMode: noop, onHint: noop, onMute: noop, onHide: noop, onCopyConsent: noop, onStartOffer: noop, onDismissOffer: noop, onEndAndStart: noop, onKeepRunning: noop }} />
           </div>
