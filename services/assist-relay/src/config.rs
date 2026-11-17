@@ -108,6 +108,19 @@ pub struct BudgetConfig {
     pub reserve_suggestions: u32,
     pub expected_output_tokens: u32,
     pub upgrade_share: f64,
+    /// How long a question the budget gate held may still start once budget frees up (milliseconds).
+    #[serde(default = "default_hold_max_ms")]
+    pub hold_max_ms: u64,
+}
+
+impl BudgetConfig {
+    pub fn hold_max(&self) -> Duration {
+        Duration::from_millis(self.hold_max_ms)
+    }
+}
+
+fn default_hold_max_ms() -> u64 {
+    5_000
 }
 
 #[derive(Debug, Clone, Deserialize)]

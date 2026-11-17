@@ -352,6 +352,8 @@ async fn a_question_turned_away_beside_a_facts_call_is_answered_once_the_call_fi
     config.models.get_mut("claude-haiku-5-5").unwrap().first_token_timeout_ms = 30_000;
     // Background calls keep room for one suggestion at the mode's worst case.
     config.budget.reserve_suggestions = 1;
+    // The facts call takes 20 s: a held question may wait that long here.
+    config.budget.hold_max_ms = 60_000;
     let h = harness(config);
     let mut token = claims("s-gate");
     // 16 cents. A slow facts call holds 8 cents (its worst case) beside one Balanced suggestion's worst (8 cents);
@@ -413,13 +415,15 @@ async fn a_question_turned_away_beside_a_facts_call_is_answered_once_the_call_fi
     assert_eq!(s.next().await["mode"], "balanced");
 }
 
-#[tokio::test(start_paused = true)]
-async fn a_held_question_is_dropped_once_me_starts_speaking() {
+/// A session in Balanced at 16 cents with a slow facts call (20 s) holding 8 cents, after Fast answers have spent the
+/// rest down until a question at the end of a turn (`o-<n>`) is held. Returns the held turn's id.
+async fn held_question(session: &str, hold_max_ms: u64) -> (Harness, Driver, String) {
     let mut config = pricey_output();
     config.models.get_mut("claude-haiku-5-5").unwrap().first_token_timeout_ms = 30_000;
     config.budget.reserve_suggestions = 1;
+    config.budget.hold_max_ms = hold_max_ms;
     let h = harness(config);
-    let mut token = claims("s-held-me");
+    let mut token = claims(session);
     token.budget.cents_left = 16;
     let mut s = h.connect(token);
     assert_eq!(s.next().await["mode"], "balanced");
@@ -428,56 +432,81 @@ async fn a_held_question_is_dropped_once_me_starts_speaking() {
     for (i, line) in ["I can start on the 3rd.", "My rate is 35 dollars an hour.", "The first build takes 2 weeks."].iter().enumerate() {
         s.send(final_turn(&format!("m-{i}"), "me", line)).await;
     }
-    // Spend Fast answers until a question is held.
-    let mut held = None;
     for turn in 0..30 {
         let turn_id = format!("o-{turn}");
         s.send(final_turn(&turn_id, "other", "What is your notice period?")).await;
         match s.next_within(Duration::from_secs(1)).await {
             Some(reply) if reply["type"] == "suggestion_start" => drop(s.until("suggestion_end").await),
             Some(reply) => panic!("unexpected {reply}"),
-            None => {
-                held = Some(turn_id);
-                break;
-            }
+            None => return (h, s, turn_id),
         }
     }
-    assert!(held.is_some(), "a question was held");
-    // Me answers it themselves before the facts call is done: the moment has passed.
-    s.send(json!({"type": "turn_partial", "turn_id": "m-9", "channel": "me", "text": "Two weeks, I", "silence_ms": 0})).await;
+    panic!("no question was held");
+}
+
+/// Waits past the facts call's end and returns what arrived meanwhile.
+async fn after_the_facts_call(h: &Harness, s: &mut Driver) -> Vec<serde_json::Value> {
     let after = s.drain(Duration::from_secs(25)).await;
     assert!(h.reports.reports().iter().any(|r| matches!(r, Report::Facts(_))), "the facts call finished");
+    after
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_held_question_starts_once_the_hold_is_released_within_hold_max() {
+    let (h, mut s, held) = held_question("s-held-ok", 60_000).await;
+    let after = after_the_facts_call(&h, &mut s).await;
+    let starts = of_type(&after, "suggestion_start");
+    assert_eq!(starts.len(), 1, "{after:?}");
+    assert_eq!(starts[0]["turn_id"], held.as_str());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_held_question_older_than_hold_max_is_dropped() {
+    // The default: 5 s. The facts call holds its budget for about 20 s more.
+    let (h, mut s, _) = held_question("s-held-old", RelayConfig::built_in().budget.hold_max_ms).await;
+    let after = after_the_facts_call(&h, &mut s).await;
+    assert!(of_type(&after, "suggestion_start").is_empty(), "{after:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_held_question_is_dropped_once_me_starts_speaking() {
+    let (h, mut s, _) = held_question("s-held-me", 60_000).await;
+    // Me answers it themselves before the facts call is done: the moment has passed.
+    s.send(json!({"type": "turn_partial", "turn_id": "m-9", "channel": "me", "text": "Two weeks, I", "silence_ms": 0})).await;
+    let after = after_the_facts_call(&h, &mut s).await;
+    assert!(of_type(&after, "suggestion_start").is_empty(), "{after:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_held_question_is_dropped_when_the_other_side_keeps_talking() {
+    let (h, mut s, _) = held_question("s-held-partial", 60_000).await;
+    s.send(partial("o-40", "And also, before that", 0)).await;
+    let after = after_the_facts_call(&h, &mut s).await;
+    assert!(of_type(&after, "suggestion_start").is_empty(), "{after:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_held_question_is_dropped_by_a_newer_final_from_the_other_side() {
+    let (h, mut s, _) = held_question("s-held-final", 60_000).await;
+    // Even a line that asks nothing ("Okay.") moves the conversation on.
+    s.send(final_turn("o-40", "other", "Okay.")).await;
+    let after = after_the_facts_call(&h, &mut s).await;
+    assert!(of_type(&after, "suggestion_start").is_empty(), "{after:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_speculative_question_the_gate_turns_away_is_not_held() {
+    let (h, mut s, _) = held_question("s-held-spec", 60_000).await;
+    // A question at a pause: the gate turns it away too, and its final would come anyway, so it isn't held.
+    s.send(partial("o-40", "When could you join us?", 900)).await;
+    assert_eq!(s.next_within(Duration::from_secs(1)).await, None);
+    let after = after_the_facts_call(&h, &mut s).await;
     assert!(of_type(&after, "suggestion_start").is_empty(), "{after:?}");
 }
 
 #[tokio::test(start_paused = true)]
 async fn a_held_question_is_dropped_when_the_app_disconnects() {
-    let mut config = pricey_output();
-    config.models.get_mut("claude-haiku-5-5").unwrap().first_token_timeout_ms = 30_000;
-    config.budget.reserve_suggestions = 1;
-    let h = harness(config);
-    let mut token = claims("s-held-gone");
-    token.budget.cents_left = 16;
-    let mut s = h.connect(token);
-    assert_eq!(s.next().await["mode"], "balanced");
-    s.drain(Duration::from_millis(200)).await;
-    h.mock(assist_relay::domain::ProviderKind::Anthropic).push(assist_relay::provider::MockBehavior::Late(Duration::from_secs(20)));
-    for (i, line) in ["I can start on the 3rd.", "My rate is 35 dollars an hour.", "The first build takes 2 weeks."].iter().enumerate() {
-        s.send(final_turn(&format!("m-{i}"), "me", line)).await;
-    }
-    let mut held = false;
-    for turn in 0..30 {
-        s.send(final_turn(&format!("o-{turn}"), "other", "What is your notice period?")).await;
-        match s.next_within(Duration::from_secs(1)).await {
-            Some(reply) if reply["type"] == "suggestion_start" => drop(s.until("suggestion_end").await),
-            Some(reply) => panic!("unexpected {reply}"),
-            None => {
-                held = true;
-                break;
-            }
-        }
-    }
-    assert!(held, "a question was held");
+    let (h, s, _) = held_question("s-held-gone", 60_000).await;
     let answers = || h.mock(assist_relay::domain::ProviderKind::Anthropic).requests().iter().filter(|(_, p)| *p == Purpose::Answer).count();
     let (asked, spent) = (answers(), h.state.registry.spent("s-held-gone"));
     // The app goes away; the facts call finishes within the resume grace and releases its hold.

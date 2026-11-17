@@ -34,6 +34,9 @@ reserve_suggestions = 3
 expected_output_tokens = 160
 # Share of Balanced suggestions that also go to the upgrade model (hard questions), for the estimate only.
 upgrade_share = 0.3
+# A question turned away while background calls or other suggestions held the budget starts when they finish, if
+# within this many milliseconds of the question (and no newer line came from the other side, and Me hasn't spoken).
+hold_max_ms = 5000
 
 [session]
 # A session survives a dropped connection this long; a reconnect with a valid token resumes it.

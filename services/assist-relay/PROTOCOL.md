@@ -371,9 +371,10 @@ both models, no cache, the longest answer; background calls hold theirs too. A s
 case fits in what is left with all of those held back. When the mode's doesn't fit (calls are in flight), the next
 cheaper allowed mode answers this one question, with no `mode_changed` (`suggestion_start.mode` says which); a hard
 question's upgrade that doesn't fit beside its draft is left out. When none fits, a question the app asked for (help
-now, regenerate, shorter, formal, translate) gets `budget_exhausted` with `retry: true` and no suggestion; an
-automatic one (a final or speculative turn) gets no message and waits: the relay starts it as soon as calls in flight
-release their holds, unless a newer question replaced it or Me has spoken since. A background call starts only when it
+now, regenerate, shorter, formal, translate) gets `budget_exhausted` with `retry: true` and no suggestion; a question
+at the end of the other side's turn gets no message and waits: the relay starts it as soon as calls in flight release
+their holds, unless by then it is older than `hold_max_ms` (5 s), the other side has said more, Me has spoken, or the
+app has disconnected. A speculative one is not held (the turn's final comes anyway). A background call starts only when it
 leaves room for the reserved suggestions at the mode's worst case (one in Fast). The mode itself follows the budget
 left without those holds, so it never moves for a call in flight.
 

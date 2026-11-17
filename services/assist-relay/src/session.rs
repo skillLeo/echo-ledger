@@ -417,8 +417,9 @@ pub(crate) struct Engine {
     replying_to: Option<u64>,
     /// Background calls in flight and their worst-case cost: held back from the budget until their result arrives.
     reserved: HashMap<String, u64>,
-    /// The last automatic suggestion the budget gate turned away (its origin, when its question came, what it
-    /// replaces): started once reservations are released, unless a newer question replaced it or Me spoke since.
+    /// The last question at the end of a turn the budget gate turned away (its origin, when it came, what it
+    /// replaces): started once reservations are released, unless it is older than `hold_max_ms`, the other side has
+    /// said more since, Me has spoken since, or the app went away.
     pending: Option<(Origin, Instant, Option<String>)>,
     /// Reservations were released since the run loop last looked: time to try the pending suggestion again.
     retry_due: bool,
@@ -831,6 +832,8 @@ impl Engine {
             self.last_me_speech = Some(at);
             return;
         }
+        // The other side says more: a held question's moment has passed.
+        self.pending = None;
         let config = self.config();
         let window = Duration::from_millis(config.speculative.restart_window_ms);
         if let Some(spec) = &self.spec {
@@ -876,6 +879,8 @@ impl Engine {
             self.last_me_speech = Some(at);
             return;
         }
+        // A newer line from the other side, a question or not: a held question's moment has passed.
+        self.pending = None;
         let spec = self.spec.take().filter(|spec| spec.turn_id == turn.turn_id);
         let mut replaces = None;
         if let Some(spec) = spec {
@@ -960,11 +965,13 @@ impl Engine {
         self.claims.models.iter().any(|m| m == model) && self.config().model(model).is_some_and(|spec| spec.enabled)
     }
 
-    /// Starts the suggestion the budget gate turned away, now that reservations were released, unless Me has spoken
-    /// since its question (the moment has passed). A newer question already replaced it in `start`.
+    /// Starts the suggestion the budget gate turned away, now that reservations were released, unless its moment has
+    /// passed: Me has spoken since, or it is older than `hold_max_ms`. Newer lines from the other side already dropped
+    /// it (`on_partial`, `on_final`).
     fn retry_pending(&mut self) {
         let Some((origin, t0, replaces)) = self.pending.take() else { return };
-        if self.conn.is_none() || self.last_me_speech.is_some_and(|at| at > t0) {
+        let stale = t0.elapsed() > self.config().budget.hold_max();
+        if self.conn.is_none() || stale || self.last_me_speech.is_some_and(|at| at > t0) {
             return;
         }
         self.start(origin, t0, replaces);
@@ -1029,9 +1036,9 @@ impl Engine {
             if origin.explicit() {
                 // The person asked: they hear why and may ask again.
                 self.error(ErrorMessage::new("budget_exhausted", "Not enough budget is free for a suggestion right now. Try again in a moment.").retry());
-            } else {
-                // Automatic: held quietly and started when background calls or other suggestions release their
-                // reservations.
+            } else if matches!(origin, Origin::Final { .. }) {
+                // The end of a turn: held quietly and started when background calls or other suggestions release
+                // their reservations. A speculative one is not held: the turn's final comes anyway.
                 self.pending = Some((origin, t0, replaces));
             }
             return;
