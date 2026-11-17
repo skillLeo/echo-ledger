@@ -47,7 +47,7 @@ describe("the card's rules (1.9.0-f)", () => {
     const s = play([READY, start("s1"), token("s1", "Half"),
       { type: "error", code: "provider_error", message: "That suggestion didn't come through.", retry: true, suggestion_id: "s1", in_reply_to: null, fatal: false }]);
     expect(shown(s)).toMatchObject({ text: "", status: "failed" });
-    expect(s.error).toEqual({ text: "That suggestion didn't come through.", fatal: false, suggestionId: "s1", code: "provider_error" });
+    expect(s.error).toEqual({ text: "Something went wrong with Live Assist.", fatal: false, suggestionId: "s1", code: "provider_error" });
   });
 
   it("mode_changed says why, in words; requested says nothing; captions only says captions go on", () => {
@@ -215,7 +215,8 @@ describe("contract 1.9.0-n on the card", () => {
       expect(words).not.toContain(code);
       expect(words).not.toBe("relay text");
     }
-    expect(errorWords("provider_not_configured", false, "Live Assist isn't available right now.")).toBe("Live Assist isn't available right now.");
+    expect(errorWords("provider_not_configured", false, "Groq key missing")).toBe("Live Assist isn't set up on this server yet.");
+    expect(errorWords("something_new", true, "raw relay text")).toBe("Something went wrong with Live Assist.");
     expect(play([READY, err("bad_message", false)]).error).toBeNull();
   });
 
@@ -232,6 +233,17 @@ describe("contract 1.9.0-n on the card", () => {
     expect(isSessionActive({ code: "session_active", message: "x" })).toBe(true);
     expect(isSessionActive("Another session: session_active")).toBe(true);
     expect(isSessionActive({ code: "budget_exhausted" })).toBe(false);
+  });
+});
+
+describe("session_active only after a start from the card", () => {
+  it("a session_active error without a start from the card asks nothing", () => {
+    const a = { onSend: vi.fn(), onMode: vi.fn(), onHint: vi.fn(), onMute: vi.fn(), onHide: vi.fn(), onCopyConsent: vi.fn(), onStartOffer: vi.fn(), onDismissOffer: vi.fn(), onEndAndStart: vi.fn(), onKeepRunning: vi.fn() };
+    const err: AssistMessage = { type: "error", code: "session_active", message: "x", retry: false, suggestion_id: null, in_reply_to: null, fatal: false };
+    const { container } = render(<AssistCard state={play([err])} hint="full" muted={false} actions={a} />);
+    expect(container).toBeEmptyDOMElement();
+    render(<AssistCard state={{ ...play([err]), pendingStart: { prepId: "pr1", clientRef: "rec-7" } }} hint="full" muted={false} actions={a} />);
+    expect(screen.getByRole("button", { name: "End it and start this one" })).toBeInTheDocument();
   });
 });
 

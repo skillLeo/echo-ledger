@@ -53,7 +53,8 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
       : state.meetingType ? CONSENT_LINE : null;
   const rtl = parsed?.language && parsed.language.label !== "Roman Urdu";
 
-  const sessionActive = state.sessionActive && (
+  // Only for a start made from this card (its offer): the question needs something to start again.
+  const sessionActive = state.sessionActive && state.pendingStart && (
     <div className="el-assist__note" role="alert">
       <span>Another Live Assist session is running.</span>
       <Button size="sm" variant="primary" onClick={actions.onEndAndStart}>End it and start this one</Button>
@@ -62,7 +63,7 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
   );
   // Before a session: the core's offer for a prepared meeting's call (it never starts by itself).
   if (!state.sessionId) {
-    if (!state.offer && !state.sessionActive && !state.error) return null;
+    if (!state.offer && !sessionActive && !state.error) return null;
     return (
       <section className="el-assist el-assist--offer" data-hit aria-label="Live Assist" data-testid="assist-card">
         {state.offer && (

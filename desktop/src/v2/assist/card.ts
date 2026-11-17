@@ -92,12 +92,12 @@ function previousShown(state: CardState, id: string): string | null {
 
 /**
  * The app's own sentence for a relay error code (1.9.0-n), never the code itself; null when the card says nothing
- * (an unknown message type, a token being renewed). `provider_not_configured` keeps the relay's fixed message.
+ * (an unknown message type, a token being renewed). Never the relay's text: its words are not the app's.
  */
-export function errorWords(code: string, retry: boolean, message: string): string | null {
+export function errorWords(code: string, retry: boolean, _message = ""): string | null {
   switch (code) {
     case "budget_exhausted": return retry ? "Try again in a moment." : "Suggestions are off for this call.";
-    case "provider_not_configured": return message || "Live Assist isn't set up on this server yet.";
+    case "provider_not_configured": return "Live Assist isn't set up on this server yet.";
     case "provider_unavailable":
     case "provider_timeout": return "That suggestion didn't come through. Try again in a moment.";
     case "model_declined": return "This one can't be answered here. Try Regenerate, or ask in other words.";
@@ -107,7 +107,7 @@ export function errorWords(code: string, retry: boolean, message: string): strin
     case "session_active": return "Another Live Assist session is running.";
     case "bad_message": return null;
     case "token_expired": return retry ? null : "Live Assist stopped: sign in again to start a new session.";
-    default: return message || "Something went wrong with Live Assist.";
+    default: return "Something went wrong with Live Assist.";
   }
 }
 
