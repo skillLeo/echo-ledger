@@ -4,7 +4,7 @@
 // see, one plain line, and on a Mac the test with the phone per meeting app. The captured picture lives in this page's
 // state only and goes when the page closes. Names: docs/DESIGN_SYSTEM.md "Screen-share privacy names".
 import { useEffect, useRef, useState } from "react";
-import { api, errorMessage, type MeetingApp, type MeetingAppRow, type OldWindowsSharing, type PrivacyStatus, type Settings, type SettingsPatch, type ShareCheckView, type ShareHiding } from "../../lib/ipc";
+import { api, errorMessage, type PrivacyBadge, type MeetingApp, type MeetingAppRow, type OldWindowsSharing, type PrivacyStatus, type Settings, type SettingsPatch, type ShareCheckView, type ShareHiding } from "../../lib/ipc";
 import { checkedWhen, demoLeft, resultLine, summary, usePrivacyStatus } from "../../lib/privacy";
 import { setting } from "../../lib/settingsRegistry";
 import { prettyShortcut } from "../../lib/format";
@@ -17,7 +17,27 @@ type Patch = (p: SettingsPatch) => Promise<boolean>;
 const options = <T extends string>(id: string) => (setting(id).options ?? []).map((o) => [o.value as T, o.label] as const);
 
 /** What the page says first: what EchoLedger does and that the last check is the truth, never a promise beyond it. */
-export const SHARE_PRIVACY_INTRO = "EchoLedger keeps its windows out of screen shares in Zoom, Meet and Teams, checks this on your computer, and tells you what the last check saw.";
+export const SHARE_PRIVACY_INTRO = "EchoLedger hides its windows from screen sharing, checks on this computer whether that works, and tells you what the last check saw.";
+/** The first line while Hide from screen sharing is off: nothing is hidden, so nothing is promised. */
+export const SHARE_PRIVACY_OFF = "Hide from screen sharing is off: EchoLedger's windows show in a screen share.";
+/** With only the floating windows hidden: what shows and what doesn't. */
+export const SHARE_PRIVACY_FLOATING = "The main window is visible in screen share; captions, the recording controls and the other floating windows stay hidden.";
+/** What the last check saw, by the badge it left (never more than that). */
+export const LAST_CHECK_SENTENCE: Record<PrivacyBadge, string> = {
+  private: "The last check saw EchoLedger's windows hidden from the screen share.",
+  visible: "The last check saw EchoLedger's windows in the screen share.",
+  black_box: "The last check saw a black box where EchoLedger's windows are.",
+  not_checked: "Screen-share privacy is not checked yet on this computer.",
+};
+
+/**
+ * The page's first lines for the hiding choice and the last check: with hiding off, only that it is off; otherwise
+ * what EchoLedger does, what the last check saw, and with only the floating windows hidden, that the main window shows.
+ */
+export function sharePrivacyTop(hiding: ShareHiding | null | undefined, badge: PrivacyBadge | null | undefined): string[] {
+  if (hiding === "off") return [SHARE_PRIVACY_OFF];
+  return [SHARE_PRIVACY_INTRO, ...(badge ? [LAST_CHECK_SENTENCE[badge]] : []), ...(hiding === "floating" ? [SHARE_PRIVACY_FLOATING] : [])];
+}
 
 /** The one-window tip and the limits, in the words the plan gives them. */
 export const ONE_WINDOW_TIP = "Share one window or a tab for the strongest privacy.";
@@ -142,7 +162,6 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
   const barHolds = hiddenReason(status) === "share_bar";
   const shortcut = settings.shortcuts.hide_all ? <span className="kbd">{prettyShortcut(settings.shortcuts.hide_all, status?.platform ?? "windows")}</span> : "No shortcut";
   const footer = [
-    status?.hiding === "floating" ? "The main window is visible in screen share; captions, the recording controls and the other floating windows stay hidden." : null,
     status?.hiding === "off" ? "Everything EchoLedger shows can be seen by people watching your screen share." : null,
   ].filter(Boolean) as string[];
   const lines = status?.lines ?? [];
@@ -152,7 +171,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
   };
   return (
     <div data-testid="share-privacy">
-      <p className="set-intro">{SHARE_PRIVACY_INTRO}</p>
+      {sharePrivacyTop(settings.hideFromSharing, status?.badge).map((l) => <p key={l} className="set-intro">{l}</p>)}
       <Section footer={footer.length || lines.length ? <>
         {footer.map((l) => <p key={l}>{l}</p>)}
         {lines.length > 0 && (
@@ -402,7 +421,7 @@ export function OnboardingShareCheck({ platform }: { platform: string }) {
   return (
     <div className="onboarding-privacy" data-testid="onboarding-share-check">
       <h2 className="settings-group-title">Private notes</h2>
-      <p className="small muted">{SHARE_PRIVACY_INTRO}</p>
+      {sharePrivacyTop(status?.hiding, status?.badge).map((l) => <p key={l} className="small muted">{l}</p>)}
       <p className="small muted">{PATTERN_FLASH}</p>
       <button type="button" className="btn" onClick={() => void run()} disabled={busy}>{busy ? "Checking…" : view ? "Check again" : "Check screen-share privacy"}</button>
       {line && (

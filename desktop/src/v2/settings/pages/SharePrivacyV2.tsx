@@ -13,7 +13,7 @@ import { prettyShortcut } from "../../../lib/format";
 import { useCopied } from "../../../views/main/SettingsControls";
 import { PrivacyBadgeView } from "../../../components/PrivacyBadge";
 import {
-  GUIDED_ALONE, HIDDEN_WHILE_SHARING, SHARE_PRIVACY_INTRO, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
+  GUIDED_ALONE, HIDDEN_WHILE_SHARING, sharePrivacyTop, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
   displaysValue, hiddenReason, hiddenValue, lastCheckValue, statusValue, useCountdown, versionLine,
 } from "../../../views/main/PrivacySettings";
 import { Badge, Button, Card, Icons, List, ListRow } from "../../components";
@@ -49,7 +49,6 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
   const barHolds = hiddenReason(status) === "share_bar";
   const shortcut = settings.shortcuts.hide_all ? prettyShortcut(settings.shortcuts.hide_all, status?.platform ?? "windows") : "No shortcut";
   const notes = [
-    status?.hiding === "floating" ? "The main window is visible in screen share; captions, the recording controls and the other floating windows stay hidden." : null,
     status?.hiding === "off" ? "Everything EchoLedger shows can be seen by people watching your screen share." : null,
   ].filter(Boolean) as string[];
   const lines = status?.lines ?? [];
@@ -60,7 +59,7 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
 
   return (
     <div className="el-settings-v2" data-testid="share-privacy">
-      <p className="el-secondary">{SHARE_PRIVACY_INTRO}</p>
+      <div className="el-share-top">{sharePrivacyTop(settings.hideFromSharing, status?.badge).map((l) => <p key={l} className="el-secondary">{l}</p>)}</div>
       <Group footer={notes.length || lines.length ? <>
         {notes.map((l) => <p key={l}>{l}</p>)}
         {lines.length > 0 && (
