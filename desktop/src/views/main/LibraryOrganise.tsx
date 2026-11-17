@@ -2,6 +2,7 @@
 // row menu, and bulk actions for the selected recordings. Every change goes to the server; the library refreshes
 // when it answers.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { MAX_LABEL_CHARS, withLabel } from "../../lib/organise";
@@ -262,6 +263,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
   onDone: () => void;
   onClientCreated: (client: ClientFolder) => void;
 }) {
+  const keepHours = useTrashKeepHours();
   const [label, setLabel] = useState("");
   const [format, setFormat] = useState<BulkExportFormat>("docx");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -335,7 +337,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
             </div>
           </details>
           {confirmDelete ? (
-            <button type="button" className="btn danger small" disabled={busy} onClick={() => void run("delete")}>{`Delete ${count} (restorable for 48 hours)`}</button>
+            <button type="button" className="btn danger small" disabled={busy} onClick={() => void run("delete")}>{`Delete ${count} (restorable for ${hoursWords(keepHours)})`}</button>
           ) : (
             <button type="button" className="btn danger ghost small" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</button>
           )}
@@ -352,8 +354,9 @@ export function eraseIn(eraseAt: string, now: number = Date.now()): string {
   return hours >= 1 ? `erased in ${hours} hour${hours === 1 ? "" : "s"}` : "erased soon";
 }
 
-/** Recently deleted (B17): the 48-hour undo bin with Restore and Delete now. */
+/** Recently deleted (B17): the undo bin (48 hours unless the server says otherwise) with Restore and Delete now. */
 export function BinPanel({ notify, onClose }: { notify: Notify; onClose: () => void }) {
+  const keepHours = useTrashKeepHours();
   const [items, setItems] = useState<BinItem[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const load = () => api.bin().then((r) => setItems(r.data ?? []), (e) => { setItems([]); notify(errorMessage(e), true); });
@@ -377,8 +380,8 @@ export function BinPanel({ notify, onClose }: { notify: Notify; onClose: () => v
   return (
     <div className="card bin-panel" role="region" aria-label="Recently deleted">
       <div className="row"><b>Recently deleted</b><span className="spacer" /><button type="button" className="btn ghost small" onClick={onClose}>Close</button></div>
-      <p className="small muted">Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.</p>
-      {items === null ? <p className="small muted">Loading…</p> : items.length === 0 ? <p className="small muted">Nothing deleted in the last 48 hours.</p> : (
+      <p className="small muted">{`Deleted recordings stay here for ${hoursWords(keepHours)}, then their audio and transcripts are erased.`}</p>
+      {items === null ? <p className="small muted">Loading…</p> : items.length === 0 ? <p className="small muted">{`Nothing deleted in the last ${hoursWords(keepHours)}.`}</p> : (
         <div className="site-list" role="list">
           {items.map((b) => (
             <div className="site-rule" role="listitem" key={b.id}>

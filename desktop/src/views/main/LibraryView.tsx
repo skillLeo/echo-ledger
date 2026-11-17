@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type MeetingPackFormat, type ScreenMoment, type LibraryItem, type SearchResult, type SharedItem, type SmartFolder, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
 import { folderLabel, inFolderHere, LIBRARY_VIEWS, type LibraryView as LibraryViewKey } from "../../lib/folders";
@@ -142,6 +143,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   /** The nested column (v1.6, P4.2): the Library's places with their counts. */
   aside?: ReactNode;
 }) {
+  // How long a deleted recording can be restored: the server's number, 48 until the core says (lib/trash.ts).
+  const keepHours = useTrashKeepHours();
   // The Move dialog of one recording (its row menu).
   const [moveFor, setMoveFor] = useState<{ ids: string[]; title: string | null; current: string | null } | null>(null);
   const [items, setItems] = useState<LibraryItem[]>([]);
@@ -992,13 +995,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   };
 
   const remove = async (id: string) => {
-    if (!(await confirmAction({ title: "Delete this recording?", body: "It's deleted with its transcript on every device. You can restore it from Recently deleted for 48 hours.", confirm: "Delete", tone: "danger" }))) return;
+    if (!(await confirmAction({ title: "Delete this recording?", body: `It's deleted with its transcript on every device. You can restore it from Recently deleted for ${hoursWords(keepHours)}.`, confirm: "Delete", tone: "danger" }))) return;
     try {
       await api.deleteSession(id);
       // Deleting another row from its menu leaves the open recording open.
       setSelected((open) => (open === id ? null : open));
       setItems(await api.library());
-      notify("Deleted. Restore it from Recently deleted for 48 hours.", false, { kind: "action", run: () => setBinOpen(true) });
+      notify(`Deleted. Restore it from Recently deleted for ${hoursWords(keepHours)}.`, false, { kind: "action", run: () => setBinOpen(true) });
     } catch (e) {
       notify(errorMessage(e), true);
     }

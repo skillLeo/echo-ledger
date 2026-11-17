@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type LibraryItem } from "../../lib/ipc";
 import { formatDuration, rowDate } from "../../lib/format";
 import { eraseIn } from "../../views/main/LibraryOrganise";
+import { useTrashKeepHours } from "../../lib/trash";
 import {
   Badge, Button, Chip, Dialog, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
@@ -35,6 +36,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   const [erase, setErase] = useState<BinItem | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
   const seq = useRef(0);
+  const keepHours = useTrashKeepHours();
 
   const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
 
@@ -164,10 +166,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
           ) : !bin ? (
             <Loading label="Loading Trash">{Array.from({ length: 4 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
           ) : bin.length === 0 ? (
-            <EmptyState icon={Icons.TrashIcon} title="Trash is empty" body={binSentence(binHours(bin))} />
+            <EmptyState icon={Icons.TrashIcon} title="Trash is empty" body={binSentence(binHours(bin, keepHours))} />
           ) : (
             <>
-            <p className="el-secondary">{binSentence(binHours(bin))}</p>
+            <p className="el-secondary">{binSentence(binHours(bin, keepHours))}</p>
             <List label="Deleted recordings">
               {bin.map((b) => (
                 <ListRow key={b.id} icon={Icons.TrashIcon} title={b.title || "Recording"}
