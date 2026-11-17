@@ -43,6 +43,7 @@ const SCREENS = [
   ["a-trash", app("library"), async (page) => { await page.getByRole("button", { name: "Trash", exact: true }).click(); await page.waitForTimeout(1200); }],
   ["a-home", app("library"), nav("Home")],
   ["a-live", app("library"), nav("Live")],
+  ["a-live-translate", app("library"), async (page) => { await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "Live Translate", exact: true }).click(); await page.waitForTimeout(800); }],
   ["a-prep", app("library"), async (page) => { await nav("Live")(page); await page.getByRole("button", { name: "New session" }).click(); await page.waitForTimeout(800); }],
   ["a-ask", app("library"), nav("Ask")],
   ["a-project", app("project"), project],

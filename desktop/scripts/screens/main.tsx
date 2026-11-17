@@ -325,7 +325,7 @@ const commands: Record<string, (args: Args) => unknown> = {
     makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
   // What the core chose: the Zoom call earlier today, not recorded because its switch is off, not the filter (D-014).
   mic_last_not_recorded: () => ({ user: makeMicUser({ name: "zoom.us", app: "zoom", site: null, decision: "ignored", reason: "app_off" }), at: new Date(new Date().setHours(9, 40, 0, 0)).toISOString() }),
-  translate_apps: () => [],
+  translate_apps: () => [{ pid: 4242, name: "Valorant" }, { pid: 77, name: "Chrome" }],
   translate_status: () => screen.startsWith("controls-translate") ? {
     mode: screen.endsWith("subtitles") ? "watch" : "game", app: "Valorant", locked: true, hidden: false, status: "running", notice: null, partial: "",
     original: screen.endsWith("subtitles") ? "" : "Necesitamos rotar al sitio B ahora mismo",

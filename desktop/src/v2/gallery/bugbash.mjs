@@ -38,6 +38,7 @@ const CASES = [
   ["a-trash", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Trash", exact: true }).click(); await page.waitForTimeout(1200); }],
   ["a-home", "app", app("library"), ["en"], nav("Home")],
   ["a-live", "app", app("library"), ["en"], nav("Live")],
+  ["a-live-translate", "app", app("library"), ["en"], async (page) => { await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "Live Translate", exact: true }).click(); await page.waitForTimeout(800); }],
   ["a-ask", "app", app("library"), ["en"], nav("Ask")],
   ["a-workspace", "app", app("project"), ["en"], async (page) => {
     await page.getByRole("button", { name: "Acme Holdings", exact: true }).first().click();
