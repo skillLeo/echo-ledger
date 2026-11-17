@@ -138,7 +138,8 @@ class WorkspaceTest : ScreenTest() {
         server.on("POST", "/api/clients/$project/rules", FakeServer.json(200, """{"data":{"id":8,"kind":"title","value":"Lawn"}}"""))
         server.on("DELETE", "/api/clients/$project/rules/7", FakeServer.empty(204))
         open()
-        compose.onNodeWithText("Title contains “Qureshi”").performScrollTo().assertExists()
+        // The rules come in after the page.
+        waitFor("Title contains “Qureshi”")
         compose.onAllNodes(hasText("Text in the title")).onFirst().performScrollTo().performTextInput("Lawn")
         press("Add rule")
         waitFor("Title contains “Lawn”")
