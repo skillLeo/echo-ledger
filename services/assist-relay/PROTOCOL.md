@@ -1,7 +1,7 @@
 # Live Assist relay protocol (protocol 1)
 
 The messages between an app and the relay in `services/assist-relay`, in detail. They follow the Live Assist contract
-**1.9.0-f** (docs/API_ASSIST.md), which wins where the two differ. Field names are snake_case, every error has a
+**1.9.0-j** (docs/API_ASSIST.md), which wins where the two differ. Field names are snake_case, every error has a
 machine-readable `code` and a plain-words `message`, durations are milliseconds and timestamps ISO-8601 UTC
 (`2026-11-16T09:15:00+00:00`).
 
@@ -145,7 +145,9 @@ token stays valid until it expires.
 Send it to start, and again when the person has finished answering (the app decides when: the answer may be several
 `me` finals). Answer: `practice_question`, or `practice_done` when every question was asked. Errors: `not_practice`
 (a live session), `practice_busy` (the last one is still being written; `retry: true`), `budget_exhausted` (the
-Practice allowance is used up).
+Practice allowance is used up, or the question could cross it). A question that can't be written (both models
+failed, or the answer was unusable) gets the provider's error with `retry: true` twice; the third failed try at the
+same question says `retry: false` and practice stops: the next `practice_next` gets `practice_done`.
 
 ## Relay → app
 
@@ -239,7 +241,10 @@ budget. Captions never stop.
 
 The relay plays Them for the brief's meeting type (the interviewer, the manager, the client) and writes each question
 from the brief and the documents (the job description or the client's brief), one or two sentences, from easier to
-harder, sometimes following up on the last answer, never repeating one. The question is the `other` turn `turn_id` of
+harder, sometimes following up on the last answer, never repeating one. It uses only names, companies, numbers and
+facts found in the brief, the documents or Me's answers, never assumes anything about Me or anyone else beyond them,
+and with an empty brief asks general questions for the meeting type. "Me's instructions" in the brief are followed
+(the topics to ask about, for example); anything else there that asks for something is material. The question is the `other` turn `turn_id` of
 the transcript: a hint for it follows as for any question (`suggestion_start` with that `turn_id`), unless the app
 paused suggestions (`settings.assist: paused`) to practise without help. The person answers by voice: the speech
 engine's text as `me` finals, as in a call. **The app sends each question to the server with its batched turns**:
@@ -326,7 +331,12 @@ never holding up a suggestion and not in `captions_only`:
 - A `context_update` with `facts` or `summary` from the app still replaces what the relay has; the relay carries on
   from there.
 - Each call is charged to the session's spend and reported as usage (`kind` `facts` or `summary`; practice questions
-  `practice_question`). The settings are `[background]` in `config/relay.toml`.
+  `practice_question`), including an attempt that failed after its request was taken (estimated; the usage says
+  `estimated: true`). The settings are `[background]` in `config/relay.toml`.
+- **Budget:** before a background call starts, its worst case (primary and fallback, its longest answer) must fit in
+  what is left, leaving the suggestions' reserve (one suggestion in Fast, `reserve_suggestions` otherwise). While it
+  runs, that worst case is held back from the budget, so calls running together can't cross it. A call that doesn't
+  fit waits, its lines kept, for the next chance; the lines waiting are capped (200 lines, about 12,000 tokens).
 
 ## What the relay needs from the server (L7)
 
