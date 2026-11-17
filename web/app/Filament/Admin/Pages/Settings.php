@@ -127,6 +127,7 @@ class Settings extends Page
 
         return [
             'retention_days' => $all['retention_days'],
+            'trash_keep_hours' => (int) ($all['trash.keep_hours'] ?? SettingsRepository::TRASH_HOURS_DEFAULT),
             'retention_preset' => in_array((int) $all['retention_days'], RetentionPolicy::PRESETS, true) ? (string) $all['retention_days'] : 'custom',
             'provider_live_captions' => $all['provider.live_captions'],
             'provider_dictation' => $all['provider.dictation'],
@@ -455,7 +456,11 @@ class Settings extends Page
                             ->afterStateUpdated(fn (?string $state, Set $set) => is_numeric($state) ? $set('retention_days', (int) $state) : null),
                         TextInput::make('retention_days')->label('Days')
                             ->numeric()->minValue(1)->maxValue(365)->required()
-                            ->helperText('Older recordings go to the 48-hour undo bin, then are erased. Kept recordings and projects with their own setting are exempt.'),
+                            ->helperText('Older recordings go to Trash, then are erased. Kept recordings and projects with their own setting are exempt.'),
+                        // Since v2.0 (owner's decision 2026-11-17): Trash's time, the same the apps read (trash.keep_hours).
+                        TextInput::make('trash_keep_hours')->label('Keep deleted recordings in Trash (hours)')
+                            ->integer()->minValue(SettingsRepository::TRASH_HOURS_MIN)->maxValue(SettingsRepository::TRASH_HOURS_MAX)->required()
+                            ->helperText('A deleted recording can be restored for this long, then its audio and transcript are erased for good. 1 to 720 hours (30 days).'),
                     ]),
                     $this->section('limit')
                         ->description('For the whole server, per calendar month in the time zone above. At the limit, devices show "Monthly transcription limit reached" and new transcripts wait. Leave a limit empty for none.')
@@ -761,6 +766,7 @@ class Settings extends Page
         $before = $settings->all();
         $settings->setMany([
             'retention_days' => (int) $state['retention_days'],
+            'trash.keep_hours' => (int) $state['trash_keep_hours'],
             'provider.live_captions' => $state['provider_live_captions'],
             'provider.dictation' => $state['provider_dictation'],
             'provider.final_transcript' => $state['provider_final_transcript'],

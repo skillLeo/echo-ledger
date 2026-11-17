@@ -30,6 +30,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Colors\Color;
@@ -387,6 +388,14 @@ class Plans extends Page implements HasTable
                 TextInput::make('max_file_minutes')->label('Longest recording (minutes)')->integer()->minValue(1)->maxValue(100000),
                 TextInput::make('uploads_per_day')->label('Recordings a day')->integer()->minValue(1)->maxValue(100000),
             ]),
+            // Since v2.0: Live Assist's monthly allowances; empty is the server's default for the plan (config/assist.php).
+            Section::make('Live Assist')->description('A month\'s allowance per person. Live: the assist time and AI budget of live calls and meetings. Practice: its own, counted apart. Leave a box empty for the default.')
+                ->columns(['default' => 2])->schema([
+                    TextInput::make('assist_minutes')->label('Live minutes a month')->integer()->minValue(0)->maxValue(100000),
+                    TextInput::make('assist_usd')->label('Live AI budget (US$ a month)')->numeric()->minValue(0)->maxValue(10000)->step(0.01),
+                    TextInput::make('practice_minutes')->label('Practice minutes a month')->integer()->minValue(0)->maxValue(100000),
+                    TextInput::make('practice_usd')->label('Practice AI budget (US$ a month)')->numeric()->minValue(0)->maxValue(10000)->step(0.01),
+                ]),
             CheckboxList::make('engines')->label('Engines')->columns(2)
                 ->options(self::ENGINE_LABELS)
                 ->helperText('Leave every box ticked for every engine. Premium engines also need the Premium engines feature.'),
@@ -458,6 +467,10 @@ class Plans extends Page implements HasTable
             'retention_days' => $plan->retention_days,
             'seats' => $plan->seats,
             'ai_credits_usd' => $plan->ai_credits_usd,
+            'assist_minutes' => $plan->assist_minutes,
+            'assist_usd' => $plan->assist_usd,
+            'practice_minutes' => $plan->practice_minutes,
+            'practice_usd' => $plan->practice_usd,
             ...collect($plan->featureMap())->mapWithKeys(fn (bool $on, string $f): array => ["feature_{$f}" => $on])->all(),
         ];
     }
@@ -495,6 +508,10 @@ class Plans extends Page implements HasTable
             'retention_days' => $number('retention_days'),
             'seats' => $number('seats'),
             'ai_credits_usd' => filled($data['ai_credits_usd'] ?? null) ? (float) $data['ai_credits_usd'] : null,
+            'assist_minutes' => $number('assist_minutes'),
+            'assist_usd' => filled($data['assist_usd'] ?? null) ? round((float) $data['assist_usd'], 2) : null,
+            'practice_minutes' => $number('practice_minutes'),
+            'practice_usd' => filled($data['practice_usd'] ?? null) ? round((float) $data['practice_usd'], 2) : null,
             'features' => collect(Plan::FEATURES)->mapWithKeys(fn (string $f): array => [$f => (bool) ($data["feature_{$f}"] ?? false)])->all(),
         ];
     }

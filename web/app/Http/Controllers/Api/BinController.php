@@ -32,7 +32,7 @@ final class BinController extends Controller
             'started_at' => $s->started_at->toAtomString(),
             'duration_ms' => $s->duration_ms,
             'deleted_at' => $s->deleted_at?->toAtomString(),
-            'erase_at' => $s->deleted_at?->copy()->addHours(CaptureSession::BIN_HOURS)->toAtomString(),
+            'erase_at' => $s->deleted_at?->copy()->addHours(CaptureSession::binHours())->toAtomString(),
         ])->values()]);
     }
 

@@ -100,7 +100,7 @@ final class DeviceConfigPayload
             'announcement' => app(PlatformNotices::class)->announcement(),
             'maintenance' => app(PlatformNotices::class)->maintenance(),
             // Since 2.0.0-b: how long a deleted recording can be restored, the bin's own length (never a fixed number).
-            'trash' => ['keep_hours' => CaptureSession::BIN_HOURS],
+            'trash' => ['keep_hours' => CaptureSession::binHours()],
             // Since 2.0.0-a (docs/API.md "Interface flags"): each flag's answer for this person in this workspace, and
             // whether they chose "Switch back to classic".
             ...self::uiFlags($device->user, $device->workspace_id),

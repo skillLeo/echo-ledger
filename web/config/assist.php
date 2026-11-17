@@ -16,8 +16,10 @@ return [
     // sessions, their questions, facts, summary and report are billed to it.
     'plans' => [
         'free' => ['claim' => 'free', 'live_modes' => [], 'seconds' => 0, 'cents' => 0, 'practice' => ['seconds' => 30 * 60, 'cents' => 100]],
-        'pro' => ['claim' => 'pro', 'live_modes' => ['fast', 'balanced'], 'seconds' => 10 * 3600, 'cents' => 1500, 'practice' => ['seconds' => 5 * 3600, 'cents' => 500]],
-        'business' => ['claim' => 'ultra', 'live_modes' => ['fast', 'balanced', 'deep', 'max'], 'seconds' => 40 * 3600, 'cents' => 6000, 'practice' => ['seconds' => 10 * 3600, 'cents' => 1000]],
+        // Since v2.0 (the owner's decision 2026-11-17): Pro 5 hours and $15 a month of live Live Assist, Ultra 10 hours
+        // and $60; each plan's own values in Admin › Plans win over these (AssistPlans::config).
+        'pro' => ['claim' => 'pro', 'live_modes' => ['fast', 'balanced'], 'seconds' => 5 * 3600, 'cents' => 1500, 'practice' => ['seconds' => 5 * 3600, 'cents' => 500]],
+        'business' => ['claim' => 'ultra', 'live_modes' => ['fast', 'balanced', 'deep', 'max'], 'seconds' => 10 * 3600, 'cents' => 6000, 'practice' => ['seconds' => 10 * 3600, 'cents' => 1000]],
         'personal' => ['claim' => 'ultra', 'live_modes' => ['fast', 'balanced', 'deep', 'max'], 'seconds' => 40 * 3600, 'cents' => 6000, 'practice' => ['seconds' => 10 * 3600, 'cents' => 1000]],
     ],
 

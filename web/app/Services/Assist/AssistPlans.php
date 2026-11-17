@@ -37,7 +37,7 @@ final class AssistPlans
     {
         $plan = $this->limits->plan($workspaceId);
 
-        return ['key' => $plan->key, ...self::config($plan->key)];
+        return ['key' => $plan->key, ...self::config($plan->key, $plan)];
     }
 
     /**
@@ -148,18 +148,24 @@ final class AssistPlans
      *
      * @return array{claim: string, live_modes: list<string>, seconds: int, cents: int, practice: array{seconds: int, cents: int}}
      */
-    public static function config(string $planKey): array
+    public static function config(string $planKey, ?Plan $row = null): array
     {
         $plans = (array) config('assist.plans', []);
         $plan = (array) ($plans[$planKey] ?? $plans[Plan::FREE] ?? []);
+        // Since v2.0 the plan's own allowances (Admin › Plans) win; an empty one is the config's.
+        $minutes = fn (?int $value, int $fallback): int => $value !== null ? max(0, $value) * 60 : $fallback;
+        $cents = fn (mixed $usd, int $fallback): int => $usd !== null ? max(0, (int) round((float) $usd * 100)) : $fallback;
 
         return [
             'claim' => in_array($plan['claim'] ?? null, ['free', 'pro', 'ultra'], true) ? (string) $plan['claim'] : 'free',
             // In the plan's own order (the cheapest first, as the contract's example); only modes there are.
             'live_modes' => array_values(array_filter((array) ($plan['live_modes'] ?? []), fn (mixed $m): bool => in_array($m, (array) config('assist.modes_order'), true))),
-            'seconds' => (int) ($plan['seconds'] ?? 0),
-            'cents' => (int) ($plan['cents'] ?? 0),
-            'practice' => ['seconds' => (int) ($plan['practice']['seconds'] ?? 0), 'cents' => (int) ($plan['practice']['cents'] ?? 0)],
+            'seconds' => $minutes($row?->assist_minutes, (int) ($plan['seconds'] ?? 0)),
+            'cents' => $cents($row?->assist_usd, (int) ($plan['cents'] ?? 0)),
+            'practice' => [
+                'seconds' => $minutes($row?->practice_minutes, (int) ($plan['practice']['seconds'] ?? 0)),
+                'cents' => $cents($row?->practice_usd, (int) ($plan['practice']['cents'] ?? 0)),
+            ],
         ];
     }
 

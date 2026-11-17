@@ -413,7 +413,7 @@ final class Shell
             SharedWithMe::class => 'Recordings and projects your teammates sent you.',
             Shares::class => 'The links you made, who opened them, and Stop sharing.',
             RequestLinksPage::class => 'Links people use to send you files, without an account.',
-            RecentlyDeleted::class => 'Deleted recordings stay here for 48 hours; restore one or delete it for good.',
+            RecentlyDeleted::class => 'Deleted recordings stay here for '.CaptureSession::binHours().' hours; restore one or delete it for good.',
             Search::class => 'Find a word in every transcript; a result plays from that moment.',
             ListDevices::class => 'Your phones and computers: rename one, sign it out, or sign in a new one.',
             Usage::class => 'Minutes transcribed and what they cost, this month and before.',

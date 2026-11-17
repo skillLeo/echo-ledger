@@ -98,7 +98,9 @@ class Plan extends Model
             'team' => false, 'premium_engines' => false, 'live_translate' => false, 'ai_notes' => false]];
 
     protected $fillable = ['key', 'name', 'price_usd', 'monthly_minutes', 'storage_bytes', 'max_devices', 'retention_days', 'seats', 'ai_credits_usd', 'features',
-        'badge', 'color', 'description', 'price_label', 'sort_order', 'on_offer', 'is_default', 'trial_minutes', 'max_file_minutes', 'uploads_per_day', 'engines', 'retention_from', 'archived_at', 'price_amount', 'currency', 'price_pkr'];
+        'badge', 'color', 'description', 'price_label', 'sort_order', 'on_offer', 'is_default', 'trial_minutes', 'max_file_minutes', 'uploads_per_day', 'engines', 'retention_from', 'archived_at', 'price_amount', 'currency', 'price_pkr',
+        // Since v2.0: Live Assist's monthly allowances (AssistPlans); empty is config/assist.php's value.
+        'assist_minutes', 'assist_usd', 'practice_minutes', 'practice_usd'];
 
     protected static function booted(): void
     {
@@ -243,6 +245,7 @@ class Plan extends Model
             'sort_order' => 'integer', 'on_offer' => 'boolean', 'is_default' => 'boolean', 'trial_minutes' => 'integer',
             'max_file_minutes' => 'integer', 'uploads_per_day' => 'integer', 'engines' => 'array', 'retention_from' => 'datetime',
             'archived_at' => 'datetime', 'price_amount' => 'decimal:2', 'price_pkr' => 'integer',
+            'assist_minutes' => 'integer', 'assist_usd' => 'decimal:2', 'practice_minutes' => 'integer', 'practice_usd' => 'decimal:2',
         ];
     }
 }

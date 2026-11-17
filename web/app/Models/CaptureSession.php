@@ -287,14 +287,23 @@ class CaptureSession extends Model
         $this->eraseMedia();
     }
 
-    /** Hours a deleted recording waits in the undo bin before its audio and text are erased (B17). */
+    /** The undo bin's default hours (B17); the server's own is binHours(). */
     public const BIN_HOURS = 48;
 
-    /** In the undo bin: deleted, media not erased yet, and still within the 48 hours. */
+    /**
+     * Hours a deleted recording waits in Trash before its audio and text are erased: the operator's setting (Admin ›
+     * Settings › Storage, `trash.keep_hours`, 1 to 720, 48 by default), the same the apps read in `trash.keep_hours`.
+     */
+    public static function binHours(): int
+    {
+        return app(SettingsRepository::class)->trashKeepHours();
+    }
+
+    /** In the undo bin: deleted, media not erased yet, and still within the bin's hours. */
     public function restorable(): bool
     {
         return $this->trashed() && $this->media_erased_at === null && $this->deleted_at !== null
-            && $this->deleted_at->gt(now()->subHours(self::BIN_HOURS));
+            && $this->deleted_at->gt(now()->subHours(self::binHours()));
     }
 
     /** End of the undo bin: the audio, text and screens go for good; the tombstone stays for syncing. */

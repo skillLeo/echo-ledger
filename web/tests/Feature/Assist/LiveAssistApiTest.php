@@ -220,14 +220,14 @@ describe('starting a session', function () {
             ->assertCreated()->assertHeader('Cache-Control', 'no-store, private')
             ->assertJsonPath('session.mode', 'balanced')->assertJsonPath('session.practice', false)->assertJsonPath('session.auto_saved', false)
             ->assertJsonPath('relay.url', 'wss://relay.example.com/v1/assist')->assertJsonPath('stt', null)
-            ->assertJsonPath('plan.modes', ['fast', 'balanced'])->assertJsonPath('plan.seconds_left', 36000);
+            ->assertJsonPath('plan.modes', ['fast', 'balanced'])->assertJsonPath('plan.seconds_left', 18000);
         $claims = relayClaims($answer->json('relay.token'));
 
         expect($claims)->toMatchArray([
             'iss' => 'echoledger', 'aud' => 'assist-relay', 'sub' => (string) $device->user_id, 'ws' => (string) $device->workspace_id,
             'sid' => $answer->json('session.id'), 'plan' => 'pro', 'modes' => ['fast', 'balanced'],
             'models' => ['claude-haiku-5-5', 'openai/gpt-oss-120b', 'claude-sonnet-5-5'],
-            'budget' => ['seconds_left' => 36000, 'cents_left' => 1500], 'practice' => false, 'iat' => now()->getTimestamp(),
+            'budget' => ['seconds_left' => 18000, 'cents_left' => 1500], 'practice' => false, 'iat' => now()->getTimestamp(),
         ])->and($claims['exp'] - $claims['iat'])->toBe(900)
             ->and($claims['jti'])->toMatch('/^[0-9A-Z]{26}$/')
             ->and($answer->json('relay.expires_at'))->toBe(now()->addSeconds(900)->toAtomString());

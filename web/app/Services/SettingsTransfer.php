@@ -23,6 +23,7 @@ final class SettingsTransfer
     /** The settings keys that are exported and imported: everything the Settings page edits. */
     public const PORTABLE = [
         'retention_days',
+        'trash.keep_hours',
         'provider.live_captions',
         'provider.dictation',
         'provider.final_transcript',
