@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { LiveTranslateAvailability } from "../../lib/ipc";
 import {
-  TRANSLATE_FEED, TRANSLATE_TARGETS, endedWords, translateApi, translatePhase, type TranslateApp, type TranslateFeed, type TranslateMode, type TranslateSpeed,
+  TRANSLATE_FEED, TRANSLATE_TARGETS, UNAVAILABLE_WORDS, endedWords, translateApi, translatePhase, type TranslateApp, type TranslateFeed, type TranslateMode, type TranslateSpeed,
 } from "../../lib/translate";
 import { Button, Card, Icons, Select, Status } from "../components";
 
@@ -20,21 +20,7 @@ export const SPEEDS: { value: TranslateSpeed; label: string }[] = [
   { value: "accurate", label: "Accurate" },
 ];
 
-/** Why Live Translate can't run here, in words. */
-export const UNAVAILABLE_WORDS: Record<NonNullable<LiveTranslateAvailability["reason"]>, string> = {
-  platform: "Live Translate isn't on the Mac yet",
-  plan: "Not in your plan",
-};
-
-/**
- * Whether it can run here: the core's answer (live_translate_status), else worked out the same way from this system
- * and the plan, for a core that doesn't say yet.
- */
-export function translateAvailability(answer: LiveTranslateAvailability | null, platform: string, inPlan: boolean): LiveTranslateAvailability {
-  if (answer) return answer;
-  if (platform === "macos") return { available: false, reason: "platform" };
-  return inPlan ? { available: true, reason: null } : { available: false, reason: "plan" };
-}
+export { UNAVAILABLE_WORDS, translateAvailability } from "../../lib/translate";
 
 /** "translating", or the feed's own word for where it is. */
 const feedWords = (feed: TranslateFeed) => (feed.status === "live" ? "Translating" : feed.status.charAt(0).toUpperCase() + feed.status.slice(1));

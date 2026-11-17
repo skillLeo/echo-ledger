@@ -7,6 +7,7 @@ import {
   type TranslateFeed,
   type TranslateMode,
   type TranslateSpeed,
+  UNAVAILABLE_WORDS,
   endedWords,
   translateApi,
   translatePhase,
@@ -17,7 +18,25 @@ import {
  * the top) or Watch (a video → subtitles at the bottom), and Start. The overlay never takes the mouse until
  * Ctrl+Shift+T unlocks it.
  */
-export function LiveTranslateCard({ run }: { run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined> }) {
+export function LiveTranslateCard({ run, unavailable = null }: {
+  run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
+  /** Why it can't run here (live_translate_status); the card then says so and asks nothing of the core. */
+  unavailable?: keyof typeof UNAVAILABLE_WORDS | null;
+}) {
+  if (unavailable) {
+    return (
+      <div className="card" style={{ marginTop: 14 }} data-testid="translate-unavailable">
+        <div className="row"><b>Live Translate</b></div>
+        <p className="small" role="status">{UNAVAILABLE_WORDS[unavailable]}</p>
+        <p className="small muted">Translates one app's sound as it is heard: teammates in a game's voice chat, or a film.</p>
+        <div className="card-actions"><button type="button" className="btn primary" disabled>Start</button></div>
+      </div>
+    );
+  }
+  return <LiveTranslateForm run={run} />;
+}
+
+function LiveTranslateForm({ run }: { run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined> }) {
   const [apps, setApps] = useState<TranslateApp[]>([]);
   const [pid, setPid] = useState<number | null>(null);
   const [mode, setMode] = useState<TranslateMode>("game");

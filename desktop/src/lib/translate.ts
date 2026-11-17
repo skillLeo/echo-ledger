@@ -1,4 +1,5 @@
-import { api } from "./ipc";
+import { useEffect, useState } from "react";
+import { api, type LiveTranslateAvailability } from "./ipc";
 
 /** Live Translate on the desktop (v1.3, plan B6): one app's sound translated in a click-through overlay. */
 export type TranslateMode = "game" | "watch";
@@ -27,6 +28,35 @@ export interface TranslateFeed {
 }
 
 export const TRANSLATE_FEED = "translate-feed";
+
+/** Why Live Translate can't run here, in words. */
+export const UNAVAILABLE_WORDS: Record<NonNullable<LiveTranslateAvailability["reason"]>, string> = {
+  platform: "Live Translate isn't on the Mac yet",
+  plan: "Not in your plan",
+};
+
+/**
+ * Whether it can run here: the core's answer (live_translate_status), else worked out the same way from this system
+ * and the plan, for a core that doesn't answer.
+ */
+export function translateAvailability(answer: LiveTranslateAvailability | null, platform: string, inPlan: boolean): LiveTranslateAvailability {
+  if (answer) return answer;
+  if (platform === "macos") return { available: false, reason: "platform" };
+  return inPlan ? { available: true, reason: null } : { available: false, reason: "plan" };
+}
+
+/** The core's answer, read once: null until it comes (or when the core can't say). */
+export function useTranslateAvailability(): LiveTranslateAvailability | null {
+  const [answer, setAnswer] = useState<LiveTranslateAvailability | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.liveTranslateStatus().then((a) => live && setAnswer(a ?? null), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return answer;
+}
 
 /** The statuses of a session that is running. Anything else, a status this app doesn't know included, is not. */
 export const RUNNING_STATUSES: ReadonlySet<string> = new Set(["listening", "live", "quiet", "reconnecting"]);

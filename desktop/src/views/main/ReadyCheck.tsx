@@ -3,7 +3,7 @@
 // `ready:changed`; this card shows it with a one-click fix per problem, and the chip in the sidebar says it in two words.
 import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type AppStatus, type ReadyCheck, type ReadyReport } from "../../lib/ipc";
-import { CheckIcon } from "../../components/ControlIcons";
+import { CheckIcon, WarningIcon } from "../../components/ControlIcons";
 import { CloseIcon } from "../../components/Icons";
 import type { Notify } from "../../lib/notice";
 
@@ -44,13 +44,16 @@ export function useReadyReport(): [ReadyReport | null, (r: ReadyReport) => void]
 
 function ReadyRow({ check, busy, onFix }: { check: ReadyCheck; busy: boolean; onFix: (c: ReadyCheck) => void }) {
   return (
-    <li className={`check-row ${check.ok ? "ok" : "failed"}`} data-testid={`ready-${check.id}`}>
-      <span className="check-mark" role="img" aria-label={check.ok ? "OK" : "Problem"}>{check.ok ? <CheckIcon size={15} /> : <CloseIcon size={15} />}</span>
+    // An advisory row that isn't OK is worth a look: it never counts toward Not ready, and its fix is never the main button.
+    <li className={`check-row ${check.ok ? "ok" : check.advisory ? "limited" : "failed"}`} data-testid={`ready-${check.id}`}>
+      <span className="check-mark" role="img" aria-label={check.ok ? "OK" : check.advisory ? "Worth a look" : "Problem"}>
+        {check.ok ? <CheckIcon size={15} /> : check.advisory ? <WarningIcon size={15} /> : <CloseIcon size={15} />}
+      </span>
       <div className="check-main">
-        <div className="check-title">{check.label}</div>
+        <div className="check-title">{check.label}{!check.ok && check.advisory && <span className="small muted"> · Worth a look</span>}</div>
         {check.detail && <div className="small muted">{check.detail}</div>}
       </div>
-      {check.fix && <button type="button" className={`btn compact ${check.ok ? "" : "primary"}`} disabled={busy} onClick={() => onFix(check)}>{check.fix.label}</button>}
+      {check.fix && <button type="button" className={`btn compact ${check.ok || check.advisory ? "" : "primary"}`} disabled={busy} onClick={() => onFix(check)}>{check.fix.label}</button>}
     </li>
   );
 }

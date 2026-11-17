@@ -953,3 +953,5 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
   text-align: match-parent;
   text-align: -webkit-match-parent;
 }
+.el-report { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-16); }
+.el-report p { margin: 0; }
