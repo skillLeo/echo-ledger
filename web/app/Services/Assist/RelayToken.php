@@ -71,7 +71,8 @@ final class RelayToken
             'plan' => $plan['claim'],
             'modes' => $modes,
             'models' => self::models($modes),
-            'budget' => $this->plans->left($session->workspace_id, $session->user_id),
+            // Practice's own allowance for a Practice session (1.9.0-h), the live one otherwise.
+            'budget' => $this->plans->left($session->workspace_id, $session->user_id, $session->practice),
             'practice' => $session->practice,
             'iat' => $issuedAt,
             'exp' => $expiresAt,

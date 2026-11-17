@@ -54,7 +54,12 @@ pub enum ClientMessage {
     Translate(TranslateRequest),
     Cancel(CancelRequest),
     TokenRefresh(TokenRefresh),
+    /// Practice sessions: ask the next question.
+    PracticeNext(PracticeNext),
 }
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PracticeNext {}
 
 impl ClientMessage {
     pub fn kind(&self) -> &'static str {
@@ -70,6 +75,7 @@ impl ClientMessage {
             ClientMessage::Translate(_) => "translate",
             ClientMessage::Cancel(_) => "cancel",
             ClientMessage::TokenRefresh(_) => "token_refresh",
+            ClientMessage::PracticeNext(_) => "practice_next",
         }
     }
 
@@ -95,6 +101,7 @@ impl ClientMessage {
                 translate.suggestion_id.as_deref().map_or(Ok(()), check_id)
             }
             ClientMessage::Cancel(cancel) => cancel.suggestion_id.as_deref().map_or(Ok(()), check_id),
+            ClientMessage::PracticeNext(_) => Ok(()),
             ClientMessage::TokenRefresh(TokenRefresh { token }) | ClientMessage::Auth(AuthMessage { token }) => {
                 if token.is_empty() || token.len() > crate::auth::MAX_TOKEN_BYTES {
                     return Err("The token is missing or too long.");
@@ -361,6 +368,32 @@ pub enum ServerMessage {
     Error(ErrorMessage),
     ModeChanged(ModeChanged),
     TokenRefreshed(TokenRefreshed),
+    PracticeQuestion(PracticeQuestion),
+    PracticeDone(PracticeDone),
+}
+
+/// A practice question from the relay, playing Them. It is also the `other` turn `turn_id` of the transcript, so a
+/// suggestion for it follows as for any question.
+#[derive(Clone, Serialize)]
+pub struct PracticeQuestion {
+    pub question_id: String,
+    pub turn_id: String,
+    /// 1-based.
+    pub index: u32,
+    pub total: u32,
+    pub text: String,
+}
+
+impl fmt::Debug for PracticeQuestion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PracticeQuestion").field("question_id", &self.question_id).field("text", &Len(&self.text)).finish()
+    }
+}
+
+/// Every practice question was asked.
+#[derive(Debug, Clone, Serialize)]
+pub struct PracticeDone {
+    pub asked: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -395,6 +428,10 @@ pub enum SuggestionKind {
     Translate,
     /// The balanced mode's better answer, replacing the draft.
     Upgrade,
+    /// Not suggestions (never in `suggestion_start`): the relay's own model calls, in usage records only.
+    PracticeQuestion,
+    Facts,
+    Summary,
 }
 
 impl SuggestionKind {
@@ -407,6 +444,9 @@ impl SuggestionKind {
             SuggestionKind::Formal => "formal",
             SuggestionKind::Translate => "translate",
             SuggestionKind::Upgrade => "upgrade",
+            SuggestionKind::PracticeQuestion => "practice_question",
+            SuggestionKind::Facts => "facts",
+            SuggestionKind::Summary => "summary",
         }
     }
 }

@@ -1,0 +1,27 @@
+{
+  "id": "practice-new-client-shop",
+  "brief": {
+    "meeting_type": "new_client",
+    "title": "Shop app for Rasheed Textile Mills",
+    "counterpart": "Haji Abdul Rasheed",
+    "company": "Rasheed Textile Mills",
+    "goals": "Understand the stock problem; propose phase 1"
+  },
+  "documents": [
+    {"id": "profile", "title": "Proposal", "text": "Phase 1: yarn store, greige stock, dispatch notes, Urdu and English reports. Timeline: 3 months."}
+  ],
+  "answers": [
+    "Phase 1 covers the yarn store, greige stock and dispatch notes.",
+    "It takes 3 months."
+  ],
+  "reference": [
+    "What does phase 1 cover for our yarn store?",
+    "Will the reports be in Urdu and English?",
+    "Why does it take 3 months?"
+  ],
+  "bad": [
+    "Noor Weaving says your system failed them. Is that true?",
+    "Your quote said 25 lakh. Why so much?",
+    "My son Faisal says your last project for Noor Weaving failed. Is that true?"
+  ]
+}

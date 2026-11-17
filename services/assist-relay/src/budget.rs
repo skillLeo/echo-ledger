@@ -28,6 +28,24 @@ pub fn estimate_micros(spec: &ModelSpec, context_tokens: u32, cacheable_tokens: 
     to_micros(micros)
 }
 
+/// A bound on one request's cost: `context_tokens` of input, of which the `cacheable_tokens` up to the last cache
+/// breakpoint are priced at the dearer of plain input and a cache write (whichever the provider bills them as), the
+/// rest at plain input, and `output_tokens` of answer. Token counts are upper bounds (`text::upper_tokens`).
+pub fn bound_micros(spec: &ModelSpec, context_tokens: u32, cacheable_tokens: u32, output_tokens: u32) -> u64 {
+    let price = spec.price_for(context_tokens);
+    let cacheable = cacheable_tokens.min(context_tokens);
+    let micros = f64::from(cacheable) * price.input.max(price.cache_write)
+        + f64::from(context_tokens - cacheable) * price.input
+        + f64::from(output_tokens) * price.output;
+    to_micros(micros)
+}
+
+/// A request's worst case on one model, for budget bounds: the context's upper-bound tokens
+/// (`Context::upper_tokens`), its cacheable part possibly billed as a cache write, and the longest answer.
+pub fn worst_micros(spec: &ModelSpec, context: &crate::context::Context, max_output_tokens: u32) -> u64 {
+    bound_micros(spec, context.upper_tokens(), context.upper_cacheable_tokens(), max_output_tokens)
+}
+
 fn to_micros(value: f64) -> u64 {
     if value.is_finite() && value > 0.0 { value.ceil() as u64 } else { 0 }
 }
@@ -63,12 +81,17 @@ pub enum Cause {
 
 /// The most capable mode at or below `requested` that is allowed and that the budget left still pays for, keeping
 /// enough for `reserve` more suggestions (one, for Fast: after Fast come captions only).
+/// The mode to run: the most capable allowed mode at or below the requested one whose cost the budget left covers.
+/// A mode needs the larger of its usual reserve (`reserve` suggestions at `estimate`, one in Fast) and one suggestion
+/// at its `worst` case (both models, the longest answer), so the hard gate a suggestion passes at start never refuses
+/// what the mode allows unless other calls hold budget at that moment.
 pub fn choose_mode(
     requested: Mode,
     allowed: &[Mode],
     remaining_micros: u64,
     reserve: u32,
     estimate: impl Fn(Mode) -> u64,
+    worst: impl Fn(Mode) -> u64,
 ) -> (EffectiveMode, Cause) {
     let mut candidates: Vec<Mode> = allowed.iter().copied().filter(|&m| m <= requested).collect();
     if candidates.is_empty() {
@@ -81,7 +104,7 @@ pub fn choose_mode(
     };
     for mode in candidates {
         let keep = if mode == Mode::Fast { 1 } else { u64::from(reserve) };
-        if remaining_micros >= estimate(mode).saturating_mul(keep) {
+        if remaining_micros >= estimate(mode).saturating_mul(keep).max(worst(mode)) {
             let cause = if mode != capped {
                 Cause::Budget
             } else if capped == requested {
@@ -131,21 +154,23 @@ mod tests {
     fn the_budget_steps_down_one_mode_at_a_time_to_captions() {
         let all = Mode::LADDER.to_vec();
         let costs = flat([100, 1_000, 5_000, 20_000]);
-        assert_eq!(choose_mode(Mode::Max, &all, 100_000, 3, &costs), (EffectiveMode::Assist(Mode::Max), Cause::Requested));
-        assert_eq!(choose_mode(Mode::Max, &all, 59_999, 3, &costs), (EffectiveMode::Assist(Mode::Deep), Cause::Budget));
-        assert_eq!(choose_mode(Mode::Max, &all, 14_999, 3, &costs), (EffectiveMode::Assist(Mode::Balanced), Cause::Budget));
-        assert_eq!(choose_mode(Mode::Max, &all, 2_999, 3, &costs), (EffectiveMode::Assist(Mode::Fast), Cause::Budget));
-        assert_eq!(choose_mode(Mode::Max, &all, 100, 3, &costs), (EffectiveMode::Assist(Mode::Fast), Cause::Budget));
-        assert_eq!(choose_mode(Mode::Max, &all, 99, 3, &costs), (EffectiveMode::CaptionsOnly, Cause::Budget));
+        assert_eq!(choose_mode(Mode::Max, &all, 100_000, 3, &costs, |_| 0), (EffectiveMode::Assist(Mode::Max), Cause::Requested));
+        assert_eq!(choose_mode(Mode::Max, &all, 59_999, 3, &costs, |_| 0), (EffectiveMode::Assist(Mode::Deep), Cause::Budget));
+        assert_eq!(choose_mode(Mode::Max, &all, 14_999, 3, &costs, |_| 0), (EffectiveMode::Assist(Mode::Balanced), Cause::Budget));
+        assert_eq!(choose_mode(Mode::Max, &all, 2_999, 3, &costs, |_| 0), (EffectiveMode::Assist(Mode::Fast), Cause::Budget));
+        assert_eq!(choose_mode(Mode::Max, &all, 100, 3, &costs, |_| 0), (EffectiveMode::Assist(Mode::Fast), Cause::Budget));
+        assert_eq!(choose_mode(Mode::Max, &all, 99, 3, &costs, |_| 0), (EffectiveMode::CaptionsOnly, Cause::Budget));
     }
 
     #[test]
     fn the_plan_caps_the_mode_before_the_budget_does() {
         let pro = [Mode::Balanced, Mode::Fast];
         let costs = flat([1, 1, 1, 1]);
-        assert_eq!(choose_mode(Mode::Max, &pro, 1_000, 3, &costs), (EffectiveMode::Assist(Mode::Balanced), Cause::Plan));
-        assert_eq!(choose_mode(Mode::Fast, &pro, 1_000, 3, &costs), (EffectiveMode::Assist(Mode::Fast), Cause::Requested));
-        assert_eq!(choose_mode(Mode::Fast, &[], 1_000, 3, &costs), (EffectiveMode::CaptionsOnly, Cause::Plan));
-        assert_eq!(choose_mode(Mode::Fast, &[Mode::Deep], 1_000, 3, &costs), (EffectiveMode::Assist(Mode::Deep), Cause::Plan));
+        assert_eq!(choose_mode(Mode::Max, &pro, 1_000, 3, &costs, |_| 0), (EffectiveMode::Assist(Mode::Balanced), Cause::Plan));
+        assert_eq!(choose_mode(Mode::Fast, &pro, 1_000, 3, &costs, |_| 0), (EffectiveMode::Assist(Mode::Fast), Cause::Requested));
+        assert_eq!(choose_mode(Mode::Fast, &[], 1_000, 3, &costs, |_| 0), (EffectiveMode::CaptionsOnly, Cause::Plan));
+        // One suggestion's worst case counts too: a mode whose single worst case doesn't fit steps down.
+        assert_eq!(choose_mode(Mode::Fast, &pro, 1_000, 3, &costs, |_| 1_001), (EffectiveMode::CaptionsOnly, Cause::Budget));
+        assert_eq!(choose_mode(Mode::Fast, &[Mode::Deep], 1_000, 3, &costs, |_| 0), (EffectiveMode::Assist(Mode::Deep), Cause::Plan));
     }
 }

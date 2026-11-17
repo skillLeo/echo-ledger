@@ -37,6 +37,8 @@ pub const TIMESTAMP_WINDOW_SECS: i64 = 60;
 pub const PROVIDERS_PATH: &str = "/api/internal/assist/providers";
 pub const USAGE_PATH: &str = "/api/internal/assist/usage";
 pub const SUGGESTIONS_PATH: &str = "/api/internal/assist/suggestions";
+pub const FACTS_PATH: &str = "/api/internal/assist/facts";
+pub const SUMMARY_PATH: &str = "/api/internal/assist/summary";
 
 const REFRESH_EVERY: Duration = Duration::from_secs(600);
 const RETRY_FIRST_FETCH: Duration = Duration::from_secs(30);
@@ -317,10 +319,40 @@ impl fmt::Debug for SuggestionText {
     }
 }
 
+/// `POST /api/internal/assist/facts`: the whole facts ledger as the relay keeps it. Never logged.
+#[derive(Clone, Serialize)]
+pub struct FactsReport {
+    pub session_id: String,
+    pub facts: Vec<String>,
+    pub at: String,
+}
+
+impl fmt::Debug for FactsReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FactsReport").field("session_id", &self.session_id).field("facts", &self.facts.len()).finish()
+    }
+}
+
+/// `POST /api/internal/assist/summary`: the running summary. Never logged.
+#[derive(Clone, Serialize)]
+pub struct SummaryReport {
+    pub session_id: String,
+    pub summary: String,
+    pub at: String,
+}
+
+impl fmt::Debug for SummaryReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SummaryReport").field("session_id", &self.session_id).field("chars", &self.summary.chars().count()).finish()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Report {
     Usage(UsageRecord),
     Suggestion(SuggestionText),
+    Facts(FactsReport),
+    Summary(SummaryReport),
 }
 
 impl Report {
@@ -328,6 +360,8 @@ impl Report {
         match self {
             Report::Usage(_) => USAGE_PATH,
             Report::Suggestion(_) => SUGGESTIONS_PATH,
+            Report::Facts(_) => FACTS_PATH,
+            Report::Summary(_) => SUMMARY_PATH,
         }
     }
 
@@ -335,6 +369,8 @@ impl Report {
         match self {
             Report::Usage(_) => "usage",
             Report::Suggestion(_) => "suggestion",
+            Report::Facts(_) => "facts",
+            Report::Summary(_) => "summary",
         }
     }
 
@@ -342,6 +378,8 @@ impl Report {
         match self {
             Report::Usage(usage) => serde_json::to_vec(usage),
             Report::Suggestion(text) => serde_json::to_vec(text),
+            Report::Facts(facts) => serde_json::to_vec(facts),
+            Report::Summary(summary) => serde_json::to_vec(summary),
         }
         .unwrap_or_default()
     }

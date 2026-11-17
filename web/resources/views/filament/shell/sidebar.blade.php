@@ -24,6 +24,9 @@
         $shared = Shell::sharedPlaces();
         $activityBadge = Activity::canAccess() ? Activity::getNavigationBadge() : null;
         $sharedActive = collect($shared)->contains(fn (array $s): bool => request()->routeIs($s['route']));
+        // Since v1.9 (L8): Live Assist's sessions and preps, for the people its flag is on for.
+        $assist = Shell::assistPlaces();
+        $assistActive = request()->routeIs('filament.app.pages.live-assist.*');
     }
     $pages = $inApp ? Shell::pages() : collect(filament()->getNavigation())->flatMap(fn ($group) => collect($group->getItems())->map(fn ($item) => [
         'id' => md5((string) $item->getUrl()), 'label' => (string) $item->getLabel(), 'group' => (string) $group->getLabel(), 'url' => (string) $item->getUrl(), 'words' => '',
@@ -135,6 +138,26 @@
 
                     @if (Activity::canAccess())
                         @include('filament.shell.sidebar-item', ['label' => 'Activity', 'url' => Activity::getUrl(), 'icon' => 'bell', 'active' => request()->routeIs('filament.app.pages.activity'), 'badge' => $activityBadge])
+                    @endif
+
+                    @if ($assist !== [])
+                        <div class="el-sb-group">
+                            <div class="el-sb-row">
+                                @include('filament.shell.sidebar-item', ['label' => 'Live Assist', 'url' => $assist[0]['url'], 'icon' => 'sparkles', 'active' => $assistActive])
+                                @include('filament.shell.sidebar-expander', ['group' => 'assist', 'label' => 'Live Assist'])
+                            </div>
+                            <ul class="el-sb-sub" x-show="isOpen('assist') && ! rail()" aria-label="Live Assist" x-cloak>
+                                @foreach ($assist as $a)
+                                    @php($here = request()->routeIs($a['route']))
+                                    <li>
+                                        <a href="{{ $a['url'] }}" @class(['el-sb-subitem', 'el-on' => $here]) @if ($here) aria-current="true" @endif>
+                                            @svg('heroicon-o-'.$a['icon'], ['aria-hidden' => 'true'])
+                                            <span class="el-sb-label">{{ $a['label'] }}</span>
+                                        </a>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
                     @endif
 
                     @if ($shared !== [])
