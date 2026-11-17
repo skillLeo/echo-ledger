@@ -11,6 +11,12 @@ Phone rules for every batch: `pm install -r` only; never uninstall, never clear 
 Builds: the v1.8.1 release candidate from CI on `release/v1.8.1` (desktop 1.8.1; Android 1.8.1, code 18). Windows
 first: it gates the release.
 
+Update 19:15: the first 1.8.1 candidate froze on permissions (S0, found in the Mac session) and was withdrawn before
+release. The fixed candidate adds the start-up stall fix and the permissions fix; the lead installs it on the Mac and
+posts the Windows download link when its CI is green. Gate 3 and the decisions were settled this afternoon, so
+items 2 and 3 below are done. On the Windows laptop, also check that Record and Live captions respond at once after
+the app opens (the S0 path). The phone already has 1.8.1 (code 18); nothing to install there tonight.
+
 **1. Windows laptop, about 50 minutes**
 1. Install the 1.8.1 Windows build from CI over the old one; open it; note the version under Help › About.
 2. Run the batch above ("Windows laptop — v1.8.1 S0/S6/S7"), steps 1–6, with the phone as the viewer.
