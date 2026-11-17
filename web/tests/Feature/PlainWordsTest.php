@@ -91,6 +91,7 @@ const VENDOR_NAMES_ALLOWED = [
     // A person adds the connector in Claude or ChatGPT themselves, and the website says where it works.
     'resources/views/auth/connector-consent.blade.php' => 'the person adds the connector there',
     'resources/views/site/home.blade.php' => 'where the connector works',
+    'resources/views/site/v2/home.blade.php' => 'where the connector works (the v2.0 website, the same words)',
     // The privacy policy names every provider that receives data, as the law asks.
     'resources/views/legal/privacy.blade.php' => 'the law',
 ];

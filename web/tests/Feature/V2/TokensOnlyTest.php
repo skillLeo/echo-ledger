@@ -17,6 +17,7 @@ function consoleV2Sources(): array
         ...glob(resource_path('css/v2/*.css')) ?: [],
         ...glob(resource_path('views/filament/v2/*.blade.php')) ?: [],
         ...glob(resource_path('views/components/el/v2/*.blade.php')) ?: [],
+        ...glob(resource_path('views/site/v2/*.blade.php')) ?: [],
     ];
     $sources = [];
     foreach ($files as $file) {
@@ -126,6 +127,7 @@ it('loads tokens.css first, so a token\'s change reaches the console and the adm
     expect($sources['resources/css/v2/values.css'])->toContain("@import '../tokens.css';")
         ->and($sources['resources/css/v2/console.css'])->toContain("@import './values.css';")
         ->and($sources['resources/css/v2/admin.css'])->toContain("@import './values.css';")
+        ->and($sources['resources/css/v2/site.css'])->toContain("@import '../tokens.css';")
         ->and($families[1])->not->toBe([])
         ->and(array_filter($families[1], fn (string $value): bool => ! str_starts_with(trim($value), 'var(--el-font-family-')))->toBe([])
         ->and((string) file_get_contents(resource_path('css/tokens.css')))->toContain('--el-font-family-sans:');
