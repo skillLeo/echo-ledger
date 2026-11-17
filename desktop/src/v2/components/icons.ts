@@ -35,6 +35,13 @@ export {
   LucideCopyIcon as CopyIcon,
   LucideSmartphoneIcon as DeviceIcon,
   LucideLaptopIcon as LaptopIcon,
+  LucidePencilIcon as RenameIcon,
+  LucideTagIcon as LabelIcon,
+  LucidePinIcon as PinIcon,
+  LucideFolderInputIcon as MoveIcon,
+  LucideInfinityIcon as KeepIcon,
+  LucideListChecksIcon as SelectIcon,
+  LucideSendIcon as SendIcon,
 } from "../../components/Icons";
 export {
   SourceAppIcon,

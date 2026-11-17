@@ -1,6 +1,6 @@
-import { useId, type PointerEvent, type ReactNode } from "react";
+import { useId, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { Icon, type IconType } from "./Button";
-import { ChevronEndIcon } from "./icons";
+import { CheckIcon, ChevronEndIcon } from "./icons";
 
 /** A list of rows with an accessible name. */
 export function List({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
@@ -29,7 +29,14 @@ export type ListRowProps = {
   /** A control that acts on its own (a Toggle); the row is then not a button. */
   control?: ReactNode;
   chevron?: boolean;
-  onClick?: () => void;
+  /** The row's press; the event tells a Shift- or Cmd/Ctrl-click (a range or one more in a selection). */
+  onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
+  /** A right-click on the row, or Shift+F10 and the context-menu key on its button: the row's menu. */
+  onContextMenu?: (e: MouseEvent<HTMLElement> | KeyboardEvent<HTMLButtonElement>) => void;
+  /** Selection mode: the row ticks and unticks (aria-pressed) and shows a tick in a circle instead of its icon. */
+  checked?: boolean;
+  /** Buttons on the end side next to the row's own button (a recording's ⋮), shown on hover and focus. */
+  actions?: ReactNode;
   selected?: boolean;
   compact?: boolean;
   /** At most one badge per row. */
@@ -56,20 +63,27 @@ export type ListRowProps = {
  */
 export function ListRow({
   title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId, label, mark, anchor, disabled, expanded,
+  onContextMenu, checked, actions,
 }: ListRowProps) {
   const id = useId();
   const interactive = Boolean(onClick) && !control;
-  const cls = ["el-row", interactive && "el-row--interactive", disabled && "el-row--disabled", selected && "el-row--selected", compact && "el-row--compact"]
+  const cls = ["el-row", interactive && "el-row--interactive", disabled && "el-row--disabled", (selected || checked) && "el-row--selected", compact && "el-row--compact", actions && "el-row--actions"]
     .filter(Boolean).join(" ");
   const describedBy = [mark && `${id}-mark`, meta && `${id}-meta`, (endTop || endBottom) && `${id}-end`, value && `${id}-value`, badge && `${id}-badge`]
     .filter(Boolean).join(" ") || undefined;
   return (
-    <li className={cls} {...(anchor ? { id: `setting-${anchor}`, "data-setting": anchor, tabIndex: -1 } : {})}>
+    <li className={cls} {...(anchor ? { id: `setting-${anchor}`, "data-setting": anchor, tabIndex: -1 } : {})}
+      onContextMenu={onContextMenu ? (e) => { e.preventDefault(); onContextMenu(e); } : undefined}>
       {interactive && (
         <button type="button" className="el-row__hit" aria-label={label} aria-labelledby={label ? undefined : `${id}-title`} aria-describedby={describedBy}
-          aria-current={selected || undefined} onClick={onClick} onPointerDown={onPointerDown} data-row-id={rowId} disabled={disabled} aria-expanded={expanded} />
+          aria-current={selected || undefined} aria-pressed={checked ?? undefined} onClick={onClick} onPointerDown={onPointerDown} data-row-id={rowId} disabled={disabled} aria-expanded={expanded}
+          onKeyDown={onContextMenu ? (e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); onContextMenu(e); } } : undefined} />
       )}
-      {leading ?? (icon && (
+      {checked !== undefined ? (
+        <span className="el-row__leading el-row__leading--tick" aria-hidden="true">
+          <span className={`el-row__tick${checked ? " el-row__tick--on" : ""}`}>{checked && <Icon icon={CheckIcon} />}</span>
+        </span>
+      ) : leading ?? (icon && (
         <span className={`el-row__leading${iconStyle === "avatar" ? " el-row__leading--avatar" : ""}`}>
           <Icon icon={icon} size="md" />
         </span>
@@ -93,6 +107,7 @@ export function ListRow({
       )}
       {value && <span className="el-row__value" id={`${id}-value`}><span className="el-row__value-text" dir="auto">{value}</span></span>}
       {control && <span className="el-row__control">{control}</span>}
+      {actions && <span className="el-row__actions">{actions}</span>}
       {chevron && <span className="el-row__chevron"><Icon icon={ChevronEndIcon} directional /></span>}
     </li>
   );
