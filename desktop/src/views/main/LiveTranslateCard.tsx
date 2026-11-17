@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { errorMessage } from "../../lib/ipc";
 import {
   TRANSLATE_FEED,
   TRANSLATE_TARGETS,
@@ -8,6 +9,8 @@ import {
   type TranslateMode,
   type TranslateSpeed,
   UNAVAILABLE_WORDS,
+  appsFailure,
+  appsPrompt,
   endedWords,
   translateApi,
   translatePhase,
@@ -38,13 +41,24 @@ export function LiveTranslateCard({ run, unavailable = null }: {
 
 function LiveTranslateForm({ run }: { run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined> }) {
   const [apps, setApps] = useState<TranslateApp[]>([]);
+  const [appsError, setAppsError] = useState<string | null>(null);
   const [pid, setPid] = useState<number | null>(null);
   const [mode, setMode] = useState<TranslateMode>("game");
   const [target, setTarget] = useState("en");
   const [speed, setSpeed] = useState<TranslateSpeed>("fastest");
   const [feed, setFeed] = useState<TranslateFeed | null>(null);
   const [taken, setTaken] = useState<string[]>([]);
-  const refresh = () => void translateApi.apps().then(setApps).catch(() => setApps([]));
+  const refresh = () =>
+    void translateApi
+      .apps()
+      .then((list) => {
+        setApps(list);
+        setAppsError(null);
+      })
+      .catch((e: unknown) => {
+        setApps([]);
+        setAppsError(errorMessage(e));
+      });
   useEffect(() => {
     refresh();
     void translateApi.status().then(setFeed).catch(() => undefined);
@@ -80,7 +94,7 @@ function LiveTranslateForm({ run }: { run: <T>(fn: () => Promise<T>, ok?: string
       <div className="translate-form">
         <label className="small">App
           <select aria-label="App to translate" value={pid ?? ""} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : null)} disabled={running || ended}>
-            <option value="">{apps.length ? "Choose an app playing sound" : "Nothing is playing sound"}</option>
+            <option value="">{appsPrompt(apps.length, appsError !== null)}</option>
             {apps.map((a) => <option key={a.pid} value={a.pid}>{a.name}</option>)}
           </select>
         </label>
@@ -104,6 +118,7 @@ function LiveTranslateForm({ run }: { run: <T>(fn: () => Promise<T>, ok?: string
           </select>
         </label>
       </div>
+      {appsError !== null && <p className="small error-text" role="alert">{appsFailure(appsError)}</p>}
       {running && <p className="small muted">Ctrl+Shift+T lets you move Live Translate (drag it, then Done); Ctrl+Shift+H hides it.</p>}
       {taken.length > 0 && <p className="small error-text">Another app already uses {taken.join(" and ")}: use the buttons here instead.</p>}
       {running && feed?.notice && <p className="small error-text">{feed.notice}</p>}

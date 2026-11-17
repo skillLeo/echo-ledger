@@ -221,8 +221,8 @@ pub fn availability(platform: bool, in_plan: bool) -> Availability {
     Availability { available: reason.is_none(), reason }
 }
 
-/// The apps that play sound now (EchoLedger itself left out).
-pub fn apps() -> Vec<TranslateApp> {
+/// The apps that play sound now (EchoLedger itself left out); an error when the system could not be asked.
+pub fn apps() -> Result<Vec<TranslateApp>, String> {
     #[cfg(windows)]
     {
         let mut list: Vec<TranslateApp> =
@@ -235,15 +235,17 @@ pub fn apps() -> Vec<TranslateApp> {
                 .collect();
         list.sort_by_key(|a| a.name.to_lowercase());
         list.dedup_by(|a, b| a.name == b.name);
-        list
+        Ok(list)
     }
     #[cfg(target_os = "macos")]
     {
-        crate::audio::platform::macos::playing_apps().into_iter().map(|(pid, name)| TranslateApp { pid, name }).collect()
+        let list = crate::audio::platform::macos::playing_apps()?;
+        eprintln!("[echoledger] live translate: {} app(s) playing sound", list.len());
+        Ok(list.into_iter().map(|(pid, name)| TranslateApp { pid, name }).collect())
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
-        Vec::new()
+        Ok(Vec::new())
     }
 }
 

@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { LiveTranslateCard } from "../main/LiveTranslateCard";
 import TranslateOverlayApp from "./TranslateOverlayApp";
-import { RUNNING_STATUSES, TRANSLATE_FEED, type TranslateFeed, endedWords, tailText, translatePhase } from "../../lib/translate";
+import { RUNNING_STATUSES, TRANSLATE_FEED, type TranslateFeed, appsPrompt, endedWords, tailText, translatePhase } from "../../lib/translate";
 import translateRs from "../../../src-tauri/src/translate/mod.rs?raw";
-import { callsOf, emitEvent, listenerCount, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, listenerCount, resetTauriMock, respond } from "../../test/tauri";
 
 const subscribed = () => waitFor(() => expect(listenerCount(TRANSLATE_FEED)).toBeGreaterThan(0));
 
@@ -40,6 +40,16 @@ describe("Live Translate card", () => {
 
     await waitFor(() => expect(callsOf("translate_start")).toHaveLength(1));
     expect(callsOf("translate_start")[0]).toEqual({ request: { pid: 4242, name: "Valorant", mode: "game", target: "ur", hints: ["ar", "en"], speed: "fastest" } });
+  });
+
+  it("a list that could not be read says so, never that nothing is playing", async () => {
+    fail("translate_apps", "Core Audio did not answer");
+    render(<LiveTranslateCard run={run} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The apps playing sound could not be listed: Core Audio did not answer. Press Refresh to try again.");
+    expect(screen.getByLabelText("App to translate")).toHaveTextContent("The apps playing sound could not be listed");
+    expect(appsPrompt(0, false)).toBe("Nothing is playing sound");
+    expect(appsPrompt(2, false)).toBe("Choose an app playing sound");
+    expect(appsPrompt(0, true)).toBe("The apps playing sound could not be listed");
   });
 
   it("says where it works, and offers Move and Stop while it runs", async () => {

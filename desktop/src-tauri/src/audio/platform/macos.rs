@@ -476,22 +476,31 @@ struct AudioProcess {
 /// Every process object Core Audio knows (`kAudioHardwarePropertyProcessObjectList`) with
 /// `kAudioProcessPropertyPID`, `kAudioProcessPropertyBundleID`, `kAudioProcessPropertyIsRunningInput` and
 /// `kAudioProcessPropertyIsRunningOutput` (objc2-core-audio-0.3.2 `src/generated/AudioHardware.rs` lines 1082,
-/// 1758-1768). Polled; property listeners are unreliable for other processes.
+/// 1758-1768). Polled; property listeners are unreliable for other processes. None read (Core Audio did not answer):
+/// an empty list.
 fn audio_processes() -> Vec<AudioProcess> {
+    read_audio_processes().unwrap_or_default()
+}
+
+/// The same, saying when Core Audio could not be asked: an empty list then is not "nothing plays".
+fn read_audio_processes() -> Result<Vec<AudioProcess>, String> {
     let mut out = Vec::new();
     unsafe {
         let system_object = kAudioObjectSystemObject as AudioObjectID;
         let addr = address(kAudioHardwarePropertyProcessObjectList, kAudioObjectPropertyScopeGlobal);
         let mut size: u32 = 0;
-        if AudioObjectGetPropertyDataSize(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size)) != 0 {
-            return out;
+        let status = AudioObjectGetPropertyDataSize(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size));
+        if status != 0 {
+            return Err(format!("Core Audio did not list the apps (error {status})"));
         }
         let count = size as usize / std::mem::size_of::<AudioObjectID>();
         let mut ids = vec![0 as AudioObjectID; count];
-        if count == 0
-            || AudioObjectGetPropertyData(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size), NonNull::new_unchecked(ids.as_mut_ptr().cast())) != 0
-        {
-            return out;
+        if count == 0 {
+            return Ok(out);
+        }
+        let status = AudioObjectGetPropertyData(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size), NonNull::new_unchecked(ids.as_mut_ptr().cast()));
+        if status != 0 {
+            return Err(format!("Core Audio did not list the apps (error {status})"));
         }
         for id in ids {
             let Some(pid) = get_u32(id, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal, None) else { continue };
@@ -512,7 +521,7 @@ fn audio_processes() -> Vec<AudioProcess> {
             out.push(AudioProcess { pid, bundle, input, output });
         }
     }
-    out
+    Ok(out)
 }
 
 /// Whether the output device may be the clock of Live Translate's aggregate device (pure): only one that records
@@ -653,20 +662,21 @@ unsafe fn tap_aggregate(tap_uid: &str) -> Result<AudioObjectID, String> {
 }
 
 /// Live Translate (macOS 14.2+): the apps playing sound now, with their processes (`translate::players`).
-fn playing() -> Vec<crate::translate::players::PlayingApp> {
+fn playing() -> Result<Vec<crate::translate::players::PlayingApp>, String> {
     use crate::translate::players::{Player, group};
-    let processes: Vec<Player> = audio_processes().into_iter().map(|p| Player { pid: p.pid, bundle: p.bundle, output: p.output }).collect();
-    group(&processes, std::process::id())
+    let processes: Vec<Player> = read_audio_processes()?.into_iter().map(|p| Player { pid: p.pid, bundle: p.bundle, output: p.output }).collect();
+    Ok(group(&processes, std::process::id()))
 }
 
-/// The apps playing sound now, each by the name macOS gives it (its running name, else a known one or its bundle id).
-pub fn playing_apps() -> Vec<(u32, String)> {
-    playing().into_iter().map(|app| (app.root, app_name(&app.bundle))).collect()
+/// The apps playing sound now, each by the name macOS gives it (its running name, else a known one or its bundle id);
+/// an error when Core Audio could not be asked (never said as "nothing plays").
+pub fn playing_apps() -> Result<Vec<(u32, String)>, String> {
+    Ok(playing()?.into_iter().map(|app| (app.root, app_name(&app.bundle))).collect())
 }
 
 /// The processes of the app `pid` stands for that play sound now; none when it stopped playing.
 pub fn playing_pids(pid: u32) -> Option<Vec<u32>> {
-    crate::translate::players::pids_of(&playing(), pid)
+    crate::translate::players::pids_of(&playing().ok()?, pid)
 }
 
 fn app_name(bundle: &str) -> String {

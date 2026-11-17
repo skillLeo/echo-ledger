@@ -3034,8 +3034,8 @@ pub fn skipped_restore(app: AppHandle, id: String) -> AppResult<()> {
 
 /// The apps playing sound now, to pick one for Live Translate.
 #[tauri::command]
-pub fn translate_apps() -> Vec<crate::translate::TranslateApp> {
-    crate::translate::apps()
+pub fn translate_apps() -> AppResult<Vec<crate::translate::TranslateApp>> {
+    crate::translate::apps().map_err(AppError::Message)
 }
 
 /// Whether Live Translate can start on this computer, and why not: `platform` (a Mac, for now) or `plan`.
