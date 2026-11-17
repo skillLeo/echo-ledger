@@ -142,10 +142,14 @@ final class AssistSessionController extends Controller
         return response()->json(['accepted' => $accepted]);
     }
 
-    /** POST /api/assist/sessions/{id}/end — `sessions:write`. */
+    /**
+     * POST /api/assist/sessions/{id}/end — `sessions:write`. Since 1.9.0-l the person's own session still on in any of
+     * their workspaces (what a 409 session_active named, so the app can end it and start again); otherwise as every
+     * other route: this workspace's own session, 409 session_ended once it ended, anyone else's a 404.
+     */
     public function end(Request $request, string $id): JsonResponse
     {
-        $session = $this->active($request, $id);
+        $session = $this->activeOf($this->device($request)->user_id)->find($id) ?? $this->active($request, $id);
         self::close($session, now());
         MakeAssistReportJob::enqueue($session);
 

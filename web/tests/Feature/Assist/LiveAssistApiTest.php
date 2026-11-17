@@ -286,6 +286,37 @@ describe('starting a session', function () {
         expect(AssistSession::query()->withoutGlobalScopes()->where('user_id', $user->id)->count())->toBe(1);
     });
 
+    it('ends the person\'s own session in another of their workspaces, so a new one can start (1.9.0-l)', function () {
+        $device = assistPerson('pro');
+        $live = $this->api(Fx::token($device))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])->assertCreated()->json('session.id');
+        $user = $device->user->fresh();
+        $team = app(Workspaces::class)->createFor($user, 'Second team');
+        app(Workspaces::class)->switchTo($user, $team);
+        $there = $this->api(Fx::token(Fx::device($user->fresh(), ['workspace_id' => $team->id])));
+
+        $named = $there->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertStatus(409)->json('session_id');
+        $there->postJson("/api/assist/sessions/{$named}/end")->assertOk()->assertExactJson(['report' => 'queued']);
+        expect(AssistSession::query()->withoutGlobalScopes()->find($live)->status)->toBe('ended');
+        $there->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertCreated();
+        // Still only the person's: their other workspace's session stays out of reach for everything else.
+        $there->getJson("/api/assist/sessions/{$live}")->assertNotFound();
+        // Once ended, the other workspace's session is as out of reach as any other there.
+        $there->postJson("/api/assist/sessions/{$live}/end")->assertNotFound();
+    });
+
+    it('answers 404 to ending someone else\'s session, whatever the workspace', function () {
+        $bob = assistPerson('pro');
+        $bobSession = $this->api(Fx::token($bob))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true])->json('session.id');
+        $alice = assistPerson('pro');
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($bob->workspace_id), $alice->user);
+        $aliceThere = Fx::device($alice->user->fresh(), ['workspace_id' => $bob->workspace_id]);
+
+        foreach ([$alice, $aliceThere] as $device) {
+            $this->api(Fx::token($device))->postJson("/api/assist/sessions/{$bobSession}/end")->assertNotFound();
+        }
+        expect(AssistSession::query()->withoutGlobalScopes()->find($bobSession)->status)->toBe('active');
+    });
+
     it('answers 503 while the relay is not set up, and creates nothing', function () {
         app(SettingsRepository::class)->set('relay.url', null);
         $this->api(Fx::token(assistPerson()))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true])
