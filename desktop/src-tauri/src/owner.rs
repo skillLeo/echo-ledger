@@ -250,11 +250,11 @@ mod tests {
 
     #[test]
     fn a_recording_uploads_only_for_the_account_and_server_it_was_made_under() {
-        let a = Owner::new("https://Ledger.example.test/", Some(" Hassam@Example.test "));
-        assert_eq!(a, Owner { server: "https://Ledger.example.test".into(), email: Some("hassam@example.test".into()) });
-        assert!(a.may_upload_as(&Owner::new(SERVER, Some("hassam@example.test"))), "the host's case and the email's case do not matter");
+        let a = Owner::new("https://Ledger.example.test/", Some(" Ayesha@Example.test "));
+        assert_eq!(a, Owner { server: "https://Ledger.example.test".into(), email: Some("ayesha@example.test".into()) });
+        assert!(a.may_upload_as(&Owner::new(SERVER, Some("ayesha@example.test"))), "the host's case and the email's case do not matter");
         assert!(!a.may_upload_as(&Owner::new(SERVER, Some("sara@example.test"))), "another account");
-        assert!(!a.may_upload_as(&Owner::new("https://other.example.test", Some("hassam@example.test"))), "another server");
+        assert!(!a.may_upload_as(&Owner::new("https://other.example.test", Some("ayesha@example.test"))), "another server");
         assert!(!a.may_upload_as(&Owner::new(SERVER, None)), "an account not read yet is not taken for this one");
         // An older server has no accounts: only its address is known.
         let old = Owner::new(SERVER, None);
@@ -263,7 +263,7 @@ mod tests {
 
         assert!(may_upload(None, None), "an item without an owner is the current account's");
         assert!(!may_upload(Some(&a), None));
-        assert_eq!(held_for(Some(&a), Some(&Owner::new(SERVER, Some("sara@example.test")))).as_deref(), Some("hassam@example.test"));
+        assert_eq!(held_for(Some(&a), Some(&Owner::new(SERVER, Some("sara@example.test")))).as_deref(), Some("ayesha@example.test"));
         assert_eq!(held_for(Some(&old), Some(&Owner::new("https://other.example.test", None))).as_deref(), Some("ledger.example.test"));
         assert_eq!(held_for(None, Some(&a)), None);
     }
@@ -273,7 +273,7 @@ mod tests {
         let data = tempfile::tempdir().unwrap();
         assert_eq!(current(data.path(), None), None);
         assert_eq!(current(data.path(), Some(SERVER)), Some(Owner::new(SERVER, None)));
-        let a = Owner::new(SERVER, Some("hassam@example.test"));
+        let a = Owner::new(SERVER, Some("ayesha@example.test"));
         a.save(data.path()).unwrap();
         assert_eq!(Owner::load(data.path()), Some(a.clone()));
         assert_eq!(current(data.path(), Some("https://other.example.test")), Some(a), "account.json wins");
@@ -283,10 +283,10 @@ mod tests {
     fn signing_in_as_someone_else_keeps_the_queue_for_the_account_that_made_it() {
         let data = tempfile::tempdir().unwrap();
         let dir = data.path();
-        let a = Owner::new(SERVER, Some("hassam@example.test"));
+        let a = Owner::new(SERVER, Some("ayesha@example.test"));
         let b = Owner::new(SERVER, Some("sara@example.test"));
         a.save(dir).unwrap();
-        let earlier = Owner::new("https://other.example.test", Some("hassam@example.test"));
+        let earlier = Owner::new("https://other.example.test", Some("ayesha@example.test"));
         UploadQueue { items: vec![upload(dir, "r1", None), upload(dir, "r2", Some(earlier.clone()))] }.save(&paths::uploads(dir)).unwrap();
         let mut usage = UsageQueue::default();
         usage.push(report("u1"));
@@ -330,13 +330,13 @@ mod tests {
     fn signing_in_again_as_the_same_account_changes_nothing() {
         let data = tempfile::tempdir().unwrap();
         let dir = data.path();
-        let a = Owner::new(SERVER, Some("hassam@example.test"));
+        let a = Owner::new(SERVER, Some("ayesha@example.test"));
         UploadQueue { items: vec![upload(dir, "r1", None)] }.save(&paths::uploads(dir)).unwrap();
         let mut usage = UsageQueue::default();
         usage.push(report("u1"));
         usage.save(&paths::usage(dir)).unwrap();
 
-        assert!(!hand_over(dir, Some(&a), &Owner::new("https://ledger.example.test/", Some("HASSAM@example.test"))).unwrap());
+        assert!(!hand_over(dir, Some(&a), &Owner::new("https://ledger.example.test/", Some("AYESHA@example.test"))).unwrap());
         assert_eq!(UploadQueue::load(&paths::uploads(dir)).items[0].owner, None);
         assert_eq!(UsageQueue::load(&paths::usage(dir)).items.len(), 1);
         // A first sign-in, and an install from before v1.5 whose account was not known, keep the queue as it is.
@@ -350,7 +350,7 @@ mod tests {
     fn a_session_of_another_account_s_discarded_recording_waits_for_that_account() {
         let data = tempfile::tempdir().unwrap();
         let dir = data.path();
-        let a = Owner::new(SERVER, Some("hassam@example.test"));
+        let a = Owner::new(SERVER, Some("ayesha@example.test"));
         let b = Owner::new(SERVER, Some("sara@example.test"));
         let mut discards = DiscardQueue::default();
         discards.push("A-OPEN".into());
@@ -362,7 +362,7 @@ mod tests {
         b.save(dir).unwrap();
         hand_over(dir, Some(&b), &a).unwrap();
         let back = DiscardQueue::load(&paths::discards(dir)).items;
-        assert!(back.contains(&"A-OPEN".to_string()), "deleted once Hassam is back: {back:?}");
+        assert!(back.contains(&"A-OPEN".to_string()), "deleted once Ayesha is back: {back:?}");
         assert!(!back.contains(&"B-OWN".to_string()), "Sara's deletion waits for Sara");
     }
 
@@ -379,7 +379,7 @@ mod tests {
         };
         PendingStore { items: vec![decision("p1")] }.save(&paths::pending(dir)).unwrap();
         SkippedStore { items: vec![SkippedCall { decision: decision("k1"), reason: SkipReason::TooShort, skipped_at: now }] }.save(&paths::skipped(dir)).unwrap();
-        let a = Owner::new(SERVER, Some("hassam@example.test"));
+        let a = Owner::new(SERVER, Some("ayesha@example.test"));
 
         hand_over(dir, Some(&a), &Owner::new("https://other.example.test", None)).unwrap();
         let kept = PendingStore::load(&paths::pending(dir)).items[0].to_upload();
