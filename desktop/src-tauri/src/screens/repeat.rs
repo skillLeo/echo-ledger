@@ -4,15 +4,26 @@
 //! answers `200` with it. Skipped here, it costs no encoding, no upload and no decoding on a busy server.
 //!
 //! The check is stricter than the server's on each of its three counts, so it never drops a screen the server would
-//! keep: within [`WINDOW_MS`] (not 5 minutes), the same size, and no pixel at all differing by more than [`SHADES`] at
-//! [`GREY_WIDTH`] px (not 2). The picture is reduced by averaging every pixel into its box, never by sampling, so a
-//! small sharp change (a digit, a cursor's click) cannot fall between samples. "Capture now" and pointing words count
-//! too: the server would merge their repeat all the same.
+//! keep: within [`WINDOW_MS`] (not 5 minutes), the same size, and no pixel at all differing by more than [`SHADES`]
+//! (not 2), on a picture shrunk as the server shrinks it ([`grey_width`]: at most 3 × smaller, so one pixel always
+//! weighs at least a ninth of its box). The picture is reduced by averaging every pixel into its box, never by
+//! sampling, so a small sharp change (a digit, a cursor's click) cannot fall between samples. A frame above
+//! [`MAX_PIXELS`] or longer than [`MAX_ASPECT`] to 1 is never compared. "Capture now" and pointing words count too: the
+//! server would merge their repeat all the same.
 
 /// How close in time a repeat must be to the screen it repeats.
 pub const WINDOW_MS: u64 = 30_000;
-/// The width the pictures are compared at (the server's).
+/// The narrowest width the pictures are compared at (the server's).
 pub const GREY_WIDTH: usize = 640;
+/// Frames above this many pixels are never compared.
+pub const MAX_PIXELS: u64 = 12_000_000;
+/// Nor frames longer than this to 1 either way.
+pub const MAX_ASPECT: u64 = 4;
+
+/// The width a frame `width` px wide is compared at, as the server shrinks it: `min(w, max(640, ceil(w / 3)))`.
+pub fn grey_width(width: usize) -> usize {
+    width.min(GREY_WIDTH.max(width.div_ceil(3)))
+}
 /// A pixel differs when its grey moved by more than this (the server's).
 pub const SHADES: u8 = 12;
 
@@ -32,14 +43,18 @@ fn luminance(b: u8, g: u8, r: u8) -> u32 {
 
 impl Fingerprint {
     /// The fingerprint of a BGRA frame (rows `stride` bytes apart) kept at `at_ms` of the recording. Every pixel is
-    /// averaged into its box of the [`GREY_WIDTH`]-wide picture (a narrower frame keeps its width). `None` for an
-    /// empty frame or a buffer too short for its size.
+    /// averaged into its box of the [`grey_width`]-wide picture. `None` for a frame that is never compared (above
+    /// [`MAX_PIXELS`], longer than [`MAX_ASPECT`] to 1), an empty one or a buffer too short for its size.
     pub fn of(bgra: &[u8], width: u32, height: u32, stride: usize, at_ms: u64) -> Option<Self> {
         let (w, h) = (width as usize, height as usize);
         if w == 0 || h == 0 || stride < w * 4 || bgra.len() < stride * (h - 1) + w * 4 {
             return None;
         }
-        let gw = w.min(GREY_WIDTH);
+        let (long, short) = (width.max(height) as u64, width.min(height) as u64);
+        if u64::from(width) * u64::from(height) > MAX_PIXELS || long > short * MAX_ASPECT {
+            return None;
+        }
+        let gw = grey_width(w);
         let gh = (h * gw / w).max(1);
         let column: Vec<usize> = (0..w).map(|x| x * gw / w).collect();
         let mut per_column = vec![0u32; gw];
@@ -146,6 +161,36 @@ mod tests {
         assert!(!print(&dimmed, 1920, 1080, 1_000).repeats(&first));
     }
 
+    #[test]
+    fn large_frames_shrink_as_the_server_does_so_one_pixel_or_a_faint_line_still_counts() {
+        assert_eq!((grey_width(500), grey_width(1280), grey_width(1920), grey_width(2880), grey_width(3840)), (500, 640, 640, 960, 1280));
+        for (w, h) in [(3840u32, 2160u32), (2880, 1800)] {
+            let frame = page(w, h, |_, _| None);
+            let first = print(&frame, w, h, 0);
+            assert!(print(&frame, w, h, 1_000).repeats(&first), "{w}x{h}: the same picture again");
+            // One pixel gone black on the light part of the page.
+            let pixel = page(w, h, |x, y| (x == 1001 && y == 30).then_some(0));
+            assert!(!print(&pixel, w, h, 1_000).repeats(&first), "{w}x{h}: one changed pixel is kept");
+            // A 1 px line of low contrast (40 shades) across the light part, and down it.
+            let across = page(w, h, |_, y| (y == 30).then_some(195));
+            assert!(!print(&across, w, h, 1_000).repeats(&first), "{w}x{h}: a faint line across is kept");
+            let down = page(w, h, |x, y| (x == 1001 && (24..48).contains(&y)).then_some(195));
+            assert!(!print(&down, w, h, 1_000).repeats(&first), "{w}x{h}: a faint line down is kept");
+        }
+    }
+
+    #[test]
+    fn frames_too_large_or_too_long_are_never_compared() {
+        let big = page(5120, 2880, |_, _| None);
+        assert!(Fingerprint::of(&big, 5120, 2880, 5120 * 4, 0).is_none(), "14.7 MP");
+        let long = page(4100, 1000, |_, _| None);
+        assert!(Fingerprint::of(&long, 4100, 1000, 4100 * 4, 0).is_none(), "longer than 4 to 1");
+        let tall = page(400, 1601, |_, _| None);
+        assert!(Fingerprint::of(&tall, 400, 1601, 400 * 4, 0).is_none(), "taller than 4 to 1");
+        let edge = page(4000, 1000, |_, _| None);
+        assert!(Fingerprint::of(&edge, 4000, 1000, 4000 * 4, 0).is_some(), "4 to 1 exactly is compared");
+    }
+
     /// CPU per capture, beside the WebP encoding every kept screen pays anyway. Ignored by default; in a release build:
     /// `cargo test --release --lib screens::repeat -- --ignored --nocapture`.
     #[test]
@@ -177,7 +222,7 @@ mod tests {
         let changed = page(500, 300, |x, y| (x == 499 && y == 299).then_some(0));
         assert!(!print(&changed, 500, 300, 1).repeats(&print(&small, 500, 300, 0)), "the last pixel of the last row counts");
         // Padded rows (stride wider than the picture) and a short buffer.
-        let (w, h, stride) = (700u32, 10u32, 704 * 4);
+        let (w, h, stride) = (700u32, 200u32, 704 * 4);
         let padded: Vec<u8> = (0..h).flat_map(|_| (0..stride).map(|i| if i < (w as usize) * 4 { 128 } else { 0 })).collect();
         assert!(Fingerprint::of(&padded, w, h, stride, 0).is_some());
         assert!(Fingerprint::of(&padded[..100], w, h, stride, 0).is_none());
