@@ -8,6 +8,7 @@ use std::sync::Mutex;
 
 pub mod card;
 pub mod client;
+pub mod http;
 pub mod live;
 pub mod outbox;
 pub mod protocol;
