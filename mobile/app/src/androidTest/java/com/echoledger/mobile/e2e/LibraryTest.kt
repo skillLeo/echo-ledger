@@ -63,11 +63,13 @@ class EmptyLibraryTest : E2eTest() {
     @Test
     fun theAppOffersCallSetupBecauseTheCaptureHelperIsNotRunning() {
         launchPaired()
-        Ui.awaitText("WhatsApp calls are not being recorded")
-        Ui.clickText("Set up call recording →")
-        Ui.awaitText("Setup")
-        Ui.awaitTextContaining("Call capture")
-        Ui.clickDescription("Back")
+        // Since v1.5 the banner names what stops calls being recorded, and Fix opens the Ready check (P-017: one line
+        // above the problems, never the first problem twice).
+        Ui.awaitTextContaining("Calls are not being recorded")
+        Ui.clickText("Fix")
+        Ui.awaitText("Ready check")
+        Ui.awaitText("Calls are not being recorded")
+        Ui.device.pressBack()
         Ui.awaitText("Library")
     }
 }

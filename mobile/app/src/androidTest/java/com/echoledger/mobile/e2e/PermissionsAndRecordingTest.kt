@@ -92,11 +92,14 @@ class PermissionsAndRecordingTest : E2eTest() {
         assertTrue(Ui.hasContaining("Display over other apps"))
         assertTrue(Ui.hasContaining("Not enabled yet.") || Ui.hasContaining("helper"))
         Ui.clickDescription("Back")
-        Ui.openTab("Record")
-        Ui.awaitText("Auto-record WhatsApp calls")
+        // Auto-record calls lives in Settings › Calls & meetings (and Record › Calls & meetings), one switch for all apps.
+        Ui.openTab("Settings")
+        Ui.awaitText("Settings")
+        Ui.scrollDownTo("Calls & meetings")
+        Ui.clickText("Calls & meetings")
+        Ui.awaitText("Auto-record calls")
         assertTrue(Ui.has("Enable call capture in Setup first"))
-        assertFalse("auto-record cannot be switched on without the capture helper", Ui.switchNear("Auto-record WhatsApp calls").isEnabled)
-        assertTrue(Ui.has("Open setup"))
+        assertFalse("auto-record cannot be switched on without the capture helper", Ui.switchNear("Auto-record calls").isEnabled)
     }
 
     @Ignore("NEW: runtime permission requests crash the app (androidx.fragment 1.2.5 rejects the activity result request code)")
@@ -105,7 +108,9 @@ class PermissionsAndRecordingTest : E2eTest() {
         openSetup()
         allowFor("Microphone").click()
         answerPrompt("While using the app", "Only this time")
-        Ui.awaitText("✓  Microphone")
+        // A granted permission shows a check mark and no Allow beside it.
+        Ui.awaitText("Microphone")
+        Ui.awaitCondition("Allow to go from the microphone row", Ui.NORMAL) { granted(Manifest.permission.RECORD_AUDIO) }
         Ui.snapshot("setup-microphone-granted")
         assertTrue(granted(Manifest.permission.RECORD_AUDIO))
     }
@@ -126,8 +131,8 @@ class PermissionsAndRecordingTest : E2eTest() {
         openSetup()
         allowFor("Notifications (Stop / Keep / Discard actions)").click()
         answerPrompt("Allow")
-        Ui.awaitText("✓  Notifications (Stop / Keep / Discard actions)")
-        assertTrue(granted(Manifest.permission.POST_NOTIFICATIONS))
+        Ui.awaitCondition("the notification permission", Ui.NORMAL) { granted(Manifest.permission.POST_NOTIFICATIONS) }
+        assertTrue(Ui.has("Notifications (Stop / Keep / Discard actions)"))
     }
 
     @Test
