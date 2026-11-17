@@ -163,6 +163,8 @@ pub fn rescue_scaled(areas: &[(WorkArea, f64)], pos: (i32, i32), size: (u32, u32
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Spot {
     TopCentre,
+    /// Centred, `margin` up from the bottom (Live Translate's subtitles).
+    BottomCentre,
     Corner(Corner),
 }
 
@@ -173,6 +175,7 @@ pub fn spot_on(area: WorkArea, scale: f64, size: (u32, u32), window_scale: f64, 
     let margin = (margin_logical * scale).round() as i32;
     let at = match spot {
         Spot::TopCentre => top_center(area, size, margin),
+        Spot::BottomCentre => (area.x + (area.w as i32 - size.0 as i32) / 2, area.y + area.h as i32 - size.1 as i32 - margin),
         Spot::Corner(corner) => dock(area, size, corner, margin),
     };
     clamp_into(area, at, size)

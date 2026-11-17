@@ -26,6 +26,9 @@ pub const REVIEW: &str = "review";
 
 /// Every overlay-type window: same builder flags, click-through unless the cursor is over a reported region.
 pub const WINDOWS: [&str; 5] = [OVERLAY, DICTATION, PILL, REVIEW, ASSIST];
+/// The windows kept on screen when a display goes away or moves (`keep_on_screen`): the overlays and Live Translate,
+/// whose clicks it locks and unlocks itself, so it stays out of the click-through poll's [`WINDOWS`].
+pub const RESCUED: [&str; 6] = [OVERLAY, DICTATION, PILL, REVIEW, ASSIST, crate::translate::WINDOW];
 /// The Live Assist card (the privacy service's name for it).
 pub const ASSIST: &str = crate::privacy::ASSIST;
 
@@ -378,10 +381,9 @@ pub fn create_translate_window<R: Runtime>(app: &AppHandle<R>, subtitles: bool) 
     let _ = window.set_ignore_cursor_events(true);
     if let (Some(desk), Some((_, outer))) = (Desk::read(&window), frame_of(&window)) {
         let (area, scale) = desk.primary();
-        let margin = margin_units(scale, if subtitles { 96.0 } else { 16.0 });
-        let x = area.x + (area.w as i32 - outer.0 as i32) / 2;
-        let y = if subtitles { area.y + area.h as i32 - outer.1 as i32 - margin } else { area.y + margin };
-        put(&window, (x, y));
+        // At its size on the primary display, which may have another scale than the one it was built on.
+        let (spot, margin) = if subtitles { (Spot::BottomCentre, 96.0) } else { (Spot::TopCentre, 16.0) };
+        put(&window, spot_on(area, scale, outer, frame_scale(&window), spot, margin));
     }
     Ok(())
 }
@@ -446,9 +448,9 @@ pub fn pill_position<R: Runtime>(window: &WebviewWindow<R>) -> Option<PillPositi
 
 /// Moves overlays back on screen after a display went away or moved. Asked about every few seconds while one is built.
 fn keep_on_screen<R: Runtime>(app: &AppHandle<R>) {
-    let Some(first) = WINDOWS.iter().find_map(|label| app.get_webview_window(label)) else { return };
+    let Some(first) = RESCUED.iter().find_map(|label| app.get_webview_window(label)) else { return };
     let Some(desk) = Desk::read(&first) else { return };
-    for label in WINDOWS {
+    for label in RESCUED {
         fit_to_text_size(app, label);
         let Some(window) = app.get_webview_window(label) else { continue };
         if let Some((position, size)) = frame_of(&window)
@@ -500,7 +502,8 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
             period = poll_period(!regions.is_empty(), all_ignoring);
             // Nothing interactive and every window already click-through (or no overlay built): no cursor query, no
             // window calls.
-            if (!resync && regions.is_empty() && all_ignoring) || WINDOWS.iter().all(|l| app.get_webview_window(l).is_none()) {
+            // Live Translate open alone still needs the screen check, so it counts here (never in the click-through below).
+            if (!resync && regions.is_empty() && all_ignoring) || RESCUED.iter().all(|l| app.get_webview_window(l).is_none()) {
                 continue;
             }
             if resync && cfg!(target_os = "macos") {
@@ -618,6 +621,13 @@ pub fn hide_ask(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_translate_is_kept_on_screen_but_left_out_of_the_click_through_poll() {
+        assert!(RESCUED.contains(&crate::translate::WINDOW), "moved back after a display went away");
+        assert!(!WINDOWS.contains(&crate::translate::WINDOW), "its clicks stay locked and unlocked by Live Translate alone");
+        assert!(WINDOWS.iter().all(|w| RESCUED.contains(w)), "every overlay is still rescued");
+    }
 
     #[test]
     fn the_pill_and_the_after_call_card_grow_with_the_text_size_up_to_twice() {

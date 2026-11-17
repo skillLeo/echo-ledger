@@ -675,3 +675,16 @@ fn a_scale_that_cannot_be_read_is_the_last_one_read() {
     assert_eq!(scale_or_last(None, None), 1.0, "never read: 1");
     assert_eq!(scale_or_last(Some(0.0), None), 1.0);
 }
+
+#[test]
+fn live_translate_s_subtitles_sit_bottom_centre_at_their_size_on_the_primary_display() {
+    use desktop_lib::overlay::geometry::{Spot, WorkArea, spot_on};
+    // Built at 100 % (900 × 140), the primary display at 150 % (2880 × 1560 physical): 1350 × 210 there, 144 px up.
+    let primary = WorkArea { x: 0, y: 0, w: 2880, h: 1560 };
+    assert_eq!(spot_on(primary, 1.5, (900, 140), 1.0, Spot::BottomCentre, 96.0), ((2880 - 1350) / 2, 1560 - 210 - 144));
+    // Game mode: top centre, 16 px down (24 at 150 %).
+    assert_eq!(spot_on(primary, 1.5, (560, 132), 1.0, Spot::TopCentre, 16.0), ((2880 - 840) / 2, 24));
+    // Wider than a small display: kept at its left edge.
+    let small = WorkArea { x: 100, y: 0, w: 800, h: 600 };
+    assert_eq!(spot_on(small, 1.0, (900, 140), 1.0, Spot::BottomCentre, 96.0).0, 100);
+}
