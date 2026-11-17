@@ -902,8 +902,9 @@ fn schedule_keep(app: &AppHandle, at: chrono::DateTime<Utc>) {
     });
 }
 
-/// At start: a recording whose chip time ran out while the app was closed is kept, one whose chip still counts (a
-/// restart within 12 s) gets its timer (`keep_due`); a chip's Discard is finished once its Undo time is over
+/// At start: a recording whose chip time ran out while the app was closed is kept as its chip promised (audio only, or
+/// kept and transcribed for a chip shown before v1.8), one whose chip still counts (a restart within 12 s) gets its
+/// timer (`keep_due`); a chip's Discard is finished once its Undo time is over
 /// (`discard_due`). Recordings that wait for the person stay as they are, whatever
 /// the setting. Skipped calls past their 24 hours are deleted; the others get their timers.
 pub fn restore_pending(app: &AppHandle) {

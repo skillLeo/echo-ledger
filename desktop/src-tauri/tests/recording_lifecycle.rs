@@ -524,6 +524,44 @@ fn keep_transcribes_and_save_audio_uploads_without_a_transcript() {
 }
 
 #[test]
+fn a_chip_shown_before_the_upgrade_keeps_its_promise_and_is_transcribed() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    let due = now - chrono::Duration::seconds(1);
+    files.add(decision(root.path(), "old", None, now).keeping_at(due)).unwrap();
+    files.add(decision(root.path(), "new", None, now).keeping_at(due)).unwrap();
+    // pending.json as an older version wrote it: its chip had no Save audio mark and promised Keep.
+    let path = root.path().join("pending.json");
+    let mut file: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    for item in file["items"].as_array_mut().unwrap() {
+        if item["id"] == "old" {
+            item.as_object_mut().unwrap().remove("saves_audio_when_due").expect("the mark is written");
+        }
+    }
+    std::fs::write(&path, file.to_string()).unwrap();
+
+    let mut kept = files.keep_due(now).unwrap();
+    kept.sort();
+    assert_eq!(kept, ["new", "old"]);
+    let queued: Vec<(String, bool)> = UploadQueue::load(&files.uploads).items.iter().map(|i| (i.client_ref.clone(), i.transcribe)).collect();
+    assert!(queued.contains(&("ref-old".to_string(), true)), "kept and transcribed, as its chip said: {queued:?}");
+    assert!(queued.contains(&("ref-new".to_string(), false)), "this version's chip saves the audio only: {queued:?}");
+}
+
+#[test]
+fn a_chip_back_from_undo_saves_the_audio_when_due() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    files.add(decision(root.path(), "a", None, now)).unwrap();
+    files.discard_later("a", now + chrono::Duration::seconds(6)).unwrap();
+    files.undo_discard("a", now - chrono::Duration::seconds(1)).unwrap();
+    assert_eq!(files.keep_due(now).unwrap(), ["a"]);
+    assert!(!UploadQueue::load(&files.uploads).items[0].transcribe);
+}
+
+#[test]
 fn an_upload_queued_before_save_audio_existed_is_still_transcribed() {
     let root = tempfile::tempdir().unwrap();
     let files = DecisionFiles::in_dir(root.path());

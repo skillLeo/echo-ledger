@@ -154,6 +154,10 @@ pub struct PendingDecision {
     /// When the after-call chip keeps it by itself ("Ask me", v1.5); none = it waits for Keep or Discard.
     #[serde(default)]
     keep_at: Option<DateTime<Utc>>,
+    /// The chip promised to save the audio, not transcribed, at `keep_at` (since v1.8 P1). An entry written by an
+    /// older version has no such mark: its chip promised Keep, so it is kept and transcribed when due.
+    #[serde(default)]
+    saves_audio_when_due: bool,
     /// The account it was made under, once another account signed in here (since v1.5); none = the account this
     /// computer signs in as. Keep passes it on to the upload.
     #[serde(default)]
@@ -202,6 +206,7 @@ impl PendingDecision {
             language_marks: input.language_marks,
             caller: input.caller,
             keep_at: None,
+            saves_audio_when_due: false,
             owner: None,
             recovered: false,
             discard_at: None,
@@ -211,6 +216,7 @@ impl PendingDecision {
     /// The same decision, kept by itself at `at` unless the person answers the chip first.
     pub fn keeping_at(mut self, at: DateTime<Utc>) -> Self {
         self.keep_at = Some(at);
+        self.saves_audio_when_due = true;
         self
     }
 
@@ -288,6 +294,7 @@ impl PendingDecision {
             language_marks: Vec::new(),
             caller: None,
             keep_at: None,
+            saves_audio_when_due: false,
             owner: None,
             recovered: true,
             discard_at: None,
@@ -574,14 +581,15 @@ impl DecisionFiles {
     }
 
     /// Saves as audio only every recording whose chip time is over at `now` (also one whose time ran out while the app
-    /// was closed) and returns their ids: no answer is "Save audio", never a transcript (v1.8 P1). Recordings that
-    /// wait for the person are left alone.
+    /// was closed) and returns their ids: no answer is "Save audio", never a transcript (v1.8 P1). A chip shown by a
+    /// version before that promised Keep, so its recording is kept and transcribed. Recordings that wait for the
+    /// person are left alone.
     pub fn keep_due(&self, now: DateTime<Utc>) -> AppResult<Vec<String>> {
-        let due: Vec<String> = self.load().items.iter().filter(|d| d.keep_at.is_some_and(|at| at <= now)).map(|d| d.id.clone()).collect();
-        for id in &due {
-            self.keep_audio(id)?;
+        let due: Vec<(String, bool)> = self.load().items.iter().filter(|d| d.keep_at.is_some_and(|at| at <= now)).map(|d| (d.id.clone(), !d.saves_audio_when_due)).collect();
+        for (id, transcribe) in &due {
+            self.keep_as(id, *transcribe)?;
         }
-        Ok(due)
+        Ok(due.into_iter().map(|(id, _)| id).collect())
     }
 
     /// Discard from the after-call chip: the recording leaves every list and count now, its chip stops counting, and
@@ -602,6 +610,8 @@ impl DecisionFiles {
         self.update(id, |d| {
             d.discard_at = None;
             d.keep_at = Some(keep_at);
+            // The chip is back as this version shows it: "Saves the audio in N s".
+            d.saves_audio_when_due = true;
         })
     }
 
