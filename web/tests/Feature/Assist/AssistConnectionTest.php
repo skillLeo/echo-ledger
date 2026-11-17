@@ -224,6 +224,10 @@ describe('the relay check never reaches inside the server\'s network', function 
         ['64:ff9b::5db8:d70e', true],
         ['2002:0a00:0001::1', false], ['2002:c0a8:0105::', false], ['2002:7f00:0001::1', false],
         ['2002:5db8:d70e::1', true],
+        // Mapped in its hex spelling, NAT64 local-use (64:ff9b:1::/48) and Teredo (2001::/32, the client inverted).
+        ['::ffff:a00:1', false], ['::ffff:7f00:1', false], ['::ffff:5db8:d70e', true],
+        ['64:ff9b:1::a00:1', false], ['64:ff9b:1:abcd::c0a8:105', false], ['64:ff9b:1::5db8:d70e', true],
+        ['2001:0:4136:e378:8000:63bf:f5ff:fffe', false], ['2001:0:4136:e378:8000:63bf:a247:28f1', true],
     ]);
 
     it('pins the checked address and follows no redirect', function () {

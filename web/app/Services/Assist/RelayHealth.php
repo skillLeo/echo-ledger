@@ -133,7 +133,11 @@ class RelayHealth
             && preg_match('/^(0\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|169\.254\.|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/i', $ip) !== 1;
     }
 
-    /** The IPv4 address inside a NAT64 (64:ff9b::/96) or 6to4 (2002::/16) IPv6 address, else null. */
+    /**
+     * The IPv4 address an IPv6 address carries, else null: mapped (::ffff:0:0/96, in any spelling, the hex form
+     * ::ffff:a00:1 too), NAT64 (64:ff9b::/96 and the local-use 64:ff9b:1::/48, its last 32 bits), 6to4 (2002::/16, the
+     * next 32 bits) and Teredo (2001::/32: the client's address is the last 32 bits, inverted).
+     */
     private static function embeddedIpv4(string $ip): ?string
     {
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false) {
@@ -143,14 +147,16 @@ class RelayHealth
         if ($bytes === false || strlen($bytes) !== 16) {
             return null;
         }
-        if (substr($bytes, 0, 12) === "\x00\x64\xff\x9b".str_repeat("\x00", 8)) {
-            return (string) inet_ntop(substr($bytes, 12, 4));
-        }
-        if (substr($bytes, 0, 2) === "\x20\x02") {
-            return (string) inet_ntop(substr($bytes, 2, 4));
-        }
+        $v4 = fn (string $four): string => (string) inet_ntop($four);
 
-        return null;
+        return match (true) {
+            substr($bytes, 0, 12) === str_repeat("\x00", 10)."\xff\xff" => $v4(substr($bytes, 12, 4)),
+            substr($bytes, 0, 12) === "\x00\x64\xff\x9b".str_repeat("\x00", 8) => $v4(substr($bytes, 12, 4)),
+            substr($bytes, 0, 6) === "\x00\x64\xff\x9b\x00\x01" => $v4(substr($bytes, 12, 4)),
+            substr($bytes, 0, 2) === "\x20\x02" => $v4(substr($bytes, 2, 4)),
+            substr($bytes, 0, 4) === "\x20\x01\x00\x00" => $v4(substr($bytes, 12, 4) ^ "\xff\xff\xff\xff"),
+            default => null,
+        };
     }
 
     /**

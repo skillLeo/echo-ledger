@@ -317,7 +317,7 @@ class Settings extends Page
                                 ->helperText('Applied to every new final transcript; the original stays in the transcript history and can be restored.'),
                         ]),
                     $this->section('assist_connection')
-                        ->description('How the apps reach Live Assist during a call. Shared hosting needs nothing more; a dedicated relay runs on a VPS (its secret and certificate pins are on API Credentials). Each session keeps the connection it started with.')
+                        ->description('How the apps reach Live Assist during a call. A dedicated relay runs on a VPS (its secret and certificate pins are on API Credentials). Shared hosting (emergency only) needs nothing more. Each session keeps the connection it started with.')
                         ->columns(2)->schema([
                             Select::make('assist_connection')->label('Live Assist connection')->options(AssistTransport::CHOICES)->selectablePlaceholder(false)->required()->live()
                                 ->helperText(fn (Get $get): string => $get('assist_connection') === AssistTransport::SHARED ? AssistTransport::SHARED_HELP
@@ -919,7 +919,7 @@ class Settings extends Page
         $changed = array_values(array_filter(array_keys($after), fn (string $key): bool => $same($before[$key] ?? null) !== $same($after[$key])));
         // Live Assist's connection gets its own entry, naming the choice and the relay before and after.
         if (array_intersect($changed, ['assist.connection', 'relay.url']) !== []) {
-            $describe = fn (array $all): string => (AssistTransport::CHOICES[$all['assist.connection'] ?? ''] ?? AssistTransport::CHOICES[AssistTransport::AUTOMATIC])
+            $describe = fn (array $all): string => (AssistTransport::CHOICES[$all['assist.connection'] ?? ''] ?? AssistTransport::CHOICES[AssistTransport::DEFAULT])
                 .' ('.(is_string($all['relay.url'] ?? null) ? $all['relay.url'] : 'no relay').')';
             app(AuditLog::class)->record('assist_connection_changed', (int) auth()->id(), null, Str::limit('Live Assist connection: '.$describe($before).' → '.$describe($after), 250, '…'), [
                 'from' => ['connection' => $before['assist.connection'] ?? null, 'relay' => $before['relay.url'] ?? null],

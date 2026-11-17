@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\Assist\AssistLiveController;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
 use App\Services\Assist\AssistTransport;
@@ -85,6 +86,24 @@ it('refuses what is not a live message, a session that is not HTTP mode, an ende
     $relay->forceFill(['transport' => 'http'])->save();
     $api->postJson("/api/assist/sessions/{$id}/end")->assertOk();
     $api->postJson("/api/assist/sessions/{$id}/live", ['type' => 'context_update'])->assertStatus(409)->assertJsonPath('code', 'session_ended');
+});
+
+it('never counts below 0 when the count ran out or was forgotten while a stream was open', function () {
+    [$api, $id] = httpSession($this);
+    $key = 'assist-live-open:'.$id;
+    // The stream's own "end" lands after its count is gone (expired, or the cache was cleared): 0, never -1.
+    Cache::forget($key);
+    $api->postJson("/api/assist/sessions/{$id}/live", ['type' => 'context_update'])->assertOk()->streamedContent();
+    expect((int) Cache::get($key))->toBe(0);
+
+    // A stream started (count 1), then its count ran out or was forgotten before it ended: its end leaves 0, not -1.
+    $count = new ReflectionMethod(AssistLiveController::class, 'openStreams');
+    expect($count->invoke(null, $key, +1))->toBe(1);
+    Cache::forget($key);
+    expect($count->invoke(null, $key, -1))->toBe(0)->and((int) Cache::get($key))->toBe(0);
+    Cache::put($key, 1, 1);
+    $this->travel(5)->seconds();
+    expect($count->invoke(null, $key, -1))->toBe(0);
 });
 
 it('counts open streams with a fresh lifetime on every change, never below 0', function () {
