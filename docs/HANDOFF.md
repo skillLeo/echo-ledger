@@ -1051,3 +1051,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 - Merged b-phone-ui at the reviewed 4c3e96ab: phone v2 (components, shell, Home, Library, Trash, Settings, Setup &
   health, pill and after-call card, Urdu strings) behind the ui_v2 flags. The activity hook that shows it is the
   phone core's next step; until then nothing of v2 is reachable in the app.
+- Merged b-web-l7 at the reviewed 7b97507c: the post-call report (Urdu-safe worst-case budget, billed failures counted, its
+  own assist-reports queue: deploy needs the second worker), practice and facts endpoints, document text on the single
+  read, /end across workspaces, escaped Markdown downloads, the console's Preps, Sessions and Report pages, all behind
+  live_assist.
