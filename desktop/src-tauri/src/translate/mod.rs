@@ -410,11 +410,12 @@ fn spawn_capture(
                 return;
             };
             // Said before the keys go back: a Start during that wait (it waits for the main thread) is never followed
-            // by this session's ended feed.
-            if let Ok(mut f) = feed.lock() {
-                let ended = mark_ended(&mut f, reason);
-                let _ = app.emit(FEED_EVENT, &ended);
-            }
+            // by this session's ended feed. The feed is copied and its lock let go before `mark_ended` takes
+            // `running`'s: elsewhere (`update_feed`, `current_feed`) `running` is taken first and then a feed, so this
+            // thread never holds a feed while it waits for `running`.
+            let mut ended = feed.lock().unwrap_or_else(|p| p.into_inner()).clone();
+            let ended = mark_ended(&mut ended, reason);
+            let _ = app.emit(FEED_EVENT, &ended);
             // Its own window goes (the panel keeps the reason and Close): an unlocked window never takes clicks over a
             // game, and nothing counts it as open. Only while it is still the newest; a quick Start waits for it.
             if window_generation() == window {
@@ -696,7 +697,7 @@ mod tests {
         let source = include_str!("mod.rs");
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         let thread = &thread[..thread.find("\n}").unwrap()];
-        for step in ["ended_reason(", "mark_ended(&mut f, reason)", "emit_status(&app)"] {
+        for step in ["ended_reason(", "mark_ended(&mut ended, reason)", "emit_status(&app)"] {
             assert!(thread.contains(step), "{step}");
         }
         // A session no longer current says nothing: the check comes before the keys, the feed and the status.
@@ -743,15 +744,20 @@ mod tests {
         // The natural end says it ended before the keys go back.
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         let thread = &thread[..thread.find("\n}").unwrap()];
-        assert!(thread.find("mark_ended(&mut f, reason)") < thread.find("unregister_hotkeys(&app)"), "ended is said before the keys go back");
+        assert!(thread.find("mark_ended(&mut ended, reason)") < thread.find("unregister_hotkeys(&app)"), "ended is said before the keys go back");
+        // The feed's lock is let go (a copy taken) before mark_ended takes running's: never a feed held while waiting
+        // for running, which update_feed and current_feed take first.
+        let copied = thread.find("let mut ended = feed.lock().unwrap_or_else(|p| p.into_inner()).clone();").expect("the feed is copied, its lock dropped at once");
+        assert!(copied < thread.find("mark_ended(&mut ended, reason)").unwrap());
+        assert!(!thread.contains("if let Ok(mut f) = feed.lock()"), "no feed lock held across mark_ended");
         // Then its own window closes: after the ended feed, only while it is the newest, marked closing first.
-        let marked = thread.find("mark_ended(&mut f, reason)").unwrap();
+        let marked = thread.find("mark_ended(&mut ended, reason)").unwrap();
         let guard = thread.find("if window_generation() == window {").expect("guarded by its window's number");
         let closing = thread.find("CLOSING.store(window, Ordering::SeqCst);").expect("a quick Start waits for it");
         let close = thread.find("let _ = w.close();").expect("the window closes");
         assert!(marked < guard && guard < closing && closing < close && close < thread.find("unregister_hotkeys(&app)").unwrap());
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
-        assert!(thread[..thread.find("\n}").unwrap()].contains("mark_ended(&mut f, reason)"));
+        assert!(thread[..thread.find("\n}").unwrap()].contains("mark_ended(&mut ended, reason)"));
     }
 
     #[test]
