@@ -427,13 +427,13 @@ Captions show what you and the other person say, while you talk.
 - **Phone:** captions appear in a small floating window.
 - On the computer, **Account → Calls & meetings → Captions** changes the size, the number of lines, the position, the colours and how fast they
   fade.
-- Captions are hidden from screen sharing with the rest of EchoLedger (see **Private notes** below).
+- Captions follow the same screen-share setting as the rest of EchoLedger (see **Private notes** below).
 - Press **Ctrl+Alt+Shift+C** to copy the last 2 minutes of captions.
 
 ### Private notes (since v1.8.1)
 
-Your notes stay on your screen. When you share your screen in Zoom, Meet or Teams, people see your other apps, not
-EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
+EchoLedger hides its windows from screen sharing, checks on this computer whether that works, and tells you what the
+last check saw.
 
 - **Settings → Screen-share privacy → Hide from screen sharing:** *All EchoLedger windows* (the default), *Only floating
   windows* (captions, the recording controls, dictation, the after-call card, Live Translate; the main window shows), or
@@ -444,9 +444,9 @@ EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
   see* with one plain line. The picture stays on that page and is gone when you close it. The check runs again by itself
   after an app or system update and once a week.
 - The badge says **Private**, **Not checked** or **Visible in screen share** (amber), from the last real check.
-- **Windows 10 version 2004 and later, Windows 11:** people see what is behind EchoLedger. On older Windows they see a
-  black box where it is (the text stays private); choose *Show normally* if you prefer, or update Windows. In Remote
-  Desktop, EchoLedger is visible to the remote side.
+- When the last check says **Private**, people see what is behind EchoLedger on Windows 10 version 2004 and later and
+  Windows 11; on older Windows they see a black box where it is. Choose *Show normally* if you prefer, or update Windows.
+  In Remote Desktop, EchoLedger is visible to the remote side.
 - **Mac:** each meeting app captures the screen its own way, so test each one once with your phone (*Test with your
   phone*: join the meeting on the phone, share your whole screen, say whether you see the test card). In **Zoom**, open
   Settings › Share Screen › Advanced and set *Screen capture mode* to *Advanced capture with window filtering*. In Meet,
