@@ -37,8 +37,8 @@ data class WizardStep(val key: String, val title: Int, val detail: Int, val acti
 /**
  * The Android capture helper's wizard. Every step is decided from what the phone shows now, never from history alone:
  * Developer options from Android's own switch; Shizuku installed from the package; paired only with live proof (Shizuku
- * runs, or the helper is connected through it now) and unknown while Shizuku is stopped, since a reinstall, cleared
- * data or a removed pairing all need pairing again; started while Shizuku runs; allowed only while Shizuku can answer
+ * runs, or the helper is connected through it now); unknown while Shizuku is stopped after being used here, since a
+ * reinstall, cleared data or a removed pairing all need pairing again; to do when it was never used here; started while Shizuku runs; allowed only while Shizuku can answer
  * (else unknown); the helper while it runs. The start step says to pair again if Shizuku asks, and after a restart,
  * when Wireless debugging is off, to turn it on first. A phone set up with the computer method gets that method's one
  * step instead.
@@ -62,10 +62,11 @@ object ShizukuWizard {
             )
         }
         val viaShizuku = helper && f.method == HelperMethod.Shizuku
-        // null: unknown while Shizuku is stopped (the pairing may be gone); false while Shizuku isn't installed.
+        // true with live proof; null (unknown) while Shizuku is stopped but was used here (the pairing may be gone);
+        // false (to do) when Shizuku isn't installed or this phone has no memory of it being used.
         val paired: Boolean? = when {
             r.shizukuRunning || viaShizuku -> true
-            r.shizukuInstalled -> null
+            r.shizukuInstalled && f.method == HelperMethod.Shizuku -> null
             else -> false
         }
         val started = r.shizukuRunning || viaShizuku

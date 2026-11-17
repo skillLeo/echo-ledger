@@ -101,6 +101,12 @@ class SetupHealthTest {
     }
 
     @Test
+    fun withNoMemoryOfShizukuPairingIsToDoAndCurrent() {
+        val pair = ShizukuWizard.steps(SetupHealthFixtures.shizukuNeverUsed).first { it.key == "pair" }
+        assertEquals(StepState.Current, pair.state)
+    }
+
+    @Test
     fun pairedOnlyWithLiveProof() {
         // Shizuku running is proof; the helper connected through it is proof.
         assertEquals(StepState.Done, ShizukuWizard.steps(SetupHealthFixtures.notAllowed).first { it.key == "pair" }.state)

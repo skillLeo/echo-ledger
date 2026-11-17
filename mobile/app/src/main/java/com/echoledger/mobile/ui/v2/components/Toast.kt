@@ -39,6 +39,8 @@ enum class EchoToastResult { Action, Dismissed }
 class EchoToastData internal constructor(
     val message: String,
     val actionLabel: String?,
+    /** A fixed time on screen (a timer elsewhere that the toast must end with); null: the toast's own time. */
+    val durationMs: Long?,
     private val continuation: CancellableContinuation<EchoToastResult>
 ) {
     fun performAction() {
@@ -57,10 +59,13 @@ class EchoToastState {
         private set
     private val queue = Mutex()
 
-    /** Shows [message] (with [actionLabel] when given) until the action is tapped or its time runs out. */
-    suspend fun show(message: String, actionLabel: String? = null): EchoToastResult = queue.withLock {
+    /**
+     * Shows [message] (with [actionLabel] when given) until the action is tapped or its time runs out: [durationMs] when
+     * given (the toast then ends exactly with a timer kept elsewhere), else the toast's own time.
+     */
+    suspend fun show(message: String, actionLabel: String? = null, durationMs: Long? = null): EchoToastResult = queue.withLock {
         try {
-            suspendCancellableCoroutine { cont -> current = EchoToastData(message, actionLabel, cont) }
+            suspendCancellableCoroutine { cont -> current = EchoToastData(message, actionLabel, durationMs, cont) }
         } finally {
             current = null
         }
@@ -83,7 +88,7 @@ fun EchoToastHost(state: EchoToastState, modifier: Modifier = Modifier) {
     val data = state.current ?: return
     val accessibility = LocalAccessibilityManager.current
     LaunchedEffect(data) {
-        val time = accessibility?.calculateRecommendedTimeoutMillis(
+        val time = data.durationMs ?: accessibility?.calculateRecommendedTimeoutMillis(
             EchoTokens.Component.toastDurationMs.toLong(),
             containsIcons = false,
             containsText = true,

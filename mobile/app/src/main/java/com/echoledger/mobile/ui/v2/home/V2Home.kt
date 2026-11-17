@@ -1,5 +1,6 @@
 package com.echoledger.mobile.ui.v2.home
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +31,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.R
+import com.echoledger.mobile.calls.Decisions
 import com.echoledger.mobile.core.Readiness
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.recording.PillMachine
@@ -50,6 +52,7 @@ import com.echoledger.mobile.ui.v2.components.EchoSkeletonList
 import com.echoledger.mobile.ui.v2.components.EchoStatus
 import com.echoledger.mobile.ui.v2.components.EchoStatusKind
 import com.echoledger.mobile.ui.v2.components.EchoToastResult
+import com.echoledger.mobile.ui.v2.components.EchoToastState
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.components.formatClock
 import com.echoledger.mobile.ui.v2.library.LibraryModel
@@ -59,9 +62,12 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
+import java.time.Instant
 import java.time.ZonedDateTime
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Where Home's rows and buttons lead; the shell decides the screens. */
 class HomeActions(
@@ -92,8 +98,6 @@ fun V2HomeScreen(vm: MainViewModel, initials: String, actions: HomeActions, modi
     val live by RecordingService.live.collectAsState()
     val setup = rememberSetupFacts(vm, 0)
     val readiness = remember(setup) { Readiness.evaluate(setup.ready) }
-    // Calls discarded here wait for their Undo before the view model is told (nothing is gone until then).
-    var discarding by remember { mutableStateOf(emptySet<String>()) }
     val facts = HomeFacts(
         chip = readiness.chip,
         callsPossible = setup.callsPossible,
@@ -102,7 +106,7 @@ fun V2HomeScreen(vm: MainViewModel, initials: String, actions: HomeActions, modi
         notificationsAllowed = setup.ready.capabilities.notificationPermission,
         live = live,
         library = library,
-        pending = pending.filterNot { it.id in discarding },
+        pending = pending,
         transcriptionLanguage = settings.transcriptionLanguage,
         syncing = syncing,
         hasSynced = vm.hasSynced(),
@@ -112,6 +116,7 @@ fun V2HomeScreen(vm: MainViewModel, initials: String, actions: HomeActions, modi
     )
     val toasts = LocalEchoToasts.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current.applicationContext
     val discardedWords = stringResource(R.string.v2_home_discarded)
     val undo = EchoV2.strings.undo
     V2HomeContent(
@@ -119,18 +124,43 @@ fun V2HomeScreen(vm: MainViewModel, initials: String, actions: HomeActions, modi
         initials = initials,
         actions = actions,
         onKeep = { vm.decide(it.id, keep = true) },
-        onDiscard = { rec ->
-            discarding = discarding + rec.id
-            scope.launch {
-                if (toasts.show(discardedWords, undo) == EchoToastResult.Dismissed) vm.decide(rec.id, keep = false)
-                discarding = discarding - rec.id
-            }
-        },
+        onDiscard = { rec -> scope.launch { discardWithUndo(context, vm, toasts, rec.id, discardedWords, undo) } },
         onRetryUploads = { vm.retryPending() },
         onRetryLibrary = { vm.refresh() },
         modifier = modifier
     )
 }
+
+/**
+ * Discard with Undo, on the after-call card's delayed discard (v1.1, P-003): [Decisions.discardLater] at once, so the
+ * call is "discarding" on the phone (the 10 s keep and the decision notification are cancelled, and it survives the
+ * process dying); the toast ends exactly with that file's timer (its discard time, less the margin the worker keeps
+ * after it); Undo calls [Decisions.undoDiscard]. The worker deletes it when the time is over.
+ */
+internal suspend fun discardWithUndo(
+    context: Context,
+    vm: MainViewModel,
+    toasts: EchoToastState,
+    id: String,
+    message: String,
+    undo: String,
+    nowMs: Long = System.currentTimeMillis()
+) {
+    val discarding = withContext(Dispatchers.IO) { Decisions.discardLater(context, id, nowMs) } ?: return
+    vm.reloadLocal()
+    val endsAt = runCatching { Instant.parse(discarding.discardAt).toEpochMilli() }.getOrNull() ?: return
+    val visible = (endsAt - DISCARD_MARGIN_MS - nowMs).coerceAtLeast(0)
+    if (toasts.show(message, undo, durationMs = visible) == EchoToastResult.Action) {
+        withContext(Dispatchers.IO) { Decisions.undoDiscard(context, id) }
+        vm.reloadLocal()
+    }
+}
+
+/**
+ * How long before the file's discard time the toast ends: the slack the delayed discard keeps after its own "Discarded ·
+ * Undo" (Decisions.DISCARD_AFTER_MS is that time plus 2 s), so Undo in the toast's last second still finds the call.
+ */
+internal const val DISCARD_MARGIN_MS = 2_000L
 
 /** Home without the view model (tests and screenshots). */
 @Composable

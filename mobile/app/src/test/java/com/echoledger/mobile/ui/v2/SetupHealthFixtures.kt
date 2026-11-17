@@ -71,6 +71,9 @@ object SetupHealthFixtures {
     /** Shizuku was set up and used, then reinstalled (or its data cleared): installed again, not running. */
     val shizukuReinstalled = facts(helper = false, running = false, allowed = false, wireless = true)
 
+    /** Shizuku installed but never used on this phone (no memory of it starting the helper), not running. */
+    val shizukuNeverUsed = facts(helper = false, running = false, allowed = false, everConnected = false, wireless = true, method = null)
+
     /** The pairing was removed in Wireless debugging: Shizuku installed and stopped, Wireless debugging off. */
     val pairingRemoved = facts(helper = false, running = false, allowed = false, wireless = false)
 
