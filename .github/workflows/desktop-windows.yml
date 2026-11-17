@@ -108,6 +108,8 @@ jobs:
           # stays out of the installer (checked below) and is kept as an artifact of its own.
           CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
           CARGO_PROFILE_RELEASE_STRIP: none
+          # The exe names its PDB by file name only, never the runner's folder it was built in.
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-C link-arg=/PDBALTPATH:%_PDB%"
         with:
           projectPath: desktop
           args: --bundles nsis ${{ env.SIGNING_CONFIG }} ${{ env.UPDATER_CONFIG }}
@@ -150,13 +152,14 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-      # The app's PDB, to read a stall report's minidump with symbols; never in the installer.
+      # The app's PDB, to read a stall report's minidump with symbols: 90 days for a release tag's build, 7 otherwise.
+      # Never in the installer, and never attached to a release (this workflow cannot write to the repository).
       - uses: actions/upload-artifact@v4
         with:
           name: EchoLedger-windows-x64-pdb
           path: desktop/src-tauri/target/release/echoledger_desktop.pdb
           if-no-files-found: error
-          retention-days: 7
+          retention-days: ${{ startsWith(github.ref, 'refs/tags/') && 90 || 7 }}
 
   smoke:
     name: Smoke test, ${{ matrix.label }}

@@ -582,6 +582,14 @@ mod tests {
     fn no_async_code_reaches_a_window_build_but_through_spawn_blocking() {
         // A build waits for the main thread to make its webview: on an async worker it holds the worker for as long, and
         // a few at once starve the runtime (the Server 2022 stall). Async code reaches a build only through spawn_blocking.
+        //
+        // What the check cannot see:
+        // - method calls (`x.build()`, `Self::f` through a value): only path calls (`f(…)`, `a::b::f(…)`) are followed,
+        //   so a window build reached through a method is not;
+        // - calls through a function value, a trait object or a macro;
+        // - a closure that async code runs itself: every closure is read as sync code (the callbacks it hands on run
+        //   elsewhere);
+        // - a name the app gives several functions (`run`, `create`, `build`), followed only within its own file.
         let calls = app_calls();
         let builders = calls.builders();
         let found: Vec<String> = calls.from_async.iter().filter(|(f, name)| calls.builds(&builders, f, name)).map(|(f, name)| format!("{f}: {name}(…) outside spawn_blocking")).collect();
