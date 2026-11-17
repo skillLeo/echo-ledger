@@ -250,24 +250,55 @@ pub(crate) fn call_rule(settings: &crate::settings::Settings, source_app: &str, 
     crate::call_rules::resolve(rules, source_app, contact)
 }
 
-/// Whether a Don't record rule refuses this start (an automatic one only), decided before anything is captured or
-/// written: the rule that refused it, or none to go on. Reads only the settings and who the call app says the call is
-/// with now.
-pub(crate) fn refused_by_rule(state: &crate::AppState, source_app: &str, auto: bool) -> Option<crate::call_rules::RuleFrom> {
-    let contact = state.detect.caller_now(source_app);
-    let (choice, from) = call_rule(&state.settings(), source_app, contact.as_deref());
-    (!crate::call_rules::records(choice, auto)).then_some(from)
+/// How a call recording starts: two separate things, who asked (a call rule's Don't record refuses only a start
+/// nobody asked for) and whether it stops by itself when the call app lets go of the microphone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Started {
+    /// Without the person (the detect loop, the watchdog's backup): the rules decide, and it stops by itself.
+    Automatically,
+    /// The person said Record on the "Record this call?" chip: asked for, so no rule refuses it; it stops by itself.
+    AskedOnChip,
+    /// By hand (Record now, the tray, the Record page, Live Assist): asked for; it stops when the person stops it.
+    ByHand,
 }
 
-/// Starts a two-channel recording from a clean slate; `captions` decides whether live captions open with it.
+impl Started {
+    /// Nobody asked: the call rules decide whether it records.
+    pub fn without_the_person(self) -> bool {
+        self == Started::Automatically
+    }
+
+    /// It stops when the call app releases the microphone (and counts as automatic for short-call skipping).
+    pub fn stops_by_itself(self) -> bool {
+        self != Started::ByHand
+    }
+}
+
+/// Whether a Don't record rule refuses this start (one nobody asked for), decided before anything is captured or
+/// written: the rule that refused it, or none to go on. Reads only the settings and who the call app says the call is
+/// with now.
+pub(crate) fn refused_by_rule(state: &crate::AppState, source_app: &str, started: Started) -> Option<crate::call_rules::RuleFrom> {
+    let contact = state.detect.caller_now(source_app);
+    let (choice, from) = call_rule(&state.settings(), source_app, contact.as_deref());
+    (!crate::call_rules::records(choice, started.without_the_person())).then_some(from)
+}
+
+/// Starts a two-channel recording from a clean slate; `captions` decides whether live captions open with it. `auto`:
+/// started without the person (the rules decide) and stopping by itself; otherwise by hand.
 pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: bool, captions: bool) -> AppResult<()> {
+    start_call_recording_as(app, source_app, if auto { Started::Automatically } else { Started::ByHand }, captions).await
+}
+
+/// [`start_call_recording_with`] saying how it started ([`Started`]).
+pub async fn start_call_recording_as(app: &AppHandle, source_app: &str, started: Started, captions: bool) -> AppResult<()> {
+    let auto = started.stops_by_itself();
     let state = app.state::<crate::AppState>();
     if state.capture.is_recording() {
         return Ok(());
     }
     // A Don't record rule: the call is never recorded, nothing is captured or written (call rules, plan 2). Quietly:
     // it is what the person asked for.
-    if let Some(from) = refused_by_rule(&state, source_app, auto) {
+    if let Some(from) = refused_by_rule(&state, source_app, started) {
         eprintln!("[echoledger] not recording a {source_app} call: Don't record ({from:?} rule)");
         return Ok(());
     }
@@ -363,7 +394,7 @@ pub async fn record_now(app: &AppHandle) -> AppResult<()> {
 pub async fn start_backup(app: &AppHandle, source: crate::detect::classify::SourceApp) {
     use crate::call_guard::{BACKUP_BODY, BACKUP_TITLE};
     let state = app.state::<crate::AppState>();
-    if state.capture.is_recording() || refused_by_rule(&state, source.as_str(), true).is_some() {
+    if state.capture.is_recording() || refused_by_rule(&state, source.as_str(), Started::Automatically).is_some() {
         return;
     }
     match start_call_recording(app, source.as_str(), true).await {
@@ -2054,14 +2085,18 @@ mod call_rule_tests {
             .unwrap();
         let before = written(dir.path());
         // The source's rule, the contact's rule over a source that records, and the default.
-        assert_eq!(super::refused_by_rule(&state, "whatsapp", true), Some(RuleFrom::Source));
-        assert_eq!(super::refused_by_rule(&state, "zoom", true), None);
+        use super::Started::{AskedOnChip, Automatically, ByHand};
+        assert_eq!(super::refused_by_rule(&state, "whatsapp", Automatically), Some(RuleFrom::Source));
+        assert_eq!(super::refused_by_rule(&state, "zoom", Automatically), None);
         state.detect.note_caller("zoom", "Mum");
-        assert_eq!(super::refused_by_rule(&state, "zoom", true), Some(RuleFrom::Contact), "the contact's rule beats Zoom's");
-        assert_eq!(super::refused_by_rule(&state, "zoom", false), None, "Record now is the person asking");
-        assert_eq!(super::refused_by_rule(&state, "microsoft_teams", true), None, "the default asks");
+        assert_eq!(super::refused_by_rule(&state, "zoom", Automatically), Some(RuleFrom::Contact), "the contact's rule beats Zoom's");
+        assert_eq!(super::refused_by_rule(&state, "zoom", ByHand), None, "Record now is the person asking");
+        assert_eq!(super::refused_by_rule(&state, "microsoft_teams", Automatically), None, "the default asks");
         state.update_settings(|s| s.after_call = crate::settings::AfterCall::DontRecord).unwrap();
-        assert_eq!(super::refused_by_rule(&state, "microsoft_teams", true), Some(RuleFrom::Default));
+        assert_eq!(super::refused_by_rule(&state, "microsoft_teams", Automatically), Some(RuleFrom::Default));
+        // The chip's Record is the person asking: under a Don't record default it records.
+        assert_eq!(super::refused_by_rule(&state, "other", AskedOnChip), None);
+        assert_eq!(super::refused_by_rule(&state, "other", Automatically), Some(RuleFrom::Default));
         // Deciding wrote nothing but the settings themselves: no recording folder, no audio.
         let after: Vec<_> = written(dir.path()).into_iter().filter(|p| !before.contains(p) && !p.ends_with("settings.json")).collect();
         assert!(after.is_empty(), "nothing written: {after:?}");
@@ -2077,13 +2112,20 @@ mod call_rule_tests {
             let rest = &source[start..];
             rest[..rest.find("\n}\n").unwrap()].to_string()
         };
-        let start = body("pub async fn start_call_recording_with(");
-        let gate = start.find("refused_by_rule(&state, source_app, auto)").expect("the rule is asked");
+        let start = body("pub async fn start_call_recording_as(");
+        let gate = start.find("refused_by_rule(&state, source_app, started)").expect("the rule is asked");
         let capture = start.find("state.capture.start(").expect("capture starts here");
         assert!(gate < capture, "the rule before capture");
         for before in ["checked_permissions(", "start_captions(", "on_recording_started("] {
             assert!(gate < start.find(before).unwrap(), "the rule before {before}");
         }
+        // The chip's Record is asked for: it skips the rule and keeps the stop by itself.
+        let chip = include_str!("detect/mod.rs");
+        let answer = &chip[chip.find("pub async fn answer_ask(").unwrap()..];
+        let answer = &answer[..answer.find("\n}\n").unwrap()];
+        assert!(answer.contains("Started::AskedOnChip") && !answer.contains("start_call_recording(app"), "{answer}");
+        assert!(super::Started::AskedOnChip.stops_by_itself() && !super::Started::AskedOnChip.without_the_person());
+        assert!(!super::Started::ByHand.stops_by_itself() && super::Started::Automatically.without_the_person());
         let backup = body("pub async fn start_backup(");
         assert!(backup.find("refused_by_rule(") < backup.find("start_call_recording("), "the backup start asks first and says nothing");
         // The only automatic starts go through start_call_recording (the detect loop and the watchdog).

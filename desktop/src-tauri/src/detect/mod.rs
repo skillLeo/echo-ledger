@@ -415,7 +415,9 @@ pub async fn answer_ask(app: &AppHandle, id: &str, answer: &str) -> AppResult<()
             if let Some(t) = &target {
                 lock(&state.detect.call).adopt(t.root_pid);
             }
-            crate::actions::start_call_recording(app, SourceApp::Other.as_str(), true).await?;
+            // The person asked: no call rule refuses it, and it stops when the app lets go of the microphone.
+            let captions = state.settings().captions_on_record;
+            crate::actions::start_call_recording_as(app, SourceApp::Other.as_str(), crate::actions::Started::AskedOnChip, captions).await?;
         }
         ("ignore", Some(t)) => lock(&state.detect.ask).suppress(t.root_pid),
         ("always_ignore", Some(t)) => {
