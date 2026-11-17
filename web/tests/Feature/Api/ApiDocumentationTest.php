@@ -100,6 +100,7 @@ const SERVED_BEFORE_DOCUMENTED = [
     'POST /api/assist/preps/{}/arm',
     'POST /api/assist/preps/{}/documents',
     'POST /api/assist/sessions',
+    'POST /api/assist/sessions/{}/ask',
     'POST /api/assist/sessions/{}/end',
     'POST /api/assist/sessions/{}/suggestions/{}/action',
     'POST /api/assist/sessions/{}/token',

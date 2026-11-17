@@ -27,6 +27,26 @@
             {{ AssistRecords::MODES[$session->mode] ?? $session->mode }}
         </p>
 
+        @if ($answers !== [])
+            <x-filament::section heading="Your questions" description="Answered from this session. Not kept: they go when you leave the page." data-assist-answers>
+                <div style="display:flex;flex-direction:column;gap:1rem">
+                    @foreach ($answers as $a)
+                        <div>
+                            <p style="margin:0;font-weight:600">{{ $a['question'] }}</p>
+                            <p style="margin:.25rem 0 0;white-space:pre-line">{{ $a['answer'] }}</p>
+                            @if ($a['citations'] !== [])
+                                <ul style="margin:.5rem 0 0;padding-left:1.25rem;list-style:disc;font-size:.875rem">
+                                    @foreach ($a['citations'] as $c)
+                                        <li><span style="{{ $muted }}font-variant-numeric:tabular-nums">{{ $clock((int) $c['at_ms']) }} · {{ $c['channel'] === 'me' ? 'You' : 'Them' }}</span> “{{ $c['text'] }}”</li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+            </x-filament::section>
+        @endif
+
         @if (! $session->ended())
             <x-filament::section><p style="margin:0">This session is on now. Its report is made when it ends.</p></x-filament::section>
         @elseif ($report === null)

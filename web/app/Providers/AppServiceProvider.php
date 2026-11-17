@@ -22,7 +22,9 @@ use App\Models\WebhookEvent;
 use App\Services\Accounts\AccountSessions;
 use App\Services\Accounts\KnownBrowsers;
 use App\Services\ActivityFeed;
+use App\Services\Assist\AssistAskAi;
 use App\Services\Assist\AssistReportAi;
+use App\Services\Assist\ClaudeAssistAskAi;
 use App\Services\Assist\ClaudeAssistReportAi;
 use App\Services\AuditLog;
 use App\Services\ClientAi\ClaudeClientAi;
@@ -99,6 +101,7 @@ class AppServiceProvider extends ServiceProvider
         // Client workspaces (v1.4) ask Claude through one interface; tests swap in a fake.
         $this->app->bind(ClientAi::class, ClaudeClientAi::class);
         $this->app->bind(AssistReportAi::class, ClaudeAssistReportAi::class);
+        $this->app->bind(AssistAskAi::class, ClaudeAssistAskAi::class);
         // Screen moments (v1.5) are read by Claude Haiku through one interface; tests swap in a fake.
         $this->app->bind(ScreenDescriber::class, ClaudeScreenDescriber::class);
         $this->app->bind(TitleWriter::class, ClaudeTitleWriter::class);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\Device;
 use App\Models\Plan;
 use App\Models\Workspace;
+use App\Services\Assist\AssistAskAi;
 use App\Services\Assist\AssistReportAi;
 use App\Services\Assist\RelaySecret;
 use App\Services\CredentialVault;
@@ -115,6 +116,41 @@ function fakeAssistReportAi(?array $data = null, ?Throwable $fails = null): obje
         }
     };
     app()->instance(AssistReportAi::class, $fake);
+
+    return $fake;
+}
+
+/**
+ * The Ask model, faked: answers [$data] (an answer resting on lines 2 and 1) and remembers what it read.
+ *
+ * @param  array<string, mixed>|null  $data
+ */
+function fakeAssistAskAi(?array $data = null, ?Throwable $fails = null): object
+{
+    $fake = new class($data, $fails) implements AssistAskAi
+    {
+        /** @var list<array<string, mixed>> */
+        public array $inputs = [];
+
+        public function __construct(public ?array $data, public ?Throwable $fails) {}
+
+        public function promptText(array $input): string
+        {
+            return (string) json_encode($input, JSON_UNESCAPED_UNICODE);
+        }
+
+        public function ask(array $input): array
+        {
+            $this->inputs[] = $input;
+            if ($this->fails !== null) {
+                throw $this->fails;
+            }
+
+            return ['data' => $this->data ?? ['answer' => 'They expect 300,000 rupees.', 'lines' => [2, 1, 2, 99]],
+                'model' => 'claude-haiku-5-5', 'tokens' => ['input' => 2000, 'cached' => 0, 'written' => 0, 'output' => 100]];
+        }
+    };
+    app()->instance(AssistAskAi::class, $fake);
 
     return $fake;
 }

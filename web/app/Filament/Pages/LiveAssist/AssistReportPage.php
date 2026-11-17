@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages\LiveAssist;
 
+use App\Exceptions\ApiError;
 use App\Filament\Concerns\LiveAssistOnly;
 use App\Filament\Support\Notice as Notification;
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
+use App\Services\Assist\AssistAsk;
 use App\Services\Assist\AssistRecords;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Textarea;
 use Filament\Pages\Page;
 use Filament\Panel;
+use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Attributes\Locked;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -37,6 +42,14 @@ class AssistReportPage extends Page
 
     #[Locked]
     public string $sessionId = '';
+
+    /**
+     * This visit's questions and their answers (Ask over the session): shown, never stored.
+     *
+     * @var list<array{question: string, answer: string, citations: list<array{at_ms: int, channel: string, text: string}>}>
+     */
+    #[Locked]
+    public array $answers = [];
 
     public static function getRelativeRouteName(Panel $panel): string
     {
@@ -64,6 +77,30 @@ class AssistReportPage extends Page
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('ask')->label('Ask')->icon(Heroicon::OutlinedChatBubbleLeftEllipsis)
+                ->visible(fn (): bool => self::canChange() && $this->session()->ended() && $this->session()->turns()->exists())
+                ->modalHeading('Ask about this session')
+                ->modalDescription('Answered from what was said, its summary and its facts, with the moments it rests on. It counts toward this month\'s allowance.')
+                ->schema([Textarea::make('question')->label('Your question')->required()->rows(3)->maxLength((int) config('assist.ask.question_chars', 500))
+                    ->placeholder('What did they say about the budget?')])
+                ->modalSubmitActionLabel('Ask')
+                ->action(function (array $data): void {
+                    $key = 'ask:'.self::personId();
+                    if (RateLimiter::tooManyAttempts($key, 20)) {
+                        Notification::make()->title('Too many questions. Try again in a minute.')->danger()->send();
+
+                        throw new Halt;
+                    }
+                    RateLimiter::hit($key, 60);
+                    try {
+                        $answer = app(AssistAsk::class)->ask($this->session(), (string) $data['question']);
+                    } catch (ApiError $e) {
+                        Notification::make()->title($e->getMessage())->danger()->send();
+
+                        throw new Halt;
+                    }
+                    array_unshift($this->answers, ['question' => trim((string) $data['question']), ...$answer]);
+                }),
             Action::make('download')->label('Download')->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
                 ->visible(fn (): bool => $this->session()->report !== null)
                 ->action(function (): StreamedResponse {
@@ -99,6 +136,7 @@ class AssistReportPage extends Page
             'making' => $session->ended() && $session->report_status === 'queued',
             'meetingType' => AssistRecords::MEETING_TYPES[$prep instanceof AssistPrep ? $prep->meeting_type : 'general'],
             'tz' => app(SettingsRepository::class)->displayTimezone(),
+            'answers' => $this->answers,
         ];
     }
 

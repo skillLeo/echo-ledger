@@ -16,6 +16,7 @@ use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\User;
+use App\Services\Assist\AssistAsk;
 use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistRecords;
 use App\Services\Assist\AssistStt;
@@ -211,6 +212,17 @@ final class AssistSessionController extends Controller
         );
 
         return response()->noContent();
+    }
+
+    /**
+     * POST /api/assist/sessions/{id}/ask `{"question"}` — `sessions:write`, throttled: a question about the session,
+     * answered from its own lines, summary and facts, with the moments it rests on. Nothing is stored.
+     */
+    public function ask(Request $request, string $id, AssistAsk $ask): JsonResponse
+    {
+        $data = $request->validate(['question' => ['required', 'string', 'max:'.(int) config('assist.ask.question_chars', 500)]]);
+
+        return response()->json($ask->ask($this->find($request, $id), (string) $data['question']));
     }
 
     /** @return array<string, mixed> a session as the apps read it */

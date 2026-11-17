@@ -274,11 +274,29 @@ final class AssistReport
      */
     public static function worstCaseCents(string $prompt): int
     {
-        $price = (array) config('assist.models.'.config('assist.report.model', 'claude-sonnet-5-5').'.price', []);
-        $input = self::worstCaseTokens($prompt) * max((float) ($price['input'] ?? 0), (float) ($price['cache_write'] ?? 0));
-        $output = (int) config('assist.report.max_output_tokens', 6000) * (float) ($price['output'] ?? 0);
+        return self::worstCaseCentsOf((string) config('assist.report.model', 'claude-sonnet-5-5'), (int) config('assist.report.max_output_tokens', 6000), $prompt);
+    }
 
-        return (int) ceil(($input + $output) / 1_000_000 * 100);
+    /** The most one call of [$model] with [$prompt] and at most [$maxOutput] tokens out can cost, in US cents. */
+    public static function worstCaseCentsOf(string $model, int $maxOutput, string $prompt): int
+    {
+        $price = (array) config("assist.models.{$model}.price", []);
+        $input = self::worstCaseTokens($prompt) * max((float) ($price['input'] ?? 0), (float) ($price['cache_write'] ?? 0));
+
+        return (int) ceil(($input + $maxOutput * (float) ($price['output'] ?? 0)) / 1_000_000 * 100);
+    }
+
+    /**
+     * What [$tokens] of [$model] cost in US$, at the catalog's prices.
+     *
+     * @param  array{input: int, cached: int, written: int, output: int}  $tokens
+     */
+    public static function costUsd(string $model, array $tokens): float
+    {
+        $price = (array) config("assist.models.{$model}.price", []);
+
+        return ($tokens['input'] * (float) ($price['input'] ?? 0) + $tokens['cached'] * (float) ($price['cache_read'] ?? 0)
+            + $tokens['written'] * (float) ($price['cache_write'] ?? 0) + $tokens['output'] * (float) ($price['output'] ?? 0)) / 1_000_000;
     }
 
     /**
@@ -340,10 +358,8 @@ final class AssistReport
     private function charge(AssistSession $session, array $answer, int $run, bool $estimated = false): void
     {
         $model = (string) config('assist.report.model', 'claude-sonnet-5-5');
-        $price = (array) config("assist.models.{$model}.price", []);
         $tokens = $answer['tokens'];
-        $cost = ($tokens['input'] * (float) ($price['input'] ?? 0) + $tokens['cached'] * (float) ($price['cache_read'] ?? 0)
-            + $tokens['written'] * (float) ($price['cache_write'] ?? 0) + $tokens['output'] * (float) ($price['output'] ?? 0)) / 1_000_000;
+        $cost = self::costUsd($model, $tokens);
         try {
             InternalAssistController::record($session, [
                 'suggestion_id' => "report-{$session->id}-{$run}", 'provider' => (string) config("assist.models.{$model}.provider", 'anthropic'),
