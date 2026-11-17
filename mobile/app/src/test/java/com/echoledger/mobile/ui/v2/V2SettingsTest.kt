@@ -79,6 +79,17 @@ class V2SettingsTest {
     }
 
     @Test
+    fun aSearchResultLightsItsSettingOnEveryV2DrawnPage() {
+        // Search opens a page with the setting's id (aSearchResultJumpsToItsPageAndSetting); each v2-drawn page must
+        // light that id, not an older entry name.
+        val sources = java.io.File("src/main/java/com/echoledger/mobile/ui/v2/settings").listFiles()!!.joinToString("\n") { it.readText() }
+        val lit = Regex("highlight == \"([^\"]+)\"").findAll(sources).map { it.groupValues[1] }.toSet()
+        val ids = SettingsSearch.items().filter { it.page in SettingsTree.nativePages && it.page != SettingsTree.SETUP }.map { it.id }
+        assertEquals(emptyList<String>(), ids.filter { it !in lit })
+        assertEquals(emptyList<String>(), lit.filter { id -> SettingsSearch.items().none { it.id == id } })
+    }
+
+    @Test
     fun theThemeChangesThroughTheExistingSettingsUpdate() {
         var settings by mutableStateOf(AppSettings())
         compose.setContent {

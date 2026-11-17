@@ -80,7 +80,7 @@ fun LanguagePage(vm: MainViewModel, settings: AppSettings, highlight: String?, o
     val current = Languages.canonical(settings.transcriptionLanguage)
     val title = stringResource(R.string.v2_set_page_language)
     SettingsPage(title, onBack, modifier) {
-        Column(Modifier.highlightedIf(highlight == "transcription")) {
+        Column(Modifier.highlightedIf(highlight == "language.new")) {
             EchoSectionHeader(stringResource(R.string.v2_tr_language_title))
             Languages.MAIN.forEach { option ->
                 EchoRadio(current == option.code, {
@@ -100,10 +100,11 @@ fun LanguagePage(vm: MainViewModel, settings: AppSettings, highlight: String?, o
             )
             Line(stringResource(R.string.v2_tr_lang_help))
         }
-        EchoSectionHeader(stringResource(R.string.v2_tr_vocab))
+        val vocabulary = Modifier.highlightedIf(highlight == "language.vocabulary")
+        EchoSectionHeader(stringResource(R.string.v2_tr_vocab), vocabulary)
         var term by remember { mutableStateOf("") }
         Row(
-            Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+            vocabulary.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
         ) {
@@ -132,7 +133,7 @@ private const val TERM_MAX = 50
 fun WordsPage(vm: MainViewModel, settings: AppSettings, highlight: String?, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val clients by vm.clients.collectAsState()
     SettingsPage(stringResource(R.string.v2_set_page_words), onBack, modifier) {
-        Column(Modifier.highlightedIf(highlight == "client")) {
+        Column(Modifier.highlightedIf(highlight == "words.project")) {
             EchoSectionHeader(stringResource(R.string.v2_tr_keyterms))
             Line(stringResource(R.string.v2_tr_keyterms_help))
             EchoRadio(settings.clientId == null, {
@@ -150,7 +151,7 @@ fun WordsPage(vm: MainViewModel, settings: AppSettings, highlight: String?, onBa
  * key with Open console.groq.com, the field and Save; with one saved, Remove key (asked first) and Replace.
  */
 @Composable
-fun KeyPage(vm: MainViewModel, plan: PlanState, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun KeyPage(vm: MainViewModel, plan: PlanState, highlight: String?, onBack: () -> Unit, modifier: Modifier = Modifier) {
     val c = EchoV2.colors
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -158,7 +159,7 @@ fun KeyPage(vm: MainViewModel, plan: PlanState, onBack: () -> Unit, modifier: Mo
     var saving by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf(false) }
     SettingsPage(stringResource(R.string.v2_set_page_key), onBack, modifier) {
-        EchoSectionHeader(stringResource(R.string.v2_tr_key_title))
+        EchoSectionHeader(stringResource(R.string.v2_tr_key_title), Modifier.highlightedIf(highlight == "key.groq"))
         if (!plan.needsOwnKey && plan.transcriptionKey?.set != true) {
             Line(stringResource(R.string.v2_tr_key_not_needed))
             return@SettingsPage

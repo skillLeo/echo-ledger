@@ -39,7 +39,7 @@ class TranscriptionPagesShotsTest : ScreenTest() {
             val settings by vm.settings.collectAsState()
             EchoV2Theme(darkTheme = dark, language = language) {
                 CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
-                    if (which == "language") LanguagePage(vm, settings, null, {}) else KeyPage(vm, settings.plan, {})
+                    if (which == "language") LanguagePage(vm, settings, null, {}) else KeyPage(vm, settings.plan, null, {})
                 }
             }
         }
