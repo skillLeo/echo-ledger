@@ -209,7 +209,7 @@ curl -o /dev/null -s -w 'connect %{time_connect}s  tls %{time_appconnect}s\n' ht
 ```
 
 Every suggestion pays this trip once on top of the model's first token. The targets are, with the trip added: the
-middle (p50) first token at most 1.5 s in Fast, 2.0 s in Balanced and 3.0 s in Deep. Send `LATENCY_V1_9.md` and your
+middle (p50) first token at most 1.5 s in Fast, 2.0 s in Balanced and 3.0 s in Deep. Send the latency report (the LATENCY_V1_9.md file it wrote) and your
 five `connect` lines to the developer. If a target is missed, don't go on to step 6: tell the developer first.
 
 ## 6. Live Assist on, for you only
