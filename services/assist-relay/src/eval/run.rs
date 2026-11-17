@@ -29,7 +29,7 @@ use crate::telemetry::Recorder;
 use crate::time::unix_now;
 
 /// The answer CI scripts for an `answer` or `any` turn that has no reference: short, no numbers, nothing claimed.
-pub const GENERIC_ANSWER: &str = "Sure, happy to answer that.\n- **Point**: from my notes";
+pub const GENERIC_ANSWER: &str = "Sure, happy to answer that.\n- **Point**: short and clear";
 
 /// Which answers CI scripts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
