@@ -138,7 +138,7 @@ final class CaptureSessionsTable
                     self::renameAction(),
                     // Since v1.6 (P5.5): the text of the view it opens in, the text and the voice, or a 7-day link.
                     WhatsAppActions::send(),
-                    DeleteAction::make()->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for 48 hours.'),
+                    DeleteAction::make()->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for '.CaptureSession::binHours().' hours.'),
                 ])->label('More')->tooltip('More')->color('gray'),
             ])
             // Since v1.6 (P5.2) the selection bar holds them: "8 selected · Move · Label · Export · Delete · More · Clear".
@@ -254,7 +254,7 @@ final class CaptureSessionsTable
                 ->alpineClickHandler("\$dispatch('el-upload-pick')"),
             DeleteAction::make('deleteFailed')->label('Delete')->button()->size(Size::Small)->color('gray')
                 ->visible(fn (HasTable $livewire): bool => $failedView($livewire))
-                ->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for 48 hours.'),
+                ->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for '.CaptureSession::binHours().' hours.'),
         ];
     }
 

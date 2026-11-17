@@ -68,7 +68,7 @@
 
         <h2>How long we keep it</h2>
         <ul>
-            <li>Recordings: until you delete them or the server's retention period ends; deleted ones wait 48 hours in the undo bin, then they and the engines' copies are erased.</li>
+            <li>Recordings: until you delete them or the server's retention period ends; deleted ones wait {{ \App\Models\CaptureSession::binDuration() }} in the undo bin, then they and the engines' copies are erased.</li>
             <li>Your account: until you delete it; 7 days later it is erased with everything only it owns.</li>
             <li>An export of your data: 24 hours.</li>
         </ul>

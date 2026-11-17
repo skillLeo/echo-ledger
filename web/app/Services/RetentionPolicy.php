@@ -122,7 +122,7 @@ final class RetentionPolicy
     public function emptyBin(): int
     {
         $erased = 0;
-        CaptureSession::onlyTrashed()->whereNull('media_erased_at')->where('deleted_at', '<=', now()->subHours(CaptureSession::BIN_HOURS))
+        CaptureSession::onlyTrashed()->whereNull('media_erased_at')->where('deleted_at', '<=', now()->subHours(CaptureSession::binHours()))
             ->chunkById(100, function (Collection $sessions) use (&$erased): void {
                 foreach ($sessions as $session) {
                     $session->purgeMedia();
@@ -141,7 +141,7 @@ final class RetentionPolicy
     public function bin(int $workspaceId): Collection
     {
         return CaptureSession::onlyTrashed()->where('workspace_id', $workspaceId)->ofPerson()->whereNull('media_erased_at')
-            ->where('deleted_at', '>', now()->subHours(CaptureSession::BIN_HOURS))->with('client')->orderByDesc('deleted_at')->get();
+            ->where('deleted_at', '>', now()->subHours(CaptureSession::binHours()))->with('client')->orderByDesc('deleted_at')->get();
     }
 
     /** Takes a recording out of the bin; `410 restore_expired` once its 48 hours are over. */

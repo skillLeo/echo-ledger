@@ -23,6 +23,8 @@ final class SettingsRepository
     /** @var array<string, mixed> */
     public const DEFAULTS = [
         'retention_days' => 30,
+        // Since v2.0 (owner's decision 2026-11-17): how long a deleted recording waits in Trash, 1 to 720 hours.
+        'trash.keep_hours' => 48,
         'provider.live_captions' => 'assemblyai',
         'provider.dictation' => 'assemblyai',
         'provider.final_transcript' => 'assemblyai',
@@ -188,6 +190,20 @@ final class SettingsRepository
 
         return is_scalar($days) ? max(1, min(365, (int) $days)) : 30;
     }
+
+    /** Hours a deleted recording can be restored from Trash (Admin › Settings › Storage), 1 to 720; 48 by default. */
+    public function trashKeepHours(): int
+    {
+        $hours = $this->get('trash.keep_hours', self::TRASH_HOURS_DEFAULT);
+
+        return is_numeric($hours) ? max(self::TRASH_HOURS_MIN, min(self::TRASH_HOURS_MAX, (int) $hours)) : self::TRASH_HOURS_DEFAULT;
+    }
+
+    public const TRASH_HOURS_DEFAULT = 48;
+
+    public const TRASH_HOURS_MIN = 1;
+
+    public const TRASH_HOURS_MAX = 720;
 
     public function providerFor(SttUseCase $useCase): SttProviderKey
     {

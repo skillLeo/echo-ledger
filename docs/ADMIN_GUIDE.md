@@ -208,6 +208,10 @@ reports.
 - What a plan leaves out shows a lock in the apps, and its routes answer "… is not in your plan" with the plan that
   has it. At a limit people see a message in plain words (apps of v1.6 and later get one code for every limit).
 - Retention of a plan applies only to recordings made after it was set; older recordings are never deleted by it.
+- **Live Assist** (since v2.0), in each plan: live minutes and live AI budget (US$) a month, and Practice's own
+  minutes and budget, counted apart. An empty box is the server's default for that plan. Free has Practice only
+  (30 minutes, $1); Pro 5 hours and $15 of live Live Assist; Ultra 10 hours and $60. A change applies at once, to
+  this month's allowance too, and goes in the activity log.
 - **Payment instructions** (since v1.6): the text people read after **Request upgrade** (bank or JazzCash details and
   what to write as the reference), followed by "We'll activate it once confirmed".
 
@@ -295,6 +299,9 @@ grant can still report up to that time on two channels, so one account can use u
 - **Maintenance:** while it is on, customers see "EchoLedger will be back soon" with your message in the app and their
   apps wait (they ask again after the time you give); staff keep working and see a red reminder. Share links,
   webhooks and the public pages keep working. Remember to turn it off.
+- **Settings → Storage → Keep deleted recordings in Trash (hours)** (since v2.0): how long a deleted recording can be
+  restored before its audio and transcript are erased for good, 1 to 720 hours, 48 by default. The apps read the same
+  value (`trash.keep_hours`), so their Trash says the same time. A change is in the activity log.
 - **Activity log:** everything the audit log keeps for the whole platform (sign-ins, devices, sharing, settings, plans,
   staff and support actions, every look under Support access) with filters by what happened, who did it and the date,
   and search.

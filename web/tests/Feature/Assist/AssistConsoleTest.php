@@ -74,7 +74,7 @@ describe('who sees it', function () {
     it('is in the sidebar and opens for a person the flag is on for', function () {
         consoleAs(assistPerson('pro'));
 
-        $html = (string) $this->get(AssistSessions::getUrl())->assertOk()->assertSee('Practice: 5 h 0 min left')->assertSee('Live Assist: 10 h 0 min left')->getContent();
+        $html = (string) $this->get(AssistSessions::getUrl())->assertOk()->assertSee('Practice: 5 h 0 min left')->assertSee('Live Assist: 5 h 0 min left')->getContent();
         expect($html)->toContain('Live Assist')->toContain(AssistPreps::getUrl());
         $this->get(AssistPreps::getUrl())->assertOk()->assertSee('No preps yet');
     });

@@ -45,7 +45,7 @@ final class SettingsSearch
         'signup' => ['privacy', 'Members and sign-up', 'who can sign up register registration accounts new people invite invitation anyone nobody google members console viewers'],
         'pins' => ['privacy', 'Certificate pins', 'pinning spki sha256 tls certificate security'],
         'devices' => ['devices', 'Signed-in devices', 'pair sign in revoke phone computer devices page'],
-        'retention' => ['storage', 'Storage and retention', 'delete days undo bin recordings transcripts erase 48 hours'],
+        'retention' => ['storage', 'Storage and retention', 'delete days undo bin trash restore deleted recordings transcripts erase keep hours'],
         'limit' => ['storage', 'Monthly limit', 'budget minutes dollars usd warn percent prices cost usage'],
         'plan' => ['storage', 'Plan limits', 'plan workspace minutes gigabytes pairings quota raise'],
         'game' => ['game', 'Game translate', 'live translate pubg codm voice chat arabic english speed budget soniox cost dollars'],

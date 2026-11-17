@@ -152,7 +152,7 @@ trait ManagesAppPages
             'value' => Formats::bytes($used).($limit !== null ? ' of '.Formats::bytes($limit) : ''),
             'percent' => $limit !== null && $limit > 0 ? min(100, (int) floor($used * 100 / $limit)) : null,
             'retention' => $retention !== null ? Formats::days($retention) : 'Until you delete them',
-            'bin' => CaptureSession::BIN_HOURS.' hours',
+            'bin' => CaptureSession::binHours().' hours',
             'binUrl' => RecentlyDeleted::canAccess() ? RecentlyDeleted::getUrl(panel: 'app') : null,
         ];
     }

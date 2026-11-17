@@ -569,7 +569,7 @@ forever or stops keeping). An empty view says why it is empty and offers **Show 
 Library says **Failed uploads (2) · See why**. In that view each recording says what went wrong and what happens next, in
 plain words: an upload from a phone or computer is sent again by that device the next time EchoLedger is open there and
 online; **Retry** carries on an upload from this browser (choose the same file again) or transcribes a recording again
-(after a busy engine, the monthly limit, or adding your own Groq key); **Delete** puts it in Recently deleted for 48 hours.
+(after a busy engine, the monthly limit, or adding your own Groq key); **Delete** puts it in Recently deleted for the time your server keeps them (48 hours unless your admin changed it).
 
 ## 10. Import, rename, export and share
 
@@ -862,7 +862,8 @@ new devices and shares are listed but not counted. Above nine it says **9+**.
 
 - In **Settings → Storage and retention**, choose how long recordings are kept: **7**, **14**, **30** days or a
   number of your own. A client can have its own time. A recording marked **Keep** is never removed.
-- Deleted recordings wait **48 hours** in **Recently deleted**. You can restore them there. After that they are
+- Deleted recordings wait in **Recently deleted** for the time your server keeps them (48 hours unless your admin
+  changed it). You can restore them there. After that they are
   gone for good, and nobody can play or share them in between.
 
 ## 15. Usage and budget

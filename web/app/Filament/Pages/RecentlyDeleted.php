@@ -51,16 +51,16 @@ class RecentlyDeleted extends Page implements HasTable
     {
         return $table
             ->query(fn (): Builder => CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->whereNull('media_erased_at')
-                ->where('deleted_at', '>', now()->subHours(CaptureSession::BIN_HOURS)))
+                ->where('deleted_at', '>', now()->subHours(CaptureSession::binHours())))
             ->defaultSort('deleted_at', 'desc')
-            ->description('Deleted recordings stay here for '.CaptureSession::BIN_HOURS.' hours, then their audio and transcripts are erased for good.')
+            ->description('Deleted recordings stay here for '.CaptureSession::binHours().' hours, then their audio and transcripts are erased for good.')
             ->columns([
                 TextColumn::make('title')->label('Title')->state(fn (CaptureSession $r): string => $r->displayTitle())->limit(48),
                 TextColumn::make('client.name')->label('Project')->placeholder('—'),
                 TextColumn::make('started_at')->label('Recorded')->dateTime('M j, Y · g:i A'),
                 TextColumn::make('deleted_at')->label('Deleted')->since(),
                 TextColumn::make('erase_at')->label('Erased')
-                    ->state(fn (CaptureSession $r): string => $r->deleted_at?->copy()->addHours(CaptureSession::BIN_HOURS)->diffForHumans() ?? ''),
+                    ->state(fn (CaptureSession $r): string => $r->deleted_at?->copy()->addHours(CaptureSession::binHours())->diffForHumans() ?? ''),
             ])
             ->recordActions([
                 Action::make('restore')->label('Restore')->icon(Heroicon::OutlinedArrowUturnLeft)
@@ -82,6 +82,6 @@ class RecentlyDeleted extends Page implements HasTable
                     }),
             ])
             ->emptyStateIcon(Heroicon::OutlinedTrash)
-            ->emptyStateHeading('Nothing deleted in the last 48 hours');
+            ->emptyStateHeading('Nothing deleted in the last '.CaptureSession::binHours().' hours');
     }
 }
