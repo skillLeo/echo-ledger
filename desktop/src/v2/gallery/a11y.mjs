@@ -206,6 +206,28 @@ try {
       log.push(`focus back on "${focused}"`);
       log.push("delete_session, then Undo → session_restore");
     });
+    await walk("undo-keys", app("library"), async (page, go, log) => {
+      await go(/^Weekly sync with Northwind$/);
+      await page.waitForTimeout(1200);
+      await go(/^Delete$/);
+      await page.waitForTimeout(400);
+      const named = () => page.evaluate(() => {
+        const el = document.activeElement;
+        const by = el?.getAttribute("aria-labelledby");
+        return (by ? document.getElementById(by)?.textContent : el?.getAttribute("aria-label") || el?.textContent?.trim()) ?? el?.tagName;
+      });
+      const from = await named();
+      await page.keyboard.press("F6");
+      if ((await named()) !== "Undo") throw new Error(`F6 put focus on ${await named()}`);
+      log.push(`F6 from "${from}" → "Undo"`);
+      await page.keyboard.press("F6");
+      if ((await named()) !== from) throw new Error(`F6 again put focus on ${await named()}`);
+      log.push(`F6 again → back on "${from}"`);
+      await page.keyboard.press("ControlOrMeta+z");
+      await page.waitForTimeout(600);
+      if (!(await calls(page)).includes("session_restore")) throw new Error("Cmd/Ctrl+Z didn't send session_restore");
+      log.push(`Cmd/Ctrl+Z → session_restore; focus stays on "${await named()}"`);
+    });
     await walk("setting", app("settings"), async (page, go, log) => {
       await go(/^Search settings$/, null);
       await page.keyboard.type("live captions");

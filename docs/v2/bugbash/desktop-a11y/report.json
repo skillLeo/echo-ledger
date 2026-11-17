@@ -283,11 +283,11 @@
    ],
    "calls": [
     "lock_touch",
-    "session_detail",
-    "transcript_detail",
-    "session_detail",
-    "transcript_detail",
     "app_status",
+    "session_detail",
+    "transcript_detail",
+    "session_detail",
+    "transcript_detail",
     "app_status"
    ]
   },
@@ -332,6 +332,29 @@
     "session_restore",
     "library_list",
     "app_status"
+   ]
+  },
+  {
+   "name": "undo-keys",
+   "ok": true,
+   "log": [
+    "14 × Tab → \"Weekly sync with Northwind\", Enter",
+    "4 × Tab → \"Delete\", Enter",
+    "F6 from \"Voice note\" → \"Undo\"",
+    "F6 again → back on \"Voice note\"",
+    "Cmd/Ctrl+Z → session_restore; focus stays on \"Voice note\""
+   ],
+   "calls": [
+    "lock_touch",
+    "session_detail",
+    "transcript_detail",
+    "session_detail",
+    "transcript_detail",
+    "app_status",
+    "delete_session",
+    "app_status",
+    "session_restore",
+    "library_list"
    ]
   },
   {

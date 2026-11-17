@@ -53,7 +53,7 @@ what they act on.
 
 Each walk starts at the top of the page and uses only Tab, Shift+Tab, Enter, Space and the arrow keys. At each stop the
 walk checks that focus is visible: a focus ring on the control, or on the field's frame for text fields. It then checks
-that the app was asked to do the task (the command sent to the core). All 5 walks pass.
+that the app was asked to do the task (the command sent to the core). All 5 walks pass, plus a sixth for Undo from the keyboard (D-150).
 
 | Task | Keys | Result |
 |---|---|---|
@@ -61,10 +61,11 @@ that the app was asked to do the task (the command sent to the core). All 5 walk
 | Find a recording | Tab ×9 to Search recordings, type "contract"; Tab ×6 to "Contract review", Enter | The recording opens |
 | Transcribe | Tab ×12 to the Untranscribed filter, Enter; Tab ×3 to the call, Enter; Tab ×9 to Transcribe, Enter | Transcription starts (`session_retranscribe`) |
 | Delete with Undo | Tab ×14 to "Weekly sync with Northwind", Enter; Tab ×4 to Delete, Enter; Tab ×8 to Undo, Enter | Deleted, then restored (`delete_session`, then `session_restore`). Focus returns to the restored recording |
+| Undo from the keyboard | After Delete: F6 to the toast, F6 back to the next recording; then Cmd/Ctrl+Z | F6 moves focus to Undo and back; Cmd/Ctrl+Z restores the recording (`session_restore`) without moving focus |
 | Change a setting | Tab ×7 to Search settings, type "captions"; Tab ×2 to the result, Enter; Tab ×1 to the switch, Space | The setting is saved (`update_settings`) |
 
 Screenshots: `desktop-a11y/keys-record.png`, `keys-find.png`, `keys-transcribe.png`, `keys-delete-undo.png`,
-`keys-setting.png`.
+`keys-undo-keys.png`, `keys-setting.png`.
 
 The first run of the delete walk found that focus was lost after Delete and after Undo. The deleted row and then the
 toast left the page, so focus fell back to the top of the window, and reaching Undo took 16 Tabs. Now focus moves to the
@@ -80,7 +81,7 @@ Undo. The toast waits while the pointer or focus is on it.
 | D-147 | S2 | Library, Trash | Keyboard focus was lost after Delete and after Undo | Fixed in f408f2a6 |
 | D-148 | S4 | Live Assist card window | No page heading for screen-reader navigation | Fixed in f408f2a6 |
 | D-149 | S3 | Caption overlay (today's, not v2) | The speaker name on a partial caption is 3.49:1 in light; it should be 4.5:1 | Logged |
-| D-150 | S3 | Toast with Undo | From the next row, Undo is 8 Tabs away (the toast is last in the page); there is no shortcut | Logged |
+| D-150 | S3 | Toast with Undo | From the next row, Undo was 8 Tabs away (the toast is last in the page), with no shortcut | Fixed in 8e7c39c0: Cmd+Z (Ctrl+Z on Windows) undoes while the toast shows; F6 moves focus to the toast and back |
 
 No S0 or S1. The tests now cover focus after Delete and after Undo (`v2/library/library.test.tsx`) and the profile
 button's name and description (`v2/shell/shell.test.tsx`).
