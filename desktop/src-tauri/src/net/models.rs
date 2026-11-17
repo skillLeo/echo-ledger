@@ -1363,6 +1363,9 @@ pub struct AssistPlanDto {
     pub modes: Vec<String>,
     #[serde(default)]
     pub seconds_left: Option<u64>,
+    /// The month's assist seconds, when the server says.
+    #[serde(default, deserialize_with = "lenient")]
+    pub seconds_total: Option<u64>,
 }
 
 /// `201` of `POST /api/assist/sessions`. The `stt` block is kept as sent: the live captions read it.
@@ -1382,4 +1385,155 @@ pub struct AssistTokenAnswer {
     pub relay: AssistRelayDto,
     #[serde(default)]
     pub stt: Option<serde_json::Value>,
+}
+
+/// A text field that may come as `null`: read as empty.
+fn text<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(match Option::<serde_json::Value>::deserialize(deserializer)? {
+        Some(serde_json::Value::String(s)) => s,
+        _ => String::new(),
+    })
+}
+
+fn text_or(value: String, default: &str) -> String {
+    if value.is_empty() { default.to_string() } else { value }
+}
+
+/// A project file attached to a prep (the server extracts its text and counts its tokens).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrepDocument {
+    #[serde(default, alias = "id", deserialize_with = "text")]
+    pub file_id: String,
+    #[serde(default, deserialize_with = "text")]
+    pub name: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub tokens: Option<u64>,
+}
+
+/// A Live Assist prep (docs/API_ASSIST.md "Preps"), in the card's shape: every field present, `null` text as empty.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Prep {
+    #[serde(default, deserialize_with = "text")]
+    pub id: String,
+    /// `interview` | `boss` | `existing_client` | `new_client` | `general`.
+    #[serde(default, deserialize_with = "text")]
+    pub meeting_type: String,
+    #[serde(default, deserialize_with = "text")]
+    pub title: String,
+    #[serde(default, deserialize_with = "text")]
+    pub counterpart: String,
+    #[serde(default, deserialize_with = "text")]
+    pub company: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub project_id: Option<String>,
+    #[serde(default, deserialize_with = "text")]
+    pub goals: String,
+    #[serde(default, deserialize_with = "text")]
+    pub done: String,
+    #[serde(default, deserialize_with = "text")]
+    pub not_done: String,
+    #[serde(default, deserialize_with = "text")]
+    pub to_discuss: String,
+    #[serde(default, deserialize_with = "text")]
+    pub instructions: String,
+    /// `keywords` | `outline` | `full`.
+    #[serde(default, deserialize_with = "text")]
+    pub hint_level: String,
+    /// `fast` | `balanced` | `deep` | `max`.
+    #[serde(default, deserialize_with = "text")]
+    pub mode: String,
+    /// `off` | `urdu` | `roman_urdu` | `arabic`.
+    #[serde(default, deserialize_with = "text")]
+    pub language_help: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub scheduled_at: Option<String>,
+    /// `draft` | `scheduled` | `armed` | `done` | `cancelled`.
+    #[serde(default, deserialize_with = "text")]
+    pub status: String,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub documents: Vec<PrepDocument>,
+}
+
+impl Prep {
+    /// The defaults the contract names for what the server left out.
+    pub fn completed(mut self) -> Self {
+        self.meeting_type = text_or(std::mem::take(&mut self.meeting_type), "general");
+        self.hint_level = text_or(std::mem::take(&mut self.hint_level), "outline");
+        self.mode = text_or(std::mem::take(&mut self.mode), "balanced");
+        self.language_help = text_or(std::mem::take(&mut self.language_help), "off");
+        self.status = text_or(std::mem::take(&mut self.status), "draft");
+        self
+    }
+
+    /// One prep from an answer: the object itself or under `data`.
+    pub fn from_answer(answer: serde_json::Value) -> crate::error::AppResult<Self> {
+        let object = match answer {
+            serde_json::Value::Object(mut map) if map.get("data").is_some_and(serde_json::Value::is_object) => map.remove("data").unwrap_or_default(),
+            other => other,
+        };
+        serde_json::from_value::<Prep>(object).map(Prep::completed).map_err(|_| crate::error::AppError::msg("The server sent a prep this app can't read."))
+    }
+
+    /// A list of preps: a bare array or under `data`; entries that can't be read are left out.
+    pub fn list_from_answer(answer: serde_json::Value) -> Vec<Self> {
+        let items = match answer {
+            serde_json::Value::Array(items) => items,
+            serde_json::Value::Object(mut map) => match map.remove("data") {
+                Some(serde_json::Value::Array(items)) => items,
+                _ => Vec::new(),
+            },
+            _ => Vec::new(),
+        };
+        items.into_iter().filter_map(|i| serde_json::from_value::<Prep>(i).ok()).filter(|p| !p.id.is_empty()).map(Prep::completed).collect()
+    }
+}
+
+/// What people wrote stays out of logs.
+impl std::fmt::Debug for Prep {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Prep").field("id", &self.id).field("meeting_type", &self.meeting_type).field("status", &self.status).finish_non_exhaustive()
+    }
+}
+
+/// A prep as the card saves it (`POST /api/assist/preps`, or `PATCH` with its id); the id is never in the body.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrepDraft {
+    #[serde(default, skip_serializing)]
+    pub id: Option<String>,
+    pub meeting_type: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub counterpart: String,
+    #[serde(default)]
+    pub company: String,
+    #[serde(default)]
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub goals: String,
+    #[serde(default)]
+    pub done: String,
+    #[serde(default)]
+    pub not_done: String,
+    #[serde(default)]
+    pub to_discuss: String,
+    #[serde(default)]
+    pub instructions: String,
+    #[serde(default)]
+    pub hint_level: String,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub language_help: String,
+    #[serde(default)]
+    pub scheduled_at: Option<String>,
+}
+
+impl std::fmt::Debug for PrepDraft {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrepDraft").field("id", &self.id).field("meeting_type", &self.meeting_type).finish_non_exhaustive()
+    }
 }

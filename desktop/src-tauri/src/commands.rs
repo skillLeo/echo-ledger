@@ -2558,52 +2558,84 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
     Ok(crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic))
 }
 
-/// Starts a Live Assist session (docs/API_ASSIST.md 1.9.0-g), only while the server's `live_assist` flag is on: the
-/// server first (`POST /api/assist/sessions`), then the relay, pinned with the config's `relay_pins` (none refuses the
-/// connection in plain words). Suggestions reach the window as `assist:suggestion_start`,
-/// `assist:token`, `assist:suggestion_end`, `assist:skip` and `assist:mode_changed`, the connection as `assist:state`.
+// ---- Live Assist (docs/API_ASSIST.md 1.9.0-g; the card's commands, desktop/src/v2/assist/adapter.ts) ----------------
+
+/// The person's preps (`GET /api/assist/preps?status=`), all of them without a status.
 #[tauri::command]
-pub async fn assist_start(
-    app: AppHandle,
-    prep_id: Option<String>,
-    mode: Option<String>,
-    practice: Option<bool>,
-    recording_session_id: Option<String>,
-) -> AppResult<crate::assist::session::AssistStarted> {
-    let state = app.state::<AppState>();
-    let api = std::sync::Arc::new(state.api()?);
-    let flags = crate::ui_flags::cached(&state);
-    // The relay host's own pins (`relay_pins`, contract 1.9.0-g); none refuses the connection in plain words.
-    let pins = crate::assist::relay_pins(state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref());
-    let practice = practice.unwrap_or(false);
-    let request = crate::net::models::AssistStartRequest {
-        prep_id,
-        mode,
-        platform: "desktop".into(),
-        // Practice has no recording; a live session names the recording of this device, when one runs.
-        recording_session_id: if practice { None } else { recording_session_id },
-        practice,
-    };
-    let emitter = app.clone();
-    let (started, handle) = crate::assist::session::start(api, &flags, pins, request, move |name, body| {
-        let _ = emitter.emit(name, body);
-    })
-    .await?;
-    state.assist.set(started.session_id.clone(), handle);
-    Ok(started)
+pub async fn assist_preps_list(app: AppHandle, status: Option<String>) -> AppResult<Vec<crate::net::models::Prep>> {
+    crate::assist::live::preps(&app, status).await
 }
 
-/// Ends the Live Assist session that runs: the relay connection closes and the server is told
-/// (`POST /api/assist/sessions/{id}/end`). Nothing runs: nothing to do.
+/// Saves a prep: a new one, or the one its id names.
 #[tauri::command]
-pub async fn assist_stop(app: AppHandle) -> AppResult<()> {
-    let state = app.state::<AppState>();
-    let Some(session_id) = state.assist.take() else { return Ok(()) };
-    match state.api()?.assist_end(&session_id).await {
-        // Already ended on the server (from another device, or by its time): what was wanted.
-        Err(e) if e.code() == Some("session_ended") => Ok(()),
-        other => other,
-    }
+pub async fn assist_prep_save(app: AppHandle, prep: crate::net::models::PrepDraft) -> AppResult<crate::net::models::Prep> {
+    crate::assist::live::prep_save(&app, prep).await
+}
+
+#[tauri::command]
+pub async fn assist_prep_delete(app: AppHandle, id: String) -> AppResult<()> {
+    crate::assist::live::prep_delete(&app, &id).await
+}
+
+/// Project files join a prep; the prep as it is now.
+#[tauri::command]
+pub async fn assist_prep_documents_add(app: AppHandle, id: String, file_ids: Vec<String>) -> AppResult<crate::net::models::Prep> {
+    crate::assist::live::prep_documents_add(&app, &id, &file_ids).await
+}
+
+#[tauri::command]
+pub async fn assist_prep_document_remove(app: AppHandle, id: String, file_id: String) -> AppResult<crate::net::models::Prep> {
+    crate::assist::live::prep_document_remove(&app, &id, &file_id).await
+}
+
+/// Schedules a prep for `at` (RFC 3339); it is armed 2 minutes before and waits up to 10 minutes for the meeting.
+#[tauri::command]
+pub async fn assist_schedule(app: AppHandle, prep_id: String, at: String) -> AppResult<crate::net::models::Prep> {
+    crate::assist::live::schedule(&app, &prep_id, &at).await
+}
+
+/// Starts Live Assist, only while the server's `live_assist` flag is on: the recording first (Practice has none), then
+/// the server session linked to it, then the relay pinned with the config's `relay_pins` (none refuses the connection
+/// in plain words). The card opens and hears the session as `assist:message`.
+#[tauri::command]
+pub async fn assist_start(app: AppHandle, prep_id: Option<String>, mode: Option<String>, practice: Option<bool>) -> AppResult<crate::assist::session::AssistStarted> {
+    crate::assist::live::start(&app, prep_id, mode, practice.unwrap_or(false)).await
+}
+
+/// Ends the session that runs (`POST /api/assist/sessions/{id}/end`) and stops the recording.
+#[tauri::command]
+pub async fn assist_end(app: AppHandle) -> AppResult<()> {
+    crate::assist::live::end(&app).await
+}
+
+/// A button on the card: `help_now`, `regenerate`, `shorter`, `formal`, `translate` or `cancel`.
+#[tauri::command]
+pub fn assist_send(app: AppHandle, kind: String) -> AppResult<()> {
+    crate::assist::live::send(&app, &kind)
+}
+
+/// The card's mode, hint level, pause or mute (`context_update.settings`); the card's state comes back.
+#[tauri::command]
+pub fn assist_set(app: AppHandle, settings: crate::assist::live::CardSettings) -> AppResult<crate::assist::card::Snapshot> {
+    crate::assist::live::set(&app, settings)
+}
+
+/// What the person did with a suggestion: `used` or `dismissed` (and the rewrites' names).
+#[tauri::command]
+pub async fn assist_feedback(app: AppHandle, suggestion_id: String, action: String) -> AppResult<()> {
+    crate::assist::live::feedback(&app, &suggestion_id, &action).await
+}
+
+/// The card hides; the session goes on.
+#[tauri::command]
+pub fn assist_card_hide(app: AppHandle) {
+    crate::assist::live::hide_card(&app);
+}
+
+/// The card's state for a window opened mid-session (with the prep's `meeting_type`); `null` when none runs.
+#[tauri::command]
+pub fn assist_state(app: AppHandle) -> Option<crate::assist::card::Snapshot> {
+    crate::assist::live::snapshot(&app)
 }
 
 /// "Once per loss": the person has read the sentence.

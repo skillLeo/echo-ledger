@@ -182,7 +182,7 @@ pub async fn start_captions(app: &AppHandle) -> AppResult<()> {
 }
 
 /// The open server session of the running recording, opened on first use (live captions on a v1.1 server).
-async fn ensure_server_session(app: &AppHandle, info: &crate::audio::RecordingInfo) -> AppResult<String> {
+pub(crate) async fn ensure_server_session(app: &AppHandle, info: &crate::audio::RecordingInfo) -> AppResult<String> {
     let state = app.state::<crate::AppState>();
     if let Some(id) = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).session_for(&info.client_ref) {
         return Ok(id);
@@ -360,6 +360,10 @@ fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     emit_recording_state(app);
     check_bluetooth_mic(app, info);
     crate::screens::on_recording_started(app, info);
+    // A prep armed for this meeting starts its Live Assist session.
+    if info.mode == RecordingMode::Call {
+        crate::assist::live::on_call_started(app);
+    }
 }
 
 /// Whether the recording's microphone is Bluetooth (v1.5), asked of the system beside the start so the start does not
@@ -528,12 +532,14 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     if let Some(reason) = crate::skipped::reason(auto, mode, output.duration_ms, settings.skip_calls_shorter_than_s, output.speech_ms) {
         return skip_finished(app, decision, late, reason, now);
     }
-    let at_once = pending::after_call(settings.after_call, mode).keeps_at_once();
+    // A Live Assist session from a prep saves its call without the after-call card (docs/API_ASSIST.md `auto_saved`).
+    let assist_saved = take_assist_saved(&state, &client_ref);
+    let at_once = if assist_saved { Some(true) } else { pending::after_call(settings.after_call, mode).keeps_at_once() };
     let ask = at_once.is_none();
     let decision = if ask && interactive { decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)) } else { decision };
     let id = decision.id.clone();
     let keep_at = decision.keep_at();
-    let toast = (!ask && interactive).then(|| SavedToast::of(&decision, now));
+    let toast = (!ask && interactive && !assist_saved).then(|| SavedToast::of(&decision, now));
     {
         let files = DecisionFiles::in_dir(&state.data_dir);
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
@@ -962,6 +968,16 @@ fn take_recording_owner(state: &crate::AppState, client_ref: &str) -> Option<cra
             None
         }
     }
+}
+
+/// Whether a Live Assist session from a prep saved this recording (cleared with it).
+fn take_assist_saved(state: &crate::AppState, client_ref: &str) -> bool {
+    let mut saved = state.assist_auto_saved.lock().unwrap_or_else(|p| p.into_inner());
+    if saved.as_deref() == Some(client_ref) {
+        *saved = None;
+        return true;
+    }
+    false
 }
 
 /// Who a finished recording was with (cleared with it).

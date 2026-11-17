@@ -37,6 +37,7 @@ fn customised() -> Settings {
         skip_calls_shorter_than_s: 30,
         caption_lines: 5,
         pill_position: Some(PillPosition { x: -1_520, y: 64 }),
+        assist_card_position: Some(PillPosition { x: 880, y: 40 }),
         ask_unknown_apps: true,
         site_rules: vec![crate::detect::sites::SiteRule {
             id: "6f1c2d3e-4b5a-4c7d-8e9f-0a1b2c3d4e5f".into(),
@@ -157,6 +158,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "afterCall",
             "appLock",
             "askUnknownApps",
+            "assistCardPosition",
             "autoMode",
             "autoRecordApps",
             "autostart",
@@ -201,7 +203,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 46, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 47, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");

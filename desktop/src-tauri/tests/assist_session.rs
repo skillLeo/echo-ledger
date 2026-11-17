@@ -8,6 +8,7 @@ use std::sync::Arc;
 use serde_json::json;
 
 use common::{MockServer, Reply, Router};
+use desktop_lib::assist::client::{AssistEvent, EndReason};
 use desktop_lib::assist::session::{self, AssistStarted};
 use desktop_lib::net::api::ApiClient;
 use desktop_lib::net::models::AssistStartRequest;
@@ -47,7 +48,7 @@ async fn a_session_starts_refreshes_its_tokens_and_ends() {
     );
     assert_eq!(
         AssistStarted::from_answer(&answer),
-        AssistStarted { session_id: ID.into(), mode: "balanced".into(), practice: false, auto_saved: true, modes: vec!["fast".into(), "balanced".into()], seconds_left: Some(31_200) }
+        AssistStarted { session_id: ID.into(), auto_saved: true, mode: "balanced".into(), allowed_modes: vec!["fast".into(), "balanced".into()], seconds_left: Some(31_200), practice: false }
     );
     let grant = session::grant(&answer.relay, &["sha256/AAAA".into()]);
     assert_eq!((grant.url.as_str(), grant.token.as_str(), grant.pins.len()), ("wss://relay.example/v1/assist", "relay-token-1", 1));
@@ -87,7 +88,7 @@ async fn refusals_read_in_plain_words() {
 async fn nothing_reaches_the_server_while_live_assist_is_off() {
     let server = MockServer::start(Router::new().fixed("POST", "/api/assist/sessions", Reply::json(201, fixture("assist_session_start.json"))));
     let off = UiFlags::read(Some(&json!({"live_assist": false})), false);
-    let refused = session::start(Arc::new(client(&server)), &off, vec![], request(), |_, _| {}).await.unwrap_err();
+    let refused = session::start(Arc::new(client(&server)), &off, vec![], request(), |_| {}).await.unwrap_err();
     assert_eq!(refused.to_string(), "Live Assist isn't on for you yet.");
     assert!(server.requests_to("POST", "/api/assist/sessions").is_empty());
 }
@@ -97,20 +98,17 @@ async fn a_started_session_connects_to_the_relay_it_was_given() {
     // The relay's address is wss:// and no pins are known here: the session refuses it in plain words.
     let server = MockServer::start(Router::new().fixed("POST", "/api/assist/sessions", Reply::json(201, fixture("assist_session_start.json"))));
     let on = UiFlags::read(Some(&json!({"live_assist": true})), false);
-    let events: Arc<std::sync::Mutex<Vec<(String, serde_json::Value)>>> = Arc::default();
+    let events: Arc<std::sync::Mutex<Vec<AssistEvent>>> = Arc::default();
     let sink = events.clone();
-    let (started, _handle) = session::start(Arc::new(client(&server)), &on, vec![], request(), move |name, body| sink.lock().unwrap().push((name.to_string(), body)))
-        .await
-        .unwrap();
-    assert_eq!(started.session_id, ID);
+    let (answer, _handle) = session::start(Arc::new(client(&server)), &on, vec![], request(), move |event| sink.lock().unwrap().push(event)).await.unwrap();
+    assert_eq!(answer.session.id, ID);
     for _ in 0..200 {
         if !events.lock().unwrap().is_empty() {
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
-    assert_eq!(
-        events.lock().unwrap()[0],
-        ("assist:state".to_string(), json!({"state": "ended", "reason": "insecure", "message": "Live Assist could not make a secure connection."}))
-    );
+    let first = events.lock().unwrap()[0].clone();
+    assert_eq!(first, AssistEvent::Ended(EndReason::Insecure));
+    assert_eq!(session::end_sentence(&EndReason::Insecure), Some("Live Assist could not make a secure connection."));
 }

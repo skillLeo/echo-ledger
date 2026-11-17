@@ -97,9 +97,13 @@ impl Announced {
 pub fn announce(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
     let flags = cached(&state);
-    // `live_assist` turned off for this person: a session that runs stops.
-    state.assist.stop_unless_enabled(&flags);
+    // `live_assist` turned off for this person: a session that runs ends.
+    crate::assist::live::stop_unless_enabled(app, &flags);
     if let Some(flags) = state.ui_announced.changed(flags) {
+        // Turned on: the scheduled preps get their arming timers.
+        if crate::assist::enabled(&flags) {
+            crate::assist::live::rearm(app);
+        }
         let _ = app.emit(EVENT, flags);
     }
 }

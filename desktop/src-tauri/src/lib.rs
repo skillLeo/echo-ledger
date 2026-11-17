@@ -75,6 +75,8 @@ pub struct AppState {
     pub ui_announced: ui_flags::Announced,
     /// The Live Assist session that runs, if any.
     pub assist: assist::Registry,
+    /// The recording a Live Assist session from a prep saves without the after-call card (its `client_ref`).
+    pub assist_auto_saved: Mutex<Option<String>>,
     pub capture: audio::CaptureController,
     pub live: stt::LiveCaptions,
     pub dictation_live: stt::LiveCaptions,
@@ -170,6 +172,7 @@ impl AppState {
             server_config: Mutex::new(None),
             ui_announced: ui_flags::Announced::default(),
             assist: assist::Registry::default(),
+            assist_auto_saved: Mutex::new(None),
             capture: audio::CaptureController::default(),
             live: stt::LiveCaptions::default(),
             dictation_live: stt::LiveCaptions::default(),
@@ -489,6 +492,8 @@ pub fn run() {
             // notification area of Windows, see `ExitRequested`); the next open builds a new one on the same page
             // (main_view_get).
             WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
+            // The Live Assist card was dragged: its place is kept for the next session.
+            WindowEvent::Moved(_) if window.label() == assist::live::WINDOW => assist::live::card_moved(window.app_handle()),
             WindowEvent::Destroyed => {
                 privacy::destroyed(window.app_handle(), window.label());
                 lifecycle::on_destroyed(window.app_handle(), window.label());
@@ -579,8 +584,19 @@ pub fn run() {
             commands::ui_flags,
             commands::trash_keep_hours,
             commands::ui_classic_set,
+            commands::assist_preps_list,
+            commands::assist_prep_save,
+            commands::assist_prep_delete,
+            commands::assist_prep_documents_add,
+            commands::assist_prep_document_remove,
+            commands::assist_schedule,
             commands::assist_start,
-            commands::assist_stop,
+            commands::assist_end,
+            commands::assist_send,
+            commands::assist_set,
+            commands::assist_feedback,
+            commands::assist_card_hide,
+            commands::assist_state,
             commands::ask_answer,
             commands::import_voice_notes,
             commands::import_pick,

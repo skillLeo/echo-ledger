@@ -284,6 +284,8 @@ pub struct Settings {
     pub caption_lines: u8,
     /// Physical desktop px of the recording pill's top-left corner; set only when the user drags the pill.
     pub pill_position: Option<PillPosition>,
+    /// Where the Live Assist card was dragged to (its top-left corner, like the pill's); none: top-centre.
+    pub assist_card_position: Option<PillPosition>,
     /// macOS only: read browser tab addresses through Apple Events to identify call sites; ignored on Windows.
     pub browser_automation: bool,
     /// Size, width, opacity, compact mode, auto-hide and speaker colours of the caption overlay.
@@ -358,6 +360,7 @@ impl Default for Settings {
             site_rules: Vec::new(),
             caption_lines: DEFAULT_CAPTION_LINES,
             pill_position: None,
+            assist_card_position: None,
             browser_automation: false,
             caption_style: CaptionStyle::default(),
             input_device: None,

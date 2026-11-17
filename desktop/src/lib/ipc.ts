@@ -380,6 +380,7 @@ export interface Settings {
   siteRules: SiteRule[];
   captionLines: number;
   pillPosition: PillPosition | null;
+  assistCardPosition: PillPosition | null;
   browserAutomation: boolean;
   autoRecordApps: Record<string, boolean>;
   captionStyle: CaptionStyle;
@@ -646,55 +647,71 @@ export interface MicUser {
   reason: IgnoreReason | null;
 }
 
-/** Live Assist (docs/API_ASSIST.md 1.9.0-e). */
-export interface AssistStartOptions {
-  prepId?: string | null;
-  mode?: "fast" | "balanced" | "deep" | "max" | null;
-  practice?: boolean;
-  recordingSessionId?: string | null;
+/** Live Assist (docs/API_ASSIST.md 1.9.0-g): the core's side of the card's commands (desktop/src/v2/assist/adapter.ts). */
+export type AssistMeetingType = "interview" | "boss" | "existing_client" | "new_client" | "general";
+export type AssistHintLevel = "keywords" | "outline" | "full";
+export type AssistMode = "fast" | "balanced" | "deep" | "max";
+export type AssistLanguageHelp = "off" | "urdu" | "roman_urdu" | "arabic";
+export type AssistPrepStatus = "draft" | "scheduled" | "armed" | "done" | "cancelled";
+export interface AssistPrepDocument {
+  file_id: string;
+  name: string;
+  tokens: number | null;
 }
+export interface AssistPrepDraft {
+  id?: string;
+  meeting_type: AssistMeetingType;
+  title: string;
+  counterpart: string;
+  company: string;
+  project_id: string | null;
+  goals: string;
+  done: string;
+  not_done: string;
+  to_discuss: string;
+  instructions: string;
+  hint_level: AssistHintLevel;
+  mode: AssistMode;
+  language_help: AssistLanguageHelp;
+  scheduled_at: string | null;
+}
+export type AssistPrep = AssistPrepDraft & { id: string; status: AssistPrepStatus; documents: AssistPrepDocument[] };
 export interface AssistStarted {
-  sessionId: string;
-  mode: string;
+  session_id: string;
+  /** Started from a prep: the call is saved without the after-call card. */
+  auto_saved: boolean;
+  mode: AssistMode | "captions_only";
+  allowed_modes: AssistMode[];
+  seconds_left: number | null;
   practice: boolean;
-  /** Started from a prep: no after-call card. */
-  autoSaved: boolean;
-  modes: string[];
-  secondsLeft: number | null;
 }
-/** `assist:suggestion_start`: `turn_id` is the other person's turn it answers; `replaces` the suggestion it takes the
- * place of on the card (drop that one when this one's first token arrives). */
-export interface AssistSuggestionStart {
-  suggestion_id: string;
-  turn_id: string | null;
-  kind: "answer" | "upgrade" | "rewrite" | "fallback" | "other";
-  mode: string;
-  model: string;
-  speculative: boolean;
-  draft: boolean;
-  replaces: string | null;
+export type AssistSendKind = "help_now" | "regenerate" | "shorter" | "formal" | "translate" | "cancel";
+export interface AssistCardSettings {
+  mode?: AssistMode;
+  hint_level?: AssistHintLevel;
+  paused?: boolean;
+  muted_seconds?: number;
 }
-export interface AssistToken {
-  suggestion_id: string;
-  text: string;
+/** `assist:message`: the relay's messages as it sends them (without `seq`) and the core's `turn`, `budget` and `ended`. */
+export type AssistMessage =
+  | { type: "ready"; session_id: string; mode: AssistMode | "captions_only"; requested_mode: AssistMode; allowed_modes: AssistMode[]; resumed: boolean; practice: boolean; meeting_type?: AssistMeetingType }
+  | { type: "suggestion_start"; suggestion_id: string; turn_id: string | null; kind: "answer" | "help_now" | "regenerate" | "shorter" | "formal" | "translate" | "upgrade" | "other"; speculative: boolean; replaces: string | null; mode: string; model: string; draft: boolean }
+  | { type: "token"; suggestion_id: string; text: string }
+  | { type: "suggestion_end"; suggestion_id: string; status: "done" | "cancelled" | "superseded" | "other" }
+  | { type: "skip"; suggestion_id: string; turn_id?: string | null }
+  | { type: "mode_changed"; from: string; to: string; mode: string; reason: "budget" | "budget_restored" | "plan" | "assist_time" | "requested" | "other"; requested?: AssistMode | null }
+  | { type: "error"; code: string; message: string; retry: boolean; suggestion_id: string | null; in_reply_to: number | null; fatal: boolean }
+  | { type: "turn"; turn_id: string; channel: "me" | "other"; text: string; final: boolean }
+  | { type: "budget"; seconds_left: number | null; seconds_total: number | null }
+  | { type: "ended"; reason: "closed" | "replaced" | "wrong_session" | "insecure" | "gave_up" | "token_rejected"; message: string | null };
+/** `assist_state`: the session so far, for a window opened mid-session. */
+export interface AssistSnapshot {
+  messages: AssistMessage[];
+  hint_level: AssistHintLevel;
+  paused: boolean;
+  muted_until: string | null;
+  meeting_type: AssistMeetingType | null;
 }
-export interface AssistSuggestionEnd {
-  suggestion_id: string;
-  status: "complete" | "cancelled" | "superseded" | "failed" | "other";
-  model: string;
-  latency: Record<string, number | null>;
-  usage: Record<string, number | boolean>;
-}
-export interface AssistModeChanged {
-  from: string;
-  to: string;
-  reason: "budget" | "budget_restored" | "plan" | "assist_time" | "other";
-}
-/** `assist:state`: the relay connection; `message` is a plain sentence when it ended by itself. */
-export type AssistState =
-  | { state: "connected"; resumed: boolean; mode: string }
-  | { state: "reconnecting"; attempt: number; afterMs: number }
-  | { state: "ended"; reason: "closed" | "replaced" | "wrong_session" | "insecure" | "gave_up"; message: string | null };
 
 /** The interface flags (contract 2.0.0-a): every flag the app knows, on or off, for this person, and the "classic"
  * choice; `ui:flags` carries the same when the cached flags change. */
@@ -1484,12 +1501,7 @@ export interface PrivacyStatus {
 export interface EventPayloads {
   "app:status": AppStatus;
   "ui:flags": UiFlagsAnswer;
-  "assist:suggestion_start": AssistSuggestionStart;
-  "assist:token": AssistToken;
-  "assist:suggestion_end": AssistSuggestionEnd;
-  "assist:skip": { suggestion_id: string; turn_id: string | null };
-  "assist:mode_changed": AssistModeChanged;
-  "assist:state": AssistState;
+  "assist:message": AssistMessage;
   /** The words, or (since v1.6.1) the words and where the notice goes (lib/notice.ts NoticePayload). */
   "app:error": string | { text: string; target?: unknown };
   "app:toast": string | { text: string; target?: unknown };
@@ -1774,11 +1786,24 @@ export const api = {
   trashKeepHours: () => invoke<number>("trash_keep_hours"),
   /** "Switch back to classic" (`PUT /api/account/ui`): the server's new flags. */
   uiClassicSet: (classic: boolean) => invoke<UiFlagsAnswer>("ui_classic_set", { classic }),
-  /** Live Assist (API_ASSIST.md 1.9.0-e): starts a session while `live_assist` is on; suggestions come as `assist:*`. */
-  assistStart: (options: AssistStartOptions = {}) =>
-    invoke<AssistStarted>("assist_start", { prepId: options.prepId ?? null, mode: options.mode ?? null, practice: options.practice ?? false, recordingSessionId: options.recordingSessionId ?? null }),
-  /** Ends the running Live Assist session (nothing runs: nothing happens). */
-  assistStop: () => invoke<void>("assist_stop"),
+  /** Live Assist (API_ASSIST.md 1.9.0-g): the person's preps, all of them without a status. */
+  assistPrepsList: (status: AssistPrepStatus | null = null) => invoke<AssistPrep[]>("assist_preps_list", { status }),
+  assistPrepSave: (prep: AssistPrepDraft) => invoke<AssistPrep>("assist_prep_save", { prep }),
+  assistPrepDelete: (id: string) => invoke<void>("assist_prep_delete", { id }),
+  assistPrepDocumentsAdd: (id: string, fileIds: string[]) => invoke<AssistPrep>("assist_prep_documents_add", { id, fileIds }),
+  assistPrepDocumentRemove: (id: string, fileId: string) => invoke<AssistPrep>("assist_prep_document_remove", { id, fileId }),
+  /** Schedules a prep for `at` (RFC 3339): armed 2 minutes before, it waits up to 10 minutes for the meeting. */
+  assistSchedule: (prepId: string, at: string) => invoke<AssistPrep>("assist_schedule", { prepId, at }),
+  /** Starts the recording, the session and the relay while `live_assist` is on; the card hears `assist:message`. */
+  assistStart: (prepId: string | null, mode: AssistMode | null = null, practice = false) => invoke<AssistStarted>("assist_start", { prepId, mode, practice }),
+  /** Ends the running session and stops the recording (nothing runs: nothing happens). */
+  assistEnd: () => invoke<void>("assist_end"),
+  assistSend: (kind: AssistSendKind) => invoke<void>("assist_send", { kind }),
+  assistSet: (settings: AssistCardSettings) => invoke<AssistSnapshot>("assist_set", { settings }),
+  assistFeedback: (suggestionId: string, action: "used" | "dismissed") => invoke<void>("assist_feedback", { suggestionId, action }),
+  /** Hides the card; the session goes on. */
+  assistCardHide: () => invoke<void>("assist_card_hide"),
+  assistState: () => invoke<AssistSnapshot | null>("assist_state"),
   permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
   macCheckRun: () => invoke<CheckReport>("mac_check_run"),
   macCheckLast: () => invoke<CheckReport | null>("mac_check_last"),

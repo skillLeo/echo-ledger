@@ -1,11 +1,14 @@
-//! Live Assist (v1.9 Phase L, docs/API_ASSIST.md 1.9.0-e): text-only help on screen while the other person talks. The
-//! relay's messages ([`protocol`]), what waits for the relay ([`outbox`]) and the WebSocket client ([`client`]). Nothing
-//! here shows or starts anything by itself; a session starts only while the server's `live_assist` flag is on for this
-//! person, and one that runs stops when the flag turns off ([`Registry::stop_unless_enabled`]).
+//! Live Assist (v1.9 Phase L, docs/API_ASSIST.md 1.9.0-g): text-only help on screen while the other person talks. The
+//! relay's messages ([`protocol`]), what waits for the relay ([`outbox`]), the WebSocket client ([`client`]), the
+//! server side of a session ([`session`]), the card's messages and the turns for the server ([`card`]), and the session
+//! as the app runs it ([`live`]: start, end, the card window, scheduling). A session starts only while the server's
+//! `live_assist` flag is on for this person, and one that runs stops when the flag turns off.
 
 use std::sync::Mutex;
 
+pub mod card;
 pub mod client;
+pub mod live;
 pub mod outbox;
 pub mod protocol;
 pub mod session;
@@ -33,23 +36,52 @@ pub fn start(
 }
 
 /// The session that runs on this computer, if any (one at a time, as the server allows): its server id, its relay
-/// connection and its turns.
+/// connection, its turns, the card's side and the turns waiting for the server; and the prep armed for a meeting.
 #[derive(Default)]
-pub struct Registry(Mutex<Option<Running>>);
+pub struct Registry {
+    running: Mutex<Option<Running>>,
+    armed: Mutex<Option<live::Armed>>,
+}
 
-struct Running {
-    id: String,
-    handle: client::AssistHandle,
-    turns: turns::TurnFeeder,
+/// One running session.
+pub struct Running {
+    pub id: String,
+    pub handle: client::AssistHandle,
+    pub turns: turns::TurnFeeder,
+    pub card: card::Card,
+    pub batch: card::TurnBatch,
+    pub budget: card::Budget,
+    /// The prep's `language_help` (`off` | `urdu` | `roman_urdu` | `arabic`), for `translate`.
+    pub language_help: String,
+}
+
+/// What is left of a session that was taken out: its id and the turns that still wait for the server.
+#[derive(Debug)]
+pub struct Taken {
+    pub id: String,
+    pub rows: Vec<card::TurnRow>,
+}
+
+/// What one caption line gives the app: the card's message, and whether a batch of turns should go now.
+#[derive(Debug, Default)]
+pub struct Line {
+    pub card: Option<serde_json::Value>,
+    pub flush: bool,
 }
 
 impl Registry {
     fn lock(&self) -> std::sync::MutexGuard<'_, Option<Running>> {
-        self.0.lock().unwrap_or_else(|p| p.into_inner())
+        self.running.lock().unwrap_or_else(|p| p.into_inner())
     }
 
-    pub fn set(&self, session_id: String, handle: client::AssistHandle) {
-        if let Some(old) = self.lock().replace(Running { id: session_id, handle, turns: turns::TurnFeeder::default() }) {
+    /// The prep armed for its meeting, if any.
+    pub fn armed(&self) -> std::sync::MutexGuard<'_, Option<live::Armed>> {
+        self.armed.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// A new running session; one that ran before is stopped.
+    pub fn begin(&self, running: Running) {
+        if let Some(old) = self.lock().replace(running) {
             old.handle.stop();
         }
     }
@@ -59,36 +91,66 @@ impl Registry {
         self.lock().as_ref().filter(|r| r.handle.is_running()).map(|r| (r.id.clone(), r.handle.clone()))
     }
 
-    /// Stops the session's connection and forgets it; its id when one ran (the server is told by the caller).
-    pub fn take(&self) -> Option<String> {
-        self.lock().take().map(|running| {
+    /// The running session's id, also while its connection is down.
+    pub fn session_id(&self) -> Option<String> {
+        self.lock().as_ref().map(|r| r.id.clone())
+    }
+
+    /// Works on the running session `id` (none when another one runs, or none at all).
+    pub fn with<T>(&self, id: &str, f: impl FnOnce(&mut Running) -> T) -> Option<T> {
+        self.lock().as_mut().filter(|r| r.id == id).map(f)
+    }
+
+    /// Works on whichever session runs.
+    pub fn with_current<T>(&self, f: impl FnOnce(&mut Running) -> T) -> Option<T> {
+        self.lock().as_mut().map(f)
+    }
+
+    /// Stops the session's connection and forgets it: its id and the turns that still wait.
+    pub fn take(&self) -> Option<Taken> {
+        self.lock().take().map(|mut running| {
             running.handle.stop();
-            running.id
+            let mut rows = Vec::new();
+            while !running.batch.is_empty() {
+                rows.extend(running.batch.take(std::time::Instant::now()));
+            }
+            Taken { id: running.id, rows }
         })
     }
 
-    /// A live captions partial, to the running session: the other person's only ([`turns`]). True when sent.
-    pub fn heard_partial(&self, channel: crate::audio::types::Channel, text: &str) -> bool {
+    /// A live captions partial: the relay hears the other person's ([`turns`]); the card hears both.
+    pub fn heard_partial(&self, channel: crate::audio::types::Channel, text: &str) -> Line {
         let mut running = self.lock();
-        let Some(running) = running.as_mut().filter(|r| r.handle.is_running()) else { return false };
-        running.turns.partial(channel, text, std::time::Instant::now()).is_some_and(|m| running.handle.send(m))
+        let Some(running) = running.as_mut() else { return Line::default() };
+        let heard = running.turns.hear_partial(channel, text, std::time::Instant::now());
+        if let Some(message) = heard.relay {
+            running.handle.send(message);
+        }
+        let card = heard.card.map(|turn| card::turn_message(&turn));
+        if let Some(message) = &card {
+            running.card.record(message);
+        }
+        Line { card, flush: false }
     }
 
-    /// A live captions final turn, on the recording's clock, to the running session (the microphone's as context).
-    pub fn heard_final(&self, channel: crate::audio::types::Channel, text: &str, start_ms: u64, end_ms: u64) -> bool {
+    /// A live captions final turn, on the recording's clock: to the relay (the microphone's as context), the card and
+    /// the batch for the server.
+    pub fn heard_final(&self, channel: crate::audio::types::Channel, text: &str, start_ms: u64, end_ms: u64) -> Line {
         let mut running = self.lock();
-        let Some(running) = running.as_mut().filter(|r| r.handle.is_running()) else { return false };
-        running.turns.finished(channel, text, start_ms, end_ms).is_some_and(|m| running.handle.send(m))
+        let Some(running) = running.as_mut() else { return Line::default() };
+        let heard = running.turns.hear_final(channel, text, start_ms, end_ms);
+        if let Some(message) = heard.relay {
+            running.handle.send(message);
+        }
+        let Some(turn) = heard.card else { return Line::default() };
+        let flush = card::TurnRow::of(&running.id, &turn).is_some_and(|row| running.batch.push(row));
+        let message = card::turn_message(&turn);
+        running.card.record(&message);
+        Line { card: Some(message), flush }
     }
 
     /// Stops the session and forgets it; true when one ran.
     pub fn stop(&self) -> bool {
         self.take().is_some()
-    }
-
-    /// Stops a running session when the `live_assist` flag is off (the server turned it off for this person); true
-    /// when one was stopped.
-    pub fn stop_unless_enabled(&self, flags: &crate::ui_flags::UiFlags) -> bool {
-        !enabled(flags) && self.stop()
     }
 }

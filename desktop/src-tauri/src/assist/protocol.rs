@@ -1,4 +1,4 @@
-//! The relay's WebSocket messages (docs/API_ASSIST.md 1.9.0-c "WebSocket (relay)", with the exact shapes of
+//! The relay's WebSocket messages (docs/API_ASSIST.md 1.9.0-g "WebSocket (relay)", with the exact shapes of
 //! services/assist-relay's protocol). One JSON object per text frame, named by `type`, with a per-direction `seq`.
 //!
 //! Turns, documents, the brief and suggestion text are what people said and wrote: no `Debug` here prints them, so a
@@ -8,37 +8,40 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-/// What a suggestion is (1.9.0-e): an answer to the other person's turn, a Balanced upgrade of a draft, a rewrite
-/// (shorter, formal, translate, regenerate) or a fallback after a provider failed mid-answer. A kind this app does not
-/// know yet is `Other`.
+/// What asked for a suggestion (1.9.0-f): the other person's turn (`answer`), the app's requests (`help_now`,
+/// `regenerate`, `shorter`, `formal`, `translate`) or a Balanced draft's `upgrade`. A fallback after a provider failure
+/// keeps the original kind and is recognised by `replaces`. A kind this app does not know yet is `Other`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SuggestionKind {
     #[default]
     Answer,
+    HelpNow,
+    Regenerate,
+    Shorter,
+    Formal,
+    Translate,
     Upgrade,
-    Rewrite,
-    Fallback,
     #[serde(other)]
     Other,
 }
 
-/// How a suggestion ended (1.9.0-e): `complete`; `cancelled` (the person kept talking, or `cancel`); `superseded`
-/// (replaced by the suggestion whose `replaces` names it); `failed` (an `error` follows). Unknown is `Other`.
+/// How a suggestion ended (1.9.0-f): `done`; `cancelled` (the person kept talking, or `cancel`); `superseded`
+/// (replaced, or a streamed answer refused after words were shown: its text leaves the card at once). A failure ends
+/// with an `error` carrying the `suggestion_id` instead. Unknown is `Other`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EndStatus {
     #[default]
-    Complete,
+    Done,
     Cancelled,
     Superseded,
-    Failed,
     #[serde(other)]
     Other,
 }
 
-/// Why the mode changed (1.9.0-e): spend reached the next step down, a refreshed token raised the budget, the plan
-/// allows fewer modes, or the session's assist seconds ran out. Unknown is `Other`.
+/// Why the mode changed (1.9.0-f): spend reached the next step down, a refreshed token raised the budget, the plan
+/// allows fewer modes, the session's assist seconds ran out, or the app asked for it. Unknown is `Other`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ModeReason {
@@ -46,6 +49,7 @@ pub enum ModeReason {
     BudgetRestored,
     Plan,
     AssistTime,
+    Requested,
     #[default]
     #[serde(other)]
     Other,
@@ -237,7 +241,7 @@ impl fmt::Debug for ClientMessage {
 }
 
 /// `ready`: the first message on every connection.
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ready {
     #[serde(default)]
     pub protocol: u32,
@@ -246,6 +250,9 @@ pub struct Ready {
     /// `fast` | `balanced` | `deep` | `max` | `captions_only`.
     #[serde(default)]
     pub mode: String,
+    /// The mode the app asked for (`balanced` until `context_update.settings.mode` says otherwise).
+    #[serde(default)]
+    pub requested_mode: String,
     #[serde(default)]
     pub allowed_modes: Vec<String>,
     #[serde(default)]
@@ -259,7 +266,7 @@ pub struct Ready {
 }
 
 /// `ready.limits`: the most the relay takes; the app paces its messages to `messages_per_second`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Limits {
     #[serde(default)]
     pub max_message_bytes: Option<usize>,
@@ -322,7 +329,7 @@ pub struct Skip {
     pub turn_id: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelayError {
     pub code: String,
     #[serde(default)]
@@ -345,6 +352,9 @@ pub struct ModeChanged {
     pub to: String,
     #[serde(default)]
     pub reason: ModeReason,
+    /// The mode the app asked for, when the relay names it (1.9.0-f).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested: Option<String>,
 }
 
 /// Relay → app. A type this app does not know yet is `Unknown` and is ignored.
@@ -419,7 +429,7 @@ mod tests {
         assert!(matches!(start, ServerMessage::SuggestionStart(ref s) if s.speculative && s.draft && s.kind == SuggestionKind::Answer));
         assert!(matches!(parse(r#"{"type":"token","seq":3,"suggestion_id":"1f3a-7","text":"Yes, I "}"#).unwrap().1, ServerMessage::Token(ref t) if t.text == "Yes, I "));
         let (_, end) = parse(r#"{"type":"suggestion_end","seq":4,"suggestion_id":"1f3a-7","status":"done","model":"m","latency":{"total_ms":702.5},"usage":{"output_tokens":31}}"#).unwrap();
-        assert!(matches!(end, ServerMessage::SuggestionEnd(ref e) if e.status == EndStatus::Other && e.latency["total_ms"] == 702.5), "the relay's old done");
+        assert!(matches!(end, ServerMessage::SuggestionEnd(ref e) if e.status == EndStatus::Done && e.latency["total_ms"] == 702.5));
         assert!(matches!(parse(r#"{"type":"skip","seq":5,"suggestion_id":"x","turn_id":"o-1","latency":{},"usage":{}}"#).unwrap().1, ServerMessage::Skip(_)));
         let (_, error) = parse(r#"{"type":"error","seq":6,"code":"token_expired","message":"…","retry":false,"suggestion_id":null,"in_reply_to":null,"fatal":true}"#).unwrap();
         assert!(matches!(error, ServerMessage::Error(ref e) if e.code == "token_expired" && e.fatal));
@@ -431,24 +441,34 @@ mod tests {
     }
 
     #[test]
-    fn the_1_9_0_e_fields_are_read() {
-        let (_, start) = parse(r#"{"type":"suggestion_start","seq":2,"suggestion_id":"s2","turn_id":"o-12","kind":"fallback","mode":"balanced","model":"m2","speculative":false,"draft":false,"replaces":"s1"}"#).unwrap();
+    fn the_1_9_0_f_fields_are_read() {
+        // A fallback keeps the original kind and is recognised by `replaces`.
+        let (_, start) = parse(r#"{"type":"suggestion_start","seq":2,"suggestion_id":"s2","turn_id":"o-12","kind":"answer","mode":"balanced","model":"m2","speculative":false,"draft":false,"replaces":"s1"}"#).unwrap();
         let ServerMessage::SuggestionStart(start) = start else { panic!("{start:?}") };
-        assert_eq!((start.turn_id.as_deref(), start.kind, start.speculative, start.replaces.as_deref()), (Some("o-12"), SuggestionKind::Fallback, false, Some("s1")));
-        for (kind, read) in [("answer", SuggestionKind::Answer), ("upgrade", SuggestionKind::Upgrade), ("rewrite", SuggestionKind::Rewrite), ("fallback", SuggestionKind::Fallback), ("help_now", SuggestionKind::Other)] {
+        assert_eq!((start.turn_id.as_deref(), start.kind, start.speculative, start.replaces.as_deref()), (Some("o-12"), SuggestionKind::Answer, false, Some("s1")));
+        for (kind, read) in [
+            ("answer", SuggestionKind::Answer),
+            ("help_now", SuggestionKind::HelpNow),
+            ("regenerate", SuggestionKind::Regenerate),
+            ("shorter", SuggestionKind::Shorter),
+            ("formal", SuggestionKind::Formal),
+            ("translate", SuggestionKind::Translate),
+            ("upgrade", SuggestionKind::Upgrade),
+            ("rewrite", SuggestionKind::Other),
+        ] {
             let (_, m) = parse(&format!(r#"{{"type":"suggestion_start","suggestion_id":"s","kind":"{kind}"}}"#)).unwrap();
             assert!(matches!(m, ServerMessage::SuggestionStart(ref s) if s.kind == read), "{kind}");
         }
-        for (status, read) in [("complete", EndStatus::Complete), ("cancelled", EndStatus::Cancelled), ("superseded", EndStatus::Superseded), ("failed", EndStatus::Failed), ("later", EndStatus::Other)] {
+        for (status, read) in [("done", EndStatus::Done), ("cancelled", EndStatus::Cancelled), ("superseded", EndStatus::Superseded), ("complete", EndStatus::Other)] {
             let (_, m) = parse(&format!(r#"{{"type":"suggestion_end","suggestion_id":"s","status":"{status}"}}"#)).unwrap();
             assert!(matches!(m, ServerMessage::SuggestionEnd(ref e) if e.status == read), "{status}");
         }
-        for (reason, read) in [("budget", ModeReason::Budget), ("budget_restored", ModeReason::BudgetRestored), ("plan", ModeReason::Plan), ("assist_time", ModeReason::AssistTime), ("requested", ModeReason::Other)] {
+        for (reason, read) in [("budget", ModeReason::Budget), ("budget_restored", ModeReason::BudgetRestored), ("plan", ModeReason::Plan), ("assist_time", ModeReason::AssistTime), ("requested", ModeReason::Requested), ("later", ModeReason::Other)] {
             let (_, m) = parse(&format!(r#"{{"type":"mode_changed","from":"deep","to":"balanced","reason":"{reason}"}}"#)).unwrap();
             assert!(matches!(m, ServerMessage::ModeChanged(ref c) if c.reason == read), "{reason}");
         }
         // Written back in the contract's words for the window.
-        assert_eq!(serde_json::to_value(&start).unwrap()["kind"], "fallback");
+        assert_eq!(serde_json::to_value(&start).unwrap()["kind"], "answer");
         assert_eq!(serde_json::to_value(EndStatus::Superseded).unwrap(), "superseded");
         assert_eq!(serde_json::to_value(ModeReason::AssistTime).unwrap(), "assist_time");
     }

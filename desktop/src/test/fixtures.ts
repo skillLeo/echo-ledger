@@ -119,6 +119,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     siteRules: [],
     captionLines: 3,
     pillPosition: null,
+    assistCardPosition: null,
     browserAutomation: false,
     autoRecordApps: {},
     captionStyle: { size: "medium", width: "normal", opacity: 85, compact: false, autoHideSeconds: 0, meColor: null, clientColor: null },

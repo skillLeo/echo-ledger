@@ -627,8 +627,22 @@ async fn a_relay_without_the_pinned_key_is_refused_in_plain_words() {
     assert_eq!(desktop_lib::net::pinning::RELAY_INSECURE, "Live Assist could not make a secure connection.");
 }
 
+fn running(handle: client::AssistHandle) -> desktop_lib::assist::Running {
+    use desktop_lib::assist::card::{Budget, Card, TurnBatch};
+    desktop_lib::assist::Running {
+        id: "01JS".into(),
+        handle,
+        turns: Default::default(),
+        card: Card::new(Some("interview".into()), None),
+        batch: TurnBatch::new(std::time::Instant::now()),
+        budget: Budget { left_at_start: None, total: None, started: std::time::Instant::now() },
+        language_help: "off".into(),
+    }
+}
+
 #[tokio::test]
-async fn a_running_session_stops_when_live_assist_turns_off() {
+async fn a_running_session_stops_when_it_is_taken_out_with_its_waiting_turns() {
+    use desktop_lib::audio::types::Channel as Audio;
     let relay = Relay::start(never, |_, mut ws: Ws| async move {
         let _ = ws.send(ready(false)).await;
         while let Some(Ok(_)) = ws.next().await {}
@@ -638,12 +652,13 @@ async fn a_running_session_stops_when_live_assist_turns_off() {
     let events = Events::default();
     let on = desktop_lib::ui_flags::UiFlags::read(Some(&json!({"live_assist": true})), false);
     let registry = desktop_lib::assist::Registry::default();
-    registry.set("01JS".into(), desktop_lib::assist::start(&on, grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, events.sink()).unwrap());
+    registry.begin(running(desktop_lib::assist::start(&on, grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, events.sink()).unwrap()));
     events.wait_for("ready", |e| matches!(e, AssistEvent::Connected { .. })).await;
-    assert!(!registry.stop_unless_enabled(&on), "still on: it runs");
     assert!(registry.current().is_some());
-    let off = desktop_lib::ui_flags::UiFlags::read(Some(&json!({"live_assist": false})), false);
-    assert!(registry.stop_unless_enabled(&off));
+    registry.heard_final(Audio::System, "When can you start?", 1_000, 2_000);
+    let taken = registry.take().expect("it ran");
+    assert_eq!(taken.id, "01JS");
+    assert_eq!(taken.rows.iter().map(|r| r.client_ref.as_str()).collect::<Vec<_>>(), ["01JS:o-1"], "the turns still waiting go with it");
     events.wait_for("the end", |e| *e == AssistEvent::Ended(EndReason::Closed)).await;
     assert!(registry.current().is_none());
 }
@@ -670,13 +685,16 @@ async fn the_captions_turns_reach_the_relay_the_microphone_s_as_context_only() {
     let (refresh, _) = refresher(&relay.url);
     let events = Events::default();
     let registry = desktop_lib::assist::Registry::default();
-    assert!(!registry.heard_partial(Audio::System, "nothing runs"), "no session: nothing to send");
-    registry.set("01JS".into(), client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, quick(), events.sink()));
+    assert!(registry.heard_partial(Audio::System, "nothing runs").card.is_none(), "no session: nothing to send or show");
+    registry.begin(running(client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, quick(), events.sink())));
     events.wait_for("ready", |e| matches!(e, AssistEvent::Connected { .. })).await;
-    assert!(!registry.heard_partial(Audio::Mic, "my notice is"), "never a partial of mine");
-    assert!(registry.heard_partial(Audio::System, "so what is your notice"));
-    assert!(registry.heard_final(Audio::System, "So what is your notice period?", 81_200, 86_400));
-    assert!(registry.heard_final(Audio::Mic, "One month.", 87_000, 88_000));
+    let mine = registry.heard_partial(Audio::Mic, "my notice is").card.expect("the card shows my words");
+    assert_eq!((mine["type"].as_str(), mine["channel"].as_str(), mine["final"].as_bool()), (Some("turn"), Some("me"), Some(false)));
+    assert!(registry.heard_partial(Audio::System, "so what is your notice").card.is_some());
+    let theirs = registry.heard_final(Audio::System, "So what is your notice period?", 81_200, 86_400);
+    assert_eq!(theirs.card.as_ref().map(|c| c["final"].clone()), Some(json!(true)));
+    assert!(!theirs.flush, "one turn waits for the 5 s batch");
+    assert!(registry.heard_final(Audio::Mic, "One month.", 87_000, 88_000).card.is_some());
     for _ in 0..100 {
         if got.lock().unwrap().len() >= 3 {
             break;
@@ -694,5 +712,8 @@ async fn the_captions_turns_reach_the_relay_the_microphone_s_as_context_only() {
         ("turn_final".into(), "other".into(), "o-1".into()),
         ("turn_final".into(), "me".into(), "m-1".into()),
     ]);
+    let snapshot = registry.with_current(|r| r.card.snapshot(chrono::Utc::now())).unwrap();
+    assert_eq!(snapshot.messages.len(), 4, "a window opened now reads every line back");
+    assert_eq!(snapshot.meeting_type.as_deref(), Some("interview"));
     registry.stop();
 }
