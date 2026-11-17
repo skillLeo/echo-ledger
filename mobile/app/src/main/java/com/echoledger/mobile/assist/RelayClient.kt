@@ -1,5 +1,6 @@
 package com.echoledger.mobile.assist
 
+import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.ui.v2.assist.MeetingType
 import java.net.InetAddress
 import java.net.Socket
@@ -49,7 +50,10 @@ enum class RelayEnd {
     Lost,
 
     /** The relay host's key is not one of `relay_pins`, or there are none yet: never connected (recording goes on). */
-    NotTrusted
+    NotTrusted,
+
+    /** The relay refused the connection before the upgrade (400: a request it can't take); trying again won't help. */
+    Refused
 }
 
 /** The pauses of one session (docs/API_ASSIST.md "Connecting"); the same as the desktop's. */
@@ -76,11 +80,16 @@ data class RelayPolicy(
         /** Not a close code: the relay host's key is not one of the pins (the connection never opened). */
         const val PINS_REFUSED = -1
 
+        /** Not a close code: the relay answered `400` before the upgrade. */
+        const val BAD_REQUEST = -2
+
         /** What a close code means for the session (pure; no close frame at all is null, as for 1006). */
         fun afterClose(code: Int?): After = when (code) {
             1000 -> After.End(RelayEnd.Closed)
 
             PINS_REFUSED -> After.End(RelayEnd.NotTrusted)
+
+            BAD_REQUEST -> After.End(RelayEnd.Refused)
 
             4409 -> After.End(RelayEnd.Replaced)
 
@@ -315,11 +324,14 @@ class RelayClient(
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            // No close frame (1006: the network, or a reader the relay dropped), refused before the upgrade (401: the
-            // token), or a relay host whose key is not pinned (never retried with the same pins).
+            // No close frame (1006: the network, or a reader the relay dropped), a relay host whose key is not pinned
+            // (never retried with the same pins), or refused before the upgrade, read like the close codes: 401 the
+            // token (refresh, then again), 403 the session is not this token's (stop), 400 a bad request (stop).
             val code = when {
                 pinsRefused(t) -> RelayPolicy.PINS_REFUSED
                 response?.code == 401 -> 4401
+                response?.code == 403 -> 4403
+                response?.code == 400 -> RelayPolicy.BAD_REQUEST
                 else -> null
             }
             incoming.trySend(Incoming.Closed(webSocket, code))
@@ -349,9 +361,10 @@ class RelayClient(
 
         /**
          * The HTTP client of one connection: TCP_NODELAY on, and the relay host's key pinned to [RelayGrant.pins]; null
-         * when there are no pins for a `wss://` relay (it can't be trusted yet). Plain `ws://` only to this phone itself.
+         * when there are no pins for a `wss://` relay (it can't be trusted yet). Plain `ws://` only in a debug build
+         * ([allowLocal]), and only to this phone itself or the emulator's host.
          */
-        fun clientFor(grant: RelayGrant, base: OkHttpClient? = null): OkHttpClient? {
+        fun clientFor(grant: RelayGrant, base: OkHttpClient? = null, allowLocal: Boolean = BuildConfig.DEBUG): OkHttpClient? {
             val https = grant.url.replaceFirst(Regex("^wss://"), "https://").replaceFirst(Regex("^ws://"), "http://")
             val host = runCatching { java.net.URI(https).host }.getOrNull() ?: return null
             val builder = (base?.newBuilder() ?: OkHttpClient.Builder())
@@ -361,7 +374,7 @@ class RelayClient(
                 val pins = com.echoledger.mobile.net.Pins.normalize(grant.pins)
                 if (pins.isEmpty()) return null
                 builder.certificatePinner(CertificatePinner.Builder().apply { pins.forEach { add(host, it) } }.build())
-            } else if (host !in setOf("localhost", "127.0.0.1", "10.0.2.2")) {
+            } else if (!allowLocal || host !in setOf("localhost", "127.0.0.1", "10.0.2.2")) {
                 return null
             }
             return builder.build()

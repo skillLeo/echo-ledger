@@ -107,14 +107,14 @@ class ScreenStore
         $thumbPlain = $this->uploads->tempPath('screen-thumb');
         $written = [];
         try {
-            // The decodes (the thumbnail, the comparison) in a decode slot, with room for them.
+            // The decodes (the thumbnail, the comparison) in a decode slot, one at a time for the person, with room.
             $near = self::decoding(function () use ($plainPath, $thumbPlain, $session, $meta): ?Screen {
                 self::writeThumbnail($plainPath, $thumbPlain);
 
                 // Since v1.8 P4.1: the same screen sent again a moment later (re-compressed, so another sha256) is
                 // the one kept already, as an exact repeat is (ScreenSimilarity, conservative).
                 return $this->nearDuplicate($session, $plainPath, $meta);
-            });
+            }, (int) $session->user_id);
             if ($near instanceof Screen) {
                 return [$near, false];
             }
@@ -333,42 +333,58 @@ class ScreenStore
     /** Memory for decoding the largest picture taken (25 MP at 4 bytes a pixel, with room to spare). */
     public const DECODE_MEMORY = 512 * 1024 * 1024;
 
+    /** Memory a process must be under, below its old limit, to have that limit put back. */
+    private const RESTORE_MARGIN = 32 * 1024 * 1024;
+
     /**
      * Runs [$work], which decodes pictures, in one of the server's decode slots (echoledger.picture_decodes: 2 by
      * default, each a cache lock, so the bound holds for every PHP process sharing the cache; a picture takes up to
-     * about 200 MB), with PHP's memory limit raised to DECODE_MEMORY where it is lower. The limit
-     * is put back afterwards, so a queue worker or Octane keeps its own; when the process still holds more than its old
-     * limit (rare: GD frees its pictures), the raised one stays for the rest of the process rather than fail. Throws
-     * `503 server_busy` (Retry-After 5) when no slot frees up in time (20 seconds by default).
+     * about 200 MB), and at most one at a time for [$userId], so one account can't hold every slot. PHP's memory limit
+     * is raised to DECODE_MEMORY where it is lower, and put back afterwards (a queue worker or Octane keeps its own)
+     * when the process uses at least 32 MB less than its old limit; otherwise the raised one stays for the rest of the
+     * process rather than fail. Throws `503 server_busy` (Retry-After 5) when no slot frees up in time (4 seconds by
+     * default).
      *
      * @template T
      *
      * @param  Closure(): T  $work
      * @return T
      */
-    public static function decoding(Closure $work): mixed
+    public static function decoding(Closure $work, ?int $userId = null): mixed
     {
-        $slot = self::decodeSlot();
-        $previous = self::roomToDecode();
+        $deadline = microtime(true) + (float) config('echoledger.picture_decodes.wait_seconds', 4);
+        $locks = [];
+        $previous = null;
         try {
+            if ($userId !== null) {
+                $locks[] = self::waitFor(fn (): array => ['pictures:decode:user:'.$userId], $deadline);
+            }
+            $slots = max(1, (int) config('echoledger.picture_decodes.slots', 2));
+            $locks[] = self::waitFor(fn (): array => array_map(fn (int $i): string => 'pictures:decode:'.$i, range(0, $slots - 1)), $deadline);
+            $previous = self::roomToDecode();
+
             return $work();
         } finally {
-            if ($previous !== null && memory_get_usage(true) < self::bytes($previous)) {
+            if ($previous !== null && memory_get_usage(true) < self::bytes($previous) - self::RESTORE_MARGIN) {
                 @ini_set('memory_limit', $previous);
             }
-            $slot->release();
+            foreach (array_reverse($locks) as $lock) {
+                $lock->release();
+            }
         }
     }
 
-    /** A free decode slot, waiting for one as long as the configuration says. */
-    private static function decodeSlot(): Lock
+    /**
+     * The first of [$names]'s locks that is free, waiting for one until [$deadline].
+     *
+     * @param  Closure(): list<string>  $names
+     */
+    private static function waitFor(Closure $names, float $deadline): Lock
     {
-        $slots = max(1, (int) config('echoledger.picture_decodes.slots', 2));
-        $deadline = microtime(true) + (float) config('echoledger.picture_decodes.wait_seconds', 20);
         do {
-            for ($i = 0; $i < $slots; $i++) {
+            foreach ($names() as $name) {
                 // Held for at most a minute even if the process dies mid-decode.
-                $lock = Cache::lock('pictures:decode:'.$i, 60);
+                $lock = Cache::lock($name, 60);
                 if ($lock->get()) {
                     return $lock;
                 }

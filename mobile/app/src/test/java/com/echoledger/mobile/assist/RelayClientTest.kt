@@ -269,6 +269,47 @@ class RelayClientTest {
     }
 
     @Test
+    fun `refused before the upgrade with 403, the session is someone else's and it never tries again`() {
+        server.enqueue(MockResponse.Builder().code(403).body("""{"code":"wrong_session","message":"No."}""").build())
+        accept(ready())
+        client().start()
+        assertEquals(RelayEnd.WrongSession, ended.poll(5, TimeUnit.SECONDS))
+        Thread.sleep(300)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `refused before the upgrade with 400, it ends and never tries again`() {
+        server.enqueue(MockResponse.Builder().code(400).body("""{"code":"bad_request","message":"No."}""").build())
+        accept(ready())
+        client().start()
+        assertEquals(RelayEnd.Refused, ended.poll(5, TimeUnit.SECONDS))
+        Thread.sleep(300)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `a 401 before the upgrade is a token to refresh, then it connects`() {
+        server.enqueue(MockResponse.Builder().code(401).build())
+        accept(ready())
+        var asked = 0
+        client(refresh = {
+            asked++
+            RelayGrant(url, "t2", null, emptyList())
+        }).start()
+        waitFor("ready after the refresh") { events.any { it is RelayEvent.Ready } }
+        assertEquals(1, asked)
+        assertTrue(ended.isEmpty())
+    }
+
+    @Test
+    fun `plain ws only in a debug build`() {
+        assertNull(RelayClient.clientFor(RelayGrant("ws://127.0.0.1:9/v1/assist", "t", null, emptyList()), allowLocal = false))
+        assertNull(RelayClient.clientFor(RelayGrant("ws://10.0.2.2:9/v1/assist", "t", null, emptyList()), allowLocal = false))
+        assertNotNull(RelayClient.clientFor(RelayGrant("ws://10.0.2.2:9/v1/assist", "t", null, emptyList()), allowLocal = true))
+    }
+
+    @Test
     fun `plain ws only to this phone itself`() {
         assertNull(RelayClient.clientFor(RelayGrant("ws://relay.example/v1/assist", "t", null, emptyList())))
         assertNotNull(RelayClient.clientFor(RelayGrant("ws://127.0.0.1:9/v1/assist", "t", null, emptyList())))
