@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::mpsc;
+use tokio::sync::{Notify, mpsc};
 use tokio_tungstenite::tungstenite::Message;
 
 #[cfg(any(windows, target_os = "macos"))]
@@ -93,6 +93,9 @@ pub struct TranslateApp {
 
 struct Running {
     stop: Arc<AtomicBool>,
+    /// Signalled once `stop` is set (Stop, the window going, the capture's own end): wakes the session out of a
+    /// connect or a back-off at once ([`unless_stopped`]).
+    wake: Arc<Notify>,
     feed: Arc<Mutex<Feed>>,
     /// The window it was started with ([`window_generation`]): only that window's going ends it.
     window: u64,
@@ -354,6 +357,7 @@ fn stop_session() {
 /// later one goes, and the "stopped" sent after this is the last thing the panels get. Lock order: running, then feed.
 fn halt(run: &Running) {
     run.stop.store(true, Ordering::SeqCst);
+    run.wake.notify_one();
     drop(run.feed.lock());
 }
 
@@ -406,25 +410,19 @@ fn spawn_capture(
     app: AppHandle,
     feed: Arc<Mutex<Feed>>,
     stop: Arc<AtomicBool>,
+    wake: Arc<Notify>,
     tx: mpsc::Sender<Vec<i16>>,
     hear: impl FnOnce(&AtomicBool, &mut dyn FnMut(Vec<f32>)) -> Result<(), String> + Send + 'static,
 ) -> Result<(), String> {
     std::thread::Builder::new()
         .name("el-translate-capture".into())
         .spawn(move || {
-            let mut pending: Vec<i16> = Vec::with_capacity(FRAME_SAMPLES * 2);
-            let mut send = |samples: Vec<f32>| {
-                pending.extend(gate::to_pcm16(&samples, 16_000));
-                while pending.len() >= FRAME_SAMPLES {
-                    let frame: Vec<i16> = pending.drain(..FRAME_SAMPLES).collect();
-                    let _ = tx.blocking_send(frame);
-                }
-            };
-            let result = hear(&stop, &mut send);
+            let result = capture_frames(&stop, tx, hear);
             // Stopped by the person (Stop, the window going): they already ended the session. Otherwise the capture
             // ended on its own: the session ends too, the window keeps the reason and the tray stops saying "listening".
             let Some(reason) = ended_reason(stop.load(Ordering::SeqCst), result) else { return };
             stop.store(true, Ordering::SeqCst);
+            wake.notify_one();
             // Only the session still current says anything: an older one's thread never flashes "ended" on a newer
             // session's window, and never takes its keys.
             let Some(window) = end_if_current(&stop) else {
@@ -450,6 +448,39 @@ fn spawn_capture(
         })
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// Hears the app until `stop` (`hear` checks it), cut into the speech gate's frames for the session. A frame the
+/// session has no room for is dropped, never waited for: while it connects or backs off nobody reads, and a capture
+/// blocked on a full queue would never see `stop`, keeping the app's sound (and the Mac's recording light) on after
+/// Stop. The queue goes when the capture does, which ends the session's wait for frames.
+fn capture_frames(
+    stop: &AtomicBool,
+    tx: mpsc::Sender<Vec<i16>>,
+    hear: impl FnOnce(&AtomicBool, &mut dyn FnMut(Vec<f32>)) -> Result<(), String>,
+) -> Result<(), String> {
+    let mut pending: Vec<i16> = Vec::with_capacity(FRAME_SAMPLES * 2);
+    let mut send = |samples: Vec<f32>| {
+        pending.extend(gate::to_pcm16(&samples, 16_000));
+        while pending.len() >= FRAME_SAMPLES {
+            let frame: Vec<i16> = pending.drain(..FRAME_SAMPLES).collect();
+            let _ = tx.try_send(frame);
+        }
+    };
+    hear(stop, &mut send)
+}
+
+/// `work` unless the session stops first: none once `stop` is set, without waiting for `work` (a connect, a back-off).
+/// `wake` keeps a signal given before this waits, so a stop between the check and the wait is never missed.
+async fn unless_stopped<T>(stop: &AtomicBool, wake: &Notify, work: impl std::future::Future<Output = T>) -> Option<T> {
+    if stop.load(Ordering::SeqCst) {
+        return None;
+    }
+    tokio::select! {
+        biased;
+        () = wake.notified() => None,
+        out = work => Some(out),
+    }
 }
 
 /// What Live Translate says when the app's sound ended without a reason given.
@@ -489,6 +520,7 @@ where
 {
     stop_session();
     let stop_flag = Arc::new(AtomicBool::new(false));
+    let wake = Arc::new(Notify::new());
     let feed = Arc::new(Mutex::new(Feed {
         mode: Some(mode),
         app: name,
@@ -502,16 +534,16 @@ where
         let mut running = running().lock().map_err(|_| "Live Translate is busy.".to_string())?;
         // Under `running`'s lock, as `mark_ended` decides: an older session's ended feed is gone for good.
         clear_ended();
-        *running = Some(Running { stop: stop_flag.clone(), feed: feed.clone(), window: window_generation() });
+        *running = Some(Running { stop: stop_flag.clone(), wake: wake.clone(), feed: feed.clone(), window: window_generation() });
     }
 
     let (tx, rx) = mpsc::channel::<Vec<i16>>(64);
     #[cfg(windows)]
-    spawn_capture(app.clone(), feed.clone(), stop_flag.clone(), tx, move |stop, send| {
+    spawn_capture(app.clone(), feed.clone(), stop_flag.clone(), wake.clone(), tx, move |stop, send| {
         crate::audio::platform::windows::app_loopback(pid, stop, send)
     })?;
     #[cfg(target_os = "macos")]
-    spawn_capture(app.clone(), feed.clone(), stop_flag.clone(), tx, move |stop, send| {
+    spawn_capture(app.clone(), feed.clone(), stop_flag.clone(), wake.clone(), tx, move |stop, send| {
         // The app's processes that play sound now (a browser's helpers with it), read when it starts.
         let pids = crate::audio::platform::macos::playing_pids(pid).ok_or_else(|| STOPPED_PLAYING.to_string())?;
         crate::audio::platform::macos::app_tap(&pids, stop, send)
@@ -523,10 +555,14 @@ where
     }
     #[allow(unreachable_code)]
     {
+        let emit = move |f: &Feed| {
+            let _ = app.emit(FEED_EVENT, f);
+        };
         tauri::async_runtime::spawn(run_session(
-            app,
+            emit,
             rx,
             stop_flag,
+            wake,
             feed,
             mode,
             speed,
@@ -536,10 +572,14 @@ where
     }
 }
 
+/// The session: frames to Soniox while someone speaks, its replies to the window (`emit`). Ends at once on `stop`, even
+/// mid-connect or in a back-off, and drops the capture's queue as it goes.
+#[allow(clippy::too_many_arguments)]
 async fn run_session<F, Fut>(
-    app: AppHandle,
+    emit: impl Fn(&Feed) + Send + Sync,
     mut rx: mpsc::Receiver<Vec<i16>>,
     stop: Arc<AtomicBool>,
+    wake: Arc<Notify>,
     feed: Arc<Mutex<Feed>>,
     mode: Mode,
     speed: Speed,
@@ -550,9 +590,6 @@ async fn run_session<F, Fut>(
 {
     let mut gate = SpeechGate::new(mode == Mode::Watch);
     let mut attempt: u32 = 0;
-    let emit = |f: &Feed| {
-        let _ = app.emit(FEED_EVENT, f);
-    };
     'outer: while !stop.load(Ordering::SeqCst) {
         // Wait (cheaply) for speech before opening a stream.
         let mut first = Vec::new();
@@ -565,7 +602,10 @@ async fn run_session<F, Fut>(
             }
             first = gate.offer(frame).frames;
         }
-        let token = match fetch_token().await {
+        let Some(token) = unless_stopped(&stop, &wake, fetch_token()).await else {
+            break 'outer;
+        };
+        let token = match token {
             Ok(t) => t,
             Err(message) => {
                 if let Some(mut f) = feed_while_live(&feed, &stop) {
@@ -574,23 +614,24 @@ async fn run_session<F, Fut>(
                     emit(&f);
                 }
                 attempt += 1;
-                tokio::time::sleep(Duration::from_millis(
-                    (1_000u64 << attempt.min(5)).min(30_000),
-                ))
-                .await;
+                if unless_stopped(&stop, &wake, tokio::time::sleep(back_off(attempt))).await.is_none() {
+                    break 'outer;
+                }
                 continue;
             }
         };
-        let Ok((ws, _)) = tokio_tungstenite::connect_async_tls_with_config(
+        let connect = tokio_tungstenite::connect_async_tls_with_config(
             token.websocket_url.as_str(),
             None,
             true,
             Some(tokio_tungstenite::Connector::Rustls(
                 crate::net::pinning::public_tls_config(),
             )),
-        )
-        .await
-        else {
+        );
+        let Some(connected) = unless_stopped(&stop, &wake, connect).await else {
+            break 'outer;
+        };
+        let Ok((ws, _)) = connected else {
             if let Some(mut f) = feed_while_live(&feed, &stop) {
                 if attempt == 0 {
                     f.notice = Some("No connection — retrying".into());
@@ -599,13 +640,16 @@ async fn run_session<F, Fut>(
                 emit(&f);
             }
             attempt += 1;
-            tokio::time::sleep(Duration::from_millis(
-                (1_000u64 << attempt.min(5)).min(30_000),
-            ))
-            .await;
+            if unless_stopped(&stop, &wake, tokio::time::sleep(back_off(attempt))).await.is_none() {
+                break 'outer;
+            }
             continue;
         };
         attempt = 0;
+        // Stopped while it connected: nothing captured before Stop goes out after it, not even the stream's config.
+        if stop.load(Ordering::SeqCst) {
+            break 'outer;
+        }
         let (mut sink, mut stream) = ws.split();
         if sink
             .send(Message::Text(protocol::config(&token, speed).into()))
@@ -620,17 +664,24 @@ async fn run_session<F, Fut>(
             emit(&f);
         }
         for frame in first {
+            if stop.load(Ordering::SeqCst) {
+                break 'outer;
+            }
             let _ = sink.send(Message::Binary(pcm_bytes(&frame).into())).await;
         }
         let mut last_audio = Instant::now();
         let mut keepalive = tokio::time::interval(KEEPALIVE_EVERY);
         loop {
+            // A stop ends it at once, first: never a frame, a reply or a keepalive after Stop.
             tokio::select! {
+                biased;
+                () = wake.notified() => break 'outer,
                 frame = rx.recv() => {
                     let Some(frame) = frame else { break 'outer };
                     if stop.load(Ordering::SeqCst) { break 'outer; }
                     let out = gate.offer(frame);
                     for f in out.frames {
+                        if stop.load(Ordering::SeqCst) { break 'outer; }
                         last_audio = Instant::now();
                         if sink.send(Message::Binary(pcm_bytes(&f).into())).await.is_err() { break; }
                     }
@@ -665,6 +716,11 @@ async fn run_session<F, Fut>(
         }
     }
     stop.store(true, Ordering::SeqCst);
+}
+
+/// The wait before another try (pure): 2 s after the first failure, doubling, at most 30 s.
+fn back_off(attempt: u32) -> Duration {
+    Duration::from_millis((1_000u64 << attempt.min(5)).min(30_000))
 }
 
 fn pcm_bytes(frame: &[i16]) -> Vec<u8> {
@@ -705,12 +761,12 @@ mod tests {
         assert_eq!(ended_reason(false, Ok(())).as_deref(), Some(STOPPED_HEARING));
 
         let mine = Arc::new(AtomicBool::new(true));
-        *running().lock().unwrap() = Some(Running { stop: mine.clone(), feed: Arc::default(), window: 3 });
+        *running().lock().unwrap() = Some(Running { stop: mine.clone(), wake: Arc::default(), feed: Arc::default(), window: 3 });
         assert_eq!(end_if_current(&mine), Some(3), "its own session ends (its window, 3, to close): the tray stops saying listening");
         assert!(running().lock().unwrap().is_none());
         // A newer session started meanwhile is left alone.
         let newer = Arc::new(AtomicBool::new(false));
-        *running().lock().unwrap() = Some(Running { stop: newer.clone(), feed: Arc::default(), window: 4 });
+        *running().lock().unwrap() = Some(Running { stop: newer.clone(), wake: Arc::default(), feed: Arc::default(), window: 4 });
         assert_eq!(end_if_current(&mine), None);
         assert!(running().lock().unwrap().is_some() && !newer.load(Ordering::SeqCst));
         *running().lock().unwrap() = None;
@@ -743,14 +799,14 @@ mod tests {
         assert_eq!((shown.status.as_str(), shown.notice.as_deref(), shown.hidden), ("ended", Some(STOPPED_PLAYING), false));
         assert!(!is_running(), "the tray never says it listens");
         // A running session's own feed comes first.
-        *running().lock().unwrap() = Some(Running { stop: Arc::default(), feed: Arc::new(Mutex::new(Feed { status: "live".into(), ..Default::default() })), window: 9 });
+        *running().lock().unwrap() = Some(Running { stop: Arc::default(), wake: Arc::default(), feed: Arc::new(Mutex::new(Feed { status: "live".into(), ..Default::default() })), window: 9 });
         assert_eq!(current_feed().map(|f| f.status), Some("live".into()));
         *running().lock().unwrap() = None;
         // Close (Stop) and a new Start let it go.
         clear_ended();
         assert_eq!(current_feed(), None);
         // A newer session already runs: an older capture's end is sent but never kept, so it can't come back later.
-        *running().lock().unwrap() = Some(Running { stop: Arc::default(), feed: Arc::new(Mutex::new(Feed { status: "live".into(), ..Default::default() })), window: 10 });
+        *running().lock().unwrap() = Some(Running { stop: Arc::default(), wake: Arc::default(), feed: Arc::new(Mutex::new(Feed { status: "live".into(), ..Default::default() })), window: 10 });
         let old = Mutex::new(Feed { status: "live".into(), ..Default::default() });
         let ended = mark_ended(&old, STOPPED_HEARING.into());
         assert_eq!(ended.status, "ended", "still sent to its window");
@@ -815,7 +871,7 @@ mod tests {
         let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
         let stop = Arc::new(AtomicBool::new(false));
         let feed: Arc<Mutex<Feed>> = Arc::default();
-        *running().lock().unwrap() = Some(Running { stop: stop.clone(), feed: feed.clone(), window: 1 });
+        *running().lock().unwrap() = Some(Running { stop: stop.clone(), wake: Arc::default(), feed: feed.clone(), window: 1 });
         // A send under way: it passed the gate and holds the feed.
         let sending = feed_while_live(&feed, &stop).expect("running: its sends go");
         let stopper = std::thread::spawn(stop_session);
@@ -829,10 +885,184 @@ mod tests {
     }
 
     #[test]
+    fn stop_ends_the_capture_at_once_while_the_session_backs_off() {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        let stop = Arc::new(AtomicBool::new(false));
+        let wake = Arc::new(Notify::new());
+        let feed = Arc::new(Mutex::new(Feed { status: "listening".into(), ..Default::default() }));
+        *running().lock().unwrap() = Some(Running { stop: stop.clone(), wake: wake.clone(), feed: feed.clone(), window: 1 });
+        let (tx, rx) = mpsc::channel::<Vec<i16>>(64);
+        let queue = tx.downgrade();
+        // The app's sound: someone speaking (a loud 200 Hz tone), 100 ms at a time, as fast as it is taken, until stop.
+        let capture_stop = stop.clone();
+        let capture = std::thread::spawn(move || {
+            let tone: Vec<f32> = (0..FRAME_SAMPLES).map(|i| 0.5 * (i as f32 * 200.0 * std::f32::consts::TAU / 16_000.0).sin()).collect();
+            capture_frames(&capture_stop, tx, |stop, send| {
+                while !stop.load(Ordering::SeqCst) {
+                    send(tone.clone());
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                Ok(())
+            })
+        });
+        let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let session = runtime.spawn(run_session(|_: &Feed| {}, rx, stop.clone(), wake, feed.clone(), Mode::Game, Speed::default(), || async {
+            Err::<LiveTranslateToken, String>("No server".into())
+        }));
+        // The token fails: the session backs off (2 s) and reads nothing, so the capture's queue fills.
+        let until = Instant::now() + Duration::from_secs(5);
+        while !(feed.lock().unwrap().status == "reconnecting" && queue.upgrade().is_some_and(|q| q.capacity() == 0)) {
+            assert!(Instant::now() < until, "the session backs off with a full queue");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!capture.is_finished(), "still capturing, its frames dropped, never blocked");
+        let pressed = Instant::now();
+        stop_session();
+        assert_eq!(capture.join().unwrap(), Ok(()));
+        let captured_for = pressed.elapsed();
+        runtime.block_on(async { tokio::time::timeout(Duration::from_secs(1), session).await }).expect("the session ended").unwrap();
+        let session_for = pressed.elapsed();
+        assert!(captured_for < Duration::from_millis(200), "the capture ended {captured_for:?} after Stop");
+        assert!(session_for < Duration::from_millis(200), "the session ended {session_for:?} after Stop, not after its back-off");
+        assert!(queue.upgrade().is_none(), "the queue is gone");
+        // In the source: the capture never waits for room, and every wait of the session that reads no frames (the
+        // token, the connect, the back-offs) is raced against stop; the capture's own end wakes it too.
+        let source = include_str!("mod.rs");
+        let frames = &source[source.find("fn capture_frames(").unwrap()..];
+        let frames = &frames[..frames.find("\n}").unwrap()];
+        assert!(frames.contains("tx.try_send(frame)") && !frames.contains("blocking_send"), "{frames}");
+        let session = &source[source.find("async fn run_session<").unwrap()..source.find("fn back_off(").unwrap()];
+        assert_eq!(session.matches("tokio::time::sleep(").count(), session.matches("unless_stopped(&stop, &wake, tokio::time::sleep(back_off(attempt)))").count());
+        assert_eq!(session.matches("tokio::time::sleep(").count(), 2, "both back-offs");
+        assert!(session.contains("unless_stopped(&stop, &wake, fetch_token())") && session.matches("fetch_token()").count() == 1);
+        assert!(session.contains("unless_stopped(&stop, &wake, connect)"));
+        // Nothing captured before Stop goes out after it: stop is read after the connect, before the config, before
+        // each frame, and the live loop's first arm is the stop.
+        let connected = &session[session.find("let Ok((ws, _)) = connected else {").unwrap()..];
+        let check = connected.find("if stop.load(Ordering::SeqCst) {\n            break 'outer;").expect("stop read after the connect");
+        assert!(check < connected.find("protocol::config(&token, speed)").unwrap(), "before the config goes");
+        let live = &session[session.find("loop {\n            // A stop ends it at once").unwrap()..];
+        let arms = &live[live.find("tokio::select! {").unwrap()..live.find("frame = rx.recv()").unwrap()];
+        assert!(arms.contains("biased;") && arms.contains("() = wake.notified() => break 'outer,"), "the stop is the live loop's first arm: {arms}");
+        assert_eq!(session.matches("Message::Binary(").count(), session.matches("if stop.load(Ordering::SeqCst) { break 'outer; }\n                        last_audio").count() + 1);
+        let thread = &source[source.find("fn spawn_capture(").unwrap()..];
+        let thread = &thread[..thread.find("\n}").unwrap()];
+        assert!(thread.find("stop.store(true, Ordering::SeqCst);") < thread.find("wake.notify_one();"), "the capture's own end wakes the session");
+        let halt = &source[source.find("fn halt(run: &Running)").unwrap()..];
+        let halt = &halt[..halt.find("\n}").unwrap()];
+        assert!(halt.find("run.stop.store(true") < halt.find("run.wake.notify_one();"), "{halt}");
+    }
+
+    /// A Soniox stand-in on this computer: runs a session against it until `stop_at` says, and gives what the session
+    /// sent it and how long the session took to end after Stop. `in_handshake`: Stop lands while the connect completes
+    /// (stop set as the session's connect is decided, before its config could go); else once the session is live.
+    // The handshake callback's error type is tungstenite's, as it is.
+    #[allow(clippy::result_large_err)]
+    fn session_against_a_local_stream(in_handshake: bool) -> (Vec<Message>, Duration) {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(2).enable_all().build().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let wake = Arc::new(Notify::new());
+        let feed: Arc<Mutex<Feed>> = Arc::default();
+        *running().lock().unwrap() = Some(Running { stop: stop.clone(), wake: wake.clone(), feed: feed.clone(), window: 1 });
+        let listener = runtime.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();
+        let url = format!("ws://{}", listener.local_addr().unwrap());
+        let (got_tx, mut got_rx) = mpsc::unbounded_channel::<Message>();
+        let server_stop = stop.clone();
+        let server = runtime.spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut ws = tokio_tungstenite::accept_hdr_async(socket, |_: &_, response| {
+                if in_handshake {
+                    // Stop between the connect's race and what follows it: only the flag is seen from here on.
+                    server_stop.store(true, Ordering::SeqCst);
+                }
+                Ok(response)
+            })
+            .await
+            .unwrap();
+            while let Some(Ok(message)) = ws.next().await {
+                if !matches!(message, Message::Close(_)) {
+                    let _ = got_tx.send(message);
+                }
+            }
+        });
+        let token = LiveTranslateToken {
+            api_key: "test".into(),
+            expires_at: String::new(),
+            websocket_url: url,
+            model: "stt-rt".into(),
+            translation: protocol::TranslationConfig { kind: "one_way".into(), target_language: "en".into() },
+            language_hints: Vec::new(),
+        };
+        let (tx, rx) = mpsc::channel::<Vec<i16>>(64);
+        let speech: Vec<i16> = gate::to_pcm16(&(0..FRAME_SAMPLES).map(|i| 0.5 * (i as f32 * 200.0 * std::f32::consts::TAU / 16_000.0).sin()).collect::<Vec<_>>(), 16_000);
+        // One frame of speech: the session's first; the live loop then has nothing to read.
+        tx.try_send(speech).unwrap();
+        let session = runtime.spawn(run_session(|_: &Feed| {}, rx, stop.clone(), wake, feed, Mode::Game, Speed::default(), move || {
+            let token = token.clone();
+            async move { Ok(token) }
+        }));
+        let pressed = if in_handshake {
+            Instant::now()
+        } else {
+            // Live: the config and the speech went out; then Stop, with the capture still open and nothing more to read.
+            let first = runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), got_rx.recv()).await }).expect("the config arrives");
+            assert!(matches!(first, Some(Message::Text(_))), "the config first: {first:?}");
+            let audio = runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), got_rx.recv()).await }).expect("the speech arrives");
+            assert!(matches!(audio, Some(Message::Binary(_))), "then the speech: {audio:?}");
+            let pressed = Instant::now();
+            stop_session();
+            pressed
+        };
+        runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), session).await }).expect("the session ended").unwrap();
+        let ended_after = pressed.elapsed();
+        runtime.block_on(async { tokio::time::timeout(Duration::from_secs(5), server).await }).expect("the stream closed").unwrap();
+        drop(tx);
+        *running().lock().unwrap() = None;
+        let mut after = Vec::new();
+        while let Ok(message) = got_rx.try_recv() {
+            after.push(message);
+        }
+        (after, ended_after)
+    }
+
+    #[test]
+    fn stop_just_after_the_connect_sends_nothing() {
+        let (sent, _) = session_against_a_local_stream(true);
+        assert!(sent.is_empty(), "nothing goes out after Stop, not even the config: {sent:?}");
+    }
+
+    #[test]
+    fn stop_while_live_ends_the_stream_at_once() {
+        // Nothing to read, no reply, the keepalive 10 s off: only the stop arm ends it this soon.
+        let (sent, ended_after) = session_against_a_local_stream(false);
+        assert!(ended_after < Duration::from_millis(200), "the session ended {ended_after:?} after Stop");
+        assert!(sent.iter().all(|m| !matches!(m, Message::Text(t) if t.as_str() == protocol::KEEPALIVE)), "{sent:?}");
+    }
+
+    #[test]
+    fn a_stop_given_before_the_session_waits_is_not_missed() {
+        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let stop = AtomicBool::new(false);
+        let wake = Notify::new();
+        // Signalled between the check and the wait: the signal is kept.
+        wake.notify_one();
+        let started = Instant::now();
+        let out = runtime.block_on(async { unless_stopped(&stop, &wake, tokio::time::sleep(Duration::from_secs(30))).await });
+        assert_eq!(out, None);
+        assert!(started.elapsed() < Duration::from_secs(1));
+        stop.store(true, Ordering::SeqCst);
+        assert_eq!(runtime.block_on(unless_stopped(&stop, &wake, async { 1 })), None, "stopped: nothing more starts");
+        assert_eq!(back_off(1), Duration::from_secs(2));
+        assert_eq!(back_off(9), Duration::from_secs(30));
+    }
+
+    #[test]
     fn a_window_gone_any_way_ends_the_session_and_its_keys() {
         let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
         let stop = Arc::new(AtomicBool::new(false));
-        *running().lock().unwrap() = Some(Running { stop: stop.clone(), feed: Arc::default(), window: 1 });
+        *running().lock().unwrap() = Some(Running { stop: stop.clone(), wake: Arc::default(), feed: Arc::default(), window: 1 });
         stop_session();
         assert!(stop.load(Ordering::SeqCst), "the capture is told to stop");
         assert!(running().lock().unwrap().is_none(), "nothing runs");
