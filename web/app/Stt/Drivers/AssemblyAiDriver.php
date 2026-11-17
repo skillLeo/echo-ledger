@@ -40,6 +40,22 @@ final class AssemblyAiDriver implements SttProvider
 
     private const STREAM_HOST = 'streaming.assemblyai.com';
 
+    /**
+     * Caption speed (Admin › Settings › AssemblyAI): the provider's turn presets, with their turn silences in ms
+     * (docs: streaming/turn-detection). min_latency ends a turn after 640 ms of silence instead of balanced's 1280 ms
+     * and sends the first partial at once, so captions follow speech by about a second (partials every 1 to 1.5 s).
+     * The silences are also sent explicitly, so a change of the server's presets does not slow captions down.
+     * The values assume no speaker_labels (with them the provider's defaults are 640 / 768 ms whatever the mode); the
+     * grant never asks for speaker labels, because the two channels already tell the speakers apart.
+     */
+    public const STREAMING_MODES = [
+        'min_latency' => ['min_turn_silence' => 128, 'max_turn_silence' => 640],
+        'balanced' => ['min_turn_silence' => 128, 'max_turn_silence' => 1280],
+        'max_accuracy' => ['min_turn_silence' => 512, 'max_turn_silence' => 2560],
+    ];
+
+    public const STREAMING_MODE_DEFAULT = 'min_latency';
+
     public function __construct(
         private readonly CredentialVault $vault,
         private readonly SettingsRepository $settings,
@@ -86,6 +102,7 @@ final class AssemblyAiDriver implements SttProvider
             'encoding' => 'pcm_s16le',
             'sample_rate' => $request->sampleRate,
             'inactivity_timeout' => 120,
+            ...$this->turnSettings($model),
             'token' => $token,
         ], '', '&', PHP_QUERY_RFC3986);
         $wsUrl = 'wss://'.self::STREAM_HOST.'/v3/ws?'.$query;
@@ -177,6 +194,22 @@ final class AssemblyAiDriver implements SttProvider
         }
 
         return SubmitResult::submitted($id);
+    }
+
+    /**
+     * The turn settings for the stream: `mode` on Universal-3.6 Pro (the model with the presets), and the preset's turn silences on every model (the budget Universal-Streaming models take
+     * those too). An unknown stored mode falls back to min_latency.
+     *
+     * @return array<string, string|int>
+     */
+    public function turnSettings(string $model): array
+    {
+        $mode = (string) $this->settings->get('assemblyai.streaming_mode', self::STREAMING_MODE_DEFAULT);
+        if (! array_key_exists($mode, self::STREAMING_MODES)) {
+            $mode = self::STREAMING_MODE_DEFAULT;
+        }
+
+        return ($model === 'universal-3-6-pro' ? ['mode' => $mode] : []) + self::STREAMING_MODES[$mode];
     }
 
     /**
