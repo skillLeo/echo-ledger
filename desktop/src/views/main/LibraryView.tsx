@@ -618,10 +618,16 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const transcriptId = transcript?.id ?? null;
   // The person picked a view (or Original) on this recording: views that become ready never switch it for them.
   const viewPicked = useRef(false);
-  useEffect(() => {
+  // Another transcript starts on its original words. Set back while rendering it, not in an effect after: a view
+  // pressed the moment its buttons show would otherwise be set back to Original once its views had already come.
+  const [viewsOf, setViewsOf] = useState<string | null>(transcriptId);
+  if (viewsOf !== transcriptId) {
+    setViewsOf(transcriptId);
     setShowAs("original");
     setViews(null);
     viewPicked.current = false;
+  }
+  useEffect(() => {
     // Open in the default view (console setting) when it is made for this recording.
     const summary = transcript?.views;
     if (summary?.status === "ready" && summary.default && summary.default !== "original" && summary.available.includes(summary.default)) void chooseView(summary.default);
