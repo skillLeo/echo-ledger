@@ -24,7 +24,7 @@ export type AssistCardActions = {
   /** The core's offer: Start (with the call's client_ref) or Not now. */
   onStartOffer: () => void;
   onDismissOffer: () => void;
-  /** 409 session_active: end the running session, then start this one; or keep it. */
+  /** 409 session_active: end the running session and start this one; or keep it running (closing the card too). */
   onEndAndStart: () => void;
   onKeepRunning: () => void;
 };
@@ -56,9 +56,9 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
   // Only for a start made from this card (its offer): the question needs something to start again.
   const sessionActive = state.sessionActive && state.pendingStart && (
     <div className="el-assist__note" role="alert">
-      <span>Another Live Assist session is running.</span>
-      <Button size="sm" variant="primary" onClick={actions.onEndAndStart}>End it and start this one</Button>
-      <Button size="sm" variant="quiet" onClick={actions.onKeepRunning}>Keep it</Button>
+      <span>{state.sessionActive?.text}</span>
+      <Button size="sm" variant="primary" onClick={actions.onEndAndStart}>{state.sessionActive?.action}</Button>
+      <Button size="sm" variant="quiet" onClick={actions.onKeepRunning}>Keep running</Button>
     </div>
   );
   // Before a session: the core's offer for a prepared meeting's call (it never starts by itself).
@@ -66,6 +66,10 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
     if (!state.offer && !sessionActive && !state.error) return null;
     return (
       <section className="el-assist el-assist--offer" data-hit aria-label="Live Assist" data-testid="assist-card">
+        <div className="el-assist__bar">
+          <span className="el-assist__budget" />
+          <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Hide the card" onClick={actions.onHide} />
+        </div>
         {state.offer && (
           <div className="el-assist__offer">
             <p className="el-assist__first" dir="auto">{offerQuestion(state.offer)}</p>

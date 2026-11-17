@@ -20,8 +20,12 @@
 // Event (core → windows):
 //   assist:message  AssistMessage   every relay message the card needs, as the relay sends it (seq dropped), plus the
 //                                   core's own `turn` (a caption line), `budget`, `ended` and `offer`
-//   A start refused because another session runs (409 session_active, 1.9.0-k) comes as an `error` with that code,
-//   or as assist_start's rejection carrying `code: "session_active"`.
+//   assist_start_replacing { sessionId, prepId, mode, practice, clientRef } → AssistStarted  ends the named running
+//                                                         session and starts this one (409 session_active, 1.9.0-k)
+//   assist_keep_running                                   → void            the person keeps the running session (409 asked)
+//   assist_shown { suggestionId, renderMs }               → void            the first text of a suggestion was drawn
+//   A start refused because another session runs comes as an `assist:message` of type `session_active`, or as
+//   assist_start's rejection carrying the same fields with `code: "session_active"`.
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -72,7 +76,12 @@ export type AssistMessage =
   | { type: "ended"; reason?: string; message?: string | null }
   /** The core's, for every prepared meeting's call (it never starts by itself): the card asks, and Start passes the
    * recording's client_ref back to assist_start. */
-  | { type: "offer"; prep_id: string; title: string; client_ref: string; caller?: string | null; question?: string | null };
+  | { type: "offer"; prep_id: string; title: string; client_ref: string; caller?: string | null; question?: string | null }
+  /** The core's, for 409 session_active: the running session, its words and the button's label. */
+  | { type: "session_active"; session_id: string; practice: boolean; text: string; action: string };
+
+/** The running session a start ran into (409 session_active), as the core describes it. */
+export type SessionActive = { session_id: string | null; practice: boolean; text: string; action: string };
 
 export type AssistSnapshot = { messages: AssistMessage[]; hint_level: HintLevel; paused: boolean; muted_until: string | null; meeting_type?: MeetingType | null };
 
@@ -87,6 +96,13 @@ export const assist = {
     invoke<AssistStarted>("assist_start", { prepId, mode, practice: false, clientRef }),
   schedule: (prepId: string, at: string) => invoke<Prep>("assist_schedule", { prepId, at }),
   end: () => invoke<void>("assist_end"),
+  /** Ends `sessionId` (the running session) and starts this one, in one step on the core. */
+  startReplacing: (sessionId: string | null, prepId: string | null, mode: AssistMode | null = null, practice = false, clientRef: string | null = null) =>
+    invoke<AssistStarted>("assist_start_replacing", { sessionId, prepId, mode, practice, clientRef }),
+  /** The answer to 409 session_active that keeps the running session (also when the card is closed while it asks). */
+  keepRunning: () => invoke<void>("assist_keep_running"),
+  /** When a suggestion's first text appeared, from its suggestion_start (1.9.0-n's "shown" report). */
+  shown: (suggestionId: string, renderMs: number) => invoke<void>("assist_shown", { suggestionId, renderMs }),
   send: (kind: SendKind) => invoke<void>("assist_send", { kind }),
   set: (settings: { mode?: AssistMode; hint_level?: HintLevel; paused?: boolean; muted_seconds?: number }) => invoke<AssistSnapshot>("assist_set", { settings }),
   feedback: (suggestionId: string, action: "used" | "dismissed") => invoke<void>("assist_feedback", { suggestionId, action }),

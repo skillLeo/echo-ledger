@@ -1,7 +1,7 @@
 // The `assist` window (the core opens it per L4: top-centre under the webcam, hidden from screen sharing, click-through
 // outside the card). Shown only while live_assist and ui_v2.live are on for this person. In a development build
 // `?assistfixture` plays the fixture session instead of listening to the core.
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
@@ -9,7 +9,8 @@ import { errorMessage } from "../../lib/ipc";
 import { useUiFlags } from "../flags";
 import { assist, type AssistMessage, type AssistMode, type HintLevel, type SendKind } from "./adapter";
 import { AssistCard, CONSENT_LINE } from "./AssistCard";
-import { EMPTY_CARD, cardReducer, isSessionActive, type CardState } from "./card";
+import { EMPTY_CARD, cardReducer, isSessionActive, sessionActiveOf, shown, type CardState } from "./card";
+import type { SessionActive } from "./adapter";
 import "../components";
 
 type Action =
@@ -17,7 +18,7 @@ type Action =
   | { type: "local_error"; text: string }
   | { type: "reset"; messages: AssistMessage[] }
   | { type: "starting"; prepId: string | null; clientRef: string | null }
-  | { type: "session_active_refused" }
+  | { type: "session_active_refused"; active: SessionActive }
   | { type: "offer_dismissed" }
   | { type: "session_active_dismissed" };
 
@@ -26,9 +27,9 @@ export function reduce(state: CardState, a: Action): CardState {
     case "reset": return a.messages.reduce(cardReducer, EMPTY_CARD);
     case "local_error": return { ...state, error: { text: a.text, fatal: false, suggestionId: null } };
     case "starting": return { ...state, pendingStart: { prepId: a.prepId, clientRef: a.clientRef }, offer: null, error: null };
-    case "session_active_refused": return { ...state, sessionActive: true };
+    case "session_active_refused": return { ...state, sessionActive: a.active };
     case "offer_dismissed": return { ...state, offer: null };
-    case "session_active_dismissed": return { ...state, sessionActive: false, pendingStart: null };
+    case "session_active_dismissed": return { ...state, sessionActive: null, pendingStart: null };
     default: return cardReducer(state, a);
   }
 }
@@ -80,8 +81,23 @@ export default function AssistApp() {
     return () => window.clearTimeout(t);
   }, [local.mutedUntil, now]);
 
+  // 1.9.0-n's "shown" report: when a suggestion's first text is drawn, the time since its suggestion_start.
+  const startedAt = useRef(new Map<string, number>());
+  const reported = useRef(new Set<string>());
+  useEffect(() => {
+    for (const sug of state.suggestions) if (!startedAt.current.has(sug.id)) startedAt.current.set(sug.id, performance.now());
+  }, [state.suggestions]);
+  const onCard = shown(state);
+  useEffect(() => {
+    if (fixture || !onCard?.text || reported.current.has(onCard.id)) return;
+    reported.current.add(onCard.id);
+    const since = startedAt.current.get(onCard.id);
+    const renderMs = since === undefined ? 0 : Math.max(0, Math.round(performance.now() - since));
+    assist.shown(onCard.id, renderMs).catch(() => undefined);
+  }, [fixture, onCard?.id, onCard?.text]);
+
   const run = useCallback((fn: () => Promise<unknown>) => {
-    fn().catch((e) => dispatch(isSessionActive(e) ? { type: "session_active_refused" } : { type: "local_error", text: errorMessage(e) }));
+    fn().catch((e) => dispatch(isSessionActive(e) ? { type: "session_active_refused", active: sessionActiveOf(e) } : { type: "local_error", text: errorMessage(e) }));
   }, [dispatch]);
   const start = (prepId: string | null, clientRef: string | null) => {
     dispatch({ type: "starting", prepId, clientRef });
@@ -102,20 +118,28 @@ export default function AssistApp() {
             setNow(Date.now());
             run(() => assist.set({ muted_seconds: 60 }));
           },
-          onHide: () => run(() => assist.hideCard()),
+          onHide: () => {
+            // Closing the card while it asks about a running session keeps that session.
+            if (state.sessionActive && state.pendingStart) {
+              dispatch({ type: "session_active_dismissed" });
+              run(() => assist.keepRunning());
+            }
+            run(() => assist.hideCard());
+          },
           onCopyConsent: () => run(() => navigator.clipboard.writeText(CONSENT_LINE)),
           onStartOffer: () => state.offer && start(state.offer.prepId, state.offer.clientRef),
           onDismissOffer: () => dispatch({ type: "offer_dismissed" }),
           onEndAndStart: () => {
             const again = state.pendingStart;
+            const running = state.sessionActive;
             dispatch({ type: "session_active_dismissed" });
-            run(async () => {
-              await assist.end();
-              dispatch({ type: "starting", prepId: again?.prepId ?? null, clientRef: again?.clientRef ?? null });
-              await assist.start(again?.prepId ?? null, null, again?.clientRef ?? null);
-            });
+            dispatch({ type: "starting", prepId: again?.prepId ?? null, clientRef: again?.clientRef ?? null });
+            run(() => assist.startReplacing(running?.session_id ?? null, again?.prepId ?? null, null, false, again?.clientRef ?? null));
           },
-          onKeepRunning: () => dispatch({ type: "session_active_dismissed" }),
+          onKeepRunning: () => {
+            dispatch({ type: "session_active_dismissed" });
+            run(() => assist.keepRunning());
+          },
         }} />
     </div>
   );
