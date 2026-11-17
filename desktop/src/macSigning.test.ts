@@ -126,6 +126,27 @@ describe.runIf(process.platform !== "win32")("release-mac.sh", () => {
     expect(empty.stderr).toContain("no *.dmg");
   });
 
+  it("stops at the release gate before it checks or signs anything", () => {
+    const folder = mkdtempSync(join(tmpdir(), "release-mac-"));
+    dirs.push(folder);
+    writeFileSync(join(folder, "EchoLedger_1.8.1_aarch64.dmg"), "dmg");
+    writeFileSync(join(folder, "EchoLedger.app.tar.gz"), "tarball");
+    // A stand-in npx that records how it was run and fails like a blocked gate.
+    const bin = mkdtempSync(join(tmpdir(), "release-gate-bin-"));
+    dirs.push(bin);
+    const log = join(bin, "npx.log");
+    writeFileSync(join(bin, "npx"), `#!/bin/sh\necho "ECHOLEDGER_RELEASE=$ECHOLEDGER_RELEASE $*" > "${log}"\nexit 1\n`);
+    chmodSync(join(bin, "npx"), 0o755);
+    const key = { TAURI_SIGNING_PRIVATE_KEY: "key", TAURI_SIGNING_PRIVATE_KEY_PASSWORD: "", PATH: `${bin}:${process.env.PATH}` };
+    const blocked = run([folder, "1.8.1"], key);
+    expect(blocked.status).toBe(1);
+    expect(blocked.stderr).toContain("the release gate failed");
+    expect(readFileSync(log, "utf8").trim()).toBe("ECHOLEDGER_RELEASE=1 --no-install vitest run src/lib/releaseGate.test.ts");
+    expect(existsSync(join(folder, "release")), "nothing packed or signed").toBe(false);
+    const script = readFileSync(release, "utf8");
+    expect(script.indexOf("src/lib/releaseGate.test.ts) ||")).toBeLessThan(script.indexOf('check-mac-archive.sh" "$tarball"'));
+  });
+
   it("checks both apps with the pinned certificate before it signs a fresh archive of the checked app, binding the version", () => {
     const script = readFileSync(release, "utf8");
     const unpacked = script.indexOf('check-mac-archive.sh" "$tarball" "$work/package"');
