@@ -7,7 +7,7 @@ import { makeStatus } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { sampleEntitlements } from "../../test/fixtures";
 import { LiveTranslateCard } from "../../views/main/LiveTranslateCard";
-import { LiveTranslateV2 } from "./LiveTranslateV2";
+import { LiveTranslateV2, translateAvailability } from "./LiveTranslateV2";
 import { LiveV2 } from "./LiveV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -98,9 +98,32 @@ describe("Live Translate in the Live tab follows the plan", () => {
     render(<LiveV2 status={makeStatus()} {...props} />);
     await act(flushAsync);
     const row = within(screen.getByRole("list", { name: "During a call" })).getByRole("button", { name: "Live Translate" });
+    expect(row).toHaveAccessibleDescription(/Not in your plan/);
     fireEvent.click(row);
-    expect(screen.getByRole("region", { name: "Live Translate" })).not.toHaveTextContent("Start");
+    const panel = screen.getByRole("region", { name: "Live Translate" });
+    expect(within(panel).getByRole("status")).toHaveTextContent("Not in your plan");
+    expect(within(panel).getByRole("button", { name: "Start" })).toBeDisabled();
+    expect(within(panel).queryByRole("combobox")).toBeNull();
     expect(callsOf("translate_apps")).toHaveLength(0);
+  });
+
+  it("on a Mac it says it isn't there yet, instead of an empty list of apps", async () => {
+    render(<LiveV2 status={makeStatus({ platform: "macos" })} {...props} />);
+    await act(flushAsync);
+    const row = within(screen.getByRole("list", { name: "During a call" })).getByRole("button", { name: "Live Translate" });
+    expect(row).toHaveAccessibleDescription(/Live Translate isn't on the Mac yet/);
+    fireEvent.click(row);
+    expect(within(screen.getByRole("region", { name: "Live Translate" })).getByRole("status")).toHaveTextContent("Live Translate isn't on the Mac yet");
+    expect(callsOf("translate_apps")).toHaveLength(0);
+  });
+
+  it("the core's answer decides when it gives one", async () => {
+    respond("live_translate_status", { available: false, reason: "platform" });
+    render(<LiveV2 status={makeStatus({ platform: "windows" })} {...props} />);
+    await act(flushAsync);
+    expect(within(screen.getByRole("list", { name: "During a call" })).getByRole("button", { name: "Live Translate" })).toHaveAccessibleDescription(/isn't on the Mac yet/);
+    expect(translateAvailability(null, "windows", true)).toEqual({ available: true, reason: null });
+    expect(translateAvailability(null, "windows", false)).toEqual({ available: false, reason: "plan" });
   });
 
   it("a server without Live Translate doesn't list it", async () => {

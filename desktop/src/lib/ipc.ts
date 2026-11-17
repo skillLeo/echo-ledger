@@ -1341,6 +1341,12 @@ export interface ScreenMoment {
   said?: string | null;
 }
 
+/** `live_translate_status`: whether Live Translate can run on this computer and plan, and why not. */
+export interface LiveTranslateAvailability {
+  available: boolean;
+  reason: "platform" | "plan" | null;
+}
+
 /** `GET /api/help/guides?q=` (2.0.0-d): a section of the user guide. */
 export interface HelpGuideHit {
   id: string;
@@ -1825,6 +1831,8 @@ export const api = {
   helpGuide: (id: string) => invoke<HelpGuide>("help_guide", { id }),
   /** This platform's last releases with notes, newest first (the core names the platform: windows or mac). */
   helpWhatsNew: () => invoke<{ data: WhatsNewRelease[] }>("help_whats_new"),
+  /** Whether Live Translate can run here: `platform` = not on this system yet (the Mac), `plan` = not in the plan. */
+  liveTranslateStatus: () => invoke<LiveTranslateAvailability>("live_translate_status"),
   /** The device check this computer last sent (`POST /api/devices/report`), which Contact support can attach; null: none yet. */
   lastDeviceReport: () => invoke<{ sentAt: string | null } | null>("last_device_report"),
   /** Contact support (5 an hour): the device's last report goes with it only when `includeDeviceReport`. */

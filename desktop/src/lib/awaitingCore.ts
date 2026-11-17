@@ -7,9 +7,10 @@ export const AWAITING_CORE = {
   removeBy: "2.0.0",
   /**
    * Help (docs/API.md 2.0.0-d): GET /api/help/guides, /guides/{id}, /whats-new and POST /api/support/messages; and the
-   * core's record of the last device report this computer sent, which Contact support says it attaches.
+   * core's record of the last device report this computer sent, which Contact support says it attaches. Live
+   * Translate's availability here (until the core says it, the Live tab works it out from the system and the plan).
    */
-  commands: ["help_guides", "help_guide", "help_whats_new", "support_send", "last_device_report"] as readonly string[],
+  commands: ["help_guides", "help_guide", "help_whats_new", "support_send", "last_device_report", "live_translate_status"] as readonly string[],
 } as const;
 
 /** "1.10.2" ≥ "1.9.0", by number. */
