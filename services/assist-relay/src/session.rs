@@ -1732,7 +1732,7 @@ impl Engine {
             cache_write_tokens: outcome.usage.cache_write_tokens,
             output_tokens: outcome.usage.output_tokens,
             cost_usd: micros_to_usd(cost),
-            estimated: false,
+            estimated: outcome.estimated,
         };
         self.deps.reports.report(Report::Usage(UsageRecord {
             suggestion_id: kind.id().to_owned(),
@@ -1746,7 +1746,7 @@ impl Engine {
             fallback: outcome.fallback_used,
             tokens: UsageRecord::tokens_of(&usage),
             cost_usd: usage.cost_usd,
-            estimated: false,
+            estimated: usage.estimated,
             latency: Latency::default(),
             at: iso8601(unix_now()),
         }));

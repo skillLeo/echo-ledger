@@ -228,3 +228,24 @@ async fn a_ten_hour_captions_only_session_makes_no_background_calls_and_stays_re
     s.send(json!({"type": "help_now"})).await;
     assert_eq!(s.next().await["code"], "budget_exhausted", "the session still answers");
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_background_call_without_provider_counts_is_reported_as_estimated() {
+    let h = harness(RelayConfig::built_in());
+    let mut s = h.connect(practice_claims("s-estimated"));
+    ready_now(&mut s).await;
+    // A provider that streams the question but sends no counts.
+    h.mock(assist_relay::domain::ProviderKind::Anthropic).push(assist_relay::provider::MockBehavior::NoUsage);
+    s.send(json!({"type": "practice_next"})).await;
+    s.drain(Duration::from_secs(3)).await;
+    let usage = h
+        .reports
+        .reports()
+        .into_iter()
+        .find_map(|r| match r {
+            Report::Usage(u) if u.kind == assist_relay::protocol::SuggestionKind::PracticeQuestion => Some(u),
+            _ => None,
+        })
+        .expect("a usage record");
+    assert!(usage.estimated, "{usage:?}");
+}

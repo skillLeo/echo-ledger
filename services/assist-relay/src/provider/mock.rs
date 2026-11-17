@@ -50,6 +50,8 @@ pub enum MockBehavior {
     Late(Duration),
     /// The usual answer's first this-many words, then a dropped connection.
     Break(usize),
+    /// The usual answer, complete, but no token counts (some providers send none).
+    NoUsage,
 }
 
 #[derive(Debug)]
@@ -232,6 +234,22 @@ impl Provider for MockProvider {
                     Err(ProviderError::Unavailable)
                 });
                 return texts.chain(broken).boxed();
+            }
+            Some(MockBehavior::NoUsage) => {
+                let next = Duration::from_millis(latency.token_ms);
+                let chunks: Vec<String> =
+                    mock_reply(request.purpose, &request.question).split_inclusive(char::is_whitespace).map(str::to_owned).collect();
+                // Counted as completed when the stream is dropped: it ends normally, only without counts.
+                let guard = Arc::new(CancelGuard { stats: self.stats.clone(), finished: true });
+                return stream::iter(chunks.into_iter().enumerate())
+                    .then(move |(i, chunk)| {
+                        let _held = guard.clone();
+                        async move {
+                            tokio::time::sleep(if i == 0 { first } else { next }).await;
+                            Ok(StreamEvent::Text(chunk))
+                        }
+                    })
+                    .boxed();
             }
             None => mock_reply(request.purpose, &request.question),
         };

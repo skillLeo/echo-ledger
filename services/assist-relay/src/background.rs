@@ -249,6 +249,8 @@ pub struct TaskOutcome {
     pub text: String,
     pub usage: Usage,
     pub fallback_used: bool,
+    /// The provider sent no counts (or part of the usage is an abandoned attempt's estimate): the usage is estimated.
+    pub estimated: bool,
 }
 
 /// One call, whole: each model in turn until one answers (the first is the Fast model, then its fallback). The
@@ -293,12 +295,13 @@ pub async fn run(
         .await;
         match collected {
             Ok(Ok((text, usage))) => {
+                let estimated = usage.is_none();
                 let usage = usage.unwrap_or(Usage {
                     input_tokens: context.tokens(),
                     output_tokens: estimate_tokens(&text),
                     ..Usage::default()
                 });
-                return Ok(TaskOutcome { model: model.clone(), provider: spec.provider, text, usage, fallback_used: attempt > 0 });
+                return Ok(TaskOutcome { model: model.clone(), provider: spec.provider, text, usage, fallback_used: attempt > 0, estimated });
             }
             Ok(Err(error)) => last = error,
             Err(_) => last = ProviderError::Timeout,
