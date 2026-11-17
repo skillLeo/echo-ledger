@@ -959,6 +959,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun ask(clientId: String, question: String, language: String) =
         workspaceCall("The AI assistant could not answer right now. Try again in a minute.") { it.ask(clientId, question, language) }
 
+    /**
+     * Ask for the v2 screen (P-089): the answer, or the failure itself (offline or not, the server's status and code,
+     * and words for people), never null plus a message elsewhere. The classic screen keeps [ask].
+     */
+    suspend fun askOutcome(clientId: String, question: String, language: String): AskOutcome = withContext(Dispatchers.IO) {
+        try {
+            AskOutcome.Answer((graph.api() ?: error(com.echoledger.mobile.core.Problems.SIGN_IN)).ask(clientId, question, language))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            askFailure(e)
+        }
+    }
+
     /** The plain words for a refused workspace call, by its code (never the server's text about its AI provider). */
     internal fun workspaceProblem(e: Throwable, failed: String): String = when ((e as? ApiException)?.code) {
         "ai_unavailable" -> AI_NOT_SET_UP
@@ -1717,6 +1731,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         /** `409 ai_unavailable`: the server has no AI provider set up (call notes, the brief and Ask). */
         const val AI_NOT_SET_UP = "The AI assistant is not set up on the server yet."
 
+        /** The same sentence as the classic Ask's. */
+        const val ASK_FAILED = "The AI assistant could not answer right now. Try again in a minute."
+
+        /**
+         * A failed Ask in words for people: by its code, else [com.echoledger.mobile.core.Problems] (a bare status such
+         * as "Request failed (502)" or a connection's own text never shows).
+         */
+        internal fun askFailure(e: Throwable): AskOutcome.Failed {
+            val refused = e as? ApiException
+            val words = if (refused?.code == "ai_unavailable") AI_NOT_SET_UP else com.echoledger.mobile.core.Problems.text(e, ASK_FAILED)
+            val offline = refused == null && words == com.echoledger.mobile.core.Problems.OFFLINE
+            return AskOutcome.Failed(offline = offline, status = refused?.status, code = refused?.code, words = words)
+        }
+
         const val NOT_A_PAIRING_QR = "That isn't an EchoLedger sign-in code. In the console open Profile → Devices → Sign in a device."
     }
+}
+
+/** What Ask got back (P-089). */
+sealed interface AskOutcome {
+    data class Answer(val answer: com.echoledger.mobile.data.AskAnswerDto) : AskOutcome
+
+    /** [offline]: the server could not be reached; [status] and [code]: the server's refusal; [words]: for people. */
+    data class Failed(val offline: Boolean, val status: Int?, val code: String?, val words: String) : AskOutcome
 }
