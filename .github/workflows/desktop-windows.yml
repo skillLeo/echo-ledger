@@ -103,6 +103,11 @@ jobs:
           # The server the sign-in uses (v1.6), built into the page by vite.config.ts; a repository variable, never in
           # the sources. Unset: the app asks for the server address.
           ECHOLEDGER_DEFAULT_SERVER: ${{ vars.ECHOLEDGER_DEFAULT_SERVER }}
+          # A PDB beside the exe, so a stall report's thread stacks can be read with function names and lines: line
+          # tables only (the code is optimised the same), and not stripped, which on Windows would leave no PDB. The PDB
+          # stays out of the installer (checked below) and is kept as an artifact of its own.
+          CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
+          CARGO_PROFILE_RELEASE_STRIP: none
         with:
           projectPath: desktop
           args: --bundles nsis ${{ env.SIGNING_CONFIG }} ${{ env.UPDATER_CONFIG }}
@@ -118,6 +123,15 @@ jobs:
           } else {
             "Unsigned build: no code-signing certificate in this repository's secrets (docs/SIGNING.md)." >> $env:GITHUB_STEP_SUMMARY
           }
+
+      - name: Check the installer carries no PDB
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          $listing = & 7z l $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw "7-Zip could not list the installer ($LASTEXITCODE)" }
+          $pdbs = $listing | Select-String -Pattern '\.pdb$'
+          if ($pdbs) { throw "The installer carries a PDB: $pdbs" }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -135,6 +149,14 @@ jobs:
           path: desktop/src-tauri/target/release/echoledger-desktop.exe
           if-no-files-found: error
           retention-days: 3
+
+      # The app's PDB, to read a stall report's minidump with symbols; never in the installer.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EchoLedger-windows-x64-pdb
+          path: desktop/src-tauri/target/release/echoledger_desktop.pdb
+          if-no-files-found: error
+          retention-days: 7
 
   smoke:
     name: Smoke test, ${{ matrix.label }}
