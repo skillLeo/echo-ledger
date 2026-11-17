@@ -9,11 +9,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -46,6 +51,7 @@ import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.EchoV2Colors
 import com.echoledger.mobile.ui.v2.theme.LocalEchoV2Colors
+import com.echoledger.mobile.ui.v2.theme.largeText
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 @Composable
@@ -203,11 +209,15 @@ private fun AssistExpanded(
                     )
                 }
             }
+            // At large text the suggestion gets all its lines: up to six show, and the text scrolls beyond that.
+            val large = largeText()
+            val sixLines = with(LocalDensity.current) { (EchoV2.type.contentStrong.lineHeight * MAX_LINES_LARGE).toDp() }
             Column(
-                Modifier.padding(horizontal = EchoTokens.Space.s16, vertical = EchoTokens.Space.s8).semantics {
-                    liveRegion =
-                        LiveRegionMode.Polite
-                },
+                Modifier
+                    .then(if (large) Modifier.heightIn(max = sixLines).verticalScroll(rememberScrollState()) else Modifier)
+                    .testTag(TEXT_TAG)
+                    .padding(horizontal = EchoTokens.Space.s16, vertical = EchoTokens.Space.s8)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
                 verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
             ) {
                 state.practiceDone?.let {
@@ -225,7 +235,7 @@ private fun AssistExpanded(
                         it,
                         style = EchoV2.type.contentCaption.copy(textDirection = TextDirection.Content),
                         color = c.textSecondary,
-                        maxLines = 1,
+                        maxLines = if (large) 2 else 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -235,19 +245,20 @@ private fun AssistExpanded(
                     state.captionsOnly -> Unit
 
                     parsed != null && parsed.first.isNotEmpty() -> {
-                        // At most three lines on the phone: the first line, then bullets while there is room.
+                        // At most three lines on the phone: the first line, then bullets while there is room. At large
+                        // text nothing is cut: the area scrolls instead.
                         Text(
                             bold(parsed.first),
                             style = EchoV2.type.contentStrong.copy(textDirection = TextDirection.Content),
-                            maxLines = 2,
+                            maxLines = if (large) Int.MAX_VALUE else 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.fillMaxWidth()
                         )
-                        parsed.bullets.take(1).forEach {
+                        parsed.bullets.take(if (large) 3 else 1).forEach {
                             Text(
                                 bold("• $it"),
                                 style = EchoV2.type.metaLatin.copy(textDirection = TextDirection.Content),
-                                maxLines = 1,
+                                maxLines = if (large) Int.MAX_VALUE else 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -271,7 +282,7 @@ private fun AssistExpanded(
                                         }
                                         ).copy(textDirection = TextDirection.Content),
                                     color = c.textSecondary,
-                                    maxLines = 1,
+                                    maxLines = if (large) Int.MAX_VALUE else 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -378,3 +389,9 @@ private fun Reminder(meeting: MeetingType, onCopyConsent: () -> Unit, onOk: () -
         }
     }
 }
+
+/** The card's text area, for tests. */
+const val TEXT_TAG = "assist-text"
+
+/** Lines of suggestion shown at large text before the text area scrolls. */
+private const val MAX_LINES_LARGE = 6

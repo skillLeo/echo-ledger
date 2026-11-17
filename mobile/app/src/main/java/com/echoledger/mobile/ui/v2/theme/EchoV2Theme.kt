@@ -20,6 +20,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.TextStyle
@@ -392,3 +393,7 @@ private val EchoV2Shapes = Shapes(
 /** The screen's locale, read from the (observable) configuration so dates and numbers follow a language change. */
 @Composable
 fun screenLocale(): Locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.ROOT
+
+/** Android's text size is 150 % or more: components drop decoration and give text more lines to keep words whole. */
+@Composable
+fun largeText(): Boolean = LocalDensity.current.fontScale >= 1.5f

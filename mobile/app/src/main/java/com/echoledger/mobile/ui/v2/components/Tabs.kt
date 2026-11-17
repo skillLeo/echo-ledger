@@ -28,13 +28,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.largeText
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
@@ -95,7 +95,7 @@ fun EchoSegmented(options: List<String>, selectedIndex: Int, onSelect: (Int) -> 
         color = c.bgSurface,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderStrong)
     ) {
-        val largeText = LocalDensity.current.fontScale >= LARGE_TEXT_SCALE
+        val largeText = largeText()
         Row(Modifier.height(IntrinsicSize.Min).selectableGroup()) {
             options.forEachIndexed { index, label ->
                 val selected = index == selectedIndex
@@ -208,6 +208,3 @@ fun EchoTopBar(
         actions()
     }
 }
-
-/** From this text size on (Android's 150 %), controls drop decoration to keep their words whole. */
-private const val LARGE_TEXT_SCALE = 1.5f
