@@ -2852,7 +2852,7 @@ pub async fn resume_recording(app: AppHandle) -> AppResult<AppStatus> {
 
 #[tauri::command]
 pub async fn cancel_recording(app: AppHandle) -> AppResult<AppStatus> {
-    crate::actions::cancel_recording(&app).await?;
+    crate::actions::cancel_recording(&app, None).await?;
     Ok(status(&app))
 }
 
