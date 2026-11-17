@@ -289,11 +289,16 @@ final class AccountExporter
         $json = fn (mixed $data): string => (string) json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         $this->addText('live-assist/settings.json', $json(['defaults' => AssistDefaults::all($user), 'saved' => $user->assist_settings]));
 
+        // Only the person's own projects, and their files: a prep linked to anyone else's (from before projects were
+        // private) shows neither its name nor its documents.
+        $own = Client::query()->withoutGlobalScopes()->where('user_id', $user->id)->pluck('id')->flip();
         $preps = AssistPrep::query()->withoutGlobalScopes()->withTrashed()->where('user_id', $user->id)->with('documents')->orderBy('created_at')->get()
             ->map(fn (AssistPrep $p): array => [
                 ...AssistPrepController::payload($p),
+                'project_id' => $p->client_id !== null && $own->has($p->client_id) ? $p->client_id : null,
                 'workspace_id' => $p->workspace_id,
-                'documents' => $p->documents->map(fn (ClientFile $f): array => ['file_id' => $f->id, 'name' => $f->name])->values()->all(),
+                'documents' => $p->documents->filter(fn (ClientFile $f): bool => $own->has($f->client_id))
+                    ->map(fn (ClientFile $f): array => ['file_id' => $f->id, 'name' => $f->name])->values()->all(),
                 'deleted_at' => $p->deleted_at?->toAtomString(),
             ])->values()->all();
         if ($preps !== []) {

@@ -219,6 +219,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('uploads', fn (Request $request) => Limit::perMinute(600)->by('upload:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('stt-token', fn (Request $request) => Limit::perMinute(30)->by('stt:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // A device check is sent by hand; ten an hour is plenty for one device.
+        // Since v1.8 P6.3: invitations and invite links from the apps, per person, as the console's 20 an hour.
+        RateLimiter::for('invites', fn (Request $request) => Limit::perHour(20)->by('invites:'.(($u = $request->user()) instanceof Device ? 'u'.$u->user_id : ($u?->getAuthIdentifier() ?? $request->ip()))));
         RateLimiter::for('device-report', fn (Request $request) => Limit::perHour(10)->by('device-report:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('share-check', fn (Request $request) => Limit::perHour(30)->by('share-check:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Since v1.8: one report per call a device saw but did not record; sixty an hour is far more than a day of calls.

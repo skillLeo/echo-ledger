@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Anthropic\Client;
 use App\Enums\SessionStatus;
 use App\Filament\Pages\LiveAssist\AssistReportPage;
+use App\Http\Controllers\Api\Assist\AssistSessionController;
 use App\Jobs\MakeAssistReportJob;
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
@@ -575,7 +576,8 @@ describe('what a crash leaves behind', function () {
         expect($session->fresh()->report['ai']['runs'])->toBe(2)->and(AssistUsage::query()->where('suggestion_id', "report-{$id}-2")->exists())->toBeTrue();
 
         // A second death after the requeue: failed, and the console says so.
-        $session->refresh()->forceFill(['report_status' => 'queued', 'report' => null])->save();
+        // (Its requeue already spent: the made report cleared it, so this stands for a second requeue that died too.)
+        $session->refresh()->forceFill(['report_status' => 'queued', 'report' => null, 'report_requeued_at' => now()])->save();
         (new MakeAssistReportJob($id))->failed(new RuntimeException('killed'));
         expect($session->fresh()->report_status)->toBe('failed');
         $this->api(Fx::token($device))->getJson("/api/assist/sessions/{$id}")->assertJsonPath('report', 'failed');
@@ -596,5 +598,38 @@ describe('what a crash leaves behind', function () {
         (new MakeAssistReportJob($session->id))->failed(new RuntimeException('timeout'));
         expect($session->fresh()->report_status)->toBe('failed');
         Queue::assertPushed(MakeAssistReportJob::class, 1);
+    });
+});
+
+describe('the review\'s minors', function () {
+    it('settles a reservation once: the call and the sweep meeting leave one cost and one ledger row', function () {
+        $device = assistPerson('pro');
+        $session = AssistSession::query()->withoutGlobalScopes()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'mode' => 'fast',
+            'practice' => true, 'platform' => 'android', 'status' => 'ended', 'started_at' => now(), 'ended_at' => now(), 'seconds_used' => 1]);
+        $budget = app(AssistBudget::class);
+        $row = $budget->reserve($session, 'ask', 'claude-haiku-5-5', 3, 'ask-twice');
+        $stale = AssistUsage::query()->find($row->id);
+
+        $budget->settle($row, 'claude-haiku-5-5', 'claude-haiku-5-5', ['input' => 2000, 'cached' => 0, 'written' => 0, 'output' => 100]);
+        $budget->settle($stale, 'claude-haiku-5-5', 'claude-haiku-5-5', ['input' => 0, 'cached' => 0, 'written' => 0, 'output' => 0], lost: true);
+
+        expect($row->fresh())->toMatchArray(['outcome' => 'done', 'estimated' => false])->and((float) $row->fresh()->cost_usd)->toBe(0.00025)
+            ->and(UsageLedgerEntry::query()->withoutGlobalScopes()->where('report_id', 'assist/ask-twice')->count())->toBe(1);
+    });
+
+    it('clears the requeue once the report is ready, and keeps a report already made ready when a remake does not come', function () {
+        fakeAssistReportAi();
+        $device = assistPerson('pro');
+        $id = practiceSession($this, $this->api(Fx::token($device)));
+        AssistSessionController::close($session = AssistSession::query()->withoutGlobalScopes()->find($id), now());
+        $session->forceFill(['report_requeued_at' => now()])->save();
+
+        (new MakeAssistReportJob($id))->handle();
+        expect($session->fresh())->toMatchArray(['report_status' => 'ready', 'report_requeued_at' => null]);
+
+        // A remake queued (a late post) that never comes: the report made before stays, ready.
+        $session->fresh()->forceFill(['report_status' => 'queued'])->save();
+        MakeAssistReportJob::retryOrFail($session->fresh());
+        expect($session->fresh()->report_status)->toBe('ready')->and($session->fresh()->report)->not->toBeNull();
     });
 });

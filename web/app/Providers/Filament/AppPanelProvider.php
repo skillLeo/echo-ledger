@@ -19,6 +19,7 @@ use App\Filament\Support\Shell;
 use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\EnsureAppAvailable;
 use App\Http\Middleware\EnsureWorkspaceMember;
+use App\Http\Middleware\NoReferrerOnInvites;
 use App\Livewire\ActivityBell;
 use App\Livewire\Shell\Sidebar;
 use App\Livewire\Shell\Topbar;
@@ -205,6 +206,8 @@ class AppPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+                // Since v1.8 P6.3: the sign-up page with an invitation sends no referrer.
+                NoReferrerOnInvites::class,
             ])
             ->authMiddleware([
                 Authenticate::class,

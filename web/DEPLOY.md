@@ -72,6 +72,13 @@ Check what the daily clean-up would delete without deleting: `php artisan model:
 be restored from the console's Recently deleted page for 48 hours.
 `--timeout` is enforced only when `pcntl` exists; every provider HTTP call also has its own timeout.
 
+## Invitation addresses in the logs (since v1.8 P6.3)
+An invite link (`/join/<token>`), an email invitation (`/invitations/<token>?…`) and the sign-up page opened with one
+(`/app/register?invite=…`) carry a secret in their address. The app sends `Referrer-Policy: no-referrer` from them and
+keeps the link in the session after the first page, but the web server's access log still sees the first address.
+On nginx, mask it with the `map` and `log_format echoledger` lines in `docs/DEPLOY_VPS.md` ("Nginx"). On a shared host
+whose access log you cannot change, turn the raw access log off in the hosting panel or keep it short (a day).
+
 ## Provider dashboards
 - **AssemblyAI:** upgrade to a paid plan, enable *Data Controls → Opt out of training*, set transcript TTL to 1 day
   as a backstop. Webhook URLs are sent per request automatically (`/api/webhooks/stt/assemblyai?rid=…`).

@@ -9,6 +9,7 @@ use App\Models\AssistSession;
 use App\Models\AssistSuggestion;
 use App\Models\AssistTurn;
 use App\Models\AssistUsage;
+use App\Models\Client;
 use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
 use App\Models\User;
@@ -145,4 +146,30 @@ it('erases all of the person\'s Live Assist with the account, in every workspace
     // Someone else's stays.
     expect(AssistSession::query()->withoutGlobalScopes()->find($made['theirs']->id))->not->toBeNull()
         ->and(AssistTurn::query()->where('assist_session_id', $made['theirs']->id)->value('text'))->toBe('SOMEONE-ELSE-SAID');
+});
+
+it('exports a prep\'s project and documents only when the project is the person\'s own', function () {
+    $device = assistPerson('pro');
+    $teammate = Fx::user();
+    app(Workspaces::class)->addMember(Workspace::query()->findOrFail($device->workspace_id), $teammate);
+    $theirs = Client::query()->withoutGlobalScopes()->create(['workspace_id' => $device->workspace_id, 'user_id' => $teammate->id, 'name' => 'THEIR-PROJECT', 'color' => '#8B5CF6']);
+    $theirFile = ClientFile::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $teammate->id, 'client_id' => $theirs->id,
+        'name' => 'THEIR-FILE.pdf', 'mime' => 'application/pdf', 'size_bytes' => 1, 'status' => 'ready', 'text' => 'x']);
+    // From before projects were private: a prep linked to a teammate's project and file.
+    $prep = AssistPrep::query()->withoutGlobalScopes()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'client_id' => $theirs->id,
+        'meeting_type' => 'boss', 'hint_level' => 'full', 'mode' => 'fast', 'language_help' => 'off', 'status' => 'draft']);
+    $prep->documents()->attach($theirFile->id, ['tokens' => 1]);
+
+    $id = $this->api(Fx::token($device))->postJson('/api/account/export')->assertStatus(202)->json('id');
+    $url = (string) $this->api(Fx::token($device))->getJson("/api/account/export/{$id}")->json('url');
+    app('auth')->forgetGuards();
+    $path = tempnam(sys_get_temp_dir(), 'zip');
+    file_put_contents($path, $this->get($url)->assertOk()->streamedContent());
+    $zip = new ZipArchive;
+    $zip->open($path);
+    $preps = json_decode((string) $zip->getFromName('live-assist/preps.json'), true);
+    expect($preps[0]['project_id'])->toBeNull()->and($preps[0]['documents'])->toBe([])
+        ->and((string) $zip->getFromName('live-assist/preps.json'))->not->toContain('THEIR-FILE')->not->toContain($theirs->id);
+    $zip->close();
+    @unlink($path);
 });

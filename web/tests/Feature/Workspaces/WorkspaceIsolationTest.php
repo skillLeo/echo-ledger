@@ -13,6 +13,8 @@ use App\Models\Screen;
 use App\Models\SessionMarker;
 use App\Models\ShareLink;
 use App\Models\User;
+use App\Models\WorkspaceInvitation;
+use App\Models\WorkspaceInviteLink;
 use App\Services\ActivityFeed;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\Testing\TestAction;
@@ -89,7 +91,9 @@ it('never lets workspace A read, change or delete workspace B through the API', 
             ->and($b['bob']->fresh()->ui_classic)->toBeFalse()
             ->and(AssistPrep::query()->find($b['assistPrep']->id)?->title)->toBe('BOB-SECRET-TITLE prep')
             ->and(AssistSession::query()->find($b['assistSession']->id)?->status)->toBe('active')
-            ->and(AssistTurn::query()->where('assist_session_id', $b['assistSession']->id)->count())->toBe(1);
+            ->and(AssistTurn::query()->where('assist_session_id', $b['assistSession']->id)->count())->toBe(1)
+            ->and(WorkspaceInvitation::query()->find($b['bobInvitation']->id))->not->toBeNull()
+            ->and(WorkspaceInviteLink::query()->find($b['bobLink']->id)?->revoked_at)->toBeNull();
     });
 });
 

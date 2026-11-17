@@ -12,7 +12,9 @@ use App\Filament\Support\PlanLock;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
+use App\Models\WorkspaceInviteLink;
 use App\Services\Accounts\Invitations;
+use App\Services\Accounts\InviteLinks;
 use App\Services\Accounts\SignUp;
 use App\Services\AuditLog;
 use App\Services\Workspaces\ConsoleAccess;
@@ -100,7 +102,7 @@ class WorkspaceSettings extends Page implements HasTable
             EmbeddedTable::make(),
             View::make('filament.pages.workspace-invitations')
                 ->visible(fn (): bool => $this->can('invite'))
-                ->viewData(fn (): array => ['invitations' => $this->openInvitations(), 'plan' => $this->planLine()]),
+                ->viewData(fn (): array => ['invitations' => $this->openInvitations(), 'links' => $this->openLinks(), 'plan' => $this->planLine()]),
             // Since v1.6 (P2.5): what each role may do here, as the admin panel shows staff roles.
             View::make('filament.pages.workspace-roles-matrix')->viewData(fn (): array => ['rows' => self::ROLE_MATRIX, 'mine' => $this->roleOf($this->user())?->value]),
         ]);
@@ -172,16 +174,50 @@ class WorkspaceSettings extends Page implements HasTable
             Action::make('addMember')->label('Invite')->icon(Heroicon::OutlinedUserPlus)
                 ->visible(fn (): bool => PlanLock::allows('team'))
                 ->authorize(fn (): bool => $this->can('invite'))
-                ->modalDescription(fn (): string => app(SignUp::class)->open()
-                    ? 'They get an email with a link to join, for 7 days; someone without an account makes one with it.'
-                    : 'They get an email with a link to join, for 7 days. Someone without an account gets one with a one-time password, shown to you once.')
+                ->modalDescription(fn (): string => (app(SignUp::class)->open()
+                    ? 'They get an email with a link to join; someone without an account makes one with it.'
+                    : 'They get an email with a link to join. Someone without an account gets one with a one-time password, shown to you once.')
+                    .(($seats = $this->planLine()) !== null ? ' '.$seats : ''))
                 ->schema([
                     TextInput::make('email')->email()->required()->maxLength(255),
                     TextInput::make('name')->maxLength(255)->helperText('For a new account.'),
                     Select::make('role')->options(fn (): array => $this->assignableRoles())
                         ->default(WorkspaceRole::Member->value)->selectablePlaceholder(false)->required(),
+                    // Since v1.8 P6.3: how long the link in the email works.
+                    Select::make('days')->label('The link works for')->options(self::DAY_OPTIONS)->default('7')->selectablePlaceholder(false)->required(),
                 ])
                 ->action(fn (array $data) => $this->addMember($data)),
+            // Since v1.8 P6.3: a link anyone can use to join as a member or a viewer, shown once.
+            Action::make('inviteLink')->label('Invite link')->icon(Heroicon::OutlinedLink)->color('gray')
+                ->visible(fn (): bool => PlanLock::allows('team'))
+                ->authorize(fn (): bool => $this->can('invite'))
+                ->modalDescription(fn (): string => 'Anyone with the link can join as the role you pick, until it ends or you revoke it. Each person takes a seat when they join.'
+                    .(($seats = $this->planLine()) !== null ? ' '.$seats : ''))
+                ->schema([
+                    Select::make('role')->options(fn (): array => array_intersect_key($this->assignableRoles(), array_flip([WorkspaceRole::Member->value, WorkspaceRole::Viewer->value])))
+                        ->default(WorkspaceRole::Member->value)->selectablePlaceholder(false)->required(),
+                    Select::make('days')->label('Open for')->options(self::DAY_OPTIONS)->default('7')->selectablePlaceholder(false)->required(),
+                    TextInput::make('max_uses')->label('People at most')->numeric()->integer()->minValue(1)->maxValue(InviteLinks::MAX_USES)
+                        ->placeholder('Any number'),
+                ])
+                ->modalSubmitActionLabel('Make the link')
+                ->action(function (array $data): void {
+                    $role = WorkspaceRole::tryFrom((string) $data['role']);
+                    if ($role === null || ! in_array($role, InviteLinks::ROLES, true) || ! $this->can('assignRole', $role)) {
+                        Notification::make()->title('You cannot give that role.')->danger()->send();
+
+                        return;
+                    }
+                    try {
+                        ['url' => $this->newInviteLink] = app(InviteLinks::class)->create($this->workspaceOrFail(), $this->user(), $role, (int) $data['days'],
+                            filled($data['max_uses'] ?? null) ? (int) $data['max_uses'] : null);
+                    } catch (ApiError $e) {
+                        Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+
+                        return;
+                    }
+                    $this->replaceMountedAction('inviteLinkShown');
+                }),
             Action::make('rename')->label('Rename')->icon(Heroicon::OutlinedPencilSquare)->color('gray')
                 ->authorize(fn (): bool => $this->can('manage'))
                 ->fillForm(fn (): array => ['name' => $this->workspace()?->name])
@@ -225,6 +261,41 @@ class WorkspaceSettings extends Page implements HasTable
                     }
                 }),
         ];
+    }
+
+    /** How long an invitation or an invite link stays open (since v1.8 P6.3). */
+    public const DAY_OPTIONS = ['1' => '1 day', '7' => '7 days', '30' => '30 days'];
+
+    /** An invite link just made, until its modal has read it (never kept beyond that). */
+    public ?string $newInviteLink = null;
+
+    /** The new invite link, shown once with a copy box. */
+    public function inviteLinkShownAction(): Action
+    {
+        return Action::make('inviteLinkShown')
+            ->modalHeading('Invite link ready')
+            ->modalDescription('Copy it now: it is shown only once. Send it to the people you want in the team.')
+            ->fillForm(function (): array {
+                $url = $this->newInviteLink;
+                $this->newInviteLink = null;
+
+                return ['url' => $url];
+            })
+            ->schema([TextInput::make('url')->label('Invite link')->readOnly()->copyable(copyMessage: 'Copied')])
+            ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('lg');
+    }
+
+    /** Revokes an invite link: it stops working at once; people who joined with it stay. */
+    public function revokeLink(int $id): void
+    {
+        if (! $this->can('invite')) {
+            return;
+        }
+        $link = WorkspaceInviteLink::query()->where('workspace_id', CurrentWorkspace::id())->find($id);
+        if ($link instanceof WorkspaceInviteLink) {
+            app(InviteLinks::class)->revoke($link, $this->user());
+            Notification::make()->title('Invite link revoked')->success()->send();
+        }
     }
 
     /** Cancels taken back per hour by one account (since v1.5, Phase 1C). */
@@ -283,7 +354,7 @@ class WorkspaceSettings extends Page implements HasTable
         }
     }
 
-    /** @param  array{email: string, name?: string|null, role: string}  $data */
+    /** @param  array{email: string, name?: string|null, role: string, days?: string|int}  $data */
     private function addMember(array $data): void
     {
         // Each one emails the address: 20 an hour, so a workspace cannot be used to send this server's emails to a
@@ -311,7 +382,7 @@ class WorkspaceSettings extends Page implements HasTable
 
             return;
         }
-        $this->attempt(fn () => app(Invitations::class)->invite($this->workspaceOrFail(), $this->user(), $email, $role), "Invitation sent to {$email}");
+        $this->attempt(fn () => app(Invitations::class)->invite($this->workspaceOrFail(), $this->user(), $email, $role, (int) ($data['days'] ?? Invitations::DAYS)), "Invitation sent to {$email}");
     }
 
     private function addWithPassword(string $email, string $name, WorkspaceRole $role): void
@@ -369,9 +440,20 @@ class WorkspaceSettings extends Page implements HasTable
             ->all();
     }
 
+    /** @return list<array<string, mixed>> the invite links still open */
+    private function openLinks(): array
+    {
+        return WorkspaceInviteLink::query()->where('workspace_id', CurrentWorkspace::id())->whereNull('revoked_at')->where('expires_at', '>', now())
+            ->with('creator')->orderBy('expires_at')->limit(100)->get()->filter(fn (WorkspaceInviteLink $l): bool => $l->usable())
+            ->map(fn (WorkspaceInviteLink $l): array => ['id' => $l->id, 'role' => $l->role->label(), 'by' => $l->creator->name ?? '—',
+                'uses' => $l->max_uses === null ? "{$l->uses} joined" : "{$l->uses} of {$l->max_uses} joined", 'expires' => $l->expires_at->diffForHumans()])
+            ->values()->all();
+    }
+
+    /** The seats taken and the plan's (since v1.8 P6.3 for everyone who invites, not the owner alone). */
     private function planLine(): ?string
     {
-        if (! $this->can('manage')) {
+        if (! $this->can('invite')) {
             return null;
         }
         $seats = app(PlanLimits::class)->summary((int) CurrentWorkspace::id())['seats'];
