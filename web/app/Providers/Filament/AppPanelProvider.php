@@ -75,7 +75,12 @@ class AppPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, $shell(fn (): View => view('filament.shell.help')));
         // Since v2.0: the design values (tokens/) and the new frame's script, only while a v2.0 part is on for the
         // person; nothing at all otherwise, so the classic console stays as it was.
-        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): View|string => ConsoleV2::any() ? view('filament.v2.head') : '');
+        // The admin panel takes the same values under ui_v2.admin (admin.css: no layout change).
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): View|string => match (true) {
+            ConsoleV2::any() => view('filament.v2.head', ['sheet' => 'console']),
+            ConsoleV2::admin() => view('filament.v2.head', ['sheet' => 'admin']),
+            default => '',
+        });
         // The page pattern (P4.4): the section above the title and a one-line subtitle, where a page has neither.
         FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_BEFORE, fn (): View|HtmlString|string => self::pageHeader('crumbs'));
         FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_AFTER, fn (): View|HtmlString|string => self::pageHeader('subtitle'));

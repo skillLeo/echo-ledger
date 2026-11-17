@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\User;
+use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
@@ -49,3 +50,15 @@ it('renders the classic admin page exactly as before the re-theme while ui_v2.ad
     expect(file_exists($file))->toBeTrue("no saved copy of {$name}: run with UPDATE_GOLDEN=1 once")
         ->and($html)->toBe(file_get_contents($file), "the classic admin {$name} page changed");
 })->with('classic admin pages');
+
+it('changes only the head under ui_v2.admin: the saved dashboard plus the design values, no layout change', function () {
+    $admin = classicAdmin($this);
+    app(InterfaceFlags::class)->set('ui_v2.admin', false, 0, [], [$admin->id]);
+
+    $html = (string) $this->actingAs($admin, 'web')->get('/admin')->assertOk()->getContent();
+    $head = '/\s*<link rel="stylesheet"[^>]*v2\/admin[^>]*>|<script>\s*\(\(\) => \{\s*const root = document\.documentElement;.*?<\/script>|<style>\s*@font-face \{ font-family: "Noto Nastaliq Urdu".*?<\/style>/s';
+
+    expect($html)->toContain('root.dataset.theme')
+        ->and(trim((string) preg_replace('/\n\s*\n/', "\n", normaliseClassic((string) preg_replace($head, '', $html), (string) session()->token()))))
+        ->toBe(trim((string) preg_replace('/\n\s*\n/', "\n", (string) file_get_contents(__DIR__.'/golden/admin-dashboard.html'))));
+});
