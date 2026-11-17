@@ -1356,6 +1356,16 @@ export interface HelpGuide {
   markdown: string;
 }
 
+/** Why Live Translate cannot start here: this system has no capture of one app's sound for it yet (a Mac), or the plan
+ * leaves it out. */
+export type LiveTranslateUnavailable = "platform" | "plan";
+
+/** `live_translate_status`: whether Live Translate can start on this computer, and why not. */
+export interface LiveTranslateStatus {
+  available: boolean;
+  reason: LiveTranslateUnavailable | null;
+}
+
 /** What a message to support attaches when the person asks for the device report (`last_device_report`): the last
  * report this computer sent for this account with Send to my admin, and when the server took it; null when none yet. */
 export interface LastDeviceReport {
@@ -1672,6 +1682,8 @@ export const api = {
   // Live Translate (v1.3, lib/translate.ts holds its types).
   translateApps: () => invoke<import("./translate").TranslateApp[]>("translate_apps"),
   translateStatus: () => invoke<import("./translate").TranslateFeed | null>("translate_status"),
+  /** Whether Live Translate can start here, and why not, so the page shows it disabled with the reason. */
+  liveTranslateStatus: () => invoke<LiveTranslateStatus>("live_translate_status"),
   translateStart: (request: import("./translate").TranslateStartRequest) => invoke<string[]>("translate_start", { request }),
   translateStop: () => invoke<void>("translate_stop"),
   translateToggleLock: () => invoke<void>("translate_toggle_lock"),

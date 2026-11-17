@@ -3015,6 +3015,12 @@ pub fn translate_apps() -> Vec<crate::translate::TranslateApp> {
     crate::translate::apps()
 }
 
+/// Whether Live Translate can start on this computer, and why not: `platform` (a Mac, for now) or `plan`.
+#[tauri::command]
+pub fn live_translate_status(state: State<'_, AppState>) -> crate::translate::Availability {
+    crate::translate::availability(crate::translate::PLATFORM_SUPPORTED, state.plan_info().live_translate)
+}
+
 /// What Live Translate shows now (null when it is off).
 #[tauri::command]
 pub fn translate_status() -> Option<crate::translate::Feed> {

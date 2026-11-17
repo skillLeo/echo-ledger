@@ -91,6 +91,39 @@ fn running() -> &'static Mutex<Option<Running>> {
     R.get_or_init(|| Mutex::new(None))
 }
 
+/// Why Live Translate cannot start on this computer now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Unavailable {
+    /// This system has no capture of one app's sound for it yet (a Mac).
+    Platform,
+    /// The workspace's plan leaves Live Translate out.
+    Plan,
+}
+
+/// Whether Live Translate can start here, and why not (`live_translate_status`): the page shows it disabled with the
+/// reason instead of failing at Start.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct Availability {
+    pub available: bool,
+    pub reason: Option<Unavailable>,
+}
+
+/// This system can capture one app's sound for Live Translate.
+pub const PLATFORM_SUPPORTED: bool = cfg!(windows);
+
+/// The availability (pure): the system first (no plan brings it to a Mac), then the plan.
+pub fn availability(platform: bool, in_plan: bool) -> Availability {
+    let reason = if !platform {
+        Some(Unavailable::Platform)
+    } else if !in_plan {
+        Some(Unavailable::Plan)
+    } else {
+        None
+    };
+    Availability { available: reason.is_none(), reason }
+}
+
 /// The apps that play sound now (EchoLedger itself left out).
 pub fn apps() -> Vec<TranslateApp> {
     #[cfg(windows)]
@@ -449,6 +482,16 @@ fn tail(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn live_translate_says_why_it_cannot_start() {
+        let none = |platform, plan| serde_json::to_value(availability(platform, plan)).unwrap();
+        assert_eq!(none(true, true), serde_json::json!({"available": true, "reason": null}));
+        assert_eq!(none(true, false), serde_json::json!({"available": false, "reason": "plan"}));
+        assert_eq!(none(false, true), serde_json::json!({"available": false, "reason": "platform"}));
+        assert_eq!(none(false, false), serde_json::json!({"available": false, "reason": "platform"}), "the system first: no plan brings it to a Mac");
+        assert_eq!(PLATFORM_SUPPORTED, cfg!(windows));
+    }
 
     #[test]
     fn app_names_read_like_names() {

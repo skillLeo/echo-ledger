@@ -327,6 +327,12 @@ describe("wire types", () => {
     expect(tsInterfaceKeys("LastDeviceReport")).toEqual(rustFields(rustSourceDeclaring("struct", "LastDeviceReport"), "LastDeviceReport"));
   });
 
+  it("Live Translate's availability has the fields and reasons Rust sends", () => {
+    const source = rustSourceDeclaring("struct", "Availability");
+    expect(sorted(tsInterfaceKeys("LiveTranslateStatus"))).toEqual(sorted(rustFields(source, "Availability", false)));
+    expect(sorted(tsUnionValues("LiveTranslateUnavailable"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "Unavailable"), "Unavailable")));
+  });
+
   it("screen hold reasons match the serde names of the Rust enum", () => {
     expect(sorted(tsUnionValues("ScreenHoldReason"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "HoldReason"), "HoldReason")));
   });

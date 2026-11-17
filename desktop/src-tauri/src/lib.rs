@@ -521,6 +521,7 @@ pub fn run() {
             commands::privacy_move_to_other_display,
             commands::translate_apps,
             commands::translate_status,
+            commands::live_translate_status,
             commands::translate_start,
             commands::translate_stop,
             commands::translate_toggle_lock,
