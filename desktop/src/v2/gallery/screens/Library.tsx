@@ -70,7 +70,7 @@ export function LibraryScreen({ lang, state = "ready", toast = state === "ready"
         </List>
       )}
       <ToastRegion>
-        {showToast && <Toast message={t.toast} actionLabel={t.undo} closeLabel={t.dismiss} duration={0} onAction={() => undefined} onClose={() => setShowToast(false)} />}
+        {showToast && <Toast message={t.toast} actionLabel={t.undo} undo closeLabel={t.dismiss} duration={0} onAction={() => undefined} onClose={() => setShowToast(false)} />}
       </ToastRegion>
     </div>
   );

@@ -119,6 +119,10 @@ class RecordingService : LifecycleService() {
         @Volatile var isRecording = false
             private set
 
+        /** The pill of the recording under way is the v2 one (`ui_v2.recording_controls`, read when it started). */
+        @Volatile var pillV2 = false
+            private set
+
         /** A recording just stopped is still being saved (the missed-recording detector waits for it, since v1.8). */
         @Volatile var isSaving = false
             private set
@@ -1012,6 +1016,12 @@ class RecordingService : LifecycleService() {
         if (BluetoothMic.inUse(this)) session.bluetoothMic = true
         if (session.bluetoothMic) CaptureLog.add(this, "bluetooth mic", BluetoothMic.NOTE)
         isRecording = true
+        // The pill's look is decided here, at the recording's start, and never changes during it (2.0.0-a).
+        pillV2 =
+            com.echoledger.mobile.ui.v2.shell.UiFlags(
+                settings.uiFlags,
+                settings.uiClassic
+            ).isOn(com.echoledger.mobile.ui.v2.shell.UiFlags.RECORDING_CONTROLS)
         pillState.value =
             PillState(mode = if (settings.pillDot) PillState.Mode.DOT else PillState.Mode.PILL, language = Languages.chip(session.language))
         captionFeed.value = CaptionFeed()
@@ -1030,6 +1040,7 @@ class RecordingService : LifecycleService() {
         val current = pill ?: ControlPill(
             this,
             pillState,
+            v2 = pillV2,
             onEvent = { event -> onPillEvent(event) },
             onMoved = { edge, y -> lifecycleScope.launch { graph.settings.update { it.copy(pillEdge = edge, pillY = y) } } },
             edge = settings.pillEdge,
@@ -1462,7 +1473,13 @@ class RecordingService : LifecycleService() {
                     Notifications.noAudio(this, CaptureProblems.recent(this))
                 } else if (stored != null && skip == null) {
                     if (isCall && !held) {
-                        PostCallPrompt.show(this, stored, afterCall, themeMode)
+                        PostCallPrompt.show(
+                            this,
+                            stored,
+                            afterCall,
+                            themeMode,
+                            com.echoledger.mobile.ui.v2.shell.UiFlags(settings.uiFlags, settings.uiClassic)
+                        )
                         oneSided?.takeUnless { phoneAppCovers }?.let { Notifications.onlyYourVoice(this, it) }
                     } else if (!isCall) {
                         UploadWorker.enqueue(this, stored.id)

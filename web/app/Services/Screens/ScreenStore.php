@@ -12,8 +12,11 @@ use App\Models\Screen;
 use App\Services\ChunkedUploadService;
 use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\PlanLimits;
+use Closure;
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -32,7 +35,14 @@ class ScreenStore
     /** A recording keeps at most this many screens (`409 too_many_screens`). */
     public const MAX_PER_RECORDING = 400;
 
-    public const THUMB_WIDTH = 480;
+    /** Since v1.8 P4.1, 320 px (480 before: those thumbnails stay as they are). */
+    public const THUMB_WIDTH = 320;
+
+    /** Since v1.8 P4.1: at most this many screens in any hour of a recording, on top of MAX_PER_RECORDING. */
+    public const MAX_PER_HOUR = 120;
+
+    /** A near-duplicate is looked for among the screens this close in time (ScreenSimilarity). */
+    public const NEIGHBOUR_MS = 300_000;
 
     /** Larger pictures are refused before they are decoded (a small file can hold a huge picture). */
     public const MAX_PIXELS = 25_000_000;
@@ -86,7 +96,7 @@ class ScreenStore
         if ($existing instanceof Screen) {
             return [$existing, false];
         }
-        $this->assertRoom($session);
+        $this->assertRoom($session, (int) $meta['at_ms']);
         app(PlanLimits::class)->assertStorage($session->workspace_id, (int) filesize($plainPath), $session->user_id);
 
         $id = (string) Str::ulid();
@@ -97,7 +107,17 @@ class ScreenStore
         $thumbPlain = $this->uploads->tempPath('screen-thumb');
         $written = [];
         try {
-            self::writeThumbnail($plainPath, $thumbPlain);
+            // The decodes (the thumbnail, the comparison) in a decode slot, with room for them.
+            $near = self::decoding(function () use ($plainPath, $thumbPlain, $session, $meta): ?Screen {
+                self::writeThumbnail($plainPath, $thumbPlain);
+
+                // Since v1.8 P4.1: the same screen sent again a moment later (re-compressed, so another sha256) is
+                // the one kept already, as an exact repeat is (ScreenSimilarity, conservative).
+                return $this->nearDuplicate($session, $plainPath, $meta);
+            });
+            if ($near instanceof Screen) {
+                return [$near, false];
+            }
             $storedBytes = $files->encryptInto($plainPath, $imagePath, $id);
             $written[] = $imagePath;
             $storedBytes += $files->encryptInto($thumbPlain, $thumbPath, self::thumbKey($id));
@@ -109,7 +129,7 @@ class ScreenStore
                 if ($twin instanceof Screen) {
                     return [$twin, false];
                 }
-                $this->assertRoom($session);
+                $this->assertRoom($session, (int) $meta['at_ms']);
                 $screen = new Screen([
                     'workspace_id' => $session->workspace_id,
                     'capture_session_id' => $session->id,
@@ -289,14 +309,15 @@ class ScreenStore
         return $id.'/thumb';
     }
 
-    /** The 480 px wide WebP thumbnail (narrower pictures keep their width), made with GD. */
-    public static function writeThumbnail(string $plainPath, string $targetPath): void
+    /** The [$width] (a screen's: 320 px) wide WebP thumbnail (narrower pictures keep their width), made with GD. */
+    public static function writeThumbnail(string $plainPath, string $targetPath, int $width = self::THUMB_WIDTH): void
     {
+        $maxWidth = $width;
         $image = @imagecreatefromstring((string) file_get_contents($plainPath));
         if ($image === false) {
             throw new UnreadablePicture('The picture could not be read.');
         }
-        $width = min(self::THUMB_WIDTH, imagesx($image));
+        $width = min($maxWidth, imagesx($image));
         $height = max(1, (int) round(imagesy($image) * $width / max(1, imagesx($image))));
         // Resampled by hand: imagescale() refuses its bicubic modes on some GD builds.
         $thumb = imagecreatetruecolor($width, $height);
@@ -309,6 +330,86 @@ class ScreenStore
         }
     }
 
+    /** Memory for decoding the largest picture taken (25 MP at 4 bytes a pixel, with room to spare). */
+    public const DECODE_MEMORY = 512 * 1024 * 1024;
+
+    /**
+     * Runs [$work], which decodes pictures, in one of the server's decode slots (echoledger.picture_decodes: 2 by
+     * default, each a cache lock, so the bound holds for every PHP process sharing the cache; a picture takes up to
+     * about 200 MB), with PHP's memory limit raised to DECODE_MEMORY where it is lower. The limit
+     * is put back afterwards, so a queue worker or Octane keeps its own; when the process still holds more than its old
+     * limit (rare: GD frees its pictures), the raised one stays for the rest of the process rather than fail. Throws
+     * `503 server_busy` (Retry-After 5) when no slot frees up in time (20 seconds by default).
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $work
+     * @return T
+     */
+    public static function decoding(Closure $work): mixed
+    {
+        $slot = self::decodeSlot();
+        $previous = self::roomToDecode();
+        try {
+            return $work();
+        } finally {
+            if ($previous !== null && memory_get_usage(true) < self::bytes($previous)) {
+                @ini_set('memory_limit', $previous);
+            }
+            $slot->release();
+        }
+    }
+
+    /** A free decode slot, waiting for one as long as the configuration says. */
+    private static function decodeSlot(): Lock
+    {
+        $slots = max(1, (int) config('echoledger.picture_decodes.slots', 2));
+        $deadline = microtime(true) + (float) config('echoledger.picture_decodes.wait_seconds', 20);
+        do {
+            for ($i = 0; $i < $slots; $i++) {
+                // Held for at most a minute even if the process dies mid-decode.
+                $lock = Cache::lock('pictures:decode:'.$i, 60);
+                if ($lock->get()) {
+                    return $lock;
+                }
+            }
+            if (microtime(true) >= $deadline) {
+                break;
+            }
+            usleep(200_000);
+        } while (true);
+
+        throw new ApiError(503, 'server_busy', 'The server is busy with other pictures. Try again in a moment.', [], ['Retry-After' => '5']);
+    }
+
+    /**
+     * Raises PHP's memory limit to DECODE_MEMORY where it is lower (a 128M default would fail on a 25 MP picture).
+     * Use decoding(), which also puts it back.
+     *
+     * @return string|null the limit before, when it was raised
+     */
+    public static function roomToDecode(): ?string
+    {
+        $limit = trim((string) ini_get('memory_limit'));
+        if ($limit === '' || $limit === '-1' || self::bytes($limit) >= self::DECODE_MEMORY) {
+            return null;
+        }
+        ini_set('memory_limit', (string) self::DECODE_MEMORY);
+
+        return $limit;
+    }
+
+    /** A php.ini size ("128M", "262144K", "2G", "536870912") in bytes. */
+    private static function bytes(string $size): int
+    {
+        return (int) $size * match (strtolower(substr($size, -1))) {
+            'g' => 1024 ** 3,
+            'm' => 1024 ** 2,
+            'k' => 1024,
+            default => 1,
+        };
+    }
+
     private function twin(CaptureSession $session, string $sha): ?Screen
     {
         $screen = Screen::query()->withoutGlobalScope(WorkspaceScope::class)->where('capture_session_id', $session->id)->where('sha256', $sha)->first();
@@ -316,11 +417,52 @@ class ScreenStore
         return $screen instanceof Screen ? $screen : null;
     }
 
-    private function assertRoom(CaptureSession $session): void
+    private function assertRoom(CaptureSession $session, int $atMs): void
     {
-        if (Screen::query()->withoutGlobalScope(WorkspaceScope::class)->where('capture_session_id', $session->id)->count() >= self::MAX_PER_RECORDING) {
+        $screens = fn () => Screen::query()->withoutGlobalScope(WorkspaceScope::class)->where('capture_session_id', $session->id);
+        if ($screens()->count() >= self::MAX_PER_RECORDING) {
             throw new ApiError(409, 'too_many_screens', 'This recording already keeps '.self::MAX_PER_RECORDING.' screens.');
         }
+        // Since v1.8 P4.1: at most 120 in the hour of the recording up to this moment.
+        if ($screens()->where('at_ms', '>', $atMs - 3_600_000)->where('at_ms', '<=', $atMs)->count() >= self::MAX_PER_HOUR) {
+            throw new ApiError(409, 'too_many_screens', 'This recording already keeps '.self::MAX_PER_HOUR.' screens in an hour.');
+        }
+    }
+
+    /**
+     * The screen of [$session] just before or after [$meta]'s moment (within 5 minutes, the same size) that shows the
+     * same picture as the one at [$plainPath], if one does (the pictures themselves, ScreenSimilarity).
+     *
+     * @param  array{at_ms: int, width: int, height: int}  $meta
+     */
+    private function nearDuplicate(CaptureSession $session, string $plainPath, array $meta): ?Screen
+    {
+        $base = fn () => Screen::query()->withoutGlobalScope(WorkspaceScope::class)->where('capture_session_id', $session->id)
+            ->where('width', $meta['width'])->where('height', $meta['height']);
+        $neighbours = array_filter([
+            $base()->where('at_ms', '<=', $meta['at_ms'])->where('at_ms', '>=', $meta['at_ms'] - self::NEIGHBOUR_MS)->orderByDesc('at_ms')->first(),
+            $base()->where('at_ms', '>', $meta['at_ms'])->where('at_ms', '<=', $meta['at_ms'] + self::NEIGHBOUR_MS)->orderBy('at_ms')->first(),
+        ]);
+        if ($neighbours === []) {
+            return null;
+        }
+        // The size it claims, checked against the picture; one out of bounds is kept, never compared.
+        $mine = ScreenSimilarity::signature((string) file_get_contents($plainPath), (int) $meta['width'], (int) $meta['height']);
+        if ($mine === null) {
+            return null;
+        }
+        // One neighbour decoded at a time, each freed before the next.
+        foreach ($neighbours as $neighbour) {
+            $picture = $this->picture($neighbour);
+            $theirs = $picture !== null ? ScreenSimilarity::signature($picture, $neighbour->width, $neighbour->height) : null;
+            unset($picture);
+            if ($theirs !== null && ScreenSimilarity::same($mine, $theirs)) {
+                return $neighbour;
+            }
+            unset($theirs);
+        }
+
+        return null;
     }
 
     /** @param  list<string|null>  $paths */

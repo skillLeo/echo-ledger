@@ -369,19 +369,26 @@ describe('invitations', function () {
             ->and(WorkspaceInvitation::query()->where('email', $guest->email)->firstOrFail()->accepted_at)->toBeNull();
     });
 
-    it('makes the account of a new address with the invitation, and without joining a team that filled up meanwhile', function () {
+    it('makes the account of a new address without joining a team that filled up meanwhile while anyone may sign up, and none by invitation', function () {
         Mail::fake();
-        openedSignUp();
+        openedSignUp(SignUp::ANYONE);
         $owner = Fx::user();
         $ws = Workspace::query()->findOrFail($owner->current_workspace_id);
         app(Invitations::class)->invite($ws, $owner, 'late@example.test', WorkspaceRole::Member);
         $invitation = WorkspaceInvitation::query()->where('email', 'late@example.test')->firstOrFail();
+        app(Invitations::class)->invite($ws, $owner, 'later@example.test', WorkspaceRole::Member);
         Plan::personal()->update(['seats' => 1]);
 
         $user = app(SignUp::class)->create(['name' => 'Late', 'email' => 'late@example.test', 'password' => 'correct-horse-9'], $invitation);
-
         expect($ws->roleOf($user))->toBeNull()
             ->and($user->fresh()->workspaces()->count())->toBe(1);
+
+        // By invitation only (since v1.8 P6.3), the invitation was the account's only way in: no account.
+        openedSignUp(SignUp::INVITED);
+        $later = WorkspaceInvitation::query()->where('email', 'later@example.test')->firstOrFail();
+        expect(fn () => app(SignUp::class)->create(['name' => 'Later', 'email' => 'later@example.test', 'password' => 'correct-horse-9'], $later))
+            ->toThrow(ApiError::class);
+        expect(User::query()->where('email', 'later@example.test')->exists())->toBeFalse();
     });
 
     it('invites from the console with the roles the person may give, and says when no seat is left', function () {

@@ -146,6 +146,17 @@ function abilityRoutes(): array
         'assist: delete a session' => ['DELETE', "/api/assist/sessions/{$id}", 'sessions:write'],
         'assist: what was done with a suggestion' => ['POST', "/api/assist/sessions/{$id}/suggestions/{$id}/action", 'sessions:write'],
         'assist: ask about a session' => ['POST', "/api/assist/sessions/{$id}/ask", 'sessions:write'],
+        // Since v1.8 P6.3: inviting people.
+        'the invitations and links' => ['GET', '/api/workspace/invitations', 'config:read'],
+        'invite by email' => ['POST', '/api/workspace/invitations', 'sessions:write'],
+        'cancel an invitation' => ['DELETE', "/api/workspace/invitations/{$id}", 'sessions:write'],
+        'make an invite link' => ['POST', '/api/workspace/invite-links', 'sessions:write'],
+        'revoke an invite link' => ['DELETE', "/api/workspace/invite-links/{$id}", 'sessions:write'],
+        // Since v1.8 P6.4: help and Contact support.
+        'the guide' => ['GET', '/api/help/guides', 'config:read'],
+        'a guide' => ['GET', "/api/help/guides/{$id}", 'config:read'],
+        'what is new' => ['GET', '/api/help/whats-new', 'config:read'],
+        'write to support' => ['POST', '/api/support/messages', 'sessions:write'],
         'assist: start a session' => ['POST', '/api/assist/sessions', 'stt:token'],
         'assist: refresh its tokens' => ['POST', "/api/assist/sessions/{$id}/token", 'stt:token'],
     ];

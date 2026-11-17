@@ -106,6 +106,61 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
+    fun `the v2 after-call card's Delete goes through the delayed discard`() {
+        overlayAllowed(true)
+        val rec = call(state = "pending_decision")
+        PostCallPrompt.show(
+            app,
+            rec,
+            PostCallPrompt.ASK,
+            "dark",
+            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
+        )
+        assertTrue("the v2 card", DecisionPopup.showingV2)
+
+        // The card in the after-call window itself.
+        compose.onNodeWithText("Delete").performClick()
+
+        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertTrue("nothing deleted by the tap", app.graph.recordings.encryptedFile("call-1").exists())
+        assertEquals("Deleted · Undo on the card", DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
+        assertTrue(DecisionPopup.showingV2)
+        assertEquals(WorkInfo.State.ENQUEUED, discardWork("call-1").single().state)
+    }
+
+    @Test
+    fun `without the flag the after-call chip is the classic one`() {
+        overlayAllowed(true)
+        PostCallPrompt.show(app, call(state = "pending_decision"), PostCallPrompt.ASK, "dark")
+        assertFalse(DecisionPopup.showingV2)
+    }
+
+    @Test
+    fun `a longer Undo time keeps the file that much longer`() {
+        call(state = "pending_decision")
+        val now = System.currentTimeMillis()
+        val discarding = runBlocking { Decisions.discardLater(app, "call-1", nowMs = now, afterMs = 20_000) }!!
+        assertEquals(java.time.Instant.ofEpochMilli(now + 20_000).toString(), discarding.discardAt)
+        assertTrue(discardWork("call-1").single().initialDelayMillis >= 20_000)
+        // The default is unchanged.
+        call("call-2", state = "pending_decision")
+        val usual = runBlocking { Decisions.discardLater(app, "call-2", nowMs = now) }!!
+        assertEquals(java.time.Instant.ofEpochMilli(now + Decisions.DISCARD_AFTER_MS).toString(), usual.discardAt)
+    }
+
+    @Test
+    fun `a call brought back by Undo waits for a decision with its timer running again`() {
+        call(state = "pending_decision")
+        runBlocking { Decisions.discardLater(app, "call-1") }
+        assertTrue(timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+
+        // Undo through the core alone (no chip or notification shows it again).
+        runBlocking { Decisions.undoDiscard(app, "call-1") }
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue("kept after 10 s again", timeoutWork("call-1").any { it.state == WorkInfo.State.ENQUEUED })
+    }
+
+    @Test
     fun `the final delete and an Undo never interleave`() {
         call(state = "pending_decision")
         runBlocking { Decisions.discardLater(app, "call-1") }

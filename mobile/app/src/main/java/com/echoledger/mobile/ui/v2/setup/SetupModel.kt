@@ -4,21 +4,16 @@ import com.echoledger.mobile.R
 import com.echoledger.mobile.core.Readiness
 import com.echoledger.mobile.core.ReadyFacts
 import com.echoledger.mobile.core.ReadyFix
-
-/** How this phone's capture helper was last started: through Shizuku on the phone, or with the computer (ADB). */
-enum class HelperMethod { Shizuku, Computer }
+import com.echoledger.mobile.privilege.HelperMethod
 
 /**
  * What Setup & health looks at: the Ready check's facts (read live on the phone by ReadinessWatch, never cached, so
- * they are right after a restart), two of Android's own switches read live, and how the helper was last started
- * ([method], remembered by [HelperMethodMemory]; null when it never ran here).
+ * they are right after a restart), and two of Android's own switches read live.
  */
-data class SetupFacts(
-    val ready: ReadyFacts,
-    val developerOptions: Boolean,
-    val wirelessDebugging: Boolean,
-    val method: HelperMethod? = null
-) {
+data class SetupFacts(val ready: ReadyFacts, val developerOptions: Boolean, val wirelessDebugging: Boolean) {
+    /** How the helper was last started on this phone, as the Ready check has it; null when it never ran here. */
+    val method: HelperMethod? = Readiness.evaluate(ready).helperMethod
+
     val callsPossible: Boolean get() = ready.capabilities.helperInBuild && ready.capabilities.callCaptureSupportedByOs
 
     /** The helper is running and current: nothing to set up. */

@@ -32,6 +32,7 @@ export {
   LucideClockIcon as ClockIcon,
   LucideLogOutIcon as SignOutIcon,
   LucideCalendarIcon as CalendarIcon,
+  LucideCopyIcon as CopyIcon,
   LucideSmartphoneIcon as DeviceIcon,
 } from "../../components/Icons";
 export {

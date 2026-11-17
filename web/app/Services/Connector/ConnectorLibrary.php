@@ -173,7 +173,7 @@ final class ConnectorLibrary
         }
         $out[] = "Transcript\n".($body === [] ? '(no words were recognised)' : implode("\n", $body));
         if ($screens->isNotEmpty()) {
-            $out[] = self::screensSection($screens);
+            $out[] = self::screensSection($screens, $lines);
         }
 
         return implode("\n\n", $out);
@@ -334,25 +334,29 @@ final class ConnectorLibrary
         return implode("\n", $block);
     }
 
-    /** `[Screen 7 at 14:32: The client's invoice page]`, as Copy for AI writes it. */
+    /** `[Screen 7 at 14:32 — The client's invoice page]`, as Copy for AI and the meeting folder write it. */
     private static function screenLine(Screen $screen, int $number): string
     {
-        return '['.MeetingPack::label($number, $screen->at_ms).($screen->description !== null ? ': '.$screen->description : '').']';
+        return '['.MeetingPack::label($number, $screen->at_ms, $screen->description).']';
     }
 
     /**
      * Each screen's text and its signed picture link (30 minutes, ScreenController::LINK_MINUTES).
      *
      * @param  Collection<int, Screen>  $screens  in time order
+     * @param  list<array{speaker: string, start_ms: int, end_ms: int, text: string}>  $lines
      */
-    private static function screensSection(Collection $screens): string
+    private static function screensSection(Collection $screens, array $lines): string
     {
         $out = ['Screens (each picture link works for '.ScreenController::LINK_MINUTES.' minutes)'];
         foreach ($screens as $i => $screen) {
-            $payload = ScreenController::payload($screen, $i + 1);
+            // The same name, description and what was said as the meeting folder (v1.8 P4.4, ScreenAssets).
+            $payload = ScreenController::payload($screen, $i + 1, $screens->count(), $lines);
             $text = trim((string) preg_replace('/[ \t]+/u', ' ', (string) $screen->ocr_text));
-            $out[] = MeetingPack::label($i + 1, $screen->at_ms)."\n"
+            $out[] = MeetingPack::label($i + 1, $screen->at_ms, $screen->description)."\n"
+                .'File: '.$payload['file_name']."\n"
                 .($text !== '' ? "Text: {$text}\n" : '')
+                .($payload['said'] !== null ? 'Said around it: '.str_replace("\n", ' / ', $payload['said'])."\n" : '')
                 .'Picture: '.$payload['image_url'];
         }
 

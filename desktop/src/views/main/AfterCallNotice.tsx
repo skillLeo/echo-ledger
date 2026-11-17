@@ -14,7 +14,7 @@ export function AfterCallNotice({ text, notify }: { text: string | null | undefi
     setBusy(true);
     try {
       await api.afterCallNoticeAnswer(alwaysTranscribe);
-      if (alwaysTranscribe) notify("Every call is now transcribed", false, NO_TARGET); // said where it was answered: nothing to open
+      if (alwaysTranscribe) notify("Every call is now transcribed", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {

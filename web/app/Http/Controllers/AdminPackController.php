@@ -28,7 +28,8 @@ final class AdminPackController extends Controller
         $view = is_string($view) && in_array($view, MeetingPack::VIEWS, true) ? $view : null;
         $finished = $model->transcripts()->where('kind', TranscriptKind::Final->value)->where('status', TranscriptStatus::Completed->value)->exists();
         abort_unless($finished, 404);
-        $file = $pack->build($model, $format, $view, request()->boolean('include_audio'), printBar: $format === 'html');
+        $part = request()->query('part');
+        $file = $pack->build($model, $format, $view, request()->boolean('include_audio'), printBar: $format === 'html', part: is_numeric($part) ? max(1, (int) $part) : 1);
         app(AuditLog::class)->record('transcript_exported', (int) auth()->id(), $model, "Meeting pack exported as {$format}", ['format' => 'pack_'.$format]);
 
         return PackController::send($file, inline: $format === 'html');

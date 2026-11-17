@@ -76,9 +76,11 @@ fun <T> EchoSelect(
                     .padding(start = EchoTokens.Space.s12, end = EchoTokens.Space.s8),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Options are often names (a project, a person): their own face and direction, lined up at the start.
                 Text(
                     optionLabel(selected),
-                    style = type.body,
+                    style = type.content(optionLabel(selected), type.body),
+                    textAlign = startAlign(),
                     color = if (enabled) c.textPrimary else c.textDisabled,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -97,7 +99,7 @@ fun <T> EchoSelect(
             options.forEach { option ->
                 val isSelected = option == selected
                 DropdownMenuItem(
-                    text = { Text(optionLabel(option), style = type.body) },
+                    text = { Text(optionLabel(option), style = type.content(optionLabel(option), type.body)) },
                     onClick = {
                         open = false
                         onSelect(option)

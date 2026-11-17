@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.largeText
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
@@ -94,6 +95,7 @@ fun EchoSegmented(options: List<String>, selectedIndex: Int, onSelect: (Int) -> 
         color = c.bgSurface,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderStrong)
     ) {
+        val largeText = largeText()
         Row(Modifier.height(IntrinsicSize.Min).selectableGroup()) {
             options.forEachIndexed { index, label ->
                 val selected = index == selectedIndex
@@ -109,7 +111,9 @@ fun EchoSegmented(options: List<String>, selectedIndex: Int, onSelect: (Int) -> 
                     horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (selected) Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
+                    // At large text sizes a third of the width can't hold the check and a word, so the tint alone marks
+                    // the choice there (screen readers still hear "selected").
+                    if (selected && !largeText) Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
                     Text(
                         label,
                         style = EchoV2.type.label,

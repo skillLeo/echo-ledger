@@ -23,7 +23,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.core.Speakers
@@ -50,9 +49,9 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.V2Text
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.screenLocale
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.ZonedDateTime
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 /** The transcript as the page shows it: loading, none yet, failed (with the server's plain sentence), or the lines. */
@@ -161,7 +160,7 @@ fun V2RecordingContent(
 ) {
     val c = EchoV2.colors
     val text = v2Text
-    val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    val locale = screenLocale()
     val row = remember(item, text, locale) { LibraryModel.row(item, ZonedDateTime.now(), text, locale) }
     var tab by remember { mutableIntStateOf(0) }
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {

@@ -21,6 +21,7 @@ use App\Services\Workspaces\Workspaces;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
@@ -164,6 +165,16 @@ describe('sending a receipt', function () {
         expect(getimagesizefromstring((string) $thumb->getContent())[0])->toBe(480);
         $this->api($this->token)->getJson("/api/upgrade-requests/{$this->id}/proofs/{$proof['id']}?variant=original")->assertNotFound()->assertJsonPath('code', 'proof_not_found');
         $this->api($this->token)->getJson('/api/upgrade-requests/latest')->assertJsonPath('payment.proofs.0.id', $proof['id']);
+    });
+
+    it('decodes a receipt in a decode slot, as screens are: none free answers 503 server_busy and keeps nothing', function () {
+        config(['echoledger.picture_decodes.wait_seconds' => 0.2]);
+        $held = [Cache::lock('pictures:decode:0', 60), Cache::lock('pictures:decode:1', 60)];
+        expect($held[0]->get() && $held[1]->get())->toBeTrue();
+        sendReceipt($this, receiptJpegWithExif(400, 200, 1))->assertStatus(503)->assertJsonPath('code', 'server_busy');
+        expect(UpgradeRequestProof::query()->count())->toBe(0)->and(Storage::disk('recordings')->allFiles('payment-proofs'))->toBe([]);
+        $held[0]->release();
+        sendReceipt($this, receiptJpegWithExif(400, 200, 1))->assertCreated();
     });
 
     it('turns a photo upright and leaves its EXIF, location and comments behind', function () {
@@ -508,8 +519,8 @@ it('runs its migration up, down and up again, with a reference for every request
     // Since v1.8.1 the Share Check results' migration comes after it, since v1.8 (0.2) the missed recordings', then the
     // v1.8.1 audit's index on the Share Check results, the plain words in the Pro plan's description (D-129), in the
     // "Transcription failed" notifications (D-131) and in the AI's stored reasons, then 2.0.0-a's interface flags,
-    // Live Assist's tables, its reports' columns, its settings and its claims.
-    $run('migrate:rollback', ['--step' => 12]);
+    // Live Assist's tables, its reports' columns, its settings and its claims, and the invite links.
+    $run('migrate:rollback', ['--step' => 13]);
     expect($schema->hasTable('upgrade_request_proofs'))->toBeFalse()->and($schema->hasColumn('plans', 'price_pkr'))->toBeFalse();
     foreach ($columns as $column) {
         expect($schema->hasColumn('upgrade_requests', $column))->toBeFalse($column);
@@ -534,7 +545,7 @@ it('runs its migration up, down and up again, with a reference for every request
         ->and($schema->hasColumns('upgrade_request_proofs', ['id', 'upgrade_request_id', 'user_id', 'kind', 'mime', 'name', 'bytes', 'width', 'height', 'sha256', 'path', 'thumb_path', 'locked_at', 'erased_at']))->toBeTrue();
     // down() takes the prices with their column and leaves the requests as they were; up() seeds them again.
     $db->table('plans')->where('key', 'pro')->update(['price_pkr' => 3500]);
-    $run('migrate:rollback', ['--step' => 12]);
+    $run('migrate:rollback', ['--step' => 13]);
     expect($db->table('upgrade_requests')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all())->toBe($before);
     $run('migrate');
     expect((int) $db->table('plans')->where('key', 'pro')->value('price_pkr'))->toBe(2999);

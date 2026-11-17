@@ -1,3 +1,4 @@
+import { NO_TARGET } from "../../lib/notice";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AfterCallNotice } from "./AfterCallNotice";

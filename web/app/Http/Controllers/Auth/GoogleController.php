@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Auth;
 
+use App\Exceptions\ApiError;
 use App\Filament\Auth\EditProfile;
+use App\Filament\Pages\GetTheApps;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\Accounts\GoogleSignIn;
+use App\Services\Accounts\InviteLinks;
+use App\Services\Accounts\JoinSession;
 use App\Services\Accounts\SignInGuard;
 use App\Services\Accounts\SignUp;
 use App\Services\Accounts\TwoFactorCodes;
@@ -106,10 +110,27 @@ final class GoogleController extends Controller
             return $this->pending($request, $existing, $profile, link: true);
         }
         $signUp = app(SignUp::class);
+        // The invite link the visitor opened lets the sign-up through while it is by invitation and joins its team, as
+        // the email code's sign-up does (SignUp::withLink).
+        $link = app(InviteLinks::class)->find(JoinSession::token());
+        SignUp::withLink($link);
         if (! $signUp->allows($profile['email'])) {
             return $this->message('No account uses this address', 'Sign-up on this server is closed or by invitation. Ask the person who runs it to add you.');
         }
-        $user = $signUp->create(['name' => $profile['name'], 'email' => $profile['email'], 'password' => Str::password(40), 'google_id' => $profile['id']], emailVerified: true, via: 'google');
+        try {
+            $user = $signUp->create(['name' => $profile['name'], 'email' => $profile['email'], 'password' => Str::password(40), 'google_id' => $profile['id']], emailVerified: true, via: 'google');
+        } catch (ApiError $e) {
+            // By invitation, a link that closed or a team that filled meanwhile: no account, and why.
+            return $this->message(match ($e->apiCode()) {
+                'link_closed' => 'This invite link is no longer open',
+                'invitation_closed' => 'This invitation is no longer valid',
+                default => 'This team is full',
+            }, $e->getMessage());
+        }
+        if ($link !== null) {
+            // Then the apps, as after the email code's sign-up (they joined already).
+            $request->session()->put('url.intended', GetTheApps::getUrl(panel: 'app'));
+        }
 
         return $this->signIn($request, $user);
     }

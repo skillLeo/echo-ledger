@@ -2,7 +2,7 @@ package com.echoledger.mobile.ui.v2
 
 import com.echoledger.mobile.core.ReadyFacts
 import com.echoledger.mobile.privilege.Capabilities
-import com.echoledger.mobile.ui.v2.setup.HelperMethod
+import com.echoledger.mobile.privilege.HelperMethod
 import com.echoledger.mobile.ui.v2.setup.SetupFacts
 
 /** The phone's state at the moments that matter for Setup & health (a Galaxy S25 on Android 15). */
@@ -36,11 +36,11 @@ object SetupHealthFixtures {
             signedIn = true,
             freeStorageMb = freeMb,
             batteryExempt = battery,
-            callerNamesAllowed = callerNames
+            callerNamesAllowed = callerNames,
+            helperMethod = method
         ),
         developerOptions = developer,
-        wirelessDebugging = wireless,
-        method = method
+        wirelessDebugging = wireless
     )
 
     val allReady = facts()
