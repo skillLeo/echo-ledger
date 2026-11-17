@@ -107,6 +107,7 @@ export default function AssistApp() {
   if (concealed || (!fixture && readFor === null) || !on || (state.ended && !state.offer)) return <div className="el-root el-embedded el-assist-root" />;
   return (
     <div className="el-root el-embedded el-assist-root">
+      <h1 className="el-visually-hidden">Live Assist</h1>
       <AssistCard state={state} hint={local.hint} muted={local.mutedUntil > now} badge={<PrivacyBadge compact />}
         actions={{
           onSend: (kind: SendKind) => run(() => assist.send(kind)),

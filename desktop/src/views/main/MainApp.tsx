@@ -50,6 +50,7 @@ import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { anyV2, useUiFlags } from "../../v2/flags";
 import { LiveTranslateCard } from "./LiveTranslateCard";
 import { shellStatus as shellStatusOf } from "../../v2/shell/status";
+import { helpV2Reachable } from "../../v2/help/route";
 
 // The redesigned screens (docs/API.md "Interface flags"): loaded only when the server turns their flag on.
 const v2 = () => import("../../v2/app");
@@ -59,6 +60,7 @@ const StorageCardV2 = lazy(() => v2().then((m) => ({ default: m.StorageCard })))
 const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
+const HelpV2 = lazy(() => v2().then((m) => ({ default: m.HelpV2 })));
 const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
 const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
 const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
@@ -741,18 +743,21 @@ export default function MainApp() {
           aside={<LibraryColumn places={places} folder={libraryFolder} view={libraryView} onOpen={openPlace} projects={projects} expanded={expanded}
             onToggle={toggleExpanded} onProject={(id) => openProject(id)} />} />
       )}
-      {tab === "projects" && ui.flags["ui_v2.ask"] && projectId && (projects ?? []).some((p) => p.id === projectId) && (
-        <Suspense fallback={null}>
-          <div className="el-root el-embedded">
-            <WorkspaceV2 key={projectId} project={(projects ?? []).find((p) => p.id === projectId)!} onBack={() => openProject(null)}
-              onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
-          </div>
-        </Suspense>
-      )}
-      {tab === "projects" && !(ui.flags["ui_v2.ask"] && projectId && (projects ?? []).some((p) => p.id === projectId)) && (
+      {tab === "projects" && (
         <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
           projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
           requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
+          renderPage={ui.flags["ui_v2.ask"] ? (ctx) => (
+            <Suspense fallback={null}>
+              <div className="el-root el-embedded">
+                <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name, ai_notes: ctx.project.ai_notes }} parent={ctx.parent} folders={ctx.folders}
+                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
+                  onMoveRecordings={ctx.onMoveRecordings} onProjectChanged={ctx.onProjectChanged} notify={notify}
+                  onBack={() => openProject(ctx.parent?.id ?? null)} onOpenProject={(id) => openProject(id)}
+                  onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
+              </div>
+            </Suspense>
+          ) : null}
           aside={<ProjectsColumn projects={projects} selectedId={projectId} expanded={expanded} onToggle={toggleExpanded} onOpen={openProject} onNew={newProject} />} />
       )}
       {tab === "record" && ui.flags["ui_v2.home"] && (
@@ -794,7 +799,9 @@ export default function MainApp() {
               footer={<ClassicSwitchV2 state={ui} onState={setUi} />}
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
                 ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
-                : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
+                : section.id === "help" && helpV2Reachable(ui.flags)
+                  ? <HelpV2 platform={status.platform} onBack={onHome} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })} />
+                  : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>
       )}

@@ -1,0 +1,398 @@
+{
+ "axe": [
+  {
+   "name": "g-library",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-library",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-library-ur",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-library-ur",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-recording",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-recording",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-settings",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-settings",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-library-loading",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-library-loading",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-library-error",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-library-error",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-recording-empty",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-recording-empty",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-assist",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "g-assist",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-library",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-library",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-recording",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-recording",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-trash",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-trash",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-home",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-home",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-live",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-live",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-prep",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-prep",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-ask",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-ask",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-project",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-project",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-project-memory",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-project-memory",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-settings",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-settings",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-setup",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-setup",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-controls",
+   "theme": "light",
+   "violations": [],
+   "unnamed": []
+  },
+  {
+   "name": "a-controls",
+   "theme": "dark",
+   "violations": [],
+   "unnamed": []
+  }
+ ],
+ "keys": [
+  {
+   "name": "record",
+   "ok": true,
+   "log": [
+    "1 × Tab → \"Home\", Enter",
+    "6 × Tab → \"Record now\", Enter",
+    "record_now sent"
+   ],
+   "calls": [
+    "lock_touch",
+    "plugin:event|unlisten",
+    "main_view_set",
+    "ready_last",
+    "plugin:event|listen",
+    "plugin:event|listen",
+    "permissions_status",
+    "library_list",
+    "skipped_list",
+    "ready_last",
+    "plugin:event|listen",
+    "plugin:event|listen",
+    "permissions_status",
+    "library_list",
+    "skipped_list",
+    "plugin:event|unlisten",
+    "plugin:event|unlisten",
+    "record_now",
+    "app_status",
+    "app_status"
+   ]
+  },
+  {
+   "name": "find",
+   "ok": true,
+   "log": [
+    "9 × Tab → \"Search recordings\"",
+    "6 × Tab → \"Contract review\", Enter",
+    "search, the row, Enter → \"Contract review\""
+   ],
+   "calls": [
+    "lock_touch",
+    "app_status",
+    "session_detail",
+    "transcript_detail",
+    "session_detail",
+    "transcript_detail",
+    "app_status"
+   ]
+  },
+  {
+   "name": "transcribe",
+   "ok": true,
+   "log": [
+    "12 × Tab → \"Untranscribed 3\", Enter",
+    "3 × Tab → \"Call with +92 300 1234567\", Enter",
+    "opened \"Call with +92 300 1234567\"",
+    "9 × Tab → \"Transcribe\", Enter",
+    "session_retranscribe sent"
+   ],
+   "calls": [
+    "lock_touch",
+    "session_detail",
+    "transcript_detail",
+    "session_detail",
+    "transcript_detail",
+    "app_status",
+    "session_retranscribe"
+   ]
+  },
+  {
+   "name": "delete-undo",
+   "ok": true,
+   "log": [
+    "14 × Tab → \"Weekly sync with Northwind\", Enter",
+    "4 × Tab → \"Delete\", Enter",
+    "8 × Tab → \"Undo\", Enter",
+    "focus back on \"Weekly sync with Northwind\"",
+    "delete_session, then Undo → session_restore"
+   ],
+   "calls": [
+    "lock_touch",
+    "session_detail",
+    "transcript_detail",
+    "session_detail",
+    "transcript_detail",
+    "app_status",
+    "delete_session",
+    "session_restore",
+    "library_list",
+    "app_status"
+   ]
+  },
+  {
+   "name": "undo-keys",
+   "ok": true,
+   "log": [
+    "14 × Tab → \"Weekly sync with Northwind\", Enter",
+    "4 × Tab → \"Delete\", Enter",
+    "F6 from \"Voice note\" → \"Undo\"",
+    "F6 again → back on \"Voice note\"",
+    "Cmd/Ctrl+Z → session_restore; focus stays on \"Voice note\""
+   ],
+   "calls": [
+    "lock_touch",
+    "session_detail",
+    "transcript_detail",
+    "session_detail",
+    "transcript_detail",
+    "app_status",
+    "delete_session",
+    "app_status",
+    "session_restore",
+    "library_list"
+   ]
+  },
+  {
+   "name": "setting",
+   "ok": true,
+   "log": [
+    "7 × Tab → \"Search settings\"",
+    "2 × Tab → \"Live captions while recording\", Enter",
+    "1 × Tab → \"Live captions while recording\", Space",
+    "update_settings sent"
+   ],
+   "calls": [
+    "lock_touch",
+    "app_status",
+    "account_get",
+    "plugin:app|version",
+    "get_settings",
+    "plugin:event|listen",
+    "security_overview",
+    "storage_info",
+    "input_devices",
+    "list_clients",
+    "account_get",
+    "plugin:app|version",
+    "get_settings",
+    "plugin:event|listen",
+    "security_overview",
+    "storage_info",
+    "input_devices",
+    "list_clients",
+    "plugin:event|unlisten",
+    "update_settings",
+    "app_status",
+    "app_status"
+   ]
+  }
+ ],
+ "classic": [
+  "light: color-contrast (serious): .partial > .spk-2.who"
+ ]
+}

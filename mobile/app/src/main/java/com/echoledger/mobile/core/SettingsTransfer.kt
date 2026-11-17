@@ -67,6 +67,7 @@ object SettingsTransfer {
         "uiFlags",
         "uiClassic",
         "trashKeepHours",
+        "relayPins",
         "ownKeySavedAt",
         "phoneCalls",
         // The Phone app's own recordings belong to this phone (since v1.8).

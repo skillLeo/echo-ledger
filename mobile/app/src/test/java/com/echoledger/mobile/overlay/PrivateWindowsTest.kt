@@ -101,10 +101,31 @@ class PrivateWindowsTest : AppTest() {
     /** Every kind of floating window that is on screen while nothing is hidden (the grey dot shows only while hidden). */
     private val usual = FloatingWindow.entries - FloatingWindow.LIVE_TRANSLATE_DOT
 
+    /** This phone's Live Assist card, on a session that says nothing. */
+    private fun assistCard() {
+        val quiet = object : com.echoledger.mobile.ui.v2.assist.AssistAdapter {
+            override val messages = kotlinx.coroutines.flow.emptyFlow<com.echoledger.mobile.ui.v2.assist.AssistMessage>()
+            override val meetingType: com.echoledger.mobile.ui.v2.assist.MeetingType? = null
+
+            override suspend fun snapshot() = emptyList<com.echoledger.mobile.ui.v2.assist.AssistMessage>()
+
+            override fun send(kind: com.echoledger.mobile.ui.v2.assist.SendKind) = Unit
+
+            override fun feedback(suggestionId: String, used: Boolean) = Unit
+
+            override fun reportShown(suggestionId: String, renderMs: Long) = Unit
+
+            override fun end() = Unit
+        }
+        assertTrue(AssistCardWindow.show(app, quiet))
+        closers += { AssistCardWindow.hide() }
+    }
+
     private fun everyWindow(): TranslateOverlay {
         pill()
         captions()
         afterCallCard()
+        assistCard()
         return liveTranslate()
     }
 

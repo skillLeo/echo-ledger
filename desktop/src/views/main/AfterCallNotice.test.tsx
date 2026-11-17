@@ -1,3 +1,4 @@
+import { NO_TARGET } from "../../lib/notice";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { AfterCallNotice } from "./AfterCallNotice";
@@ -23,7 +24,7 @@ describe("After a call notice", () => {
     fireEvent.click(screen.getByRole("button", { name: "Always transcribe" }));
     await flushAsync();
     expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }]);
-    expect(notify).toHaveBeenCalledWith("Every call is now transcribed", false);
+    expect(notify).toHaveBeenCalledWith("Every call is now transcribed", false, NO_TARGET);
   });
 
   it("closing it keeps Ask me and is the answer too", async () => {

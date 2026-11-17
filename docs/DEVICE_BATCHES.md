@@ -33,7 +33,8 @@ look, or say what to change.
 Trash 48 hours or 30 days; the Live Assist plan numbers; who deploys the website (the lead with backup and rollback).
 
 **4. Mac, if time is left, about 15 minutes**
-DC-03 on the Mac, and the MAC-32 Dock and quit check with the 1.8.1 Mac build (the first self-signed build asks once
+DC-03 on the Mac, and the MAC-32 Dock and quit check with the 1.8.1 Mac build. Later, in a v2 Mac build: Cmd+Z on an
+Undo toast undoes the delete, and Edit › Undo still works in text fields (D-150) (the first self-signed build asks once
 for the microphone, system audio and Screen Recording; allow them, then they stay).
 
 ## Phone (S25, Android 17) — v1.8.1 S5 retest + v1.8 0.3, about 35 minutes
