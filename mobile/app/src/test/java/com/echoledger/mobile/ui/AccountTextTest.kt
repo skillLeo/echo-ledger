@@ -26,8 +26,8 @@ class AccountTextTest {
     @Test
     fun `the workspace and security lines`() {
         val account = AccountDto(
-            name = "Hassam",
-            email = "h@example.com",
+            name = "Ayesha",
+            email = "a@example.com",
             emailVerified = false,
             twoFactor = true,
             google = true,
