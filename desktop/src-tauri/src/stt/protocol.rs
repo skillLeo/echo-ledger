@@ -91,3 +91,6 @@ pub fn elevenlabs_audio_message(pcm: &[u8], commit: bool) -> String {
 }
 
 pub const ASSEMBLYAI_TERMINATE: &str = r#"{"type":"Terminate"}"#;
+
+/// AssemblyAI v3: ends the current turn now, so its text comes back as a final (docs/research/stt-assemblyai.md 2.6).
+pub const ASSEMBLYAI_FORCE_ENDPOINT: &str = r#"{"type":"ForceEndpoint"}"#;

@@ -137,6 +137,25 @@ pub fn build_http_client(base_url: &str, pins: &[String]) -> Result<reqwest::Cli
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(120))
         .user_agent(concat!("EchoLedger-Desktop/", env!("CARGO_PKG_VERSION")));
+    finish_http_client(builder, base_url, pins)
+}
+
+/// How long a Live Assist stream may be silent (the server sends keep-alives while it holds a question).
+pub const LIVE_IDLE: std::time::Duration = std::time::Duration::from_secs(45);
+
+/// The client for Live Assist's HTTP-mode streams (contract 1.9.0-q): the same pinning, but no total timeout (a
+/// stream lasts up to 60 s and ends on its own; only silence for [`LIVE_IDLE`] cuts it) and no redirects, so what a
+/// meeting said is never re-sent to an address the server did not name.
+pub fn build_live_client(base_url: &str, pins: &[String]) -> Result<reqwest::Client, String> {
+    let builder = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .read_timeout(LIVE_IDLE)
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(concat!("EchoLedger-Desktop/", env!("CARGO_PKG_VERSION")));
+    finish_http_client(builder, base_url, pins)
+}
+
+fn finish_http_client(builder: reqwest::ClientBuilder, base_url: &str, pins: &[String]) -> Result<reqwest::Client, String> {
     let builder = if is_local_dev(base_url) {
         builder
     } else {

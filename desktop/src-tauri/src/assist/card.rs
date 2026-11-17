@@ -36,6 +36,8 @@ pub fn error_sentence(code: &str, retry: bool) -> &'static str {
         "bad_message" => "Live Assist couldn't read one request. Try that again.",
         "token_refresh_rejected" | "token_expired" | "token_missing" | "token_invalid" => "Live Assist is renewing its access.",
         "wrong_session" => "This Live Assist session belongs to another account.",
+        "app_update_required" => "Live Assist needs the latest version of the app.",
+        "relay_unavailable" | "unavailable" => "Live Assist can't connect right now. Try again in a few minutes.",
         _ => "Live Assist couldn't make this suggestion. Try again.",
     }
 }

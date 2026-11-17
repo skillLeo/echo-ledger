@@ -28,7 +28,7 @@ fn client(server: &MockServer) -> ApiClient {
 }
 
 fn request() -> AssistStartRequest {
-    AssistStartRequest { prep_id: Some("01JBPREP".into()), mode: Some("balanced".into()), platform: "desktop".into(), recording_session_id: Some("01JBREC".into()), practice: false }
+    AssistStartRequest { prep_id: Some("01JBPREP".into()), mode: Some("balanced".into()), platform: "desktop".into(), recording_session_id: Some("01JBREC".into()), practice: false, transports: AssistStartRequest::transports() }
 }
 
 #[tokio::test]
@@ -44,17 +44,19 @@ async fn a_session_starts_refreshes_its_tokens_and_ends() {
     let sent = server.requests_to("POST", "/api/assist/sessions");
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&sent[0].body).unwrap(),
-        json!({"prep_id": "01JBPREP", "mode": "balanced", "platform": "desktop", "recording_session_id": "01JBREC", "practice": false})
+        json!({"prep_id": "01JBPREP", "mode": "balanced", "platform": "desktop", "recording_session_id": "01JBREC", "practice": false, "transports": ["relay", "http"]})
     );
     assert_eq!(
         AssistStarted::from_answer(&answer),
         AssistStarted { session_id: ID.into(), auto_saved: true, mode: "balanced".into(), allowed_modes: vec!["fast".into(), "balanced".into()], seconds_left: Some(31_200), practice: false }
     );
-    let grant = session::grant(&answer.relay, &["sha256/AAAA".into()]);
+    assert!(!session::uses_http(&answer), "a server before 1.9.0-q answers no transport: the relay");
+    let relay = answer.relay.as_ref().unwrap();
+    let grant = session::grant(relay, &["sha256/AAAA".into()]);
     assert_eq!((grant.url.as_str(), grant.token.as_str(), grant.pins.len()), ("wss://relay.example/v1/assist", "relay-token-1", 1));
     assert!(!format!("{:?}", answer.relay).contains("relay-token-1"), "the token is never printed");
     let refreshed = api.assist_token(ID).await.unwrap();
-    assert_eq!(refreshed.relay.token, "relay-token-2");
+    assert_eq!(refreshed.relay.unwrap().token, "relay-token-2");
     // The connection's refresh hands the plan on: the card's time left counts from there.
     let heard: Arc<std::sync::Mutex<Vec<Option<u64>>>> = Arc::default();
     let log = heard.clone();
