@@ -16,6 +16,12 @@
     <string name="v2_calls_und_24">24 گھنٹے بعد</string>
     <string name="v2_calls_und_72">3 دن بعد</string>
     <string name="v2_calls_auto_title">خود ریکارڈ ہونے والی ایپس</string>
+    <string name="v2_calls_autorecord">کالز خود ریکارڈ کریں</string>
+    <string name="v2_calls_autorecord_not_in_build">کالز ریکارڈ کرنا EchoLedger کے ویب سائٹ والے ورژن میں ہے: گوگل پلے اس کے لیے ضروری کیپچر ہیلپر کی اجازت نہیں دیتا۔</string>
+    <string name="v2_calls_autorecord_needs_android">اینڈرائیڈ 12 یا اس سے نیا چاہیے</string>
+    <string name="v2_calls_autorecord_setup_first">پہلے سیٹ اپ میں کال کیپچر آن کریں</string>
+    <string name="v2_calls_autorecord_ask">ہر کال کے بعد کارڈ پوچھتا ہے؛ 10 سیکنڈ بعد محفوظ ہو جاتی ہے</string>
+    <string name="v2_calls_autorecord_keep">جواب دی گئی کالز خود محفوظ ہوتی ہیں؛ بغیر جواب اور مختصر کالز چھوڑ دی جاتی ہیں</string>
     <string name="v2_calls_auto_off_note">خود ریکارڈ بند ہے: یہ ایپس صرف تب ریکارڈ ہوتی ہیں جب آپ ریکارڈنگ شروع کریں۔</string>
     <string name="v2_calls_app_not">ریکارڈ نہیں ہوتی</string>
     <string name="v2_calls_app_auto">خود بخود ریکارڈ ہوتی ہے</string>

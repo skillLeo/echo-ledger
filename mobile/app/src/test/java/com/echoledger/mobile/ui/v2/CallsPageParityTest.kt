@@ -123,6 +123,7 @@ class CallsPageParityTest : ScreenTest() {
             "WhatsApp", "WhatsApp Business", "Google Meet", "Zoom", "Microsoft Teams", "Telegram", "Signal", "Messenger",
             "Instagram", "Skype", "Slack", "Discord"
         ).forEach { put("switch: Auto-record $it", "switch: $it") }
+        put("switch: Auto-record calls", "switch: Auto-record calls")
         put("textbox: Another call app (package name)", "textbox: Another call app (package name)")
         put("button: Add", "button: Add")
         put("button: Remove com.example.voip from the call apps", "button: Remove com.example.voip from the call apps")
@@ -142,7 +143,9 @@ class CallsPageParityTest : ScreenTest() {
 
     /** Today's controls the v2 page doesn't have, and why. */
     private val reasons = mapOf(
-        "button: Search settings" to "v2 Settings searches from its first page; Back leads there"
+        "button: Search settings" to "v2 Settings searches from its first page; Back leads there",
+        "button: Auto-record calls" to
+            "the row opens Setup while call capture is off; on v2 the switch's line says so and Setup is in Settings"
     )
 
     @Test

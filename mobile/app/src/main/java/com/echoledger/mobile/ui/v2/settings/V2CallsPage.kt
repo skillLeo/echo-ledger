@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,7 @@ import com.echoledger.mobile.core.PhoneCalls
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.recording.AutoRecordRules
 import com.echoledger.mobile.ui.ImportRecordingDialog
+import com.echoledger.mobile.ui.capabilities
 import com.echoledger.mobile.ui.v2.components.EchoButton
 import com.echoledger.mobile.ui.v2.components.EchoButtonKind
 import com.echoledger.mobile.ui.v2.components.EchoRadio
@@ -126,6 +128,36 @@ fun CallsPage(
                 }
             }
             Column(Modifier.highlightedIf(highlight == "auto-apps")) {
+                // The Auto-record calls switch itself, above the apps it applies to (bug P-016), as on the Record page.
+                val context = LocalContext.current
+                val helperState = remember {
+                    (context.applicationContext as? EchoLedgerApp)?.graph?.helper?.state
+                        ?: kotlinx.coroutines.flow.MutableStateFlow(com.echoledger.mobile.privilege.HelperConnection.State())
+                }
+                val helper by helperState.collectAsState()
+                val caps = remember(helper.connected) { context.capabilities(helper.connected) }
+                EchoSwitch(
+                    settings.autoRecordArmed,
+                    { on ->
+                        context.startForegroundService(
+                            com.echoledger.mobile.recording.RecordingService.intent(
+                                context,
+                                if (on) com.echoledger.mobile.recording.RecordingService.ACTION_ARM else com.echoledger.mobile.recording.RecordingService.ACTION_DISARM
+                            )
+                        )
+                    },
+                    stringResource(R.string.v2_calls_autorecord),
+                    supporting = stringResource(
+                        when {
+                            !caps.helperInBuild -> R.string.v2_calls_autorecord_not_in_build
+                            !caps.callCaptureSupportedByOs -> R.string.v2_calls_autorecord_needs_android
+                            !caps.helperConnected -> R.string.v2_calls_autorecord_setup_first
+                            settings.afterCall == com.echoledger.mobile.calls.PostCallPrompt.ASK -> R.string.v2_calls_autorecord_ask
+                            else -> R.string.v2_calls_autorecord_keep
+                        }
+                    ),
+                    enabled = caps.canCaptureCalls
+                )
                 EchoSectionHeader(stringResource(R.string.v2_calls_auto_title))
                 if (!settings.autoRecordArmed) Note(stringResource(R.string.v2_calls_auto_off_note))
                 AutoRecordRules.APPS.forEach { app ->
