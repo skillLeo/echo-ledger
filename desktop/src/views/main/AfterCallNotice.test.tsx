@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { AfterCallNotice } from "./AfterCallNotice";
 import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { resetClosedBanners } from "../../components/StateBanner";
+import { NO_TARGET } from "../../lib/notice";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -23,7 +24,7 @@ describe("After a call notice", () => {
     fireEvent.click(screen.getByRole("button", { name: "Always transcribe" }));
     await flushAsync();
     expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }]);
-    expect(notify).toHaveBeenCalledWith("Every call is now transcribed", false);
+    expect(notify).toHaveBeenCalledWith("Every call is now transcribed", false, NO_TARGET);
   });
 
   it("closing it keeps Ask me and is the answer too", async () => {

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { api, errorMessage } from "../../lib/ipc";
 import { BellIcon } from "../../components/Icons";
 import { StateBanner } from "../../components/StateBanner";
-import type { Notify } from "../../lib/notice";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 export function AfterCallNotice({ text, notify }: { text: string | null | undefined; notify: Notify }) {
   const [busy, setBusy] = useState(false);
@@ -14,7 +14,7 @@ export function AfterCallNotice({ text, notify }: { text: string | null | undefi
     setBusy(true);
     try {
       await api.afterCallNoticeAnswer(alwaysTranscribe);
-      if (alwaysTranscribe) notify("Every call is now transcribed", false);
+      if (alwaysTranscribe) notify("Every call is now transcribed", false, NO_TARGET); // said where it was answered: nothing to open
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {
