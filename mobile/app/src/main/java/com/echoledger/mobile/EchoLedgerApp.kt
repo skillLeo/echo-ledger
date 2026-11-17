@@ -33,6 +33,8 @@ class EchoLedgerApp : Application() {
         graph = AppGraph(this)
         Notifications.createChannels(this)
         graph.helper.autoConnect()
+        // This phone's Live Assist card comes and goes with its session.
+        com.echoledger.mobile.overlay.AssistCardWindow.follow(this, graph.scope)
         // Auto-record comes back on by itself after an update or a restart, without the app being opened.
         cancelStartCheck = AutoRecordKeeper.onAppStart(this)
     }

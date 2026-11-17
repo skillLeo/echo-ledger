@@ -546,6 +546,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 // Since 2.0.0-a/b: the redesign's flags and how long Trash keeps a recording.
                                 uiFlags = config.uiFlags,
                                 uiClassic = config.uiClassic,
+                                relayPins = config.relayPins,
                                 trashKeepHours = config.trash?.keepHours?.takeIf { hours -> hours > 0 }
                                     ?: com.echoledger.mobile.data.TrashConfig.DEFAULT_HOURS
                             )

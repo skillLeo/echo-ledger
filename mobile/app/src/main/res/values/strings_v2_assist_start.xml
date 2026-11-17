@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (assist_start). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_assist_start_intro">Suggestions appear on a card over your call while the other person talks. Only you see it, and it is hidden when you share your screen.</string>
+    <string name="v2_assist_start_needs_recording">Live Assist follows the words of a recording. Start recording your call or meeting first.</string>
+    <string name="v2_assist_start_record">Record now</string>
+    <string name="v2_assist_start_now">Start now</string>
+    <string name="v2_assist_start_starting">Starting</string>
+    <string name="v2_assist_start_on">Live Assist is on</string>
+    <string name="v2_assist_start_on_help">Suggestions show on the card over your call.</string>
+    <string name="v2_assist_start_show_card">Show the card</string>
+    <string name="v2_assist_start_end">End Live Assist</string>
+    <string name="v2_assist_start_busy">Live Assist is already on for this account. End that session to start here.</string>
+    <string name="v2_assist_start_end_other">End it and start here</string>
+    <string name="v2_assist_start_no_overlay">To show the card over your call, let EchoLedger appear on top of other apps.</string>
+    <string name="v2_assist_start_allow">Allow</string>
+</resources>

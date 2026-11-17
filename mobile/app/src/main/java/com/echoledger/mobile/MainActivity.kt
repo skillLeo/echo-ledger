@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -813,13 +814,81 @@ class MainActivity : FragmentActivity() {
                                     BackHandler(onBack = onBack)
                                     SettingsScreen(vm, onSetup = { showSetup = true }, openPage = page)
                                 },
-                                setup = { onBack -> SetupScreen(vm, caps, onBack = onBack, onRecheck = { recheck++ }) }
+                                setup = { onBack -> SetupScreen(vm, caps, onBack = onBack, onRecheck = { recheck++ }) },
+                                liveEntry = { entry, onBack ->
+                                    LiveEntryScreen(
+                                        entry,
+                                        onBack,
+                                        caps,
+                                        onSetup = { showSetup = true },
+                                        onReviewWaiting = { showWaiting = true }
+                                    )
+                                }
                             ),
                             onSwitchToClassic = vm::setClassicUi
                         )
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * What a row of the v2 Live tab opens: the existing Record (calls), voice note and Live Translate screens, the
+     * Dictation and Captions settings, and Live Assist's start on the recording under way.
+     */
+    @Composable
+    private fun LiveEntryScreen(
+        entry: com.echoledger.mobile.ui.v2.live.LiveEntry,
+        onBack: () -> Unit,
+        caps: com.echoledger.mobile.privilege.Capabilities,
+        onSetup: () -> Unit,
+        onReviewWaiting: () -> Unit
+    ) {
+        BackHandler(onBack = onBack)
+        when (entry) {
+            com.echoledger.mobile.ui.v2.live.LiveEntry.Record ->
+                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.CALLS, onReviewWaiting = onReviewWaiting)
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.VoiceNote ->
+                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.VOICE, onReviewWaiting = onReviewWaiting)
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.LiveTranslate ->
+                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.GAME, onReviewWaiting = onReviewWaiting)
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.Dictation -> SettingsScreen(vm, onSetup = onSetup, openPage = "voice")
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.Captions -> SettingsScreen(vm, onSetup = onSetup, openPage = "captions")
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.LiveAssist -> com.echoledger.mobile.ui.v2.assist.V2AssistStart(
+                onBack = onBack,
+                // A recording whose captions are still starting is left alone (the record button would stop it).
+                onRecord = { if (!RecordingService.isRecording) toggleRecording("live assist") },
+                start = { endOther ->
+                    val graph = (application as EchoLedgerApp).graph
+                    graph.api()?.let { api ->
+                        com.echoledger.mobile.assist.AssistHub.start(
+                            api,
+                            graph.settings.current().relayPins,
+                            graph.scope,
+                            endOther = endOther
+                        )
+                    } ?: com.echoledger.mobile.assist.AssistHub.Start.Failed(com.echoledger.mobile.core.Problems.SIGN_IN)
+                },
+                cardAllowed = { android.provider.Settings.canDrawOverlays(this) },
+                showCard = {
+                    com.echoledger.mobile.assist.AssistHub.active.value?.let {
+                        com.echoledger.mobile.overlay.AssistCardWindow.show(this, it)
+                    }
+                },
+                onAllowCard = {
+                    runCatching {
+                        startActivity(
+                            Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri())
+                        )
+                    }
+                }
+            )
         }
     }
 

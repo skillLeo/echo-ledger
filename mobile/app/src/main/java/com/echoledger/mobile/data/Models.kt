@@ -68,9 +68,36 @@ data class ServerConfig(
     @SerialName("ui_flags") @Serializable(with = LenientFlags::class) val uiFlags: Map<String, Boolean> = emptyMap(),
     /** Since 2.0.0-a: this person chose "Switch back to classic" (every `ui_v2.*` flag then answers off). */
     @SerialName("ui_classic") @Serializable(with = LenientTrue::class) val uiClassic: Boolean = false,
+    /** Since 1.9.0-g (Live Assist): the relay host's pins, never the server's own; empty: Live Assist can't connect yet. */
+    @SerialName("relay_pins") val relayPins: List<String> = emptyList(),
     /** Since 2.0.0-b: how long a deleted recording can be restored; null on an older server (48 hours). */
     @Serializable(with = LenientTrash::class) val trash: TrashConfig? = null
 )
+
+/** Live Assist (docs/API_ASSIST.md "Sessions"): the relay block of a session start and of each token refresh. */
+@Serializable
+data class AssistRelayDto(val url: String, val token: String, @SerialName("expires_at") val expiresAt: String? = null) {
+    override fun toString(): String = "AssistRelayDto($url, expires $expiresAt)"
+}
+
+@Serializable
+data class AssistSessionInfoDto(
+    val id: String,
+    @SerialName("auto_saved") val autoSaved: Boolean = false,
+    val mode: String? = null,
+    val practice: Boolean = false
+)
+
+@Serializable
+data class AssistPlanDto(val modes: List<String> = emptyList(), @SerialName("seconds_left") val secondsLeft: Long? = null)
+
+/** `POST /api/assist/sessions` → `201`; the phone follows its own recording's captions, so `stt` is not read. */
+@Serializable
+data class AssistStartDto(val session: AssistSessionInfoDto, val relay: AssistRelayDto, val plan: AssistPlanDto? = null)
+
+/** `POST /api/assist/sessions/{id}/token`. */
+@Serializable
+data class AssistTokenDto(val relay: AssistRelayDto)
 
 /** `GET /api/config` `trash` (since 2.0.0-b). */
 @Serializable
