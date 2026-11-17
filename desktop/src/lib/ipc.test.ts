@@ -33,6 +33,7 @@ describe("api wrappers", () => {
     ["quitAndReopen", () => api.quitAndReopen(), "quit_and_reopen", undefined],
     ["uiFlags", () => api.uiFlags(), "ui_flags", undefined],
     ["trashKeepHours", () => api.trashKeepHours(), "trash_keep_hours", undefined],
+    ["afterCallNoticeAnswer", () => api.afterCallNoticeAnswer(true), "after_call_notice_answer", { alwaysTranscribe: true }],
     ["uiClassicSet", () => api.uiClassicSet(true), "ui_classic_set", { classic: true }],
     ["assistPrepsList", () => api.assistPrepsList(), "assist_preps_list", { status: null }],
     ["assistPrepsList (scheduled)", () => api.assistPrepsList("scheduled"), "assist_preps_list", { status: "scheduled" }],

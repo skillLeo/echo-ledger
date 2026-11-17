@@ -66,6 +66,8 @@ export interface AppStatus {
   readyProblems?: number;
   /** What the server says to every app (v1.6, P2.7); missing from an older core. */
   server?: ServerNotices;
+  /** Said once after "Keep automatically" became Ask me; null otherwise (missing from an older core). */
+  afterCallNotice?: string | null;
 }
 
 /** `config.app_update`: this version is below the server's minimum; `refused`: its other requests are refused. */
@@ -375,6 +377,7 @@ export interface Settings {
   clientId: string | null;
   consentAcknowledged: boolean;
   afterCall: AfterCall;
+  afterCallNotice: boolean;
   skipCallsShorterThanS: number;
   askUnknownApps: boolean;
   siteRules: SiteRule[];
@@ -1805,6 +1808,8 @@ export const api = {
   assistCardHide: () => invoke<void>("assist_card_hide"),
   assistState: () => invoke<AssistSnapshot | null>("assist_state"),
   permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
+  /** The After a call notice: Always transcribe (true) or closed (false); said once either way. */
+  afterCallNoticeAnswer: (alwaysTranscribe: boolean) => invoke<AppStatus>("after_call_notice_answer", { alwaysTranscribe }),
   macCheckRun: () => invoke<CheckReport>("mac_check_run"),
   macCheckLast: () => invoke<CheckReport | null>("mac_check_last"),
   macCheckCopy: () => invoke<void>("mac_check_copy"),

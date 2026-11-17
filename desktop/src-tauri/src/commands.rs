@@ -55,6 +55,8 @@ pub struct AppStatus {
     /// What the server says to every app (v1.6, P2.7): an update this version needs, an announcement, maintenance,
     /// and why uploads are waiting.
     pub server: crate::server_notice::ServerNotices,
+    /// Said once after "Keep automatically" became Ask me ([`crate::settings::AFTER_CALL_NOTICE`]); none otherwise.
+    pub after_call_notice: Option<&'static str>,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
@@ -113,7 +115,21 @@ pub fn status(app: &AppHandle) -> AppStatus {
         ready_problems,
         device_note: state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()),
         server: state.server_notices(),
+        after_call_notice: settings.after_call_notice.then_some(crate::settings::AFTER_CALL_NOTICE),
     }
+}
+
+/// The answer to the After a call notice: Always transcribe (one tap), or closed (Ask me stays). Said once either way.
+#[tauri::command]
+pub fn after_call_notice_answer(app: AppHandle, always_transcribe: bool) -> AppResult<AppStatus> {
+    let settings = app.state::<AppState>().update_settings(|s| {
+        s.after_call_notice = false;
+        if always_transcribe {
+            s.after_call = crate::settings::AfterCall::AlwaysTranscribe;
+        }
+    })?;
+    let _ = app.emit("settings:changed", &settings);
+    Ok(status(&app))
 }
 
 /// Main-window material and system accent (C2).

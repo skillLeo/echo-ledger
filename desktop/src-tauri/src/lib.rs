@@ -583,6 +583,7 @@ pub fn run() {
             commands::quit_and_reopen,
             commands::ui_flags,
             commands::trash_keep_hours,
+            commands::after_call_notice_answer,
             commands::ui_classic_set,
             commands::assist_preps_list,
             commands::assist_prep_save,

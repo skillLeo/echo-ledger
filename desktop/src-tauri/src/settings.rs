@@ -34,6 +34,9 @@ impl AfterCall {
     }
 }
 
+/// What the person reads once when v1.5's "Keep automatically" became Ask me.
+pub const AFTER_CALL_NOTICE: &str = "After a call now asks before transcribing. To transcribe every call as before, choose Always transcribe";
+
 /// "Hide EchoLedger from screen sharing" (v1.8.1, `privacy`): every window, only the floating ones, or none.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -274,6 +277,9 @@ pub struct Settings {
     pub consent_acknowledged: bool,
     /// What happens when a call ends: kept at once with Undo, or asked about with a chip that keeps it after 10 s.
     pub after_call: AfterCall,
+    /// v1.5's "Keep automatically" became Ask me (contract 1.8.0-e): the person is told once, with Always transcribe one
+    /// tap away ([`AFTER_CALL_NOTICE`]). Cleared once answered.
+    pub after_call_notice: bool,
     /// Automatic call recordings shorter than this many seconds are skipped quietly (0 = never; v1.5, `skipped`).
     pub skip_calls_shorter_than_s: u32,
     /// Offer the "Record / Ignore / Always ignore" chip when an unrecognised app or site holds the mic and plays audio.
@@ -355,6 +361,7 @@ impl Default for Settings {
             // Also what a file from before v1.5 (askBeforeSaving / decisionTimeout, no afterCall) loads as: permission
             // first (contract 1.8.0-e). The old keys are read and ignored.
             after_call: AfterCall::Ask,
+            after_call_notice: false,
             skip_calls_shorter_than_s: crate::skipped::DEFAULT_SHORTER_THAN_S,
             ask_unknown_apps: false,
             site_rules: Vec::new(),
@@ -413,6 +420,8 @@ impl Settings {
         // v1.8's "Show during screen share" (`contentProtection: false`) kept the floating windows in shares, and the main
         // window was in them anyway: that person keeps seeing both, so Off. Everyone else gets the new default (All).
         let showed_in_shares = !file.contains_key("hideFromSharing") && file.get("contentProtection") == Some(&Value::Bool(false));
+        // v1.5's "Keep automatically" reads as Ask me: the person is told once.
+        let kept_automatically = file.get("afterCall").and_then(Value::as_str) == Some("keep");
         let Ok(Value::Object(mut merged)) = serde_json::to_value(Self::default()) else { return Self::default() };
         for (key, value) in file {
             let value = match key.as_str() {
@@ -449,6 +458,7 @@ impl Settings {
         }
         let mut settings: Settings = serde_json::from_value(Value::Object(merged)).unwrap_or_default();
         settings.onboarding_done |= set_up_before;
+        settings.after_call_notice |= kept_automatically;
         if showed_in_shares {
             settings.hide_from_sharing = ShareHiding::Off;
         }

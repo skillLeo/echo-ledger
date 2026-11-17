@@ -34,6 +34,7 @@ fn customised() -> Settings {
         client_id: Some("01JB8Q4C1D2E3F4G5H6J7K8M9N".into()),
         consent_acknowledged: true,
         after_call: AfterCall::Ask,
+        after_call_notice: true,
         skip_calls_shorter_than_s: 30,
         caption_lines: 5,
         pill_position: Some(PillPosition { x: -1_520, y: 64 }),
@@ -156,6 +157,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
         [
             "activityNotifications",
             "afterCall",
+            "afterCallNotice",
             "appLock",
             "askUnknownApps",
             "assistCardPosition",
@@ -203,7 +205,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 47, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 48, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");
@@ -584,6 +586,27 @@ fn every_after_a_call_choice_survives_a_save_and_load_and_v1_5_s_choices_become_
     s.save(&path).unwrap();
     let file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(file["afterCall"], "ask");
+}
+
+#[test]
+fn keep_automatically_becoming_ask_me_is_told_once() {
+    let d = dir();
+    let path = d.path().join("settings.json");
+    std::fs::write(&path, r#"{"serverUrl": "https://ledger.example.com", "afterCall": "keep"}"#).unwrap();
+    let s = Settings::load(&path);
+    assert!(s.after_call_notice, "a person who kept every call is told");
+    // Saved as ask: the next start finds the notice, not "keep" again.
+    s.save(&path).unwrap();
+    let again = Settings::load(&path);
+    assert!(again.after_call_notice && again.after_call == AfterCall::Ask);
+    // Answered (either way): never again.
+    Settings { after_call_notice: false, ..again }.save(&path).unwrap();
+    assert!(!Settings::load(&path).after_call_notice);
+    for choice in ["ask", "always_transcribe", "always_audio"] {
+        assert!(!Settings::from_value(json!({"afterCall": choice})).after_call_notice, "{choice}: nothing changed for them");
+    }
+    assert!(!Settings::from_value(json!({})).after_call_notice, "a new install has nothing to be told");
+    assert!(crate::settings::AFTER_CALL_NOTICE.ends_with("choose Always transcribe"));
 }
 
 #[test]

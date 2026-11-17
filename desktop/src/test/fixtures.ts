@@ -114,6 +114,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     clientId: null,
     consentAcknowledged: false,
     afterCall: "ask",
+    afterCallNotice: false,
     skipCallsShorterThanS: 10,
     askUnknownApps: false,
     siteRules: [],
