@@ -1055,3 +1055,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   own assist-reports queue: deploy needs the second worker), practice and facts endpoints, document text on the single
   read, /end across workspaces, escaped Markdown downloads, the console's Preps, Sessions and Report pages, all behind
   live_assist.
+- Merged b-relay at the reviewed aca8ee86: practice over the relay, facts and summary within the budget, the hard
+  budget gate with Urdu-safe upper bounds, held questions (finals only, 5 s, dropped on new speech or disconnect),
+  RELEASE.md (the owner's VPS release steps) and EVAL_RUN.md (the owner's eval and latency runs). Waiting on keys and
+  the VPS.
