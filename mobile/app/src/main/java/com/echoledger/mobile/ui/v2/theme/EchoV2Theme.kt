@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
+import androidx.core.os.ConfigurationCompat
 import com.echoledger.mobile.R
 import com.echoledger.mobile.ui.design.UrduNastaliq
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
@@ -387,3 +388,7 @@ private val EchoV2Shapes = Shapes(
     large = RoundedCornerShape(PhoneDialogRadius),
     extraLarge = RoundedCornerShape(EchoTokens.Component.sheetRadius)
 )
+
+/** The screen's locale, read from the (observable) configuration so dates and numbers follow a language change. */
+@Composable
+fun screenLocale(): Locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.ROOT

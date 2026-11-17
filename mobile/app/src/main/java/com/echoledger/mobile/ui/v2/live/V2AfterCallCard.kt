@@ -30,6 +30,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.core.text.BidiFormatter
+import androidx.core.text.TextDirectionHeuristicsCompat
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LocalRecording
@@ -44,6 +46,7 @@ import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.EchoV2Colors
 import com.echoledger.mobile.ui.v2.theme.LocalEchoV2Colors
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
+import java.util.Locale
 
 /** What the card is showing: asking, saved (Undo keeps it waiting again), or deleted (Undo brings it back). */
 enum class AfterCallMode { Ask, Saved, Deleted }
@@ -51,8 +54,12 @@ enum class AfterCallMode { Ask, Saved, Deleted }
 /** "Call with Omar Khan", else the number, else the source ("WhatsApp"), in the screen's language. */
 fun afterCallTitle(res: Resources, rec: LocalRecording): String = rec.title?.takeIf { it.isNotBlank() }
     ?: rec.callerName?.takeIf { it.isNotBlank() }?.let { res.getString(R.string.v2_live_call_with, it) }
-    ?: rec.callerNumber?.takeIf { it.any(Char::isDigit) }?.let { res.getString(R.string.v2_live_call_with, "⁦$it⁩") }
+    ?: rec.callerNumber?.takeIf { it.any(Char::isDigit) }?.let { res.getString(R.string.v2_live_call_with, leftToRight(res, it)) }
     ?: sourceName(res, rec.sourceApp)
+
+/** A phone number kept left to right inside a sentence in any language ("+92 300 …" in Urdu). */
+private fun leftToRight(res: Resources, number: String): String =
+    BidiFormatter.getInstance(res.configuration.locales[0] ?: Locale.ROOT).unicodeWrap(number, TextDirectionHeuristicsCompat.LTR)
 
 /**
  * The after-call card on the v2 components (behind `ui_v2.after_call`, docs/PLAN_V1_8.md 1.1): the source, "Omar Khan ·

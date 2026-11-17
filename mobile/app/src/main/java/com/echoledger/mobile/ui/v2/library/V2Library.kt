@@ -20,7 +20,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.core.SourceApp
@@ -49,9 +48,9 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.V2Text
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.screenLocale
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.ZonedDateTime
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 /** A recording still on the phone (queued, uploading or failed to upload), shown above the library. */
@@ -106,7 +105,7 @@ fun V2LibraryScreen(
     val offline by vm.offline.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
     var views by remember(initialViews) { mutableStateOf(initialViews) }
-    val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    val locale = screenLocale()
     val now = remember(library) { ZonedDateTime.now() }
     val rows = remember(library, views, query, text, locale) { LibraryModel.rows(library, views, query, now, text, locale) }
     val uploads = remember(pending, text) { uploadRows(pending, text) }
