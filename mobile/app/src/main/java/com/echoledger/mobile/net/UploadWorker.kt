@@ -31,9 +31,12 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /**
  * Resumable upload of one encrypted local recording (WorkManager; survives restarts, waits for network).
@@ -63,7 +66,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         return try {
             val started = keep(id) { it.copy(state = "uploading", lastError = null) }
             if (started?.state == Decisions.DISCARDING) return Result.success()
-            when (upload(api, rec)) {
+            val current = bringBackServerCopy(api, started ?: rec)
+            when (upload(api, current)) {
                 Outcome.READY -> {
                     // The server now holds the (encrypted) copy, so the phone's goes, in one step with the check that
                     // it was not discarded meanwhile; if it was, the server's copy goes too (the phone's with the Discard).
@@ -138,22 +142,64 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     private fun keep(id: String, change: (LocalRecording) -> LocalRecording): LocalRecording? =
         (applicationContext as EchoLedgerApp).graph.recordings.update(id) { if (it.state == Decisions.DISCARDING) it else change(it) }
 
+    /**
+     * After an Undo of a Discard whose upload had reached the server (since v1.8.1): a delete that may have run is undone
+     * (`POST /api/sessions/{id}/restore`), and the upload then finds that session again by its reference and finishes
+     * against it. A session that can no longer be restored (410 restore_expired, or not found) is sent again fresh under
+     * a new reference, so nothing is lost.
+     */
+    private suspend fun bringBackServerCopy(api: ApiClient, rec: LocalRecording): LocalRecording {
+        val copy = rec.serverCopy ?: return rec
+        val fresh = if (rec.restoreServerCopy) {
+            try {
+                api.restoreSession(copy)
+                false
+            } catch (e: ApiException) {
+                if (e.status == 410 || e.status == 404) true else throw e
+            }
+        } else {
+            false
+        }
+        return keep(rec.id) {
+            it.copy(serverCopy = null, restoreServerCopy = false, clientRef = if (fresh) UUID.randomUUID().toString() else it.clientRef)
+        } ?: rec
+    }
+
     /** The server session this run created or finished, once it has one. */
     private var session: String? = null
 
+    /** This run asked the server for its session: the request may have arrived even when no answer did. */
+    private var asked: Pair<ApiClient, LocalRecording>? = null
+
     /**
      * Whether the call was discarded while this run sent it (since v1.8.1). Then the session the run reached on the
-     * server is deleted too ([DiscardWorker]); the phone's copy is the Discard's to delete once its Undo time is over.
+     * server is deleted too ([DiscardWorker]); the phone's copy is the Discard's to delete once its Undo time is over. A
+     * run stopped while it asked for its session (no answer yet) looks the session up by the call's reference first: the
+     * server answers the same request with the session it made, so none is left with the call's title and caller.
      */
-    private fun discardedMeanwhile(id: String): Boolean {
+    private suspend fun discardedMeanwhile(id: String): Boolean {
         val graph = (applicationContext as EchoLedgerApp).graph
-        if (graph.recordings.get(id)?.state != Decisions.DISCARDING) return false
-        (session ?: graph.recordings.get(id)?.serverSessionId)?.let { DiscardWorker.enqueue(applicationContext, id, it) }
+        val now = graph.recordings.get(id)
+        if (now?.state != Decisions.DISCARDING) return false
+        val known = session ?: now.serverSessionId ?: asked?.let { (api, rec) -> lookUp(api, rec) }
+        known?.let { reached ->
+            // Kept with the call, so an Undo can stop the delete or bring the session back.
+            graph.recordings.update(id) { it.copy(serverCopy = reached) }
+            DiscardWorker.enqueue(applicationContext, id, reached)
+        }
         return true
+    }
+
+    /** The session the server made for [rec]'s reference, by asking again (idempotent); null when it cannot say. */
+    private suspend fun lookUp(api: ApiClient, rec: LocalRecording): String? = withContext(NonCancellable) {
+        runCatching {
+            withTimeout(LOOKUP_TIMEOUT_MS) { api.createSession(oneShot(rec, rec.clientRef ?: rec.id, listOf(artifactOf(rec)))).session.id }
+        }.getOrNull()
     }
 
     private suspend fun upload(api: ApiClient, rec: LocalRecording): Outcome {
         val graph = (applicationContext as EchoLedgerApp).graph
+        if (rec.serverSessionId == null) asked = api to rec
         val created = createOrFinish(api, rec)
         session = created.session.id
         // A voice note shared from another app: its page follows the server recording once the local copy is gone.
@@ -226,7 +272,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 return api.createSession(oneShot(rec, UUID.randomUUID().toString(), artifacts))
             }
         }
-        return api.createSession(oneShot(rec, rec.id, artifacts))
+        return api.createSession(oneShot(rec, rec.clientRef ?: rec.id, artifacts))
     }
 
     private fun oneShot(rec: LocalRecording, clientRef: String, artifacts: List<ArtifactDto>) = CreateSessionRequest(
@@ -374,6 +420,9 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
             else -> FAILED
         }
+
+        /** How long a stopped run may take to find the session it asked for (a discarded call's lookup). */
+        private const val LOOKUP_TIMEOUT_MS = 15_000L
 
         /** A `Retry-After` up to this long is left to WorkManager's back-off; longer waits are scheduled exactly. */
         const val SHORT_RETRY_SECONDS = 30L

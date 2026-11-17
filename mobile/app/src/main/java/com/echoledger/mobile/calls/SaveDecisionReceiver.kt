@@ -127,8 +127,20 @@ object Decisions {
     suspend fun undoDiscard(context: Context, recordingId: String): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         DiscardLaterWorker.cancel(context, recordingId)
+        // A server copy an upload reached meanwhile: its delete is stopped if it has not run, else the next upload
+        // restores it first ([com.echoledger.mobile.net.UploadWorker]).
+        val serverDelete = graph.recordings.get(recordingId)?.serverCopy?.let { DiscardWorker.cancelBeforeItRuns(context, recordingId) }
         val back = graph.recordings.update(recordingId) {
-            if (it.state == DISCARDING) it.copy(state = it.discardedFrom ?: WAITING, discardAt = null, discardedFrom = null) else it
+            if (it.state == DISCARDING) {
+                it.copy(
+                    state = it.discardedFrom ?: WAITING,
+                    discardAt = null,
+                    discardedFrom = null,
+                    restoreServerCopy = serverDelete == DiscardWorker.Stopped.MAYBE_RAN
+                )
+            } else {
+                it
+            }
         }?.takeIf { it.state == WAITING || it.state == KEPT } ?: return null
         WidgetStateStore.refresh(context)
         return back
