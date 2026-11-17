@@ -1598,6 +1598,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Send to my admin on the device check (since v1.5): the only thing that uploads it. */
     suspend fun sendDeviceReport(facts: com.echoledger.mobile.core.PhoneFacts, rows: List<com.echoledger.mobile.core.CheckRow>) {
         workspaceCall("The report could not be sent.") { it.reportDevice(facts, rows) } ?: return
+        // Contact support says which report goes with a message (Help v2): the time it reached the server.
+        graph.deviceReports.sent()
         _message.value = "Sent to your admin"
     }
 

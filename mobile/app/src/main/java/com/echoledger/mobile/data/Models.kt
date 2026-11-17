@@ -100,6 +100,29 @@ data class AssistStartDto(val session: AssistSessionInfoDto, val relay: AssistRe
 @Serializable
 data class AssistTokenDto(val relay: AssistRelayDto, val plan: AssistPlanDto? = null)
 
+/** Help (contract 2.0.0-d): `GET /api/help/guides?q=` rows. */
+@Serializable
+data class HelpGuideHitDto(val id: String, val title: String = "", val excerpt: String? = null)
+
+@Serializable
+data class HelpGuidesDto(val data: List<HelpGuideHitDto> = emptyList())
+
+/** `GET /api/help/guides/{id}`. */
+@Serializable
+data class HelpGuideDto(val id: String, val title: String = "", val markdown: String = "")
+
+/** `GET /api/help/whats-new?platform=android` rows: one release's notes (Markdown). */
+@Serializable
+data class ReleaseNotesDto(
+    val version: String,
+    val platform: String? = null,
+    @SerialName("released_at") val releasedAt: String? = null,
+    val notes: String = ""
+)
+
+@Serializable
+data class WhatsNewDto(val data: List<ReleaseNotesDto> = emptyList())
+
 /** `GET /api/config` `trash` (since 2.0.0-b). */
 @Serializable
 data class TrashConfig(@SerialName("keep_hours") val keepHours: Int = TrashConfig.DEFAULT_HOURS) {

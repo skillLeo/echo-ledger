@@ -847,7 +847,8 @@ class MainActivity : FragmentActivity() {
                                     )
                                 }
                             ),
-                            onSwitchToClassic = vm::setClassicUi
+                            onSwitchToClassic = vm::setClassicUi,
+                            help = (application as EchoLedgerApp).graph.help
                         )
                     }
                 }
