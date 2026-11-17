@@ -222,6 +222,19 @@ describe('the admin panel', function () {
         expect(PromoCode::query()->where('code', 'UNTOUCHED1')->value('plan'))->toBe($first)->and($first)->not->toBeNull();
     });
 
+    it('keeps a code\'s own plan in the edit form once that plan is no longer offered', function () {
+        $this->actingAs(promoStaff('billing'), 'web');
+        Filament::setCurrentPanel('admin');
+        $old = Plan::query()->create(['key' => 'legacy', 'name' => 'Legacy', 'on_offer' => false]);
+        $promo = PromoCode::query()->create(['code' => 'OLDPLAN1', 'plan' => $old->key, 'percent' => 20, 'months' => 1, 'one_per_person' => true, 'active' => true]);
+
+        Livewire::test(PromoCodesPage::class)
+            ->callTableAction('edit', $promo, data: ['percent' => 30])
+            ->assertHasNoTableActionErrors();
+
+        expect($promo->fresh()->plan)->toBe('legacy')->and($promo->fresh()->percent)->toBe(30);
+    });
+
     it('lets staff with Make and change plans create, edit and switch off codes, with their uses', function () {
         $this->actingAs($staff = promoStaff('billing'), 'web');
         Filament::setCurrentPanel('admin');

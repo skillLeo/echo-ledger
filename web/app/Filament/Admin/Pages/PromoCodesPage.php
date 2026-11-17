@@ -123,7 +123,7 @@ class PromoCodesPage extends Page implements HasTable
                 Action::make('edit')->label('Edit')->icon(Heroicon::OutlinedPencilSquare)->color('gray')
                     ->authorize(fn (): bool => StaffAccess::can('plans.manage'))
                     ->fillForm(fn (PromoCode $record): array => $record->only(['plan', 'percent', 'ends_at', 'max_uses', 'one_per_person', 'months', 'active', 'note']))
-                    ->schema(fn (): array => self::form(false))
+                    ->schema(fn (PromoCode $record): array => self::form(false, $record->plan))
                     ->action(function (PromoCode $record, array $data): void {
                         $record->update(self::values($data));
                         app(AuditLog::class)->record('promo_code_changed', (int) auth()->id(), $record, "Promo code {$record->code} changed");
@@ -148,7 +148,7 @@ class PromoCodesPage extends Page implements HasTable
     }
 
     /** @return list<Component|Field> */
-    private static function form(bool $creating): array
+    private static function form(bool $creating, ?string $current = null): array
     {
         return [
             Grid::make(2)->schema([
@@ -161,7 +161,7 @@ class PromoCodesPage extends Page implements HasTable
                         }
                     }),
                 Select::make('plan')->label('Plan')->required()->selectablePlaceholder(false)
-                    ->options(fn (): array => self::offeredPlans()),
+                    ->options(fn (): array => self::planOptions($current)),
                 TextInput::make('percent')->label('Discount (%)')->required()->integer()->minValue(1)->maxValue(100)
                     ->helperText('100 % switches the plan on at once.'),
                 TextInput::make('months')->label('Months the plan lasts')->required()->integer()->minValue(1)->maxValue(36),
@@ -190,6 +190,23 @@ class PromoCodesPage extends Page implements HasTable
             'active' => (bool) ($data['active'] ?? true),
             'note' => filled($data['note'] ?? null) ? trim((string) $data['note']) : null,
         ];
+    }
+
+    /**
+     * The plans the select offers: the offered paid plans, plus an existing code's own plan when it is no longer
+     * offered, so editing such a code keeps its plan instead of showing another one.
+     *
+     * @return array<string, string> key => name
+     */
+    private static function planOptions(?string $current): array
+    {
+        $options = self::offeredPlans();
+        if ($current !== null && $current !== '' && ! array_key_exists($current, $options)) {
+            $name = Plan::query()->where('key', $current)->value('name') ?? $current;
+            $options[$current] = $name.' (no longer offered)';
+        }
+
+        return $options;
     }
 
     /**
