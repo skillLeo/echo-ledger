@@ -161,6 +161,8 @@ fun V2SettingsScreen(
 
                 SettingsTree.SETUP -> setupPage(r.highlight, back)
 
+                "calls" -> CallsPage(settings, vm::updateSettings, r.highlight, back)
+
                 // Help v2 (guides, what's new, contact support); its phone check is the classic help page.
                 "help" -> if (help != null) HelpPage(help, openClassicPage, back) else openClassicPage(r.id, back)
 

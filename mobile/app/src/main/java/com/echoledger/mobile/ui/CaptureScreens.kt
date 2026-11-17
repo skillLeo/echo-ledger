@@ -63,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -74,6 +75,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.BuildConfig
+import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.PhoneCallLog
 import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.Languages
@@ -530,7 +532,7 @@ internal fun PhoneAppRecordingsBlock(
  * Play to listen first, so the person knows it is that call's before EchoLedger takes it in.
  */
 @Composable
-private fun ImportRecordingDialog(
+internal fun ImportRecordingDialog(
     candidate: com.echoledger.mobile.calls.PhoneAppRecordings.Candidate,
     time: String,
     fileOf: (suspend (Context, Long) -> com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile?)?,
@@ -554,16 +556,23 @@ private fun ImportRecordingDialog(
             player = null
         }
     }
+    // Its words in the screen's language (the same English as before; Urdu on a v2 Urdu screen).
+    val recordingWord = stringResource(R.string.v2_calls_dlg_recording)
+    val playWord = stringResource(R.string.v2_calls_dlg_play)
+    val stopWord = stringResource(R.string.v2_calls_dlg_stop)
+    val playDesc = stringResource(R.string.v2_calls_dlg_play_desc, time)
+    val stopDesc = stringResource(R.string.v2_calls_dlg_stop_desc, time)
+    val importDesc = stringResource(R.string.v2_calls_pa_import_one_desc, time)
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Import this recording?") },
+        title = { Text(stringResource(R.string.v2_calls_dlg_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Import it only if it is your call at $time. EchoLedger could not check that the Phone app made the file.")
+                Text(stringResource(R.string.v2_calls_dlg_body, time))
                 file?.let { f ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(f.name.ifBlank { "Recording" }, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                            Text(f.name.ifBlank { recordingWord }, fontWeight = FontWeight.SemiBold, maxLines = 2)
                             Text(formatDuration(f.durationMs).ifEmpty { "0:00" }, color = Brand.Muted, fontSize = 12.sp)
                         }
                         TextButton(
@@ -595,17 +604,8 @@ private fun ImportRecordingDialog(
                                     }.getOrNull()
                                 }
                             },
-                            modifier = Modifier.semantics {
-                                contentDescription =
-                                    if (player !=
-                                        null
-                                    ) {
-                                        "Stop the recording of your call at $time"
-                                    } else {
-                                        "Play the recording of your call at $time"
-                                    }
-                            }
-                        ) { Text(if (player != null) "Stop" else "Play") }
+                            modifier = Modifier.semantics { contentDescription = if (player != null) stopDesc else playDesc }
+                        ) { Text(if (player != null) stopWord else playWord) }
                     }
                 }
             }
@@ -613,14 +613,12 @@ private fun ImportRecordingDialog(
         confirmButton = {
             TextButton(
                 onClick = onImport,
-                modifier = Modifier.semantics {
-                    contentDescription = "Import the recording of your call at $time"
-                }
+                modifier = Modifier.semantics { contentDescription = importDesc }
             ) {
-                Text("Import")
+                Text(stringResource(R.string.v2_calls_dlg_import))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.v2_calls_dlg_cancel)) } }
     )
 }
 
