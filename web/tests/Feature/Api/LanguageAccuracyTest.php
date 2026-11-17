@@ -211,16 +211,17 @@ describe('telling the engine the language', function () {
         expect(json_encode($auto))->not->toContain('language_codes');
     });
 
-    it('switches live captions for Urdu to ElevenLabs when the AssemblyAI streaming model has no Urdu', function () {
+    it('keeps Urdu live captions on AssemblyAI when a Universal-Streaming model (no Urdu, no longer offered) is still stored', function () {
         $this->configureAssemblyAi();
         keys('elevenlabs');
         app(SettingsRepository::class)->set('assemblyai.streaming_model', 'universal-streaming-english');
-        Http::fake(['api.elevenlabs.io/v1/single-use-token/*' => Http::response(['token' => 'xi_single'], 200), '*' => Http::response(['token' => 'x'], 200)]);
+        Http::fake(['*' => Http::response(['token' => 'x'], 200)]);
         $id = $this->openSession(['client_ref' => 'live-ur-2']);
 
         $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $id, 'channels' => ['me'], 'language' => 'ur'])->assertOk();
 
-        expect($response->json('provider'))->toBe('elevenlabs')->and($response->json('grants.0.ws_url'))->toContain('language_code=ur');
+        expect($response->json('provider'))->toBe('assemblyai')->and($response->json('grants.0.ws_url'))->toContain('speech_model=universal-3-6-pro')
+            ->and(json_encode($response->json('grants.0.init_messages')))->toContain('"ur"');
     });
 });
 

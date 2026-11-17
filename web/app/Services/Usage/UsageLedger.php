@@ -14,7 +14,9 @@ use App\Models\UsageLedgerEntry;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\SettingsRepository;
 use App\Stt\Data\NormalizedTranscript;
+use App\Stt\Drivers\AssemblyAiDriver;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Writes the usage ledger (docs/API.md "Usage and monthly limit"): streaming periods reported by devices and final
@@ -63,7 +65,7 @@ final class UsageLedger
                 'capture_session_id' => $sessionId,
                 'source' => UsageLedgerEntry::SOURCE_DEVICE,
                 ...$this->pricing($provider, $useCase, $this->grants->take($device, $streamed), $channels),
-                'model' => $this->streamingModel($provider),
+                'model' => self::grantedStreamingModel($provider, $sessionId) ?? $this->streamingModel($provider),
                 'occurred_at' => $this->clampedEnd($data['ended_at'] ?? null),
             ],
         );
@@ -198,11 +200,38 @@ final class UsageLedger
         ];
     }
 
-    /** The streaming model configured when the report arrived (informational). */
+    /**
+     * Remembers the model a recording's live-caption grant named in its `speech_model` (AssemblyAI), for the reports that
+     * follow; six hours, longer than a recording's longest stream.
+     */
+    public static function rememberStreamingModel(string $provider, string $sessionId, mixed $wsUrl): void
+    {
+        if ($provider !== SttProviderKey::AssemblyAi->value || ! is_string($wsUrl)) {
+            return;
+        }
+        parse_str((string) parse_url($wsUrl, PHP_URL_QUERY), $query);
+        $model = $query['speech_model'] ?? null;
+        if (is_string($model) && $model !== '') {
+            Cache::put('stt-granted-model:'.$sessionId, mb_substr($model, 0, 64), now()->addHours(6));
+        }
+    }
+
+    /** The model the recording's grant used, when it was an AssemblyAI grant this server remembers. */
+    private static function grantedStreamingModel(SttProviderKey $provider, ?string $sessionId): ?string
+    {
+        if ($provider !== SttProviderKey::AssemblyAi || $sessionId === null) {
+            return null;
+        }
+        $model = Cache::get('stt-granted-model:'.$sessionId);
+
+        return is_string($model) ? $model : null;
+    }
+
+    /** The streaming model configured when the report arrived (informational), when no grant of the recording says. */
     private function streamingModel(SttProviderKey $provider): ?string
     {
         $model = match ($provider) {
-            SttProviderKey::AssemblyAi => $this->settings->get('assemblyai.streaming_model'),
+            SttProviderKey::AssemblyAi => AssemblyAiDriver::storedStreamingModel($this->settings->get('assemblyai.streaming_model')),
             SttProviderKey::ElevenLabs => $this->settings->get('elevenlabs.realtime_model_id'),
             default => null,
         };

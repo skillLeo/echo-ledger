@@ -62,17 +62,17 @@ describe('AssemblyAI', function () {
         expect($url)->toStartWith('wss://streaming.assemblyai.com/v3/ws?')
             ->and(wsQuery($url))->toBe([
                 'speech_model' => 'universal-3-6-pro', 'encoding' => 'pcm_s16le', 'sample_rate' => '48000',
-                'inactivity_timeout' => '120', 'mode' => 'min_latency', 'min_turn_silence' => '128',
+                'inactivity_timeout' => '120', 'mode' => 'min_latency', 'min_turn_silence' => '80',
                 'max_turn_silence' => '640', 'token' => 'tmp_stream_token',
             ]);
     });
 
-    it('follows the configured streaming model', function () {
+    it('reads a stored Universal-Streaming model (no longer offered) as Universal-3.6 Pro', function () {
         app(SettingsRepository::class)->set('assemblyai.streaming_model', 'universal-streaming-english');
 
         $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->json('grants.0.ws_url');
 
-        expect(wsQuery($url)['speech_model'])->toBe('universal-streaming-english');
+        expect(wsQuery($url)['speech_model'])->toBe('universal-3-6-pro');
     });
 
     it('expires the grant within a minute', function () {
@@ -235,7 +235,8 @@ describe('ElevenLabs', function () {
             ->and(wsQuery($grants[0]['ws_url'])['token'])->toBe('tok_me')
             ->and(wsQuery($grants[1]['ws_url'])['token'])->toBe('tok_client')
             ->and($grants[0])->toMatchArray(['protocol' => 'elevenlabs_realtime', 'init_messages' => [], 'max_session_seconds' => null])
-            ->and($grants[0]['audio'])->toBe(['encoding' => 'pcm_s16le', 'sample_rate' => 16000, 'channels' => 1, 'frame_ms' => 100]);
+            // 50 ms frames, as AssemblyAI's (words reach the screen sooner; both apps take 50 to 250).
+            ->and($grants[0]['audio'])->toBe(['encoding' => 'pcm_s16le', 'sample_rate' => 16000, 'channels' => 1, 'frame_ms' => 50]);
         Http::assertSentCount(2);
         Http::assertSent(fn (HttpRequest $r) => $r->method() === 'POST' && $r->url() === 'https://api.elevenlabs.io/v1/single-use-token/realtime_scribe' && $r->hasHeader('xi-api-key', 'xi_test_key_1234567890'));
     });
