@@ -58,6 +58,11 @@ class WorkspaceParityTest : ScreenTest() {
 
     private fun waitFor(text: String) = pumpUntil(text) { has(text) }
 
+    /** Waits for the very button [press] taps: its words and a click. */
+    private fun waitForButton(text: String) = pumpUntil(text) {
+        compose.onAllNodes(hasText(text) and hasClickAction()).fetchSemanticsNodes().isNotEmpty()
+    }
+
     /** A control's name: what it says it is for screen readers, else its first text (a field's label), else its icon's. */
     private fun name(node: SemanticsNode): String? = node.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull()
         ?: firstIn(node) { it.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
@@ -322,18 +327,19 @@ class WorkspaceParityTest : ScreenTest() {
                     State.Menu -> compose.onNode(hasContentDescription("Project menu")).performClick()
 
                     State.Brief -> {
-                        waitFor("Edit")
+                        waitForButton("Edit")
                         press("Edit")
                     }
 
                     State.Paste -> {
-                        waitFor("Paste instructions")
+                        waitForButton("Paste instructions")
                         press("Paste instructions")
                     }
 
                     State.RemoveFile -> {
-                        waitFor("Proforma March.pdf")
-                        compose.onNode(hasContentDescription("Remove Proforma March.pdf")).performClick()
+                        val remove = hasContentDescription("Remove Proforma March.pdf")
+                        pumpUntil("Remove Proforma March.pdf") { compose.onAllNodes(remove).fetchSemanticsNodes().isNotEmpty() }
+                        compose.onNode(remove).performClick()
                     }
 
                     State.Viewer -> press("Screen 7 · 14:32")

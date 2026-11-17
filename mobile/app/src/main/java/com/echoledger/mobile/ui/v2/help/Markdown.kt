@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -77,18 +78,33 @@ object Markdown {
     private fun cells(line: String): List<String> =
         line.trim().removePrefix("|").removeSuffix("|").split("|", limit = MAX_CELLS + 1).take(MAX_CELLS).map { it.trim() }
 
-    /** A block's direction from its own words: right to left when they are in Urdu's (Arabic) script, else left to right. */
-    fun direction(block: MdBlock): LayoutDirection {
-        val words = when (block) {
-            is MdBlock.Heading -> block.text
-            is MdBlock.Paragraph -> block.text
-            is MdBlock.Quote -> block.text
-            is MdBlock.Code -> return LayoutDirection.Ltr
-            is MdBlock.ListBlock -> block.items.joinToString(" ")
-            is MdBlock.Table -> (block.head + block.rows.flatten()).joinToString(" ")
+    /**
+     * A line's direction by Unicode's first-strong rule: its first letter, past Markdown marks, quotes, digits and
+     * punctuation, decides; Arabic script (Urdu) is right to left, any other letter left to right. Null when it has no
+     * letter (the line then follows what holds it).
+     */
+    fun firstStrong(text: String): LayoutDirection? {
+        for (span in inline(text)) {
+            for (ch in span.text) {
+                if (!Character.isLetter(ch)) continue
+                val arabic = Character.UnicodeScript.of(ch.code) == Character.UnicodeScript.ARABIC
+                return if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr
+            }
         }
-        val arabic = words.any { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.ARABIC }
-        return if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr
+        return null
+    }
+
+    /**
+     * A block's direction: its words' first strong letter; a list's from its first item that has one (each item then
+     * takes its own); a table's from its header row; code is always left to right.
+     */
+    fun direction(block: MdBlock): LayoutDirection? = when (block) {
+        is MdBlock.Heading -> firstStrong(block.text)
+        is MdBlock.Paragraph -> firstStrong(block.text)
+        is MdBlock.Quote -> firstStrong(block.text)
+        is MdBlock.Code -> LayoutDirection.Ltr
+        is MdBlock.ListBlock -> block.items.firstNotNullOfOrNull(::firstStrong)
+        is MdBlock.Table -> block.head.firstNotNullOfOrNull(::firstStrong)
     }
 
     fun blocks(markdown: String): List<MdBlock> {
@@ -218,9 +234,10 @@ fun EchoMarkdown(text: String, modifier: Modifier = Modifier) {
     val c = EchoV2.colors
     val type = EchoV2.type
     val blocks = remember(text) { Markdown.blocks(text) }
+    val screen = LocalLayoutDirection.current
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
         blocks.forEach { b ->
-            CompositionLocalProvider(LocalLayoutDirection provides Markdown.direction(b)) {
+            CompositionLocalProvider(LocalLayoutDirection provides (Markdown.direction(b) ?: screen)) {
                 Block(b, c, type)
             }
         }
@@ -233,16 +250,16 @@ private fun Block(b: MdBlock, c: EchoV2Colors, type: EchoV2Type) {
     when (b) {
         is MdBlock.Heading -> Text(
             styled(b.text),
-            style = type.content(b.text, if (b.level <= 2) type.titleS else type.bodyStrong),
+            style = face(b.text, if (b.level <= 2) type.titleS else type.bodyStrong),
             color = c.textPrimary,
             modifier = wide.semantics { heading() }
         )
 
-        is MdBlock.Paragraph -> Text(styled(b.text), style = type.content(b.text, type.body), color = c.textPrimary, modifier = wide)
+        is MdBlock.Paragraph -> Text(styled(b.text), style = face(b.text, type.body), color = c.textPrimary, modifier = wide)
 
         is MdBlock.Quote -> Text(
             styled(b.text),
-            style = type.content(b.text, type.body),
+            style = face(b.text, type.body),
             color = c.textSecondary,
             modifier = wide.padding(start = EchoTokens.Space.s12)
         )
@@ -258,11 +275,15 @@ private fun Block(b: MdBlock, c: EchoV2Colors, type: EchoV2Type) {
         )
 
         is MdBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
+            val list = LocalLayoutDirection.current
             b.items.forEachIndexed { n, item ->
-                Row(horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
-                    val mark = if (b.ordered) "${n + 1}." else "•"
-                    Text(mark, style = type.content(item, type.body), color = c.textSecondary)
-                    Text(styled(item), style = type.content(item, type.body), color = c.textPrimary, modifier = Modifier.weight(1f))
+                // Each item its own direction: an English item quoting Urdu stays left to right, and the other way round.
+                CompositionLocalProvider(LocalLayoutDirection provides (Markdown.firstStrong(item) ?: list)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                        val mark = if (b.ordered) "${n + 1}." else "•"
+                        Text(mark, style = face(item, type.body), color = c.textSecondary)
+                        Text(styled(item), style = face(item, type.body), color = c.textPrimary, modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -270,6 +291,14 @@ private fun Block(b: MdBlock, c: EchoV2Colors, type: EchoV2Type) {
         is MdBlock.Table -> Table(b)
     }
 }
+
+/**
+ * A line's face by its first strong letter: one that starts in Latin letters takes the system face on the Urdu screens
+ * too (an English sentence quoting Urdu), one that starts in Urdu the screen's face.
+ */
+@Composable
+private fun face(text: String, style: TextStyle): TextStyle =
+    EchoV2.type.content(if (Markdown.firstStrong(text) == LayoutDirection.Ltr) "A" else text, style)
 
 /** A table that scrolls sideways when it's wider than the page; the header row is strong. */
 @Composable
@@ -282,7 +311,7 @@ private fun Table(table: MdBlock.Table) {
                 row.forEach { cell ->
                     Text(
                         styled(cell),
-                        style = EchoV2.type.content(cell, if (r == 0) EchoV2.type.label else EchoV2.type.meta),
+                        style = face(cell, if (r == 0) EchoV2.type.label else EchoV2.type.meta),
                         color = if (r == 0) c.textPrimary else c.textSecondary,
                         modifier = Modifier.width(EchoTokens.Space.s64 * CELL_UNITS).padding(end = EchoTokens.Space.s8)
                     )

@@ -3,6 +3,11 @@ package com.echoledger.mobile.ui.v2
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -93,6 +98,23 @@ class LargeTextScreensTest : ScreenTest() {
     }
 
     private val help = FixtureHelpSource(lastReport = "2026-11-17T05:42:00+00:00")
+
+    /** The user guide's section 12, Languages: English items that quote Urdu (P-091). */
+    @Test
+    fun guideSectionLanguages() {
+        val guide = java.io.File("../../web/resources/help/user-guide.md").readText()
+        val section = guide.substringAfter("## 12. Languages").substringBefore("\n## ")
+        bash.run("help-section-12") { _ ->
+            androidx.compose.foundation.layout.Column(
+                androidx.compose.ui.Modifier.fillMaxSize()
+                    .background(com.echoledger.mobile.ui.v2.theme.EchoV2.colors.bgCanvas)
+                    .verticalScroll(rememberScrollState())
+                    .padding(com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s16)
+            ) {
+                com.echoledger.mobile.ui.v2.help.EchoMarkdown("## Languages\n" + section)
+            }
+        }
+    }
 
     @androidx.compose.runtime.Composable
     private fun HelpScreen(tab: Int) = V2HelpScreen(help, onPhoneCheck = {}, onBack = {}, startTab = tab)
