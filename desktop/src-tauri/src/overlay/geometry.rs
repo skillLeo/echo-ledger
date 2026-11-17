@@ -181,6 +181,12 @@ pub fn spot_on(area: WorkArea, scale: f64, size: (u32, u32), window_scale: f64, 
     clamp_into(area, at, size)
 }
 
+/// Whether a window stood still since the last screen check (pure): one that moved (dragged by the person, an unlocked
+/// Live Translate window, or just put back) is left alone this round, so a rescue never snatches it mid-drag.
+pub fn settled(previous: Option<(i32, i32)>, now: (i32, i32)) -> bool {
+    previous == Some(now)
+}
+
 /// A scale as read now, else the last one read for the same window, else 1 (pure).
 pub fn scale_or_last(read: Option<f64>, last: Option<f64>) -> f64 {
     let ok = |s: &f64| s.is_finite() && *s > 0.0;

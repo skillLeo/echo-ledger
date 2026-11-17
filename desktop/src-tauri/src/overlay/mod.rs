@@ -17,7 +17,7 @@ use tauri::{AppHandle, LogicalSize, Manager, Runtime, WebviewUrl, WebviewWindow,
 
 use crate::lifecycle;
 use crate::settings::{CaptionSize, CaptionStyle, CaptionWidth, Settings};
-use geometry::{Corner, PillPosition, RectPx, Spot, WorkArea, area_for, caption_overlay_size_for, cursor_in_regions_scaled, dock, nearest_corner, pill_origin_scaled, rescue_scaled, scale_or_last, size_at, spot_on};
+use geometry::{Corner, PillPosition, RectPx, Spot, WorkArea, area_for, caption_overlay_size_for, cursor_in_regions_scaled, dock, nearest_corner, pill_origin_scaled, rescue_scaled, scale_or_last, settled, size_at, spot_on};
 
 pub const OVERLAY: &str = "overlay";
 pub const DICTATION: &str = "dictation";
@@ -300,6 +300,9 @@ fn frame_scale<R: Runtime>(window: &WebviewWindow<R>) -> f64 {
     if cfg!(target_os = "macos") { 1.0 } else { scale_of(window) }
 }
 
+/// Where each window was at the last screen check: one that moved since is not rescued that round (`settled`).
+static LAST_FRAME: Mutex<Option<HashMap<String, (i32, i32)>>> = Mutex::new(None);
+
 /// The last scale read for each window, for when a read fails (the window is being moved or rebuilt).
 static LAST_SCALE: Mutex<Option<HashMap<String, f64>>> = Mutex::new(None);
 
@@ -453,7 +456,13 @@ fn keep_on_screen<R: Runtime>(app: &AppHandle<R>) {
     for label in RESCUED {
         fit_to_text_size(app, label);
         let Some(window) = app.get_webview_window(label) else { continue };
-        if let Some((position, size)) = frame_of(&window)
+        let Some((position, size)) = frame_of(&window) else { continue };
+        // Read before the lock is taken: nothing waits for the main thread while it is held.
+        let still = {
+            let mut seen = LAST_FRAME.lock().unwrap_or_else(|p| p.into_inner());
+            settled(seen.get_or_insert_with(HashMap::new).insert(label.to_string(), position), position)
+        };
+        if still
             && let Some(at) = rescue_scaled(&desk.areas, position, size, frame_scale(&window))
         {
             eprintln!("[echoledger] the {label} window was off screen at {position:?}: moved back to {at:?}");

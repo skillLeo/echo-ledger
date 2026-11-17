@@ -688,3 +688,12 @@ fn live_translate_s_subtitles_sit_bottom_centre_at_their_size_on_the_primary_dis
     let small = WorkArea { x: 100, y: 0, w: 800, h: 600 };
     assert_eq!(spot_on(small, 1.0, (900, 140), 1.0, Spot::BottomCentre, 96.0).0, 100);
 }
+
+#[test]
+fn a_window_that_moved_since_the_last_check_is_not_rescued_that_round() {
+    use desktop_lib::overlay::geometry::settled;
+    // The person drags the unlocked Live Translate window across a display's edge: it moves between checks.
+    assert!(!settled(None, (100, 100)), "first seen: wait a round");
+    assert!(!settled(Some((100, 100)), (900, 100)), "moving: left alone mid-drag");
+    assert!(settled(Some((900, 100)), (900, 100)), "still where it was let go: rescued if it is off screen");
+}
