@@ -2626,6 +2626,13 @@ pub async fn assist_start_replacing(app: AppHandle, session_id: String, prep_id:
     crate::assist::live::start_replacing(&app, &session_id, prep_id, mode, practice.unwrap_or(false), client_ref).await
 }
 
+/// "Keep running" after `session_active`: the other session goes on, and the recording and captions this start
+/// turned on are undone.
+#[tauri::command]
+pub async fn assist_keep_running(app: AppHandle) {
+    crate::assist::live::keep_running(&app).await;
+}
+
 /// Ends the session that runs (`POST /api/assist/sessions/{id}/end`) and stops the recording.
 #[tauri::command]
 pub async fn assist_end(app: AppHandle) -> AppResult<()> {

@@ -1807,6 +1807,8 @@ export const api = {
   /** "End it and start this one" after `session_active`: that session ends, then this start is tried once more. */
   assistStartReplacing: (sessionId: string, prepId: string | null, mode: AssistMode | null = null, practice = false, clientRef: string | null = null) =>
     invoke<AssistStarted>("assist_start_replacing", { sessionId, prepId, mode, practice, clientRef }),
+  /** "Keep running" after `session_active`: the other session goes on; what this start turned on is undone. */
+  assistKeepRunning: () => invoke<void>("assist_keep_running"),
   /** Ends the running session and stops the recording (nothing runs: nothing happens). */
   assistEnd: () => invoke<void>("assist_end"),
   assistSend: (kind: AssistSendKind) => invoke<void>("assist_send", { kind }),

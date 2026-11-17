@@ -354,12 +354,26 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
         None => None,
     };
     let mode = mode.filter(|m| !m.is_empty()).or_else(|| prep.as_ref().map(|p| p.mode.clone())).unwrap_or_else(|| "balanced".into());
-    let captions_were_on = state.live.is_live();
-    let app_language = state.capture.info().map_or_else(|| state.settings().transcription_language.clone(), |i| state.recording_language(&i.client_ref));
-    let (recording_session_id, started_recording) = if practice { (None, None) } else {
-        let (id, started) = recording_session(app).await?;
-        (Some(id), started)
+    // A start answered `session_active` left what it turned on to this one ("End it and start this one").
+    let earlier = state.assist.pending().take();
+    let mut fresh = Attempt::default();
+    let recording_session_id = if practice {
+        None
+    } else {
+        match recording_session(app, &mut fresh).await {
+            Ok(id) => Some(id),
+            Err(e) => {
+                let running = state.capture.info().map(|i| i.client_ref);
+                undo(app, &carried(earlier.as_ref(), &fresh, running.as_deref())).await;
+                return Err(e);
+            }
+        }
     };
+    let running = state.capture.info().map(|i| i.client_ref);
+    let attempt = carried(earlier.as_ref(), &fresh, running.as_deref());
+    let captions_were_on = !attempt.captions_turned_on;
+    let started_recording = attempt.started_recording.clone();
+    let app_language = state.capture.info().map_or_else(|| state.settings().transcription_language.clone(), |i| state.recording_language(&i.client_ref));
     let request = AssistStartRequest { prep_id: prep.as_ref().map(|p| p.id.clone()), mode: Some(mode.clone()), platform: "desktop".into(), recording_session_id, practice };
     let pins = super::relay_pins(state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref());
     let meeting_type = prep.as_ref().map(|p| p.meeting_type.clone());
@@ -380,15 +394,21 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
             emit(&plan_app, &message);
         }
     });
-    let answer = match api.assist_start_or_active(&request).await? {
-        Ok(answer) => answer,
-        Err(active) => {
-            // Another session of this person is active: the card offers to end it and start this one.
+    let answer = match api.assist_start_or_active(&request).await {
+        Ok(Ok(answer)) => answer,
+        Ok(Err(active)) => {
+            // Another session of this person is active: the card offers to end it and start this one. What this start
+            // turned on waits for the answer: the next start owns it, "Keep running" undoes it.
+            *state.assist.pending() = Some(attempt);
             let this_device = state.settings().device_id.clone();
             let message = active_message(&active, this_device.as_deref());
             crate::lifecycle::show(app, WINDOW, "assist");
             emit(app, &message);
             return Err(AppError::msg(message["text"].as_str().unwrap_or_default()));
+        }
+        Err(e) => {
+            undo(app, &attempt).await;
+            return Err(e);
         }
     };
     let handle = session::connect(api, &answer, pins, on_plan, move |event| {
@@ -468,20 +488,81 @@ struct Early {
 
 /// The open server session of the recording the assist runs beside, and the recording this started (its
 /// `client_ref`): a call recording is started (with captions, whose turns feed the relay) when none runs.
-async fn recording_session(app: &AppHandle) -> AppResult<(String, Option<String>)> {
+/// `attempt` notes what this start turned on as it goes, so a start that fails can undo it.
+async fn recording_session(app: &AppHandle, attempt: &mut Attempt) -> AppResult<String> {
     let state = app.state::<crate::AppState>();
-    let started = if state.capture.is_recording() {
-        None
-    } else {
+    if !state.capture.is_recording() {
         let source = state.detect.meeting().map_or("other", |m| m.app.as_str());
+        let captions_before = state.live.is_live();
         crate::actions::start_call_recording_with(app, source, false, true).await?;
-        state.capture.info().map(|i| i.client_ref)
-    };
+        attempt.started_recording = state.capture.info().map(|i| i.client_ref);
+        attempt.captions_turned_on |= !captions_before && state.live.is_live();
+    }
     if !state.live.is_live() {
         crate::actions::start_captions(app).await?;
+        attempt.captions_turned_on = true;
     }
     let info = state.capture.info().ok_or_else(|| AppError::msg("The recording ended before Live Assist could start."))?;
-    Ok((crate::actions::ensure_server_session(app, &info).await?, started))
+    crate::actions::ensure_server_session(app, &info).await
+}
+
+/// What a start turned on before the server answered: the recording it started (its `client_ref`) and whether it
+/// turned captions on. A start that fails undoes them; one answered `session_active` keeps them while the card asks,
+/// and the start that follows owns them.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Attempt {
+    pub started_recording: Option<String>,
+    pub captions_turned_on: bool,
+}
+
+/// What undoing an attempt does (pure): its recording stops (and its captions with it); captions it turned on for
+/// the person's own recording go off; nothing when that recording has ended or another runs.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Undo {
+    StopRecording,
+    CaptionsOff,
+    Nothing,
+}
+
+pub fn undo_for(attempt: &Attempt, running: Option<&str>) -> Undo {
+    match running {
+        Some(running) if attempt.started_recording.as_deref() == Some(running) => Undo::StopRecording,
+        Some(_) if attempt.captions_turned_on && attempt.started_recording.is_none() => Undo::CaptionsOff,
+        _ => Undo::Nothing,
+    }
+}
+
+/// The attempt a start carries on from (pure): what an earlier attempt answered `session_active` turned on, while its
+/// recording is still the one running, joined with what this start turned on.
+pub fn carried(earlier: Option<&Attempt>, now: &Attempt, running: Option<&str>) -> Attempt {
+    let earlier = earlier.filter(|e| e.started_recording.is_none() || e.started_recording.as_deref() == running);
+    Attempt {
+        started_recording: now.started_recording.clone().or_else(|| earlier.and_then(|e| e.started_recording.clone())),
+        captions_turned_on: now.captions_turned_on || earlier.is_some_and(|e| e.captions_turned_on),
+    }
+}
+
+/// Undoes what an attempt turned on.
+async fn undo(app: &AppHandle, attempt: &Attempt) {
+    let state = app.state::<crate::AppState>();
+    let running = state.capture.info().map(|i| i.client_ref);
+    match undo_for(attempt, running.as_deref()) {
+        Undo::StopRecording => {
+            if let Err(e) = crate::actions::stop_recording(app, false).await {
+                eprintln!("[echoledger] stopping the recording Live Assist started: {}", e.code().unwrap_or("error"));
+            }
+        }
+        Undo::CaptionsOff => crate::actions::stop_captions(app),
+        Undo::Nothing => {}
+    }
+}
+
+/// "Keep running" on the `session_active` card (or the card closed): what the waiting start turned on is undone.
+pub async fn keep_running(app: &AppHandle) {
+    let pending = app.state::<crate::AppState>().assist.pending().take();
+    if let Some(attempt) = pending {
+        undo(app, &attempt).await;
+    }
 }
 
 /// What the end of a session does to the recording beside it (pure).
@@ -655,6 +736,11 @@ pub fn snapshot(app: &AppHandle) -> Option<Snapshot> {
 /// The card hides; the session goes on.
 pub fn hide_card(app: &AppHandle) {
     crate::lifecycle::hide(app, WINDOW, "assist");
+    // Closing the card while it asked about another session is "Keep running".
+    if app.state::<crate::AppState>().assist.pending().is_some() {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { keep_running(&app).await });
+    }
 }
 
 /// Whether a session ends because of the flags (pure): `live_assist` is off and one runs.
@@ -983,6 +1069,33 @@ mod tests {
         assert_eq!(at_end(None, Some("rec-0"), false), AtEnd { stop_recording: false, captions_off: true }, "the person's recording goes on; captions go back off");
         assert!(!at_end(Some("rec-1"), Some("rec-2"), true).stop_recording, "a later recording is not the session's");
         assert_eq!(at_end(Some("rec-1"), None, false), AtEnd { stop_recording: false, captions_off: false }, "nothing runs");
+    }
+
+    #[test]
+    fn a_start_answered_session_active_then_keep_running_leaves_no_recording() {
+        // This start began rec-1 with its captions; the server said another session is active.
+        let attempt = carried(None, &Attempt { started_recording: Some("rec-1".into()), captions_turned_on: true }, Some("rec-1"));
+        assert_eq!(undo_for(&attempt, Some("rec-1")), Undo::StopRecording, "Keep running: the recording it started stops");
+        // A start beside the person's own recording only turned captions on: they go off, the recording goes on.
+        let beside = Attempt { started_recording: None, captions_turned_on: true };
+        assert_eq!(undo_for(&beside, Some("rec-0")), Undo::CaptionsOff);
+        assert_eq!(undo_for(&Attempt::default(), Some("rec-0")), Undo::Nothing, "it turned nothing on");
+        assert_eq!(undo_for(&attempt, Some("rec-9")), Undo::Nothing, "another recording runs now");
+        assert_eq!(undo_for(&attempt, None), Undo::Nothing, "it already stopped");
+    }
+
+    #[test]
+    fn end_it_and_start_this_one_owns_the_recording_so_the_end_stops_it() {
+        let first = Attempt { started_recording: Some("rec-1".into()), captions_turned_on: true };
+        // The retry starts nothing new: the recording runs already.
+        let owned = carried(Some(&first), &Attempt::default(), Some("rec-1"));
+        assert_eq!(owned, first, "the new session owns what the first attempt started");
+        // Then assist_end: the recording stops; nothing is left running.
+        assert_eq!(at_end(owned.started_recording.as_deref(), Some("rec-1"), !owned.captions_turned_on), AtEnd { stop_recording: true, captions_off: false });
+        // A retry whose recording is gone carries nothing from it.
+        assert_eq!(carried(Some(&first), &Attempt::default(), Some("rec-2")).started_recording, None);
+        // The retry failing too undoes all of it.
+        assert_eq!(undo_for(&owned, Some("rec-1")), Undo::StopRecording);
     }
 
     #[test]

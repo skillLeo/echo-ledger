@@ -593,6 +593,7 @@ pub fn run() {
             commands::assist_schedule,
             commands::assist_start,
             commands::assist_start_replacing,
+            commands::assist_keep_running,
             commands::assist_end,
             commands::assist_send,
             commands::assist_set,

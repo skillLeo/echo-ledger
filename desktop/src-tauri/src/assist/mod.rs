@@ -41,6 +41,8 @@ pub fn start(
 pub struct Registry {
     running: Mutex<Option<Running>>,
     armed: Mutex<Vec<live::Armed>>,
+    /// A start answered `session_active`: what it turned on, waiting for "End it and start this one" or "Keep running".
+    pending: Mutex<Option<live::Attempt>>,
 }
 
 /// One running session.
@@ -81,6 +83,11 @@ pub struct Line {
 impl Registry {
     fn lock(&self) -> std::sync::MutexGuard<'_, Option<Running>> {
         self.running.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// What a start answered `session_active` turned on, while the card asks.
+    pub fn pending(&self) -> std::sync::MutexGuard<'_, Option<live::Attempt>> {
+        self.pending.lock().unwrap_or_else(|p| p.into_inner())
     }
 
     /// The preps armed for their meetings, one entry per prep.

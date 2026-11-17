@@ -46,6 +46,7 @@ describe("api wrappers", () => {
     ["assistStart (now, practice)", () => api.assistStart(null, null, true), "assist_start", { prepId: null, mode: null, practice: true, clientRef: null }],
     ["assistStart (an offer)", () => api.assistStart("p1", null, false, "rec-7"), "assist_start", { prepId: "p1", mode: null, practice: false, clientRef: "rec-7" }],
     ["assistEnd", () => api.assistEnd(), "assist_end", undefined],
+    ["assistKeepRunning", () => api.assistKeepRunning(), "assist_keep_running", undefined],
     ["assistStartReplacing", () => api.assistStartReplacing("old", "p1"), "assist_start_replacing", { sessionId: "old", prepId: "p1", mode: null, practice: false, clientRef: null }],
     ["assistSend", () => api.assistSend("help_now"), "assist_send", { kind: "help_now" }],
     ["assistSet", () => api.assistSet({ muted_seconds: 60 }), "assist_set", { settings: { muted_seconds: 60 } }],
