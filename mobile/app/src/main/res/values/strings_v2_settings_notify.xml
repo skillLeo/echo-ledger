@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (settings_notify). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_ntf_quiet_from">From</string>
+    <string name="v2_ntf_quiet_to">To</string>
+    <string name="v2_ntf_quiet_bad">Write the time like 22:00</string>
+    <string name="v2_ntf_kinds">Kinds of notification</string>
+    <string name="v2_ntf_always_on">Always on</string>
+    <string name="v2_ntf_android_off">Off in Android\'s settings, so none of these show.</string>
+    <string name="v2_ntf_critical_off">You will not hear when calls stop being recorded.</string>
+    <string name="v2_ntf_test">Test</string>
+    <string name="v2_ntf_test_cd">Test %1$s</string>
+    <string name="v2_ntf_sound">Sound &amp; vibration</string>
+    <string name="v2_ntf_sound_cd">Sound and vibration for %1$s</string>
+    <string name="v2_ntf_turn_on">Turn on in Android</string>
+    <string name="v2_ntf_allow_first">Allow notifications for EchoLedger first.</string>
+    <string name="v2_ntf_open_settings">Open settings</string>
+    <string name="v2_ntf_recording">Recording</string>
+    <string name="v2_ntf_recording_help">Recording now, and the question after a call</string>
+    <string name="v2_ntf_transcription">Transcription</string>
+    <string name="v2_ntf_transcription_help">A transcript is ready, or could not be made</string>
+    <string name="v2_ntf_enhancement">Enhancement</string>
+    <string name="v2_ntf_enhancement_help">Roman Urdu and other views are ready</string>
+    <string name="v2_ntf_uploads">Uploads</string>
+    <string name="v2_ntf_uploads_help">A recording could not be uploaded</string>
+    <string name="v2_ntf_readiness">Call capture &amp; readiness</string>
+    <string name="v2_ntf_readiness_help">Recording calls stopped working, and how to fix it. Comes through even in quiet hours.</string>
+    <string name="v2_ntf_sharing">Sharing</string>
+    <string name="v2_ntf_sharing_help">Someone shared a recording or project with you</string>
+    <string name="v2_ntf_account">Account &amp; security</string>
+    <string name="v2_ntf_account_help">A new device signed in, and other account changes</string>
+    <string name="v2_ntf_usage">Usage &amp; limits</string>
+    <string name="v2_ntf_usage_help">Close to or at the monthly limit</string>
+    <string name="v2_ntf_live_translate">Live Translate</string>
+    <string name="v2_ntf_live_translate_help">Live Translate is running</string>
+    <string name="v2_ntf_updates">App updates</string>
+    <string name="v2_ntf_updates_help">A new version of EchoLedger</string>
+    <string name="v2_ntf_other">Other</string>
+    <string name="v2_ntf_other_help">Everything else</string>
+</resources>

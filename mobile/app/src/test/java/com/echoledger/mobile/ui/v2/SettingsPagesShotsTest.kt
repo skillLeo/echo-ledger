@@ -132,4 +132,15 @@ class SettingsPagesShotsTest {
         )
         org.junit.Assert.assertEquals(com.echoledger.mobile.R.string.v2_calls_note_other_app, bare.words)
     }
+
+    @Test
+    fun notifications() = shoot("settings-notifications") {
+        com.echoledger.mobile.ui.v2.settings.NotificationsPage(AppSettings(quietHours = true), {}, highlight = null, onBack = {})
+    }
+
+    @Test
+    fun calls() = shoot("settings-calls") {
+        CallsPage(AppSettings(autoRecordArmed = true, extraCallApps = listOf("com.example.voip")), {
+        }, highlight = null, onBack = {}, manufacturer = "samsung")
+    }
 }

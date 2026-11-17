@@ -184,7 +184,7 @@ class SettingsV17Test : ScreenTest() {
 
     private fun signedIn(plan: PlanState, latest: UpgradeRequestDto? = null) {
         runBlocking { app.pairLocally(server) }
-        server.on("GET", "/api/account", FakeServer.json(200, """{"name":"Hassam Ali","email":"hassam@example.com"}"""))
+        server.on("GET", "/api/account", FakeServer.json(200, """{"name":"Ayesha Khan","email":"ayesha@example.com"}"""))
         server.on(
             "GET",
             "/api/upgrade-requests/latest",
@@ -204,8 +204,8 @@ class SettingsV17Test : ScreenTest() {
     fun `the root opens with the account card, the plan and Upgrade, then sections with values`() {
         signedIn(free)
         shoot { SettingsScreen(vm, onSetup = {}) }
-        waitFor { compose.onAllNodesWithText("Hassam Ali").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("hassam@example.com").assertIsDisplayed()
+        waitFor { compose.onAllNodesWithText("Ayesha Khan").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("ayesha@example.com").assertIsDisplayed()
         compose.onNodeWithText("Upgrade").assertIsDisplayed()
         compose.onNodeWithText("Set up free transcription (2 minutes)").assertExists()
         compose.onNodeWithText("Recording").assertExists()
@@ -218,7 +218,7 @@ class SettingsV17Test : ScreenTest() {
     fun `Ultra has no Upgrade, and an open request replaces it with its status line`() {
         signedIn(ultra)
         shoot { SettingsScreen(vm, onSetup = {}) }
-        waitFor { compose.onAllNodesWithText("Hassam Ali").fetchSemanticsNodes().isNotEmpty() }
+        waitFor { compose.onAllNodesWithText("Ayesha Khan").fetchSemanticsNodes().isNotEmpty() }
         assertTrue(compose.onAllNodesWithText("Upgrade").fetchSemanticsNodes().isEmpty())
         capture("settings-ultra")
     }
@@ -352,7 +352,7 @@ class SettingsV17Test : ScreenTest() {
         wallpaper = true
         signedIn(free)
         shoot { SettingsScreen(vm, onSetup = {}) }
-        waitFor { compose.onAllNodesWithText("Hassam Ali").fetchSemanticsNodes().isNotEmpty() }
+        waitFor { compose.onAllNodesWithText("Ayesha Khan").fetchSemanticsNodes().isNotEmpty() }
         capture("settings-wallpaper")
     }
 }
