@@ -1,4 +1,6 @@
-# Live Assist contract — revision 1.9.0-j (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-k (frozen 2026-11-17 for the sprint)
+
+1.9.0-k: `409 session_active` names the active session; a start from the same device may end it first.
 
 1.9.0-j: `practice_question` numbers questions with `index`; the apps send the relay's `turn_id` as each `other`
 turn's `client_ref`; a token refresh never fails because captions are down.
@@ -96,7 +98,9 @@ Errors added by Live Assist:
    "stt": {"provider": "soniox", "ws_url": "…", "token": "…", "expires_at": "…", "translate_other": true},
    "plan": {"modes": ["fast", "balanced"], "seconds_left": 31200}}
   ```
-  One active session (live or practice) per person: a second start answers `409 session_active`. `stt` is `null`
+  One active session (live or practice) per person, across all their workspaces: a second start answers
+  `409 session_active` with `{"session_id": "…", "practice": true|false, "device_id": "…"}`; the app may end it
+  (`POST …/end`) and start again. `stt` is `null`
   when the server can't issue a captions token; that is allowed only with a running recording (the app then uses its
   own captions through `POST /api/stt/token`). Otherwise the start is refused with `503 provider_not_configured`.
   `auto_saved` is true when the session started from a prep: that call gets no after-call card. `recording_session_id`
