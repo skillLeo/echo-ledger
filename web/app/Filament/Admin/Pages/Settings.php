@@ -13,6 +13,9 @@ use App\Filament\Support\NoticeTargets;
 use App\Mail\TestMail;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
+use App\Services\Assist\AssistTransport;
+use App\Services\Assist\RelayHealth;
+use App\Services\Assist\RelayToken;
 use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\EngineWait;
@@ -188,6 +191,8 @@ class Settings extends Page
             'whisper_chunk_seconds' => $all['whisper.chunk_seconds'],
             'whisper_vad' => (bool) $all['whisper.vad'],
             'app_pins' => $all['app.pins'],
+            'assist_connection' => isset(AssistTransport::CHOICES[$all['assist.connection'] ?? '']) ? $all['assist.connection'] : AssistTransport::DEFAULT,
+            'relay_url' => is_string($all['relay.url'] ?? null) ? $all['relay.url'] : null,
             ...self::budgetFormState($all),
         ];
     }
@@ -311,6 +316,25 @@ class Settings extends Page
                                 ])
                                 ->columns(4)->defaultItems(0)->maxItems(TextReplacements::MAX_RULES)->addActionLabel('Add a correction')
                                 ->helperText('Applied to every new final transcript; the original stays in the transcript history and can be restored.'),
+                        ]),
+                    $this->section('assist_connection')
+                        ->description('How the apps reach Live Assist during a call. A dedicated relay runs on a VPS (its secret and certificate pins are on API Credentials). Shared hosting (emergency only) needs nothing more. Each session keeps the connection it started with.')
+                        ->columns(2)->schema([
+                            Select::make('assist_connection')->label('Live Assist connection')->options(AssistTransport::CHOICES)->selectablePlaceholder(false)->required()->live()
+                                ->helperText(fn (Get $get): string => $get('assist_connection') === AssistTransport::SHARED ? AssistTransport::SHARED_HELP
+                                    : 'Dedicated relay (the default) always uses the relay on the VPS and says so when it is down, so the apps can try again. Automatic does the same whenever a relay is set up, and uses this server only while none is. Shared hosting is for emergencies only.'),
+                            TextInput::make('relay_url')->label('Relay address')->placeholder('relay.example.com')->maxLength(253)
+                                ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
+                                    if (filled($value) && RelayToken::url((string) $value) === null) {
+                                        $fail('Enter the relay\'s host name, such as relay.example.com.');
+                                    }
+                                })
+                                ->helperText(fn (?string $state): string => RelayToken::url($state) !== null
+                                    ? 'The apps connect to '.RelayToken::url($state).'. Empty: no relay.'
+                                    : 'The relay\'s host name; the apps connect to wss://<host>/v1/assist. Empty: no relay.'),
+                            Actions::make([
+                                Action::make('checkRelay')->label('Check relay')->icon(Heroicon::OutlinedSignal)->action(fn () => $this->checkRelay()),
+                            ])->columnSpanFull(),
                         ]),
                 ]),
                 'recording' => $this->tab('recording', [
@@ -760,6 +784,36 @@ class Settings extends Page
         return $routes;
     }
 
+    /**
+     * "Check relay": asks the relay at the address in the form (saved or not) and shows how it answered. Guarded like
+     * every relay check (RelayHealth::probe: public addresses only, pinned, no redirects) and limited to 6 a minute.
+     */
+    public function checkRelay(): void
+    {
+        $key = 'check-relay:'.auth()->id();
+        if (RateLimiter::tooManyAttempts($key, 6)) {
+            Notification::make()->title('Wait a moment')->body('Check the relay again in '.RateLimiter::availableIn($key).' seconds.')->warning()->send();
+
+            return;
+        }
+        RateLimiter::hit($key, 60);
+        $typed = trim((string) ($this->data['relay_url'] ?? ''));
+        $url = RelayToken::url($typed);
+        if ($url === null) {
+            Notification::make()->title('No relay to check')->body($typed === '' ? 'Enter the relay\'s address first.' : 'Enter the relay\'s host name, such as relay.example.com.')->warning()->send();
+
+            return;
+        }
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        // The check is remembered for the saved address only: a typed one is asked, not remembered.
+        $result = app(SettingsRepository::class)->get('relay.url') === $host ? app(RelayHealth::class)->check() : RelayHealth::probe($host);
+        if ($result['ok']) {
+            Notification::make()->title('The relay is up')->body("{$host} answered in {$result['ms']} ms".($result['version'] !== null ? " (version {$result['version']})." : '.'))->success()->send();
+        } else {
+            Notification::make()->title('The relay is down')->body("{$host}: ".($result['error'] ?? 'no answer.').' Live Assist sessions are refused until it answers again (the apps say so); Shared hosting is for emergencies only.')->danger()->send();
+        }
+    }
+
     public function save(SettingsRepository $settings): void
     {
         $this->persist($settings);
@@ -836,6 +890,10 @@ class Settings extends Page
             'live_translate.watch_speed' => array_key_exists($state['live_translate_watch_speed'] ?? '', self::LIVE_TRANSLATE_SPEEDS) ? $state['live_translate_watch_speed'] : 'balanced',
             'routing.final' => self::routingFromState($state),
             'routing.urdu_wait_hours' => EngineWait::clampHours($state['urdu_wait_hours'] ?? null),
+            'assist.connection' => isset(AssistTransport::CHOICES[$state['assist_connection'] ?? '']) ? $state['assist_connection'] : AssistTransport::DEFAULT,
+            'relay.url' => filled($state['relay_url'] ?? null) && RelayToken::url((string) $state['relay_url']) !== null
+                ? (string) parse_url((string) RelayToken::url((string) $state['relay_url']), PHP_URL_HOST)
+                : null,
         ]);
         // The SMTP password goes to the credential vault (its change is in the audit log there); empty keeps it.
         $vault = app(CredentialVault::class);
@@ -867,6 +925,15 @@ class Settings extends Page
             return (string) json_encode($value);
         };
         $changed = array_values(array_filter(array_keys($after), fn (string $key): bool => $same($before[$key] ?? null) !== $same($after[$key])));
+        // Live Assist's connection gets its own entry, naming the choice and the relay before and after.
+        if (array_intersect($changed, ['assist.connection', 'relay.url']) !== []) {
+            $describe = fn (array $all): string => (AssistTransport::CHOICES[$all['assist.connection'] ?? ''] ?? AssistTransport::CHOICES[AssistTransport::DEFAULT])
+                .' ('.(is_string($all['relay.url'] ?? null) ? $all['relay.url'] : 'no relay').')';
+            app(AuditLog::class)->record('assist_connection_changed', (int) auth()->id(), null, Str::limit('Live Assist connection: '.$describe($before).' → '.$describe($after), 250, '…'), [
+                'from' => ['connection' => $before['assist.connection'] ?? null, 'relay' => $before['relay.url'] ?? null],
+                'to' => ['connection' => $after['assist.connection'], 'relay' => $after['relay.url']],
+            ]);
+        }
         if ($changed !== []) {
             app(AuditLog::class)->record('settings_changed', (int) auth()->id(), null, Str::limit('Settings changed: '.implode(', ', $changed), 250, '…'), ['keys' => $changed]);
         }

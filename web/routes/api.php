@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\ActivityController;
+use App\Http\Controllers\Api\Assist\AssistLiveController;
 use App\Http\Controllers\Api\Assist\AssistPrepController;
 use App\Http\Controllers\Api\Assist\AssistSessionController;
 use App\Http\Controllers\Api\Assist\InternalAssistController;
@@ -261,6 +262,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::post('preps/{id}/arm', [AssistPrepController::class, 'arm'])->name('api.assist.preps.arm');
             Route::post('sessions/{id}/turns', [AssistSessionController::class, 'turns'])->name('api.assist.sessions.turns');
             Route::post('sessions/{id}/end', [AssistSessionController::class, 'end'])->name('api.assist.sessions.end');
+            // HTTP mode (1.9.0-q): one app message in, its answer streamed back as server-sent events.
+            Route::post('sessions/{id}/live', [AssistLiveController::class, 'live'])->name('api.assist.sessions.live');
             Route::delete('sessions/{id}', [AssistSessionController::class, 'destroy'])->name('api.assist.sessions.destroy');
             Route::post('sessions/{id}/suggestions/{suggestionId}/action', [AssistSessionController::class, 'action'])->name('api.assist.sessions.suggestions.action');
             // Ask over the session (L7): a model call billed to the session's allowance, so the Ask limit too.

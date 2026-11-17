@@ -90,6 +90,8 @@ final class SettingsTransfer
         'live_translate.monthly_usd',
         'live_translate.watch_target',
         'live_translate.watch_speed',
+        'assist.connection',
+        'relay.url',
     ];
 
     public function __construct(private readonly SettingsRepository $settings) {}

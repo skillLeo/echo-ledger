@@ -53,11 +53,12 @@ final class AssistPlans
     /**
      * What is left this month of the live allowance, or of Practice's: assist seconds and model budget in US cents
      * (never below 0). Each counts only its own kind of session, and the usage of those sessions (pending reservations
-     * too), less what the relay tokens of the sessions still on granted and they have not spent yet (held()).
+     * too, unless [$withPending] is false), less what the relay tokens of the sessions still on granted and they have not
+     * spent yet (held()).
      *
      * @return array{seconds_left: int, cents_left: int}
      */
-    public function left(int $workspaceId, int $userId, bool $practice, ?string $exceptClaimOf = null): array
+    public function left(int $workspaceId, int $userId, bool $practice, ?string $exceptClaimOf = null, bool $withPending = true): array
     {
         $plan = $this->for($workspaceId);
         $allowance = $practice ? $plan['practice'] : ['seconds' => $plan['seconds'], 'cents' => $plan['cents']];
@@ -67,7 +68,10 @@ final class AssistPlans
         $sessions()->where('started_at', '>=', $from)->each(function (AssistSession $session) use (&$seconds): void {
             $seconds += $session->seconds();
         });
+        // [$withPending] false leaves out the reservations of calls still in flight (HTTP mode's mode choice follows what
+        // is spent, so it never moves for a call in flight; the gate that takes a reservation counts them).
         $spent = (float) AssistUsage::query()->where('user_id', $userId)->where('occurred_at', '>=', $from)
+            ->when(! $withPending, fn ($q) => $q->where(fn ($w) => $w->whereNull('outcome')->orWhere('outcome', '!=', AssistBudget::PENDING)))
             ->whereIn('assist_session_id', $sessions()->select('id'))->sum('cost_usd');
 
         return [

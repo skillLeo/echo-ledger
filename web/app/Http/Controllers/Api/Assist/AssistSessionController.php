@@ -20,6 +20,11 @@ use App\Services\Assist\AssistAsk;
 use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistRecords;
 use App\Services\Assist\AssistStt;
+use App\Services\Assist\AssistTransport;
+use App\Services\Assist\Http\Card;
+use App\Services\Assist\Http\HttpBlock;
+use App\Services\Assist\Http\LiveContext;
+use App\Services\Assist\Http\LiveState;
 use App\Services\Assist\RelayToken;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -36,7 +41,13 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 final class AssistSessionController extends Controller
 {
-    public function __construct(private readonly AssistPlans $plans, private readonly RelayToken $relay, private readonly AssistStt $stt) {}
+    public function __construct(
+        private readonly AssistPlans $plans,
+        private readonly RelayToken $relay,
+        private readonly AssistStt $stt,
+        private readonly AssistTransport $transport,
+        private readonly HttpBlock $http,
+    ) {}
 
     /** POST /api/assist/sessions — `stt:token`. */
     public function store(Request $request): JsonResponse
@@ -47,6 +58,9 @@ final class AssistSessionController extends Controller
             'platform' => ['required', Rule::in(AssistSession::PLATFORMS)],
             'recording_session_id' => ['sometimes', 'nullable', 'string', 'max:26'],
             'practice' => ['sometimes', 'boolean'],
+            // Since 1.9.0-q: the transports the app knows; absent for apps that know only the relay.
+            'transports' => ['sometimes', 'array', 'max:8'],
+            'transports.*' => ['string', 'max:16'],
         ]);
         $device = $this->device($request);
         $practice = (bool) ($data['practice'] ?? false);
@@ -62,15 +76,16 @@ final class AssistSessionController extends Controller
         // the budget: a session still on holds its token's budget, and the answer should name it.
         $this->assertNoneActive($device);
         $this->plans->assertLeft($device->workspace_id, $device->user_id, $practice);
-        // Refused before anything is created: no relay, or no captions where nothing else gives them (Practice, or a
-        // call without a recording; a running recording has its own captions).
-        $this->relay->assertReady();
+        // Refused before anything is created: no transport this app knows (or the dedicated relay down), or no captions
+        // where nothing else gives them (Practice, or a call without a recording; a running recording has its own).
+        $known = array_values(array_intersect(AssistTransport::TRANSPORTS, (array) ($data['transports'] ?? [AssistTransport::TRANSPORT_RELAY])));
+        $transport = $this->transport->choose($known);
         $stt = $this->stt->block($prep instanceof AssistPrep && $prep->language_help !== 'off');
         if ($stt === null && $recording === null) {
             throw new ApiError(503, 'provider_not_configured', 'Live captions are not set up on the server yet.');
         }
 
-        $session = DB::transaction(function () use ($device, $data, $practice, $prep, $recording, $mode): AssistSession {
+        $session = DB::transaction(function () use ($device, $data, $practice, $prep, $recording, $mode, $transport): AssistSession {
             // One assist session at a time per person, live or Practice: each spends what is left of the month, so two
             // at once would spend it twice. The person's row is locked so two starts at once cannot both pass.
             User::query()->whereKey($device->user_id)->lockForUpdate()->first();
@@ -86,6 +101,7 @@ final class AssistSessionController extends Controller
                 'plan' => $this->plans->for($device->workspace_id)['key'],
                 'practice' => $practice,
                 'platform' => (string) $data['platform'],
+                'transport' => $transport,
                 'auto_saved' => $prep !== null,
                 'status' => 'active',
                 'started_at' => now(),
@@ -98,7 +114,7 @@ final class AssistSessionController extends Controller
 
         return response()->json([
             'session' => ['id' => $session->id, 'auto_saved' => $session->auto_saved, 'mode' => $session->mode, 'practice' => $session->practice],
-            'relay' => $this->relay->block($session),
+            ...$this->transportBlocks($session),
             'stt' => $stt,
             'plan' => ['modes' => $this->plans->modes($device->workspace_id, $practice), 'seconds_left' => $this->plans->left($device->workspace_id, $device->user_id, $practice)['seconds_left']],
         ], 201)->header('Cache-Control', 'no-store');
@@ -111,12 +127,27 @@ final class AssistSessionController extends Controller
     public function token(Request $request, string $id): JsonResponse
     {
         $session = $this->active($request, $id);
-        $this->relay->assertReady();
+        if ($session->transport === AssistTransport::TRANSPORT_RELAY) {
+            $this->relay->assertReady();
+        }
         $prep = $session->prep;
         $stt = $this->stt->block($prep instanceof AssistPrep && $prep->language_help !== 'off', $session->id);
         $session->forceFill(['last_token_at' => now()])->save();
 
-        return response()->json(['relay' => $this->relay->block($session), 'stt' => $stt])->header('Cache-Control', 'no-store');
+        return response()->json([...$this->transportBlocks($session), 'stt' => $stt])->header('Cache-Control', 'no-store');
+    }
+
+    /**
+     * `transport` and its block (1.9.0-q): the relay's address and token, or HTTP mode's endpoint and `ready`; the other
+     * block null.
+     *
+     * @return array{transport: string, relay: array<string, string>|null, http: array<string, mixed>|null}
+     */
+    private function transportBlocks(AssistSession $session): array
+    {
+        return $session->transport === AssistTransport::TRANSPORT_HTTP
+            ? ['transport' => AssistTransport::TRANSPORT_HTTP, 'relay' => null, 'http' => $this->http->block($session)]
+            : ['transport' => AssistTransport::TRANSPORT_RELAY, 'relay' => $this->relay->block($session), 'http' => null];
     }
 
     /** POST /api/assist/sessions/{id}/turns — `sessions:write`: final turns; a client_ref seen before is ignored. */
@@ -254,6 +285,10 @@ final class AssistSessionController extends Controller
             'seconds_used' => max(0, (int) $session->started_at->diffInSeconds($at, true)),
             'report_status' => 'queued',
         ])->save();
+        // HTTP mode keeps the call's context and the card in the cache while it runs: gone with it.
+        app(LiveContext::class)->forget($session);
+        app(LiveState::class)->forget($session);
+        app(Card::class)->forget($session);
     }
 
     /**

@@ -70,6 +70,44 @@ return [
         ],
     ],
 
+    // HTTP mode (since 1.9.0-q, docs/API_ASSIST.md): the relay's role inside Laravel, one POST per app message.
+    // `reserve_suggestions`: a mode needs room for this many suggestions (one in Fast); `upgrade_share`: the share of
+    // Balanced suggestions that also go to the upgrade model (the estimate only); `hold_max_ms` / `hold_poll_ms`: how long a
+    // question the budget gate can't take yet waits for room, and how often it looks again; `stall_timeout_ms`: a model that
+    // has begun to answer and then sends nothing for this long has failed (until its first word, its own
+    // `first_token_timeout_ms` counts).
+    'http' => [
+        'reserve_suggestions' => 3,
+        'upgrade_share' => 0.3,
+        'hold_max_ms' => 5000,
+        'hold_poll_ms' => 150,
+        'stall_timeout_ms' => 10000,
+        // How often a request writing a suggestion looks at the card to see whether another request has ended it.
+        'card_check_ms' => 100,
+    ],
+
+    // The relay's own calls beside the suggestions (services/assist-relay/config/relay.toml [background], [practice]): the
+    // facts ledger after this many final lines, the running summary at most this often, and what a call may write; and
+    // Practice: the questions it asks (one per `practice_next`) and the length of each.
+    'background' => ['facts_every_finals' => 3, 'summary_every_secs' => 300, 'max_output_tokens' => 400],
+    'practice' => ['questions' => 8, 'max_output_tokens' => 120],
+
+    // What a request is made of (services/assist-relay/config/relay.toml [context]): the older transcript is cut into
+    // blocks of about this many tokens (a closed block never changes, so it stays cached), the newest turns go word for
+    // word, and past `max_transcript_tokens` the oldest blocks are dropped (the running summary covers them).
+    'context' => ['block_tokens' => 1500, 'recent_turns' => 8, 'max_transcript_tokens' => 40000],
+
+    // A question is hard when it has at least this many words or contains one of these phrases: in Balanced it also goes
+    // to the upgrade model.
+    'upgrade' => [
+        'min_words' => 14,
+        'phrases' => [
+            'why', 'how would', 'how do you', 'explain', 'describe', 'walk me through', 'tell me about a time',
+            'what would you do', 'difference between', 'compare', 'kyun', 'kyon', 'kaise', 'samjhao',
+            'کیوں', 'کیسے', 'سمجھائیں', 'لماذا', 'كيف', 'اشرح',
+        ],
+    ],
+
     // The usage kinds the relay reports (1.9.0-h): a suggestion's (`suggestion`, or the relay's own kind of it) and its
     // background calls. `report` is the server's own: the post-call report (L7).
     'usage_kinds' => ['suggestion', 'answer', 'help_now', 'regenerate', 'shorter', 'formal', 'translate', 'upgrade', 'practice_question', 'facts', 'summary', 'report', 'ask'],
