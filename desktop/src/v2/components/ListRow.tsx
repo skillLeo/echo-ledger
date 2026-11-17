@@ -9,7 +9,7 @@ export function List({ label, children, className }: { label: string; children: 
 
 /** A plain heading between groups of rows (Today, Yesterday; Recording, Privacy). */
 export function ListSection({ title, id }: { title: ReactNode; id?: string }) {
-  return <li role="presentation" className="el-list-section el-caption el-body-strong" id={id}>{title}</li>;
+  return <li className="el-list-section el-caption el-body-strong" id={id}>{title}</li>;
 }
 
 export type ListRowProps = {
@@ -34,6 +34,8 @@ export type ListRowProps = {
   compact?: boolean;
   /** At most one badge per row. */
   badge?: ReactNode;
+  /** What the row stands for (a recording's id): a page can give it keyboard focus back after a change. */
+  rowId?: string;
   /** A press that may start a drag (recordings dragged onto a project in the sidebar). */
   onPointerDown?: (e: PointerEvent<HTMLButtonElement>) => void;
 };
@@ -43,7 +45,7 @@ export type ListRowProps = {
  * by the rest; with a control the row is a label for it.
  */
 export function ListRow({
-  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown,
+  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId,
 }: ListRowProps) {
   const id = useId();
   const interactive = Boolean(onClick) && !control;
@@ -55,7 +57,7 @@ export function ListRow({
     <li className={cls}>
       {interactive && (
         <button type="button" className="el-row__hit" aria-labelledby={`${id}-title`} aria-describedby={describedBy}
-          aria-current={selected || undefined} onClick={onClick} onPointerDown={onPointerDown} />
+          aria-current={selected || undefined} onClick={onClick} onPointerDown={onPointerDown} data-row-id={rowId} />
       )}
       {leading ?? (icon && (
         <span className={`el-row__leading${iconStyle === "avatar" ? " el-row__leading--avatar" : ""}`}>

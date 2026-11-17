@@ -222,7 +222,8 @@ describe("the app with the flags", () => {
     render(<MainApp />);
     await act(flushAsync);
     await act(flushAsync);
-    const me = await screen.findByRole("button", { name: /^Ayesha Siddiqui.*Opens Settings\.$/ });
+    const me = await screen.findByRole("button", { name: /^Ayesha Siddiqui/ });
+    expect(me).toHaveAccessibleDescription("Opens Settings");
     fireEvent.click(me);
     await act(flushAsync);
     await act(flushAsync);

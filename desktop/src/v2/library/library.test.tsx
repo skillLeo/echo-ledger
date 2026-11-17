@@ -180,6 +180,8 @@ describe("LibraryV2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await act(flushAsync);
     expect(callsOf("delete_session")).toEqual([{ id: "bilal" }]);
+    // The deleted recording's place goes to the next one in the list.
+    expect(screen.getByRole("button", { name: "Voice note" })).toHaveFocus();
     const toast = screen.getByRole("status", { name: "Notifications" });
     expect(toast).toHaveTextContent('"Bilal Qureshi · Qureshi Textiles" moved to Trash');
     expect(screen.queryByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" })).toBeNull();
@@ -188,6 +190,8 @@ describe("LibraryV2", () => {
     await act(flushAsync);
     expect(callsOf("session_restore")).toEqual([{ id: "bilal" }]);
     expect(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" })).toBeInTheDocument();
+    // Keyboard focus comes back to the recording, never lost on the page.
+    expect(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" })).toHaveFocus();
   });
 
   it("Trash lists deleted recordings to restore or delete forever after a confirmation", async () => {
