@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.echoledger.mobile.ui.MainViewModel
+import com.echoledger.mobile.ui.v2.ask.V2AskScreen
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoDestination
 import com.echoledger.mobile.ui.v2.components.EchoIcons
@@ -244,7 +245,12 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
                         classic.live()
                     }
 
-                    V2Tab.Ask -> classic.ask()
+                    V2Tab.Ask -> if (flags.isOn(UiFlags.ASK)) {
+                        // A citation opens its recording (the v2 page with ui_v2.library, else the Library tab).
+                        V2AskScreen(vm, onOpenAt = { id, _ -> if (flags.library) route = V2Route.Recording(id) else tab = V2Tab.Library })
+                    } else {
+                        classic.ask()
+                    }
                 }
             }
         }
