@@ -33,6 +33,11 @@ return new class extends Migration
         DB::table('users')->where('ui_classic', true)->whereNull('ui_design')->update(['ui_design' => 'classic']);
     }
 
+    /**
+     * Empties what up() filled. A "v2" choice a person made after the deploy is lost on rollback (2.0.0-a has no such
+     * choice); a "classic" choice survives through ui_classic, which setDesign() keeps equal to it. Availabilities go
+     * back to null; with the columns' down they go entirely, and the flags read from "everyone" and the lists as before.
+     */
     public function down(): void
     {
         DB::table('interface_flags')->update(['availability' => null]);
