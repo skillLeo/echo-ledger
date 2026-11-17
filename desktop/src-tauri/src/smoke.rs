@@ -30,6 +30,11 @@ pub const EXIT_WINDOW_FAILED: i32 = 2;
 pub const EXIT_TIMED_OUT: i32 = 3;
 /// A Mac only: the app is not set up as a normal app must be (`mac_app_problem`). Not 4, 5 or 6, the Share Check's.
 pub const EXIT_MAC_APP: i32 = 7;
+/// Asking what the permissions are (`permissions_status`, as every page that shows them does) got no answer within
+/// [`PERMISSIONS_WITHIN`]: a lock waited on itself. Not 8, the stall detector's on the newer line.
+pub const EXIT_PERMISSIONS_HUNG: i32 = 9;
+/// How long the permissions may take to answer: they read the system once, never a prompt.
+pub const PERMISSIONS_WITHIN: Duration = Duration::from_secs(10);
 
 /// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, and every
 /// floating window must be a non-activating panel (it floats over a full-screen meeting without taking the focus) that,
@@ -144,6 +149,26 @@ pub fn drive(app: tauri::AppHandle) {
             tokio::time::sleep(POLL).await;
         }
         say(&format!("ok: {} windows ready in {} ms", labels.len(), started.elapsed().as_millis()));
+        // The permissions, asked once as the pages ask them (read only: nothing is prompted, the memory is the test's).
+        let asked = Instant::now();
+        let reader = app.clone();
+        let answer = tauri::async_runtime::spawn_blocking(move || {
+            use tauri::Manager;
+            crate::commands::permissions_status_of(&reader.state::<crate::AppState>())
+        });
+        match tokio::time::timeout(PERMISSIONS_WITHIN, answer).await {
+            Ok(Ok(status)) => say(&format!(
+                "ok: the permissions answered in {} ms (microphone {}, system audio {}, screen {})",
+                asked.elapsed().as_millis(),
+                status.microphone,
+                status.system_audio,
+                status.screen
+            )),
+            _ => {
+                say(&format!("failed: the permissions gave no answer within {} s", PERMISSIONS_WITHIN.as_secs()));
+                finish(&dir, EXIT_PERMISSIONS_HUNG);
+            }
+        }
         // A Mac: the app runs as a normal one, its quit answer is in and the floating windows are panels.
         #[cfg(target_os = "macos")]
         {
