@@ -186,6 +186,35 @@ async fn a_busy_server_keeps_the_screens_and_waits_longer() {
 }
 
 #[tokio::test]
+async fn a_server_busy_decoding_pictures_gets_the_same_screen_again_after_its_wait() {
+    // 2.0.0-f: 503 server_busy with Retry-After: 5, then the server takes it.
+    let server = MockServer::start(inbox_session().route("POST", &screens_path(), |_, nth| {
+        if nth == 0 {
+            Action::Reply(Reply::json(503, json!({"message": "Busy.", "code": "server_busy"})).header("Retry-After", "5"))
+        } else {
+            Action::Reply(Reply::json(201, json!({"data": {}})))
+        }
+    }));
+    let (_dir, store) = stored(2);
+    let now = Utc::now();
+
+    let busy = drain(&client(&server), &store, &key(), None, now).await;
+    assert_eq!((busy.sent, busy.dropped, busy.stopped, busy.busy_for), (0, 0, None, Some(5)));
+    let manifest = store.load("rec").unwrap();
+    assert_eq!(manifest.items.len(), 2, "nothing is lost");
+    assert_eq!(manifest.failures, 0, "not a failure: the wait does not grow");
+    let at = manifest.next_try_at.unwrap();
+    assert!(at >= now + chrono::Duration::seconds(5) && at < Utc::now() + chrono::Duration::seconds(6), "after Retry-After, not the 30 s backoff");
+    assert!(drain(&client(&server), &store, &key(), None, now).await.sent == 0, "not before its wait");
+
+    let later = drain(&client(&server), &store, &key(), None, at).await;
+    assert_eq!(later.sent, 2, "the same screens go");
+    let posts = server.requests_to("POST", &screens_path());
+    assert_eq!(posts.len(), 3);
+    assert_eq!(part(&posts[0], "sha256"), part(&posts[1], "sha256"), "the screen the server was too busy for is sent again");
+}
+
+#[tokio::test]
 async fn rate_limits_wait_at_least_retry_after() {
     let server = MockServer::start(inbox_session().fixed("POST", &screens_path(), Reply::json(429, json!({"message": "Slow down", "code": "rate_limited"})).header("Retry-After", "120")));
     let (_dir, store) = stored(1);

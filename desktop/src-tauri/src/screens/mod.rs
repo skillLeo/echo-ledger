@@ -423,6 +423,14 @@ pub async fn send(app: &AppHandle, api: &ApiClient) -> usize {
     let Some(key) = state.screens.key() else { return 0 };
     let drain = upload::drain(api, &store, &key, current.as_ref(), Utc::now()).await;
     state.screens.limit_reached(&drain.limited);
+    // The server was busy decoding pictures: the upload worker comes back after its wait instead of its usual 30 s.
+    if let Some(after) = drain.busy_for {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(after)).await;
+            app.state::<crate::AppState>().upload_notify.notify_one();
+        });
+    }
     match drain.stopped {
         Some(upload::Next::ServerMissing) => {
             state.screens.server_missing.store(true, Ordering::SeqCst);

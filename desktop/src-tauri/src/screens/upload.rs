@@ -34,7 +34,14 @@ pub enum Next {
     Unpaired,
     /// Busy or unreachable: try again later (after `Retry-After` seconds when the server said).
     Later(Option<u64>),
+    /// The server is decoding as many pictures as it allows (`503 server_busy`): nothing failed, the same screen goes
+    /// again after these seconds (its `Retry-After`).
+    Busy(u64),
 }
+
+/// How long a screen waits after `503 server_busy` without a `Retry-After` (the server sends 5), and at most.
+pub const BUSY_WAIT_SECS: u64 = 5;
+pub const BUSY_WAIT_MAX_SECS: u64 = 60;
 
 /// The step after an upload's answer (pure).
 pub fn next_after<T>(result: &AppResult<T>) -> Next {
@@ -47,6 +54,7 @@ pub fn next_after<T>(result: &AppResult<T>) -> Next {
         Some("too_many_screens") => return Next::LimitReached,
         Some("session_not_found" | "not_allowed" | "storage_limit_reached") => return Next::DropRecording,
         Some("feature_not_in_plan") => return Next::NotInPlan,
+        Some("server_busy") => return Next::Busy(e.retry_after_secs().unwrap_or(BUSY_WAIT_SECS).clamp(1, BUSY_WAIT_MAX_SECS)),
         _ => {}
     }
     if e.is_missing_route() {
@@ -74,6 +82,8 @@ pub struct Drain {
     pub stopped: Option<Next>,
     /// Recordings the server keeps no more screens of (`409 too_many_screens`).
     pub limited: Vec<String>,
+    /// The server was busy decoding pictures: the round stopped, and the screens go again after these seconds.
+    pub busy_for: Option<u64>,
 }
 
 /// Does the session's project keep screens? The Inbox does; a project says with its `screens` switch (missing = on).
@@ -118,7 +128,7 @@ pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, curren
                         drain.stopped = Some(next);
                         return drain;
                     }
-                    Next::Later(_) | Next::Sent => {
+                    Next::Later(_) | Next::Busy(_) | Next::Sent => {
                         wait(store, &manifest, now);
                         return drain;
                     }
@@ -132,6 +142,10 @@ pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, curren
             }
             // Busy or away: the other recordings would meet the same server.
             Some(Next::Later(_)) => return drain,
+            Some(Next::Busy(after)) => {
+                drain.busy_for = Some(after);
+                return drain;
+            }
             _ => {}
         }
     }
@@ -172,6 +186,11 @@ async fn send_recording(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, m
             Next::Later(after) => {
                 wait_at_least(store, manifest, Utc::now(), after);
                 return Some(Next::Later(after));
+            }
+            Next::Busy(after) => {
+                // Not a failure: the same screen goes again after the server's wait, which does not grow.
+                let _ = store.update(&manifest.recording, |m| m.next_try_at = Some(Utc::now() + Duration::seconds(after as i64)));
+                return Some(Next::Busy(after));
             }
             other => return Some(other),
         }
@@ -222,6 +241,11 @@ mod tests {
         assert_eq!(next_after::<()>(&Err(AppError::NotPaired)), Next::Unpaired);
         let limited: AppResult<()> = Err(AppError::Server { status: 429, message: "slow".into(), code: Some("rate_limited".into()), retry_after_secs: Some(42) });
         assert_eq!(next_after(&limited), Next::Later(Some(42)));
+        let busy = |secs| -> AppResult<()> { Err(AppError::Server { status: 503, message: "busy".into(), code: Some("server_busy".into()), retry_after_secs: secs }) };
+        assert_eq!(next_after(&busy(Some(5))), Next::Busy(5));
+        assert_eq!(next_after(&busy(None)), Next::Busy(BUSY_WAIT_SECS));
+        assert_eq!(next_after(&busy(Some(0))), Next::Busy(1));
+        assert_eq!(next_after(&busy(Some(3_600))), Next::Busy(BUSY_WAIT_MAX_SECS));
     }
 
     #[test]
