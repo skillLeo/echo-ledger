@@ -1,13 +1,18 @@
-//! Latency benchmark (plan L9), run by the owner from Pakistan: every model in the settings, through the relay's own
-//! provider clients, cold once and then warm and cached; time to first token p50 / p95 and the share of input read from
-//! the cache, written to docs/LATENCY_V1_9.md.
+//! Latency benchmark (plan L9): every model in the settings, through the relay's own provider clients, cold once and
+//! then warm and cached; time to first token p50 / p95 and the share of input read from the cache, written to
+//! docs/LATENCY_V1_9.md.
 //!
-//! How to run (from services/assist-relay, on the network the apps will use):
+//! Where it runs: on the relay's VPS, where the relay's model calls start. What a person in Pakistan sees adds the trip
+//! from their network to the relay, measured separately from the owner's computer with
+//! `curl -o /dev/null -s -w 'connect %{time_connect}s\n' https://<relay host>/healthz` (RELEASE.md step 5). The
+//! "Against the targets" table compares the VPS numbers only: add that trip before reading a pass.
+//!
+//! How to run (on the VPS, from services/assist-relay):
 //!   1. cargo build --release
 //!   2. read -rs ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY   (and GROQ_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY the same way)
-//!   3. target/release/assist-relay-latency --from "Lahore, home fibre"          (lists the models; sends nothing)
-//!   4. target/release/assist-relay-latency --from "Lahore, home fibre" --yes    (about 12 requests per model, a few cents)
-//!   5. unset the keys, read docs/LATENCY_V1_9.md, and commit it.
+//!   3. target/release/assist-relay-latency --from "VPS, Frankfurt"          (lists the models; sends nothing)
+//!   4. target/release/assist-relay-latency --from "VPS, Frankfurt" --yes    (about 12 requests per model, a few cents)
+//!   5. unset the keys, read docs/LATENCY_V1_9.md, and commit it with the trip from Pakistan noted in it.
 //!
 //! Options: --rounds N (10 warm requests per model), --gap-ms N (1500 between requests), --models a,b (only these),
 //! --out FILE (default docs/LATENCY_V1_9.md). A model whose provider key is not set is listed as skipped. Keys are read
