@@ -157,11 +157,18 @@ private fun AppGraph.replaceLazy(property: String, value: Any) {
 
 fun app(): EchoLedgerApp = ApplicationProvider.getApplicationContext()
 
+/**
+ * More main-thread work for [pumpUntil] to run on each step. A screen test sets it to run the work its screen's effects
+ * have queued with Compose's test clock, so a wait sees what the main thread would have done by then in the app.
+ */
+var pumpStep: (() -> Unit)? = null
+
 /** Runs queued main-thread work until [condition] holds (background work completes on real threads meanwhile). */
 fun pumpUntil(what: String = "condition", timeoutMs: Long = 20_000, condition: () -> Boolean) {
     val deadline = System.nanoTime() + timeoutMs * 1_000_000
     while (true) {
         shadowOf(Looper.getMainLooper()).idle()
+        pumpStep?.invoke()
         if (condition()) return
         if (System.nanoTime() > deadline) throw AssertionError("Timed out after ${timeoutMs}ms waiting for $what\n${busyThreads()}")
         Thread.sleep(5)
