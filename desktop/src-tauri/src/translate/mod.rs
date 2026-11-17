@@ -672,7 +672,8 @@ async fn run_session<F, Fut>(
         let mut last_audio = Instant::now();
         let mut keepalive = tokio::time::interval(KEEPALIVE_EVERY);
         loop {
-            // A stop ends it at once, first: never a frame, a reply or a keepalive after Stop.
+            // A stop ends it at once, first: no reply or keepalive after Stop, and no frame but at most the one already
+            // being sent when Stop came, which completes.
             tokio::select! {
                 biased;
                 () = wake.notified() => break 'outer,
@@ -954,8 +955,8 @@ mod tests {
         assert!(halt.find("run.stop.store(true") < halt.find("run.wake.notify_one();"), "{halt}");
     }
 
-    /// A Soniox stand-in on this computer: runs a session against it until `stop_at` says, and gives what the session
-    /// sent it and how long the session took to end after Stop. `in_handshake`: Stop lands while the connect completes
+    /// A Soniox stand-in on this computer: runs a session against it until Stop, and gives what the session sent it after
+    /// Stop and how long the session took to end after it. `in_handshake`: Stop lands while the connect completes
     /// (stop set as the session's connect is decided, before its config could go); else once the session is live.
     // The handshake callback's error type is tungstenite's, as it is.
     #[allow(clippy::result_large_err)]
@@ -1038,7 +1039,7 @@ mod tests {
         // Nothing to read, no reply, the keepalive 10 s off: only the stop arm ends it this soon.
         let (sent, ended_after) = session_against_a_local_stream(false);
         assert!(ended_after < Duration::from_millis(200), "the session ended {ended_after:?} after Stop");
-        assert!(sent.iter().all(|m| !matches!(m, Message::Text(t) if t.as_str() == protocol::KEEPALIVE)), "{sent:?}");
+        assert!(sent.is_empty(), "nothing goes out after Stop: {sent:?}");
     }
 
     #[test]
