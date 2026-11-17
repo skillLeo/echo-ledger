@@ -6,8 +6,15 @@ namespace App\Services\Accounts;
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Http\Controllers\Api\Assist\AssistPrepController;
+use App\Http\Controllers\Api\Assist\AssistSessionController;
 use App\Mail\ExportReadyMail;
 use App\Models\AccountExport;
+use App\Models\AssistPrep;
+use App\Models\AssistSession;
+use App\Models\AssistSuggestion;
+use App\Models\AssistTurn;
+use App\Models\AssistUsage;
 use App\Models\CallNote;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -18,6 +25,8 @@ use App\Models\Recording;
 use App\Models\Screen;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Services\Assist\AssistDefaults;
+use App\Services\Assist\AssistRecords;
 use App\Services\AuditLog;
 use App\Services\Screens\ScreenStore;
 use App\Services\SettingsRepository;
@@ -37,7 +46,9 @@ use ZipArchive;
 /**
  * "Export my data" (since v1.5, docs/API.md "Your account"): one ZIP with every recording of the account (its
  * decrypted audio, its transcripts as .txt and .json in the original and every view that was made, its screens and
- * call notes) and every project of it (notes, brief, memory and files), with a manifest.json listing it all. The ZIP
+ * call notes), every project of it (notes, brief, memory and files) and, since v1.9, its Live Assist (settings, preps
+ * with their documents, and every session with its lines, suggestions, facts, summary, report and usage, in every
+ * workspace), with a manifest.json listing it all. The ZIP
  * is built in a working folder of its own, stored encrypted on the recordings disk (exports/) and its link emailed.
  */
 final class AccountExporter
@@ -109,6 +120,7 @@ final class AccountExporter
                 'account' => ['name' => $user->name, 'email' => $user->email, 'created_at' => $user->created_at?->toAtomString()],
                 'recordings' => $this->recordings($user, $work),
                 'projects' => $this->projects($user, $work),
+                'live_assist' => $this->liveAssist($user),
             ];
             $this->addText('manifest.json', (string) json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             $this->close();
@@ -263,6 +275,70 @@ final class AccountExporter
         }
 
         return $entries;
+    }
+
+    /**
+     * Live Assist (since v1.9), in every workspace, deleted sessions too (what is kept of them): live-assist/settings.json,
+     * preps.json, and a folder per session with session.json (its lines, suggestions, facts, summary, report and
+     * usage) and report.md.
+     *
+     * @return array{settings: string, preps: string|null, sessions: list<array{id: string, folder: string, files: list<string>}>}
+     */
+    private function liveAssist(User $user): array
+    {
+        $json = fn (mixed $data): string => (string) json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $this->addText('live-assist/settings.json', $json(['defaults' => AssistDefaults::all($user), 'saved' => $user->assist_settings]));
+
+        $preps = AssistPrep::query()->withoutGlobalScopes()->withTrashed()->where('user_id', $user->id)->with('documents')->orderBy('created_at')->get()
+            ->map(fn (AssistPrep $p): array => [
+                ...AssistPrepController::payload($p),
+                'workspace_id' => $p->workspace_id,
+                'documents' => $p->documents->map(fn (ClientFile $f): array => ['file_id' => $f->id, 'name' => $f->name])->values()->all(),
+                'deleted_at' => $p->deleted_at?->toAtomString(),
+            ])->values()->all();
+        if ($preps !== []) {
+            $this->addText('live-assist/preps.json', $json($preps));
+        }
+
+        $sessions = [];
+        AssistSession::query()->withoutGlobalScopes()->withTrashed()->where('user_id', $user->id)->orderBy('started_at')
+            ->chunkById(50, function (Collection $chunk) use (&$sessions, $json): void {
+                foreach ($chunk as $session) {
+                    /** @var AssistSession $session */
+                    $folder = $this->uniqueName('live-assist/sessions/'.$session->started_at->format('Y-m-d His').' '.($session->practice ? 'Practice' : 'Call'));
+                    $data = [
+                        ...AssistSessionController::payload($session),
+                        'workspace_id' => $session->workspace_id,
+                        'plan' => $session->plan,
+                        'deleted_at' => $session->deleted_at?->toAtomString(),
+                        'summary' => $session->summary,
+                        'facts' => $session->facts ?? [],
+                        'turns' => $session->turns()->orderBy('start_ms')->orderBy('id')->get()->map(fn (AssistTurn $t): array => [
+                            'client_ref' => $t->client_ref, 'channel' => $t->channel, 'start_ms' => $t->start_ms, 'end_ms' => $t->end_ms,
+                            'text' => $t->text, 'language' => $t->language, 'is_question' => $t->is_question,
+                        ])->values()->all(),
+                        'suggestions' => $session->suggestions()->orderBy('id')->get()->map(fn (AssistSuggestion $s): array => [
+                            'suggestion_id' => $s->suggestion_id, 'turn_id' => $s->turn_id, 'kind' => $s->kind, 'mode' => $s->mode, 'model' => $s->model,
+                            'replaces' => $s->replaces, 'text' => $s->text, 'action' => $s->action, 'shown_at' => $s->shown_at?->toAtomString(),
+                        ])->values()->all(),
+                        'report' => $session->report,
+                        'usage' => AssistUsage::query()->where('assist_session_id', $session->id)->orderBy('occurred_at')->get()->map(fn (AssistUsage $u): array => [
+                            'kind' => $u->kind, 'model' => $u->model, 'input_tokens' => (int) $u->input_tokens, 'cached_tokens' => (int) $u->cached_tokens,
+                            'written_tokens' => (int) $u->written_tokens, 'output_tokens' => (int) $u->output_tokens, 'cost_usd' => (float) $u->cost_usd,
+                            'estimated' => (bool) $u->estimated, 'at' => $u->occurred_at->toAtomString(),
+                        ])->values()->all(),
+                    ];
+                    $this->addText("{$folder}/session.json", $json($data));
+                    $files = ["{$folder}/session.json"];
+                    if (is_array($session->report)) {
+                        $this->addText("{$folder}/report.md", AssistRecords::markdown(['session_id' => $session->id, ...$session->report], $this->settings->displayTimezone()));
+                        $files[] = "{$folder}/report.md";
+                    }
+                    $sessions[] = ['id' => $session->id, 'folder' => $folder, 'files' => $files];
+                }
+            });
+
+        return ['settings' => 'live-assist/settings.json', 'preps' => $preps !== [] ? 'live-assist/preps.json' : null, 'sessions' => $sessions];
     }
 
     /** Adds text to the ZIP through a file of the working folder. */
