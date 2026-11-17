@@ -46,11 +46,14 @@ class DeviceCheckScreenTest : ScreenTest() {
         assertEquals("android", body["platform"]!!.jsonPrimitive.content)
         val keys = body["checks"]!!.jsonArray.map { it.jsonObject["key"]!!.jsonPrimitive.content }
         assertEquals(listOf("voice_notes", "app_calls", "sim_calls", "captions", "live_translate", "background", "memory"), keys)
+        // Help v2's Contact support knows which report goes with a message: the time this one reached the server.
+        pumpUntil("the report's time to be kept") { app.graph.deviceReports.lastAt() != null }
     }
 
     @Test
     fun `signed out, the report can be copied but not sent`() {
         show()
+        assertEquals("no report sent, none to attach", null, app.graph.deviceReports.lastAt())
 
         compose.onNodeWithText("Send to my admin").assertIsNotEnabled()
         compose.onNodeWithText("Sign in to send the report to your admin", substring = true).assertExists()

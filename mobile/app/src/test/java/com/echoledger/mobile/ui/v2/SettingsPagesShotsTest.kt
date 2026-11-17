@@ -101,53 +101,33 @@ class SettingsPagesShotsTest {
         compose.onNodeWithText("یہ ریکارڈنگ لائیں؟").assertDoesNotExist()
     }
 
-    // TODO(phone core): until lastNote() returns a code, this list is the core's sentences copied here; once the codes
-    // land, check them instead.
+    /** Every kind of last-call note has its own words, with what goes in them, in English and in Urdu. */
     @Test
-    fun everyLastCallNoteOfTheCoreHasACode() {
-        val core = com.echoledger.mobile.calls.PhoneAppRecordings
-        val sentences = listOf(
-            "Imported the Phone app's recording (12 s).",
-            "Imported the Phone app's recording (12 s); EchoLedger's own has one side only.",
-            "Imported the Phone app's recording (12 s), as you chose.",
-            "Waiting: EchoLedger is still saving its own recording of this call.",
-            "EchoLedger's own recording kept (both sides apart); the Phone app's copy stays in its folder.",
-            "EchoLedger's own recording kept (both voices on one track); the Phone app's copy stays in its folder.",
-            "EchoLedger heard both sides itself; the Phone app's copy stays in its folder.",
-            "Not imported, shorter than 10 s (Skip calls shorter than).",
-            "Not imported, shorter than 3 s.",
-            "Not imported: EchoLedger's recording of this call was discarded.",
-            "Not imported: auto-record was off.",
-            "Not imported: Record phone calls was not set to Always.",
-            "The Phone app's copy did not come: EchoLedger's own recording (your voice only) is kept as usual.",
-            "Not imported: it is no longer waiting.",
-            "Not imported: the file is gone.",
-            "Not imported: the file no longer fits the call.",
-            "Not imported yet: the file could not be read.",
-            "Not imported: the file changed after the call.",
-            "Not imported yet: the Phone app is still saving the file.",
-            "Not imported: no permission to read audio files or the call log.",
-            "The Phone app's copy took the place of EchoLedger's own (your voice only).",
-            core.UNSUPPORTED.replaceFirstChar { it.uppercase() }
-        ) + listOf(
-            com.echoledger.mobile.calls.PhoneAppRecordings.Trust.UNKNOWN_MAKER,
-            com.echoledger.mobile.calls.PhoneAppRecordings.Trust.NOT_THE_PHONE_APP,
-            com.echoledger.mobile.calls.PhoneAppRecordings.Trust.TOO_LARGE
-        ).flatMap {
-            listOf(core.note(it), core.note(it, "com.other.app"))
-        }.filter { it.isNotBlank() }.map { it.replaceFirstChar { c -> c.uppercase() } }
-        val missing = sentences.filter { com.echoledger.mobile.ui.v2.settings.LastCallNote.code(it) == null }
-        org.junit.Assert.assertEquals(emptyList<String>(), missing)
-        val other = com.echoledger.mobile.ui.v2.settings.LastCallNote.code(
-            core.note(com.echoledger.mobile.calls.PhoneAppRecordings.Trust.NOT_THE_PHONE_APP, "com.other.app")
+    fun everyLastCallNoteKindHasWordsInBothLanguages() {
+        val en = V2Testing.resources(com.echoledger.mobile.ui.v2.theme.EchoLanguage.English)
+        val ur = V2Testing.resources(com.echoledger.mobile.ui.v2.theme.EchoLanguage.Urdu)
+        val kinds = com.echoledger.mobile.calls.PhoneAppNote.Kind.entries
+        val seen = mutableSetOf<Int>()
+        for (kind in kinds) {
+            val note = com.echoledger.mobile.calls.PhoneAppNote(kind, seconds = 42, app = "WhatsApp", owner = "com.other.app")
+            val code = com.echoledger.mobile.ui.v2.settings.LastCallNote.code(note)
+            val english = en.getString(code.words, *code.args.toTypedArray())
+            val urdu = ur.getString(code.words, *code.args.toTypedArray())
+            org.junit.Assert.assertTrue(kind.wire, english.isNotBlank() && urdu.isNotBlank() && english != urdu)
+            org.junit.Assert.assertFalse(kind.wire, english.contains("%") || urdu.contains("%"))
+            // What goes in the words is said in both languages.
+            for (arg in code.args) {
+                org.junit.Assert.assertTrue("${kind.wire} $arg", english.contains(arg.toString()) && urdu.contains(arg.toString()))
+            }
+            // English words are the capture log's sentence, as before.
+            org.junit.Assert.assertEquals(kind.wire, note.english.replaceFirstChar { it.uppercase() }, english)
+            seen += code.words
+        }
+        org.junit.Assert.assertEquals("one sentence per kind", kinds.size, seen.size)
+        // Without the app or another app's package, the general words.
+        val bare = com.echoledger.mobile.ui.v2.settings.LastCallNote.code(
+            com.echoledger.mobile.calls.PhoneAppNote(com.echoledger.mobile.calls.PhoneAppNote.Kind.OTHER_APP)
         )
-        org.junit.Assert.assertEquals(listOf<Any>("com.other.app"), other?.args)
-        org.junit.Assert.assertEquals(null, com.echoledger.mobile.ui.v2.settings.LastCallNote.code("Not imported: a reason of its own."))
-    }
-
-    @Test
-    fun calls() = shoot("settings-calls") {
-        CallsPage(AppSettings(autoRecordArmed = true, extraCallApps = listOf("com.example.voip")), {
-        }, highlight = null, onBack = {}, manufacturer = "samsung")
+        org.junit.Assert.assertEquals(com.echoledger.mobile.R.string.v2_calls_note_other_app, bare.words)
     }
 }

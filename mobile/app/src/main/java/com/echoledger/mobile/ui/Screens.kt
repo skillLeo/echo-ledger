@@ -73,11 +73,9 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -141,6 +139,8 @@ import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoTopBar
 import com.echoledger.mobile.ui.design.InlineBanner
+import com.echoledger.mobile.ui.design.OutlinedTextField
+import com.echoledger.mobile.ui.design.TextButton
 import com.echoledger.mobile.ui.design.sharedElement
 import com.echoledger.mobile.ui.design.tabular
 import kotlinx.coroutines.delay
@@ -1152,7 +1152,7 @@ internal fun failureText(t: TranscriptDto): String = when (t.errorCode) {
 
     // Since v1.6 (the Free plan): transcription uses the person's own free Groq key.
     "needs_transcription_key" ->
-        "The Free plan transcribes with your own free Groq key. Add it in You → Transcription key, then tap Retry."
+        "The Free plan transcribes with your own free Groq key. Add it in Settings › Transcription key, then tap Retry."
 
     // Since 1.8.1-b (P-076): the person's own key was refused; the page's "Check your key" opens it.
     "own_key_rejected" -> "Groq did not accept your key. Check it in Transcription key, then try again."

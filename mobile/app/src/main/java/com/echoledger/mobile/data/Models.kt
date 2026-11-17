@@ -6,6 +6,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.nullable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 
@@ -99,6 +100,29 @@ data class AssistStartDto(val session: AssistSessionInfoDto, val relay: AssistRe
 @Serializable
 data class AssistTokenDto(val relay: AssistRelayDto, val plan: AssistPlanDto? = null)
 
+/** Help (contract 2.0.0-d): `GET /api/help/guides?q=` rows. */
+@Serializable
+data class HelpGuideHitDto(val id: String, val title: String = "", val excerpt: String? = null)
+
+@Serializable
+data class HelpGuidesDto(val data: List<HelpGuideHitDto> = emptyList())
+
+/** `GET /api/help/guides/{id}`. */
+@Serializable
+data class HelpGuideDto(val id: String, val title: String = "", val markdown: String = "")
+
+/** `GET /api/help/whats-new?platform=android` rows: one release's notes (Markdown). */
+@Serializable
+data class ReleaseNotesDto(
+    val version: String,
+    val platform: String? = null,
+    @SerialName("released_at") val releasedAt: String? = null,
+    val notes: String = ""
+)
+
+@Serializable
+data class WhatsNewDto(val data: List<ReleaseNotesDto> = emptyList())
+
 /** `GET /api/config` `trash` (since 2.0.0-b). */
 @Serializable
 data class TrashConfig(@SerialName("keep_hours") val keepHours: Int = TrashConfig.DEFAULT_HOURS) {
@@ -152,6 +176,24 @@ object LenientTrash : kotlinx.serialization.KSerializer<TrashConfig> {
 
     override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: TrashConfig) =
         TrashConfig.serializer().serialize(encoder, value)
+}
+
+/** Text that may be missing or of another type on an older or newer server: anything but a string is null, never an error. */
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+object LenientText : kotlinx.serialization.KSerializer<String?> {
+    override val descriptor = kotlinx.serialization.descriptors.PrimitiveSerialDescriptor(
+        "LenientText",
+        kotlinx.serialization.descriptors.PrimitiveKind.STRING
+    ).nullable
+
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): String? {
+        val json = decoder as? kotlinx.serialization.json.JsonDecoder ?: return decoder.decodeString()
+        return (json.decodeJsonElement() as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+    }
+
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: String?) {
+        if (value == null) encoder.encodeNull() else encoder.encodeString(value)
+    }
 }
 
 /** A boolean read like [LenientFlags]: only an exact `true` is true; anything else is false and never an error. */
@@ -1034,7 +1076,11 @@ data class ScreenDto(
     @SerialName("ocr_text") val ocrText: String? = null,
     val description: String? = null,
     @SerialName("image_url") val imageUrl: String? = null,
-    @SerialName("thumb_url") val thumbUrl: String? = null
+    @SerialName("thumb_url") val thumbUrl: String? = null,
+    /** Since 2.0.0-e: its name in the meeting pack's `screens/` folder ("S07_14-32_invoice-page.webp"); null if missing. */
+    @SerialName("file_name") @Serializable(with = LenientText::class) val fileName: String? = null,
+    /** Since 2.0.0-e: what was said within 15 s of it, "Speaker: text" a line; null without a transcript. */
+    @Serializable(with = LenientText::class) val said: String? = null
 )
 
 @Serializable
@@ -1096,7 +1142,11 @@ data class ProjectScreenDto(
     @SerialName("thumb_url") val thumbUrl: String? = null,
     @SerialName("session_id") val sessionId: String,
     @SerialName("session_title") val sessionTitle: String? = null,
-    @SerialName("session_started_at") val sessionStartedAt: String? = null
+    @SerialName("session_started_at") val sessionStartedAt: String? = null,
+    /** Since 2.0.0-e: its name in the meeting pack's `screens/` folder ("S07_14-32_invoice-page.webp"); null if missing. */
+    @SerialName("file_name") @Serializable(with = LenientText::class) val fileName: String? = null,
+    /** Since 2.0.0-e: what was said within 15 s of it, "Speaker: text" a line; null without a transcript. */
+    @Serializable(with = LenientText::class) val said: String? = null
 ) {
     fun screen() = ScreenDto(id, index, atMs, width, height, trigger, ocrText, description, imageUrl, thumbUrl)
 }

@@ -576,6 +576,48 @@ class MainActivityTest : AppTest() {
     }
 
     @Test
+    fun `system Back on Waiting for you goes back to the tab, not out of the app`() {
+        val controller = launch(preload = true)
+        awaitText("Weekly sync")
+        controller.newIntent(pendingIntent())
+        awaitText("Waiting for you")
+
+        controller.get().onBackPressedDispatcher.onBackPressed()
+        awaitText("Weekly sync")
+        assertTrue("the app stays open", !controller.get().isFinishing)
+        assertTrue(!present("Waiting for you"))
+    }
+
+    @Test
+    fun `system Back on a Record page opened from the New sheet returns to the tab it came from`() {
+        val controller = launch(preload = true)
+        awaitText("Weekly sync")
+        compose.onNodeWithContentDescription("Record").performClick()
+        awaitText("Calls & meetings")
+        compose.onNodeWithText("Calls & meetings").performClick()
+        awaitText("Auto-record calls")
+
+        controller.get().onBackPressedDispatcher.onBackPressed()
+        awaitText("Weekly sync")
+        assertTrue("the app stays open", !controller.get().isFinishing)
+        assertTrue(!present("Auto-record calls"))
+    }
+
+    @Test
+    fun `Settings › Calls & meetings has the Auto-record calls switch, and search finds it`() {
+        val controller = launch(preload = true)
+        awaitText("Weekly sync")
+        controller.newIntent(
+            Intent(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SETTINGS_PREFIX + "calls")
+        )
+        awaitText("Auto-record apps")
+        compose.onNodeWithContentDescription("Auto-record calls").assertExists()
+        assertTrue(
+            com.echoledger.mobile.core.SettingsIndex.items.any { it.title == "Auto-record calls" && it.page == "calls" }
+        )
+    }
+
+    @Test
     fun `a new intent with open=pending switches a running app to the calls waiting`() {
         val controller = launch(preload = true)
         awaitText("Weekly sync")

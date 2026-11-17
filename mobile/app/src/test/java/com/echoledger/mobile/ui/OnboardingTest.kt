@@ -49,7 +49,7 @@ class OnboardingTest : ScreenTest() {
             compose.onNodeWithText(it).assertIsDisplayed()
         }
         compose.onNodeWithText("Allowed").assertIsDisplayed()
-        compose.onNodeWithText("Optional. Set it up later in Settings → Devices.").assertIsDisplayed()
+        compose.onNodeWithText("Optional. Set it up later in Settings › About › This phone › Setup guide.").assertIsDisplayed()
     }
 
     @Test

@@ -20,6 +20,18 @@ import kotlinx.serialization.Serializable
  * thread only, so the caller never waits for the disk.
  */
 object CallJournal {
+    /**
+     * Why a call was not to be recorded ([Result.NOT_WANTED]'s note): fixed reasons, so the Phone app import can say each
+     * one in the screen's language (PhoneAppNote.notWanted) and never shows the words themselves.
+     */
+    object NotWanted {
+        const val PHONE_CALLS_OFF = "phone calls are off"
+        const val AUTO_RECORD_OFF_FOR = "auto-record is off for "
+        const val RECORD_NOT_CHOSEN = "Record was not chosen"
+
+        fun autoRecordOff(appLabel: String) = AUTO_RECORD_OFF_FOR + appLabel
+    }
+
     /** The stages of a call, in order. A call by hand starts at [STARTED]. */
     enum class Stage(val wire: String, val label: String) {
         DETECTED("detected", "detected"),

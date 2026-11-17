@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (help_core: Help's failures from the phone core). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_help_core_guides_failed">گائیڈز لوڈ نہیں ہو سکیں۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_core_guide_failed">یہ گائیڈ کھل نہیں سکی۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_core_whats_new_failed">نیا کیا ہے، لوڈ نہیں ہو سکا۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_core_send_failed">آپ کا پیغام نہیں بھیجا جا سکا۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_core_too_many_messages">آپ پچھلے ایک گھنٹے میں 5 پیغام بھیج چکے ہیں۔ بعد میں دوبارہ کوشش کریں، یا سپورٹ کو ای میل کریں۔</string>
+    <string name="v2_help_core_too_many_tries">بہت زیادہ کوششیں۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_core_not_verified">پہلے اپنا ای میل ایڈریس تصدیق کریں: لنک اس ای میل میں ہے جو ہم نے آپ کو بھیجی۔ پھر اپنا پیغام بھیجیں۔</string>
+    <string name="v2_help_core_busy">سرور ابھی مصروف ہے۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_core_guide_gone">یہ گائیڈ اب موجود نہیں۔</string>
+    <string name="v2_help_core_server">سرور میں مسئلہ ہوا۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_core_offline">سرور تک رسائی نہیں ہو سکی۔ کنکشن دیکھیں اور دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_core_sign_in">پہلے اس فون پر سائن اِن کریں۔</string>
+    <string name="v2_help_core_certificate">سرور کا سرٹیفکیٹ وہ نہیں جس کی اس فون کو توقع ہے۔ سرور کا پتہ چیک کریں۔</string>
+    <string name="v2_help_core_empty_answer">آپ کے سرور نے خالی جواب بھیجا۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_core_unreadable_answer">آپ کے سرور نے ایسا جواب بھیجا جو یہ ایپ پڑھ نہیں سکتی۔ اگر اس وائی فائی کا سائن اِن صفحہ ہے تو پہلے اسے کھولیں؛ ورنہ EchoLedger اپ ڈیٹ کریں۔</string>
+</resources>

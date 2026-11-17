@@ -239,21 +239,26 @@ fun RecordingPlayer(state: RecordingPlayerState, modifier: Modifier = Modifier) 
     }
 }
 
-/** A 2 dp track (played part in brand) with a 12 dp thumb; tap or drag to move. */
+/**
+ * A 2 dp track (played part in brand) with a 12 dp thumb; tap or drag to move. Internal for its right-to-left test,
+ * which can't make a real player ready.
+ */
 @Composable
-private fun Scrubber(state: RecordingPlayerState, enabled: Boolean, modifier: Modifier) {
+internal fun Scrubber(state: RecordingPlayerState, enabled: Boolean, modifier: Modifier) {
     val c = LocalEchoColors.current
     val fraction = if (state.totalMs > 0) (state.positionMs.toFloat() / state.totalMs).coerceIn(0f, 1f) else 0f
+    // Right to left (since v1.8.1, bug P-015): the track fills from the right, so a touch counts from the right too.
+    val rtl = androidx.compose.ui.platform.LocalLayoutDirection.current == androidx.compose.ui.unit.LayoutDirection.Rtl
     fun seekAt(x: Float, width: Int) {
-        if (enabled && width > 0 && state.totalMs > 0) state.seekTo(((x / width).coerceIn(0f, 1f) * state.totalMs).toLong())
+        if (enabled && width > 0 && state.totalMs > 0) state.seekTo((ScrubberMath.fraction(x, width, rtl) * state.totalMs).toLong())
     }
     Box(
         modifier
             .height(20.dp)
-            .pointerInput(enabled, state.totalMs) {
+            .pointerInput(enabled, state.totalMs, rtl) {
                 detectTapGestures { seekAt(it.x, size.width) }
             }
-            .pointerInput(enabled, state.totalMs) {
+            .pointerInput(enabled, state.totalMs, rtl) {
                 detectHorizontalDragGestures { change, _ -> seekAt(change.position.x, size.width) }
             }
             .semantics {
@@ -273,5 +278,14 @@ private fun Scrubber(state: RecordingPlayerState, enabled: Boolean, modifier: Mo
         Box(Modifier.fillMaxWidth(fraction), contentAlignment = Alignment.CenterEnd) {
             Box(Modifier.size(12.dp).clip(CircleShape).background(if (enabled) c.accentStrong else c.borderStrong))
         }
+    }
+}
+
+/** Where on the track a touch at [x] of [width] px is, 0..1 from the start of the recording (since v1.8.1). */
+internal object ScrubberMath {
+    fun fraction(x: Float, width: Int, rtl: Boolean): Float {
+        if (width <= 0) return 0f
+        val fromStart = (x / width).coerceIn(0f, 1f)
+        return if (rtl) 1f - fromStart else fromStart
     }
 }

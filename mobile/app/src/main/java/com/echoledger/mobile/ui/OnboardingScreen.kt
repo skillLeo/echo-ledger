@@ -26,7 +26,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,6 +53,7 @@ import com.echoledger.mobile.core.OnboardingStep
 import com.echoledger.mobile.core.PhoneBrand
 import com.echoledger.mobile.recording.CaptureHealth
 import com.echoledger.mobile.recording.MicTestResult
+import com.echoledger.mobile.ui.design.TextButton
 import kotlinx.coroutines.launch
 
 /**
@@ -185,7 +185,7 @@ private fun ColumnScope.PermissionsStep(vm: MainViewModel, onNext: () -> Unit, o
                     Text(
                         when {
                             item.granted -> "Allowed"
-                            item.key == "helper" -> "Optional. Set it up later in Settings → Devices."
+                            item.key == "helper" -> "Optional. Set it up later in Settings › About › This phone › Setup guide."
                             else -> item.why
                         },
                         color = if (item.granted) Brand.Success else Brand.Muted,
