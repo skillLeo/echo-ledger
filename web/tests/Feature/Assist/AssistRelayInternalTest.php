@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Admin\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\Settings;
 use App\Http\Middleware\VerifyAssistRelay;
 use App\Jobs\MakeAssistReportJob;
 use App\Models\AssistSession;
@@ -303,7 +304,8 @@ describe('the admin panel', function () {
     });
 
     it('keeps the relay\'s host and gives the apps wss://<host>/v1/assist', function () {
-        Livewire::test(ApiCredentials::class)->assertSet('data.relay_url', 'relay.example.com')
+        // Since 1.9.0-q the address is on Admin › Settings › General, beside the Live Assist connection.
+        Livewire::test(Settings::class)->assertSet('data.relay_url', 'relay.example.com')
             ->set('data.relay_url', 'https://Relay.Example.org/anything')->call('save')->assertHasNoErrors();
         expect(app(SettingsRepository::class)->get('relay.url'))->toBe('relay.example.org');
 
@@ -312,7 +314,7 @@ describe('the admin panel', function () {
 
         Filament::setCurrentPanel('admin');
         $this->actingAs(Fx::superAdmin(), 'web');
-        Livewire::test(ApiCredentials::class)->set('data.relay_url', 'not a host')->call('save')->assertHasErrors(['data.relay_url']);
+        Livewire::test(Settings::class)->set('data.relay_url', 'not a host')->call('save')->assertHasErrors(['data.relay_url']);
         expect(app(SettingsRepository::class)->get('relay.url'))->toBe('relay.example.org');
     });
 });

@@ -67,6 +67,7 @@ final class AuditLog
         'role_changed' => 'Role changed',
         'workspace_renamed' => 'Workspace renamed',
         'settings_changed' => 'Settings changed',
+        'assist_connection_changed' => 'Live Assist connection changed',
         'test_email_sent' => 'Test email sent',
         // Since v1.6: plans and a person's own features and limits.
         'entitlements_changed' => 'Features and limits changed for a person',

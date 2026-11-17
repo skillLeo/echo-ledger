@@ -13,6 +13,9 @@ use App\Filament\Support\NoticeTargets;
 use App\Mail\TestMail;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
+use App\Services\Assist\AssistTransport;
+use App\Services\Assist\RelayHealth;
+use App\Services\Assist\RelayToken;
 use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\EngineWait;
@@ -57,6 +60,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -187,6 +191,8 @@ class Settings extends Page
             'whisper_chunk_seconds' => $all['whisper.chunk_seconds'],
             'whisper_vad' => (bool) $all['whisper.vad'],
             'app_pins' => $all['app.pins'],
+            'assist_connection' => isset(AssistTransport::CHOICES[$all['assist.connection'] ?? '']) ? $all['assist.connection'] : AssistTransport::AUTOMATIC,
+            'relay_url' => is_string($all['relay.url'] ?? null) ? $all['relay.url'] : null,
             ...self::budgetFormState($all),
         ];
     }
@@ -310,6 +316,24 @@ class Settings extends Page
                                 ])
                                 ->columns(4)->defaultItems(0)->maxItems(TextReplacements::MAX_RULES)->addActionLabel('Add a correction')
                                 ->helperText('Applied to every new final transcript; the original stays in the transcript history and can be restored.'),
+                        ]),
+                    $this->section('assist_connection')
+                        ->description('How the apps reach Live Assist during a call. Shared hosting needs nothing more; a dedicated relay runs on a VPS (its secret and certificate pins are on API Credentials). Each session keeps the connection it started with.')
+                        ->columns(2)->schema([
+                            Select::make('assist_connection')->label('Live Assist connection')->options(AssistTransport::CHOICES)->selectablePlaceholder(false)->required()
+                                ->helperText('Automatic uses the relay when its address is set and it answered within the last minute, otherwise this server. Shared hosting always uses this server. Dedicated relay always uses the relay and refuses to start while it is down.'),
+                            TextInput::make('relay_url')->label('Relay address')->placeholder('relay.example.com')->maxLength(253)
+                                ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
+                                    if (filled($value) && RelayToken::url((string) $value) === null) {
+                                        $fail('Enter the relay\'s host name, such as relay.example.com.');
+                                    }
+                                })
+                                ->helperText(fn (?string $state): string => RelayToken::url($state) !== null
+                                    ? 'The apps connect to '.RelayToken::url($state).'. Empty: no relay.'
+                                    : 'The relay\'s host name; the apps connect to wss://<host>/v1/assist. Empty: no relay.'),
+                            Actions::make([
+                                Action::make('checkRelay')->label('Check relay')->icon(Heroicon::OutlinedSignal)->action(fn () => $this->checkRelay()),
+                            ])->columnSpanFull(),
                         ]),
                 ]),
                 'recording' => $this->tab('recording', [
@@ -753,6 +777,48 @@ class Settings extends Page
         return $routes;
     }
 
+    /** "Check relay": asks the relay at the address in the form (saved or not) and shows how it answered. */
+    public function checkRelay(): void
+    {
+        $typed = trim((string) ($this->data['relay_url'] ?? ''));
+        $url = RelayToken::url($typed);
+        if ($url === null) {
+            Notification::make()->title('No relay to check')->body($typed === '' ? 'Enter the relay\'s address first.' : 'Enter the relay\'s host name, such as relay.example.com.')->warning()->send();
+
+            return;
+        }
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        $settings = app(SettingsRepository::class);
+        $saved = $settings->get('relay.url');
+        // The check is remembered for the saved address only: a typed one is asked, not remembered.
+        $result = $saved === $host ? app(RelayHealth::class)->check() : self::probeRelay($host);
+        if ($result['ok']) {
+            Notification::make()->title('The relay is up')->body("{$host} answered in {$result['ms']} ms".($result['version'] !== null ? " (version {$result['version']})." : '.'))->success()->send();
+        } else {
+            Notification::make()->title('The relay is down')->body("{$host}: ".($result['error'] ?? 'no answer.').' Automatic uses this server meanwhile; Dedicated relay refuses to start.')->danger()->send();
+        }
+    }
+
+    /**
+     * A one-off health check of a relay address not saved yet.
+     *
+     * @return array{ok: bool, version: ?string, ms: int, error: ?string}
+     */
+    private static function probeRelay(string $host): array
+    {
+        $started = microtime(true);
+        try {
+            $response = Http::timeout(RelayHealth::TIMEOUT_SECONDS)->connectTimeout(RelayHealth::TIMEOUT_SECONDS)
+                ->acceptJson()->withOptions(['allow_redirects' => false])->get("https://{$host}/healthz");
+            $ok = $response->successful() && $response->json('status') === 'ok';
+
+            return ['ok' => $ok, 'version' => is_string($response->json('version')) ? mb_substr((string) $response->json('version'), 0, 40) : null,
+                'ms' => (int) round((microtime(true) - $started) * 1000), 'error' => $ok ? null : "The relay answered HTTP {$response->status()}."];
+        } catch (Throwable) {
+            return ['ok' => false, 'version' => null, 'ms' => (int) round((microtime(true) - $started) * 1000), 'error' => 'The relay did not answer.'];
+        }
+    }
+
     public function save(SettingsRepository $settings): void
     {
         $this->persist($settings);
@@ -828,6 +894,10 @@ class Settings extends Page
             'live_translate.watch_speed' => array_key_exists($state['live_translate_watch_speed'] ?? '', self::LIVE_TRANSLATE_SPEEDS) ? $state['live_translate_watch_speed'] : 'balanced',
             'routing.final' => self::routingFromState($state),
             'routing.urdu_wait_hours' => EngineWait::clampHours($state['urdu_wait_hours'] ?? null),
+            'assist.connection' => isset(AssistTransport::CHOICES[$state['assist_connection'] ?? '']) ? $state['assist_connection'] : AssistTransport::AUTOMATIC,
+            'relay.url' => filled($state['relay_url'] ?? null) && RelayToken::url((string) $state['relay_url']) !== null
+                ? (string) parse_url((string) RelayToken::url((string) $state['relay_url']), PHP_URL_HOST)
+                : null,
         ]);
         // The SMTP password goes to the credential vault (its change is in the audit log there); empty keeps it.
         $vault = app(CredentialVault::class);
@@ -859,6 +929,15 @@ class Settings extends Page
             return (string) json_encode($value);
         };
         $changed = array_values(array_filter(array_keys($after), fn (string $key): bool => $same($before[$key] ?? null) !== $same($after[$key])));
+        // Live Assist's connection gets its own entry, naming the choice and the relay before and after.
+        if (array_intersect($changed, ['assist.connection', 'relay.url']) !== []) {
+            $describe = fn (array $all): string => (AssistTransport::CHOICES[$all['assist.connection'] ?? ''] ?? AssistTransport::CHOICES[AssistTransport::AUTOMATIC])
+                .' ('.(is_string($all['relay.url'] ?? null) ? $all['relay.url'] : 'no relay').')';
+            app(AuditLog::class)->record('assist_connection_changed', (int) auth()->id(), null, Str::limit('Live Assist connection: '.$describe($before).' → '.$describe($after), 250, '…'), [
+                'from' => ['connection' => $before['assist.connection'] ?? null, 'relay' => $before['relay.url'] ?? null],
+                'to' => ['connection' => $after['assist.connection'], 'relay' => $after['relay.url']],
+            ]);
+        }
         if ($changed !== []) {
             app(AuditLog::class)->record('settings_changed', (int) auth()->id(), null, Str::limit('Settings changed: '.implode(', ', $changed), 250, '…'), ['keys' => $changed]);
         }
