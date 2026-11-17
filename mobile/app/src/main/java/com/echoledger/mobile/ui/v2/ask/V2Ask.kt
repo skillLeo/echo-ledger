@@ -179,7 +179,6 @@ fun V2AskContent(
                         onSelect = { onSelect(it.id) },
                         optionLabel = { it.name }
                     )
-                    Text(stringResource(R.string.v2_ask_scope_all_soon), style = EchoV2.type.caption, color = c.textSecondary)
                 }
                 EchoTextField(
                     value = question,
