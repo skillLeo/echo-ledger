@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2
 
 import com.echoledger.mobile.ui.v2.components.EchoToastResult
 import com.echoledger.mobile.ui.v2.components.EchoToastState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -26,6 +27,10 @@ class ToastQueueTest {
         assertEquals("Call discarded", toasts.current?.message)
         toasts.current?.dismiss()
         runCurrent()
+        // The toast that made way shows again, for its full time, before the ones that were waiting.
+        assertEquals("Restored", toasts.current?.message)
+        toasts.current?.dismiss()
+        runCurrent()
         assertEquals("Renamed", toasts.current?.message)
     }
 
@@ -41,5 +46,16 @@ class ToastQueueTest {
         runCurrent()
         assertEquals(EchoToastResult.Dismissed, late.await())
         assertEquals(null, toasts.current)
+    }
+
+    @Test
+    fun theTurnPassesToTheEndTimeToastEvenWhenTheOtherResumesAtOnce() = runTest {
+        // A toast whose coroutine resumes in place (as on the UI dispatcher) must not take its turn back.
+        backgroundScope.launch(Dispatchers.Unconfined) { toasts.show("Restored") }
+        assertEquals("Restored", toasts.current?.message)
+        backgroundScope.launch(Dispatchers.Unconfined) { toasts.show("Call discarded", "Undo", deadlineMs = now + 5_000) }
+        assertEquals("Call discarded", toasts.current?.message)
+        toasts.current?.dismiss()
+        assertEquals("Restored", toasts.current?.message)
     }
 }

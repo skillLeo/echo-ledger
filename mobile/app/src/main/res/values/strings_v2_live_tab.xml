@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (live_tab). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_livetab_title">Live</string>
+    <string name="v2_livetab_record">Record calls and meetings</string>
+    <string name="v2_livetab_record_help">WhatsApp and phone calls, recorded as they happen</string>
+    <string name="v2_livetab_voice_note">Voice note</string>
+    <string name="v2_livetab_voice_note_help">Record yourself now</string>
+    <string name="v2_livetab_translate">Live Translate</string>
+    <string name="v2_livetab_translate_help">Games and videos, translated on screen</string>
+    <string name="v2_livetab_dictation">Dictation</string>
+    <string name="v2_livetab_dictation_help">Speak instead of typing, in any app</string>
+    <string name="v2_livetab_captions">Captions</string>
+    <string name="v2_livetab_captions_help">Live words of a call on screen</string>
+    <string name="v2_livetab_assist_section">During a call</string>
+    <string name="v2_livetab_tools_section">Tools</string>
+</resources>

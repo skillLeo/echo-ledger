@@ -8,6 +8,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ClosedCaption
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -72,6 +73,7 @@ object EchoIcons {
     val Delete: ImageVector get() = Icons.Outlined.DeleteOutline
     val Folder: ImageVector get() = Icons.Outlined.FolderOpen
     val SignOut: ImageVector get() = Icons.AutoMirrored.Outlined.Logout
+    val Captions: ImageVector get() = Icons.Outlined.ClosedCaption
     val Todo: ImageVector get() = Icons.Outlined.RadioButtonUnchecked
     val Restore: ImageVector get() = Icons.Outlined.RestoreFromTrash
 

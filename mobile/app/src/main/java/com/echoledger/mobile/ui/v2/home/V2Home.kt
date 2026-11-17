@@ -170,6 +170,7 @@ class DiscardBatch(
             vm.reloadLocal()
             val endsAt = runCatching { Instant.parse(discarding.discardAt).toEpochMilli() }.getOrNull() ?: return@launch
             calls += id to endsAt
+            // Only a toast still on screen is replaced (by one for all the calls).
             showing?.cancel()
             showing = scope.launch { show(calls.toList()) }
         }
@@ -179,11 +180,17 @@ class DiscardBatch(
         val deadline = batch.minOf { it.second } - DISCARD_MARGIN_MS
         val message = if (batch.size == 1) words.one else words.many(batch.size)
         val result = toasts.show(message, words.undo, deadlineMs = deadline)
+        // Off screen now: a later Discard must not cancel what follows, so it runs in its own job.
+        showing = null
         calls.removeAll(batch)
         if (result != EchoToastResult.Action) return
-        val back = withContext(Dispatchers.IO) { batch.map { (id, _) -> Decisions.undoDiscard(context, id) } }
-        vm.reloadLocal()
-        if (back.any { it == null }) toasts.show(if (batch.size == 1) words.alreadyOne else words.alreadySome)
+        val alreadyOne = words.alreadyOne
+        val alreadySome = words.alreadySome
+        scope.launch {
+            val back = withContext(Dispatchers.IO) { batch.map { (id, _) -> Decisions.undoDiscard(context, id) } }
+            vm.reloadLocal()
+            if (back.any { it == null }) toasts.show(if (batch.size == 1) alreadyOne else alreadySome)
+        }
     }
 }
 
