@@ -11,7 +11,9 @@
 //! - `ECHOLEDGER_LATENCY_WAV=/path/to/16k-mono.wav` feeds a recording instead of the built-in speech-like signal.
 //! - Against the real provider (run by hand on a Mac, `--ignored --nocapture`): `ECHOLEDGER_LATENCY_WS_URL` (a provider
 //!   URL with its short-lived token), or `ECHOLEDGER_LATENCY_SERVER` with `ECHOLEDGER_LATENCY_TOKEN` (the server mints
-//!   the grant as the app does). Without a WAV, macOS `say` speaks one.
+//!   the grant as the app does: an open recording session "Latency check" first, deleted afterwards, also on failure).
+//!   Without a WAV, macOS `say` speaks one: `ECHOLEDGER_LATENCY_VOICE` and `ECHOLEDGER_LATENCY_TEXT` choose another
+//!   voice and script, `ECHOLEDGER_LATENCY_LANGUAGE` the recording's language (`en`, `ur`, `hi`, `en+ur`).
 
 mod common;
 
@@ -394,13 +396,20 @@ fn real_speech(dir: &std::path::Path) -> Vec<i16> {
         return load_wav(std::path::Path::new(&path));
     }
     let path = dir.join("say.wav");
-    let script = "Good morning. Let's go over the numbers for this quarter. Revenue is up eleven percent. \
-                  Costs are flat, and we hired two people. Next, the launch plan. We ship on the fourth. \
-                  Any questions so far? Great, let's move on.";
-    let ok = std::process::Command::new("say")
+    let script = std::env::var("ECHOLEDGER_LATENCY_TEXT").unwrap_or_else(|_| {
+        "Good morning. Let's go over the numbers for this quarter. Revenue is up eleven percent. \
+         Costs are flat, and we hired two people. Next, the launch plan. We ship on the fourth. \
+         Any questions so far? Great, let's move on."
+            .to_string()
+    });
+    let mut say = std::process::Command::new("say");
+    if let Ok(voice) = std::env::var("ECHOLEDGER_LATENCY_VOICE") {
+        say.args(["-v", &voice]);
+    }
+    let ok = say
         .args(["-r", "170", "-o"])
         .arg(&path)
-        .args(["--file-format=WAVE", "--data-format=LEI16@16000", script])
+        .args(["--file-format=WAVE", "--data-format=LEI16@16000", &script])
         .status()
         .is_ok_and(|s| s.success());
     assert!(ok, "no WAV: set ECHOLEDGER_LATENCY_WAV to a 16 kHz mono recording (macOS `say` is not here)");
@@ -411,17 +420,49 @@ fn real_speech(dir: &std::path::Path) -> Vec<i16> {
     samples
 }
 
-/// The provider grant: a URL given as it is, or minted by the server as the app does.
-async fn real_grant() -> Grant {
+/// The open recording session live captions need (`session_required` without one), deleted when this goes out of scope,
+/// on success and on failure alike. Never prints the token.
+struct LatencySession {
+    api: desktop_lib::net::api::ApiClient,
+    id: String,
+}
+
+impl Drop for LatencySession {
+    fn drop(&mut self) {
+        let (api, id) = (self.api.clone(), self.id.clone());
+        let deleted = tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(api.delete_session(&id)));
+        match deleted {
+            Ok(()) => println!("the \"Latency check\" session was deleted"),
+            Err(e) => println!("the \"Latency check\" session was NOT deleted ({e}): delete it by hand"),
+        }
+    }
+}
+
+/// The provider grant: a URL given as it is, or minted by the server as the app does, for an open recording session of
+/// this device made for the run (returned, so it is deleted when the test ends).
+async fn real_grant() -> (Grant, Option<LatencySession>) {
     if let Ok(url) = std::env::var("ECHOLEDGER_LATENCY_WS_URL") {
-        return grant(url);
+        return (grant(url), None);
     }
     let server = std::env::var("ECHOLEDGER_LATENCY_SERVER").expect("set ECHOLEDGER_LATENCY_WS_URL, or ECHOLEDGER_LATENCY_SERVER and ECHOLEDGER_LATENCY_TOKEN");
     let token = std::env::var("ECHOLEDGER_LATENCY_TOKEN").expect("ECHOLEDGER_LATENCY_TOKEN: the device token");
+    let language = std::env::var("ECHOLEDGER_LATENCY_LANGUAGE").ok();
     common::init_tls();
     let api = desktop_lib::net::api::ApiClient::new(&server, &[], Some(token)).expect("client");
-    let minted = api.stt_token("live_captions", &["me"], None, None, None).await.expect("the server mints a grant");
-    minted.grants.into_iter().next().expect("one grant")
+    // As the app opens a recording's session for its captions (actions::ensure_server_session).
+    let request = desktop_lib::net::models::OpenSessionRequest {
+        client_ref: uuid::Uuid::new_v4().to_string(),
+        source_app: "voice_note".into(),
+        client_id: None,
+        title: Some("Latency check".into()),
+        started_at: chrono::Utc::now().to_rfc3339(),
+        language: language.clone(),
+    };
+    let opened = api.open_session(&request).await.unwrap_or_else(|e| panic!("the session did not open: {e}"));
+    let session = LatencySession { api: api.clone(), id: opened.session.id.clone() };
+    let minted = api.stt_token("live_captions", &["me"], None, Some(&session.id), language.as_deref()).await.unwrap_or_else(|e| panic!("the server minted no grant: {e}"));
+    println!("provider: {}", minted.provider.as_deref().unwrap_or("?"));
+    (minted.grants.into_iter().next().expect("one grant"), Some(session))
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -431,7 +472,8 @@ async fn speech_to_word_against_the_real_provider() {
     let dir = tempfile::tempdir().unwrap();
     let samples = repeated(real_speech(dir.path()));
     let starts = onsets(&samples);
-    let run = feed(real_grant().await, &samples, Duration::from_secs(3)).await;
+    let (grant, _session) = real_grant().await;
+    let run = feed(grant, &samples, Duration::from_secs(3)).await;
     // For each stretch: its first word that came after it began and before the next one began.
     let mut whole = Vec::new();
     for (i, &start) in starts.iter().enumerate() {
