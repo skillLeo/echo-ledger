@@ -52,13 +52,13 @@
     color: var(--el-role-text-on-accent);
 }
 
-/* A plan's badge keeps its stored colour in the data; on the design values it reads in the accent's soft pair, so no
-   palette colour is left. Only the plan columns (Customers, Plans, Upgrade requests, Promo codes): a status badge
+/* A plan's badge keeps its stored colour in the data; on the design values it is neutral, so no palette colour is left
+   and colour stays for status alone. Only the plan columns (Customers, Plans, Upgrade requests, Promo codes): a status badge
    (Active, Suspended…) keeps its own colour. The badge's inline palette only sets variables; these set the colours. */
 :is(.fi-ta-cell-plan, .fi-ta-cell-badge) .fi-badge.fi-color[style*='--color-50'] {
-    background-color: var(--el-role-accent-soft);
-    color: var(--el-role-accent-text);
-    --tw-ring-color: var(--el-role-accent-soft);
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-secondary);
+    --tw-ring-color: var(--el-role-border-default);
 }
 
 /* The sidebar's brand is the name and the ADMIN tag, as the console's sidebar shows the name alone: no blue mark. */

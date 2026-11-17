@@ -63,13 +63,20 @@ it('changes only the head under ui_v2.admin: the saved dashboard plus the design
         ->toBe(trim((string) preg_replace('/\n\s*\n/', "\n", (string) file_get_contents(__DIR__.'/golden/admin-dashboard.html'))));
 });
 
-it('recolours only the plan columns\' badges under ui_v2.admin: a status badge such as Active keeps its colour', function () {
+it('recolours only the plan columns\' badges under ui_v2.admin, neutral: a status badge such as Active keeps its colour', function () {
     $admin = classicAdmin($this);
     $html = (string) $this->actingAs($admin, 'web')->get('/admin/customers')->assertOk()->getContent();
     $css = (string) preg_replace('~/\*.*?\*/~s', '', (string) file_get_contents(resource_path('css/v2/admin.css')));
 
     // The Active badge is Filament's success colour, not a stored palette: the plan rule cannot reach it.
     expect($html)->toMatch('/<span class="[^"]*fi-badge[^"]*fi-color-success[^"]*">\s*Active\s*</');
+    // The classes the rule hangs on are really there (a Filament rename would leave it matching nothing): the plan
+    // badge on Customers in fi-ta-cell-plan, the badge column on Plans in fi-ta-cell-badge.
+    expect($html)->toMatch('/<td[^>]*class="[^"]*fi-ta-cell-plan[^"]*"[^>]*>(?:(?!<\/td>).)*class="fi-badge[^"]*fi-color"\s+style="--color-50/s');
+    $plans = (string) $this->actingAs($admin, 'web')->get('/admin/plans')->assertOk()->getContent();
+    expect($plans)->toMatch('/<td[^>]*class="[^"]*fi-ta-cell-badge[^"]*"[^>]*>(?:(?!<\/td>).)*class="fi-badge[^"]*fi-color"\s+style="--color-50/s');
+    // Plan badges are neutral (colour is left for status).
+    expect($css)->toMatch('/:is\(\.fi-ta-cell-plan, \.fi-ta-cell-badge\)[^{]*\{[^}]*background-color: var\(--el-role-bg-subtle\);[^}]*color: var\(--el-role-text-secondary\);/');
     // Every rule that recolours a palette badge is scoped to the plan columns.
     preg_match_all('/([^{}]+)\{[^}]*\}/', $css, $rules);
     foreach ($rules[1] as $selector) {
