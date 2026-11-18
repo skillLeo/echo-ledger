@@ -480,6 +480,8 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             privacy::watch::spawn(handle.clone());
             privacy::check::spawn_auto(handle.clone());
+            // The main window shows in screen shares again by itself when its hide is over (v2.0).
+            privacy::spawn_main_hide_timer(handle.clone());
             // Newer sharing-bar patterns, when the server has them: in a task of their own, once a day.
             privacy::bars::spawn_refresh(handle.clone());
 
@@ -535,6 +537,12 @@ pub fn run() {
             commands::privacy_open_check,
             commands::privacy_diagnostics,
             commands::privacy_move_to_other_display,
+            commands::privacy_main_hide,
+            commands::caption_probe_painted,
+            commands::privacy_main_show,
+            commands::privacy_window_share,
+            commands::privacy_window_share_set,
+            commands::share_notice_dismiss,
             commands::translate_apps,
             commands::translate_status,
             commands::live_translate_status,
@@ -611,6 +619,7 @@ pub fn run() {
             commands::trash_keep_hours,
             commands::after_call_notice_answer,
             commands::ui_classic_set,
+            commands::ui_design_set,
             commands::assist_preps_list,
             commands::assist_prep_save,
             commands::assist_prep_delete,
@@ -689,6 +698,9 @@ pub fn run() {
             commands::session_organise,
             commands::sessions_bulk,
             commands::sessions_export,
+            commands::session_transcribe,
+            commands::sessions_transcribe,
+            commands::sessions_transcribe_estimate,
             commands::client_create,
             commands::client_update,
             commands::client_delete,

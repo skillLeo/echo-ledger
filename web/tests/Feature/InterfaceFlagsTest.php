@@ -97,7 +97,9 @@ it('turns every ui_v2 flag off with Switch back to classic, but not live_assist,
     $api = $this->api(Fx::token(Fx::device($user, ['workspace_id' => $user->current_workspace_id])));
 
     $api->putJson('/api/account/ui', ['classic' => true])->assertOk()
-        ->assertExactJson(['ui_flags' => flagsWith(['live_assist']), 'ui_classic' => true]);
+        ->assertExactJson(['ui_flags' => flagsWith(['live_assist']), 'ui_classic' => true,
+            // A person who went back to classic can try the new design again.
+            'ui_design' => ['choice' => 'classic', 'current' => 'classic', 'can_try' => true, 'can_switch_back' => false]]);
     expect($api->getJson('/api/config')->json('ui_flags'))->toBe(flagsWith(['live_assist']))
         ->and($user->fresh()->ui_classic)->toBeTrue();
 
@@ -110,7 +112,7 @@ it('turns every ui_v2 flag off with Switch back to classic, but not live_assist,
 it('ignores a flag it does not know', function () {
     $flags = app(InterfaceFlags::class);
     $flags->set('ui_v3.everything', true, 100, [], []);
-    expect(InterfaceFlag::query()->count())->toBe(0);
+    expect(InterfaceFlag::query()->where('flag', 'ui_v3.everything')->exists())->toBeFalse();
     // A row made some other way is not answered either.
     InterfaceFlag::query()->create(['flag' => 'ui_v3.everything', 'everyone' => true]);
     $flags->forget();
@@ -128,22 +130,47 @@ it('needs config:read to switch back to classic', function () {
 describe('the console', function () {
     beforeEach(fn () => Filament::setCurrentPanel('app'));
 
-    it('offers Switch back to classic in Appearance only while a redesigned screen is on for the person, and keeps it', function () {
+    it('offers Try the new design in classic Appearance and Switch back to classic in the new one, both ways', function () {
         $user = Fx::user();
         $this->actingAs($user, 'web');
+        $page = fn (): string => (string) $this->get('/app/settings/appearance')->assertOk()->getContent();
+        foreach (InterfaceFlags::CONSOLE as $flag) {
+            app(InterfaceFlags::class)->set($flag, false, 0, [], [], 'off');
+        }
         SettingsContext::forget();
-        expect((string) $this->get('/app/settings/appearance')->assertOk()->getContent())->not->toContain('Switch back to classic');
+        // Nothing open to try: neither row.
+        expect($page())->not->toContain('Try the new design')->not->toContain('Switch back to classic');
 
-        app(InterfaceFlags::class)->set('ui_v2.settings', false, 0, [], [$user->id]);
+        // Opt-in: classic offers Try the new design.
+        foreach (InterfaceFlags::CONSOLE as $flag) {
+            app(InterfaceFlags::class)->set($flag, false, 0, [], [], 'opt_in');
+        }
         SettingsContext::forget();
-        expect((string) $this->get('/app/settings/appearance')->assertOk()->getContent())->toContain('Switch back to classic');
+        expect($page())->toContain('Try the new design')->not->toContain('Switch back to classic');
 
-        Livewire::test(EditProfile::class, ['subpage' => 'appearance'])->call('toggleClassic');
-        expect($user->fresh()->ui_classic)->toBeTrue()
-            ->and(app(InterfaceFlags::class)->active('ui_v2.settings', $user->fresh()))->toBeFalse();
-        // Still offered, to switch the new screens back on.
+        Livewire::test(EditProfile::class, ['subpage' => 'appearance'])->call('tryNewDesign')->assertRedirect('/app/settings/appearance');
+        expect($user->fresh()->ui_design)->toBe('v2')
+            ->and(app(InterfaceFlags::class)->active('ui_v2.shell', $user->fresh()))->toBeTrue();
         SettingsContext::forget();
-        expect((string) $this->get('/app/settings/appearance')->assertOk()->getContent())->toContain('Switch back to classic')->toContain('aria-checked="true"');
+        expect($page())->toContain('Switch back to classic')->not->toContain('Try the new design');
+
+        // And back.
+        Livewire::test(EditProfile::class, ['subpage' => 'appearance'])->call('switchBackToClassic')->assertRedirect('/app/settings/appearance');
+        expect($user->fresh()->ui_design)->toBe('classic')->and($user->fresh()->ui_classic)->toBeTrue()
+            ->and(app(InterfaceFlags::class)->active('ui_v2.shell', $user->fresh()))->toBeFalse();
+        SettingsContext::forget();
+        expect($page())->toContain('Try the new design');
+    });
+
+    it('does nothing when Try the new design is not open to the person', function () {
+        $user = Fx::user();
+        $this->actingAs($user, 'web');
+        foreach (InterfaceFlags::CONSOLE as $flag) {
+            app(InterfaceFlags::class)->set($flag, false, 0, [], [], 'off');
+        }
+
+        Livewire::test(EditProfile::class, ['subpage' => 'appearance'])->call('tryNewDesign')->assertNoRedirect();
+        expect($user->fresh()->ui_design)->toBeNull();
     });
 });
 
@@ -157,7 +184,7 @@ describe('the admin panel', function () {
         $this->actingAs($admin, 'web');
 
         Livewire::test(InterfaceFlagsPage::class)->assertOk()->assertSee('Live Assist')
-            ->set('data.ui_v2__home.everyone', true)
+            ->set('data.ui_v2__home.availability', 'everyone')
             ->set('data.live_assist.people', [$sana->id])
             ->set('data.ui_v2__library.percent', 25)
             ->call('save')->assertHasNoErrors()->assertNotified('Saved');

@@ -161,6 +161,8 @@ describe('the word for a folder', function () {
             // The prompts sent to the AI: nobody reads them, and their JSON input calls it client.
             'app/Services/ClientAi/ClaudeClientAi.php' => '*',
             'app/Services/Screens/ClaudeScreenDescriber.php' => '*',
+            // Live Assist's practice prompt: who the AI plays is the client a person meets (the meeting types of docs/API_ASSIST.md).
+            'app/Services/Assist/Http/Background.php' => '*',
         ]);
 
         expect($hits)->toBe([]);

@@ -158,6 +158,9 @@ fun V2AssistStart(
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val notSetUp = stringResource(R.string.v2_assist_error_not_set_up)
+    val updateApp = stringResource(R.string.v2_assist_error_update_app)
+    val cantConnect = stringResource(R.string.v2_assist_error_cant_connect)
+
     val ui = when {
         active != null -> AssistStartUi.On(cardAllowed())
         recording == null -> AssistStartUi.NeedsRecording
@@ -179,6 +182,8 @@ fun V2AssistStart(
                         AssistHub.Start.NotSetUp -> notSetUp
                         is AssistHub.Start.Refused -> result.words
                         is AssistHub.Start.Failed -> result.words
+                        AssistHub.Start.UpdateApp -> updateApp
+                        AssistHub.Start.CantConnect -> cantConnect
                         AssistHub.Start.Busy, AssistHub.Start.NoRecording -> null
                     }
                 }

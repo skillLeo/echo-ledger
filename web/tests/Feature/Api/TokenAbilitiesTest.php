@@ -24,6 +24,7 @@ function abilityRoutes(): array
     return [
         'config' => ['GET', '/api/config', 'config:read'],
         'switch back to classic' => ['PUT', '/api/account/ui', 'config:read'],
+        'the design switch, read' => ['GET', '/api/account/ui', 'config:read'],
         'device report' => ['POST', '/api/devices/report', 'config:read'],
         'missed recording' => ['POST', '/api/devices/missed-recordings', 'config:read'],
         'share check result' => ['POST', '/api/diagnostics/share-checks', 'config:read'],
@@ -146,6 +147,8 @@ function abilityRoutes(): array
         'assist: delete a session' => ['DELETE', "/api/assist/sessions/{$id}", 'sessions:write'],
         'assist: what was done with a suggestion' => ['POST', "/api/assist/sessions/{$id}/suggestions/{$id}/action", 'sessions:write'],
         'assist: ask about a session' => ['POST', "/api/assist/sessions/{$id}/ask", 'sessions:write'],
+        // Since 1.9.0-q: HTTP mode.
+        'assist: a live message and its streamed answer' => ['POST', "/api/assist/sessions/{$id}/live", 'sessions:write'],
         // Since v1.8 P6.3: inviting people.
         'the invitations and links' => ['GET', '/api/workspace/invitations', 'config:read'],
         'invite by email' => ['POST', '/api/workspace/invitations', 'sessions:write'],

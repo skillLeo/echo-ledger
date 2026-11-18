@@ -132,6 +132,17 @@ final class PromptPack
         return self::fill($this->raw($meetingType), $values);
     }
 
+    /**
+     * The meeting type's template cut at its placeholders: piece i is the text before placeholder i, and the last piece
+     * the text after the question. What a provider's request is made of, block by block, so a repeated start stays cached.
+     *
+     * @return list<string>
+     */
+    public function pieces(string $meetingType): array
+    {
+        return preg_split(self::PLACEHOLDER, $this->raw($meetingType)) ?: [];
+    }
+
     public function defaultHintLevel(string $meetingType): string
     {
         return (string) ($this->entry($meetingType)['default_hint_level'] ?? '');

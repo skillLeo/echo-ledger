@@ -13,7 +13,7 @@ export type AwaitedCommand = { name: string; fallback?: string; callers: readonl
 export const AWAITING_CORE: { removeBy: string; commands: readonly AwaitedCommand[] } = {
   /** The app version by which the list must be empty. */
   removeBy: "2.0.0",
-  /** Empty: core batches 3 and 4 brought live_translate_status and diagnostic_report_copy. A command the interface
+  /** Empty: the core has every command the interface wraps (ui_design_set came with the parity batch). A command the interface
    * wraps before the core has it goes here, with its fallback and callers. */
   commands: [],
 };

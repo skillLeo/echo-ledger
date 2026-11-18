@@ -11,6 +11,20 @@ export type OldWindowsSharing = "black_box" | "show";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 /** After a call (contract 1.8.0-e): `ask` (default), a small chip that saves the audio by itself after 12 s, not
  * transcribed; `always_transcribe` or `always_audio`, kept at once with "Saved · Undo". v1.5's `keep` reads as `ask`. */
+/** A Show as view an export can be in. */
+export type ExportView = "roman" | "english" | "urdu";
+/** `sessions_transcribe` (docs/API.md "Audio only"). */
+export interface TranscribeStarted {
+  started: string[];
+  skipped: { id: string; code: string }[];
+  minutes: number;
+}
+/** `sessions_transcribe_estimate`. */
+export interface TranscribeEstimate {
+  minutes: number;
+  minutes_left: number | null;
+  items: { id: string; minutes: number }[];
+}
 export type AfterCall = "ask" | "always_transcribe" | "always_audio";
 /** Why an automatic call was skipped quietly (v1.5): shorter than the setting, or nobody spoke on either side. */
 export type SkipReason = "too_short" | "no_speech";
@@ -68,6 +82,8 @@ export interface AppStatus {
   server?: ServerNotices;
   /** Said once after "Keep automatically" became Ask me; null otherwise (missing from an older core). */
   afterCallNotice?: string | null;
+  /** Said once after the v2.0 update: the main window now shows in screen shares unless the person hides it. */
+  shareNotice?: string | null;
 }
 
 /** `config.app_update`: this version is below the server's minimum; `refused`: its other requests are refused. */
@@ -369,7 +385,9 @@ export interface Settings {
   shortcuts: Partial<Record<ShortcutAction, string>>;
   captionsOnRecord: boolean;
   autoMode: boolean;
-  hideFromSharing: ShareHiding; // since v1.8.1, replaces contentProtection
+  hideFromSharing: ShareHiding; // since v1.8.1, replaces contentProtection; since v2.0 the other floating windows only
+  mainShareHide: MainShareHide | null; // since v2.0: the main window hidden from screen shares, and until when
+  shareNotice: boolean; // the one-time notice after the v2.0 update
   oldWindowsSharing: OldWindowsSharing; // Windows before build 19041
   shareOneWindow: boolean; // "I share one window or a tab" (macOS)
   sendDiagnostics: boolean; // Share Check results to the server, off until turned on
@@ -725,7 +743,19 @@ export interface AssistSnapshot {
 export interface UiFlagsAnswer {
   ui_flags: Record<string, boolean>;
   ui_classic: boolean;
+  /** The design switch (since 2.0.0-g); null from an older server (show only the 2.0.0-a switch). */
+  ui_design?: UiDesign | null;
 }
+/** `ui_design` (docs/API.md "The design switch"): show Try the new design while `can_try`, Switch back to classic
+ * while `can_switch_back`. */
+export interface UiDesign {
+  choice: "v2" | "classic" | null;
+  current: "v2" | "classic";
+  can_try: boolean;
+  can_switch_back: boolean;
+}
+/** The same, by the name the design switch's reader uses (v2/flags.ts). */
+export type UiDesignAnswer = UiDesign;
 
 /** The last app that used the microphone without being recorded, and when it was last seen so (kept by the core). */
 export interface NotRecordedMic {
@@ -1000,6 +1030,8 @@ export interface SessionOrganisePatch {
   labels?: string[];
   /** Never deleted by retention (B17). */
   keep?: boolean;
+  /** The recording's language, changed without re-transcribing it (null: automatic). */
+  language?: TranscriptionLanguage | null;
 }
 export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "delete";
 /** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
@@ -1197,7 +1229,9 @@ export type CaptionEvent =
   | { kind: "partial"; speaker: string; channel: number; text: string }
   | { kind: "final"; speaker: string; channel: number; text: string; startMs: number; endMs: number }
   | { kind: "status"; live: boolean; recording: boolean; provider: string | null; message: string | null }
-  | { kind: "clear" };
+  | { kind: "clear" }
+  /** The latency probe (development only): the caption just sent carried word `id`; say when it is painted. */
+  | { kind: "probe"; id: number };
 
 export interface RectPx {
   x: number;
@@ -1518,6 +1552,29 @@ export interface ShareSeen {
   hid: boolean;
 }
 
+/** Until when the main window is hidden from screen shares (v2.0). */
+export type HideUntil = { kind: "call_ends" } | { kind: "at"; at_ms: number } | { kind: "until_off" };
+export interface MainShareHide {
+  until: HideUntil;
+  sinceMs: number;
+}
+/** What the person picks under "Hide from screen shares". */
+export type HideFor =
+  | { kind: "call_ends" } | { kind: "minutes15" } | { kind: "hour1" } | { kind: "tomorrow" } | { kind: "until_off" }
+  | { kind: "custom"; minutes: number };
+/** The two windows hidden from screen shares unless the person shows them, each on its own. */
+export type PinnedWindow = "card" | "captions";
+/** What the system reads back for that window: never only the saved choice. */
+export type WindowShareState = "hidden" | "shown" | "black_box" | "could_not_hide" | "not_open";
+export interface WindowShareView {
+  which: PinnedWindow;
+  /** The person showed it in screen shares from its own badge (until it closes; never saved). */
+  shown: boolean;
+  state: WindowShareState;
+  badge: string;
+  switchLabel: string;
+}
+
 export interface PrivacyStatus {
   platform: string;
   badge: PrivacyBadge;
@@ -1531,6 +1588,13 @@ export interface PrivacyStatus {
   hiddenForShare: boolean;
   /** The person opened the main window during a whole-screen share: it says it may be in the screen share. */
   mainInShare: boolean;
+  /** The main window is hidden from screen shares (v2.0), and until when ("until 14:30"); null: shown. */
+  mainHide?: MainShareHide | null;
+  mainHiddenUntil?: string | null;
+  /** A call is detected: "Until this call ends" is offered. */
+  callDetected?: boolean;
+  showCard?: boolean;
+  showCaptions?: boolean;
   /** Which whole-screen share that is, counted in this run: the notice closed in one share shows again in the next. */
   shareNumber: number;
   /** The share's sharing bar is on screen: "Show EchoLedger windows" is not offered (they come back when it ends). */
@@ -1610,6 +1674,17 @@ export const api = {
   shareCheckCard: (open: boolean) => invoke<void>("share_check_card", { open }),
   shareCheckAnswer: (meetingApp: MeetingApp, visible: boolean) => invoke<PrivacyStatus>("share_check_answer", { meetingApp, visible }),
   privacyShowInShares: (minutes: number) => invoke<void>("privacy_show_in_shares", { minutes }),
+  /** "Hide from screen shares" for the main window, until the time chosen (v2.0). */
+  privacyMainHide: (choice: HideFor) => invoke<PrivacyStatus>("privacy_main_hide", { choice }),
+  /** "Show now": the main window is in screen shares again. */
+  privacyMainShow: () => invoke<PrivacyStatus>("privacy_main_show"),
+  /** The card's or the captions' real state, read back from the system; the main window names the one it means. */
+  privacyWindowShare: (which: PinnedWindow | null = null) => invoke<WindowShareView>("privacy_window_share", { which }),
+  /** That window's own switch: shown in screen shares only from its own badge; the main window may only hide it. */
+  privacyWindowShareSet: (shown: boolean, which: PinnedWindow | null = null) => invoke<WindowShareView>("privacy_window_share_set", { which, shown }),
+  shareNoticeDismiss: () => invoke<void>("share_notice_dismiss"),
+  /** The latency probe (development only): word `id` is on screen. */
+  captionProbePainted: (id: number) => invoke<void>("caption_probe_painted", { id }),
   privacyConcealed: () => invoke<boolean>("privacy_concealed"),
   privacyHideAll: () => invoke<void>("privacy_hide_all"),
   /** Windows: sets every capture flag again after something else on the computer changed one. */
@@ -1726,7 +1801,16 @@ export const api = {
   bulkSessions: (ids: string[], action: BulkAction, clientId: string | null = null, label: string | null = null) =>
     invoke<number>("sessions_bulk", { ids, action, clientId, label }),
   /** One zip file, saved where the person chooses; null when they cancel the save dialog. */
-  exportSessions: (ids: string[], format: BulkExportFormat) => invoke<string | null>("sessions_export", { ids, format }),
+  /** The finished transcripts of the selected recordings in one zip; `view` (roman | english | urdu) exports each one
+   * whose Show as view is ready in it. */
+  exportSessions: (ids: string[], format: BulkExportFormat, view?: ExportView) => invoke<string | null>("sessions_export", { ids, format, view }),
+  /** Transcribe on an audio-only recording (since v1.8): its transcript starts now. */
+  sessionTranscribe: (id: string) => invoke<Record<string, unknown>>("session_transcribe", { id }),
+  /** Transcribe selected (1-50): which started, which were skipped and why, and the minutes. Nothing starts when the
+   * minutes left can't cover them all (`budget_exceeded`, said in minutes). */
+  sessionsTranscribe: (ids: string[]) => invoke<TranscribeStarted>("sessions_transcribe", { ids }),
+  /** What Transcribe selected would use and the minutes left this month (null = no limit), before it starts. */
+  sessionsTranscribeEstimate: (ids: string[]) => invoke<TranscribeEstimate>("sessions_transcribe_estimate", { ids }),
   /** A new project; `parentId` makes it a subfolder (since v1.5). */
   createClient: (name: string, color: string | null = null, avatar: string | null = null, parentId: string | null = null) =>
     invoke<{ data: ClientFolder }>("client_create", { name, color, avatar, parentId }),
@@ -1844,6 +1928,9 @@ export const api = {
   trashKeepHours: () => invoke<number>("trash_keep_hours"),
   /** "Switch back to classic" (`PUT /api/account/ui`): the server's new flags. */
   uiClassicSet: (classic: boolean) => invoke<UiFlagsAnswer>("ui_classic_set", { classic }),
+  /** The design switch (contract 2.0.0-g): "v2" is Try the new design, "classic" is Switch back to classic, null the
+   * default. The answer has the same shape as `ui_flags`, with `ui_design`. */
+  uiDesignSet: (design: "v2" | "classic" | null) => invoke<UiFlagsAnswer>("ui_design_set", { design }),
   /** Help (docs/API.md 2.0.0-d, v1.8 P6.4): the user guide's sections, those matching `q` best first (at most 20). */
   helpGuides: (q: string | null = null) => invoke<{ data: HelpGuideHit[] }>("help_guides", { q }),
   /** One section of the guide, as Markdown. */

@@ -13,6 +13,9 @@ use App\Filament\Support\NoticeTargets;
 use App\Mail\TestMail;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
+use App\Services\Assist\AssistTransport;
+use App\Services\Assist\RelayHealth;
+use App\Services\Assist\RelayToken;
 use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\EngineWait;
@@ -29,6 +32,7 @@ use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\DialectHint;
+use App\Stt\Drivers\AssemblyAiDriver;
 use App\Stt\Drivers\GeminiDriver;
 use App\Stt\GroqPacer;
 use App\Stt\KeytermPolicy;
@@ -174,8 +178,10 @@ class Settings extends Page
             'support_email' => $all['support.email'] ?? null,
             'marker_tags' => SessionMarkers::presets($all['markers.tags'] ?? SessionMarkers::DEFAULT_TAGS),
             'assemblyai_region' => $all['assemblyai.region'],
-            'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
+            'assemblyai_streaming_model' => AssemblyAiDriver::storedStreamingModel($all['assemblyai.streaming_model'] ?? null),
+            'assemblyai_fast_english' => (bool) ($all['assemblyai.fast_english'] ?? false),
             'assemblyai_streaming_mode' => $all['assemblyai.streaming_mode'],
+            'assemblyai_fastest_min_silence_ms' => AssemblyAiDriver::fastestMinSilence($all['assemblyai.fastest_min_silence_ms'] ?? null),
             'assemblyai_async_models' => $all['assemblyai.async_models'],
             'groq_plan' => isset(GroqPacer::PLANS[$all['groq.plan'] ?? '']) ? $all['groq.plan'] : GroqPacer::DEFAULT_PLAN,
             'gemini_model' => GeminiDriver::modelOr($all['gemini.model'] ?? null),
@@ -188,6 +194,8 @@ class Settings extends Page
             'whisper_chunk_seconds' => $all['whisper.chunk_seconds'],
             'whisper_vad' => (bool) $all['whisper.vad'],
             'app_pins' => $all['app.pins'],
+            'assist_connection' => isset(AssistTransport::CHOICES[$all['assist.connection'] ?? '']) ? $all['assist.connection'] : AssistTransport::DEFAULT,
+            'relay_url' => is_string($all['relay.url'] ?? null) ? $all['relay.url'] : null,
             ...self::budgetFormState($all),
         ];
     }
@@ -312,6 +320,25 @@ class Settings extends Page
                                 ->columns(4)->defaultItems(0)->maxItems(TextReplacements::MAX_RULES)->addActionLabel('Add a correction')
                                 ->helperText('Applied to every new final transcript; the original stays in the transcript history and can be restored.'),
                         ]),
+                    $this->section('assist_connection')
+                        ->description('How the apps reach Live Assist during a call. A dedicated relay runs on a VPS (its secret and certificate pins are on API Credentials). Shared hosting (emergency only) needs nothing more. Each session keeps the connection it started with.')
+                        ->columns(2)->schema([
+                            Select::make('assist_connection')->label('Live Assist connection')->options(AssistTransport::CHOICES)->selectablePlaceholder(false)->required()->live()
+                                ->helperText(fn (Get $get): string => $get('assist_connection') === AssistTransport::SHARED ? AssistTransport::SHARED_HELP
+                                    : 'Dedicated relay (the default) always uses the relay on the VPS and says so when it is down, so the apps can try again. Automatic does the same whenever a relay is set up, and uses this server only while none is. Shared hosting is for emergencies only.'),
+                            TextInput::make('relay_url')->label('Relay address')->placeholder('relay.example.com')->maxLength(253)
+                                ->rule(fn () => function (string $attribute, mixed $value, \Closure $fail): void {
+                                    if (filled($value) && RelayToken::url((string) $value) === null) {
+                                        $fail('Enter the relay\'s host name, such as relay.example.com.');
+                                    }
+                                })
+                                ->helperText(fn (?string $state): string => RelayToken::url($state) !== null
+                                    ? 'The apps connect to '.RelayToken::url($state).'. Empty: no relay.'
+                                    : 'The relay\'s host name; the apps connect to wss://<host>/v1/assist. Empty: no relay.'),
+                            Actions::make([
+                                Action::make('checkRelay')->label('Check relay')->icon(Heroicon::OutlinedSignal)->action(fn () => $this->checkRelay()),
+                            ])->columnSpanFull(),
+                        ]),
                 ]),
                 'recording' => $this->tab('recording', [
                     $this->section('engine')->description('Accuracy first. Keys live on API Credentials.')->columns(2)->schema([
@@ -373,16 +400,20 @@ class Settings extends Page
                     $this->section('assemblyai')->collapsible()->columns(2)->schema([
                         Select::make('assemblyai_region')->label('Data region')->options(['us' => 'US (default)', 'eu' => 'EU'])->required(),
                         Select::make('assemblyai_streaming_model')->label('Streaming model')->options([
-                            'universal-3-6-pro' => 'Universal-3.6 Pro (most accurate)',
-                            'universal-streaming-english' => 'Universal-Streaming English (budget)',
-                            'universal-streaming-multilingual' => 'Universal-Streaming Multilingual (budget)',
-                        ])->required(),
+                            AssemblyAiDriver::STREAMING_MODEL => 'Universal-3.6 Pro (Urdu, English and 30 more)',
+                        ])->required()->selectablePlaceholder(false),
+                        Toggle::make('assemblyai_fast_english')->label('Fast English captions')->inline(false)
+                            ->helperText('English-only recordings use AssemblyAI-STT-3.7 Realtime: words appear sooner. Urdu, mixed and Automatic stay on Universal-3.6 Pro.'),
                         Select::make('assemblyai_streaming_mode')->label('Caption speed')->options([
                             'min_latency' => 'Fastest (default)',
                             'balanced' => 'Balanced',
                             'max_accuracy' => 'Most accurate, slower',
                         ])->required()->selectablePlaceholder(false)
-                            ->helperText('How soon live captions end a line. Fastest ends it after 0.64 s of quiet, Balanced after 1.28 s, Most accurate after 2.56 s. Applies to captions started after saving.'),
+                            ->live()->helperText('How soon live captions end a line. Fastest ends it after 0.64 s of quiet, Balanced after 1.28 s, Most accurate after 2.56 s. Applies to captions started after saving.'),
+                        TextInput::make('assemblyai_fastest_min_silence_ms')->label('Fastest: quiet before a line may end (ms)')
+                            ->integer()->required()->minValue(AssemblyAiDriver::FASTEST_MIN_SILENCE_FLOOR)->maxValue(AssemblyAiDriver::FASTEST_MIN_SILENCE_CEILING)
+                            ->visible(fn (Get $get): bool => $get('assemblyai_streaming_mode') === 'min_latency')
+                            ->helperText('How soon AssemblyAI checks whether a line has ended, so its words show sooner. 80 by default; 50 to 600. Applies to captions started after saving.'),
                         TagsInput::make('assemblyai_async_models')->label('Final transcript models (priority order)')->columnSpanFull(),
                     ]),
                     $this->section('groq')->collapsible()->collapsed()->columns(2)->schema([
@@ -760,6 +791,36 @@ class Settings extends Page
         return $routes;
     }
 
+    /**
+     * "Check relay": asks the relay at the address in the form (saved or not) and shows how it answered. Guarded like
+     * every relay check (RelayHealth::probe: public addresses only, pinned, no redirects) and limited to 6 a minute.
+     */
+    public function checkRelay(): void
+    {
+        $key = 'check-relay:'.auth()->id();
+        if (RateLimiter::tooManyAttempts($key, 6)) {
+            Notification::make()->title('Wait a moment')->body('Check the relay again in '.RateLimiter::availableIn($key).' seconds.')->warning()->send();
+
+            return;
+        }
+        RateLimiter::hit($key, 60);
+        $typed = trim((string) ($this->data['relay_url'] ?? ''));
+        $url = RelayToken::url($typed);
+        if ($url === null) {
+            Notification::make()->title('No relay to check')->body($typed === '' ? 'Enter the relay\'s address first.' : 'Enter the relay\'s host name, such as relay.example.com.')->warning()->send();
+
+            return;
+        }
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        // The check is remembered for the saved address only: a typed one is asked, not remembered.
+        $result = app(SettingsRepository::class)->get('relay.url') === $host ? app(RelayHealth::class)->check() : RelayHealth::probe($host);
+        if ($result['ok']) {
+            Notification::make()->title('The relay is up')->body("{$host} answered in {$result['ms']} ms".($result['version'] !== null ? " (version {$result['version']})." : '.'))->success()->send();
+        } else {
+            Notification::make()->title('The relay is down')->body("{$host}: ".($result['error'] ?? 'no answer.').' Live Assist sessions are refused until it answers again (the apps say so); Shared hosting is for emergencies only.')->danger()->send();
+        }
+    }
+
     public function save(SettingsRepository $settings): void
     {
         $this->persist($settings);
@@ -771,6 +832,14 @@ class Settings extends Page
     {
         $state = $this->form->getState();
         $before = $settings->all();
+        // Since 2026-11-18 the Universal-Streaming models are no longer offered (gone from AssemblyAI's docs): a server
+        // that still stores one has been reading it as Universal-3.6 Pro; this save writes that down, and says so.
+        $oldModel = $before['assemblyai.streaming_model'] ?? null;
+        if (is_string($oldModel) && $oldModel !== AssemblyAiDriver::STREAMING_MODEL) {
+            app(AuditLog::class)->record('settings_changed', (int) auth()->id(), null,
+                Str::limit("AssemblyAI streaming model {$oldModel} is no longer offered: read as Universal-3.6 Pro", 250, '…'),
+                ['keys' => ['assemblyai.streaming_model'], 'from' => $oldModel, 'to' => AssemblyAiDriver::STREAMING_MODEL]);
+        }
         $settings->setMany([
             'retention_days' => (int) $state['retention_days'],
             'trash.keep_hours' => (int) $state['trash_keep_hours'],
@@ -809,8 +878,13 @@ class Settings extends Page
             'mail.from_name' => filled($state['mail_from_name'] ?? null) ? trim((string) $state['mail_from_name']) : null,
             'support.email' => filled($state['support_email'] ?? null) ? mb_strtolower(trim((string) $state['support_email'])) : null,
             'assemblyai.region' => $state['assemblyai_region'],
-            'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
+            'assemblyai.streaming_model' => AssemblyAiDriver::storedStreamingModel($state['assemblyai_streaming_model'] ?? null),
+            'assemblyai.fast_english' => (bool) ($state['assemblyai_fast_english'] ?? false),
             'assemblyai.streaming_mode' => $state['assemblyai_streaming_mode'],
+            // Hidden under Balanced and Most accurate, the field is not in getState(): keep the value the form holds
+            // (the stored one, or an imported file's), else the stored one, never the default.
+            'assemblyai.fastest_min_silence_ms' => AssemblyAiDriver::fastestMinSilence($state['assemblyai_fastest_min_silence_ms']
+                ?? $this->form->getRawState()['assemblyai_fastest_min_silence_ms'] ?? $before['assemblyai.fastest_min_silence_ms'] ?? null),
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],
             'groq.plan' => isset(GroqPacer::PLANS[$state['groq_plan'] ?? '']) ? $state['groq_plan'] : GroqPacer::DEFAULT_PLAN,
             'gemini.model' => GeminiDriver::modelOr($state['gemini_model'] ?? null),
@@ -836,6 +910,10 @@ class Settings extends Page
             'live_translate.watch_speed' => array_key_exists($state['live_translate_watch_speed'] ?? '', self::LIVE_TRANSLATE_SPEEDS) ? $state['live_translate_watch_speed'] : 'balanced',
             'routing.final' => self::routingFromState($state),
             'routing.urdu_wait_hours' => EngineWait::clampHours($state['urdu_wait_hours'] ?? null),
+            'assist.connection' => isset(AssistTransport::CHOICES[$state['assist_connection'] ?? '']) ? $state['assist_connection'] : AssistTransport::DEFAULT,
+            'relay.url' => filled($state['relay_url'] ?? null) && RelayToken::url((string) $state['relay_url']) !== null
+                ? (string) parse_url((string) RelayToken::url((string) $state['relay_url']), PHP_URL_HOST)
+                : null,
         ]);
         // The SMTP password goes to the credential vault (its change is in the audit log there); empty keeps it.
         $vault = app(CredentialVault::class);
@@ -867,6 +945,15 @@ class Settings extends Page
             return (string) json_encode($value);
         };
         $changed = array_values(array_filter(array_keys($after), fn (string $key): bool => $same($before[$key] ?? null) !== $same($after[$key])));
+        // Live Assist's connection gets its own entry, naming the choice and the relay before and after.
+        if (array_intersect($changed, ['assist.connection', 'relay.url']) !== []) {
+            $describe = fn (array $all): string => (AssistTransport::CHOICES[$all['assist.connection'] ?? ''] ?? AssistTransport::CHOICES[AssistTransport::DEFAULT])
+                .' ('.(is_string($all['relay.url'] ?? null) ? $all['relay.url'] : 'no relay').')';
+            app(AuditLog::class)->record('assist_connection_changed', (int) auth()->id(), null, Str::limit('Live Assist connection: '.$describe($before).' → '.$describe($after), 250, '…'), [
+                'from' => ['connection' => $before['assist.connection'] ?? null, 'relay' => $before['relay.url'] ?? null],
+                'to' => ['connection' => $after['assist.connection'], 'relay' => $after['relay.url']],
+            ]);
+        }
         if ($changed !== []) {
             app(AuditLog::class)->record('settings_changed', (int) auth()->id(), null, Str::limit('Settings changed: '.implode(', ', $changed), 250, '…'), ['keys' => $changed]);
         }

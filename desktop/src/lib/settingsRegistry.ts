@@ -199,9 +199,17 @@ export const SETTINGS: readonly SettingEntry[] = [
   // Screen-share privacy (since v1.8.1; it replaces Captions › "Show during screen share").
   { id: "share_privacy", title: "Screen-share privacy", page: null, root: "App", kind: "page",
     keywords: ["privacy", "screen sharing", "screen share", "hide from screen sharing", "presentation", "private notes", "zoom", "teams", "meet"], ru: ["screen share", "chupao"], ur: ["اسکرین شیئر"] },
-  { id: "share_privacy.hiding", title: "Hide from screen sharing", page: "share_privacy", kind: "choice", resettable: true, aliases: ["Hide EchoLedger from screen sharing"],
-    options: opts(["all", "All EchoLedger windows", true], ["floating", "Only floating windows"], ["off", "Off"]),
-    keywords: ["show during screen share", "hide overlays", "captions in screen share", "main window"], ru: ["screen share mein chupao", "chupana"], ur: ["اسکرین شیئر میں چھپائیں"] },
+  // Since v2.0 each window has its own: the main window shown unless hidden for a while, the Live Assist card and the
+  // captions hidden unless shown on that window; the other floating windows follow "Other floating windows".
+  { id: "share_privacy.main", title: "Main window", page: "share_privacy", kind: "info",
+    keywords: ["hide from screen shares", "show in screen shares", "main window", "hide for", "until this call ends"], ru: ["main window chupao"], ur: ["مین ونڈو"] },
+  { id: "share_privacy.card", title: "Live Assist card", page: "share_privacy", kind: "info",
+    keywords: ["assist card", "answer card", "show this card in screen shares"], ru: ["card dikhao"], ur: ["کارڈ"] },
+  { id: "share_privacy.captions", title: "Captions", page: "share_privacy", kind: "info",
+    keywords: ["captions in screen share", "show captions in screen shares"], ru: ["captions dikhao"], ur: ["کیپشن"] },
+  { id: "share_privacy.hiding", title: "Other floating windows", page: "share_privacy", kind: "choice", resettable: true, aliases: ["Hide from screen sharing", "Hide EchoLedger from screen sharing"],
+    options: opts(["all", "Hidden from screen shares", true], ["off", "Shown in screen shares"]),
+    keywords: ["show during screen share", "hide overlays", "recording controls", "dictation box"], ru: ["screen share mein chupao", "chupana"], ur: ["اسکرین شیئر میں چھپائیں"] },
   { id: "share_privacy.status", title: "Status", page: "share_privacy", kind: "info", keywords: ["private", "badge", "black box"], ru: ["haalat", "private"], ur: ["حالت", "نجی"] },
   { id: "share_privacy.old_windows", title: "On this Windows version", page: "share_privacy", kind: "choice", requires: { os: "windows" }, resettable: true,
     options: opts(["black_box", "Black box", true], ["show", "Show normally"]), keywords: ["black box", "older windows", "windows 10"], ru: ["purani windows", "kala dabba"], ur: ["پرانی ونڈوز"] },
@@ -229,6 +237,9 @@ export const SETTINGS: readonly SettingEntry[] = [
     options: opts(["comfortable", "Comfortable", true], ["compact", "Compact"]), keywords: ["spacing", "compact", "dense"] },
   { id: "appearance.clock", title: "Times", page: "appearance", kind: "segmented", resettable: true,
     options: opts(["12", "12-hour", true], ["24", "24-hour"]), keywords: ["clock", "time format", "am pm"], ru: ["waqt", "ghanta"], ur: ["وقت"] },
+  { id: "appearance.design", title: "Design", page: "appearance", kind: "action",
+    description: "Classic, or the new design: try it and come back whenever you like.",
+    keywords: ["new design", "new look", "classic", "old look", "v2", "switch back", "try the new design", "redesign"], ru: ["naya design", "purana design"], ur: ["نیا ڈیزائن"] },
 
   { id: "notifications", title: "Notifications", page: null, root: "App", kind: "page", keywords: ["alerts", "push", "notification"], ru: ["ittila", "ittilaat", "alert", "ghanti"], ur: ["اطلاع", "اطلاعات"] },
   { id: "notifications.enabled", title: "Show notifications", page: "notifications", kind: "switch", resettable: true, keywords: ["turn off notifications", "mute", "silence"], ru: ["band karo"] },

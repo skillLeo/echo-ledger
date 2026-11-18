@@ -242,7 +242,7 @@ fn elevenlabs_grants_have_no_init_messages_and_an_unlimited_session() {
     let g = &t.grants[0];
     assert_eq!(g.max_session_seconds, None, "null max_session_seconds");
     assert!(g.init_messages.is_empty());
-    assert_eq!(g.audio.as_ref().unwrap().frame_ms, 100);
+    assert_eq!(g.audio.as_ref().unwrap().frame_ms, 50);
     assert!(g.ws_url.as_deref().unwrap().contains("commit_strategy=vad"));
     assert_eq!(Protocol::from_grant(g), Some(Protocol::ElevenLabsRealtime));
 }

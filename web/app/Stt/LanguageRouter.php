@@ -237,7 +237,7 @@ final class LanguageRouter
             return false;
         }
         if ($key === SttProviderKey::AssemblyAi && $language !== 'en') {
-            return AssemblyAiDriver::streamingSupportsLanguages((string) $this->settings->get('assemblyai.streaming_model', 'universal-3-6-pro'));
+            return AssemblyAiDriver::streamingSupportsLanguages(AssemblyAiDriver::storedStreamingModel($this->settings->get('assemblyai.streaming_model')));
         }
 
         return true;

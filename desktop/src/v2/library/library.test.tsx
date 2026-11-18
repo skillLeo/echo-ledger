@@ -12,6 +12,8 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 const NOW = new Date(2026, 10, 17, 15, 0);
+/** The rows' own buttons (each row also has its ⋮). */
+const rowButtons = (list: HTMLElement) => [...list.querySelectorAll<HTMLElement>("button[data-row-id]")];
 const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute).toISOString();
 
 const ITEMS: LibraryItem[] = [
@@ -44,7 +46,7 @@ describe("the Library's rules", () => {
     expect(viewItems(ITEMS, "today", "", NOW).map((i) => i.id)).toEqual(["bilal", "voice", "usman"]);
     expect(viewItems(ITEMS, "untranscribed", "", NOW).map((i) => i.id)).toEqual(["voice", "usman"]);
     expect(viewItems(ITEMS, "all", "march shipment", NOW).map((i) => i.id)).toEqual(["bilal"]);
-    expect(viewCounts(ITEMS, NOW)).toEqual({ all: 4, today: 3, untranscribed: 2 });
+    expect(viewCounts(ITEMS, NOW)).toMatchObject({ all: 4, today: 3, untranscribed: 2 });
     expect(isUntranscribed(ITEMS[0])).toBe(false);
   });
 
@@ -101,13 +103,17 @@ describe("LibraryV2", () => {
     expect(callsOf("library_refresh")).toHaveLength(1);
   });
 
-  it("the saved views Today and Untranscribed, with their counts", async () => {
+  it("the saved views Today and Untranscribed, with their counts, from Views ▾", async () => {
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Untranscribed 2" }));
+    const pick = (name: RegExp) => {
+      fireEvent.click(screen.getByRole("button", { name: /^(Views|Today|Untranscribed)$/ }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name }));
+    };
+    pick(/^Untranscribed/);
     const list = screen.getByRole("list", { name: "Recordings" });
-    expect(within(list).getAllByRole("button").map((b) => b.getAttribute("aria-labelledby") && b.textContent)).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "Today 3" }));
-    expect(within(screen.getByRole("list", { name: "Recordings" })).getAllByRole("button")).toHaveLength(3);
+    expect(rowButtons(list)).toHaveLength(2);
+    pick(/^Today/);
+    expect(rowButtons(screen.getByRole("list", { name: "Recordings" }))).toHaveLength(3);
   });
 
   it("loading, then an error with its one fix", async () => {
@@ -137,7 +143,7 @@ describe("LibraryV2", () => {
     respond("library_list", ITEMS.slice(0, 1));
     await act(() => emitEvent("library:updated"));
     await act(flushAsync);
-    expect(within(screen.getByRole("list", { name: "Recordings" })).getAllByRole("button")).toHaveLength(1);
+    expect(rowButtons(screen.getByRole("list", { name: "Recordings" }))).toHaveLength(1);
   });
 
   describe("its screens (meeting assets)", () => {
@@ -173,8 +179,9 @@ describe("LibraryV2", () => {
         "Screen 1 · 0:04: The proforma invoice", "Screen 2 · 0:07: The bank's LC form", "Screen 3 · 1:00",
       ]);
       const lines = within(screen.getByRole("list", { name: "Transcript" })).getAllByRole("listitem").filter((li) => li.classList.contains("el-segment"));
-      expect(within(lines[0]).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Screen 1 · 0:04: The proforma invoice"]);
-      expect(within(lines[1]).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Screen 2 · 0:07: The bank's LC form", "Screen 3 · 1:00"]);
+      // Each line starts with its "Play from" time, then the screens of its moment.
+      expect(within(lines[0]).getAllByRole("button").map((b) => b.getAttribute("aria-label")).slice(1)).toEqual(["Screen 1 · 0:04: The proforma invoice"]);
+      expect(within(lines[1]).getAllByRole("button").map((b) => b.getAttribute("aria-label")).slice(1)).toEqual(["Screen 2 · 0:07: The bank's LC form", "Screen 3 · 1:00"]);
     });
 
     it("the viewer: what was said around it, the text on it, its file name, the next one, Play from here", async () => {
@@ -261,16 +268,21 @@ describe("LibraryV2", () => {
     expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
   });
 
-  it("an untranscribed recording offers Transcribe", async () => {
+  it("an untranscribed recording offers Transcribe, with its minutes first", async () => {
     respond("session_detail", { playback_url: null });
-    respond("session_retranscribe", {});
+    respond("sessions_transcribe_estimate", { minutes: 3, minutes_left: 120, items: [] });
+    respond("sessions_transcribe", { started: ["voice"], skipped: [], minutes: 3 });
     await show();
     fireEvent.click(screen.getByRole("button", { name: "Voice note" }));
     await act(flushAsync);
     fireEvent.click(screen.getByRole("button", { name: "Transcribe" }));
     await act(flushAsync);
-    expect(callsOf("session_retranscribe")).toEqual([{ id: "voice", language: null }]);
-    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Transcription started");
+    const dialog = screen.getByRole("dialog", { name: "Transcribe this recording?" });
+    expect(dialog).toHaveAccessibleDescription("About 3 minutes of the 120 minutes left this month.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Transcribe" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_transcribe")).toEqual([{ ids: ["voice"] }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Transcribing 1 recording");
   });
 
   it("Delete moves the recording to Trash and Undo brings it back", async () => {
@@ -282,7 +294,8 @@ describe("LibraryV2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
     await act(flushAsync);
     respond("library_list", ITEMS.slice(1));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await act(flushAsync);
     expect(callsOf("delete_session")).toEqual([{ id: "bilal" }]);
     // The deleted recording's place goes to the next one in the list.
@@ -309,7 +322,8 @@ describe("LibraryV2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
     await act(flushAsync);
     respond("library_list", ITEMS.slice(1));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await act(flushAsync);
     expect(screen.getByRole("button", { name: "Voice note" })).toHaveFocus();
     const search = screen.getByRole("searchbox");
@@ -333,7 +347,8 @@ describe("LibraryV2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
     await act(flushAsync);
     respond("library_list", ITEMS.slice(1));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await act(flushAsync);
     respond("library_list", ITEMS);
     fireEvent.click(within(screen.getByRole("status", { name: "Notifications" })).getByRole("button", { name: "Undo" }));
@@ -360,6 +375,85 @@ describe("LibraryV2", () => {
     const empty = screen.getByRole("region", { name: "Trash is empty" });
     expect(empty).toHaveTextContent("Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.");
     expect(document.body).not.toHaveTextContent(/30 days/);
+    // The header's Trash button stays pressed while Trash is open; pressing it again goes back to the recordings.
+    expect(screen.getByRole("button", { name: "Trash" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Trash" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  describe("parity rows that had no test (docs/v2/audit/parity.csv)", () => {
+    it("Import, clearing a search by its button and by Esc, and a search that matches nothing (DT-LIB-005, 008, 009, 138)", async () => {
+      const onImport = vi.fn();
+      await show({ onImport });
+      fireEvent.click(screen.getByRole("button", { name: "Import" }));
+      expect(onImport).toHaveBeenCalled();
+      const search = screen.getByRole("searchbox", { name: "Search recordings" });
+      fireEvent.change(search, { target: { value: "zzz nothing" } });
+      const none = screen.getByRole("region", { name: "No recordings match" });
+      fireEvent.click(within(none).getByRole("button", { name: "Clear search" }));
+      expect(search).toHaveValue("");
+      fireEvent.change(search, { target: { value: "Usman" } });
+      fireEvent.click(screen.getAllByRole("button", { name: "Clear search" })[0]);
+      expect(search).toHaveValue("");
+      fireEvent.change(search, { target: { value: "Bilal" } });
+      fireEvent.keyDown(search, { key: "Escape" });
+      expect(search).toHaveValue("");
+    });
+
+    it("a recording where nothing was heard says No audio in its row and Nothing was heard when opened (DT-LIB-072, DT-REC-055)", async () => {
+      const quiet = makeItem("quiet", { title: "Quiet call", started_at: at(17, 10), transcript: { final_status: "failed", final_transcript_id: null, live_available: false, preview: null, final_error_code: "no_audio" } });
+      respond("library_list", [quiet]);
+      respond("library_refresh", [quiet]);
+      respond("session_detail", { playback_url: null });
+      await show();
+      expect(screen.getByRole("list", { name: "Recordings" })).toHaveTextContent("No audio");
+      fireEvent.click(screen.getByRole("button", { name: "Quiet call" }));
+      await act(flushAsync);
+      expect(screen.getByRole("region", { name: "Nothing was heard" })).toBeInTheDocument();
+    });
+
+    it("Trash: a list that didn't load says so with Try again; All goes back to the recordings (DT-LIB-112, 113)", async () => {
+      fail("bin_list", "The server is out of reach");
+      await show();
+      fireEvent.click(screen.getByRole("button", { name: /^Trash/ }));
+      await act(flushAsync);
+      expect(screen.getByRole("alert")).toHaveTextContent("Trash didn't load");
+      expect(within(screen.getByRole("alert")).getByRole("button", { name: "Try again" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /^All/ }));
+      await act(flushAsync);
+      expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
+    });
+
+    it("a recording: loading, a transcript that didn't load with Try again, Save audio, time and length, and its Details (DT-REC-013, 062, 063, 123, 137 to 142)", async () => {
+      const bilal = { ...ITEMS[0], client: { id: "c1", name: "Qureshi Textiles" }, language_chip: "Urdu", device: { id: "d1", name: "Work laptop" } } as unknown as LibraryItem;
+      respond("library_list", [bilal]);
+      respond("library_refresh", [bilal]);
+      respond("session_detail", { playback_url: "https://ledger.example.com/a.m4a" });
+      let answer: (v: unknown) => void = () => undefined;
+      respondWith("transcript_detail", () => new Promise((_, no) => { answer = no; }));
+      respond("save_audio", "/Users/a/Downloads/call.m4a");
+      await show();
+      fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
+      await act(flushAsync);
+      expect(screen.getByText("Loading the transcript")).toBeInTheDocument();
+      await act(async () => answer("The server is out of reach"));
+      await act(flushAsync);
+      expect(screen.getByRole("alert", { name: "The transcript didn't load" })).toBeInTheDocument();
+      expect(screen.getByText(/0:00 \/ 18:24/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Save audio" }));
+      await act(flushAsync);
+      expect(callsOf("save_audio")).toEqual([{ id: "bilal" }]);
+      fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+      const details = document.querySelector(".el-details") as HTMLElement;
+      for (const [term, value] of [["Recorded", /./], ["Length", "18:24"], ["Source", "WhatsApp"], ["Device", "Work laptop"], ["Project", "Qureshi Textiles"], ["Language", "Urdu"]] as const) {
+        const dt = within(details).getByText(term);
+        expect(dt.nextElementSibling?.textContent ?? "", term).toMatch(value);
+      }
+    });
   });
 
   it("Restore from Trash says so and offers to open it", async () => {

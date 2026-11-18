@@ -3,11 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>EchoLedger</title>
+    <!-- The first paint, before any script runs: the window is never shown empty (a busy computer, or the core showing it
+         by its fallback before the page has drawn). React replaces #root's contents with the app. -->
+    <style>
+      .boot { display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0;
+        font: 14px system-ui, -apple-system, "Segoe UI", sans-serif; background: #f9f9fb; color: #60646c; }
+      @media (prefers-color-scheme: dark) { .boot { background: #111113; color: #b0b4ba; } }
+      html[data-window]:not([data-window="main"]) .boot { display: none; }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot" role="status">Starting EchoLedger…</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
