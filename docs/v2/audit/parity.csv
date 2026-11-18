@@ -75,79 +75,79 @@ PH-LIB-073,phone,Library,Row: label colour dot,Not in classic (plan 3),None,miss
 PH-LIB-074,phone,Library,"Row: ""Audio · 18 days left"" for audio kept without a transcript",Not in classic (call rules plan 5),None,missing,none
 PH-LIB-075,phone,Library,Swipes can be turned off in Settings,Not in classic (plan 3),None,missing,none
 PH-LIB-076,phone,Library,"Smooth with 2,000+ recordings (lazy list), with a test","Classic: lazy list, no test (plan 3)",Lazy list; no test,partial,none
-PH-REC-001,phone,Recording page,"Find in transcript: search icon, ""2 of 7"", previous and next match, close",Recording page top bar › search icon,None,missing,none
-PH-REC-002,phone,Recording page,Copy the transcript from the top bar,Recording page top bar › copy icon,None,missing,none
-PH-REC-003,phone,Recording page,⋮ Back to <app> for a voice note shared from another app,Recording page ⋮ › Back to WhatsApp,None,missing,none
-PH-REC-004,phone,Recording page,⋮ Copy for AI,Recording page ⋮ › Copy for AI,None,missing,none
-PH-REC-005,phone,Recording page,⋮ Pin / Unpin,Recording page ⋮ › Pin,None,missing,none
-PH-REC-006,phone,Recording page,⋮ Keep forever / Stop keeping,Recording page ⋮ › Keep forever,None,missing,none
-PH-REC-007,phone,Recording page,⋮ Skip silences / Play silences,Recording page ⋮ › Skip silences,None,missing,none
-PH-REC-008,phone,Recording page,"⋮ Delete, asked first: ""You can restore it from Recently deleted for 48 hours""",Recording page ⋮ › Delete,"Delete in the action row, at once with an Undo toast; no ⋮",partial,none
+PH-REC-001,phone,Recording page,"Find in transcript: search icon, ""2 of 7"", previous and next match, close",Recording page top bar › search icon,"Search icon in the top bar › the find bar: ""2 of 7"", previous, next, close; the match tinted and scrolled to",done,RecordingPageTest.findCountsTheMatchingLinesAndStepsThroughThem
+PH-REC-002,phone,Recording page,Copy the transcript from the top bar,Recording page top bar › copy icon,"Copy ▾ in the action row (one tap from the page, as the plan's action row)",done,RecordingPageTest.copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader
+PH-REC-003,phone,Recording page,⋮ Back to <app> for a voice note shared from another app,Recording page ⋮ › Back to WhatsApp,⋮ › Back to <app> (V2RecordingScreen's backToSource; the shell doesn't pass it yet),partial,none yet
+PH-REC-004,phone,Recording page,⋮ Copy for AI,Recording page ⋮ › Copy for AI,"Copy ▾ in the action row › Copy for AI (with a title, date, people and language header)",done,RecordingPageTest.copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader
+PH-REC-005,phone,Recording page,⋮ Pin / Unpin,Recording page ⋮ › Pin,⋮ › Organise › Pin / Unpin,done,RecordingPageTest.pinKeepAndUnpinSendTheSameChangesAsClassic; RecordingPageTest.aPinnedAndKeptRecordingOffersUnpinAndStopKeeping
+PH-REC-006,phone,Recording page,⋮ Keep forever / Stop keeping,Recording page ⋮ › Keep forever,⋮ › Organise › Keep forever / Stop keeping,done,RecordingPageTest.pinKeepAndUnpinSendTheSameChangesAsClassic
+PH-REC-007,phone,Recording page,⋮ Skip silences / Play silences,Recording page ⋮ › Skip silences,"⋮ › Transcript › Skip silences / Play silences, and the switch under the player",done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
+PH-REC-008,phone,Recording page,"⋮ Delete, asked first: ""You can restore it from Recently deleted for 48 hours""",Recording page ⋮ › Delete,"⋮ › Delete (last, red): asked first, then Undo in the shell's toast after the page has gone",done,RecordingPageTest.deleteAsksFirstThenGoesToTrashAndUndoWorksAfterThePageHasGone
 PH-REC-009,phone,Recording page,The title moves into the bar when the page scrolls,Recording page,None,missing,none
-PH-REC-010,phone,Recording page,Tap the title to rename the recording,Recording page › title,Title is plain text,missing,none
-PH-REC-011,phone,Recording page,"Source app tile, app name and device name (""WhatsApp · Phone"")",Recording page head,Source and status; no device,partial,none
-PH-REC-012,phone,Recording page,"Date, length and project line (""Oct 20 · 10:00 AM · 42:10 · Acme"")",Recording page head,Source and time in the head; length and project in the Details tab,partial,none
-PH-REC-013,phone,Recording page,Bookmark chips (time and tag); a tap plays from there,Recording page head,None,missing,none
-PH-REC-014,phone,Recording page,Opening a recording marks it opened (the Library's unread dot goes),Open a recording,Not marked opened,missing,none
+PH-REC-010,phone,Recording page,Tap the title to rename the recording,Recording page › title,"Tap the title, or ⋮ › Rename",done,RecordingPageTest.renameFromTheMenuOrTheTitle
+PH-REC-011,phone,Recording page,"Source app tile, app name and device name (""WhatsApp · Phone"")",Recording page head,Head: source · device · time · length · project,done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
+PH-REC-012,phone,Recording page,"Date, length and project line (""Oct 20 · 10:00 AM · 42:10 · Acme"")",Recording page head,Head: source · device · time · length · project,done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
+PH-REC-013,phone,Recording page,Bookmark chips (time and tag); a tap plays from there,Recording page head,Under the title: a chip per bookmark (time and tag); a tap plays from it,done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
+PH-REC-014,phone,Recording page,Opening a recording marks it opened (the Library's unread dot goes),Open a recording,Opening the v2 page marks it opened,done,RecordingPageTest.openingTheRecordingMarksItOpened
 PH-REC-015,phone,Recording page,Opened from a search match: plays from that moment,Library search › a transcript match,None,missing,none
-PH-REC-016,phone,Recording page,"No audio card: ""Nothing was heard…"" with Run capture test and Delete",A recording with no sound,None,missing,none
+PH-REC-016,phone,Recording page,"No audio card: ""Nothing was heard…"" with Run capture test and Delete",A recording with no sound,No audio card with Run capture test and Delete; no player or Share; the shell doesn't pass Run capture test yet,partial,RecordingPageTest.aRecordingWithNoAudioSaysSoAndOffersTheCaptureTestAndDelete
 PH-REC-017,phone,Recording page,Loading transcript…,Recording page while it loads,Loading state,done,none
 PH-REC-018,phone,Recording page,"""Couldn't load the transcript"" with Retry",Recording page offline,Error state with Try again,done,none
-PH-REC-019,phone,Recording page,"Progress while on its way: Upload · Transcribe · Improve, the line and bar, ""Notify me when ready""",A recording being transcribed,"""No transcript yet"" empty state; no steps, no Notify me when ready",partial,none
-PH-REC-020,phone,Recording page,"Failed: the reason in the phone's own words, with Retry, or ""Check your key"" for a refused own key",A failed transcription,"Failed state with the server's plain sentence; no Retry, no Check your key",partial,none
-PH-REC-021,phone,Recording page,"Empty transcript: ""no speech was detected""",A transcript with no lines,None,missing,none
-PH-REC-022,phone,Recording page,"""Improving Roman Urdu… 60%"" bar over a readable transcript",While the views are made,None,missing,none
-PH-REC-023,phone,Recording page,"Backup engine banner: ""Made with a backup service. Re-transcribe for the best quality?"" with Re-transcribe",A transcript from the backup engine,None,missing,none
-PH-REC-024,phone,Recording page,"Suggested fixes for project terms: Accept, Dismiss",Recording in a project with suggestions,None,missing,none
-PH-REC-025,phone,Recording page,"View switch: Original · Roman Urdu · اردو (Urdu) · English, with the line under it (ready, being written, failed)",Recording page › above the transcript,None,missing,none
-PH-REC-026,phone,Recording page,"Views not in the plan: ""Roman Urdu and English"" with the plan badge, opening the plans",Recording page on a plan without views,None,missing,none
-PH-REC-027,phone,Recording page,Copy and export follow the view on screen,Recording page with a view chosen,None,missing,none
-PH-REC-028,phone,Recording page,Copy text,Recording page › Copy text,None,missing,none
-PH-REC-029,phone,Recording page,Copy with timestamps,Recording page › Copy with timestamps,None,missing,none
-PH-REC-030,phone,Recording page,"Copy for AI (marks unsure words), with the note on what the marks mean and screen moments",Recording page › Copy for AI,None,missing,none
-PH-REC-031,phone,Recording page,Copy without timestamps (the plan's Copy menu item),Classic: Copy text is without timestamps,None,missing,none
-PH-REC-032,phone,Recording page,"""Final transcript"" or ""Live captions (final pending)""",Recording page › above the lines,None,missing,none
-PH-REC-033,phone,Recording page,"Speaker names: ""You"" and the names given on the server",Transcript lines,"""You"", ""Other side"", ""Speaker""; not the server's names",partial,none
-PH-REC-034,phone,Recording page,Speaker blocks: the name once per turn,Transcript lines,Each line with its speaker,done,none
+PH-REC-019,phone,Recording page,"Progress while on its way: Upload · Transcribe · Improve, the line and bar, ""Notify me when ready""",A recording being transcribed,"Upload · Transcribe · Improve, the line (and its bar when measured), Notify me when ready",done,RecordingPageTest.aRecordingOnItsWayShowsTheStepsAndNotifyMe
+PH-REC-020,phone,Recording page,"Failed: the reason in the phone's own words, with Retry, or ""Check your key"" for a refused own key",A failed transcription,"The reason in the phone's own words (English and Urdu), Retry, or Check your key; the shell doesn't pass the Settings opener yet, so Check your key does nothing in the app",partial,RecordingPageTest.aFailedTranscriptSaysWhyAndRetries; RecordingPageTest.aRefusedOwnKeyOpensTheKeyPageInsteadOfRetrying
+PH-REC-021,phone,Recording page,"Empty transcript: ""no speech was detected""",A transcript with no lines,"""The transcript is empty: no speech was detected.""",done,RecordingPageTest.anEmptyTranscriptSaysNoSpeechWasDetected
+PH-REC-022,phone,Recording page,"""Improving Roman Urdu… 60%"" bar over a readable transcript",While the views are made,"""Improving Roman Urdu… 60%"" over the lines, with its bar",partial,none yet
+PH-REC-023,phone,Recording page,"Backup engine banner: ""Made with a backup service. Re-transcribe for the best quality?"" with Re-transcribe",A transcript from the backup engine,The backup engine's banner with Re-transcribe,done,RecordingPageTest.aBackupEngineTranscriptOffersTheBestOneAndFixesCanBeAccepted
+PH-REC-024,phone,Recording page,"Suggested fixes for project terms: Accept, Dismiss",Recording in a project with suggestions,"Suggested fixes: each moment, Accept, Dismiss",done,RecordingPageTest.aBackupEngineTranscriptOffersTheBestOneAndFixesCanBeAccepted
+PH-REC-025,phone,Recording page,"View switch: Original · Roman Urdu · اردو (Urdu) · English, with the line under it (ready, being written, failed)",Recording page › above the transcript,"Above the transcript: Original · Roman Urdu · اردو · English (the views made), and the line under it",done,RecordingPageTest.theViewSwitchShowsRomanUrduAtOnceAndCopyFollowsIt
+PH-REC-026,phone,Recording page,"Views not in the plan: ""Roman Urdu and English"" with the plan badge, opening the plans",Recording page on a plan without views,"""Roman Urdu and English views are on a higher plan."" with See plans (classic's upgrade sheet)",partial,none yet
+PH-REC-027,phone,Recording page,Copy and export follow the view on screen,Recording page with a view chosen,Copy and export use the view on screen,done,RecordingPageTest.theViewSwitchShowsRomanUrduAtOnceAndCopyFollowsIt
+PH-REC-028,phone,Recording page,Copy text,Recording page › Copy text,Copy ▾ › Copy text,done,RecordingPageTest.copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader
+PH-REC-029,phone,Recording page,Copy with timestamps,Recording page › Copy with timestamps,Copy ▾ › Copy with timestamps,done,RecordingPageTest.copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader
+PH-REC-030,phone,Recording page,"Copy for AI (marks unsure words), with the note on what the marks mean and screen moments",Recording page › Copy for AI,Copy ▾ › Copy for AI,done,RecordingPageTest.copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader
+PH-REC-031,phone,Recording page,Copy without timestamps (the plan's Copy menu item),Classic: Copy text is without timestamps,Copy ▾ › Copy without timestamps,done,RecordingPageTest.copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader
+PH-REC-032,phone,Recording page,"""Final transcript"" or ""Live captions (final pending)""",Recording page › above the lines,"Above the lines: Final transcript, or Live captions (final pending)",partial,none yet
+PH-REC-033,phone,Recording page,"Speaker names: ""You"" and the names given on the server",Transcript lines,"""You"", the name the server was given, else ""Other side"" or ""Speaker""",done,RecordingPageTest.aLineIsCopiedFromItsLongPressMenuWithTheNameTheServerGaveTheSpeaker
+PH-REC-034,phone,Recording page,Speaker blocks: the name once per turn,Transcript lines,The name and time once per turn,done,RecordingPageTest.aLineIsCopiedFromItsLongPressMenuWithTheNameTheServerGaveTheSpeaker
 PH-REC-035,phone,Recording page,Timestamp on each line,Transcript lines,Time on each line,done,none
-PH-REC-036,phone,Recording page,Tap a line: play from there,Transcript line,Lines are not tappable,missing,none
-PH-REC-037,phone,Recording page,"The line being played is highlighted, and the word being spoken",Transcript while playing,None,missing,none
-PH-REC-038,phone,Recording page,Unsure words underlined with dots; a tap plays from that word,Transcript lines,None,missing,none
-PH-REC-039,phone,Recording page,"Long-press a line: Copy line, Share line, Play from here",Transcript line,None,missing,none
+PH-REC-036,phone,Recording page,Tap a line: play from there,Transcript line,Tap a line: plays from it,done,RecordingPageTest.aTapOnALinePlaysFromItWhenTheRecordingCanPlay
+PH-REC-037,phone,Recording page,"The line being played is highlighted, and the word being spoken",Transcript while playing,The line playing is tinted and the word being spoken marked,partial,none yet
+PH-REC-038,phone,Recording page,Unsure words underlined with dots; a tap plays from that word,Transcript lines,Unsure words underlined with dots; a tap on one plays from it,partial,none yet
+PH-REC-039,phone,Recording page,"Long-press a line: Copy line, Share line, Play from here",Transcript line,"Long-press a line: Copy line, Share line, Play from here",done,RecordingPageTest.aLineIsCopiedFromItsLongPressMenuWithTheNameTheServerGaveTheSpeaker
 PH-REC-040,phone,Recording page,"Urdu in Noto Nastaliq Urdu, Arabic in Noto Naskh Arabic, the rest in Inter",Transcript lines,The v2 type picks the script's face; plan 6 asks for the bundled faces,partial,none
 PH-REC-041,phone,Recording page,Screen moments after their line; the viewer with Play from here and Close,Recording with screens,"Screens strip, inline screens and the viewer",done,ScreensTest.theViewerShowsWhatWasSaidPlaysFromItsMomentAndMovesOn
-PH-REC-042,phone,Recording page,"Call notes for a project's recording (Write call notes, the notes, play from their moments)","Recording in a project, plan with notes",None,missing,none
-PH-REC-043,phone,Recording page,Call notes locked with the plan badge when the plan has none,"Recording in a project, plan without notes",None,missing,none
-PH-REC-044,phone,Recording page,"Export › PDF (print), in the view on screen",Recording page › Export,None,missing,none
-PH-REC-045,phone,Recording page,Export › Word (.docx),Recording page › Export,None,missing,none
-PH-REC-046,phone,Recording page,Export › Text (.txt),Recording page › Export,None,missing,none
-PH-REC-047,phone,Recording page,Export › Markdown (.md),Recording page › Export,None,missing,none
-PH-REC-048,phone,Recording page,Export › Subtitles (SRT),Recording page › Export,None,missing,none
-PH-REC-049,phone,Recording page,Export › Subtitles (VTT),Recording page › Export,None,missing,none
-PH-REC-050,phone,Recording page,Export › JSON,Recording page › Export,None,missing,none
-PH-REC-051,phone,Recording page,"Export › Meeting pack (PDF, with screens)",Recording page with screens › Export,None,missing,none
-PH-REC-052,phone,Recording page,Export › Meeting pack (ZIP),Recording page with screens › Export,None,missing,none
-PH-REC-053,phone,Recording page,Export › Web page (.html) (the plan's format list),Classic: only as the PDF's print page,None,missing,none
-PH-REC-054,phone,Recording page,"Share link: ""Link (works for 7 days)""",Recording page › Share link,None,missing,none
-PH-REC-055,phone,Recording page,Send to a teammate: their emails and a note (Shared with me),Recording page › Send,None,missing,none
-PH-REC-056,phone,Recording page,"Send to WhatsApp / WhatsApp Business: Text only, or Text and voice",Recording page › Send to WhatsApp,"Share sends the transcript text through Android's share sheet; no voice, no WhatsApp choice",partial,none
-PH-REC-057,phone,Recording page,Re-transcribe as… a language (warns when English only would translate Urdu; Re-transcribe anyway),Recording page › Re-transcribe as…,None,missing,none
-PH-REC-058,phone,Recording page,Current / Previous version after a re-transcribe,Recording page › Current / Previous,None,missing,none
-PH-REC-059,phone,Recording page,"Organise › Pin (""Pinned"")",Recording page › Organise,None,missing,none
-PH-REC-060,phone,Recording page,"Organise › Keep forever (""Kept forever"")",Recording page › Organise,None,missing,none
-PH-REC-061,phone,Recording page,"Organise › Folder: move to a project, or New project…",Recording page › Organise,None,missing,none
-PH-REC-062,phone,Recording page,"Organise › Labels: add a label, remove one",Recording page › Organise,None,missing,none
+PH-REC-042,phone,Recording page,"Call notes for a project's recording (Write call notes, the notes, play from their moments)","Recording in a project, plan with notes","Summary tab: the call notes, Write call notes (or In Roman Urdu), each line plays its moment",done,RecordingPageTest.summaryAndMomentsTabsSayWhatTheyHave
+PH-REC-043,phone,Recording page,Call notes locked with the plan badge when the plan has none,"Recording in a project, plan without notes","Summary tab: ""Call notes are on a higher plan."" with See plans",partial,none yet
+PH-REC-044,phone,Recording page,"Export › PDF (print), in the view on screen",Recording page › Export,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-045,phone,Recording page,Export › Word (.docx),Recording page › Export,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-046,phone,Recording page,Export › Text (.txt),Recording page › Export,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-047,phone,Recording page,Export › Markdown (.md),Recording page › Export,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-048,phone,Recording page,Export › Subtitles (SRT),Recording page › Export,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-049,phone,Recording page,Export › Subtitles (VTT),Recording page › Export,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-050,phone,Recording page,Export › JSON,Recording page › Export,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-051,phone,Recording page,"Export › Meeting pack (PDF, with screens)",Recording page with screens › Export,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-052,phone,Recording page,Export › Meeting pack (ZIP),Recording page with screens › Export,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-053,phone,Recording page,Export › Web page (.html) (the plan's format list),Classic: only as the PDF's print page,⋮ › Export ▸ (every format),done,RecordingPageTest.exportOffersEveryFormatAndAsksTheServerForIt
+PH-REC-054,phone,Recording page,"Share link: ""Link (works for 7 days)""",Recording page › Share link,"Share › Share link: classic's sheet (who may open it, downloads, how long)",partial,none yet
+PH-REC-055,phone,Recording page,Send to a teammate: their emails and a note (Shared with me),Recording page › Send,Share › Send to a teammate: classic's sheet,partial,none yet
+PH-REC-056,phone,Recording page,"Send to WhatsApp / WhatsApp Business: Text only, or Text and voice",Recording page › Send to WhatsApp,"Share › Send to WhatsApp (or Business): Text only, Text and voice, Link for 7 days",partial,none yet
+PH-REC-057,phone,Recording page,Re-transcribe as… a language (warns when English only would translate Urdu; Re-transcribe anyway),Recording page › Re-transcribe as…,"⋮ › Transcript › Change language & re-transcribe (the warning once, then Re-transcribe anyway)",done,RecordingPageTest.reTranscribeAsALanguageWarnsOnceForEnglishOnlyOnUrdu
+PH-REC-058,phone,Recording page,Current / Previous version after a re-transcribe,Recording page › Current / Previous,Above the transcript: Current / Previous (its language),done,RecordingPageTest.theOldVersionIsOneTapAwayAfterARetranscribe
+PH-REC-059,phone,Recording page,"Organise › Pin (""Pinned"")",Recording page › Organise,⋮ › Organise › Pin,done,RecordingPageTest.pinKeepAndUnpinSendTheSameChangesAsClassic
+PH-REC-060,phone,Recording page,"Organise › Keep forever (""Kept forever"")",Recording page › Organise,⋮ › Organise › Keep forever,done,RecordingPageTest.pinKeepAndUnpinSendTheSameChangesAsClassic
+PH-REC-061,phone,Recording page,"Organise › Folder: move to a project, or New project…",Recording page › Organise,"⋮ › Organise › Move to project (No project, the projects as a tree, New project)",done,RecordingPageTest.moveToAProjectOutOfOneOrIntoANewOne
+PH-REC-062,phone,Recording page,"Organise › Labels: add a label, remove one",Recording page › Organise,"⋮ › Organise › Labels (add, remove, pick a known one)",done,RecordingPageTest.labelsAreAddedAndRemoved
 PH-REC-063,phone,Recording page,Play and pause,Docked player,Player,done,none
 PH-REC-064,phone,Recording page,Back 10 s and forward 10 s,Docked player,Player,done,none
-PH-REC-065,phone,Recording page,"Speed: 0.75×, 1×, 1.25×, 1.5×, 2× (one chip steps through)",Docked player › speed chip,"Speed chip steps 1×, 1.25×, 1.5×, 2×; no 0.75×",partial,none
+PH-REC-065,phone,Recording page,"Speed: 0.75×, 1×, 1.25×, 1.5×, 2× (one chip steps through)",Docked player › speed chip,"The speed chip steps 0.75×, 1×, 1.25×, 1.5×, 2×",done,RecordingPageTest.theSpeedStepsThroughClassicsSpeeds
 PH-REC-066,phone,Recording page,"Scrubber: tap or drag to move, right to left in Urdu",Docked player,Position slider,partial,none
-PH-REC-067,phone,Recording page,Skip silence switch,Player options,None,missing,none
-PH-REC-068,phone,Recording page,Moment markers on the track (plan 4),Not in classic,None,missing,none
-PH-REC-069,phone,Recording page,"Details: source, length, project, language",Classic: in the page head,"Details tab: source, length, project, language",done,none
-PH-REC-070,phone,Recording page,"Details: device, created, file size, transcription engine, retention, labels (plan 4)",Not in classic,None,missing,none
-PH-REC-071,phone,Recording page,Tabs Transcript · Summary · Ask · Moments · Details (plan 4),Not in classic as tabs,Tabs Transcript and Details,partial,none
-PH-REC-072,phone,Recording page,"⋮ Move to project, Labels, Mark important, Change language & re-transcribe, Export ▸ (plan 4)","Classic: spread over Organise, Re-transcribe and Export",None,missing,none
-PH-REC-073,phone,Recording page,Action row: Share · Copy ▾ · Ask · ⋮ (plan 4),Not in classic,Action row Share and Delete,partial,none
+PH-REC-067,phone,Recording page,Skip silence switch,Player options,Skip silence switch under the player (and in ⋮),done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
+PH-REC-068,phone,Recording page,Moment markers on the track (plan 4),Not in classic,The player's track marks each bookmark,partial,none yet (drawn; no test reads the canvas)
+PH-REC-069,phone,Recording page,"Details: source, length, project, language",Classic: in the page head,Details tab,done,RecordingPageTest.detailsHaveTheDeviceDateLanguageProjectLabelsAndKeeping
+PH-REC-070,phone,Recording page,"Details: device, created, file size, transcription engine, retention, labels (plan 4)",Not in classic,"Details: device, recorded, labels, kept (forever or the plan's rules), pinned, bookmarks; no file size or engine (the phone never names the engine, P-001)",partial,RecordingPageTest.detailsHaveTheDeviceDateLanguageProjectLabelsAndKeeping
+PH-REC-071,phone,Recording page,Tabs Transcript · Summary · Ask · Moments · Details (plan 4),Not in classic as tabs,Tabs Transcript · Summary · Moments · Details; no Ask tab (the server answers per project),partial,RecordingPageTest.summaryAndMomentsTabsSayWhatTheyHave
+PH-REC-072,phone,Recording page,"⋮ Move to project, Labels, Mark important, Change language & re-transcribe, Export ▸ (plan 4)","Classic: spread over Organise, Re-transcribe and Export","⋮: Organise, Transcript, Export ▸, Delete; no Mark important (not in classic)",partial,RecordingPageTest.theMenuHasOrganiseTranscriptAndExportGroupsAndDeleteLast
+PH-REC-073,phone,Recording page,Action row: Share · Copy ▾ · Ask · ⋮ (plan 4),Not in classic,Share · Copy ▾ · More (⋮); no Ask yet,partial,RecordingPageTest.copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader
 PH-REC-074,phone,Recording page,Skip a language's segments in the transcript (plan 4 asks),Not in classic: no such control in the code,None,missing,none
 PH-SET-001,phone,Settings,"Profile card: name, email, plan, minutes; opens Plan & usage","Settings tab, top","Settings from the avatar: profile card with the plan, minutes and storage",partial,none
 PH-SET-002,phone,Settings,"Upgrade next to the profile card (filled on Free, outlined on Pro, none on Ultra or while a request is open)","Settings tab, top",Upgrade on the profile card,partial,none
@@ -285,7 +285,7 @@ PH-OTH-039,phone,Sign-in,"Onboarding, sign-in (password with two-step code, brow
 PH-OTH-040,phone,App lock,"App lock screen (fingerprint, face or screen lock)",Opening the app with App lock on,The same lock screen in both designs,done,BiometricLockTest (shared)
 PH-OTH-041,phone,Upgrade,"Upgrade flow: plans, payment details, receipt upload, promo code, request status",Settings › Plan & usage › Upgrade,Opens the classic flow,partial,none
 WEB-APP-001,web,Settings > Appearance,Theme row and its choices in the console's language,Settings > Appearance > Theme (English only: classic has no Urdu interface),Settings > Appearance > Theme: the title and System/Light/Dark stay English when the console language is Urdu,partial,
-WEB-APP-002,web,Settings > Appearance,Times choice reads 12-hour / 24-hour in Urdu,Settings > Appearance > Times,Settings > Appearance > Times: in Urdu the labels read "hour-12" / "hour-24" (the number and word swap in right-to-left),partial,
+WEB-APP-002,web,Settings > Appearance,Times choice reads 12-hour / 24-hour in Urdu,Settings > Appearance > Times,"Settings > Appearance > Times: in Urdu the labels read ""hour-12"" / ""hour-24"" (the number and word swap in right-to-left)",partial,
 WEB-APP-003,web,Settings,Settings side menu in the console's language,Settings side menu (English only: classic has no Urdu interface),Settings side menu: every group and page name stays English when the console language is Urdu,partial,
 WEB-APP-004,web,Settings > Appearance,Density / Library view / Sidebar rows in the console's language,Settings > Appearance,Settings > Appearance: Density and Library view titles and choices stay English in Urdu,partial,
 WEB-APP-005,web,Settings > Appearance,Design switch both ways,Settings > Appearance > Try the new design,Settings > Appearance > Switch back to classic,done,tests/Feature/InterfaceFlagsTest.php (the console both ways); tests/Feature/DesignSwitchTest.php
