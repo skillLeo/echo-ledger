@@ -1070,3 +1070,18 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-hit__line { display: flex; gap: var(--el-space-8); align-items: baseline; text-align: start; border: 0; padding: var(--el-space-4); border-radius: var(--el-radius-sm); background: transparent; cursor: pointer; }
 .el-hit__line:hover { background: var(--el-role-bg-subtle); }
 .el-hit__line mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
+/* The transcript tools: Find's bar and marks, a line edited in place, the history and the call notes. */
+.el-findbar { display: flex; align-items: center; gap: var(--el-space-8); margin-block-end: var(--el-space-8); }
+.el-findbar > .el-search { flex: 1; }
+mark.el-find { background: var(--el-role-warning-soft); color: inherit; border-radius: var(--el-radius-sm); }
+mark.el-find--current { background: var(--el-role-accent-default); color: var(--el-role-text-on-accent); }
+.el-line-edit { all: unset; cursor: text; border-radius: var(--el-radius-sm); outline: var(--el-border-hairline) dashed var(--el-role-border-strong); outline-offset: var(--el-space-2); }
+.el-line-edit:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-default); }
+.el-line-editor { inline-size: 100%; font: inherit; color: inherit; background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-accent-default); border-radius: var(--el-radius-sm); padding: var(--el-space-4) var(--el-space-8); resize: vertical; }
+.el-history { display: flex; flex-direction: column; gap: var(--el-space-8); }
+.el-history > li { display: flex; justify-content: space-between; gap: var(--el-space-12); }
+.el-notes { display: flex; flex-direction: column; gap: var(--el-space-12); }
+.el-notes__list { display: flex; flex-direction: column; }
+.el-notes__line { display: flex; gap: var(--el-space-8); align-items: baseline; inline-size: 100%; text-align: start; border: 0; padding: var(--el-space-4) var(--el-space-8); border-radius: var(--el-radius-sm); background: transparent; cursor: pointer; }
+.el-notes__line:hover:not(:disabled) { background: var(--el-role-bg-subtle); }
+.el-notes__line:disabled { cursor: default; }
