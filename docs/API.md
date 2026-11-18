@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-g (2026-11-18, accepted by the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-h (2026-11-18, proposed by the web lane)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-h: `POST /api/sessions/export` takes `html` too (parity plan 3: Export ▸ Web page for many recordings).
 2.0.0-g: the design switch both ways (docs/PLAN_V2_PARITY.md section 0): each `ui_v2.*` flag has an availability (`off`,
 `opt_in`, `everyone`); a person's own design choice (`classic`, `v2` or none); `GET /api/config` and the new `GET
 /api/account/ui` carry `ui_design`; `PUT /api/account/ui` takes `{"design": …}` (the 2.0.0-a `{"classic": …}` still works).
@@ -1087,7 +1088,7 @@ Up to 200 ids; ids of other owners are ignored. `move` uses `client_id` (`null` 
 need `label`, `delete` makes tombstones exactly like `DELETE /api/sessions/{id}`. `200 {"changed": 2}`.
 
 ### `POST /api/sessions/export` — `library:read` (since v1.1)
-`{"ids": [...], "format": "txt|md|srt|vtt|json|docx"}` → `200 application/zip` with one file per finished final
+`{"ids": [...], "format": "txt|md|srt|vtt|json|docx|html"}` (`html` since 2.0.0-h, as `GET /api/transcripts/{id}/export` has it) → `200 application/zip` with one file per finished final
 transcript (names as in `GET /api/transcripts/{id}/export`, numbered when two match) and the header
 `X-Export-Count`. Recordings without a finished transcript are skipped; when none has one, `409 nothing_to_export`.
 Since v1.4 an optional `"view"` (roman | english | urdu) exports each transcript in that Show as view when it is

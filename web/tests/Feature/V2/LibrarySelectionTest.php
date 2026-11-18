@@ -76,3 +76,19 @@ it('gives the new Library its keys and right-click, and only the new Library', f
     expect($classic)->not->toContain('elV2LibraryKeys')->not->toContain('data-selection-delete');
     $this->get('/app/settings/shortcuts')->assertOk()->assertDontSee('Select a range');
 });
+
+it('offers Export as a sub-menu of every format, Web page (.html) too, and exports many as one zip', function () {
+    foreach ($this->recordings->take(2) as $recording) {
+        Fx::transcript($recording, 'Hello from '.$recording->title.'.');
+    }
+    $ids = $this->recordings->take(2)->pluck('id')->all();
+    $page = Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids);
+    $export = collect($page->instance()->getTable()->getToolbarActions())->first(fn ($a) => $a->getLabel() === 'Export');
+    expect(collect($export->getActions())->map(fn ($a) => $a->getLabel())->all())
+        ->toBe(['Word (.docx)', 'Text (.txt)', 'Markdown (.md)', 'Subtitles (.srt)', 'Subtitles (.vtt)', 'Web page (.html)', 'JSON']);
+
+    $page->callTableBulkAction('exportHtml', $ids, data: ['view' => null])->assertHasNoTableBulkActionErrors()->assertFileDownloaded();
+    $more = collect($page->instance()->getTable()->getToolbarActions())->last();
+    expect(collect(collect($more->getActions())[0]->getActions())->map(fn ($a) => $a->getName())->all())->toContain('moveInMenu')
+        ->and(collect(collect($more->getActions())[1]->getActions())->map(fn ($a) => $a->getName())->all())->toContain('exportInMenuHtml');
+});

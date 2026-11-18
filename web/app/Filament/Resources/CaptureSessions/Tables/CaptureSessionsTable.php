@@ -329,29 +329,51 @@ final class CaptureSessionsTable
     public static function v2BulkBar(): array
     {
         $actions = collect(self::bulkActions())->keyBy(fn (BulkAction $action): string => (string) $action->getName());
+        // The ⋮ menu's own copies (an action is drawn once, and the bar's are icon buttons).
+        $menu = collect(self::bulkActions())->keyBy(fn (BulkAction $action): string => (string) $action->getName())
+            ->map(fn (BulkAction $action): BulkAction => $action->name($action->getName().'InMenu'));
         $icon = fn (BulkAction|BulkActionGroup $action, string $label): BulkAction|BulkActionGroup => $action->label(__($label))->tooltip(__($label))->iconButton()->color('gray');
 
         return [
             $icon($actions['move'], 'Move to project'),
             $icon(BulkActionGroup::make([$actions['label'], $actions['unlabel']])->icon(Heroicon::OutlinedTag), 'Label'),
-            $icon($actions['export']->icon(Heroicon::OutlinedArrowDownTray), 'Export'),
+            $icon(BulkActionGroup::make(self::exportFormatActions('export'))->icon(Heroicon::OutlinedArrowDownTray), 'Export'),
             $icon(self::trashBulkAction('trash'), 'Delete')->color('danger')->extraAttributes(['data-selection-delete' => true]),
             BulkActionGroup::make([
-                BulkActionGroup::make([$actions['pin'], $actions['unpin'], $actions['keep'], $actions['unkeep'], self::clone($actions['move']), self::clone($actions['label']), self::clone($actions['unlabel'])])
+                BulkActionGroup::make([$menu['pin'], $menu['unpin'], $menu['keep'], $menu['unkeep'], $menu['move'], $menu['label'], $menu['unlabel']])
                     ->label(__('Organise'))->dropdown(false),
-                BulkActionGroup::make([self::clone($actions['export'])])->label(__('Export'))->dropdown(false),
+                BulkActionGroup::make(self::exportFormatActions('exportInMenu'))->label(__('Export'))->dropdown(false),
                 BulkActionGroup::make([self::trashBulkAction('trashFromMenu')->label(__('Delete'))->color('danger')])->label(__('Danger'))->dropdown(false),
             ])->label(__('More'))->tooltip(__('More'))->icon(Heroicon::OutlinedEllipsisVertical)->iconButton()->color('gray')
                 ->extraAttributes(['data-selection-more' => true]),
         ];
     }
 
-    /** A second copy of a bulk action under another name, for the ⋮ menu beside its button. */
-    private static function clone(BulkAction $action): BulkAction
-    {
-        $copy = clone $action;
+    /** The v2.0 Export sub-menu's formats (parity plan 3), in its order. */
+    public const V2_EXPORT_FORMATS = [
+        'docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Subtitles (.vtt)',
+        'html' => 'Web page (.html)', 'json' => 'JSON',
+    ];
 
-        return $copy->name($action->getName().'InMenu');
+    /**
+     * One action per format of the v2.0 Export sub-menu: each asks only which view (Show as) and downloads one zip.
+     *
+     * @return list<BulkAction>
+     */
+    public static function exportFormatActions(string $prefix): array
+    {
+        $out = [];
+        foreach (self::V2_EXPORT_FORMATS as $format => $label) {
+            $out[] = BulkAction::make($prefix.ucfirst($format))->label(__($label))
+                ->modalHeading(__('Export as :format', ['format' => __($label)]))->modalSubmitActionLabel(__('Export'))
+                ->schema([
+                    Select::make('view')->label(__('Show as'))->placeholder(__('Original words'))->options(TranscriptViews::VIEWS)
+                        ->helperText(__('A recording whose view is not made yet keeps its original words.')),
+                ])
+                ->action(fn (Collection $records, array $data): ?StreamedResponse => self::exportDownload($records, $format, $data['view'] ?? null));
+        }
+
+        return $out;
     }
 
     /**
@@ -426,21 +448,29 @@ final class CaptureSessionsTable
                         ->options(TranscriptViews::VIEWS)
                         ->helperText('A recording whose view is not made yet keeps its original words.'),
                 ])
-                ->action(function (Collection $records, array $data): ?StreamedResponse {
-                    $view = is_string($data['view'] ?? null) && array_key_exists($data['view'], TranscriptViews::VIEWS) ? $data['view'] : null;
-                    try {
-                        $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), (string) $data['format'], $view);
-                    } catch (ApiError $e) {
-                        Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
-
-                        return null;
-                    }
-
-                    return response()->streamDownload(function () use ($file): void {
-                        echo $file['body'];
-                    }, $file['filename'], ['Content-Type' => 'application/zip']);
-                }),
+                ->action(fn (Collection $records, array $data): ?StreamedResponse => self::exportDownload($records, (string) $data['format'], $data['view'] ?? null)),
         ];
+    }
+
+    /**
+     * The finished transcripts of [$records] in one zip, in [$format] and the Show as [$view] (null: original words).
+     *
+     * @param  Collection<int, CaptureSession>  $records
+     */
+    public static function exportDownload(Collection $records, string $format, mixed $view): ?StreamedResponse
+    {
+        $view = is_string($view) && array_key_exists($view, TranscriptViews::VIEWS) ? $view : null;
+        try {
+            $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), $format, $view);
+        } catch (ApiError $e) {
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
+
+            return null;
+        }
+
+        return response()->streamDownload(function () use ($file): void {
+            echo $file['body'];
+        }, $file['filename'], ['Content-Type' => 'application/zip']);
     }
 
     /**

@@ -214,7 +214,8 @@ describe('zip export', function () {
     it('says when nothing can be exported and refuses other owners\' recordings', function () {
         $foreign = CaptureSession::factory()->create();
         $this->postJson('/api/sessions/export', ['ids' => [$foreign->id], 'format' => 'txt'])->assertStatus(409)->assertJsonPath('code', 'nothing_to_export');
-        $this->postJson('/api/sessions/export', ['ids' => [$foreign->id], 'format' => 'html'])->assertStatus(422);
+        // Since 2.0.0-h html is a format too (parity plan 3); an unknown one is still refused.
+        $this->postJson('/api/sessions/export', ['ids' => [$foreign->id], 'format' => 'exe'])->assertStatus(422);
     });
 });
 
@@ -238,4 +239,13 @@ describe('client folders', function () {
         $foreign = Client::factory()->create(['user_id' => User::factory()]);
         $this->patchJson("/api/clients/{$foreign->id}", ['pinned' => true])->assertNotFound();
     });
+});
+
+it('exports many recordings as web pages (html) through the API', function () {
+    $session = App\Models\CaptureSession::factory()->create(['user_id' => $this->owner, 'device_id' => $this->device->id]);
+    $session->transcripts()->create(['kind' => App\Enums\TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => App\Enums\TranscriptStatus::Completed, 'text' => 'Hello.',
+        'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello.']]]);
+
+    $response = $this->postJson('/api/sessions/export', ['ids' => [$session->id], 'format' => 'html'])->assertOk();
+    expect($response->headers->get('X-Export-Count'))->toBe('1');
 });
