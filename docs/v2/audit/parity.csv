@@ -923,12 +923,14 @@ WEB-KEY-001,web,Keyboard,/ focuses the list search,Everywhere,"Everywhere: the f
 WEB-KEY-002,web,Keyboard,? opens Help and shortcuts,Everywhere,Everywhere (same handler),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-002)
 WEB-KEY-003,web,Keyboard,[ folds the sidebar,Everywhere,Everywhere (same handler),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-003)
 WEB-KEY-004,web,Keyboard,Ctrl/Cmd K opens search and commands,Everywhere,Top bar search (same),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-004)
-WEB-KEY-005,web,Keyboard,J / K next and previous recording,Library,Not in v2: the handler looks for the classic list (.el-library-list),missing,none
-WEB-KEY-006,web,Keyboard,Enter opens the current recording,Library,Not in v2: the handler looks for the classic list (.el-library-list),missing,none
-WEB-KEY-007,web,Keyboard,X selects the current recording,Library,Not in v2: the handler looks for the classic list (.el-library-list),missing,none
-WEB-KEY-008,web,Keyboard,Esc clears the selection,Library,Not in v2: the handler looks for the classic list (.el-library-list),missing,none
-WEB-KEY-009,web,Keyboard,"Ctrl/Cmd+A select all, Shift-click a range, Delete with Undo (plan 3)",Not in classic,Not in v2,missing,none
-WEB-KEY-010,web,Keyboard,"Space play or pause, ← → back and forward (Shift: 10 s)",Recording › player,Recording › player (same player),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-010)
+WEB-KEY-005,web,Keyboard,J / K next and previous recording,Library,Library (the v2 Library’s own key handler),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-005)
+WEB-KEY-006,web,Keyboard,Enter opens the current recording,Library,Library (the v2 Library’s own key handler),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-006)
+WEB-KEY-007,web,Keyboard,X selects the current recording,Library,Library (the v2 Library’s own key handler),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-007)
+WEB-KEY-008,web,Keyboard,Esc clears the selection,Library,Library (the v2 Library’s own key handler),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-008)
+WEB-KEY-009,web,Keyboard,Ctrl/Cmd+A selects every recording on the page (plan 3),Not in classic,Library,done,tests/Feature/V2/WebParityTest.php (WEB-KEY-009)
+WEB-KEY-010,web,Keyboard,Shift-click selects a range; a click adds or takes away while something is selected (plan 3),Not in classic (Shift-click on the checkboxes only),Library,done,tests/Feature/V2/WebParityTest.php (WEB-KEY-010)
+WEB-KEY-011,web,Keyboard,"Delete or Backspace deletes the selection, with Undo (plan 3)",Not in classic,Library,done,tests/Feature/V2/WebParityTest.php (WEB-KEY-011)
+WEB-KEY-012,web,Keyboard,"Space play or pause, ← → back and forward (Shift: 10 s)",Recording › player,Recording › player (same player),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-012)
 WEB-LIB-001,web,Library,Library: h1 “Library”,Library › Library,Library › Library (same control),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-001)
 WEB-LIB-002,web,Library,Library: button “Upload”,Library › Upload,Library › Upload (same control),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-002)
 WEB-LIB-003,web,Library,Library: a “See why”,Library › See why,Library › Failed uploads line › See why: no such line in v2,missing,none
@@ -1621,7 +1623,7 @@ WEB-LIB-112,web,Library,Row: Transcribing / Uploading status,Library row,Untrans
 WEB-LIB-113,web,Library,Row: real source logo with a device badge (plan 3),Library row tile,Generic icons,missing,none
 WEB-LIB-114,web,Library,"Row: snippet, important flag, label colour dot, unread dot, Audio · N days left (plan 3)",Not in classic,Not in v2 (server fields come with the parity server work),missing,none
 WEB-LIB-115,web,Library,Failed recording: Retry and Delete on its row,Library › Failed uploads view,Not in v2: the row actions show only in the classic Failed uploads view,missing,none
-WEB-LIB-116,web,Library,Right-click a row opens its menu (plan 3),Not in classic,Not in v2,missing,none
+WEB-LIB-116,web,Library,"Right-click a row opens its menu, or ⋮ of the selection when the row is part of it (plan 3)",Not in classic,Library,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-116)
 WEB-LIB-117,web,Library,Swipe left Delete / right Pin at phone width (plan 3),Not in classic,Not in v2,missing,none
 WEB-LIB-118,web,Library,"Selection mode: × to leave, the count, Select all, 4 main actions, ⋮ Organise / Export / Danger (plan 3)","Library › select › bar (Move, Label, Export, Delete, More)","Library › select › × · N selected · Select all · Move to project, Label, Export, Delete · ⋮",done,tests/Feature/V2/WebParityTest.php (WEB-LIB-118)
 WEB-LIB-119,web,Library,"Selected: Delete moves to Trash at once, with Undo (plan 3)","Library › select › Delete (asks first, no Undo)","Library › select › Delete, then Undo in the notice",done,tests/Feature/V2/LibrarySelectionTest.php

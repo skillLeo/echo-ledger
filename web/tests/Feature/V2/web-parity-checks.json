@@ -192,7 +192,63 @@
   "scope": "topbar",
   "key": "label|search and commands"
  },
+ "WEB-KEY-005": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "elV2LibraryKeys",
+   "key === 'j' || key === 'k'"
+  ]
+ },
+ "WEB-KEY-006": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "elV2LibraryKeys",
+   "key === 'Enter'"
+  ]
+ },
+ "WEB-KEY-007": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "elV2LibraryKeys",
+   "key === 'x'"
+  ]
+ },
+ "WEB-KEY-008": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "elV2LibraryKeys",
+   "key === 'Escape'"
+  ]
+ },
+ "WEB-KEY-009": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "elV2LibraryKeys",
+   "(e.ctrlKey || e.metaKey) && key === 'a'"
+  ]
+ },
  "WEB-KEY-010": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "elV2LibraryKeys",
+   "shiftKey: e.shiftKey"
+  ]
+ },
+ "WEB-KEY-011": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "elV2LibraryKeys",
+   "data-selection-delete"
+  ]
+ },
+ "WEB-KEY-012": {
   "type": "html",
   "page": "recording",
   "contains": [
@@ -4220,6 +4276,14 @@
   "page": "library",
   "scope": "main",
   "key": "button|untranscribed"
+ },
+ "WEB-LIB-116": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "addEventListener('contextmenu'",
+   "data-selection-more"
+  ]
  },
  "WEB-LIB-118": {
   "type": "control",
