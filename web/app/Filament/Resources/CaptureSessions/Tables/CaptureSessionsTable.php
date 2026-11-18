@@ -50,7 +50,10 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class CaptureSessionsTable
@@ -380,21 +383,37 @@ final class CaptureSessionsTable
      * Delete for the v2.0 selection: the recordings go to Trash at once (each one the person may delete), and the
      * notice offers Undo, which brings them back while the Trash still has them.
      */
+    /** Where the v2.0 selection's last Delete waits for its Undo (one batch, one person). */
+    public static function undoKey(string $token): string
+    {
+        return 'el-library-undo:'.auth()->id().':'.$token;
+    }
+
     public static function trashBulkAction(string $name): BulkAction
     {
         return BulkAction::make($name)->label(__('Delete'))->icon(Heroicon::OutlinedTrash)
             ->authorizeIndividualRecords('delete')
             ->action(function (Collection $records): void {
+                // A recording still being made or uploaded stays where it is: Trash and Undo would race its upload.
+                $busy = $records->filter(fn (Model $r): bool => $r instanceof CaptureSession && in_array($r->status, [SessionStatus::Recording, SessionStatus::Uploading], true));
                 $ids = [];
-                foreach ($records as $record) {
+                foreach ($records->diff($busy) as $record) {
                     $record->delete();
                     $ids[] = (string) $record->getKey();
                 }
                 $count = count($ids);
-                Notification::make()->title($count === 1 ? __('1 recording moved to Trash') : __(':count recordings moved to Trash', ['count' => $count]))
-                    ->success()
-                    ->actions([Action::make('undo')->label(__('Undo'))->button()->dispatch('el-library-undo-delete', ['ids' => $ids])->close()])
-                    ->send();
+                $notice = Notification::make()->title($count === 1 ? __('1 recording moved to Trash') : __(':count recordings moved to Trash', ['count' => $count]));
+                if ($busy->isNotEmpty()) {
+                    $notice->body($busy->count() === 1 ? __('1 recording is still recording or uploading and was left alone.')
+                        : __(':count recordings are still recording or uploading and were left alone.', ['count' => $busy->count()]));
+                }
+                if ($count > 0) {
+                    // Undo brings back this batch only: the ids wait under a one-off token for the person who deleted them.
+                    $token = Str::random(32);
+                    Cache::put(self::undoKey($token), $ids, now()->addMinutes(30));
+                    $notice->actions([Action::make('undo')->label(__('Undo'))->button()->dispatch('el-library-undo-delete', ['token' => $token])->close()]);
+                }
+                ($count > 0 ? $notice->success() : $notice->warning())->send();
             })
             ->deselectRecordsAfterCompletion();
     }

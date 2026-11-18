@@ -5,10 +5,13 @@
     right-click opens the row's menu, or ⋮ of the selection when the row is part of it.
 --}}
 <script>
+    {!! file_get_contents(resource_path('js/library-keys-core.cjs')) !!}
+
     (() => {
         if (window.elV2LibraryKeys) return;
         window.elV2LibraryKeys = true;
-        const typing = (t) => t instanceof Element && (t.closest('input, textarea, select, [contenteditable="true"]') !== null);
+        const core = window.ElLibraryKeysCore;
+        const field = (t) => t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]') !== null ? { typing: true } : t;
         const library = () => {
             const list = document.querySelector('.v2-library');
             const host = list ? list.closest('[wire\\:id]') : null;
@@ -17,39 +20,44 @@
         const rowOf = (el) => el.closest('.fi-ta-record, .fi-ta-row') || el;
         const boxOf = (el) => rowOf(el).querySelector('input.fi-ta-record-checkbox');
         const checked = (lib) => Array.from(lib.list.querySelectorAll('input.fi-ta-record-checkbox:checked'));
+        // What the table holds selected (its own count, which reaches past this page after "Select all N").
+        const selected = (lib) => {
+            const table = lib.list.closest('.fi-ta') || document.querySelector('.fi-ta');
+            const data = table && window.Alpine ? window.Alpine.$data(table) : null;
+            return data && typeof data.getSelectedRecordsCount === 'function' ? data.getSelectedRecordsCount() : checked(lib).length;
+        };
         const wide = () => window.matchMedia('(min-width: 1024px)').matches;
         const modal = () => document.querySelector('.fi-modal-open[aria-modal="true"]') !== null;
         document.addEventListener('keydown', (e) => {
-            if (e.defaultPrevented || e.altKey || typing(e.target) || modal()) return;
             const lib = library();
             if (! lib) return;
-            const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-            if ((e.ctrlKey || e.metaKey) && key === 'a') {
-                const all = lib.list.querySelector('input.fi-ta-page-checkbox');
-                if (all) { e.preventDefault(); if (! all.checked) all.click(); }
-                return;
-            }
-            if (e.ctrlKey || e.metaKey) return;
             const items = Array.from(lib.list.querySelectorAll('[data-recording]'));
-            let at = items.findIndex((el) => rowOf(el).classList.contains('el-kb-row'));
-            if (key === 'j' || key === 'k') {
-                if (! items.length) return;
+            const all = lib.list.querySelector('input.fi-ta-page-checkbox');
+            const on = checked(lib);
+            const act = core.keyAction({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, target: field(e.target) }, {
+                modal: modal(), items: items.length, at: items.findIndex((el) => rowOf(el).classList.contains('el-kb-row')),
+                checked: on.length, selected: selected(lib), allChecked: !! (all && all.checked),
+            });
+            if (! act) return;
+            if (act.do === 'none') { e.preventDefault(); return; }
+            if (act.do === 'select-all') {
+                if (all) { e.preventDefault(); all.click(); }
+            } else if (act.do === 'move') {
                 e.preventDefault();
-                at = at < 0 ? 0 : Math.max(0, Math.min(items.length - 1, at + (key === 'j' ? 1 : -1)));
                 items.forEach((el) => rowOf(el).classList.remove('el-kb-row'));
-                rowOf(items[at]).classList.add('el-kb-row');
-                rowOf(items[at]).scrollIntoView({ block: 'nearest' });
-            } else if (key === 'Enter' && at >= 0) {
+                rowOf(items[act.at]).classList.add('el-kb-row');
+                rowOf(items[act.at]).scrollIntoView({ block: 'nearest' });
+            } else if (act.do === 'open') {
                 e.preventDefault();
-                const id = items[at].dataset.recording;
+                const id = items[act.at].dataset.recording;
                 if (wide()) lib.wire.selectRecording(id); else window.location.href = window.location.pathname.replace(/\/$/, '') + '/' + id;
-            } else if (key === 'x' && at >= 0) {
-                const box = boxOf(items[at]);
+            } else if (act.do === 'toggle') {
+                const box = boxOf(items[act.at]);
                 if (box) { e.preventDefault(); box.click(); }
-            } else if (key === 'Escape') {
-                const on = checked(lib);
-                if (on.length) { e.preventDefault(); on.forEach((b) => b.click()); }
-            } else if ((key === 'Delete' || key === 'Backspace') && checked(lib).length) {
+            } else if (act.do === 'clear') {
+                e.preventDefault();
+                on.forEach((b) => b.click());
+            } else if (act.do === 'delete') {
                 const del = document.querySelector('[data-selection-delete]');
                 if (del) { e.preventDefault(); del.click(); }
             }
@@ -59,9 +67,11 @@
         document.addEventListener('click', (e) => {
             const row = e.target instanceof Element ? e.target.closest('.v2-library [data-recording]') : null;
             const lib = library();
-            if (! row || ! lib || e.button !== 0 || e.target.closest('button, input')) return;
-            if (! checked(lib).length && ! e.shiftKey) return;
-            const box = boxOf(row);
+            if (! lib) return;
+            const act = core.clickAction({ button: e.button, shiftKey: e.shiftKey, target: field(e.target) }, {
+                inRow: !! row, onControl: !! (row && e.target.closest('button, input')), checked: checked(lib).length,
+            });
+            const box = act && boxOf(row);
             if (! box) return;
             e.preventDefault();
             e.stopPropagation();
@@ -71,11 +81,11 @@
         document.addEventListener('contextmenu', (e) => {
             const row = e.target instanceof Element ? e.target.closest('.v2-library [data-recording]') : null;
             const lib = library();
-            if (! row || ! lib) return;
-            const box = boxOf(row);
-            const more = box && box.checked && checked(lib).length > 1
-                ? document.querySelector('button[data-selection-more], [data-selection-more] button')
-                : rowOf(row).querySelector('button.fi-ac-icon-btn-group');
+            if (! lib) return;
+            const box = row && boxOf(row);
+            const act = core.contextAction({ target: field(e.target) }, { inRow: !! row, rowChecked: !! (box && box.checked), checked: checked(lib).length });
+            const more = act === 'selection-menu' ? document.querySelector('button[data-selection-more], [data-selection-more] button')
+                : (act === 'row-menu' ? rowOf(row).querySelector('button.fi-ac-icon-btn-group') : null);
             if (! more) return;
             e.preventDefault();
             // Filament's menus open on a left-button mousedown; on the next tick, as the right button's own events would

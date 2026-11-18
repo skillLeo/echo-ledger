@@ -242,10 +242,21 @@ describe('client folders', function () {
 });
 
 it('exports many recordings as web pages (html) through the API', function () {
-    $session = App\Models\CaptureSession::factory()->create(['user_id' => $this->owner, 'device_id' => $this->device->id]);
-    $session->transcripts()->create(['kind' => App\Enums\TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => App\Enums\TranscriptStatus::Completed, 'text' => 'Hello.',
-        'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello.']]]);
+    $session = CaptureSession::factory()->create(['user_id' => $this->owner, 'device_id' => $this->device->id]);
+    $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'text' => 'Hello <script>alert(1)</script>.',
+        'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello <script>alert(1)</script>.']]]);
 
     $response = $this->postJson('/api/sessions/export', ['ids' => [$session->id], 'format' => 'html'])->assertOk();
-    expect($response->headers->get('X-Export-Count'))->toBe('1');
+    expect($response->headers->get('X-Export-Count'))->toBe('1')->and($response->headers->get('Content-Type'))->toBe('application/zip');
+    // The zip holds one web page with the words in it, and a <script> in the words is text, never markup.
+    $path = tempnam(sys_get_temp_dir(), 'el-zip');
+    file_put_contents($path, $response->getContent());
+    $zip = new ZipArchive;
+    expect($zip->open($path))->toBeTrue();
+    $names = array_map(fn (int $i): string => (string) $zip->getNameIndex($i), range(0, $zip->numFiles - 1));
+    $page = collect($names)->first(fn (string $n): bool => str_ends_with($n, '.html'));
+    $body = (string) $zip->getFromName((string) $page);
+    $zip->close();
+    unlink($path);
+    expect($page)->not->toBeNull()->and($body)->toContain('Hello &lt;script&gt;alert(1)&lt;/script&gt;.')->not->toContain('<script>alert(1)');
 });

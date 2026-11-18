@@ -597,7 +597,6 @@ class ViewCaptureSession extends ViewRecord
         return ActionGroup::make([
             $copy('copyText', 'Copy text', 'text'),
             $copy('copyWithTimes', 'Copy with timestamps', 'times'),
-            $copy('copyWithoutTimes', 'Copy without timestamps', 'plain'),
             $copy('copyForAi', 'Copy for AI', 'ai'),
         ])->label(__('Copy'))->icon(Heroicon::OutlinedClipboardDocument)->button()->color('gray')->outlined()
             ->visible(fn (): bool => $this->session()->finalTranscript?->status === TranscriptStatus::Completed);

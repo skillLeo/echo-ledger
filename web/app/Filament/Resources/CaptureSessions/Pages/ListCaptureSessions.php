@@ -8,6 +8,7 @@ use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Pages\Upload;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\PlanLimitWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
@@ -42,6 +43,8 @@ use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Livewire;
@@ -330,18 +333,30 @@ class ListCaptureSessions extends ListRecords
         return [...parent::getListeners(), ...(ConsoleV2::library() ? ['el-library-undo-delete' => 'undoDelete'] : [])];
     }
 
-    /**
-     * Undo of the v2.0 selection's Delete: the person's recordings among [$ids] come back from Trash while it still keeps
-     * them (one that was erased since, or is not theirs, is left alone).
-     *
-     * @param  list<string>  $ids
-     */
-    public function undoDelete(array $ids): void
+    /** v2.0: another page of the list, or another page size, starts with nothing selected, so Delete takes what is on screen. */
+    public function updatedPaginators(): void
     {
+        if (ConsoleV2::library()) {
+            $this->deselectAllTableRecords();
+        }
+    }
+
+    public function updatingTableRecordsPerPage(): void
+    {
+        $this->updatedPaginators();
+    }
+
+    /**
+     * Undo of the v2.0 selection's Delete: the batch that Delete just moved (its token, this person's only) comes back
+     * from Trash while Trash still keeps it, each recording only when the person may restore it.
+     */
+    public function undoDelete(string $token = ''): void
+    {
+        $ids = $token !== '' ? Cache::pull(CaptureSessionsTable::undoKey($token)) : null;
         $back = 0;
         $policy = app(RetentionPolicy::class);
-        foreach (CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', array_slice(array_map('strval', $ids), 0, 200))->get() as $session) {
-            if ($session->restorable()) {
+        foreach (is_array($ids) ? CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', array_slice(array_map('strval', $ids), 0, 200))->get() : [] as $session) {
+            if ($session->restorable() && Gate::allows('restore', $session)) {
                 $policy->restore($session);
                 $back++;
             }

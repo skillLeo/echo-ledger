@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Process;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
- * The new recording page's Copy menu (docs/PLAN_V2_PARITY.md section 4): Copy text, with timestamps, without, and Copy
- * for AI with a header; the player writes the text (filament.v2.copy). Classic keeps its player buttons only.
+ * The new recording page's Copy menu (docs/PLAN_V2_PARITY.md section 4): Copy text (without timestamps), with timestamps,
+ * and Copy for AI with a header; the player writes the text exactly as classic's buttons do (filament.v2.copy, held to
+ * classic by tests/js/v2-copy.test.mjs). Classic keeps its player buttons only.
  */
 
 beforeEach(function () {
@@ -19,7 +21,7 @@ beforeEach(function () {
     $this->actingAs($this->owner->fresh(), 'web');
 });
 
-it('offers Copy ▾ beside Share with the four copies, and the header for AI', function () {
+it('offers Copy ▾ beside Share with the three copies, and the header for AI', function () {
     foreach (InterfaceFlags::UI_V2 as $flag) {
         app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
     }
@@ -27,14 +29,19 @@ it('offers Copy ▾ beside Share with the four copies, and the header for AI', f
     $html = (string) $this->get('/app/sessions/'.$this->recording->id)->assertOk()->getContent();
 
     expect($html)->toContain('window.elV2Copy = ')
-        ->toContain('Copy with timestamps')->toContain('Copy without timestamps')->toContain('Copy for AI')
+        ->toContain('Copy with timestamps')->toContain('Copy for AI')->not->toContain('Copy without timestamps')
         ->toContain("window.elV2Copy('text'")->toContain("window.elV2Copy('ai'")
         ->toContain('Recording: Payment terms')->toContain('People: Ahmed');
-    expect(strpos($html, '>Share<'))->toBeLessThan(strpos($html, 'Copy without timestamps'));
+    expect(strpos($html, '>Share<'))->toBeLessThan(strpos($html, "window.elV2Copy('text'"));
 });
 
 it('leaves the classic recording page as it was', function () {
     $html = (string) $this->get('/app/sessions/'.$this->recording->id)->assertOk()->getContent();
 
-    expect($html)->not->toContain('window.elV2Copy')->not->toContain('Copy without timestamps');
+    expect($html)->not->toContain('window.elV2Copy');
 });
+
+it('copies what classic copies (the Node test of the v2 script against the player)', function () {
+    $result = Process::path(base_path())->timeout(60)->run(['node', '--test', 'tests/js/v2-copy.test.mjs']);
+    expect($result->exitCode())->toBe(0, $result->output().$result->errorOutput());
+})->skip(fn (): bool => trim((string) shell_exec('command -v node')) === '', 'Node is not installed here');

@@ -2,10 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Enums\SessionStatus;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
+use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
 use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
+use Filament\Notifications\Livewire\Notifications;
+use Filament\Notifications\NotificationMailbox;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Process;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -40,33 +47,72 @@ it('shows the four main actions and ⋮ with Organise, Export and Danger, and ×
     $this->get('/app/sessions')->assertOk()->assertSee('data-selection-exit', false)->assertSee('Leave the selection');
 });
 
+/** The notices sent so far, as JSON (read the way assertNotified reads them, so they are taken). */
+function selectionNotices(): string
+{
+    app(NotificationMailbox::class)->flush();
+    $notices = new Notifications;
+    $notices->mount();
+    $notices->pullNotificationsFromSession();
+
+    return (string) json_encode($notices->notifications->toArray(), JSON_UNESCAPED_UNICODE);
+}
+
 it('moves the selected recordings to Trash at once, offers Undo, and brings them back', function () {
     $ids = $this->recordings->take(2)->pluck('id')->all();
 
-    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids)->assertHasNoTableBulkActionErrors()
-        ->assertNotified('2 recordings moved to Trash');
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids)->assertHasNoTableBulkActionErrors();
+    $notices = selectionNotices();
+    preg_match('/"token":"([A-Za-z0-9]{32})"/', $notices, $m);
+    $token = $m[1] ?? '';
+    expect($notices)->toContain('2 recordings moved to Trash');
     expect(CaptureSession::query()->whereIn('id', $ids)->count())->toBe(0)
         ->and(CaptureSession::onlyTrashed()->whereIn('id', $ids)->count())->toBe(2);
+    expect($token)->not->toBe('');
 
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', ids: $ids)->assertNotified('2 recordings are back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $token)->assertNotified('2 recordings are back');
     expect(CaptureSession::query()->whereIn('id', $ids)->count())->toBe(2);
+    // The token is spent: a second Undo brings nothing back.
+    $this->recordings->first()->delete();
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $token)->assertNotified('0 recordings are back');
 });
 
-it('brings back only the person\'s own recordings that Trash still keeps', function () {
+it('brings back only that batch, only the person\'s own, and only what they may restore', function () {
     $other = Fx::session(Fx::user(), null, ['title' => 'Not mine']);
     $other->delete();
-    $mine = $this->recordings->first();
+    [$mine, $earlier] = [$this->recordings[0], $this->recordings[1]];
     $mine->delete();
+    $earlier->delete();
+    Cache::put(CaptureSessionsTable::undoKey('batch'), [(string) $mine->id, (string) $other->id], now()->addMinutes(5));
 
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', ids: [$mine->id, $other->id])->assertNotified('1 recording is back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'batch')->assertNotified('1 recording is back');
     expect(CaptureSession::query()->find($mine->id))->not->toBeNull()
+        ->and(CaptureSession::query()->find($earlier->id))->toBeNull()
         ->and(CaptureSession::withoutGlobalScopes()->onlyTrashed()->find($other->id))->not->toBeNull();
+    // Ids sent from the browser are not a batch.
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', ids: [$earlier->id])->assertNotified('0 recordings are back');
+    expect(CaptureSession::query()->find($earlier->id))->toBeNull();
+
+    // A person the policy does not let restore gets nothing back.
+    Gate::before(fn ($user, string $ability) => $ability === 'restore' ? false : null);
+    Cache::put(CaptureSessionsTable::undoKey('denied'), [(string) $earlier->id], now()->addMinutes(5));
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'denied')->assertNotified('0 recordings are back');
+});
+
+it('leaves a recording that is still recording or uploading where it is, and says so', function () {
+    $busy = Fx::session($this->owner, null, ['title' => 'Still uploading', 'status' => SessionStatus::Uploading]);
+    $ids = [$this->recordings[0]->id, $busy->id];
+
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids);
+    expect(selectionNotices())->toContain('1 recording moved to Trash')->toContain('1 recording is still recording or uploading and was left alone.');
+    expect(CaptureSession::query()->find($busy->id))->not->toBeNull()
+        ->and(CaptureSession::query()->find($this->recordings[0]->id))->toBeNull();
 });
 
 it('gives the new Library its keys and right-click, and only the new Library', function () {
     $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
     expect($html)->toContain('elV2LibraryKeys')->toContain('data-selection-delete')->toContain('data-selection-more')
-        ->toContain("(e.ctrlKey || e.metaKey) && key === 'a'")->toContain("addEventListener('contextmenu'");
+        ->toContain('window.ElLibraryKeysCore')->toContain("addEventListener('contextmenu'");
     $this->get('/app/settings/shortcuts')->assertOk()->assertSee('Select a range')->assertSee('Delete the selection (Undo in the notice)');
 
     foreach (InterfaceFlags::UI_V2 as $flag) {
@@ -91,4 +137,13 @@ it('offers Export as a sub-menu of every format, Web page (.html) too, and expor
     $more = collect($page->instance()->getTable()->getToolbarActions())->last();
     expect(collect(collect($more->getActions())[0]->getActions())->map(fn ($a) => $a->getName())->all())->toContain('moveInMenu')
         ->and(collect(collect($more->getActions())[1]->getActions())->map(fn ($a) => $a->getName())->all())->toContain('exportInMenuHtml');
+});
+
+it('decides the keys and the mouse as the Node test says (Ctrl/Cmd+A, Shift-click, Delete, right-click, never while typing)', function () {
+    $result = Process::path(base_path())->timeout(60)->run(['node', '--test', 'tests/js/library-keys-core.test.mjs']);
+    expect($result->exitCode())->toBe(0, $result->output().$result->errorOutput());
+})->skip(fn (): bool => trim((string) shell_exec('command -v node')) === '', 'Node is not installed here');
+
+it('starts a new page of the list with nothing selected', function () {
+    Livewire::test(ListCaptureSessions::class)->call('gotoPage', 2, 'page')->assertDispatched('deselectAllTableRecords');
 });

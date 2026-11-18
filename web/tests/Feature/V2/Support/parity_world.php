@@ -108,6 +108,7 @@ const WEB_PARITY_SCOPES = [
     'usermenu' => '//*[contains(concat(" ", normalize-space(@class), " "), " fi-user-menu ")]',
     'switcher' => '//*[contains(concat(" ", normalize-space(@class), " "), " el-workspace-switcher ")]',
     'player' => '//*[contains(concat(" ", normalize-space(@class), " "), " el-player ")]',
+    'rectabs' => '//*[contains(concat(" ", normalize-space(@class), " "), " v2-rec-tabs ")]',
 ];
 
 /** What a control's text is compared on: lower case, digits out, spaces as one. */
@@ -117,8 +118,11 @@ function webParityKey(string $text): string
 }
 
 /**
- * The controls of one scope of a page, as "element|normalised text" => the text as shown. In `main`, nothing inside a
- * nav, an aside or the settings menu counts (those are the frame's and the settings menu's rows).
+ * The controls of one scope of a page, as "element|normalised text" => the text as shown. A control is something the
+ * person acts on (a link, a button, a field, a tab, a switch); its headings, labels, options and menu items are parts of
+ * it, not controls of their own; a menu's items are read as "menuitem|<its button> › <item>". Nothing hidden counts: a closed menu, a modal, a <template>, hidden, aria-hidden,
+ * display: none, or under an x-show the page may not be in. In `main`, nothing inside a nav, an aside or the settings menu
+ * counts either (those are the frame's and the settings menu's rows).
  *
  * @return array<string, string>
  */
@@ -127,24 +131,47 @@ function webParityControls(string $html, string $scope = 'main'): array
     $doc = new DOMDocument;
     @$doc->loadHTML('<?xml encoding="utf-8"?>'.$html);
     $xp = new DOMXPath($doc);
-    $skip = $scope === 'main' ? '[not(ancestor::nav) and not(ancestor::aside) and not(ancestor::*[contains(@class,"el-settings-nav")])]' : '';
-    $kinds = 'self::a or self::button or self::label or self::option or self::th or self::h1 or self::h2 or self::h3 or self::select or self::input[@type="search"]'
-        .' or @role="tab" or @role="menuitem" or @role="menuitemradio" or @role="switch"';
+    // Hidden as drawn: a <template>, hidden, aria-hidden, display: none, and anything under an x-show the server cannot
+    // know is true (a modal, the selection's bar, a waiting queue). x-cloak alone is not hidden: it only waits for
+    // Alpine (Filament's tab headers, its closed menus), and neither is x-show="true || ..." (its toolbar).
+    $hidden = 'ancestor-or-self::*[self::template or @hidden or @aria-hidden="true" or contains(translate(@style, " ", ""), "display:none")'
+        .' or (@x-show and not(starts-with(normalize-space(@x-show), "true")))]';
+    $skip = '[not('.$hidden.')]'.($scope === 'main' ? '[not(ancestor::nav) and not(ancestor::aside) and not(ancestor::*[contains(@class,"el-settings-nav")])]' : '');
+    $kinds = 'self::a or self::button or self::select or self::textarea or (self::input and not(@type="hidden"))'
+        .' or @role="tab" or @role="switch"';
     $out = [];
     foreach ($xp->query(WEB_PARITY_SCOPES[$scope]) as $root) {
+        if (! $root instanceof DOMElement || $xp->evaluate('boolean('.$hidden.')', $root)) {
+            continue;
+        }
         foreach ($xp->query('.//*['.$kinds.']'.$skip, $root) as $node) {
-            if (! $node instanceof DOMElement) {
+            if (! $node instanceof DOMElement || ($node->nodeName === 'a' && $xp->evaluate('boolean(ancestor::button)', $node))) {
                 continue;
             }
             $text = trim((string) preg_replace('/\s+/u', ' ', $node->textContent));
-            if ($text === '' || in_array($node->nodeName, ['select', 'input'], true)) {
-                $text = trim($node->getAttribute('aria-label') ?: $node->getAttribute('title') ?: $node->getAttribute('placeholder'));
+            if ($text === '' || in_array($node->nodeName, ['select', 'input', 'textarea'], true)) {
+                $for = $node->getAttribute('id') !== '' ? $xp->query('//label[@for="'.$node->getAttribute('id').'"]')->item(0) : null;
+                $text = trim($node->getAttribute('aria-label') ?: ($for ? (string) preg_replace('/\s+/u', ' ', $for->textContent) : '') ?: $node->getAttribute('title') ?: $node->getAttribute('placeholder'));
             }
             $key = webParityKey($text);
-            if ($key !== '' && mb_strlen($text) <= 80) {
-                $element = in_array($node->getAttribute('role'), ['tab', 'menuitem', 'menuitemradio', 'switch'], true) ? $node->getAttribute('role') : $node->nodeName;
-                $out[$element.'|'.$key] ??= Str::limit($text, 80, '');
+            if ($key === '' || mb_strlen($text) > 80) {
+                continue;
             }
+            // An item of a menu is part of the menu's button: "menuitem|<button> › <item>".
+            $panel = $xp->query('ancestor::*[contains(concat(" ", normalize-space(@class), " "), " fi-dropdown-panel ")][1]', $node)->item(0);
+            if ($panel instanceof DOMElement) {
+                $trigger = $xp->query('preceding-sibling::*[contains(@class, "fi-dropdown-trigger")][1]', $panel)->item(0);
+                $label = $trigger instanceof DOMElement ? trim((string) preg_replace('/\s+/u', ' ', $trigger->textContent)) : '';
+                if ($label === '' && $trigger instanceof DOMElement) {
+                    $button = $xp->query('.//*[@aria-label or @title]', $trigger)->item(0);
+                    $label = $button instanceof DOMElement ? trim($button->getAttribute('aria-label') ?: $button->getAttribute('title')) : '';
+                }
+                $out['menuitem|'.(webParityKey($label) ?: 'menu').' › '.$key] ??= Str::limit(($label ?: 'Menu').' › '.$text, 80, '');
+
+                continue;
+            }
+            $element = in_array($node->getAttribute('role'), ['tab', 'switch'], true) ? $node->getAttribute('role') : ($node->nodeName === 'textarea' ? 'input' : $node->nodeName);
+            $out[$element.'|'.$key] ??= Str::limit($text, 80, '');
         }
     }
 

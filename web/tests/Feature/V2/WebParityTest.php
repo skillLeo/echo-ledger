@@ -10,8 +10,11 @@ use Livewire\Livewire;
 /*
  * The web rows of docs/v2/audit/parity.csv (docs/PLAN_V2_PARITY.md section 1). Every web row whose test is this file has
  * a check in web-parity-checks.json, and it must hold in the new design:
- *  - control: an element with that text in one scope of the page (main: the page's own content, outside its navs and the
- *    settings menu; or the sidebar, top bar, avatar menu, workspace switcher, player);
+ *  - control: a control with that text in one scope of the page (main: the page's own content, outside its navs and the
+ *    settings menu; or the sidebar, top bar, avatar menu, workspace switcher, player, recording tabs), drawn shown;
+ *    a menu's items are read as parts of its button ("menuitem|<button> › <item>");
+ *  - controls: every one of a list of such controls (a menu with its items, a page's controls as they were);
+ *  - controlmatch: a control whose key matches a pattern (a part of every row, whose id differs);
  *  - html: the page's HTML has every given string (the frame's key handler and its target, a marker class);
  *  - widget: a Home card renders with the given words;
  *  - exportformats: the selection's Export offers every given format.
@@ -29,11 +32,13 @@ function webParitySheet(): array
     return array_values(array_filter(array_map('str_getcsv', array_slice($lines, 1)), fn (array $r): bool => ($r[1] ?? '') === 'web'));
 }
 
-/** Whether one check holds in [$html] (control and html checks only). */
+/** Whether one check holds in [$html] (control, controls, controlmatch and html checks only). */
 function webParityHolds(array $check, string $html): bool
 {
     return match ($check['type']) {
         'control' => array_key_exists($check['key'], webParityControls($html, $check['scope'])),
+        'controls' => $check['keys'] !== [] && array_diff($check['keys'], array_keys(webParityControls($html, $check['scope']))) === [],
+        'controlmatch' => preg_grep('~'.$check['pattern'].'~u', array_keys(webParityControls($html, $check['scope']))) !== [],
         'html' => collect($check['contains'])->every(fn (string $needle): bool => str_contains($html, $needle)),
         default => false,
     };
@@ -46,7 +51,7 @@ it('holds every web row\'s check in the new design, on pages drawn by the v2.0 f
     $html = [];
     $failed = [];
     foreach ($checks as $id => $check) {
-        if (in_array($check['type'], ['control', 'html'], true)) {
+        if (in_array($check['type'], ['control', 'controls', 'controlmatch', 'html'], true)) {
             $page = $check['page'];
             if (! isset($html[$page])) {
                 $this->app['auth']->forgetGuards();
@@ -101,6 +106,8 @@ it('fails a check when the control is taken away (the checks are not empty match
     $without = (string) $doc->saveHTML();
     expect(webParityHolds($revoke, $without))->toBeFalse()
         ->and(webParityHolds(['type' => 'html', 'contains' => ["e.key === '/'"]], str_replace("e.key === '/'", '', $html)))->toBeFalse()
+        // A control drawn hidden (under an x-show the page may not be in) is not there.
+        ->and(webParityHolds($revoke, str_replace('<main', '<main x-show="open"', $html)))->toBeFalse()
         // A control in the settings menu is not one of the page's own.
         ->and(webParityHolds(['type' => 'control', 'scope' => 'main', 'key' => 'a|appearance'], (string) $this->get($pages['settings-appearance'])->getContent()))->toBeFalse();
 });
