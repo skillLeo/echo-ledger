@@ -512,16 +512,35 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
     </ToastRegion>
   );
 
-  if (open) {
+  const closeOpen = () => {
+    const id = open?.id ?? null;
+    setOpenId(null);
+    setFocusAfter({ rowId: id, seq: ++seq.current });
+  };
+  const recordingPage = open && (
+    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)}
+      menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
+  );
+  // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
+  // the scrim closes it. The list opens it as its own page.
+  if (open && (layout !== "table" || view === "trash")) {
     return (
       <div className="el-root el-embedded" data-v2="library" ref={root}>
-        <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={() => setOpenId(null)} onMessage={(t) => say(t)}
-          menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
+        {recordingPage}
         {dialogs}
         {toasts}
       </div>
     );
   }
+  const drawer = open && (
+    <>
+      <div className="el-drawer-scrim" aria-hidden="true" onMouseDown={closeOpen} />
+      <aside className="el-drawer" aria-label={recordingName(open.title)}>
+        <Button variant="quiet" icon={Icons.CloseIcon} className="el-drawer__close" aria-label="Close" aria-keyshortcuts="Escape" onClick={closeOpen} autoFocus />
+        {recordingPage}
+      </aside>
+    </>
+  );
 
   const viewMenu: MenuItem[] = [
     ...LIST_VIEWS.map((v) => ({ label: VIEW_NAMES[v], checked: view === v, radio: true, count: counts?.[v], onPick: () => setView(v) })),
@@ -746,6 +765,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
         description={erase ? `"${erase.title || "Recording"}" and its transcript are erased from the server. This can't be undone.` : undefined}
         onClose={() => setErase(null)}
         actions={<><Button onClick={() => setErase(null)}>Cancel</Button><Button variant="danger" onClick={() => erase && void eraseNow(erase)}>Delete forever</Button></>} />
+      {drawer}
       {dialogs}
       {toasts}
     </div>

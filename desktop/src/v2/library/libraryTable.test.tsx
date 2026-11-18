@@ -75,6 +75,23 @@ describe("the Library as a table", () => {
     fireEvent.keyDown(screen.getByRole("menu", { name: "More for Bina" }), { key: "Escape" });
     fireEvent.click(within(table()).getByRole("button", { name: "Ali" }));
     await act(flushAsync);
-    expect(screen.getByRole("heading", { level: 1, name: "Ali" })).toBeInTheDocument();
+    // A drawer over the table, as classic's: the table stays; Close, Esc and the scrim close it, focus back on the row.
+    const drawer = screen.getByRole("complementary", { name: "Ali" });
+    expect(within(drawer).getByRole("heading", { level: 1, name: "Ali" })).toBeInTheDocument();
+    expect(table()).toBeInTheDocument();
+    fireEvent.click(within(drawer).getByRole("button", { name: "Close" }));
+    await act(flushAsync);
+    expect(screen.queryByRole("complementary", { name: "Ali" })).toBeNull();
+    expect(within(table()).getByRole("button", { name: "Ali" })).toHaveFocus();
+    fireEvent.click(within(table()).getByRole("button", { name: "Ali" }));
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await act(flushAsync);
+    expect(screen.queryByRole("complementary", { name: "Ali" })).toBeNull();
+    fireEvent.click(within(table()).getByRole("button", { name: "Bina" }));
+    await act(flushAsync);
+    fireEvent.mouseDown(document.querySelector(".el-drawer-scrim")!);
+    await act(flushAsync);
+    expect(screen.queryByRole("complementary", { name: "Bina" })).toBeNull();
   });
 });

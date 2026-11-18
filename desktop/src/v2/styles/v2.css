@@ -1099,3 +1099,13 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-nav-sub { display: flex; flex-direction: column; margin-block-end: var(--el-space-4); }
 .el-nav-item--sub { inline-size: 100%; min-block-size: calc(var(--el-component-button-height) - var(--el-space-8)); padding-inline-start: calc(var(--el-space-8) + var(--el-space-32)); font-size: var(--el-text-caption-size); }
 .el-nav-item--sub[aria-current="page"] { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); }
+/* A recording opened from the table: a drawer on the end side over a scrim (classic's). */
+.el-drawer-scrim { position: fixed; inset: 0; z-index: var(--el-layer-dialog); background: var(--el-role-scrim-default); }
+.el-drawer {
+  position: fixed; inset-block: 0; inset-inline-end: 0; z-index: var(--el-layer-dialog);
+  inline-size: min(100%, calc(var(--el-space-64) * 11)); overflow-y: auto;
+  background: var(--el-role-bg-canvas); box-shadow: var(--el-shadow-2);
+}
+.el-drawer__close { position: absolute; inset-block-start: var(--el-space-8); inset-inline-end: var(--el-space-8); z-index: 1; }
+.el-drawer .el-page { padding-block-start: var(--el-space-16); }
+.el-drawer .el-page__back { display: none; }
