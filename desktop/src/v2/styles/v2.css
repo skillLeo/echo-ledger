@@ -1085,3 +1085,14 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-notes__line { display: flex; gap: var(--el-space-8); align-items: baseline; inline-size: 100%; text-align: start; border: 0; padding: var(--el-space-4) var(--el-space-8); border-radius: var(--el-radius-sm); background: transparent; cursor: pointer; }
 .el-notes__line:hover:not(:disabled) { background: var(--el-role-bg-subtle); }
 .el-notes__line:disabled { cursor: default; }
+/* The Library as a table (Show as: Table). */
+.el-table-wrap { overflow-x: auto; border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md); background: var(--el-role-bg-surface); }
+.el-table { inline-size: 100%; border-collapse: collapse; }
+.el-table th, .el-table td { padding: var(--el-space-8) var(--el-space-12); text-align: start; white-space: nowrap; border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-table thead th { font-size: var(--el-text-caption-size); font-weight: var(--el-text-body-strong-weight); color: var(--el-role-text-secondary); position: sticky; inset-block-start: 0; background: var(--el-role-bg-surface); }
+.el-table__group th { background: var(--el-role-bg-subtle); font-size: var(--el-text-caption-size); }
+.el-table__row:hover { background: var(--el-role-bg-subtle); }
+.el-table__row--picked { background: var(--el-role-accent-soft); }
+.el-table__open { display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: start; }
+.el-table__title { font-weight: var(--el-text-body-strong-weight); max-inline-size: calc(var(--el-space-64) * 5); overflow: hidden; text-overflow: ellipsis; }
+.el-table__actions { inline-size: var(--el-space-40); }

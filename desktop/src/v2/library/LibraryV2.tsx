@@ -10,7 +10,7 @@ import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import {
-  Badge, Button, Card, Chip, Dialog, Icon, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Button, Card, Chip, Dialog, Icon, Segmented, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
@@ -24,6 +24,7 @@ import { recordingName, searchItems, type SortKey } from "../../lib/library";
 import { RecordingPage } from "./RecordingPage";
 import { SourceAvatar } from "./SourceAvatar";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
+import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
   copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
@@ -78,6 +79,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
+  // Show as List or Table, and the table's columns, kept on this computer (classic's).
+  const [layout, setLayoutNow] = useState<Layout>(loadLayout);
+  const [columns, setColumnsNow] = useState<Column[]>(loadColumns);
+  const setLayout = (l: Layout) => { setLayoutNow(l); saveLayout(l); };
+  const setColumns = (c: Column[]) => { setColumnsNow(c); saveColumns(c); };
+  const fold = (key: string) => setCollapsed((c) => { const n = new Set(c); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const [bin, setBin] = useState<BinItem[] | null>(null);
   const [binError, setBinError] = useState<string | null>(null);
   const [erase, setErase] = useState<BinItem | null>(null);
@@ -600,6 +607,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
           {view !== "trash" && (
             <div className="el-search-row">
               <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="/" />
+              <Segmented label="Show as" value={layout} onChange={setLayout}
+                options={[{ value: "list" as Layout, label: "List" }, { value: "table" as Layout, label: "Table" }]} />
+              {layout === "table" && <Menu label="Columns" items={columnsMenu(columns, setColumns)} button={{ variant: "quiet", icon: Icons.ColumnsIcon, title: "Columns" }} />}
               <Menu label="Sort and group" items={sortMenu}
                 button={{ variant: "quiet", icon: Icons.SortIcon, title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
             </div>
@@ -698,6 +708,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
             body={query ? "Try another word, or clear the search to see every recording." : filtersOn ? "Take a filter off, or clear them all to see every recording."
               : view === "today" ? "Today's calls and meetings appear here as they are recorded." : view === "untranscribed" ? "Recordings without a transcript appear here." : "Recordings appear here when they fit this view."}
             action={<Button onClick={clearAll}>{query && !filtersOn ? "Clear search" : filtersOn ? "Clear filters" : "Show all"}</Button>} />
+        ) : layout === "table" ? (
+          <LibraryTable groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
+            onRow={rowClick} onRowMenu={rowMenu}
+            rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
         ) : (
           <List label="Recordings">
             {groups.map((g) => [

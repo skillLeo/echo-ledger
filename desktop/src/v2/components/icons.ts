@@ -63,5 +63,6 @@ export {
   RefreshIcon,
   DownloadIcon,
   GlobeIcon as WebIcon,
+  ColumnsIcon,
 } from "../../components/Icons";
 export { PlayIcon, PauseIcon, StopIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
