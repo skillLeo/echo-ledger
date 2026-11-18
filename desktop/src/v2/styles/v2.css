@@ -782,6 +782,9 @@ button.el-step__head { cursor: pointer; }
 .el-profile-error > .el-empty { padding: var(--el-space-24); }
 .el-group { display: flex; flex-direction: column; gap: var(--el-space-8); }
 .el-group__title { padding-inline: var(--el-space-4); }
+.el-group__label { display: flex; align-items: center; gap: var(--el-space-4); padding-inline: var(--el-space-4); color: var(--el-role-text-secondary); }
+.el-group__label > .el-group__title { padding-inline: 0; color: var(--el-role-text-primary); }
+.el-group__desc { margin-block-start: calc(-1 * var(--el-space-8)); padding-inline: var(--el-space-4); }
 .el-group__rows { padding: var(--el-space-4); }
 .el-group__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
 .el-health-list { margin: 0; padding: 0; list-style: none; }

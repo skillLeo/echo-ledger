@@ -109,6 +109,9 @@ export const PAIRS = [
       await page.getByRole("button", { name: "More ways to record" }).click();
       await page.waitForTimeout(400);
     })]],
+  ["settings-groups", "Settings: classic's list | the new design's goal groups, each with its icon and a one-line description",
+    [classic("settings"), null],
+    [v2("settings"), null]],
 ];
 
 const server = await createServer({ root: desktop, configFile: join(desktop, "vite.config.ts"), server: { port: 1480, strictPort: false }, logLevel: "error" });
