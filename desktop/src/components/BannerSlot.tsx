@@ -18,6 +18,8 @@ export const BANNER_ORDER = [
   "update-ready",
   // "Keep automatically" became Ask me (contract 1.8.0-e): said once.
   "after-call",
+  // v2.0: the main window now shows in screen shares unless the person hides it (said once).
+  "share-default",
   "announcement",
 ] as const;
 

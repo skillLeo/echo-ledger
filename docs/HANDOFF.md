@@ -1086,3 +1086,12 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 - 2026-11-17: owner added PLAN_CALL_RULES (call rules, calm after-call card, auto clean-up). Local plan doc, excluded. Order: web contract and retention job, then phone and desktop. Trash period follows trash.keep_hours.
 
 - 2026-11-18: owner set PLAN_V2_PARITY (local, excluded) as top priority: v2 must have every classic feature; classic is the default until 100% parity and owner approval; the design switch works both ways first. Other v2 module work (call rules) pauses after its current commit.
+
+## 2026-11-18 03:52 PKT — paused by the owner (1–2 days)
+
+All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next steps and risks. In short:
+- **Production:** v1.1 at 144c5514 (classic for everyone, v2 Opt-in, Live Assist on the VPS relay, caption speed 80 ms). Owner devices: Mac 2.0.1, phone 2.0.1 (code 21). v1.1 on GitHub is at cb7f1d68, app-side work past production.
+- **Approved, not merged:** b-desktop-share-default d88e6767 (screen shares per window + caption latency). Merge after CI, then build Mac 2.0.2.
+- **Waiting for re-review:** b-phone-parity-recording 5ea084d9. b-phone-parity e7b12b6c needs a status check first.
+- **Parity:** desktop 62% (372/603), phone 36% (103/285), web audit just started. Source: docs/v2/audit/parity.csv.
+- **Caption latency, real provider:** p50 0.56 s / p90 1.11 s English; p50 0.77 s / p90 1.20 s Urdu+English.

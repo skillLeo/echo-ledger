@@ -1,4 +1,294 @@
 id,platform,screen,feature,how to reach it in classic,where it lives in v2,status,test that proves it
+PH-LIB-001,phone,Library,"Status chip ""Calls: Ready"" / ""Not ready"" in the header, opens the Ready check","Library header, right of the title (ReadyChipView)",Not in the v2 Library header; Home's status strip has it. Plan 2 keeps the chip in the Library header,missing,none
+PH-LIB-002,phone,Library,⋮ More › Select (enters selection with the first row ticked),Library header ⋮ › Select,No selection mode,missing,none
+PH-LIB-003,phone,Library,⋮ More › Sync now,Library header ⋮ › Sync now,"No Sync now; only ""Try again"" on the offline banner or the error state",missing,none
+PH-LIB-004,phone,Library,Pull down to sync,Pull the list down (PullToRefreshBox),No pull to refresh,missing,none
+PH-LIB-005,phone,Library,"⋮ More › Recently deleted: restore, Delete now / Erase now (asks), ""erased in 5 hours""",Library header ⋮ › Recently deleted (inline card),"Trash icon in the Library top bar › Trash page: Restore, Erase now (asks), ""Erases on …""",partial,V2ScreenShotsTest.trash (screenshot only; no restore or erase test)
+PH-LIB-006,phone,Library,Scroll to the top when the Library tab is tapped again,Tap the Library tab while on it,Not wired,missing,none
+PH-LIB-007,phone,Library,"Search recordings and transcripts: titles on the phone, transcript words on the server (2+ characters)",Search pill under the header,"Search field matches title, preview line and project on the phone only; no transcript search",partial,LibraryModelTest.searchLooksAtTitleMetaAndProject
+PH-LIB-008,phone,Library,"Search results in two groups, Titles and Transcripts; a transcript match opens the recording at that moment","Search pill, type 2+ characters","Flat filtered list; no transcript matches, no opening at the moment",missing,none
+PH-LIB-009,phone,Library,"Recent searches (last five, kept on this phone, tap to search again)","Search pill, empty field",None,missing,none
+PH-LIB-010,phone,Library,Clear search (✕) and leave search (back arrow or Back),Search field,Search field has a clear button; there is no separate search mode to leave,partial,none
+PH-LIB-011,phone,Library,"Group by: Date (default), App / Type, Project, Language, Status, Device, None",Sort icon in the search pill › View › Group by,No grouping; one flat list,missing,none
+PH-LIB-012,phone,Library,"Sort by: Newest, Oldest, Longest, Shortest, Name A–Z, Recently opened",Sort icon in the search pill › View › Sort by,Newest first only,missing,none
+PH-LIB-013,phone,Library,"Density: Comfortable, Compact",Sort icon in the search pill › View › Density,One density,missing,none
+PH-LIB-014,phone,Library,"Group, sort and density remembered per view on this phone",View sheet (stored in settings per view),Nothing to remember,missing,none
+PH-LIB-015,phone,Library,"Filter chip Source: Phone, Desktop, Web (several at once, with a count)",Chip row under the search pill › Source › sheet with Clear and Apply,No Source filter,missing,none
+PH-LIB-016,phone,Library,"Filter chip Date: Today, This week (with counts)",Chip row › Date,Saved view chip Today; no This week,partial,LibraryModelTest.savedViewsCombineAndTheNewestComesFirst
+PH-LIB-017,phone,Library,Filter chip Project: No project and every project,Chip row › Project,No Project filter,missing,none
+PH-LIB-018,phone,Library,Filter chip Language (the languages the recordings have),Chip row › Language,No Language filter,missing,none
+PH-LIB-019,phone,Library,"Filter chip Status: Waiting for decision, Failed, Pinned, Bookmarked (with counts)",Chip row › Status,"Saved view Untranscribed (untranscribed and failed); no Waiting, Pinned or Bookmarked",partial,LibraryModelTest.savedViewsCombineAndTheNewestComesFirst
+PH-LIB-020,phone,Library,"Filter by bookmark: Any bookmark, Bookmark: <tag>",Chip row › Status (bookmark tags),None,missing,none
+PH-LIB-021,phone,Library,Filter chip Labels (shown when there are labels),Chip row › Labels,None,missing,none
+PH-LIB-022,phone,Library,A chip shows how many choices are on; each sheet has Clear and Apply,Chip row,"Saved view chips toggle on and off; no counts, no Clear",partial,none
+PH-LIB-023,phone,Library,"""Nothing matches"" with a Clear filters button",Library with filters that match nothing,"""No match"" empty state without a way to clear",partial,none
+PH-LIB-024,phone,Library,"Sections: Pinned first, then Today, Yesterday, This week, then one per month; sticky headers with counts",The list (Group by Date),"One flat list, newest first, no headers",missing,none
+PH-LIB-025,phone,Library,Fold or unfold a section (tap its name or arrow),Section header,None,missing,none
+PH-LIB-026,phone,Library,"Select a whole section (its box in selection, or long-press the header)",Section header,None,missing,none
+PH-LIB-027,phone,Library,Long-press a row (or tap its icon) to select; tap more rows to add; Back leaves selection,Library row,"Long-press opens a sheet with one action, Delete",partial,none
+PH-LIB-028,phone,Library,Selection bar: ✕ close and the count,Library in selection,None,missing,none
+PH-LIB-029,phone,Library,Select all,Selection bar,None,missing,none
+PH-LIB-030,phone,Library,"Move to: Inbox, the projects as a tree, New project… (name, Create)",Selection bar › Move,None,missing,none
+PH-LIB-031,phone,Library,"Label: type a label, Add or Remove; existing labels to pick",Selection bar › Label,None,missing,none
+PH-LIB-032,phone,Library,"Delete the selection: ""Delete 3 (restorable for 48 hours)""",Selection bar › Delete,Only one recording at a time (long-press sheet),partial,V2ShellTest.deleteMovesToTrashAndUndoRestores
+PH-LIB-033,phone,Library,Rename (one selected),Selection bar ⋮ › Rename,None in the Library,missing,none
+PH-LIB-034,phone,Library,Pin and Unpin the selection,Selection bar ⋮ › Pin / Unpin,None,missing,none
+PH-LIB-035,phone,Library,Keep forever and Stop keeping the selection,Selection bar ⋮ › Keep forever / Stop keeping,None,missing,none
+PH-LIB-036,phone,Library,Export the selection as Word (.docx),Selection bar ⋮ › Export as Word,None,missing,none
+PH-LIB-037,phone,Library,Export the selection as Text (.txt),Selection bar ⋮ › Export as Text,None,missing,none
+PH-LIB-038,phone,Library,Export the selection as Markdown (.md),Selection bar ⋮ › Export as Markdown,None,missing,none
+PH-LIB-039,phone,Library,Export the selection as Subtitles (.srt),Selection bar ⋮ › Export as Subtitles,None,missing,none
+PH-LIB-040,phone,Library,Export the selection as Web subtitles (.vtt),Selection bar ⋮ › Export as Web subtitles,None,missing,none
+PH-LIB-041,phone,Library,Export the selection as JSON,Selection bar ⋮ › Export as JSON,None,missing,none
+PH-LIB-042,phone,Library,Swipe right on a row: Pin / Unpin (springs back),Library row,None,missing,none
+PH-LIB-043,phone,Library,"Swipe left on a row: Delete, with ""Recording deleted · Undo""",Library row,Delete from the long-press sheet with an Undo toast; no swipe,partial,V2ShellTest.deleteMovesToTrashAndUndoRestores
+PH-LIB-044,phone,Library,"Row icon: the source app's tile with a device badge (phone, laptop, web)",Library row,"Source icon in an avatar; no device badge; generic glyphs, not the real logos (plan 3)",partial,none
+PH-LIB-045,phone,Library,"Row title, or ""WhatsApp call"" / ""Voice note"" / ""Phone call"" when untitled",Library row,"Title, else the source's name",done,LibraryModelTest.statusDurationAndTitle
+PH-LIB-046,phone,Library,"Row time: ""1:29 AM"" today and yesterday, ""Mon"" this week, ""Oct 22"" before",Library row,WhatsApp-style times in the screen's language,done,LibraryModelTest.timesReadLikeWhatsAppInTheLocalZone
+PH-LIB-047,phone,Library,"Row meta: length and project (""2:02 · Acme"")",Library row,Length and the transcript's first line; the project only through search,partial,none
+PH-LIB-048,phone,Library,"Row status line: ""Transcribing · part 2 of 3 · about 1 min left"", ""Improving Roman Urdu… 60%""",Library row while it is being transcribed,"Badge ""Transcribing"" without the part, time left or percent",partial,LibraryModelTest.statusDurationAndTitle
+PH-LIB-049,phone,Library,"Row failed: ""Transcription failed · Tap to retry"" in red with an alert icon",Library row,"Badge ""Failed""; tapping opens the recording (no retry from the row)",partial,none
+PH-LIB-050,phone,Library,"Row no audio: ""No audio"" with a muted mic icon",Library row,No no-audio state on the row,missing,none
+PH-LIB-051,phone,Library,Row pinned mark,Library row,None,missing,none
+PH-LIB-052,phone,Library,Row unopened: brand dot and a semibold title until opened,Library row,None,missing,none
+PH-LIB-053,phone,Library,"Live refresh every 5 s while something uploads, is transcribed or its views are made",Library (automatic),No refresh while busy,missing,none
+PH-LIB-054,phone,Library,"Uploading section: ""Waiting to upload"", ""Uploading 40%""",Top of the Library,"Rows say ""Uploading"" with no percent and no waiting state",partial,none
+PH-LIB-055,phone,Library,"Upload failed: ""Upload failed · Tap to retry""",Uploading section row,"""Failed"" badge, tap to retry",done,none
+PH-LIB-056,phone,Library,"Already in your Library: ""Tap to dismiss"" for a duplicate upload",Uploading section row,None,missing,none
+PH-LIB-057,phone,Library,Upload row ⋮: Retry upload; Delete recording… (asks: this phone has the only copy),Uploading section row ⋮ or long-press,No menu; no delete for a recording that never uploaded,missing,none
+PH-LIB-058,phone,Library,"Offline banner ""You're offline. Showing the last synced library."" with Retry",Top of the Library,Offline banner with Try again,partial,none
+PH-LIB-059,phone,Library,"Server banners: app update (Update), maintenance, the admin's announcement (close)",Top of the Library,None in v2,missing,none
+PH-LIB-060,phone,Library,"""Calls are not being recorded: …"" banner with Fix",Top of the Library,Home's status strip; plan 2 moves it to one quiet banner in Library,partial,HomeTest.theStatusStripSaysWhatCallsAreDoingNow
+PH-LIB-061,phone,Library,Calls waiting for Keep or Discard: one card with Review,Top of the Library,Home › Needs action lists each waiting call with Keep and Discard; plan 2 makes it one quiet banner in Library,partial,V2ShellTest.homeDiscardIsTheDelayedDiscardAndUndoBringsTheCallBack
+PH-LIB-062,phone,Library,Skeleton rows on the first sync,Library before the first sync,Skeleton list,done,none
+PH-LIB-063,phone,Library,"Empty Library: ""No recordings yet""",Library with nothing,Empty state,done,none
+PH-LIB-064,phone,Library,Library is the start screen; Home removed as a tab; setup checklist as a dismissible card at the top of Library,Not in classic (plan 2),Home is a tab in v2,missing,none
+PH-LIB-065,phone,Library,Activity as a bell with a badge in the Library header,Classic: Activity tab (plan 2),None in Library,missing,none
+PH-LIB-066,phone,Library,Settings from the avatar at the top right,Classic: Settings tab (plan 2),Avatar in the Library top bar,done,V2ShellTest.settingsFromTheAvatarOffersClassicLook
+PH-LIB-067,phone,Library,"Saved views in a ""Views"" chip: Today, Untranscribed, Starred, Audio only",Not in classic (plan 3),Today and Untranscribed as separate chips; no Starred or Audio only,partial,LibraryModelTest.savedViewsCombineAndTheNewestComesFirst
+PH-LIB-068,phone,Library,"Applied filters as filled chips with ✕, and ""Clear all""",Not in classic (plan 3),None,missing,none
+PH-LIB-069,phone,Library,"Mark important (flag), with its row mark",Not in classic (plan 3),None,missing,none
+PH-LIB-070,phone,Library,Transcribe from the selection (shows the minutes first),"Not in classic (plan 3, call rules)",None,missing,none
+PH-LIB-071,phone,Library,Export the selection as a Web page (.html),Not in classic as a choice (plan 3),None,missing,none
+PH-LIB-072,phone,Library,Copy for AI from the selection,Classic: only on a recording and a project (plan 3),None,missing,none
+PH-LIB-073,phone,Library,Row: label colour dot,Not in classic (plan 3),None,missing,none
+PH-LIB-074,phone,Library,"Row: ""Audio · 18 days left"" for audio kept without a transcript",Not in classic (call rules plan 5),None,missing,none
+PH-LIB-075,phone,Library,Swipes can be turned off in Settings,Not in classic (plan 3),None,missing,none
+PH-LIB-076,phone,Library,"Smooth with 2,000+ recordings (lazy list), with a test","Classic: lazy list, no test (plan 3)",Lazy list; no test,partial,none
+PH-REC-001,phone,Recording page,"Find in transcript: search icon, ""2 of 7"", previous and next match, close",Recording page top bar › search icon,None,missing,none
+PH-REC-002,phone,Recording page,Copy the transcript from the top bar,Recording page top bar › copy icon,None,missing,none
+PH-REC-003,phone,Recording page,⋮ Back to <app> for a voice note shared from another app,Recording page ⋮ › Back to WhatsApp,None,missing,none
+PH-REC-004,phone,Recording page,⋮ Copy for AI,Recording page ⋮ › Copy for AI,None,missing,none
+PH-REC-005,phone,Recording page,⋮ Pin / Unpin,Recording page ⋮ › Pin,None,missing,none
+PH-REC-006,phone,Recording page,⋮ Keep forever / Stop keeping,Recording page ⋮ › Keep forever,None,missing,none
+PH-REC-007,phone,Recording page,⋮ Skip silences / Play silences,Recording page ⋮ › Skip silences,None,missing,none
+PH-REC-008,phone,Recording page,"⋮ Delete, asked first: ""You can restore it from Recently deleted for 48 hours""",Recording page ⋮ › Delete,"Delete in the action row, at once with an Undo toast; no ⋮",partial,none
+PH-REC-009,phone,Recording page,The title moves into the bar when the page scrolls,Recording page,None,missing,none
+PH-REC-010,phone,Recording page,Tap the title to rename the recording,Recording page › title,Title is plain text,missing,none
+PH-REC-011,phone,Recording page,"Source app tile, app name and device name (""WhatsApp · Phone"")",Recording page head,Source and status; no device,partial,none
+PH-REC-012,phone,Recording page,"Date, length and project line (""Oct 20 · 10:00 AM · 42:10 · Acme"")",Recording page head,Source and time in the head; length and project in the Details tab,partial,none
+PH-REC-013,phone,Recording page,Bookmark chips (time and tag); a tap plays from there,Recording page head,None,missing,none
+PH-REC-014,phone,Recording page,Opening a recording marks it opened (the Library's unread dot goes),Open a recording,Not marked opened,missing,none
+PH-REC-015,phone,Recording page,Opened from a search match: plays from that moment,Library search › a transcript match,None,missing,none
+PH-REC-016,phone,Recording page,"No audio card: ""Nothing was heard…"" with Run capture test and Delete",A recording with no sound,None,missing,none
+PH-REC-017,phone,Recording page,Loading transcript…,Recording page while it loads,Loading state,done,none
+PH-REC-018,phone,Recording page,"""Couldn't load the transcript"" with Retry",Recording page offline,Error state with Try again,done,none
+PH-REC-019,phone,Recording page,"Progress while on its way: Upload · Transcribe · Improve, the line and bar, ""Notify me when ready""",A recording being transcribed,"""No transcript yet"" empty state; no steps, no Notify me when ready",partial,none
+PH-REC-020,phone,Recording page,"Failed: the reason in the phone's own words, with Retry, or ""Check your key"" for a refused own key",A failed transcription,"Failed state with the server's plain sentence; no Retry, no Check your key",partial,none
+PH-REC-021,phone,Recording page,"Empty transcript: ""no speech was detected""",A transcript with no lines,None,missing,none
+PH-REC-022,phone,Recording page,"""Improving Roman Urdu… 60%"" bar over a readable transcript",While the views are made,None,missing,none
+PH-REC-023,phone,Recording page,"Backup engine banner: ""Made with a backup service. Re-transcribe for the best quality?"" with Re-transcribe",A transcript from the backup engine,None,missing,none
+PH-REC-024,phone,Recording page,"Suggested fixes for project terms: Accept, Dismiss",Recording in a project with suggestions,None,missing,none
+PH-REC-025,phone,Recording page,"View switch: Original · Roman Urdu · اردو (Urdu) · English, with the line under it (ready, being written, failed)",Recording page › above the transcript,None,missing,none
+PH-REC-026,phone,Recording page,"Views not in the plan: ""Roman Urdu and English"" with the plan badge, opening the plans",Recording page on a plan without views,None,missing,none
+PH-REC-027,phone,Recording page,Copy and export follow the view on screen,Recording page with a view chosen,None,missing,none
+PH-REC-028,phone,Recording page,Copy text,Recording page › Copy text,None,missing,none
+PH-REC-029,phone,Recording page,Copy with timestamps,Recording page › Copy with timestamps,None,missing,none
+PH-REC-030,phone,Recording page,"Copy for AI (marks unsure words), with the note on what the marks mean and screen moments",Recording page › Copy for AI,None,missing,none
+PH-REC-031,phone,Recording page,Copy without timestamps (the plan's Copy menu item),Classic: Copy text is without timestamps,None,missing,none
+PH-REC-032,phone,Recording page,"""Final transcript"" or ""Live captions (final pending)""",Recording page › above the lines,None,missing,none
+PH-REC-033,phone,Recording page,"Speaker names: ""You"" and the names given on the server",Transcript lines,"""You"", ""Other side"", ""Speaker""; not the server's names",partial,none
+PH-REC-034,phone,Recording page,Speaker blocks: the name once per turn,Transcript lines,Each line with its speaker,done,none
+PH-REC-035,phone,Recording page,Timestamp on each line,Transcript lines,Time on each line,done,none
+PH-REC-036,phone,Recording page,Tap a line: play from there,Transcript line,Lines are not tappable,missing,none
+PH-REC-037,phone,Recording page,"The line being played is highlighted, and the word being spoken",Transcript while playing,None,missing,none
+PH-REC-038,phone,Recording page,Unsure words underlined with dots; a tap plays from that word,Transcript lines,None,missing,none
+PH-REC-039,phone,Recording page,"Long-press a line: Copy line, Share line, Play from here",Transcript line,None,missing,none
+PH-REC-040,phone,Recording page,"Urdu in Noto Nastaliq Urdu, Arabic in Noto Naskh Arabic, the rest in Inter",Transcript lines,The v2 type picks the script's face; plan 6 asks for the bundled faces,partial,none
+PH-REC-041,phone,Recording page,Screen moments after their line; the viewer with Play from here and Close,Recording with screens,"Screens strip, inline screens and the viewer",done,ScreensTest.theViewerShowsWhatWasSaidPlaysFromItsMomentAndMovesOn
+PH-REC-042,phone,Recording page,"Call notes for a project's recording (Write call notes, the notes, play from their moments)","Recording in a project, plan with notes",None,missing,none
+PH-REC-043,phone,Recording page,Call notes locked with the plan badge when the plan has none,"Recording in a project, plan without notes",None,missing,none
+PH-REC-044,phone,Recording page,"Export › PDF (print), in the view on screen",Recording page › Export,None,missing,none
+PH-REC-045,phone,Recording page,Export › Word (.docx),Recording page › Export,None,missing,none
+PH-REC-046,phone,Recording page,Export › Text (.txt),Recording page › Export,None,missing,none
+PH-REC-047,phone,Recording page,Export › Markdown (.md),Recording page › Export,None,missing,none
+PH-REC-048,phone,Recording page,Export › Subtitles (SRT),Recording page › Export,None,missing,none
+PH-REC-049,phone,Recording page,Export › Subtitles (VTT),Recording page › Export,None,missing,none
+PH-REC-050,phone,Recording page,Export › JSON,Recording page › Export,None,missing,none
+PH-REC-051,phone,Recording page,"Export › Meeting pack (PDF, with screens)",Recording page with screens › Export,None,missing,none
+PH-REC-052,phone,Recording page,Export › Meeting pack (ZIP),Recording page with screens › Export,None,missing,none
+PH-REC-053,phone,Recording page,Export › Web page (.html) (the plan's format list),Classic: only as the PDF's print page,None,missing,none
+PH-REC-054,phone,Recording page,"Share link: ""Link (works for 7 days)""",Recording page › Share link,None,missing,none
+PH-REC-055,phone,Recording page,Send to a teammate: their emails and a note (Shared with me),Recording page › Send,None,missing,none
+PH-REC-056,phone,Recording page,"Send to WhatsApp / WhatsApp Business: Text only, or Text and voice",Recording page › Send to WhatsApp,"Share sends the transcript text through Android's share sheet; no voice, no WhatsApp choice",partial,none
+PH-REC-057,phone,Recording page,Re-transcribe as… a language (warns when English only would translate Urdu; Re-transcribe anyway),Recording page › Re-transcribe as…,None,missing,none
+PH-REC-058,phone,Recording page,Current / Previous version after a re-transcribe,Recording page › Current / Previous,None,missing,none
+PH-REC-059,phone,Recording page,"Organise › Pin (""Pinned"")",Recording page › Organise,None,missing,none
+PH-REC-060,phone,Recording page,"Organise › Keep forever (""Kept forever"")",Recording page › Organise,None,missing,none
+PH-REC-061,phone,Recording page,"Organise › Folder: move to a project, or New project…",Recording page › Organise,None,missing,none
+PH-REC-062,phone,Recording page,"Organise › Labels: add a label, remove one",Recording page › Organise,None,missing,none
+PH-REC-063,phone,Recording page,Play and pause,Docked player,Player,done,none
+PH-REC-064,phone,Recording page,Back 10 s and forward 10 s,Docked player,Player,done,none
+PH-REC-065,phone,Recording page,"Speed: 0.75×, 1×, 1.25×, 1.5×, 2× (one chip steps through)",Docked player › speed chip,"Speed chip steps 1×, 1.25×, 1.5×, 2×; no 0.75×",partial,none
+PH-REC-066,phone,Recording page,"Scrubber: tap or drag to move, right to left in Urdu",Docked player,Position slider,partial,none
+PH-REC-067,phone,Recording page,Skip silence switch,Player options,None,missing,none
+PH-REC-068,phone,Recording page,Moment markers on the track (plan 4),Not in classic,None,missing,none
+PH-REC-069,phone,Recording page,"Details: source, length, project, language",Classic: in the page head,"Details tab: source, length, project, language",done,none
+PH-REC-070,phone,Recording page,"Details: device, created, file size, transcription engine, retention, labels (plan 4)",Not in classic,None,missing,none
+PH-REC-071,phone,Recording page,Tabs Transcript · Summary · Ask · Moments · Details (plan 4),Not in classic as tabs,Tabs Transcript and Details,partial,none
+PH-REC-072,phone,Recording page,"⋮ Move to project, Labels, Mark important, Change language & re-transcribe, Export ▸ (plan 4)","Classic: spread over Organise, Re-transcribe and Export",None,missing,none
+PH-REC-073,phone,Recording page,Action row: Share · Copy ▾ · Ask · ⋮ (plan 4),Not in classic,Action row Share and Delete,partial,none
+PH-REC-074,phone,Recording page,Skip a language's segments in the transcript (plan 4 asks),Not in classic: no such control in the code,None,missing,none
+PH-SET-001,phone,Settings,"Profile card: name, email, plan, minutes; opens Plan & usage","Settings tab, top","Settings from the avatar: profile card with the plan, minutes and storage",partial,none
+PH-SET-002,phone,Settings,"Upgrade next to the profile card (filled on Free, outlined on Pro, none on Ultra or while a request is open)","Settings tab, top",Upgrade on the profile card,partial,none
+PH-SET-003,phone,Settings,"One line under the card while something needs the person: account deletion date, a receipt needed, waiting for payment, checking payment, plan ends on …, ""Set up free transcription (2 minutes)""","Settings tab, under the card",None,missing,none
+PH-SET-004,phone,Settings,"Search every setting (English and Roman Urdu words, synonyms, one-letter slips)",Settings › search,"Search at the top of v2 Settings, in English, Roman Urdu and Urdu",done,V2SettingsTest.searchReachesEachSettingInEnglishRomanUrduAndUrdu
+PH-SET-005,phone,Settings,A search result opens its page and highlights the setting,Settings › search › a result,"Same, on every v2-drawn page",done,V2SettingsTest.aSearchResultLightsItsSettingOnEveryV2DrawnPage
+PH-SET-006,phone,Settings,Sections with an icon per page and the page's value on its row,Settings tab,Goals with their pages and values; no icons; no one-line description (plan 5),partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-007,phone,Settings,Sign out (asks first),"Settings tab, bottom","Sign out at the bottom of v2 Settings, asks first",partial,none
+PH-SET-008,phone,Settings,"Reset to defaults on each page with choices (asks, then puts only that page back)",Bottom of a settings page,Reset to defaults on the v2 pages,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-009,phone,Settings,"Auto-record calls (switch; ""Needs Android 12"", ""Enable call capture in Setup first"" opens Setup)",Settings › Calls & meetings,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-010,phone,Settings,"Auto-record per app: WhatsApp, WhatsApp Business, Google Meet, Zoom, Microsoft Teams, Telegram, Signal, Messenger, Instagram, Skype, Slack, Discord",Settings › Calls & meetings › Auto-record apps,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-011,phone,Settings,"Another call app by package name: Add, Remove",Settings › Calls & meetings,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-012,phone,Settings,After a call: Keep automatically (default) or Ask me,Settings › Calls & meetings › After a call,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-013,phone,Settings,"Skip calls shorter than: Never, 5 s, 10 s (default), 20 s, 30 s",Settings › Calls & meetings,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-014,phone,Settings,"Undecided calls kept: After 24 hours (default), After 3 days, Never",Settings › Calls & meetings,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-015,phone,Settings,"Record phone calls (SIM): Off, Ask each time, Always",Settings › Calls & meetings › Phone calls,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-016,phone,Settings,Open the Phone app's settings; Allow (call log),Settings › Calls & meetings › Phone calls,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-017,phone,Settings,Import the Phone app's recordings; Delete the Phone app's copy after import,Settings › Calls & meetings,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-018,phone,Settings,A Phone app recording waiting: Import / Not this recording,Settings › Calls & meetings,Recording › Calls & meetings,done,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-SET-019,phone,Settings,"Your microphone: Reduce echo (recommended), Unprocessed",Settings › Microphone & audio,"v2 Settings › Recording › Microphone & audio: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-020,phone,Settings,"Recording quality: Standard, High, Highest (larger files)",Settings › Microphone & audio,"v2 Settings › Recording › Microphone & audio: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-021,phone,Settings,"Record from: Automatic, or a connected microphone (built-in, wired, Bluetooth, USB)",Settings › Microphone & audio › Microphone,"v2 Settings › Recording › Microphone & audio: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-022,phone,Settings,"Test recording: 10 s of your microphone, its peak, Play back",Settings › Microphone & audio,"v2 Settings › Recording › Microphone & audio: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-023,phone,Settings,Warn me when the other side is silent (30 s),Settings › Microphone & audio,"v2 Settings › Recording › Microphone & audio: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-024,phone,Settings,"Permissions and battery: each one Allowed, or Fix",Settings › Microphone & audio › Permissions,"v2 Settings › Recording › Microphone & audio: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-025,phone,Settings,Caller names (notification access),Settings › Microphone & audio,"v2 Settings › Recording › Microphone & audio: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-026,phone,Settings,Live captions while recording (floating window),Settings › Captions,"v2 Settings › Live › Captions: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-027,phone,Settings,"Caption style: Text size Small, Medium, Large",Settings › Captions › Caption style,"v2 Settings › Live › Captions: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-028,phone,Settings,Caption style: Lines,Settings › Captions › Caption style,"v2 Settings › Live › Captions: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-029,phone,Settings,"Caption style: Position Top, Bottom",Settings › Captions › Caption style,"v2 Settings › Live › Captions: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-030,phone,Settings,"Caption style: Hide when nobody speaks (Never, or after a time)",Settings › Captions › Caption style,"v2 Settings › Live › Captions: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-031,phone,Settings,Caption style: Background opacity,Settings › Captions › Caption style,"v2 Settings › Live › Captions: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-032,phone,Settings,"Caption style: Compact captions (speakers by colour); Colour for Me, Colour for Client",Settings › Captions › Caption style,"v2 Settings › Live › Captions: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-033,phone,Settings,"After sharing a voice note: Open the voice note (default), or Stay and notify me quietly",Settings › Voice notes & dictation,"v2 Settings › Recording › Voice notes & dictation: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-034,phone,Settings,Voice keyboard: Turn on the voice keyboard,Settings › Voice notes & dictation › Dictation,"v2 Settings › Recording › Voice notes & dictation: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-035,phone,Settings,"Dictation microphone: Tap to start, Hold to talk",Settings › Voice notes & dictation › Dictation,"v2 Settings › Recording › Voice notes & dictation: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-036,phone,Settings,Clean up the text,Settings › Voice notes & dictation › Dictation,"v2 Settings › Recording › Voice notes & dictation: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-037,phone,Settings,Start and stop sounds,Settings › Voice notes & dictation › Dictation,"v2 Settings › Recording › Voice notes & dictation: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-038,phone,Settings,"Dictionary and replacements: When I say → Write, Add replacement, Remove",Settings › Voice notes & dictation › Dictation,"v2 Settings › Recording › Voice notes & dictation: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-039,phone,Settings,"Voice snippets: Phrase → Text to insert, Add snippet, Remove",Settings › Voice notes & dictation › Dictation,"v2 Settings › Recording › Voice notes & dictation: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-040,phone,Settings,"Recent dictations: Copy, Clear history",Settings › Voice notes & dictation › Dictation,"v2 Settings › Recording › Voice notes & dictation: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-041,phone,Settings,"Language of new recordings: Auto, English only, Urdu (with English words), Arabic (with English words), More languages",Settings › Language,Transcription & language › Language,done,TranscriptionPagesParityTest.language
+PH-SET-042,phone,Settings,Add to vocabulary,Settings › Language,Transcription & language › Language,done,TranscriptionPagesParityTest.language
+PH-SET-043,phone,Settings,"Custom words: the project whose keyterms apply (No project, or a project)",Settings › Custom words,Transcription & language › Custom words,done,TranscriptionPagesParityTest.customWords
+PH-SET-044,phone,Settings,"Transcription key: Open console.groq.com, the key, Save, Remove key (asks), Replace with a new key",Settings › Transcription key,Transcription & language › Transcription key,done,TranscriptionPagesParityTest.transcriptionKey
+PH-SET-045,phone,Settings,"Games: Choose games, Change games",Settings › Games,"v2 Settings › Live › Games: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-046,phone,Settings,Start with the game,Settings › Games,"v2 Settings › Live › Games: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-047,phone,Settings,They speak; Translate to,Settings › Games,"v2 Settings › Live › Games: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-048,phone,Settings,Speed: Fastest … Accurate,Settings › Games,"v2 Settings › Live › Games: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-049,phone,Settings,"Box style: Text size, Lines, Background, Opacity",Settings › Games › Box style,"v2 Settings › Live › Games: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-050,phone,Settings,"Box style: Show what was said, Fade out when quiet, Show the grip dot",Settings › Games › Box style,"v2 Settings › Live › Games: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-051,phone,Settings,"Privacy: Mask swear words, Save session text",Settings › Games › Monthly budget and privacy,"v2 Settings › Live › Games: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-052,phone,Settings,Monthly budget; Continue this month anyway,Settings › Games › Monthly budget and privacy,"v2 Settings › Live › Games: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-053,phone,Settings,"Videos: Choose apps, Change apps, Use whatever is playing",Settings › Videos,"v2 Settings › Live › Videos: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-054,phone,Settings,They speak; Subtitles in; Speed,Settings › Videos,"v2 Settings › Live › Videos: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-055,phone,Settings,"Subtitle style: Text size, Lines, Black box behind the text, Height above the bottom",Settings › Videos › Subtitle style,"v2 Settings › Live › Videos: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-056,phone,Settings,"Subtitle style: Show what was said, Save subtitles (.srt)",Settings › Videos › Subtitle style,"v2 Settings › Live › Videos: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-057,phone,Settings,"Theme: System, Light, Dark",Settings › Appearance,Appearance,done,AppearanceNotificationsParityTest.appearance
+PH-SET-058,phone,Settings,Use phone font (off: the bundled Inter),Settings › Appearance,Appearance: Use the phone's font,done,AppearanceNotificationsParityTest.appearance
+PH-SET-059,phone,Settings,Wallpaper colours (Android 12+),Settings › Appearance,Left out of v2 (SettingsTree.hiddenItems); it must come back,missing,V2SettingsTest.wallpaperColoursAreNotOfferedInV2 (asserts it is absent)
+PH-SET-060,phone,Settings,Text size,Not in classic: follows the phone (plan 5),None,missing,none
+PH-SET-061,phone,Settings,App language,Not in classic: follows the phone (plan 5),None,missing,none
+PH-SET-062,phone,Settings,"Try the new design (classic) and Switch back to classic (v2), both ways (plan 0)",Not in classic Settings: no switch on the phone,"Appearance and the Settings home: Classic look, only while a v2 flag is on",partial,UiFlagsTest.theClassicSwitchShowsWhileAnyV2FlagIsOn
+PH-SET-063,phone,Settings,Show notifications (activity),Settings › Notifications,Notifications: Activity notifications,done,AppearanceNotificationsParityTest.notifications
+PH-SET-064,phone,Settings,Quiet hours with From and To,Settings › Notifications,Notifications,done,AppearanceNotificationsParityTest.notifications
+PH-SET-065,phone,Settings,"Each kind on or off: Transcription, Enhancement, Uploads, Call capture & readiness, Sharing, Account & security, Usage & limits, Live Translate, App updates, Other (Recording always on)",Settings › Notifications,Notifications,done,AppearanceNotificationsParityTest.notifications
+PH-SET-066,phone,Settings,Test each kind; its sound and vibration in Android,Settings › Notifications,Notifications,done,AppearanceNotificationsParityTest.notifications
+PH-SET-067,phone,Settings,"App lock (fingerprint, face or screen lock); Open security settings when there is none",Settings › App lock,Privacy & security › App lock,done,PrivacyPagesParityTest.appLock
+PH-SET-068,phone,Settings,"Lock after: Immediately, After 1 minute, After 5 minutes",Settings › App lock,Privacy & security › App lock,done,PrivacyPagesParityTest.appLock
+PH-SET-069,phone,Settings,Hide content in Recents and screenshots,Settings › App lock,Privacy & security › App lock,done,PrivacyPagesParityTest.appLock
+PH-SET-070,phone,Settings,Hide recording titles on the widget,Settings › App lock,Privacy & security › App lock,done,PrivacyPagesParityTest.appLock
+PH-SET-071,phone,Settings,Recording consent: I understand,Settings › Privacy & data,Privacy & security › Privacy & data,done,PrivacyPagesParityTest.privacyAndData
+PH-SET-072,phone,Settings,"During screen sharing: Private (black box), Show",Settings › Privacy & data,Privacy & security › Privacy & data,done,PrivacyPagesParityTest.privacyAndData
+PH-SET-073,phone,Settings,Export or delete my data (opens Sign-in & security),Settings › Privacy & data,Privacy & security › Privacy & data,done,PrivacyPagesParityTest.privacyAndData
+PH-SET-074,phone,Settings,"Storage: space used on the server, plan storage, how long recordings are kept, the Trash hours, Retry",Settings › Storage,Privacy & security › Storage,done,PrivacyPagesParityTest.storage
+PH-SET-075,phone,Settings,"Current plan card: plan, Paid until / Ends in N days, Upgrade, Compare plans",Settings › Plan & usage,"v2 Settings › Account & plan › Plan & usage: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-076,phone,Settings,"This month: minutes used with the reset day, uploads a day, longest recording, storage, devices, team members",Settings › Plan & usage,"v2 Settings › Account & plan › Plan & usage: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-077,phone,Settings,Your Groq key line (Key added / Not added. Tap to add your key),Settings › Plan & usage,"v2 Settings › Account & plan › Plan & usage: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-078,phone,Settings,Included in your plan; See every feature (the comparison),Settings › Plan & usage,"v2 Settings › Account & plan › Plan & usage: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-079,phone,Settings,Plans: Choose <plan>; payment details for a bank transfer,Settings › Plan & usage › Upgrade,"v2 Settings › Account & plan › Plan & usage: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-080,phone,Settings,"Plan request: status (Waiting for payment, Checking your payment, Approved, Not approved, Cancelled), Add receipt, View request, Cancel request (asks), Request again",Settings › Plan & usage,"v2 Settings › Account & plan › Plan & usage: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-081,phone,Settings,Promo code,Settings › Plan & usage › Upgrade,"v2 Settings › Account & plan › Plan & usage: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-082,phone,Settings,A locked feature shows the plan badge and opens the plans,Any locked feature,"v2 Settings › Account & plan › Plan & usage: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-083,phone,Settings,"Your data: Export my data (one ZIP), Download the export, Try again",Settings › Sign-in & security,"v2 Settings › Account & plan › Sign-in & security: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-084,phone,Settings,Sign out everywhere… (asks),Settings › Sign-in & security,"v2 Settings › Account & plan › Sign-in & security: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-085,phone,Settings,"Delete my account… (password or authenticator code, or on the web page); the deletion date while pending",Settings › Sign-in & security,"v2 Settings › Account & plan › Sign-in & security: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-086,phone,Settings,"Devices: every signed-in phone, computer and console session, with when it was seen",Settings › Devices,"v2 Settings › Account & plan › Devices: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-087,phone,Settings,Rename a device; Sign out a device (asks),Settings › Devices,"v2 Settings › Account & plan › Devices: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-088,phone,Settings,Recent activity (security events),Settings › Devices,"v2 Settings › Account & plan › Devices: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-089,phone,Settings,"Storage line ""Audio kept: 2.1 GB · cleaned up automatically after 30 days"" (call rules plan) and the usage meter moved from Home (parity plan 2)",Not in classic,Profile card shows storage; no audio-kept line,partial,none
+PH-SET-090,phone,Settings,Device check: what works on this phone and why; Copy report; Send to my admin,Settings › Help,"v2 Settings › About & help › Help: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-091,phone,Settings,"Help & diagnostics: Capture test, Audio probe (Capture 5 s, Copy findings), Copy diagnostics",Settings › Help,"v2 Settings › About & help › Help: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-092,phone,Settings,"Version and server; Check for updates (download, install, Allow installing)",Settings › About,"v2 Settings › About & help › About: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-093,phone,Settings,"Export settings; Import settings (a file, never the pairing or the lock)",Settings › About,"v2 Settings › About & help › About: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-SET-094,phone,Settings,This phone: its name; Setup guide,Settings › About › This phone,"v2 Settings › About & help › About: opens the classic page (same settings, classic look)",partial,V2SettingsTest.everyPageHasExactlyOneHomeAndEverySettingIsReachable
+PH-OTH-001,phone,Navigation,Bottom bar: Library · Projects · [Record] · Activity · Settings,Classic bottom bar,v2 shell: Home · Library · Live · Ask; plan 2 decides Library · Projects · [Record] · Live · Ask,partial,V2ShellTest.libraryIsTheV2OneAndOtherTabsStayClassic
+PH-OTH-002,phone,Navigation,Record: the big centre button in the accent colour,"Classic bottom bar, centre",No record button in the v2 bar,missing,none
+PH-OTH-003,phone,Navigation,Record sheet from the centre button: Record now; Voice & files (Record or import); Calls & meetings with its status (Calls: ready / auto-record on / set up first / your voice only / needs Android 12); Game translate and Watch translate with on or off,Centre button,"None; plan 2: tap records now, long-press opens a sheet with Calls, Live Assist, Dictation, Live Translate",missing,none
+PH-OTH-004,phone,Navigation,A tab tapped again scrolls its list to the top,Any classic tab,Not wired,missing,none
+PH-OTH-005,phone,Navigation,"Activity badge on its tab: what needs the person (unread problems, calls waiting), ""9+"" above 9",Classic Activity tab,None; plan 2: a bell with a badge in the Library header,missing,none
+PH-OTH-006,phone,Record,"Voice note: Record, Pause and Resume, Stop, Discard (with Undo); timer and live waveform",Record › Voice & files,Classic Record screen (no v2 record screen),partial,RecordScreenTest (classic)
+PH-OTH-007,phone,Record,"Import files (the system picker) and ""Uploading N recording(s)…"" with Retry",Record › Voice & files,Classic Record screen,partial,none
+PH-OTH-008,phone,Record,"Bluetooth headset note; ""Voice notes are never recorded automatically — share them from WhatsApp""",Record › Voice & files,Classic Record screen,partial,none
+PH-OTH-009,phone,Record,Calls & meetings: the Auto-record calls switch and Open setup,Record › Calls & meetings,Settings › Calls & meetings has the switch; no Record screen,partial,CallsPageParityTest.todaysPageAndTheV2PageHaveTheSameControlsInTheSameSteps
+PH-OTH-010,phone,Record,"Keep or discard a finished call: title (Rename), Project ▾, Keep, Discard",Record › Calls & meetings,Home › Needs action: Keep and Discard; no rename or project there,partial,HomeTest.needsActionComesFromThePhonesQueueAndTheLibrary
+PH-OTH-011,phone,Record,"Waiting for you: every call waiting, Keep all, Discard all (Undo for 5 s)",Library or Activity › Review,Home lists waiting calls one by one; no Keep all or Discard all,partial,none
+PH-OTH-012,phone,Activity,"Activity: Needs action, Today, Earlier; tap marks read and opens the recording",Activity tab,None in v2 (Home's Needs action covers calls waiting and failures),missing,none
+PH-OTH-013,phone,Activity,Mark all as read,Activity tab,None,missing,none
+PH-OTH-014,phone,Activity,Swipe an Activity row either way to dismiss it,Activity tab,None,missing,none
+PH-OTH-015,phone,Activity,"Missed recording rows: the call, why in plain words, and the fix (Ready check, Turn on, call test, plans)",Activity tab,None,missing,none
+PH-OTH-016,phone,Activity,"""Skipped 3 short calls"": Show, Hide, Restore each",Activity tab,None,missing,none
+PH-OTH-017,phone,Activity,"""You're all caught up"" and ""Couldn't load activity"" with Retry",Activity tab,None,missing,none
+PH-OTH-018,phone,Projects,"Projects list: projects with their last call, New project",Projects tab,"Projects list (Folder icon in the Library while ui_v2.ask is on): projects, New project",partial,WorkspaceTest.screenshots
+PH-OTH-019,phone,Projects,"Smart folders: Inbox, Voice notes, WhatsApp, WhatsApp Business, Phone, Google Meet, Zoom, Teams, Imported, Shared with me",Projects tab › Folders,"A row that opens today's page for shared, imported and requests",partial,none
+PH-OTH-020,phone,Projects,"Shared with me: From <teammate>, Open, Save to my library, Remove",Projects › Shared with me,Opens today's page,partial,none
+PH-OTH-021,phone,Projects,"Request files: request links (Title they see, Files go to Inbox or a project, Make link, Copy, Share…, Turn off)",Projects › Request files,Opens today's page,partial,none
+PH-OTH-022,phone,Projects,"A project's page: Notes (brief, memory, AI notes switch, call notes, Copy for AI), Recordings, Files, Screens, Ask; breadcrumbs and subfolders",Projects › a project,The v2 project page,done,WorkspaceParityTest.everyControlOfTodaysPageIsMappedAndNothingElse
+PH-OTH-023,phone,Projects,"Project menu: New folder inside, Rename, Move, Share link, Send to a teammate, Filing rules, Delete project",A project's page ⋮,The v2 project page's menu,done,WorkspaceParityTest.theNewPageHasEveryMappedControl
+PH-OTH-024,phone,Projects,"Share link options: Anyone with the link, with a password, or only people I choose; Allow downloads; Link works for Never / a day / a week / a month; the links with their views, Revoke, Stop sharing",Project or recording › Share link,The same sheet from the v2 project page; not on the v2 recording page,partial,none
+PH-OTH-025,phone,Ask,"Ask a project: the question, English or Roman Urdu answer, sources that open the recording at their moment",A project's page › Ask,"Ask tab: pick a project, ask, sources open at their moment",done,AskTest.askNeedsAQuestionAndAsksTheChosenProject
+PH-OTH-026,phone,Ask,Ask across all recordings,Not in classic: classic asks one project only,Not offered until the server answers it,missing,none
+PH-OTH-027,phone,Help,"Help: guides to read and search, What's new, Contact support (with the last device report)",Not in classic: classic Help is the device check and diagnostics (see Settings),"Help v2: Guides, What's new, Contact support",done,HelpTest.guidesSearchAndOpen
+PH-OTH-028,phone,Setup,Setup guide and the Ready check: each step with its fix,Settings › About › This phone › Setup guide; Library chip › Ready check,Settings › Setup & health (v2 wizard and checks),done,SetupHealthTest.eachMissingPermissionHasItsFix
+PH-OTH-029,phone,Live,"Live tab: Live Assist (with its flag), Live Translate, Captions, Dictation as rows",Classic: the Record sheet and Settings pages,Live tab v2,done,LiveAssistUiTest.liveAssistIsOnTheLiveTabOnlyWithItsFlag
+PH-OTH-030,phone,Live,"Live Translate page: Games and Videos, start and stop, the box and subtitles",Record sheet › Game translate / Watch translate,Live tab › Live Translate opens the classic page,partial,none
+PH-OTH-031,phone,Live,"Live Assist: start on the recording under way, the card over other apps, end; v2 only, no classic counterpart. HTTP mode's plain messages, on the card and the start screen in English and Urdu: ""Live Assist needs the latest version of the app."" (426), ""Live Assist can't connect right now. Try again in a few minutes."" (503), ""Live Assist couldn't reach the server. Try again."" (offline or a redirect), ""Too many requests. Wait a moment and try again."" (429), and the card's bad-message line (422)",No classic counterpart (the side-by-side pictures say so in the classic half),"Live tab › Live Assist and its card; pictures docs/v2/gate3/phone/live-assist/http-*-{light,dark}-{en,ur}.png",done,"HttpLiveClientTest: refusals read as the card's problems (429, 503, 422), and an ended session or an old app (426) ends it; a redirect is never followed, so the message never reaches another host; AssistHttpMessagesTest.theCardSaysEachInTheScreensLanguage; AssistHttpMessagesTest.theStartScreenSaysUpdateAndCantConnectInUrduToo"
+PH-OTH-032,phone,Floating windows,"Recording pill: tap for the controls; Captions, Pause/Resume, Change the language, Discard now with Undo, Stop (tap again), Hide controls, Shrink to a dot, Hide EchoLedger windows",Over any app while recording,V2RecordingPill is drawn and tested but the pill window still shows the classic pill,partial,V2LiveTest.thePillSendsItsEventsToTheMachine
+PH-OTH-033,phone,Floating windows,"Caption bubble: Me / Client / Speaker, Jump to latest, Close captions (recording continues)",Over any app while recording,The same window in both designs,done,PrivateWindowsTest (shared window)
+PH-OTH-034,phone,Floating windows,"After-call chip: ""Saved · Undo"" (6 s), Ask me with Keep and Discard (kept after 10 s), ""Discarded · Undo""; the title opens the app to rename or pick a project",After a call,"The v2 after-call card with ui_v2.after_call: Delete, Save audio, Transcribe; Undo; the title",partial,V2LiveTest.theCardsDeleteAndUndoCallTheirHostAndSwitchMode
+PH-OTH-035,phone,Notifications,"Notifications with actions: Keep / Discard after a call, Saved with Undo, Record this phone call (SIM, ask), transcript ready, upload failed, only your voice, no audio",Android notifications,The same notifications in both designs,done,PostCallPromptTest (shared)
+PH-OTH-036,phone,Widget,Home-screen widget (titles hidden with App lock or the setting),Android home screen,The same widget in both designs,done,none
+PH-OTH-037,phone,Dictation,Voice keyboard (dictation into any app),Android keyboard,The same keyboard in both designs,done,DictationScreenTest (shared)
+PH-OTH-038,phone,Shared voice note,"Shared voice note: its status, then the note with Copy and Copy for AI; Back to <app>; Continue in background",Share a voice note to EchoLedger,The classic page in both designs,partial,none
+PH-OTH-039,phone,Sign-in,"Onboarding, sign-in (password with two-step code, browser sign-in, QR pairing)",First run,Classic screens in both designs,partial,none
+PH-OTH-040,phone,App lock,"App lock screen (fingerprint, face or screen lock)",Opening the app with App lock on,The same lock screen in both designs,done,BiometricLockTest (shared)
+PH-OTH-041,phone,Upgrade,"Upgrade flow: plans, payment details, receipt upload, promo code, request status",Settings › Plan & usage › Upgrade,Opens the classic flow,partial,none
+WEB-APP-001,web,Settings > Appearance,Theme row and its choices in the console's language,Settings > Appearance > Theme (English only: classic has no Urdu interface),Settings > Appearance > Theme: the title and System/Light/Dark stay English when the console language is Urdu,partial,
+WEB-APP-002,web,Settings > Appearance,Times choice reads 12-hour / 24-hour in Urdu,Settings > Appearance > Times,Settings > Appearance > Times: in Urdu the labels read "hour-12" / "hour-24" (the number and word swap in right-to-left),partial,
+WEB-APP-003,web,Settings,Settings side menu in the console's language,Settings side menu (English only: classic has no Urdu interface),Settings side menu: every group and page name stays English when the console language is Urdu,partial,
+WEB-APP-004,web,Settings > Appearance,Density / Library view / Sidebar rows in the console's language,Settings > Appearance,Settings > Appearance: Density and Library view titles and choices stay English in Urdu,partial,
+WEB-APP-005,web,Settings > Appearance,Design switch both ways,Settings > Appearance > Try the new design,Settings > Appearance > Switch back to classic,done,tests/Feature/InterfaceFlagsTest.php (the console both ways); tests/Feature/DesignSwitchTest.php
 DT-LIB-001,desktop,Library,"Page header title ""Library"" with breadcrumbs (Library › place); ""Library"" crumb goes back to all recordings",Library tab; open any smart folder/view to see the crumb,"LibraryV2 header h1 ""Library"" (""Trash"" in Trash view); no breadcrumbs or places",partial,"src/v2/library/library.test.tsx › ""Trash lists deleted recordings to restore or delete forever after a confirmation"""
 DT-LIB-002,desktop,Library,"Header subtitle with count (""N recordings from your phone, this computer and the web."" / smart folder / Waiting/Pinned/Failed lines)",Library page header,"Subtitle under ""Library"": ""N recordings from your phone, this computer and the web."", or ""N shown"" when narrowed",done,"src/v2/library/filters.test.tsx › ""sections with counts that fold and unfold; the count of recordings under the title"""
 DT-LIB-003,desktop,Library,"""Recently deleted"" header toggle button (opens/closes the bin panel)",Library header › Recently deleted,"Header › ""Trash"" button (pressed while Trash is open; press again for the Library)",done,"src/v2/library/library.test.tsx › ""Trash lists deleted recordings to restore or delete forever after a confirmation"""

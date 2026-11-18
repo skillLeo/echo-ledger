@@ -49,12 +49,35 @@ final class AssemblyAiDriver implements SttProvider
      * grant never asks for speaker labels, because the two channels already tell the speakers apart.
      */
     public const STREAMING_MODES = [
-        'min_latency' => ['min_turn_silence' => 128, 'max_turn_silence' => 640],
+        'min_latency' => ['min_turn_silence' => self::FASTEST_MIN_SILENCE_DEFAULT, 'max_turn_silence' => 640],
         'balanced' => ['min_turn_silence' => 128, 'max_turn_silence' => 1280],
         'max_accuracy' => ['min_turn_silence' => 512, 'max_turn_silence' => 2560],
     ];
 
     public const STREAMING_MODE_DEFAULT = 'min_latency';
+
+    /**
+     * Fastest's min_turn_silence (ms): how soon AssemblyAI checks whether a line has ended, so its words show sooner
+     * (target: words on screen within a second). Admin › Settings › AssemblyAI sets it; 80 by default, never under the
+     * provider's floor of 50, and below Fastest's max_turn_silence.
+     */
+    public const FASTEST_MIN_SILENCE_DEFAULT = 80;
+
+    /** The streaming model; the only one offered in Admin › Settings since the Universal-Streaming ones left AssemblyAI's docs. */
+    public const STREAMING_MODEL = 'universal-3-6-pro';
+
+    /**
+     * "Fast English captions" (Admin › Settings, off by default): English-only recordings stream on AssemblyAI-STT-3.7
+     * Realtime (docs: api-reference/specs/streaming.yaml, 2026-11-18): partials while speech is in progress (on by
+     * default), the presets, the silences and language_codes accepted; its end-of-turn check never runs before 320 ms.
+     */
+    public const FAST_ENGLISH_MODEL = 'assemblyai-stt-3-7-realtime';
+
+    public const FAST_ENGLISH_MIN_SILENCE = 320;
+
+    public const FASTEST_MIN_SILENCE_FLOOR = 50;
+
+    public const FASTEST_MIN_SILENCE_CEILING = 600;
 
     public function __construct(
         private readonly CredentialVault $vault,
@@ -96,7 +119,7 @@ final class AssemblyAiDriver implements SttProvider
         }
 
         $keyterms = KeytermPolicy::forProvider($request->keyterms, $this->capabilities(), true);
-        $model = (string) $this->settings->get('assemblyai.streaming_model', 'universal-3-6-pro');
+        $model = $this->streamingModelFor($request->language);
         $query = http_build_query([
             'speech_model' => $model,
             'encoding' => 'pcm_s16le',
@@ -209,7 +232,46 @@ final class AssemblyAiDriver implements SttProvider
             $mode = self::STREAMING_MODE_DEFAULT;
         }
 
-        return ($model === 'universal-3-6-pro' ? ['mode' => $mode] : []) + self::STREAMING_MODES[$mode];
+        $silences = self::STREAMING_MODES[$mode];
+        if ($mode === 'min_latency') {
+            $silences['min_turn_silence'] = self::fastestMinSilence($this->settings->get('assemblyai.fastest_min_silence_ms'));
+        }
+
+        if ($model === self::FAST_ENGLISH_MODEL) {
+            // Its end-of-turn check never runs before 320 ms: say so rather than send a value it ignores.
+            $silences['min_turn_silence'] = max(self::FAST_ENGLISH_MIN_SILENCE, (int) $silences['min_turn_silence']);
+        }
+
+        return (in_array($model, [self::STREAMING_MODEL, self::FAST_ENGLISH_MODEL], true) ? ['mode' => $mode] : []) + $silences;
+    }
+
+    /**
+     * The streaming model stored by the admin, read as Universal-3.6 Pro when it is anything else (the Universal-Streaming
+     * models are no longer documented).
+     */
+    public static function storedStreamingModel(mixed $value): string
+    {
+        return $value === self::STREAMING_MODEL ? $value : self::STREAMING_MODEL;
+    }
+
+    /** The model for a stream in [$language]: 3.7 Realtime for English only when Fast English captions is on. */
+    public function streamingModelFor(?string $language): string
+    {
+        if ((bool) $this->settings->get('assemblyai.fast_english', false) && LanguageChoice::codes($language) === ['en']) {
+            return self::FAST_ENGLISH_MODEL;
+        }
+
+        return self::storedStreamingModel($this->settings->get('assemblyai.streaming_model'));
+    }
+
+    /** The admin's Fastest min_turn_silence, kept between the floor and the ceiling; anything else is the default. */
+    public static function fastestMinSilence(mixed $value): int
+    {
+        if (! is_numeric($value)) {
+            return self::FASTEST_MIN_SILENCE_DEFAULT;
+        }
+
+        return max(self::FASTEST_MIN_SILENCE_FLOOR, min(self::FASTEST_MIN_SILENCE_CEILING, (int) $value));
     }
 
     /**
@@ -218,7 +280,7 @@ final class AssemblyAiDriver implements SttProvider
      */
     public static function streamingSupportsLanguages(string $model): bool
     {
-        return $model === 'universal-3-6-pro';
+        return $model === self::STREAMING_MODEL || $model === self::FAST_ENGLISH_MODEL;
     }
 
     /** Stateless per-recording webhook secret: base64url(HMAC-SHA256(secret, "assemblyai|{rid}")). */

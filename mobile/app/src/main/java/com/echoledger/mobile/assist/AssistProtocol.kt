@@ -19,8 +19,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
 /**
- * The Live Assist relay's messages (docs/API_ASSIST.md 1.9.0-o, "WebSocket (relay)"): what the phone sends, framed with
- * its `seq`, and what it reads back. Words stay out of logs ([toString] of a message never shows them).
+ * The Live Assist relay's messages (docs/API_ASSIST.md 1.9.0-q, "WebSocket (relay)" and "HTTP mode"): what the phone
+ * sends, framed with its `seq` on the relay, and what it reads back (the same messages on both transports). Words stay out of logs ([toString] of a message never shows them).
  */
 sealed class ClientMessage(val type: String) {
     /** The fields given, each replacing what the relay had (an empty value clears it); see [AssistContext]. */
@@ -38,9 +38,14 @@ sealed class ClientMessage(val type: String) {
     data object PracticeNext : ClientMessage("practice_next")
 
     /** The JSON text with this connection's [seq]. */
-    fun frame(seq: Int): String = buildJsonObject {
+    fun frame(seq: Int): String = json(seq)
+
+    /** The JSON text for HTTP mode (contract 1.9.0-q): one POST per message, no `seq`. */
+    fun body(): String = json(null)
+
+    private fun json(seq: Int?): String = buildJsonObject {
         put("type", type)
-        put("seq", seq)
+        seq?.let { put("seq", it) }
         when (this@ClientMessage) {
             is ContextUpdate -> fields.forEach { (k, v) -> put(k, v) }
 

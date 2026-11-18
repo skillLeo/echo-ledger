@@ -442,3 +442,99 @@ fn a_recording_s_language_is_one_of_the_keys_its_patch_sends() {
     assert_eq!(serde_json::Value::Object(sent), json!({"language": "ur"}), "language goes, anything unknown does not");
     assert!(EXPORT_VIEWS.contains(&"roman") && !EXPORT_VIEWS.contains(&"original"), "the views an export takes");
 }
+
+/// The body of `fn name` in `text` (from its line to the next item at the start of a line).
+fn body_of<'a>(text: &'a str, name: &str) -> &'a str {
+    let start = text.find(name).unwrap_or_else(|| panic!("{name} not found"));
+    let rest = &text[start..];
+    let end = rest.find("\n}\n").map_or(rest.len(), |e| e + 3);
+    &rest[..end]
+}
+
+#[test]
+fn each_v2_parity_command_calls_its_own_api_method() {
+    // A command wired to the wrong route would pass every client test: each one is read here for its own method.
+    let source = include_str!("../commands.rs");
+    for (command, method) in [
+        ("pub async fn sessions_transcribe_estimate(", ".transcribe_estimate(&ids)"),
+        ("pub async fn session_transcribe(", ".transcribe_session(&id)"),
+        ("pub async fn sessions_transcribe(", ".transcribe_sessions(&ids)"),
+        ("pub async fn sessions_export(", ".export_sessions_as(&ids, &format, view.as_deref())"),
+        ("pub async fn session_organise(", ".update_session(&id, "),
+        ("pub async fn ui_design_set(", ".set_ui_design(design.as_deref())"),
+    ] {
+        let body = body_of(source, command);
+        assert!(body.contains(method), "{command} does not call {method}");
+        let others = [".transcribe_estimate(", ".transcribe_session(", ".transcribe_sessions(", ".export_sessions_as(", ".update_session(", ".set_ui_design(", ".set_ui_classic("];
+        for other in others.iter().filter(|o| !method.starts_with(**o)) {
+            assert!(!body.contains(other), "{command} also calls {other}");
+        }
+    }
+}
+
+#[test]
+fn the_design_switch_refuses_an_unknown_design_before_anything_is_sent() {
+    assert_eq!(check_design(Some("x")).unwrap_err().to_string(), "That design is not one of the choices.");
+    for ok in [Some("v2"), Some("classic"), None] {
+        assert!(check_design(ok).is_ok(), "{ok:?}");
+    }
+    // The check comes first: nothing reaches the server (or even the client) for "x".
+    let body = body_of(include_str!("../commands.rs"), "pub async fn ui_design_set(");
+    let check = body.find("check_design(design.as_deref())?").expect("ui_design_set checks the design");
+    assert!(check < body.find(".api()?").expect("then sends it"), "checked before anything is sent");
+}
+
+#[test]
+fn a_per_window_share_switch_is_changed_only_by_its_own_window_or_the_main_window() {
+    use crate::privacy::share::Pinned;
+    let (card, captions) = (crate::privacy::ASSIST, crate::overlay::OVERLAY);
+    assert_eq!(pinned_for(card, None).unwrap(), Pinned::Card, "the card about itself");
+    assert_eq!(pinned_for(captions, None).unwrap(), Pinned::Captions);
+    assert_eq!(pinned_for(card, Some(Pinned::Card)).unwrap(), Pinned::Card);
+    assert!(pinned_for(card, Some(Pinned::Captions)).is_err(), "the card never changes the captions");
+    assert!(pinned_for(captions, Some(Pinned::Card)).is_err());
+    assert_eq!(pinned_for(crate::lifecycle::MAIN, Some(Pinned::Captions)).unwrap(), Pinned::Captions, "Settings names the window");
+    assert!(pinned_for(crate::lifecycle::MAIN, None).is_err(), "the main window must say which");
+    for other in [crate::overlay::PILL, crate::overlay::DICTATION, crate::translate::WINDOW, crate::privacy::CHECK_TEST] {
+        assert!(pinned_for(other, Some(Pinned::Card)).is_err() && pinned_for(other, None).is_err(), "{other}");
+    }
+}
+
+#[test]
+fn only_the_card_or_the_captions_themselves_show_them_and_the_main_window_may_only_hide_them() {
+    use crate::privacy::share::Pinned;
+    let main = crate::lifecycle::MAIN;
+    // The main window naming the card (or the captions) with shown: true is refused.
+    for which in [Pinned::Card, Pinned::Captions] {
+        assert!(pinned_for_set(main, Some(which), true).is_err(), "{which:?}: never shown from the main window");
+        assert_eq!(pinned_for_set(main, Some(which), false).unwrap(), which, "{which:?}: hidden again from Settings");
+    }
+    assert_eq!(pinned_for_set(crate::privacy::ASSIST, None, true).unwrap(), Pinned::Card, "the card's own badge");
+    assert_eq!(pinned_for_set(crate::overlay::OVERLAY, None, true).unwrap(), Pinned::Captions, "the captions' own badge");
+    assert!(pinned_for_set(crate::privacy::ASSIST, Some(Pinned::Captions), true).is_err());
+    assert!(include_str!("../commands.rs").contains("let which = pinned_for_set(window.label(), which, shown)?;"), "the command uses the rule");
+}
+
+#[test]
+fn only_the_main_window_closes_the_share_notice() {
+    let body = body_of(include_str!("../commands.rs"), "pub fn share_notice_dismiss(");
+    assert!(body.find("crate::privacy::from_main_window(window.label())?").unwrap() < body.find("dismiss_share_notice").unwrap());
+}
+
+#[test]
+fn the_share_notice_is_said_once_and_closing_it_remembers() {
+    let state = Settings { share_notice: true, ..Settings::default() };
+    assert_eq!(state.share_notice.then_some(crate::privacy::share::SHARE_NOTICE), Some("EchoLedger now shows in screen shares unless you hide it."));
+    // Closing it, or hiding the main window from its Hide button, clears it in the saved settings.
+    let privacy = include_str!("../privacy/mod.rs");
+    assert!(body_of(privacy, "pub fn dismiss_share_notice(").contains("update_settings(|s| s.share_notice = false)"));
+    assert!(body_of(privacy, "pub fn hide_main(").contains("s.share_notice = false;"));
+    assert!(include_str!("../commands.rs").contains("share_notice: settings.share_notice.then_some(crate::privacy::share::SHARE_NOTICE),"));
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    let mut s = Settings::from_value(json!({"hideFromSharing": "all"}));
+    assert!(s.share_notice, "after the update");
+    s.share_notice = false;
+    s.save(&path).unwrap();
+    assert!(!Settings::load(&path).share_notice, "never again");
+}

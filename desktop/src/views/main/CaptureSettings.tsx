@@ -343,19 +343,15 @@ export function CaptionPreview({ style }: { style: CaptionStyle }) {
   );
 }
 
-/** Whether the captions show in a screen share, as Settings › Screen-share privacy decides (pure). */
-export function captionsShareLine(hiding: Settings["hideFromSharing"]): string {
-  return hiding === "off"
-    ? "Captions are visible in screen share. Change it in Settings › Screen-share privacy."
-    : "Captions are hidden from screen share with EchoLedger's other floating windows: Settings › Screen-share privacy.";
-}
+/** Whether the captions show in a screen share: hidden, unless the person shows them from their badge (until they close). */
+export const CAPTIONS_SHARE_LINE = "Captions are hidden from screen shares unless you show them from their badge, until they close.";
 
 /** Recording › Captions. */
 export function CaptionsPage({ settings, patch, onStyle }: { settings: Settings; patch: Patch; onStyle: () => void }) {
   return (
     <>
       <CaptionPreview style={settings.captionStyle} />
-      <Section footer={<><p>{captionsShareLine(settings.hideFromSharing)}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
+      <Section footer={<><p>{CAPTIONS_SHARE_LINE}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
         <SwitchRow id="captions.enabled" on={settings.captionsOnRecord} onChange={(v) => void patch({ captionsOnRecord: v })} />
         <LinkRow id="captions.style" onOpen={onStyle} chevron />
       </Section>

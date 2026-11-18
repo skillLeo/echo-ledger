@@ -79,6 +79,8 @@ pub enum EndReason {
     GaveUp(String),
     /// The relay kept rejecting new tokens (`token_refresh_rejected`) for the whole resume grace.
     TokenRejected,
+    /// The server needs a newer app for this session's transport (`426 app_update_required`, contract 1.9.0-q).
+    AppUpdateRequired,
 }
 
 /// The relay's close codes (services/assist-relay `session::close`).
@@ -259,6 +261,13 @@ impl AssistHandle {
 }
 
 /// Starts a session's connection task. `on_event` hears everything; it ends with exactly one `Ended`.
+impl AssistHandle {
+    /// A handle on another transport's task ([`super::http`]): the messages it takes, and its stop.
+    pub(crate) fn from_parts(outgoing: mpsc::UnboundedSender<ClientMessage>, stop: watch::Sender<bool>) -> Self {
+        AssistHandle { outgoing, stop: Arc::new(stop) }
+    }
+}
+
 pub fn spawn(grant: RelayGrant, refresh: Refresh, policy: Policy, on_event: impl Fn(AssistEvent) + Send + Sync + 'static) -> AssistHandle {
     let (outgoing, rx) = mpsc::unbounded_channel();
     let (stop, stopped) = watch::channel(false);

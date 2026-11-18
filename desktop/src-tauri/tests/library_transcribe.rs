@@ -19,6 +19,13 @@ fn client(server: &MockServer) -> ApiClient {
     ApiClient::new(&server.base_url(), &[], Some(TOKEN.to_string())).expect("local client")
 }
 
+/// The first request of a test carried the account's token.
+fn authed(server: &MockServer) {
+    let sent = server.requests();
+    assert!(!sent.is_empty(), "nothing was sent");
+    assert_eq!(sent[0].header("authorization"), Some(format!("Bearer {TOKEN}").as_str()), "the first request is signed in");
+}
+
 fn ids() -> Vec<String> {
     vec![A.to_string(), B.to_string()]
 }
@@ -31,6 +38,7 @@ async fn one_audio_only_recording_is_transcribed() {
     let sent = server.requests_to("POST", &format!("/api/sessions/{A}/transcribe"));
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].header("authorization"), Some(format!("Bearer {TOKEN}").as_str()));
+    authed(&server);
 }
 
 #[tokio::test]
@@ -46,6 +54,7 @@ async fn a_recording_already_transcribed_or_over_the_budget_says_why() {
     );
     let api = client(&server);
     let done = api.transcribe_session(A).await.unwrap_err();
+    authed(&server);
     assert_eq!((done.code(), done.to_string().contains("already transcribed")), (Some("not_audio_only"), true), "{done}");
     let over = api.transcribe_session(B).await.unwrap_err();
     assert_eq!(over.code(), Some("budget_exceeded"));
@@ -63,6 +72,7 @@ async fn a_selection_is_transcribed_and_its_estimate_comes_first() {
     );
     let api = client(&server);
     assert_eq!(api.transcribe_estimate(&ids()).await.unwrap(), estimate);
+    authed(&server);
     assert_eq!(api.transcribe_sessions(&ids()).await.unwrap(), started);
     assert_eq!(server.requests_to("POST", "/api/sessions/transcribe-estimate")[0].json(), json!({"ids": [A, B]}));
     assert_eq!(server.requests_to("POST", "/api/sessions/transcribe")[0].json(), json!({"ids": [A, B]}));
@@ -76,6 +86,7 @@ async fn a_selection_over_the_budget_starts_nothing_and_says_the_minutes() {
         Reply::json(403, json!({"code": "budget_exceeded", "message": "Monthly limit reached", "minutes_needed": 42, "minutes_left": 0})),
     ));
     let err = client(&server).transcribe_sessions(&ids()).await.unwrap_err();
+    authed(&server);
     assert!(err.to_string().contains("This needs 42 minutes and no minutes are left this month."), "{err}");
     assert_eq!(budget_sentence(1, 1), "This needs 1 minute, and 1 minute is left this month.");
 }
@@ -89,6 +100,7 @@ async fn a_selection_is_exported_in_the_view_on_screen_and_without_one_as_before
     ));
     let api = client(&server);
     let (bytes, name) = api.export_sessions_as(&ids(), "docx", Some("roman")).await.unwrap();
+    authed(&server);
     assert_eq!((bytes.as_slice(), name.as_str()), (b"PK-zip".as_slice(), "EchoLedger transcripts.zip"));
     api.export_sessions(&ids(), "srt").await.unwrap();
     let sent = server.requests_to("POST", "/api/sessions/export");
@@ -101,6 +113,7 @@ async fn a_recording_s_language_changes_without_re_transcribing_it() {
     let server = MockServer::start(Router::new().fixed("PATCH", &format!("/api/sessions/{A}"), Reply::json(200, json!({"data": {"id": A, "language": "ur"}}))));
     let answer = client(&server).update_session(A, &json!({"language": "ur"})).await.unwrap();
     assert_eq!(answer["data"]["language"], "ur");
+    authed(&server);
     assert_eq!(server.requests()[0].json(), json!({"language": "ur"}));
     assert!(server.requests_to("POST", &format!("/api/sessions/{A}/retranscribe")).is_empty(), "nothing re-transcribed");
 }
@@ -111,6 +124,7 @@ async fn the_design_switch_is_set_and_its_refusal_says_why() {
     let server = MockServer::start(Router::new().fixed("PUT", "/api/account/ui", Reply::json(200, answer)));
     let api = client(&server);
     let got = api.set_ui_design(Some("v2")).await.unwrap();
+    authed(&server);
     let flags = desktop_lib::ui_flags::UiFlags::read(got.ui_flags.as_ref(), got.ui_classic).with_design(got.ui_design.as_ref());
     assert!(flags.is_on("ui_v2.shell"));
     assert_eq!(flags.design.as_ref().map(|d| (d.current.as_str(), d.can_switch_back)), Some(("v2", true)));
@@ -122,6 +136,7 @@ async fn the_design_switch_is_set_and_its_refusal_says_why() {
     let refused = MockServer::start(Router::new().fixed("PUT", "/api/account/ui", Reply::json(422, json!({"code": "design_not_available", "message": "Nothing to try yet."}))));
     let err = client(&refused).set_ui_design(Some("v2")).await.unwrap_err();
     assert_eq!(err.code(), Some("design_not_available"));
+    authed(&refused);
     assert_eq!(err.to_string(), "The new design isn't open to try yet.");
 }
 

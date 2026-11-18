@@ -57,6 +57,8 @@ pub struct AppStatus {
     pub server: crate::server_notice::ServerNotices,
     /// Said once after "Keep automatically" became Ask me ([`crate::settings::AFTER_CALL_NOTICE`]); none otherwise.
     pub after_call_notice: Option<&'static str>,
+    /// Said once after the v2.0 update, on the main window, with Hide ([`crate::privacy::share::SHARE_NOTICE`]).
+    pub share_notice: Option<&'static str>,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
@@ -82,12 +84,16 @@ pub fn status(app: &AppHandle) -> AppStatus {
         let ready = state.ready.lock().unwrap_or_else(|p| p.into_inner());
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
-    let share_demo = (settings.hide_from_sharing != crate::settings::ShareHiding::Off).then(|| app.try_state::<crate::privacy::Privacy>().is_some_and(|p| p.demo_active(std::time::Instant::now())));
+    let main_share = Some(match settings.main_share_hide.filter(|h| crate::privacy::share::main_hidden(Some(h), crate::privacy::now_ms())) {
+        Some(hide) => crate::tray::MainShare::Hidden(crate::privacy::share::tray_line(&hide, chrono::Local::now())),
+        None => crate::tray::MainShare::Shown { call: crate::privacy::call_detected(app) },
+    });
     let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| crate::tray::hidden_line(&p));
-    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo, hidden, translate: crate::translate::is_running() };
+    let held_back = app.try_state::<crate::privacy::Privacy>().and_then(|p| p.held_back().first().map(|l| crate::privacy::held_back_line(l)));
+    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), main_share, held_back, hidden, translate: crate::translate::is_running() };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
-    crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
+    crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches.clone(), state.viewer_refusal());
     AppStatus {
         paired: state.is_paired(),
         server_url: settings.server_url.clone(),
@@ -116,6 +122,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
         device_note: state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()),
         server: state.server_notices(),
         after_call_notice: settings.after_call_notice.then_some(crate::settings::AFTER_CALL_NOTICE),
+        share_notice: settings.share_notice.then_some(crate::privacy::share::SHARE_NOTICE),
     }
 }
 
@@ -968,6 +975,14 @@ pub fn reset_shortcuts(app: AppHandle) -> AppResult<Settings> {
 #[tauri::command]
 pub fn subscribe_captions(window: WebviewWindow, on_event: IpcChannel<CaptionEvent>, hub: State<'_, CaptionHub>) {
     hub.subscribe(window.label(), on_event);
+}
+
+/// The latency probe (development only): the captions window painted word `id`. Nothing happens unless the probe runs.
+#[tauri::command]
+pub fn caption_probe_painted(id: u64) {
+    if crate::stt::latency::enabled() {
+        crate::stt::latency::painted(id);
+    }
 }
 
 /// The page has attached its listeners: it gets the events kept while its window was built (C9, lifecycle.rs).
@@ -2647,11 +2662,17 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
 /// is then read again in the background. `422 design_not_available` comes back as it is (nothing open to try).
 #[tauri::command]
 pub async fn ui_design_set(app: AppHandle, design: Option<String>) -> AppResult<crate::ui_flags::UiFlags> {
-    if design.as_deref().is_some_and(|d| !matches!(d, "v2" | "classic")) {
-        return Err(AppError::msg("That design is not one of the choices."));
-    }
+    check_design(design.as_deref())?;
     let answer = app.state::<AppState>().api()?.set_ui_design(design.as_deref()).await?;
     Ok(took_ui_answer(&app, answer))
+}
+
+/// The design switch's value before anything is sent (pure): `v2`, `classic` or none.
+pub fn check_design(design: Option<&str>) -> AppResult<()> {
+    if design.is_some_and(|d| !matches!(d, "v2" | "classic")) {
+        return Err(AppError::msg("That design is not one of the choices."));
+    }
+    Ok(())
 }
 
 /// A `PUT /api/account/ui` answer: kept in the cached config, the window told, the config read again in the background
@@ -3263,6 +3284,68 @@ pub fn privacy_open_check(app: AppHandle) {
 pub async fn privacy_diagnostics(app: AppHandle, window: WebviewWindow) -> AppResult<String> {
     crate::privacy::from_main_window(window.label())?;
     Ok(crate::privacy::check::diagnostics_text(&app))
+}
+
+/// "Hide from screen shares" for the main window, until the time chosen (Settings, the one-time notice). Only the main
+/// window asks.
+#[tauri::command]
+pub fn privacy_main_hide(app: AppHandle, window: WebviewWindow, choice: crate::privacy::share::HideFor) -> AppResult<crate::privacy::check::PrivacyStatus> {
+    crate::privacy::from_main_window(window.label())?;
+    crate::privacy::hide_main(&app, choice)?;
+    Ok(crate::privacy::check::status(&app))
+}
+
+/// "Show now": the main window is in screen shares again.
+#[tauri::command]
+pub fn privacy_main_show(app: AppHandle, window: WebviewWindow) -> AppResult<crate::privacy::check::PrivacyStatus> {
+    crate::privacy::from_main_window(window.label())?;
+    crate::privacy::show_main_in_shares(&app, None)?;
+    Ok(crate::privacy::check::status(&app))
+}
+
+/// The card's or the captions' badge: the window's real state, read back from the system. A window asks about itself;
+/// the main window names the one it means.
+#[tauri::command]
+pub async fn privacy_window_share(app: AppHandle, window: WebviewWindow, which: Option<crate::privacy::share::Pinned>) -> AppResult<crate::privacy::WindowShareView> {
+    let which = pinned_for(window.label(), which)?;
+    Ok(crate::privacy::window_share_now(&app, which).await)
+}
+
+/// The card's or the captions' own switch: "Show this card in screen shares" or hide it again. Showing comes only from
+/// that window's own badge; the main window, naming it, may only hide it again. No other window and no other setting.
+#[tauri::command]
+pub async fn privacy_window_share_set(app: AppHandle, window: WebviewWindow, which: Option<crate::privacy::share::Pinned>, shown: bool) -> AppResult<crate::privacy::WindowShareView> {
+    let which = pinned_for_set(window.label(), which, shown)?;
+    crate::privacy::set_shown_in_shares(&app, which, shown)?;
+    Ok(crate::privacy::window_share_now(&app, which).await)
+}
+
+/// Which window a per-window switch is about (pure): the card or the captions about themselves; the main window must name
+/// one; any other window, or a window naming another, is refused.
+pub fn pinned_for(label: &str, which: Option<crate::privacy::share::Pinned>) -> AppResult<crate::privacy::share::Pinned> {
+    match (crate::privacy::share::Pinned::of_label(label), which) {
+        (Some(own), None) => Ok(own),
+        (Some(own), Some(asked)) if own == asked => Ok(own),
+        (None, Some(asked)) if label == crate::lifecycle::MAIN => Ok(asked),
+        _ => Err(AppError::msg("Only that window, or EchoLedger's main window, can change this.")),
+    }
+}
+
+/// Which window a per-window switch changes (pure): as [`pinned_for`], and showing only from that window itself. The
+/// main window may hide the card or the captions again, never show them.
+pub fn pinned_for_set(label: &str, which: Option<crate::privacy::share::Pinned>, shown: bool) -> AppResult<crate::privacy::share::Pinned> {
+    let pinned = pinned_for(label, which)?;
+    if shown && crate::privacy::share::Pinned::of_label(label) != Some(pinned) {
+        return Err(AppError::msg("Show it in screen shares from its own badge, on that window."));
+    }
+    Ok(pinned)
+}
+
+/// The one-time notice ("EchoLedger now shows in screen shares unless you hide it.") was closed. Only the main window.
+#[tauri::command]
+pub fn share_notice_dismiss(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
+    crate::privacy::from_main_window(window.label())?;
+    crate::privacy::dismiss_share_notice(&app)
 }
 
 /// Moves the floating windows to the display that isn't the main one (so the main one can be shared).

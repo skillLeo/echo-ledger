@@ -374,7 +374,7 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
     let captions_were_on = !attempt.captions_turned_on;
     let started_recording = attempt.started_recording.clone();
     let app_language = state.capture.info().map_or_else(|| state.settings().transcription_language.clone(), |i| state.recording_language(&i.client_ref));
-    let request = AssistStartRequest { prep_id: prep.as_ref().map(|p| p.id.clone()), mode: Some(mode.clone()), platform: "desktop".into(), recording_session_id, practice };
+    let request = AssistStartRequest { prep_id: prep.as_ref().map(|p| p.id.clone()), mode: Some(mode.clone()), platform: "desktop".into(), recording_session_id, practice, transports: AssistStartRequest::transports() };
     let pins = super::relay_pins(state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref());
     let meeting_type = prep.as_ref().map(|p| p.meeting_type.clone());
     // What the relay says before the session is in the registry (its `ready` can be that quick) waits here.

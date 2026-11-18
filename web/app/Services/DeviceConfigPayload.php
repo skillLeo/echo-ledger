@@ -117,7 +117,11 @@ final class DeviceConfigPayload
      */
     public static function uiFlags(User $user, ?int $workspaceId): array
     {
-        return ['ui_flags' => app(InterfaceFlags::class)->for($user, $workspaceId), 'ui_classic' => (bool) $user->ui_classic];
+        $flags = app(InterfaceFlags::class);
+        $design = $flags->design($user, $workspaceId);
+
+        // Since 2.0.0-g: the design switch (`ui_design`); ui_classic is its "classic" choice.
+        return ['ui_flags' => $flags->for($user, $workspaceId), 'ui_classic' => $design['choice'] === 'classic', 'ui_design' => $design];
     }
 
     /**

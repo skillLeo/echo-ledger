@@ -1,9 +1,10 @@
 //! Overlay-type windows: caption overlay, dictation box, recording pill and the after-call window (the "Saved · Undo"
 //! toast, the ask-me chip and the unknown-app chip, label `review`). Built on first use and
-//! destroyed after they have been hidden for a while (lifecycle.rs, C9), always visible, unfocused and unfocusable
-//! (never `show()` or `set_focus()` — tao ≥ 0.37.1 would steal focus; tao builds them with `WS_EX_NOACTIVATE` and
-//! `SW_SHOWNOACTIVATE`, so one built mid-call never takes focus either); "hidden" = the view renders nothing and
-//! reports no hit regions, so the window is fully click-through. docs/research/desktop-tauri.md §2.
+//! destroyed after they have been hidden for a while (lifecycle.rs, C9), visible once built (the captions and the Live
+//! Assist card only once the privacy service has read their capture flag back as set: `privacy::gate`), unfocused and
+//! unfocusable (never `show()` or `set_focus()` — tao ≥ 0.37.1 would steal focus; tao builds them with
+//! `WS_EX_NOACTIVATE` and `SW_SHOWNOACTIVATE`, so one built mid-call never takes focus either); "hidden" = the view
+//! renders nothing and reports no hit regions, so the window is fully click-through. docs/research/desktop-tauri.md §2.
 
 pub mod geometry;
 #[cfg(target_os = "macos")]
@@ -208,8 +209,10 @@ fn build_window<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64)) -
         .focused(false)
         .focusable(false)
         .accept_first_mouse(true)
-        .visible(true);
-    crate::privacy::window(app, builder, label, crate::privacy::Kind::Floating, |b| b)
+        // The card and the captions are built off the screen: the privacy service brings them on once their capture
+        // flag reads back as set (privacy::gate).
+        .visible(!crate::privacy::reveals_itself(crate::privacy::kind_for(label)));
+    crate::privacy::window(app, builder, label, crate::privacy::kind_for(label), |b| b)
 }
 
 /// Builds one overlay-type window when it does not exist yet, click-through and docked or placed from the settings

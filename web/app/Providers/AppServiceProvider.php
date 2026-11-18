@@ -26,6 +26,9 @@ use App\Services\Assist\AssistAskAi;
 use App\Services\Assist\AssistReportAi;
 use App\Services\Assist\ClaudeAssistAskAi;
 use App\Services\Assist\ClaudeAssistReportAi;
+use App\Services\Assist\Http\Ai\LiveModels;
+use App\Services\Assist\Http\Ai\ModelGateway;
+use App\Services\Assist\Http\Prompt\PromptBuilder;
 use App\Services\AuditLog;
 use App\Services\ClientAi\ClaudeClientAi;
 use App\Services\ClientAi\ClientAi;
@@ -102,6 +105,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ClientAi::class, ClaudeClientAi::class);
         $this->app->bind(AssistReportAi::class, ClaudeAssistReportAi::class);
         $this->app->bind(AssistAskAi::class, ClaudeAssistAskAi::class);
+        // Live Assist's HTTP mode (1.9.0-q): its models, and the prompt pack its requests are made from.
+        $this->app->bind(ModelGateway::class, LiveModels::class);
+        $this->app->singleton(PromptBuilder::class, fn (): PromptBuilder => PromptBuilder::shipped());
         // Screen moments (v1.5) are read by Claude Haiku through one interface; tests swap in a fake.
         $this->app->bind(ScreenDescriber::class, ClaudeScreenDescriber::class);
         $this->app->bind(TitleWriter::class, ClaudeTitleWriter::class);

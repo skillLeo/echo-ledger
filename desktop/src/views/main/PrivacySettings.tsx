@@ -10,6 +10,7 @@ import { setting } from "../../lib/settingsRegistry";
 import { prettyShortcut } from "../../lib/format";
 import { ActionRow, InfoRow, LinkRow, Section, SelectRow, SwitchRow, Tag, useCopied } from "./SettingsControls";
 import { PrivacyBadgeView } from "../../components/PrivacyBadge";
+import { MainShareControl, PinnedShareControl, mainShareValue } from "../../components/ShareVisibility";
 import { StateBanner } from "../../components/StateBanner";
 import { AlertIcon } from "../../components/Icons";
 
@@ -17,9 +18,11 @@ type Patch = (p: SettingsPatch) => Promise<boolean>;
 const options = <T extends string>(id: string) => (setting(id).options ?? []).map((o) => [o.value as T, o.label] as const);
 
 /** What the page says first: what EchoLedger does (the last check's own sentence follows; never a promise beyond it). */
-export const SHARE_PRIVACY_INTRO = "EchoLedger hides its windows from screen sharing and checks on this computer whether it works.";
-/** The first line while Hide from screen sharing is off: nothing is hidden, so nothing is promised. */
-export const SHARE_PRIVACY_OFF = "Hide from screen sharing is off: EchoLedger's windows show in a screen share.";
+export const SHARE_PRIVACY_INTRO = "EchoLedger hides the Live Assist card, the captions and its other floating windows from screen sharing and checks on this computer whether it works.";
+/** The first line while the other floating windows are shown: only the card and the captions stay hidden. */
+export const SHARE_PRIVACY_OFF = "EchoLedger's other floating windows show in a screen share. The Live Assist card and the captions stay hidden unless you show them.";
+/** The main window's own line (since v2.0). */
+export const SHARE_PRIVACY_MAIN = "The main window shows in screen shares unless you hide it for a while.";
 /** With only the floating windows hidden: what shows and what doesn't. */
 export const SHARE_PRIVACY_FLOATING = "The main window is visible in screen share; captions, the recording controls and the other floating windows stay hidden.";
 /** What the last check saw, by the badge it left (never more than that). */
@@ -172,6 +175,11 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
   return (
     <div data-testid="share-privacy">
       {sharePrivacyTop(settings.hideFromSharing, status?.badge).map((l) => <p key={l} className="set-intro">{l}</p>)}
+      <Section footer={<p>{SHARE_PRIVACY_MAIN}</p>}>
+        <InfoRow id="share_privacy.main" value={mainShareValue(status)}><MainShareControl status={status} /></InfoRow>
+        <InfoRow id="share_privacy.card"><PinnedShareControl which="card" /></InfoRow>
+        <InfoRow id="share_privacy.captions"><PinnedShareControl which="captions" /></InfoRow>
+      </Section>
       <Section footer={footer.length || lines.length ? <>
         {footer.map((l) => <p key={l}>{l}</p>)}
         {lines.length > 0 && (
@@ -185,7 +193,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
           </div>
         )}
       </> : undefined}>
-        <SelectRow id="share_privacy.hiding" value={settings.hideFromSharing} options={options<ShareHiding>("share_privacy.hiding")} onChange={(v) => void patch({ hideFromSharing: v })} />
+        <SelectRow id="share_privacy.hiding" value={settings.hideFromSharing === "off" ? "off" : "all"} options={options<ShareHiding>("share_privacy.hiding")} onChange={(v) => void patch({ hideFromSharing: v })} />
         <InfoRow id="share_privacy.status" value={value?.text} tone={value?.tone}>
           {status && <PrivacyBadgeView badge={status.badge} compact />}
         </InfoRow>
@@ -396,7 +404,7 @@ function SidePictures({ view }: { view: ShareCheckView }) {
 /** What the Settings root shows next to "Screen-share privacy". */
 export function sharePrivacyValue(settings: Settings | null): string {
   if (!settings) return "";
-  return settings.hideFromSharing === "off" ? "Off" : settings.hideFromSharing === "floating" ? "Floating windows" : "All windows";
+  return settings.mainShareHide ? "Main window hidden" : "Main window shown";
 }
 
 /** Onboarding's Done step: what private notes means, and the check run once from here. */

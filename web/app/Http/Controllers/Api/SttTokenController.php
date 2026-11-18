@@ -14,6 +14,7 @@ use App\Models\Device;
 use App\Services\SettingsRepository;
 use App\Services\Usage\BudgetGuard;
 use App\Services\Usage\StreamingGrants;
+use App\Services\Usage\UsageLedger;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\Data\StreamingRequest;
 use App\Stt\Exceptions\ProviderNotConfigured;
@@ -116,6 +117,10 @@ final class SttTokenController extends Controller
 
         // What this device reports with POST /api/usage counts from here on.
         $grants->note($device);
+        // The model this recording's captions run on (Fast English can differ from the stored one), for the usage ledger.
+        if (is_string($data['session_id'] ?? null) && $data['session_id'] !== '') {
+            UsageLedger::rememberStreamingModel($grant->provider, (string) $data['session_id'], $grant->grants[0]['ws_url'] ?? null);
+        }
 
         return response()->json($grant->toArray())->header('Cache-Control', 'no-store');
     }

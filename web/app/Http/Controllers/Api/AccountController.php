@@ -20,6 +20,7 @@ use App\Services\Workspaces\Workspaces;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
 
 /** Your account (since v1.5, docs/API.md "Your account"): the device's owner, as the device acts for them. */
 final class AccountController extends Controller
@@ -63,13 +64,36 @@ final class AccountController extends Controller
      */
     public function ui(Request $request, InterfaceFlags $flags): JsonResponse
     {
-        $data = $request->validate(['classic' => ['required', 'boolean']]);
         $device = $this->device($request);
         // The device's own person (the model the rest of this request reads), so what is answered is what was saved.
         $user = $device->user;
-        $flags->setClassic($user, (bool) $data['classic']);
+        $workspaceId = (int) $device->getAttribute('workspace_id');
+        if ($request->has('design')) {
+            // Since 2.0.0-g: {"design": "v2" | "classic" | null}.
+            $data = $request->validate(['design' => ['present', 'nullable', Rule::in(InterfaceFlags::DESIGNS)]]);
+            $design = $data['design'];
+            if ($design === 'v2') {
+                $now = $flags->design($user, $workspaceId);
+                if (! $now['can_try'] && $now['current'] !== 'v2') {
+                    throw new ApiError(422, 'design_not_available', 'The new design is not open to try yet.');
+                }
+            }
+            $flags->setDesign($user, $design);
+        } else {
+            // 2.0.0-a: {"classic": true | false}.
+            $data = $request->validate(['classic' => ['required', 'boolean']]);
+            $flags->setClassic($user, (bool) $data['classic']);
+        }
 
-        return response()->json(DeviceConfigPayload::uiFlags($user, (int) $device->getAttribute('workspace_id')));
+        return response()->json(DeviceConfigPayload::uiFlags($user->refresh(), $workspaceId));
+    }
+
+    /** GET /api/account/ui (since 2.0.0-g): the flags, ui_classic and the design switch, as GET /api/config has them. */
+    public function showUi(Request $request): JsonResponse
+    {
+        $device = $this->device($request);
+
+        return response()->json(DeviceConfigPayload::uiFlags($device->user, (int) $device->getAttribute('workspace_id')));
     }
 
     /** POST /api/account/sign-out-everywhere — every device (this one included) and console session of the account. */

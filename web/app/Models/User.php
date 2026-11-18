@@ -59,6 +59,7 @@ use Laravel\Passport\HasApiTokens;
  * @property string|null $suspended_reason
  * @property Carbon|null $terms_accepted_at when the Terms and the Privacy Policy were accepted at sign-up (since v1.6)
  * @property bool $ui_classic the person's "Switch back to classic" (since 2.0.0-a: every ui_v2.* interface flag off)
+ * @property string|null $ui_design since 2.0.0-g: classic | v2 | null (never chose); ui_classic is kept equal to "classic"
  * @property int|null $staff_role_id since v1.6 (P2.5): the person's staff role on the admin panel; null = not staff (the super admin needs none)
  * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
  * @property Carbon|null $created_at

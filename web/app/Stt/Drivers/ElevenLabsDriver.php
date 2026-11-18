@@ -107,7 +107,8 @@ final class ElevenLabsDriver implements ClipTranscriber, SttProvider
                 'ws_url' => $wsBase.'/v1/speech-to-text/realtime?'.implode('&', $query),
                 'redeem_by' => $expires->toAtomString(),
                 'max_session_seconds' => null,
-                'audio' => ['encoding' => 'pcm_s16le', 'sample_rate' => 16000, 'channels' => 1, 'frame_ms' => 100],
+                // 50 ms frames (was 100): words reach the screen sooner; the phone and desktop both take 50 to 250.
+                'audio' => ['encoding' => 'pcm_s16le', 'sample_rate' => 16000, 'channels' => 1, 'frame_ms' => 50],
                 'init_messages' => [],
             ];
         }

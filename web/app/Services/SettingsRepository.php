@@ -36,6 +36,8 @@ final class SettingsRepository
         'assemblyai.region' => 'us',                // us | eu
         'assemblyai.streaming_model' => 'universal-3-6-pro',
         'assemblyai.streaming_mode' => 'min_latency',   // min_latency | balanced | max_accuracy (caption speed)
+        'assemblyai.fastest_min_silence_ms' => 80,       // Fastest's min_turn_silence, 50-600 ms
+        'assemblyai.fast_english' => false,              // English-only live captions on AssemblyAI-STT-3.7 Realtime
         'assemblyai.async_models' => ['universal-3-5-pro', 'universal-2'],
         'elevenlabs.base_url' => 'https://api.elevenlabs.io',
         'elevenlabs.model_id' => 'scribe_v2',
@@ -45,6 +47,9 @@ final class SettingsRepository
         'live_translate.model' => 'stt-rt-v5',
         // Since v1.9 (L1): the Live Assist relay's host; the apps get wss://<host>/v1/assist. Null: it cannot start.
         'relay.url' => null,
+        // Since 1.9.0-q: how Live Assist's live messages travel (App\Services\Assist\AssistTransport): automatic,
+        // shared (HTTP mode on this server) or relay (always the relay).
+        'assist.connection' => 'relay',   // the owner: the live relay runs only on the VPS (shared hosting: emergency only)
         // Since 1.9.0-g: the relay host's public-key pins (primary and backup), sent while live_assist is on.
         'relay.pins' => [],
         // A fingerprint of the relay secret once the relay signed with it (App\Services\Assist\RelaySecret::signing).

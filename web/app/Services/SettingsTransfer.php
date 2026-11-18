@@ -68,6 +68,8 @@ final class SettingsTransfer
         'assemblyai.region',
         'assemblyai.streaming_model',
         'assemblyai.streaming_mode',
+        'assemblyai.fastest_min_silence_ms',
+        'assemblyai.fast_english',
         'assemblyai.async_models',
         'groq.plan',
         'gemini.model',
@@ -90,6 +92,8 @@ final class SettingsTransfer
         'live_translate.monthly_usd',
         'live_translate.watch_target',
         'live_translate.watch_speed',
+        'assist.connection',
+        'relay.url',
     ];
 
     public function __construct(private readonly SettingsRepository $settings) {}
@@ -132,6 +136,16 @@ final class SettingsTransfer
         if (array_key_exists('assemblyai.streaming_mode', $settings)
             && (! is_string($settings['assemblyai.streaming_mode']) || ! array_key_exists($settings['assemblyai.streaming_mode'], AssemblyAiDriver::STREAMING_MODES))) {
             unset($settings['assemblyai.streaming_mode']);
+        }
+        // Fast English captions is a real yes or no: a string ("false") or a number is dropped.
+        if (array_key_exists('assemblyai.fast_english', $settings) && ! is_bool($settings['assemblyai.fast_english'])) {
+            unset($settings['assemblyai.fast_english']);
+        }
+        // Fastest's silence is whole milliseconds between the floor and the ceiling, or dropped.
+        $silence = $settings['assemblyai.fastest_min_silence_ms'] ?? null;
+        if (array_key_exists('assemblyai.fastest_min_silence_ms', $settings)
+            && (! is_int($silence) || $silence < AssemblyAiDriver::FASTEST_MIN_SILENCE_FLOOR || $silence > AssemblyAiDriver::FASTEST_MIN_SILENCE_CEILING)) {
+            unset($settings['assemblyai.fastest_min_silence_ms']);
         }
 
         return $settings;
