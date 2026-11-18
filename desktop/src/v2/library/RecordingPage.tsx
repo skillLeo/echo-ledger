@@ -52,7 +52,7 @@ type ShowAs = "original" | TranscriptView;
 
 /** Keys the page leaves alone: typing, and anything inside a dialog or a menu. */
 const inField = (target: EventTarget | null) =>
-  target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'));
+  target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"]:not(.el-drawer), [role="alertdialog"], [role="menu"], [role="listbox"]'));
 
 export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject }: RecordingPageProps) {
   const [sharing, setSharing] = useState(false);
@@ -184,7 +184,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     if (stillShown(t.id)) setTranscript({ state: "ready", value: t });
   };
   const saveLine = async (index: number, text: string) => {
-    if (mounted.current) setEditLine(null);
+    // Another line opened meanwhile stays open: only the saved line closes.
+    if (mounted.current) setEditLine((l) => (l === index ? null : l));
     const id = shownTranscript.current;
     if (!id) return;
     try {

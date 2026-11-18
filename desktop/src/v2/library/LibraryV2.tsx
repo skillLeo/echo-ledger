@@ -2,16 +2,16 @@
 // reloaded on library:updated), as WhatsApp-style rows with the saved views All, Today, Untranscribed and Trash. One
 // feedback system: the Toast, one at a time, with Undo after a delete. Selection mode (Select, a Cmd/Ctrl- or Shift-click,
 // Cmd/Ctrl+A or X) picks several; the row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type SearchResult } from "../../lib/ipc";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
-import { useRecovered } from "../../lib/recovered";
+import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Button, Card, Chip, Dialog, Icon, Segmented, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
@@ -539,10 +539,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
   const drawer = open && (
     <>
       <div className="el-drawer-scrim" aria-hidden="true" onMouseDown={closeOpen} />
-      <aside className="el-drawer" aria-label={recordingName(open.title)}>
-        <Button variant="quiet" icon={Icons.CloseIcon} className="el-drawer__close" aria-label="Close" aria-keyshortcuts="Escape" onClick={closeOpen} autoFocus />
-        {recordingPage}
-      </aside>
+      <Drawer label={recordingName(open.title)} onClose={closeOpen}>{recordingPage}</Drawer>
     </>
   );
 
@@ -733,7 +730,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
             action={<Button onClick={clearAll}>{query && !filtersOn ? "Clear search" : filtersOn ? "Clear filters" : "Show all"}</Button>} />
         ) : layout === "table" ? (
           <LibraryTable groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
-            onRow={rowClick} onRowMenu={rowMenu}
+            onRow={rowClick} onRowMenu={rowMenu} recovered={recovered}
             rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
         ) : (
           <List label="Recordings">
@@ -751,7 +748,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
                 const r = rowModel(item);
                 return (
                   <ListRow key={item.id} leading={<SourceAvatar item={item} />} strong title={r.title} meta={r.meta}
-                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : recovered.has(item.id) ? <Badge tone="accent">Recovered</Badge> : undefined}
+                    badge={r.badge || recovered.has(item.id) ? <>
+                      {r.badge && <Badge tone={r.badge.tone}>{r.badge.text}</Badge>}
+                      {recovered.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
+                    </> : undefined}
                     mark={item.pinned || r.screens || item.labels?.length ? <>
                       {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}{" "}
                       {r.screens ? <ScreensMark count={r.screens} /> : null}
@@ -774,6 +774,31 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
       {drawer}
       {dialogs}
       {toasts}
+    </div>
+  );
+}
+
+/**
+ * A recording opened from the table: a modal panel on the end side (role="dialog"); focus moves in, Tab stays inside,
+ * Esc or Close closes it, and focus goes back to the row.
+ */
+function Drawer({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const close = useRef<HTMLButtonElement>(null);
+  const trap = useFocusTrap(panel, close);
+  return (
+    <div ref={panel} className="el-drawer" role="dialog" aria-modal="true" aria-label={label} tabIndex={-1}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !e.defaultPrevented) {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+          return;
+        }
+        trap(e);
+      }}>
+      <Button ref={close} variant="quiet" icon={Icons.CloseIcon} className="el-drawer__close" aria-label="Close" aria-keyshortcuts="Escape" onClick={onClose} />
+      {children}
     </div>
   );
 }

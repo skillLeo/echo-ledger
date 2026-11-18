@@ -176,7 +176,7 @@ export const PAIRS = [
     })]],
   ["library-table", "Show as Table: classic's | the new design's, with the Columns menu",
     [classic("library"), steps(async (page) => {
-      await page.getByRole("button", { name: /table/i }).first().click().catch(() => undefined);
+      await page.locator(".layout-switch button[title=Table]").click();
       await page.waitForTimeout(800);
     })],
     [v2("library"), steps(async (page) => {
@@ -187,6 +187,40 @@ export const PAIRS = [
   ["sidebar-sublists", "The sidebar's sub-lists: classic's Projects and Shared | the new design's pinned projects under Projects and Shared's places under Library",
     [classic("library"), null],
     [v2("library"), null]],
+  ["table-drawer", "A recording from the table: classic's drawer | the new design's drawer over the table",
+    [classic("library"), steps(async (page) => {
+      // The open recording shows in classic's drawer as soon as the table is on.
+      await page.locator(".layout-switch button[title=Table]").click();
+      await page.waitForTimeout(1200);
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("radio", { name: "Table" }).click();
+      await page.getByRole("button", { name: "Kick-off: Contoso website" }).first().click();
+      await page.waitForTimeout(1200);
+    })]],
+  ["recording-header", "The recording's header: classic's | the new design's Share, the project link, Transcribed in, Automatic title, the script warning, bookmarks and the keys hint",
+    [classic("library"), null],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Kick-off: Contoso website" }).first().click();
+      await page.waitForTimeout(1400);
+    })]],
+  ["recording-details", "Details: classic's Organise panel | the new design's Details tab (engine, kept, labels, pinned)",
+    [classic("library"), null],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Kick-off: Contoso website" }).first().click();
+      await page.waitForTimeout(1200);
+      await page.getByRole("tab", { name: "Details" }).click();
+      await page.waitForTimeout(400);
+    })]],
+  ["record-menu", "Record's menu: classic's + menu | the new design's Record ▾ (Voice note, Upload files, New project, Request link, Record page)",
+    [classic("library"), steps(async (page) => {
+      await page.locator(".create-btn").first().click();
+      await page.waitForTimeout(500);
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "More ways to record" }).click();
+      await page.waitForTimeout(400);
+    })]],
 ];
 
 const server = await createServer({ root: desktop, configFile: join(desktop, "vite.config.ts"), server: { port: 1480, strictPort: false }, logLevel: "error" });

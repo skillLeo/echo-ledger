@@ -40,7 +40,8 @@ export const ITEMS: LibraryItem[] = [
     started_at: at(1, 18, 2), duration_ms: 402_000, status: "failed", transcript: { final_status: "failed", final_transcript_id: "t-r4", live_available: false, preview: null } }),
   makeItem("r5", { title: "Kick-off: Contoso website", source_app: "microsoft_teams", source_app_label: "Microsoft Teams", source_device: "desktop", source_device_label: "Desktop",
     client: client("c-acme", "Acme Holdings"), started_at: at(3, 15, 30), duration_ms: 135_000, status: "completed", language: "en", language_chip: "EN", marker_count: 1, tags: ["Budget"],
-    labels: ["Kick-off"], filed_by: "rule", transcript: ready("r5", "Welcome everyone, thanks for joining the kick-off.") }),
+    labels: ["Kick-off"], filed_by: "rule", title_auto: true,
+    transcript: { ...ready("r5", "Welcome everyone, thanks for joining the kick-off."), script_warning: "latin" } }),
   // v1.5: recordings in Acme's folders.
   makeItem("r8", { title: "March invoice follow-up", source_app: "whatsapp_business", source_app_label: "WhatsApp Business", source_device: "phone", source_device_label: "Phone",
     client: client("c-acme-inv", "Invoices"), started_at: at(2, 10, 20), duration_ms: 318_000, status: "completed", transcript: ready("r8", "The March invoice is still open.") }),

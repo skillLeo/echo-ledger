@@ -76,22 +76,38 @@ describe("the Library as a table", () => {
     fireEvent.click(within(table()).getByRole("button", { name: "Ali" }));
     await act(flushAsync);
     // A drawer over the table, as classic's: the table stays; Close, Esc and the scrim close it, focus back on the row.
-    const drawer = screen.getByRole("complementary", { name: "Ali" });
+    const drawer = screen.getByRole("dialog", { name: "Ali" });
     expect(within(drawer).getByRole("heading", { level: 1, name: "Ali" })).toBeInTheDocument();
-    expect(table()).toBeInTheDocument();
-    fireEvent.click(within(drawer).getByRole("button", { name: "Close" }));
+    expect(drawer).toHaveAttribute("aria-modal", "true");
+    expect(within(drawer).getByRole("button", { name: "Close" })).toHaveFocus();
+    // Tab stays inside: from the last control back to the first.
+    const inside = [...drawer.querySelectorAll<HTMLElement>("button:not([disabled])")];
+    inside[inside.length - 1].focus();
+    fireEvent.keyDown(inside[inside.length - 1], { key: "Tab" });
+    expect(within(drawer).getByRole("button", { name: "Close" })).toHaveFocus();
+    // Esc inside the drawer closes it too.
+    fireEvent.keyDown(within(drawer).getByRole("button", { name: "Close" }), { key: "Escape" });
     await act(flushAsync);
-    expect(screen.queryByRole("complementary", { name: "Ali" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Ali" })).toBeNull();
+    // A press on a row focuses it (as a click does): closing gives focus back there.
+    act(() => within(table()).getByRole("button", { name: "Ali" }).focus());
+    fireEvent.click(within(table()).getByRole("button", { name: "Ali" }));
+    await act(flushAsync);
+    const again = screen.getByRole("dialog", { name: "Ali" });
+    expect(table()).toBeInTheDocument();
+    fireEvent.click(within(again).getByRole("button", { name: "Close" }));
+    await act(flushAsync);
+    expect(screen.queryByRole("dialog", { name: "Ali" })).toBeNull();
     expect(within(table()).getByRole("button", { name: "Ali" })).toHaveFocus();
     fireEvent.click(within(table()).getByRole("button", { name: "Ali" }));
     await act(flushAsync);
     fireEvent.keyDown(document.body, { key: "Escape" });
     await act(flushAsync);
-    expect(screen.queryByRole("complementary", { name: "Ali" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Ali" })).toBeNull();
     fireEvent.click(within(table()).getByRole("button", { name: "Bina" }));
     await act(flushAsync);
     fireEvent.mouseDown(document.querySelector(".el-drawer-scrim")!);
     await act(flushAsync);
-    expect(screen.queryByRole("complementary", { name: "Bina" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Bina" })).toBeNull();
   });
 });

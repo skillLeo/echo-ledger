@@ -110,7 +110,24 @@ describe("transcript tools", () => {
     expect(lines()).toEqual(["Standup words."]);
   });
 
-  it("while editing Show as is off and a line starts from the words as heard, never a view's", async () => {
+  it("a line opened while the last one saves stays open when that save comes back", async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    respondWith("transcript_edit", () => new Promise((done) => { answer = done; }));
+    await open();
+    fireEvent.click(within(tools()).getByRole("button", { name: "Edit text" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit line 1: Hello, this is Sam." }));
+    const first = screen.getByRole("textbox", { name: "Edit line" });
+    fireEvent.change(first, { target: { value: "Hello, Sam here." } });
+    fireEvent.keyDown(first, { key: "Enter", ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: /^Edit line 2:/ }));
+    expect(screen.getByRole("textbox", { name: "Edit line" })).toHaveValue("Hi Sam, thanks for calling back.");
+    const t = makeTranscript({ id: "tr-1" });
+    t.segments = t.segments.map((x, i) => (i === 0 ? { ...x, text: "Hello, Sam here." } : x));
+    await act(async () => answer(t));
+    expect(screen.getByRole("textbox", { name: "Edit line" })).toHaveValue("Hi Sam, thanks for calling back.");
+  });
+
+    it("while editing Show as is off and a line starts from the words as heard, never a view's", async () => {
     respond("transcript_detail", makeTranscript({ id: "tr-1", views: { available: ["roman"], status: "ready" } }));
     respond("transcript_views", { status: "ready", available: ["roman"], roman: ["Roman line one", null, null, null], english: null, model: null, made_at: null, error: null });
     await open();

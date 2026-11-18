@@ -7,7 +7,8 @@ import type { ItemGroup } from "../../lib/libraryGroups";
 import { formatDuration, rowDate } from "../../lib/format";
 import { itemState, recordingName } from "../../lib/library";
 import { sourceLabel } from "../../lib/libraryGroups";
-import { Icon, Icons } from "../components";
+import { Badge, Icon, Icons } from "../components";
+import { RECOVERED_CHIP } from "../../lib/recovered";
 import type { MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
 
@@ -71,7 +72,9 @@ export function columnsMenu(columns: readonly Column[], onChange: (c: Column[]) 
   }));
 }
 
-export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, rowActions }: {
+export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, rowActions, recovered }: {
+  /** Recordings recovered after a restart: their "Recovered" chip. */
+  recovered?: ReadonlySet<string>;
   groups: readonly ItemGroup[];
   columns: readonly Column[];
   collapsed: ReadonlySet<string>;
@@ -120,6 +123,7 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
                       <span className="el-table__title" dir="auto">{name}</span>
                       {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}
                     </button>
+                    {recovered?.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
                   </td>
                   {columns.map((c) => <td key={c} dir="auto">{cell(item, c)}</td>)}
                   <td className="el-table__actions">{selecting ? null : rowActions(item)}</td>
