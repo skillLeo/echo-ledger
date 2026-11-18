@@ -5,7 +5,7 @@ Paused **2026-11-18 03:52 PKT** at the owner's request, for 1–2 days. All work
 - production is up and not in maintenance mode;
 - every worktree is clean and every branch is pushed.
 
-Read this file first, then `docs/HANDOFF.md`, then the local plans (`docs/RUN_MODE.md`, `docs/ROADMAP.md`, `docs/PLAN_V2_PARITY.md`, `docs/PLAN_CALL_RULES.md`). The local plans are excluded from git and live only on this Mac.
+Read this file first, then `docs/HANDOFF.md`, then the local plans in docs/: RUN_MODE, ROADMAP, PLAN_V2_PARITY and PLAN_CALL_RULES. The local plans are excluded from git and live only on this Mac.
 
 ## 1. Branches and worktrees
 
