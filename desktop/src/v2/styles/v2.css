@@ -1096,3 +1096,6 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-table__open { display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-align: start; }
 .el-table__title { font-weight: var(--el-text-body-strong-weight); max-inline-size: calc(var(--el-space-64) * 5); overflow: hidden; text-overflow: ellipsis; }
 .el-table__actions { inline-size: var(--el-space-40); }
+.el-nav-sub { display: flex; flex-direction: column; margin-block-end: var(--el-space-4); }
+.el-nav-item--sub { inline-size: 100%; min-block-size: calc(var(--el-component-button-height) - var(--el-space-8)); padding-inline-start: calc(var(--el-space-8) + var(--el-space-32)); font-size: var(--el-text-caption-size); }
+.el-nav-item--sub[aria-current="page"] { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); }

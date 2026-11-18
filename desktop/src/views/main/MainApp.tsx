@@ -863,6 +863,8 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
+            pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
+            shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
             onUpload={canRecord ? () => void pickImport() : undefined} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={() => setHelp(true)}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
             notices={<Suspense fallback={null}><div className="el-root el-embedded">

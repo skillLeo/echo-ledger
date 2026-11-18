@@ -61,11 +61,16 @@ export type ShellProps = {
   onSearch?: () => void;
   searchKeys?: string;
   onHelp?: () => void;
+  /** The sub-lists, as classic's sidebar: pinned projects under Projects, Shared's places under Library. */
+  pinnedProjects?: readonly { id: string; name: string }[];
+  projectId?: string | null;
+  onProject?: (id: string) => void;
+  shared?: { tabs: readonly (readonly [string, string])[]; current: string | null; open: (tab: string) => void };
   /** Today's page for the current tab. */
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onSearch, searchKeys, onHelp, children }: ShellProps) {
+export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onSearch, searchKeys, onHelp, pinnedProjects = [], projectId = null, onProject, shared, children }: ShellProps) {
   // One press records or stops: while that is under way (the core answering, then the status saying so) more presses
   // and held-down keys do nothing, so a double click never starts and stops at once.
   const [pressing, setPressing] = useState<{ from: boolean } | null>(null);
@@ -150,7 +155,23 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
           </button>
         )}
         {item("library", "Library", Icons.LibraryIcon)}
+        {shared && shared.tabs.length > 0 && (
+          <ul className="el-nav-sub" aria-label="Shared">
+            {shared.tabs.map(([tab, label]) => (
+              <li key={tab}><button type="button" className="el-nav-item el-nav-item--sub" aria-current={shared.current === tab ? "page" : undefined}
+                onClick={() => { setOwn(null); shared.open(tab); }}>{label === "With me" ? "Shared with me" : label}</button></li>
+            ))}
+          </ul>
+        )}
         {item("projects", "Projects", Icons.FolderIcon)}
+        {onProject && pinnedProjects.length > 0 && (
+          <ul className="el-nav-sub" aria-label="Pinned projects">
+            {pinnedProjects.map((p) => (
+              <li key={p.id}><button type="button" className="el-nav-item el-nav-item--sub" dir="auto" aria-current={current === "projects" && projectId === p.id ? "page" : undefined}
+                onClick={() => { setOwn(null); onProject(p.id); }}>{p.name}</button></li>
+            ))}
+          </ul>
+        )}
         {item("live", "Live", Icons.WaveIcon)}
         {item("ask", "Ask", Icons.AskIcon)}
       </Sidebar>

@@ -87,6 +87,23 @@ describe("the shell", () => {
     expect(onHelp).toHaveBeenCalled();
   });
 
+  it("the sub-lists: pinned projects under Projects and Shared's places under Library, each opening its page", () => {
+    const onProject = vi.fn();
+    const open = vi.fn();
+    render(<Shell tab="projects" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} projectId="p2"
+      pinnedProjects={[{ id: "p1", name: "Acme" }, { id: "p2", name: "قریشی ٹیکسٹائل" }]} onProject={onProject}
+      shared={{ tabs: [["with-me", "With me"], ["links", "My links"], ["requests", "Request links"]], current: null, open }}><p /></Shell>);
+    const pinned = screen.getByRole("list", { name: "Pinned projects" });
+    expect(within(pinned).getAllByRole("button").map((b) => b.textContent)).toEqual(["Acme", "قریشی ٹیکسٹائل"]);
+    expect(within(pinned).getByRole("button", { name: "قریشی ٹیکسٹائل" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(within(pinned).getByRole("button", { name: "Acme" }));
+    expect(onProject).toHaveBeenCalledWith("p1");
+    const sharedList = screen.getByRole("list", { name: "Shared" });
+    expect(within(sharedList).getAllByRole("button").map((b) => b.textContent)).toEqual(["Shared with me", "My links", "Request links"]);
+    fireEvent.click(within(sharedList).getByRole("button", { name: "My links" }));
+    expect(open).toHaveBeenCalledWith("links");
+  });
+
   it("Activity shows how many need you; none shows no badge", () => {
     const { rerender } = render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} activity={3}><p /></Shell>);
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: /^Activity/ })).toHaveTextContent("Activity3");
