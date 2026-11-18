@@ -29,6 +29,8 @@ type Load<T> = { state: "loading" } | { state: "error"; message: string } | { st
 
 export type RecordingPageProps = {
   item: LibraryItem;
+  /** Open at a moment (a transcript match, a link): the player goes there and its line is shown. */
+  startAt?: { ms: number; seq: number } | null;
   onBack: () => void;
   /** One message at a time, with at most one action (the Library's Toast). */
   onMessage: (message: string) => void;
@@ -47,7 +49,7 @@ type ShowAs = "original" | TranscriptView;
 const inField = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'));
 
-export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPageProps) {
+export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }: RecordingPageProps) {
   const [tab, setTab] = useState<Tab>("transcript");
   const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string> }>>({ state: "loading" });
   const [transcript, setTranscript] = useState<Load<TranscriptDetail | null>>({ state: "loading" });
@@ -257,6 +259,16 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
     document.addEventListener("keydown", on);
     return () => document.removeEventListener("keydown", on);
   }, []);
+  // Opened at a moment: once the page has its audio and transcript, the player goes there (once per request) and the
+  // line of that moment is shown and marked.
+  const startedAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (!startAt || startedAt.current === startAt.seq || detail.state === "loading" || transcript.state === "loading") return;
+    startedAt.current = startAt.seq;
+    seek(startAt.ms / 1000);
+    window.requestAnimationFrame?.(() => page.current?.querySelector(".el-segment--active")?.scrollIntoView?.({ block: "center" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startAt?.seq, detail.state, transcript.state]);
   // Follow: the line being played stays in view.
   useEffect(() => {
     if (!follow || active < 0 || !playing) return;

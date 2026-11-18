@@ -4,12 +4,13 @@
 // Cmd/Ctrl+A or X) picks several; the row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem } from "../../lib/ipc";
-import { formatDuration, rowDate } from "../../lib/format";
+import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type SearchResult } from "../../lib/ipc";
+import { formatDuration, rowDate, timestamp } from "../../lib/format";
+import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import {
-  Badge, Button, Chip, Dialog, Icon, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Button, Card, Chip, Dialog, Icon, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
@@ -19,7 +20,7 @@ import {
   type FilterKey, type Filters,
 } from "./filters";
 import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
-import { searchItems, type SortKey } from "../../lib/library";
+import { recordingName, searchItems, type SortKey } from "../../lib/library";
 import { RecordingPage } from "./RecordingPage";
 import { SourceAvatar } from "./SourceAvatar";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
@@ -51,7 +52,7 @@ export type LibraryV2Props = {
   onImport?: () => void;
   onRecord?: () => void;
   /** Open this recording (a notice, the palette, a link); `seq` makes the same one open again. */
-  openRequest?: { id: string; seq: number } | null;
+  openRequest?: { id: string; seq: number; ms?: number } | null;
   /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
   viewRequest?: { view: SavedView; seq: number } | null;
   /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
@@ -174,9 +175,33 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
   useEffect(() => {
     if (openRequest) {
       setView("all");
+      setOpenAt(openRequest.ms ? { id: openRequest.id, ms: openRequest.ms, seq: openRequest.seq } : null);
       setOpenId(openRequest.id);
     }
   }, [openRequest]);
+  // Search inside transcripts (classic's "In transcripts"): from two letters, a moment after typing stops.
+  const [found, setFound] = useState<SearchResult["data"]>([]);
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2 || view === "trash") {
+      setFound([]);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      api.searchLibrary({ q }).then((r) => alive && setFound(r?.data ?? [])).catch(() => alive && setFound([]));
+    }, 350);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, view]);
+  /** A transcript match: the recording opened at its moment. */
+  const [openAt, setOpenAt] = useState<{ id: string; ms: number; seq: number } | null>(null);
+  const openHit = (id: string, ms: number) => {
+    setOpenAt({ id, ms, seq: ++seq.current });
+    setOpenId(id);
+  };
 
   const remove = async (item: LibraryItem) => {
     const title = item.title?.trim() || "Recording";
@@ -483,7 +508,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
   if (open) {
     return (
       <div className="el-root el-embedded" data-v2="library" ref={root}>
-        <RecordingPage item={open} onBack={() => setOpenId(null)} onMessage={(t) => say(t)}
+        <RecordingPage item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={() => setOpenId(null)} onMessage={(t) => say(t)}
           menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
         {dialogs}
         {toasts}
@@ -582,7 +607,34 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
           <FilterBar label="Filter recordings" end={(filtersOn > 0 || (view !== "all" && view !== "trash")) && (
             <Button variant="quiet" size="sm" onClick={clearAll}>Clear all</Button>
           )}>
-            {view === "trash" ? (
+            {view !== "trash" && found.length > 0 && (
+          <section className="el-group el-hits" aria-label="Matches in transcripts">
+            <h2 className="el-caption el-body-strong el-group__title">In transcripts</h2>
+            <Card>
+              <ul className="el-group__rows">
+                {found.map((r) => {
+                  const name = recordingName(r.session.title);
+                  return (
+                    <li key={r.session.id} className="el-hit">
+                      <div className="el-hit__head">
+                        <span className="el-body-strong" dir="auto">{name}</span>
+                        <span className="el-caption el-secondary">{rowDate(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</span>
+                      </div>
+                      {r.hits.map((h) => (
+                        <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="el-hit__line" onClick={() => openHit(r.session.id, h.start_ms)}
+                          aria-label={`Play ${name} from ${timestamp(h.start_ms)}`}>
+                          <span className="el-num el-caption el-secondary">{timestamp(h.start_ms)}</span>
+                          <span dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, k) => (p.hit ? <mark key={k}>{p.text}</mark> : <span key={k}>{p.text}</span>))}</span>
+                        </button>
+                      ))}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          </section>
+        )}
+        {view === "trash" ? (
               <Chip label="All recordings" onToggle={() => setView("all")} />
             ) : (
               <>

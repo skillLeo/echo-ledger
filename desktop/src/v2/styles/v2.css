@@ -1064,3 +1064,9 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-library-top { display: flex; flex-direction: column; gap: var(--el-space-12); }
 .el-library-setup { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-12) var(--el-space-16); }
 .el-shell__status-fix { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: var(--el-space-2); }
+/* Search inside transcripts: each recording with its matching lines, a line opens the recording at its moment. */
+.el-hit { display: flex; flex-direction: column; gap: var(--el-space-2); padding: var(--el-space-8); }
+.el-hit__head { display: flex; align-items: baseline; gap: var(--el-space-8); }
+.el-hit__line { display: flex; gap: var(--el-space-8); align-items: baseline; text-align: start; border: 0; padding: var(--el-space-4); border-radius: var(--el-radius-sm); background: transparent; cursor: pointer; }
+.el-hit__line:hover { background: var(--el-role-bg-subtle); }
+.el-hit__line mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
