@@ -1,0 +1,40 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Services\InterfaceFlags;
+use Filament\Facades\Filament;
+use Tests\Feature\Security\Support\SecurityFixtures as Fx;
+
+/*
+ * The new recording page's Copy menu (docs/PLAN_V2_PARITY.md section 4): Copy text, with timestamps, without, and Copy
+ * for AI with a header; the player writes the text (filament.v2.copy). Classic keeps its player buttons only.
+ */
+
+beforeEach(function () {
+    $this->owner = Fx::user();
+    $this->recording = Fx::session($this->owner, Fx::device($this->owner), ['title' => 'Payment terms', 'caller_name' => 'Ahmed']);
+    Fx::transcript($this->recording, 'The proforma is ready.');
+    Filament::setCurrentPanel('app');
+    $this->actingAs($this->owner->fresh(), 'web');
+});
+
+it('offers Copy ▾ beside Share with the four copies, and the header for AI', function () {
+    foreach (InterfaceFlags::UI_V2 as $flag) {
+        app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
+    }
+
+    $html = (string) $this->get('/app/sessions/'.$this->recording->id)->assertOk()->getContent();
+
+    expect($html)->toContain('window.elV2Copy = ')
+        ->toContain('Copy with timestamps')->toContain('Copy without timestamps')->toContain('Copy for AI')
+        ->toContain("window.elV2Copy('text'")->toContain("window.elV2Copy('ai'")
+        ->toContain('Recording: Payment terms')->toContain('People: Ahmed');
+    expect(strpos($html, '>Share<'))->toBeLessThan(strpos($html, 'Copy without timestamps'));
+});
+
+it('leaves the classic recording page as it was', function () {
+    $html = (string) $this->get('/app/sessions/'.$this->recording->id)->assertOk()->getContent();
+
+    expect($html)->not->toContain('window.elV2Copy')->not->toContain('Copy without timestamps');
+});

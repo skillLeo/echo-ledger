@@ -1633,7 +1633,7 @@ WEB-LIB-122,web,Library,"Selected: Transcribe all with the minutes first, Copy f
 WEB-LIB-123,web,Library,Waiting for decision line (“4 calls waiting · Review”),Library top,Not in v2 (Home lists what needs you),missing,none
 WEB-LIB-124,web,Library,"Lazy loading for 2,000+ recordings (plan 3)",Pages of 5 to 50,Pages of 5 to 50 (same),partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-124)
 WEB-REC-059,web,Recording page,Previous / Next recording,Not in classic (Previous / Next belong to the screens gallery),Not in v2,missing,none
-WEB-REC-060,web,Recording page,"Copy menu: text, with timestamps, without, Copy for AI with a header (plan 4)",WhatsApp › Copy for AI; the Download panel,Not one Copy menu,missing,none
+WEB-REC-060,web,Recording page,"Copy menu: text, with timestamps, without, Copy for AI with a header (plan 4)",Player › Copy text / Copy with timestamps / Copy for AI,"Recording › Copy ▾ beside Share: Copy text, Copy with timestamps, Copy without timestamps, Copy for AI (title, date, people, language first)",done,tests/Feature/V2/RecordingCopyTest.php
 WEB-REC-061,web,Recording page,Mark important (plan 4),Not in classic,Not in v2,missing,none
 WEB-REC-062,web,Recording page,Moment markers on the player bar (plan 4),Bookmarks and pauses list,Not on the v2 bar,missing,none
 WEB-REC-063,web,Recording page,Moments tab with the recording's screens,Recording › Screens,Recording › Moments,done,tests/Feature/V2/WebParityTest.php (WEB-REC-063)
