@@ -104,7 +104,20 @@ describe("the shell", () => {
     expect(open).toHaveBeenCalledWith("links");
   });
 
-  it("Activity shows how many need you; none shows no badge", () => {
+  it("Record's menu also makes a new project and a request link (classic's + menu)", () => {
+    const onNewProject = vi.fn();
+    const onRequestLink = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onNewProject={onNewProject} onRequestLink={onRequestLink}><p /></Shell>);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "New project…" }));
+    expect(onNewProject).toHaveBeenCalled();
+    fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Request link…" }));
+    expect(onRequestLink).toHaveBeenCalled();
+  });
+
+    it("Activity shows how many need you; none shows no badge", () => {
     const { rerender } = render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} activity={3}><p /></Shell>);
     expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: /^Activity/ })).toHaveTextContent("Activity3");
     rerender(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} activity={0}><p /></Shell>);

@@ -9,6 +9,7 @@ import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
+import { useRecovered } from "../../lib/recovered";
 import {
   Badge, Button, Card, Chip, Dialog, Icon, Segmented, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
@@ -58,9 +59,12 @@ export type LibraryV2Props = {
   viewRequest?: { view: SavedView; seq: number } | null;
   /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
   top?: Omit<LibraryTopProps, "items" | "onAction"> & { onActivity: () => void };
+  /** Opens a project (the recording page's project name). */
+  onOpenProject?: (id: string) => void;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, onOpenProject }: LibraryV2Props) {
+  const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<SavedView>("all");
@@ -518,7 +522,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
     setFocusAfter({ rowId: id, seq: ++seq.current });
   };
   const recordingPage = open && (
-    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)}
+    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
       menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
@@ -747,9 +751,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
                 const r = rowModel(item);
                 return (
                   <ListRow key={item.id} leading={<SourceAvatar item={item} />} strong title={r.title} meta={r.meta}
-                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined} mark={item.pinned || r.screens ? <>
-                      {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}
+                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : recovered.has(item.id) ? <Badge tone="accent">Recovered</Badge> : undefined}
+                    mark={item.pinned || r.screens || item.labels?.length ? <>
+                      {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}{" "}
                       {r.screens ? <ScreensMark count={r.screens} /> : null}
+                      {(item.labels ?? []).slice(0, 3).map((l) => [<span key={l} className="el-row__label" dir="auto">{l}</span>, " "])}
                     </> : undefined}
                     endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
                     rowId={item.id} onClick={(e) => rowClick(item, e)} onContextMenu={(e) => rowMenu(item, e)}

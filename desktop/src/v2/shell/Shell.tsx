@@ -58,6 +58,9 @@ export type ShellProps = {
   onVoiceNote?: () => void;
   /** Upload files (the Record menu), Search (the palette, with its keys) and Help & shortcuts, as classic's sidebar. */
   onUpload?: () => void;
+  /** New project and Request link (classic's + menu), in Record's menu. */
+  onNewProject?: () => void;
+  onRequestLink?: () => void;
   onSearch?: () => void;
   searchKeys?: string;
   onHelp?: () => void;
@@ -70,7 +73,7 @@ export type ShellProps = {
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onSearch, searchKeys, onHelp, pinnedProjects = [], projectId = null, onProject, shared, children }: ShellProps) {
+export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, pinnedProjects = [], projectId = null, onProject, shared, children }: ShellProps) {
   // One press records or stops: while that is under way (the core answering, then the status saying so) more presses
   // and held-down keys do nothing, so a double click never starts and stops at once.
   const [pressing, setPressing] = useState<{ from: boolean } | null>(null);
@@ -144,6 +147,8 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
           <Menu label="More ways to record" button={{ variant: stops ? "danger" : "primary", icon: Icons.ChevronDownIcon }} items={[
             ...(onVoiceNote ? [{ label: "Voice note", icon: Icons.MicIcon, onPick: onVoiceNote }] : []),
             ...(onUpload ? [{ label: "Upload files…", icon: Icons.ShareIcon, onPick: onUpload }] : []),
+            ...(onNewProject ? [{ label: "New project…", icon: Icons.FolderIcon, group: "Make", onPick: onNewProject }] : []),
+            ...(onRequestLink ? [{ label: "Request link…", icon: Icons.LinkIcon, group: "Make", onPick: onRequestLink }] : []),
             { label: "Record page", icon: Icons.HomeIcon, onPick: () => go("record") },
           ]} />
         </div>

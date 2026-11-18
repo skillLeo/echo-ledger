@@ -13,10 +13,12 @@ import { screenSaid, screensByLine } from "../../lib/screens";
 import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
-import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, sourceAppLabel, type UnsureMarkers } from "../../lib/format";
-import { activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName } from "../../lib/player";
+import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
+import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName } from "../../lib/player";
 import { CallNotesV2, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
-import { normalizeLanguage } from "../../lib/languages";
+import { normalizeLanguage, scriptWarning, transcribedIn } from "../../lib/languages";
+import { bookmarksOf, type Bookmark } from "../../lib/library";
+import { ShareDialog } from "../../views/main/ShareDialog";
 import { PDF_HINT } from "../../views/main/TranscriptTools";
 import { screenMarker } from "../../lib/screens";
 import { Badge, Button, Card, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, Tabs, Toggle, Transcript, type Segment } from "../components";
@@ -35,6 +37,8 @@ export type RecordingPageProps = {
   onBack: () => void;
   /** One message at a time, with at most one action (the Library's Toast). */
   onMessage: (message: string) => void;
+  /** Opens the recording's project (its name in the meta line). */
+  onOpenProject?: (id: string) => void;
   /** The Library's one menu for this recording, with this page's parts in their places (Delete stays last). */
   menu: (own: RecordingMenuParts) => MenuItem[];
 };
@@ -50,9 +54,10 @@ type ShowAs = "original" | TranscriptView;
 const inField = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'));
 
-export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }: RecordingPageProps) {
+export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject }: RecordingPageProps) {
+  const [sharing, setSharing] = useState(false);
   const [tab, setTab] = useState<Tab>("transcript");
-  const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string> }>>({ state: "loading" });
+  const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string>; bookmarks: Bookmark[] }>>({ state: "loading" });
   const [transcript, setTranscript] = useState<Load<TranscriptDetail | null>>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -95,6 +100,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }:
         value: {
           url: typeof d.playback_url === "string" ? d.playback_url : null,
           names: names && typeof names === "object" && !Array.isArray(names) ? (names as Record<string, string>) : {},
+          bookmarks: bookmarksOf(d),
         },
       });
     }).catch((e) => live && setDetail({ state: "error", message: errorMessage(e) }));
@@ -221,7 +227,10 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }:
     }
   };
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
-  const meta = [source, item.client?.name, formatWhen(item.started_at)].filter(Boolean).join(" · ");
+  const meta = [source, formatWhen(item.started_at)].filter(Boolean).join(" · ");
+  const engine = transcribedIn(item.transcript);
+  const warning = scriptWarning(item.transcript?.script_warning);
+  const bookmarks = detail.state === "ready" ? detail.value.bookmarks : [];
 
   // Copy: the lines in the view on screen, with unsure words marked as the console says; Copy for AI starts with a short
   // header (title, date, people, language) and the note on the marks, and puts each screen after the line of its moment.
@@ -370,13 +379,20 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }:
           <p className="el-page__meta el-secondary">
             <SourceAvatar item={item} size="sm" />
             <span dir="auto">{meta}</span>
+            {item.client && (onOpenProject
+              ? <Button size="sm" variant="quiet" icon={Icons.FolderIcon} onClick={() => onOpenProject(item.client!.id)} aria-label={`Open project ${item.client.name}`}>{item.client.name}</Button>
+              : <span dir="auto">{item.client.name}</span>)}
+            {item.title_auto && item.title?.trim() && <Badge>Automatic title</Badge>}
             {state === "ready" ? <Badge tone="success">Transcribed</Badge>
               : state === "failed" ? <Badge tone="danger">Transcription failed</Badge>
                 : state === "no_audio" ? <Badge>Nothing was heard</Badge>
                   : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge tone="warning">Untranscribed</Badge>}
           </p>
+          {engine && <p className="el-caption el-secondary">Transcribed in {engine}</p>}
+          {warning && <p className="el-caption el-row__error" role="status">{warning}</p>}
         </div>
         <div className="el-page__actions">
+          <Button variant="quiet" icon={Icons.LinkIcon} onClick={() => setSharing(true)} title="Share a view-only link or send to a teammate">Share</Button>
           <Menu label="Recording actions" items={recordingMenu} button={{ variant: "quiet", icon: Icons.MoreIcon, title: "More" }} />
         </div>
       </header>
@@ -398,7 +414,20 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }:
             <div className="el-recording__toggles">
               <Toggle label="Skip silence" checked={skipSilence} onChange={setSkipSilence} />
               <Toggle label="Follow" checked={follow} onChange={setFollow} />
+              <span className="el-caption el-secondary el-recording__keys">{PLAYER_HINT}</span>
             </div>
+            {bookmarks.length > 0 && (
+              <ul className="el-bookmarks" aria-label="Bookmarks">
+                {bookmarks.map((b) => (
+                  <li key={b.id}>
+                    <Button size="sm" variant="secondary" icon={Icons.PinIcon} title={b.note ?? undefined} disabled={!(detail.state === "ready" && detail.value.url)}
+                      onClick={() => { seek(b.at_ms / 1000); void audio.current?.play().catch(() => undefined); }}>
+                      {`${timestamp(b.at_ms)}${b.tag ? ` ${b.tag}` : ""}`}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </>
         )}
       </Card>
@@ -479,6 +508,11 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }:
             {item.device?.name && <><dt>Device</dt><dd>{item.device.name}</dd></>}
             {item.client?.name && <><dt>Project</dt><dd>{item.client.name}</dd></>}
             {item.language_chip && <><dt>Language</dt><dd>{item.language_chip}</dd></>}
+            {item.transcript?.final_provider_label || item.transcript?.final_provider
+              ? <><dt>Transcription engine</dt><dd>{item.transcript.final_provider_label || providerName(item.transcript.final_provider)}</dd></> : null}
+            <dt>Kept</dt><dd>{item.keep ? "Forever" : "Until auto clean-up (Settings › Storage)"}</dd>
+            <dt>Labels</dt><dd>{item.labels?.length ? item.labels.join(", ") : "None"}</dd>
+            <dt>Pinned</dt><dd>{item.pinned ? "Yes" : "No"}</dd>
           </dl>
         )}
       </Tabs>
@@ -496,6 +530,10 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }:
       {tool === "history" && transcript.state === "ready" && transcript.value && (
         <HistoryDialog transcriptId={transcript.value.id} edited={!!transcript.value.edited_at} onClose={() => setTool(null)} say={onMessage}
           onRestored={showTranscript} />
+      )}
+      {sharing && (
+        <ShareDialog target={{ kind: "session", id: item.id, title: item.title ?? null, hasAudio: detail.state === "ready" && !!detail.value.url }}
+          view={exportView} onClose={() => setSharing(false)} notify={(t) => onMessage(t)} />
       )}
       {transcribeOpen && <TranscribeDialog ids={[item.id]} onClose={() => setTranscribeOpen(false)} say={onMessage} />}
       {languageOpen && <LanguageDialog item={item} onClose={() => setLanguageOpen(false)} say={onMessage} />}

@@ -1106,6 +1106,9 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
   inline-size: min(100%, calc(var(--el-space-64) * 11)); overflow-y: auto;
   background: var(--el-role-bg-canvas); box-shadow: var(--el-shadow-2);
 }
-.el-drawer__close { position: absolute; inset-block-start: var(--el-space-8); inset-inline-end: var(--el-space-8); z-index: 1; }
+.el-drawer__close { position: absolute; inset-block-start: var(--el-space-8); inset-inline-end: var(--el-space-8); z-index: var(--el-layer-sticky); }
 .el-drawer .el-page { padding-block-start: var(--el-space-16); }
 .el-drawer .el-page__back { display: none; }
+.el-recording__keys { margin-inline-start: auto; align-self: center; }
+.el-bookmarks { display: flex; flex-wrap: wrap; gap: var(--el-space-8); padding: 0 var(--el-space-16) var(--el-space-12); }
+.el-row__label { padding-inline: var(--el-space-4); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); white-space: nowrap; }
