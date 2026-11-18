@@ -85,6 +85,56 @@ describe("transcript tools", () => {
     expect(screen.queryByRole("button", { name: /^Edit line/ })).toBeNull();
   });
 
+  it("an edit's answer after another recording opened is dropped; a line being edited is saved when the page closes", async () => {
+    const other = makeItem("s2", { title: "Standup", transcript: { final_status: "completed", final_transcript_id: "tr-2", live_available: false, preview: "Hi" } });
+    respond("library_list", [ITEM, other]);
+    respond("library_refresh", [ITEM, other]);
+    let answer: (v: unknown) => void = () => undefined;
+    respondWith("transcript_edit", () => new Promise((done) => { answer = done; }));
+    const { rerender } = render(<LibraryV2 openRequest={{ id: "s1", seq: 1 }} />);
+    await act(flushAsync);
+    await act(flushAsync);
+    fireEvent.click(within(tools()).getByRole("button", { name: "Edit text" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit line 1: Hello, this is Sam." }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Edit line" }), { target: { value: "Hello, this is Sam from Acme." } });
+    // Another recording opens while the line is still open: the edit is saved, not lost.
+    respond("transcript_detail", makeTranscript({ id: "tr-2", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1000, text: "Standup words." }] }));
+    rerender(<LibraryV2 openRequest={{ id: "s2", seq: 2 }} />);
+    await act(flushAsync);
+    expect(callsOf("transcript_edit")).toEqual([{ id: "tr-1", index: 0, text: "Hello, this is Sam from Acme." }]);
+    // Its answer arrives late: Standup's lines stay on screen.
+    const late = makeTranscript({ id: "tr-1" });
+    late.segments = late.segments.map((x, i) => (i === 0 ? { ...x, text: "Hello, this is Sam from Acme." } : x));
+    await act(async () => answer(late));
+    expect(screen.getByRole("heading", { level: 1, name: "Standup" })).toBeInTheDocument();
+    expect(lines()).toEqual(["Standup words."]);
+  });
+
+  it("while editing Show as is off and a line starts from the words as heard, never a view's", async () => {
+    respond("transcript_detail", makeTranscript({ id: "tr-1", views: { available: ["roman"], status: "ready" } }));
+    respond("transcript_views", { status: "ready", available: ["roman"], roman: ["Roman line one", null, null, null], english: null, model: null, made_at: null, error: null });
+    await open();
+    fireEvent.click(screen.getByRole("radio", { name: "Roman Urdu" }));
+    await act(flushAsync);
+    expect(lines()[0]).toBe("Roman line one");
+    fireEvent.click(within(tools()).getByRole("button", { name: "Edit text" }));
+    await act(flushAsync);
+    expect(screen.queryByRole("radiogroup", { name: "Show as" })).toBeNull();
+    expect(screen.getByText(/Show as is off while you edit/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit line 1: Hello, this is Sam." }));
+    expect(screen.getByRole("textbox", { name: "Edit line" })).toHaveValue("Hello, this is Sam.");
+  });
+
+  it("a Speakers save that fails says why in the dialog", async () => {
+    respondWith("speakers_rename", () => { throw new Error("The server is out of reach"); });
+    await open();
+    fireEvent.click(within(tools()).getByRole("button", { name: "Speakers" }));
+    const dialog = screen.getByRole("dialog", { name: "Speakers" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(dialog).toHaveAccessibleDescription(/The names weren't saved: .*out of reach/);
+  });
+
   it("Find and replace with Match case and Whole words; says how many", async () => {
     respond("transcript_replace", { replaced: 2, transcript: makeTranscript({ id: "tr-1" }) });
     await open();

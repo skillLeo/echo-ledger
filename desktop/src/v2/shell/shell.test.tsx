@@ -314,6 +314,19 @@ describe("the app with the flags", () => {
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
   });
 
+  it("in the app, two quick presses on the sidebar's Record send one record_now", async () => {
+    backend({ "ui_v2.shell": true });
+    respond("record_now", null);
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.click(within(nav).getByRole("button", { name: "Record" }));
+    fireEvent.click(within(nav).getByRole("button", { name: "Record" }));
+    await act(flushAsync);
+    expect(callsOf("record_now")).toHaveLength(1);
+  });
+
   it("the command palette in the new design: the sidebar's Search and Ctrl/⌘+K open it in the new look, with every row, the arrows, Enter and Esc", async () => {
     backend({ "ui_v2.shell": true });
     render(<MainApp />);

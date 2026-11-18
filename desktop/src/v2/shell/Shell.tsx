@@ -3,13 +3,13 @@
 // line. Record opens the page where recording starts (today's Home and its Live Assist card). Modules not rebuilt yet
 // show today's page inside the new frame; Live and Ask, without their page yet, say where to find them meanwhile.
 import { useEffect, useState, type ReactNode } from "react";
-
-/** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
-const PRESS_HOLD_MS = 3000;
 import { Avatar, Badge, Button, EmptyState, Icon, Icons, NavItem, Sidebar, Status } from "../components";
 import { Menu } from "../components/Menu";
 import { initials } from "../settings/initials";
 import type { MainTab } from "../../lib/mainView";
+
+/** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
+const PRESS_HOLD_MS = 3000;
 
 export type Module = "record" | "library" | "projects" | "live" | "ask" | "activity" | "settings";
 

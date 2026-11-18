@@ -515,7 +515,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
   if (open) {
     return (
       <div className="el-root el-embedded" data-v2="library" ref={root}>
-        <RecordingPage item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={() => setOpenId(null)} onMessage={(t) => say(t)}
+        <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={() => setOpenId(null)} onMessage={(t) => say(t)}
           menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
         {dialogs}
         {toasts}

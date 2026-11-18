@@ -49,12 +49,21 @@ export function FindBar({ query, onQuery, count, current, onStep, onClose }: {
 export function LineEditor({ text, onSave, onCancel }: { text: string; onSave: (text: string) => void; onCancel: () => void }) {
   const [value, setValue] = useState(text);
   const done = useRef(false);
+  const latest = useRef({ value, text, onSave });
+  latest.current = { value, text, onSave };
   const finish = (save: boolean) => {
     if (done.current) return;
     done.current = true;
     if (save && value.trim() && value.trim() !== text.trim()) onSave(value.trim());
     else onCancel();
   };
+  // Leaving the page or the recording while a line is being edited saves it: an edit is never lost without a word.
+  useEffect(() => () => {
+    if (done.current) return;
+    done.current = true;
+    const { value: v, text: t, onSave: save } = latest.current;
+    if (v.trim() && v.trim() !== t.trim()) save(v.trim());
+  }, []);
   return (
     <textarea className="el-line-editor" aria-label="Edit line" value={value} dir="auto" rows={Math.min(6, Math.max(2, Math.ceil(value.length / 70)))} autoFocus
       onChange={(e) => setValue(e.target.value)} onBlur={() => finish(true)}
@@ -118,20 +127,22 @@ export function SpeakersDialog({ sessionId, labels, names, hasProject, onSaved, 
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(labels.map((l) => [l, names[l] ?? ""])));
   const [remember, setRemember] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const save = async () => {
     setBusy(true);
+    setError(null);
     try {
       const r = await api.renameSpeakers(sessionId, Object.fromEntries(labels.map((l) => [l, draft[l]?.trim() || null])), remember);
       onSaved(r.speaker_names);
       say("Speakers renamed");
       onClose();
     } catch (e) {
-      say(errorMessage(e));
+      setError(`The names weren't saved: ${errorMessage(e)}`);
       setBusy(false);
     }
   };
   return (
-    <Dialog open title="Speakers" description="Names shown instead of the speaker labels, here and in what you copy or export." onClose={onClose}
+    <Dialog open title="Speakers" description={error ?? "Names shown instead of the speaker labels, here and in what you copy or export."} onClose={onClose}
       actions={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" loading={busy} loadingLabel="Saving…" onClick={() => void save()}>Save</Button></>}>
       {labels.map((l) => (
         <TextField key={l} label={l} placeholder={l} value={draft[l] ?? ""} maxLength={80} onChange={(e) => setDraft((d) => ({ ...d, [l]: e.target.value }))} />

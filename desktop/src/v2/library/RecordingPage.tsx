@@ -167,21 +167,34 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }:
     if (findCurrent >= 0) page.current?.querySelector("mark.el-find--current")?.scrollIntoView?.({ block: "center" });
   }, [findCurrent, findQuery]);
   const canEdit = transcript.state === "ready" && !!transcript.value && transcript.value.kind === "final" && transcript.value.status === "completed" && transcript.value.segments.length > 0;
+  // An answer that comes back once another recording or transcript is on screen is dropped (classic's rule): it never
+  // replaces what is shown now. The edit itself is saved on the server either way.
+  const shownTranscript = useRef<string | null>(null);
+  shownTranscript.current = transcript.state === "ready" ? transcript.value?.id ?? null : null;
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  const stillShown = (transcriptId: string) => mounted.current && shownTranscript.current === transcriptId;
+  const showTranscript = (t: TranscriptDetail) => {
+    if (stillShown(t.id)) setTranscript({ state: "ready", value: t });
+  };
   const saveLine = async (index: number, text: string) => {
-    setEditLine(null);
-    const id = transcript.state === "ready" ? transcript.value?.id : null;
+    if (mounted.current) setEditLine(null);
+    const id = shownTranscript.current;
     if (!id) return;
     try {
       const { learn: _learn, ...edited } = await api.editTranscript(id, index, text);
+      if (!stillShown(id)) return;
       setTranscript({ state: "ready", value: edited });
       onMessage("Line saved");
     } catch (e) {
       onMessage(errorMessage(e));
     }
   };
+  /** The words a line has in the transcript itself (never a Show as view's): what an edit starts from. */
+  const rawText = (i: number) => (transcript.state === "ready" ? transcript.value?.segments[i]?.text ?? segments[i].text : segments[i].text);
   const renderText = (i: number) => {
-    if (editing && editLine === i) return <LineEditor text={segments[i].text} onSave={(t) => void saveLine(i, t)} onCancel={() => setEditLine(null)} />;
-    if (editing) return <button type="button" className="el-line-edit" aria-label={`Edit line ${i + 1}: ${segments[i].text}`} onClick={(e) => { e.stopPropagation(); setEditLine(i); }}>{segments[i].text}</button>;
+    if (editing && editLine === i) return <LineEditor text={rawText(i)} onSave={(t) => void saveLine(i, t)} onCancel={() => setEditLine(null)} />;
+    if (editing) return <button type="button" className="el-line-edit" aria-label={`Edit line ${i + 1}: ${rawText(i)}`} onClick={(e) => { e.stopPropagation(); setEditLine(i); }}>{rawText(i)}</button>;
     const inLine = matches.map((m, index) => ({ ...m, index })).filter((m) => m.seg === i);
     if (!inLine.length) return undefined;
     return markParts(segments[i].text, inLine).map((p, k) => (p.match === null ? <span key={k}>{p.text}</span>
@@ -416,9 +429,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }:
             <>
               {(viewsInfo?.available.length ?? 0) > 0 && tDetail?.kind === "final" && (
                 <div className="el-recording__viewbar">
-                  <Segmented label="Show as" value={showAs} onChange={(v) => void chooseView(v)}
+                  {editing ? <span className="el-caption el-secondary">Show as is off while you edit: you edit the words as heard.</span> : <Segmented label="Show as" value={showAs} onChange={(v) => void chooseView(v)}
                     options={[...VIEW_ORDER.filter((v) => viewsInfo!.available.includes(v)).map((v) => ({ value: v as ShowAs, label: VIEW_LABELS[v] })),
-                      { value: "original" as ShowAs, label: "Original" }]} />
+                      { value: "original" as ShowAs, label: "Original" }]} />}
                   {showAs !== "original" && (
                     <span className="el-caption el-secondary" role="status">
                       {views?.status === "ready" ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`
@@ -473,16 +486,16 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu }:
         text={lines.length ? copiedTranscript(lines, viewText, false, unsure) : null} hasAudio={detail.state === "ready" && !!detail.value.url} />}
       {tool === "replace" && transcript.state === "ready" && transcript.value && (
         <ReplaceDialog transcriptId={transcript.value.id} onClose={() => setTool(null)} say={onMessage}
-          onReplaced={(t) => setTranscript({ state: "ready", value: t })} />
+          onReplaced={showTranscript} />
       )}
       {tool === "speakers" && transcript.state === "ready" && transcript.value && (
         <SpeakersDialog sessionId={item.id} labels={speakerLabels(transcript.value.segments)} names={names} hasProject={!!item.client}
           onClose={() => setTool(null)} say={onMessage}
-          onSaved={(n) => setDetail((d) => (d.state === "ready" ? { state: "ready", value: { ...d.value, names: n } } : d))} />
+          onSaved={(n) => { if (mounted.current) setDetail((d) => (d.state === "ready" ? { state: "ready", value: { ...d.value, names: n } } : d)); }} />
       )}
       {tool === "history" && transcript.state === "ready" && transcript.value && (
         <HistoryDialog transcriptId={transcript.value.id} edited={!!transcript.value.edited_at} onClose={() => setTool(null)} say={onMessage}
-          onRestored={(t) => setTranscript({ state: "ready", value: t })} />
+          onRestored={showTranscript} />
       )}
       {transcribeOpen && <TranscribeDialog ids={[item.id]} onClose={() => setTranscribeOpen(false)} say={onMessage} />}
       {languageOpen && <LanguageDialog item={item} onClose={() => setLanguageOpen(false)} say={onMessage} />}
