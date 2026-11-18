@@ -747,7 +747,12 @@ export default function MainApp() {
     <>
       {tab === "library" && ui.flags["ui_v2.library"] && (
         <Suspense fallback={null}>
-          <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} />
+          <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2}
+            top={ui.flags["ui_v2.shell"] ? {
+              status, onRecord: canRecord && !status.recording ? record : undefined, onActivity: () => goTo("activity"),
+              onSetup: () => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic"),
+              onReadyCheck: () => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic"),
+            } : undefined} />
         </Suspense>
       )}
       {tab === "library" && !ui.flags["ui_v2.library"] && (

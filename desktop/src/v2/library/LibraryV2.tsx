@@ -22,6 +22,7 @@ import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGr
 import { searchItems, type SortKey } from "../../lib/library";
 import { RecordingPage } from "./RecordingPage";
 import { SourceAvatar } from "./SourceAvatar";
+import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
   copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
@@ -53,9 +54,11 @@ export type LibraryV2Props = {
   openRequest?: { id: string; seq: number } | null;
   /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
   viewRequest?: { view: SavedView; seq: number } | null;
+  /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
+  top?: Omit<LibraryTopProps, "items" | "onAction"> & { onActivity: () => void };
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }: LibraryV2Props) {
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<SavedView>("all");
@@ -563,6 +566,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
               {onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>New recording</Button>}
             </div>
           </header>
+        )}
+        {top && view !== "trash" && !selecting && (
+          <LibraryTop {...top} items={items}
+            onAction={(a) => (a === "missed" ? top.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"))} />
         )}
         <div className="el-page__tools">
           {view !== "trash" && (

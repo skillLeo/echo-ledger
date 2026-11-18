@@ -1059,3 +1059,7 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-palette .palette-detail mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
 .el-palette .palette-empty { padding: var(--el-space-12) var(--el-space-8); }
 .el-palette .palette-foot { padding: var(--el-space-8) var(--el-space-16); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+
+/* The top of the Library (plan 2): the get-started card until setup is done, and the needs-action banner. */
+.el-library-top { display: flex; flex-direction: column; gap: var(--el-space-12); }
+.el-library-setup { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-12) var(--el-space-16); }
