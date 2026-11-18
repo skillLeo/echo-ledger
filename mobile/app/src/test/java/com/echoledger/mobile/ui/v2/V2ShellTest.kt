@@ -1,12 +1,17 @@
 package com.echoledger.mobile.ui.v2
 
 import androidx.compose.material3.Text
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
+import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.work.WorkManager
 import androidx.work.testing.TestListenableWorkerBuilder
@@ -15,6 +20,7 @@ import com.echoledger.mobile.calls.DiscardLaterWorker
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
@@ -101,8 +107,12 @@ class V2ShellTest : ScreenTest() {
     fun deleteMovesToTrashAndUndoRestores() {
         seed()
         shell(v2)
+        // A long press starts selection mode (docs/PLAN_V2_PARITY.md 3); Delete asks first.
         compose.onNodeWithText("Bilal Traders", substring = true).performTouchInput { longClick() }
-        compose.onNodeWithText("Delete").performClick()
+        compose.onNodeWithText("1 selected").assertExists()
+        compose.onNodeWithContentDescription("Delete").performClick()
+        compose.onNodeWithText("Delete this recording?").assertExists()
+        compose.onNodeWithText("Delete 1").performClick()
         compose.waitUntil(5_000) { server.requestsTo("DELETE", "/api/sessions/01JA").isNotEmpty() }
         compose.onNodeWithText("Moved to Trash").assertExists()
         compose.onNodeWithText("Undo").performClick()
@@ -328,5 +338,54 @@ class V2ShellTest : ScreenTest() {
         discard(0)
         settle { state("r-a") == "pending_decision" && state("r-b") == "discarding" }
         settle { vm.pending.value.any { it.id == "r-a" && it.state == "pending_decision" } }
+    }
+
+    @Test
+    fun selectionModeActsOnEverySelectedRecording() {
+        seed()
+        server.on("POST", "/api/sessions/bulk", FakeServer.json(200, """{"changed": 2}"""))
+        shell(v2)
+        compose.onNodeWithText("Bilal Traders", substring = true).performTouchInput { longClick() }
+        // A tap adds a row while selecting; Select all and Unselect all.
+        compose.onNodeWithText("Rehman and Sons Textiles", substring = true).performClick()
+        compose.onNodeWithText("2 selected").assertExists()
+        compose.onNodeWithContentDescription("Unselect all").performClick()
+        compose.onNodeWithText("2 selected").assertDoesNotExist()
+        compose.onNodeWithText("Bilal Traders", substring = true).performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("Select all").performClick()
+        compose.onNodeWithText("2 selected").assertExists()
+        // ⋮ › Pin goes to the server for both, then selection ends.
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Pin").performClick()
+        compose.waitUntil(5_000) { server.requestsTo("POST", "/api/sessions/bulk").isNotEmpty() }
+        val body = server.requestsTo("POST", "/api/sessions/bulk").single().bodyText()
+        assertTrue(body, body.contains("\"pin\"") && body.contains("01JA") && body.contains("01JB"))
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("2 selected").fetchSemanticsNodes().isEmpty() }
+        // Back leaves selection.
+        compose.onNodeWithText("Bilal Traders", substring = true).performTouchInput { longClick() }
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithText("1 selected").assertDoesNotExist()
+    }
+
+    @Test
+    fun theFilterChipsNarrowTheListAndClearAllBringsItBack() {
+        seed()
+        shell(v2)
+        compose.onNodeWithText("Views ▾").performClick()
+        compose.onNode(hasText("Untranscribed") and isToggleable()).performClick()
+        compose.onNodeWithText("Apply").performClick()
+        compose.onNodeWithText("Bilal Traders", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Rehman and Sons Textiles", substring = true).assertExists()
+        compose.onNodeWithText("Clear all").performClick()
+        compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
+    }
+
+    @Test
+    fun sortAndGroupIsRememberedForTheView() {
+        seed()
+        shell(v2)
+        compose.onNodeWithContentDescription("Sort and group").performClick()
+        compose.onNode(hasText("Name A–Z") and isSelectable()).performSemanticsAction(SemanticsActions.OnClick)
+        pumpUntil("sort saved") { vm.settings.value.libraryViews.values.any { it.sort == "title" } }
     }
 }

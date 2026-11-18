@@ -4,9 +4,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AllInclusive
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
@@ -14,7 +17,9 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ClosedCaption
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Forward10
@@ -34,10 +39,12 @@ import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Replay10
 import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -77,6 +84,15 @@ object EchoIcons {
     val Move: ImageVector get() = Icons.Outlined.DriveFileMove
     val Delete: ImageVector get() = Icons.Outlined.DeleteOutline
     val Folder: ImageVector get() = Icons.Outlined.FolderOpen
+    val Label: ImageVector get() = Icons.AutoMirrored.Outlined.Label
+    val Sort: ImageVector get() = Icons.AutoMirrored.Outlined.Sort
+    val Keep: ImageVector get() = Icons.Outlined.AllInclusive
+    val Rename: ImageVector get() = Icons.Outlined.Edit
+    val Sync: ImageVector get() = Icons.Outlined.Sync
+    val Export: ImageVector get() = Icons.Outlined.FileDownload
+    val SelectAll: ImageVector get() = Icons.Outlined.SelectAll
+    val Unpin: ImageVector get() = Icons.Outlined.PushPin
+    val Unfold: ImageVector get() = Icons.AutoMirrored.Outlined.KeyboardArrowRight
     val SignOut: ImageVector get() = Icons.AutoMirrored.Outlined.Logout
     val Captions: ImageVector get() = Icons.Outlined.ClosedCaption
 

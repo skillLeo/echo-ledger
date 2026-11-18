@@ -21,6 +21,7 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.UiFlags
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
+import kotlinx.coroutines.async
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -98,6 +99,16 @@ class DesignSwitchTest : ScreenTest() {
         assertFalse(UiFlags(mapOf(UiFlags.SHELL to true), classic = true).shell)
     }
 
+    /**
+     * Chooses [design] off the main thread and pumps it until done: the choice reads the config again on the view
+     * model's (main) scope, so blocking the main thread for it would never finish.
+     */
+    private fun choose(design: Design): com.echoledger.mobile.ui.MainViewModel.DesignAnswer {
+        val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).async { DesignChoice.choose(app, vm, design) }
+        com.echoledger.mobile.testsupport.pumpUntil("the design choice") { job.isCompleted }
+        return kotlinx.coroutines.runBlocking { job.await() }
+    }
+
     private val v2Flags = UiFlags.PHONE_V2.joinToString(",") { "\"$it\": true" }
 
     @Test
@@ -112,7 +123,7 @@ class DesignSwitchTest : ScreenTest() {
                    "ui_design": {"choice": "v2", "current": "v2", "can_try": false, "can_switch_back": true}}"""
             )
         )
-        val answer = kotlinx.coroutines.runBlocking { DesignChoice.choose(app, vm, Design.V2) }
+        val answer = choose(Design.V2)
         assertEquals(com.echoledger.mobile.ui.MainViewModel.DesignAnswer.Taken, answer)
         val body = server.requestsTo("PUT", "/api/account/ui").single().bodyText()
         assertEquals("""{"design":"v2"}""", body)
@@ -130,7 +141,7 @@ class DesignSwitchTest : ScreenTest() {
         kotlinx.coroutines.runBlocking { app.pairLocally(server) }
         val refused = FakeServer.json(422, """{"code": "design_not_available", "message": "No new design to try."}""")
         server.on("PUT", "/api/account/ui", refused)
-        val answer = kotlinx.coroutines.runBlocking { DesignChoice.choose(app, vm, Design.V2) }
+        val answer = choose(Design.V2)
         assertEquals(com.echoledger.mobile.ui.MainViewModel.DesignAnswer.NotAvailable, answer)
         assertNull(DesignChoice.current)
         assertFalse(UiFlags().shell)
@@ -141,7 +152,7 @@ class DesignSwitchTest : ScreenTest() {
         kotlinx.coroutines.runBlocking { app.pairLocally(server) }
         val older = FakeServer.json(422, """{"code": "validation_failed", "message": "classic is required"}""")
         server.on("PUT", "/api/account/ui", older)
-        val answer = kotlinx.coroutines.runBlocking { DesignChoice.choose(app, vm, Design.Classic) }
+        val answer = choose(Design.Classic)
         assertEquals(com.echoledger.mobile.ui.MainViewModel.DesignAnswer.OnThisPhone, answer)
         assertEquals(Design.Classic, DesignChoice.current)
         assertFalse(UiFlags(mapOf(UiFlags.SHELL to true)).shell)
