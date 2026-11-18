@@ -1,7 +1,7 @@
 id,platform,screen,feature,how to reach it in classic,where it lives in v2,status,test that proves it
 PH-LIB-001,phone,Library,"Status chip ""Calls: Ready"" / ""Not ready"" in the header, opens the Ready check","Library header, right of the title (ReadyChipView)",Not in the v2 Library header; Home's status strip has it. Plan 2 keeps the chip in the Library header,missing,none
 PH-LIB-002,phone,Library,⋮ More › Select (enters selection with the first row ticked),Library header ⋮ › Select,Library ⋮ › Select,done,V2ShellTest.selectionModeActsOnEverySelectedRecording
-PH-LIB-003,phone,Library,⋮ More › Sync now,Library header ⋮ › Sync now,Library ⋮ › Sync now,partial,built; no test yet
+PH-LIB-003,phone,Library,⋮ More › Sync now,Library header ⋮ › Sync now,Library ⋮ › Sync now,done,V2LibraryActionsTest.syncNowAsksTheServerAgain
 PH-LIB-004,phone,Library,Pull down to sync,Pull the list down (PullToRefreshBox),Pull down on the Library list,partial,built; no test yet
 PH-LIB-005,phone,Library,"⋮ More › Recently deleted: restore, Delete now / Erase now (asks), ""erased in 5 hours""",Library header ⋮ › Recently deleted (inline card),Library ⋮ › Recently deleted (Trash page),partial,built; no test yet
 PH-LIB-006,phone,Library,Scroll to the top when the Library tab is tapped again,Tap the Library tab while on it,Not wired,missing,none
@@ -9,39 +9,39 @@ PH-LIB-007,phone,Library,"Search recordings and transcripts: titles on the phone
 PH-LIB-008,phone,Library,"Search results in two groups, Titles and Transcripts; a transcript match opens the recording at that moment","Search pill, type 2+ characters","Search: Titles, then Transcripts (server); a match opens the recording",partial,built; no test yet
 PH-LIB-009,phone,Library,"Recent searches (last five, kept on this phone, tap to search again)","Search pill, empty field",None,missing,none
 PH-LIB-010,phone,Library,Clear search (✕) and leave search (back arrow or Back),Search field,Search field has a clear button; there is no separate search mode to leave,partial,none
-PH-LIB-011,phone,Library,"Group by: Date (default), App / Type, Project, Language, Status, Device, None",Sort icon in the search pill › View › Group by,Sort and group button › Group by (all seven),partial,built; V2ShellTest.sortAndGroupIsRememberedForTheView covers the sheet
+PH-LIB-011,phone,Library,"Group by: Date (default), App / Type, Project, Language, Status, Device, None",Sort icon in the search pill › View › Group by,Sort and group button › Group by (all seven),done,V2LibraryActionsTest.groupByAndDensityAreChosenInTheSheet
 PH-LIB-012,phone,Library,"Sort by: Newest, Oldest, Longest, Shortest, Name A–Z, Recently opened",Sort icon in the search pill › View › Sort by,Sort and group button › Sort by (all six),done,V2ShellTest.sortAndGroupIsRememberedForTheView
-PH-LIB-013,phone,Library,"Density: Comfortable, Compact",Sort icon in the search pill › View › Density,Sort and group button › Density,partial,built; no test yet
+PH-LIB-013,phone,Library,"Density: Comfortable, Compact",Sort icon in the search pill › View › Density,Sort and group button › Density,done,V2LibraryActionsTest.groupByAndDensityAreChosenInTheSheet
 PH-LIB-014,phone,Library,"Group, sort and density remembered per view on this phone",View sheet (stored in settings per view),Remembered per view (settings.libraryViews),done,V2ShellTest.sortAndGroupIsRememberedForTheView
 PH-LIB-015,phone,Library,"Filter chip Source: Phone, Desktop, Web (several at once, with a count)",Chip row under the search pill › Source › sheet with Clear and Apply,"Filter chip row (Source, Date, Project, Language, Label, Bookmark)",partial,built; V2ShellTest.theFilterChipsNarrowTheListAndClearAllBringsItBack covers the chips
 PH-LIB-016,phone,Library,"Filter chip Date: Today, This week (with counts)",Chip row › Date,"Filter chip row (Source, Date, Project, Language, Label, Bookmark)",partial,built; V2ShellTest.theFilterChipsNarrowTheListAndClearAllBringsItBack covers the chips
 PH-LIB-017,phone,Library,Filter chip Project: No project and every project,Chip row › Project,"Filter chip row (Source, Date, Project, Language, Label, Bookmark)",partial,built; V2ShellTest.theFilterChipsNarrowTheListAndClearAllBringsItBack covers the chips
 PH-LIB-018,phone,Library,Filter chip Language (the languages the recordings have),Chip row › Language,"Filter chip row (Source, Date, Project, Language, Label, Bookmark)",partial,built; V2ShellTest.theFilterChipsNarrowTheListAndClearAllBringsItBack covers the chips
-PH-LIB-019,phone,Library,"Filter chip Status: Waiting for decision, Failed, Pinned, Bookmarked (with counts)",Chip row › Status,"Status ▾ (Waiting, Failed); Views ▾ (Pinned, Bookmarked)",partial,built; no test yet
+PH-LIB-019,phone,Library,"Filter chip Status: Waiting for decision, Failed, Pinned, Bookmarked (with counts)",Chip row › Status,"Status ▾ (Waiting, Failed); Views ▾ (Pinned, Bookmarked)",done,V2LibraryActionsTest.nothingMatchesOffersToClearTheFilters
 PH-LIB-020,phone,Library,"Filter by bookmark: Any bookmark, Bookmark: <tag>",Chip row › Status (bookmark tags),"Filter chip row (Source, Date, Project, Language, Label, Bookmark)",partial,built; V2ShellTest.theFilterChipsNarrowTheListAndClearAllBringsItBack covers the chips
 PH-LIB-021,phone,Library,Filter chip Labels (shown when there are labels),Chip row › Labels,"Filter chip row (Source, Date, Project, Language, Label, Bookmark)",partial,built; V2ShellTest.theFilterChipsNarrowTheListAndClearAllBringsItBack covers the chips
 PH-LIB-022,phone,Library,A chip shows how many choices are on; each sheet has Clear and Apply,Chip row,Each chip shows its count; its sheet has Clear and Apply,done,V2ShellTest.theFilterChipsNarrowTheListAndClearAllBringsItBack
-PH-LIB-023,phone,Library,"""Nothing matches"" with a Clear filters button",Library with filters that match nothing,"""Nothing matches"" with Clear filters",partial,built; no test yet
-PH-LIB-024,phone,Library,"Sections: Pinned first, then Today, Yesterday, This week, then one per month; sticky headers with counts",The list (Group by Date),"Sections with counts (LibraryGrouping), Pinned first",partial,built; no test yet
-PH-LIB-025,phone,Library,Fold or unfold a section (tap its name or arrow),Section header,Tap a section header to fold,partial,built; no test yet
-PH-LIB-026,phone,Library,"Select a whole section (its box in selection, or long-press the header)",Section header,Section box in selection mode,partial,built; no test yet
+PH-LIB-023,phone,Library,"""Nothing matches"" with a Clear filters button",Library with filters that match nothing,"""Nothing matches"" with Clear filters",done,V2LibraryActionsTest.nothingMatchesOffersToClearTheFilters
+PH-LIB-024,phone,Library,"Sections: Pinned first, then Today, Yesterday, This week, then one per month; sticky headers with counts",The list (Group by Date),"Sections with counts (LibraryGrouping), Pinned first",done,V2LibraryActionsTest.sectionsFoldAndSelectAsAWhole
+PH-LIB-025,phone,Library,Fold or unfold a section (tap its name or arrow),Section header,Tap a section header to fold,done,V2LibraryActionsTest.sectionsFoldAndSelectAsAWhole
+PH-LIB-026,phone,Library,"Select a whole section (its box in selection, or long-press the header)",Section header,Section box in selection mode,done,V2LibraryActionsTest.sectionsFoldAndSelectAsAWhole
 PH-LIB-027,phone,Library,Long-press a row (or tap its icon) to select; tap more rows to add; Back leaves selection,Library row,Long-press a row: selection mode; a tap adds; Back leaves,done,V2ShellTest.selectionModeActsOnEverySelectedRecording
 PH-LIB-028,phone,Library,Selection bar: ✕ close and the count,Library in selection,"Selection bar: ✕ and ""3 selected""",done,V2ShellTest.selectionModeActsOnEverySelectedRecording
 PH-LIB-029,phone,Library,Select all,Selection bar,Selection bar: Select all / Unselect all,done,V2ShellTest.selectionModeActsOnEverySelectedRecording
-PH-LIB-030,phone,Library,"Move to: Inbox, the projects as a tree, New project… (name, Create)",Selection bar › Move,"Selection bar › Move to: No project, each project, New project",partial,built; no test yet
-PH-LIB-031,phone,Library,"Label: type a label, Add or Remove; existing labels to pick",Selection bar › Label,"Selection bar › Label: add a new one, Add or Remove existing",partial,built; no test yet
+PH-LIB-030,phone,Library,"Move to: Inbox, the projects as a tree, New project… (name, Create)",Selection bar › Move,"Selection bar › Move to: No project, each project, New project",done,V2LibraryActionsTest.moveToAProjectAndToANewOne
+PH-LIB-031,phone,Library,"Label: type a label, Add or Remove; existing labels to pick",Selection bar › Label,"Selection bar › Label: add a new one, Add or Remove existing",done,V2LibraryActionsTest.labelAddsANewLabel
 PH-LIB-032,phone,Library,"Delete the selection: ""Delete 3 (restorable for 48 hours)""",Selection bar › Delete,"Selection bar › Delete (asks: restorable for 48 hours), Undo",done,V2ShellTest.deleteMovesToTrashAndUndoRestores
-PH-LIB-033,phone,Library,Rename (one selected),Selection bar ⋮ › Rename,Selection ⋮ › Rename (one selected),partial,built; no test yet
+PH-LIB-033,phone,Library,Rename (one selected),Selection bar ⋮ › Rename,Selection ⋮ › Rename (one selected),done,V2LibraryActionsTest.renameAndKeepForeverFromTheMenu
 PH-LIB-034,phone,Library,Pin and Unpin the selection,Selection bar ⋮ › Pin / Unpin,"Selection ⋮ › Pin, Unpin",done,V2ShellTest.selectionModeActsOnEverySelectedRecording
-PH-LIB-035,phone,Library,Keep forever and Stop keeping the selection,Selection bar ⋮ › Keep forever / Stop keeping,"Selection ⋮ › Keep forever, Allow auto clean-up",partial,built; no test yet
-PH-LIB-036,phone,Library,Export the selection as Word (.docx),Selection bar ⋮ › Export as Word,"Selection bar › Share or export, or ⋮ › Export ▸ docx",partial,built; no test yet
-PH-LIB-037,phone,Library,Export the selection as Text (.txt),Selection bar ⋮ › Export as Text,"Selection bar › Share or export, or ⋮ › Export ▸ txt",partial,built; no test yet
-PH-LIB-038,phone,Library,Export the selection as Markdown (.md),Selection bar ⋮ › Export as Markdown,"Selection bar › Share or export, or ⋮ › Export ▸ md",partial,built; no test yet
-PH-LIB-039,phone,Library,Export the selection as Subtitles (.srt),Selection bar ⋮ › Export as Subtitles,"Selection bar › Share or export, or ⋮ › Export ▸ srt",partial,built; no test yet
-PH-LIB-040,phone,Library,Export the selection as Web subtitles (.vtt),Selection bar ⋮ › Export as Web subtitles,"Selection bar › Share or export, or ⋮ › Export ▸ vtt",partial,built; no test yet
-PH-LIB-041,phone,Library,Export the selection as JSON,Selection bar ⋮ › Export as JSON,"Selection bar › Share or export, or ⋮ › Export ▸ json",partial,built; no test yet
-PH-LIB-042,phone,Library,Swipe right on a row: Pin / Unpin (springs back),Library row,Swipe right: Pin / Unpin,partial,built; no test yet
-PH-LIB-043,phone,Library,"Swipe left on a row: Delete, with ""Recording deleted · Undo""",Library row,Swipe left: Delete with Undo,partial,built; no test yet
+PH-LIB-035,phone,Library,Keep forever and Stop keeping the selection,Selection bar ⋮ › Keep forever / Stop keeping,"Selection ⋮ › Keep forever, Allow auto clean-up",done,V2LibraryActionsTest.renameAndKeepForeverFromTheMenu
+PH-LIB-036,phone,Library,Export the selection as Word (.docx),Selection bar ⋮ › Export as Word,"Selection bar › Share or export, or ⋮ › Export ▸ docx",done,V2LibraryActionsTest.exportAsEachFormatAsksTheServer
+PH-LIB-037,phone,Library,Export the selection as Text (.txt),Selection bar ⋮ › Export as Text,"Selection bar › Share or export, or ⋮ › Export ▸ txt",done,V2LibraryActionsTest.exportAsEachFormatAsksTheServer
+PH-LIB-038,phone,Library,Export the selection as Markdown (.md),Selection bar ⋮ › Export as Markdown,"Selection bar › Share or export, or ⋮ › Export ▸ md",done,V2LibraryActionsTest.exportAsEachFormatAsksTheServer
+PH-LIB-039,phone,Library,Export the selection as Subtitles (.srt),Selection bar ⋮ › Export as Subtitles,"Selection bar › Share or export, or ⋮ › Export ▸ srt",done,V2LibraryActionsTest.exportAsEachFormatAsksTheServer
+PH-LIB-040,phone,Library,Export the selection as Web subtitles (.vtt),Selection bar ⋮ › Export as Web subtitles,"Selection bar › Share or export, or ⋮ › Export ▸ vtt",done,V2LibraryActionsTest.exportAsEachFormatAsksTheServer
+PH-LIB-041,phone,Library,Export the selection as JSON,Selection bar ⋮ › Export as JSON,"Selection bar › Share or export, or ⋮ › Export ▸ json",done,V2LibraryActionsTest.exportAsEachFormatAsksTheServer
+PH-LIB-042,phone,Library,Swipe right on a row: Pin / Unpin (springs back),Library row,Swipe right: Pin / Unpin,done,V2LibraryActionsTest.swipeRightPinsAndSwipeLeftDeletes
+PH-LIB-043,phone,Library,"Swipe left on a row: Delete, with ""Recording deleted · Undo""",Library row,Swipe left: Delete with Undo,done,V2LibraryActionsTest.swipeRightPinsAndSwipeLeftDeletes
 PH-LIB-044,phone,Library,"Row icon: the source app's tile with a device badge (phone, laptop, web)",Library row,"Source icon in an avatar; no device badge; generic glyphs, not the real logos (plan 3)",partial,none
 PH-LIB-045,phone,Library,"Row title, or ""WhatsApp call"" / ""Voice note"" / ""Phone call"" when untitled",Library row,"Title, else the source's name",done,LibraryModelTest.statusDurationAndTitle
 PH-LIB-046,phone,Library,"Row time: ""1:29 AM"" today and yesterday, ""Mon"" this week, ""Oct 22"" before",Library row,WhatsApp-style times in the screen's language,done,LibraryModelTest.timesReadLikeWhatsAppInTheLocalZone
