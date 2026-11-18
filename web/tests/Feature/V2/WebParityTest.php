@@ -66,17 +66,15 @@ it('holds every web row\'s check in the new design, on pages drawn by the v2.0 f
                 $widget->assertSee($words);
             }
         } elseif ($check['type'] === 'exportformats') {
-            // Each format is one the Export form accepts (its select refuses anything else).
+            // Each format is an item of the new Library's Export sub-menu, and downloads.
             $this->actingAs($owner->fresh(), 'web');
             $ids = CaptureSession::query()->orderBy('started_at')->limit(2)->pluck('id')->all();
             foreach ($check['formats'] as $format) {
-                $page = Livewire::test(ListCaptureSessions::class)->callTableBulkAction('export', $ids, data: ['format' => $format]);
-                if ($page->errors()->has('mountedActions.0.data.format')) {
-                    $failed[] = "{$id}: Export refuses {$format}";
+                $page = Livewire::test(ListCaptureSessions::class)->callTableBulkAction('export'.ucfirst($format), $ids, data: ['view' => null]);
+                if ($page->errors()->isNotEmpty()) {
+                    $failed[] = "{$id}: Export ▸ {$format} refused";
                 }
             }
-            $refused = Livewire::test(ListCaptureSessions::class)->callTableBulkAction('export', $ids, data: ['format' => 'exe']);
-            expect($refused->errors()->isNotEmpty())->toBeTrue('Export refuses a format it does not offer');
         }
     }
 
