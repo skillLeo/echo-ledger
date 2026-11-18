@@ -13,6 +13,7 @@ use App\Filament\Resources\CaptureSessions\Widgets\PlanLimitWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\LibraryView;
+use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\Shell;
 use App\Filament\Support\WhatsAppActions;
@@ -21,6 +22,7 @@ use App\Models\Client;
 use App\Models\User;
 use App\Services\ConsoleUploads;
 use App\Services\LibraryOrganiser;
+use App\Services\RetentionPolicy;
 use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
@@ -318,6 +320,36 @@ class ListCaptureSessions extends ListRecords
     }
 
     /** A recording moved by a drop on the sidebar: the list is drawn again with it in its new place. */
+    /**
+     * The page's listeners, with the v2.0 selection's Undo only under the new Library (the classic page stays as it was).
+     *
+     * @return array<string, string>
+     */
+    protected function getListeners(): array
+    {
+        return [...parent::getListeners(), ...(ConsoleV2::library() ? ['el-library-undo-delete' => 'undoDelete'] : [])];
+    }
+
+    /**
+     * Undo of the v2.0 selection's Delete: the person's recordings among [$ids] come back from Trash while it still keeps
+     * them (one that was erased since, or is not theirs, is left alone).
+     *
+     * @param  list<string>  $ids
+     */
+    public function undoDelete(array $ids): void
+    {
+        $back = 0;
+        $policy = app(RetentionPolicy::class);
+        foreach (CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', array_slice(array_map('strval', $ids), 0, 200))->get() as $session) {
+            if ($session->restorable()) {
+                $policy->restore($session);
+                $back++;
+            }
+        }
+        Notification::make()->title($back === 1 ? __('1 recording is back') : __(':count recordings are back', ['count' => $back]))->success()->send();
+        $this->resetTable();
+    }
+
     #[On('el-library-changed')]
     public function libraryChanged(): void
     {
@@ -430,7 +462,7 @@ class ListCaptureSessions extends ListRecords
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_AFTER, fn (): string => Livewire::current() instanceof self && ! ConsoleV2::library() ? view('filament.library.toolbar')->render() : '');
             // Since v2.0 (ui_v2.library): the quick filters right after the search field.
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_SEARCH_AFTER, fn (): string => Livewire::current() instanceof self && ConsoleV2::library() ? view('filament.v2.library-toolbar')->render() : '');
-            FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view('filament.library.bulk-bar'), scopes: self::class);
+            FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view(ConsoleV2::library() ? 'filament.v2.bulk-bar' : 'filament.library.bulk-bar'), scopes: self::class);
         }
     }
 

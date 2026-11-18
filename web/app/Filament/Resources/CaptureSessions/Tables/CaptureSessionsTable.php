@@ -302,6 +302,9 @@ final class CaptureSessionsTable
      */
     public static function bulkBar(): array
     {
+        if (ConsoleV2::library()) {
+            return self::v2BulkBar();
+        }
         $actions = collect(self::bulkActions())->keyBy(fn (BulkAction $action): string => (string) $action->getName());
         $small = fn (BulkAction $action): BulkAction => $action->button()->size(Size::Small);
 
@@ -314,6 +317,63 @@ final class CaptureSessionsTable
             BulkActionGroup::make([$actions['pin'], $actions['unpin'], $actions['keep'], $actions['unkeep']])->label('More')
                 ->icon(Heroicon::OutlinedEllipsisHorizontal)->button()->size(Size::Small)->color('gray'),
         ];
+    }
+
+    /**
+     * The v2.0 selection bar (docs/PLAN_V2_PARITY.md section 3): four main actions as icon buttons (Move to project,
+     * Label, Export, Delete), then ⋮ with every other one in groups: Organise, Export, Danger (Delete last, red).
+     * Delete moves to Trash at once and offers Undo, as the apps do (the Trash keeps them for trash.keep_hours).
+     *
+     * @return list<BulkAction|BulkActionGroup>
+     */
+    public static function v2BulkBar(): array
+    {
+        $actions = collect(self::bulkActions())->keyBy(fn (BulkAction $action): string => (string) $action->getName());
+        $icon = fn (BulkAction|BulkActionGroup $action, string $label): BulkAction|BulkActionGroup => $action->label(__($label))->tooltip(__($label))->iconButton()->color('gray');
+
+        return [
+            $icon($actions['move'], 'Move to project'),
+            $icon(BulkActionGroup::make([$actions['label'], $actions['unlabel']])->icon(Heroicon::OutlinedTag), 'Label'),
+            $icon($actions['export']->icon(Heroicon::OutlinedArrowDownTray), 'Export'),
+            $icon(self::trashBulkAction('trash'), 'Delete')->color('danger'),
+            BulkActionGroup::make([
+                BulkActionGroup::make([$actions['pin'], $actions['unpin'], $actions['keep'], $actions['unkeep'], self::clone($actions['move']), self::clone($actions['label']), self::clone($actions['unlabel'])])
+                    ->label(__('Organise'))->dropdown(false),
+                BulkActionGroup::make([self::clone($actions['export'])])->label(__('Export'))->dropdown(false),
+                BulkActionGroup::make([self::trashBulkAction('trashFromMenu')->label(__('Delete'))->color('danger')])->label(__('Danger'))->dropdown(false),
+            ])->label(__('More'))->tooltip(__('More'))->icon(Heroicon::OutlinedEllipsisVertical)->iconButton()->color('gray'),
+        ];
+    }
+
+    /** A second copy of a bulk action under another name, for the ⋮ menu beside its button. */
+    private static function clone(BulkAction $action): BulkAction
+    {
+        $copy = clone $action;
+
+        return $copy->name($action->getName().'InMenu');
+    }
+
+    /**
+     * Delete for the v2.0 selection: the recordings go to Trash at once (each one the person may delete), and the
+     * notice offers Undo, which brings them back while the Trash still has them.
+     */
+    public static function trashBulkAction(string $name): BulkAction
+    {
+        return BulkAction::make($name)->label(__('Delete'))->icon(Heroicon::OutlinedTrash)
+            ->authorizeIndividualRecords('delete')
+            ->action(function (Collection $records): void {
+                $ids = [];
+                foreach ($records as $record) {
+                    $record->delete();
+                    $ids[] = (string) $record->getKey();
+                }
+                $count = count($ids);
+                Notification::make()->title($count === 1 ? __('1 recording moved to Trash') : __(':count recordings moved to Trash', ['count' => $count]))
+                    ->success()
+                    ->actions([Action::make('undo')->label(__('Undo'))->button()->dispatch('el-library-undo-delete', ['ids' => $ids])->close()])
+                    ->send();
+            })
+            ->deselectRecordsAfterCompletion();
     }
 
     /**

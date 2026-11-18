@@ -954,7 +954,7 @@ WEB-LIB-022,web,Library,Library: button “Retry”,Library › Retry,Library �
 WEB-LIB-023,web,Library,Library: button “Cancel”,Library › Cancel,Library › Cancel (same control),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-023)
 WEB-LIB-024,web,Library,Library: button “Remove”,Library › Remove,Library › Remove (same control),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-024)
 WEB-LIB-025,web,Library,Library: button “Clear the list”,Library › Clear the list,Library › Clear the list (same control),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-025)
-WEB-LIB-026,web,Library,Library: button “Move”,Library › Move,Library › Move (same control),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-026)
+WEB-LIB-026,web,Library,Library: button “Move”,Library › Move,Library › select › Move to project,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-026)
 WEB-LIB-027,web,Library,Library: button “Label”,Library › Label,Library › Label (same control),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-027)
 WEB-LIB-028,web,Library,Library: menuitem “Add label”,Library › Add label,Library › Add label (same control),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-028)
 WEB-LIB-029,web,Library,Library: menuitem “Remove label”,Library › Remove label,Library › Remove label (same control),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-029)
@@ -1623,12 +1623,13 @@ WEB-LIB-114,web,Library,"Row: snippet, important flag, label colour dot, unread 
 WEB-LIB-115,web,Library,Failed recording: Retry and Delete on its row,Library › Failed uploads view,Not in v2: the row actions show only in the classic Failed uploads view,missing,none
 WEB-LIB-116,web,Library,Right-click a row opens its menu (plan 3),Not in classic,Not in v2,missing,none
 WEB-LIB-117,web,Library,Swipe left Delete / right Pin at phone width (plan 3),Not in classic,Not in v2,missing,none
-WEB-LIB-118,web,Library,"Selection mode: × to leave, 4 main actions, ⋮ Organise / Export / Danger (plan 3)","Library › select › bar (Move, Label, Export, Delete, More)",Same bar as classic,partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-118)
-WEB-LIB-119,web,Library,"Export formats: Word, Text, Markdown, Subtitles .srt and .vtt, JSON, in a chosen view",Library › select › Export,Library › select › Export (same modal),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-119)
-WEB-LIB-120,web,Library,Export as a web page (.html) for many (plan 3),One recording only (Download),Not in v2,missing,none
-WEB-LIB-121,web,Library,"Selected: Transcribe all with the minutes first, Copy for AI, Mark important (plan 3)",Not in classic,Not in v2,missing,none
-WEB-LIB-122,web,Library,Waiting for decision line (“4 calls waiting · Review”),Library top,Not in v2 (Home lists what needs you),missing,none
-WEB-LIB-123,web,Library,"Lazy loading for 2,000+ recordings (plan 3)",Pages of 5 to 50,Pages of 5 to 50 (same),partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-123)
+WEB-LIB-118,web,Library,"Selection mode: × to leave, the count, Select all, 4 main actions, ⋮ Organise / Export / Danger (plan 3)","Library › select › bar (Move, Label, Export, Delete, More)","Library › select › × · N selected · Select all · Move to project, Label, Export, Delete · ⋮",done,tests/Feature/V2/WebParityTest.php (WEB-LIB-118)
+WEB-LIB-119,web,Library,"Selected: Delete moves to Trash at once, with Undo (plan 3)","Library › select › Delete (asks first, no Undo)","Library › select › Delete, then Undo in the notice",done,tests/Feature/V2/LibrarySelectionTest.php
+WEB-LIB-120,web,Library,"Export formats: Word, Text, Markdown, Subtitles .srt and .vtt, JSON, in a chosen view",Library › select › Export,Library › select › Export (same modal),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-120)
+WEB-LIB-121,web,Library,Export as a web page (.html) for many (plan 3),One recording only (Download),Not in v2,missing,none
+WEB-LIB-122,web,Library,"Selected: Transcribe all with the minutes first, Copy for AI, Mark important (plan 3)",Not in classic,Not in v2,missing,none
+WEB-LIB-123,web,Library,Waiting for decision line (“4 calls waiting · Review”),Library top,Not in v2 (Home lists what needs you),missing,none
+WEB-LIB-124,web,Library,"Lazy loading for 2,000+ recordings (plan 3)",Pages of 5 to 50,Pages of 5 to 50 (same),partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-124)
 WEB-REC-059,web,Recording page,Previous / Next recording,Not in classic (Previous / Next belong to the screens gallery),Not in v2,missing,none
 WEB-REC-060,web,Recording page,"Copy menu: text, with timestamps, without, Copy for AI with a header (plan 4)",WhatsApp › Copy for AI; the Download panel,Not one Copy menu,missing,none
 WEB-REC-061,web,Recording page,Mark important (plan 4),Not in classic,Not in v2,missing,none

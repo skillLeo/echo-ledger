@@ -343,7 +343,7 @@
   "type": "control",
   "page": "library",
   "scope": "main",
-  "key": "button|move"
+  "key": "button|move to project"
  },
  "WEB-LIB-027": {
   "type": "control",
@@ -4225,9 +4225,9 @@
   "type": "control",
   "page": "library",
   "scope": "main",
-  "key": "button|select all"
+  "key": "button|leave the selection"
  },
- "WEB-LIB-119": {
+ "WEB-LIB-120": {
   "type": "exportformats",
   "formats": [
    "docx",
@@ -4238,7 +4238,7 @@
    "json"
   ]
  },
- "WEB-LIB-123": {
+ "WEB-LIB-124": {
   "type": "control",
   "page": "library",
   "scope": "main",

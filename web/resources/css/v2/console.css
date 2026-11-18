@@ -1370,3 +1370,31 @@ html .fi-body .el-player .el-chip {
     margin: 0;
     text-align: end;
 }
+
+/* ================================================================== selection mode (parity plan 3) */
+/* × first, then the four icon actions and ⋮; the count and Select all are the table's own indicator beside them. */
+.v2-sel-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-4);
+}
+
+.v2-sel-exit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-component-chip-height);
+    block-size: var(--el-component-chip-height);
+    border-radius: var(--el-radius-full);
+    color: var(--el-role-text-primary);
+}
+
+.v2-sel-exit:hover,
+.v2-sel-exit:focus-visible {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-sel-exit svg {
+    inline-size: var(--el-icon-md);
+    block-size: var(--el-icon-md);
+}
