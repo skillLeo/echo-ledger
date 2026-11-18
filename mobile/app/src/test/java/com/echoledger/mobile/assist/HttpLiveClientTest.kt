@@ -288,7 +288,7 @@ class HttpLiveClientTest {
         val busy = events.filterIsInstance<RelayEvent.Error>().single()
         assertEquals("session_active", busy.code)
         assertEquals(
-            com.echoledger.mobile.ui.v2.assist.AssistProblem.Busy,
+            com.echoledger.mobile.ui.v2.assist.AssistProblem.BusyTryAgain,
             com.echoledger.mobile.ui.v2.assist.AssistCard.problemOf(busy.code, busy.retry, busy.fatal)
         )
         assertTrue("the session goes on", ended.isEmpty())

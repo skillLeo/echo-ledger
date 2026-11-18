@@ -158,6 +158,15 @@ fun V2AssistStart(
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val notSetUp = stringResource(R.string.v2_assist_error_not_set_up)
+    // The phone's own English sentences (Problems, the hub's fallback) in the screen's language; the server's words stay.
+    val own = mapOf(
+        AssistHub.NOT_STARTED to stringResource(R.string.v2_assist_not_started),
+        com.echoledger.mobile.core.Problems.OFFLINE to stringResource(R.string.v2_assist_offline),
+        com.echoledger.mobile.core.Problems.SERVER to stringResource(R.string.v2_assist_server),
+        com.echoledger.mobile.core.Problems.SIGN_IN to stringResource(R.string.v2_vm_sign_in_first),
+        com.echoledger.mobile.core.Problems.CERTIFICATE to stringResource(R.string.v2_assist_certificate)
+    )
+    fun said(words: String): String = own[words] ?: words
     val updateApp = stringResource(R.string.v2_assist_error_update_app)
     val cantConnect = stringResource(R.string.v2_assist_error_cant_connect)
 
@@ -180,8 +189,8 @@ fun V2AssistStart(
                     problem = when (result) {
                         is AssistHub.Start.Started -> null.also { showCard() }
                         AssistHub.Start.NotSetUp -> notSetUp
-                        is AssistHub.Start.Refused -> result.words
-                        is AssistHub.Start.Failed -> result.words
+                        is AssistHub.Start.Refused -> said(result.words)
+                        is AssistHub.Start.Failed -> said(result.words)
                         AssistHub.Start.UpdateApp -> updateApp
                         AssistHub.Start.CantConnect -> cantConnect
                         AssistHub.Start.Busy, AssistHub.Start.NoRecording -> null

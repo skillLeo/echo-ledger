@@ -120,6 +120,9 @@ enum class AssistProblem {
     BudgetOff,
     BudgetWait,
 
+    /** HTTP mode: another live session of this person answered; the message is not sent again by itself. */
+    BusyTryAgain,
+
     /** HTTP mode (1.9.0-q): this session needs a newer app (`426 app_update_required`). */
     UpdateApp,
 
@@ -211,7 +214,10 @@ object AssistCard {
 
         "token_missing", "token_invalid", "wrong_session", "not_practice" -> AssistProblem.Session
 
-        "relay_busy", "practice_busy", "session_active" -> AssistProblem.Busy
+        "relay_busy", "practice_busy" -> AssistProblem.Busy
+
+        // Nothing is sent again by itself, so the words ask the person to try again (HTTP mode, 409 session_active).
+        "session_active" -> AssistProblem.BusyTryAgain
 
         "provider_not_configured" -> AssistProblem.NotSetUp
 
