@@ -829,7 +829,7 @@ export default function MainApp() {
   const overlays = (
     <>
     {palette && (
-        <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo}
+        <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo} look={ui.flags["ui_v2.shell"] ? "v2" : "classic"}
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok, target) => void run(fn, ok, target)} pages={pages}
           extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet(true),

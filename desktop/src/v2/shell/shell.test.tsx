@@ -263,6 +263,38 @@ describe("the app with the flags", () => {
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
   });
 
+  it("the command palette in the new design: the sidebar's Search and Ctrl/⌘+K open it in the new look, with every row, the arrows, Enter and Esc", async () => {
+    backend({ "ui_v2.shell": true });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.click(within(nav).getByRole("button", { name: /^Search/ }));
+    const palette = screen.getByRole("dialog", { name: "Command palette" });
+    expect(palette.closest(".el-palette")).not.toBeNull();
+    const input = within(palette).getByRole("combobox");
+    expect(input).toHaveFocus();
+    // Every group and command classic has; the new design's Record page by its name.
+    const labels = () => within(palette).queryAllByRole("option").map((o) => o.textContent);
+    expect(labels()).toEqual(expect.arrayContaining(["Record now", "Capture voice note playing now", "Copy the last 2 minutes of captions", "Go to Projects", "Go to Activity", "Go to Shared", "Go to Record page", "Help & shortcuts", "Sync the library"]));
+    expect(labels()).not.toContain("Go to Home");
+    fireEvent.change(input, { target: { value: "activ" } });
+    expect(within(palette).getAllByRole("option")[0]).toHaveTextContent("Go to Activity");
+    fireEvent.keyDown(palette, { key: "ArrowDown" });
+    fireEvent.keyDown(palette, { key: "ArrowUp" });
+    fireEvent.keyDown(palette, { key: "Enter" });
+    await act(flushAsync);
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+    expect(within(nav).getByRole("button", { name: /^Activity/ })).toHaveAttribute("aria-current", "page");
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true, metaKey: true });
+    await act(flushAsync);
+    const again = screen.getByRole("dialog", { name: "Command palette" });
+    fireEvent.change(within(again).getByRole("combobox"), { target: { value: "x" } });
+    expect(within(again).getByRole("status")).toHaveTextContent("Type one more letter to search recordings.");
+    fireEvent.keyDown(again, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
+  });
+
   it("the profile sits at the sidebar's foot and opens Settings; with only part of the new design on, classic Appearance offers the way back", async () => {
     backend({ "ui_v2.shell": true });
     respond("account_get", { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });

@@ -112,6 +112,17 @@ export const PAIRS = [
   ["settings-groups", "Settings: classic's list | the new design's goal groups, each with its icon and a one-line description",
     [classic("settings"), null],
     [v2("settings"), null]],
+  ["palette", "The command palette (Ctrl/⌘+K) with \"go\" typed: classic's | the same rows in the new design",
+    [classic("library"), steps(async (page) => {
+      await page.getByRole("button", { name: /^Search/ }).first().click();
+      await page.keyboard.type("go");
+      await page.waitForTimeout(600);
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: /^Search/ }).first().click();
+      await page.keyboard.type("go");
+      await page.waitForTimeout(600);
+    })]],
 ];
 
 const server = await createServer({ root: desktop, configFile: join(desktop, "vite.config.ts"), server: { port: 1480, strictPort: false }, logLevel: "error" });
