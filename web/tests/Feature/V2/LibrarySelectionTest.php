@@ -62,3 +62,17 @@ it('brings back only the person\'s own recordings that Trash still keeps', funct
     expect(CaptureSession::query()->find($mine->id))->not->toBeNull()
         ->and(CaptureSession::withoutGlobalScopes()->onlyTrashed()->find($other->id))->not->toBeNull();
 });
+
+it('gives the new Library its keys and right-click, and only the new Library', function () {
+    $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($html)->toContain('elV2LibraryKeys')->toContain('data-selection-delete')->toContain('data-selection-more')
+        ->toContain("(e.ctrlKey || e.metaKey) && key === 'a'")->toContain("addEventListener('contextmenu'");
+    $this->get('/app/settings/shortcuts')->assertOk()->assertSee('Select a range')->assertSee('Delete the selection (Undo in the notice)');
+
+    foreach (InterfaceFlags::UI_V2 as $flag) {
+        app(InterfaceFlags::class)->set($flag, false, 0, [], [], 'off');
+    }
+    $classic = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($classic)->not->toContain('elV2LibraryKeys')->not->toContain('data-selection-delete');
+    $this->get('/app/settings/shortcuts')->assertOk()->assertDontSee('Select a range');
+});

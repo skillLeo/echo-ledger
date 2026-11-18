@@ -335,13 +335,14 @@ final class CaptureSessionsTable
             $icon($actions['move'], 'Move to project'),
             $icon(BulkActionGroup::make([$actions['label'], $actions['unlabel']])->icon(Heroicon::OutlinedTag), 'Label'),
             $icon($actions['export']->icon(Heroicon::OutlinedArrowDownTray), 'Export'),
-            $icon(self::trashBulkAction('trash'), 'Delete')->color('danger'),
+            $icon(self::trashBulkAction('trash'), 'Delete')->color('danger')->extraAttributes(['data-selection-delete' => true]),
             BulkActionGroup::make([
                 BulkActionGroup::make([$actions['pin'], $actions['unpin'], $actions['keep'], $actions['unkeep'], self::clone($actions['move']), self::clone($actions['label']), self::clone($actions['unlabel'])])
                     ->label(__('Organise'))->dropdown(false),
                 BulkActionGroup::make([self::clone($actions['export'])])->label(__('Export'))->dropdown(false),
                 BulkActionGroup::make([self::trashBulkAction('trashFromMenu')->label(__('Delete'))->color('danger')])->label(__('Danger'))->dropdown(false),
-            ])->label(__('More'))->tooltip(__('More'))->icon(Heroicon::OutlinedEllipsisVertical)->iconButton()->color('gray'),
+            ])->label(__('More'))->tooltip(__('More'))->icon(Heroicon::OutlinedEllipsisVertical)->iconButton()->color('gray')
+                ->extraAttributes(['data-selection-more' => true]),
         ];
     }
 
