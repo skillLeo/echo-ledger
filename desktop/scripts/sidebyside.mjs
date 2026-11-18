@@ -123,6 +123,70 @@ export const PAIRS = [
       await page.keyboard.type("go");
       await page.waitForTimeout(600);
     })]],
+  ["library-top", "Library as the start screen: classic's Home (get started, needs action) | the new Library's get-started card and needs-action banner",
+    [`${classic("library")}`, steps(async (page) => {
+      await page.locator(".sidebar").getByRole("button", { name: /^Home/ }).click();
+      await page.waitForTimeout(1200);
+    })],
+    [`${v2("library")}&calls=notready`, null]],
+  ["transcript-search", "Search inside transcripts: classic's \"In transcripts\" | the new design's, with the words marked",
+    [classic("library"), steps(async (page) => {
+      await page.getByPlaceholder("Search", { exact: true }).first().fill("launch");
+      await page.waitForTimeout(1200);
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("searchbox", { name: "Search recordings" }).fill("launch");
+      await page.waitForTimeout(1200);
+    })]],
+  ["recording-tools", "The transcript tools: classic's | the new design's Find with its marks and N of M, and the tools row",
+    [classic("library"), steps(async (page) => {
+      await page.keyboard.press("Control+f");
+      await page.keyboard.type("the");
+      await page.waitForTimeout(600);
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Kick-off: Contoso website" }).first().click();
+      await page.waitForTimeout(1200);
+      await page.getByRole("button", { name: "Find", exact: true }).click();
+      await page.keyboard.type("the");
+      await page.waitForTimeout(600);
+    })]],
+  ["recording-edit", "Editing: classic's Edit text | the new design's line editor (Show as is off while editing)",
+    [classic("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Edit text" }).first().click();
+      await page.waitForTimeout(500);
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Kick-off: Contoso website" }).first().click();
+      await page.waitForTimeout(1200);
+      await page.getByRole("button", { name: "Edit text" }).click();
+      await page.locator(".el-line-edit").first().click();
+      await page.waitForTimeout(500);
+    })]],
+  ["call-notes", "Call notes: classic's section | the new design's Call notes tab",
+    [classic("library"), steps(async (page) => {
+      await page.getByRole("heading", { name: "Call notes" }).first().scrollIntoViewIfNeeded().catch(() => undefined);
+      await page.waitForTimeout(500);
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Kick-off: Contoso website" }).first().click();
+      await page.waitForTimeout(1200);
+      await page.getByRole("tab", { name: "Call notes" }).click();
+      await page.waitForTimeout(800);
+    })]],
+  ["library-table", "Show as Table: classic's | the new design's, with the Columns menu",
+    [classic("library"), steps(async (page) => {
+      await page.getByRole("button", { name: /table/i }).first().click().catch(() => undefined);
+      await page.waitForTimeout(800);
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("radio", { name: "Table" }).click();
+      await page.getByRole("button", { name: "Columns" }).click();
+      await page.waitForTimeout(500);
+    })]],
+  ["sidebar-sublists", "The sidebar's sub-lists: classic's Projects and Shared | the new design's pinned projects under Projects and Shared's places under Library",
+    [classic("library"), null],
+    [v2("library"), null]],
 ];
 
 const server = await createServer({ root: desktop, configFile: join(desktop, "vite.config.ts"), server: { port: 1480, strictPort: false }, logLevel: "error" });
