@@ -169,4 +169,6 @@
     <string name="v2_rec_notes_locked">Call notes are on a higher plan.</string>
     <string name="v2_rec_no_moments">No bookmarks or screens in this recording.</string>
     <string name="v2_rec_bookmark">Bookmark</string>
+    <string name="v2_rec_waiting">Waiting to transcribe — retrying at %1$s</string>
+    <string name="v2_rec_waiting_busy">Waiting to transcribe (busy) — retrying at %1$s</string>
 </resources>

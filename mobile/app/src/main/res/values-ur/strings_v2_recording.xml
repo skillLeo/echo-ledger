@@ -169,4 +169,6 @@
     <string name="v2_rec_notes_locked">کال نوٹس اوپر والے پلان میں ہیں۔</string>
     <string name="v2_rec_no_moments">اس ریکارڈنگ میں کوئی بک مارک یا اسکرین نہیں۔</string>
     <string name="v2_rec_bookmark">بک مارک</string>
+    <string name="v2_rec_waiting">ٹرانسکرپشن کا انتظار — %1$s پر دوبارہ کوشش</string>
+    <string name="v2_rec_waiting_busy">ٹرانسکرپشن کا انتظار (مصروف) — %1$s پر دوبارہ کوشش</string>
 </resources>
