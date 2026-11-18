@@ -333,14 +333,17 @@ describe("rows that save", () => {
     expect(live).toHaveAttribute("aria-checked", "false");
   });
 
-  it("chooses which windows are hidden from screen sharing on the Screen-share privacy page", async () => {
-    await setup({ settings: { hideFromSharing: "all" } });
+  it("chooses whether the other floating windows are hidden from screen sharing on the Screen-share privacy page", async () => {
+    await setup({ settings: { hideFromSharing: "floating" } });
     await go("Screen-share privacy");
-    const select = await screen.findByLabelText("Hide from screen sharing");
+    const select = await screen.findByLabelText("Other floating windows");
     expect(select).toHaveValue("all");
-    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["All EchoLedger windows", "Only floating windows", "Off"]);
-    fireEvent.change(select, { target: { value: "floating" } });
-    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { hideFromSharing: "floating" } }));
+    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["Hidden from screen shares", "Shown in screen shares"]);
+    fireEvent.change(select, { target: { value: "off" } });
+    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { hideFromSharing: "off" } }));
+    // The main window, the Live Assist card and the captions each have their own row, never this choice.
+    expect(screen.getByText("Main window")).toBeInTheDocument();
+    expect(screen.getByText("Live Assist card")).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Show during screen share" })).toBeNull();
     expect(screen.getByText("Share one window or a tab for the strongest privacy.")).toBeInTheDocument();
     expect(screen.getByText("Not hidden from cameras, projectors, Remote Desktop, or monitoring software on your computer.")).toBeInTheDocument();

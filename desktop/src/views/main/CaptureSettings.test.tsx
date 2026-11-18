@@ -1,7 +1,7 @@
 // Settings › Recording (v1.7 rows): Calls & meetings, Microphone & audio and Captions › Style.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { CallsPage, CaptionStylePage, MicrophonePage, afterCallHint, appRecords, callAppsValue, captionsShareLine, testVerdict } from "./CaptureSettings";
+import { CallsPage, CaptionStylePage, MicrophonePage, afterCallHint, appRecords, callAppsValue, CAPTIONS_SHARE_LINE, testVerdict } from "./CaptureSettings";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll, respondWith } from "../../test/tauri";
 import { makeMicUser, makeSettings } from "../../test/fixtures";
 import { answerConfirm, confirmAsked } from "../../test/confirm";
@@ -13,9 +13,8 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 const switchFor = (name: string) => screen.getByRole("switch", { name });
 
 describe("Captions and screen share", () => {
-  it("says what Settings › Screen-share privacy decides for the captions", () => {
-    expect(captionsShareLine("off")).toBe("Captions are visible in screen share. Change it in Settings › Screen-share privacy.");
-    for (const hiding of ["all", "floating"] as const) expect(captionsShareLine(hiding)).toMatch(/^Captions are hidden from screen share/);
+  it("says the captions are hidden from screen shares unless the person shows them from their badge", () => {
+    expect(CAPTIONS_SHARE_LINE).toBe("Captions are hidden from screen shares unless you show them from their badge, until they close.");
   });
 });
 
