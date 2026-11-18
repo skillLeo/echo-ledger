@@ -20,6 +20,7 @@ import { PDF_HINT } from "../../views/main/TranscriptTools";
 import { screenMarker } from "../../lib/screens";
 import { Badge, Button, Card, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
+import { SourceAvatar } from "./SourceAvatar";
 import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
 
@@ -300,6 +301,7 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
         <div className="el-page__titles">
           <h1 className="el-title-l" dir="auto">{item.title?.trim() || "Recording"}</h1>
           <p className="el-page__meta el-secondary">
+            <SourceAvatar item={item} size="sm" />
             <span dir="auto">{meta}</span>
             {state === "ready" ? <Badge tone="success">Transcribed</Badge>
               : state === "failed" ? <Badge tone="danger">Transcription failed</Badge>
@@ -390,6 +392,7 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
             <dt>Recorded</dt><dd>{formatWhen(item.started_at) || "Unknown"}</dd>
             <dt>Length</dt><dd className="el-num">{formatDuration(item.duration_ms) || "Unknown"}</dd>
             {source && <><dt>Source</dt><dd>{source}</dd></>}
+            {item.source_device && <><dt>Recorded on</dt><dd>{{ phone: "Phone", desktop: "Computer", web: "Web" }[item.source_device] ?? item.source_device}</dd></>}
             {item.device?.name && <><dt>Device</dt><dd>{item.device.name}</dd></>}
             {item.client?.name && <><dt>Project</dt><dd>{item.client.name}</dd></>}
             {item.language_chip && <><dt>Language</dt><dd>{item.language_chip}</dd></>}

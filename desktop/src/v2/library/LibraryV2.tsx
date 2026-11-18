@@ -9,7 +9,7 @@ import { formatDuration, rowDate } from "../../lib/format";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import {
-  Badge, Button, Chip, Dialog, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Button, Chip, Dialog, Icon, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
@@ -21,6 +21,7 @@ import {
 import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { searchItems, type SortKey } from "../../lib/library";
 import { RecordingPage } from "./RecordingPage";
+import { SourceAvatar } from "./SourceAvatar";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
   copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
@@ -653,8 +654,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
               ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
                 const r = rowModel(item);
                 return (
-                  <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={r.meta}
-                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined} mark={r.screens ? <ScreensMark count={r.screens} /> : undefined}
+                  <ListRow key={item.id} leading={<SourceAvatar item={item} />} strong title={r.title} meta={r.meta}
+                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined} mark={item.pinned || r.screens ? <>
+                      {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}
+                      {r.screens ? <ScreensMark count={r.screens} /> : null}
+                    </> : undefined}
                     endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
                     rowId={item.id} onClick={(e) => rowClick(item, e)} onContextMenu={(e) => rowMenu(item, e)}
                     checked={selecting ? picked.has(item.id) : undefined}

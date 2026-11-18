@@ -100,6 +100,9 @@ export const PAIRS = [
       await page.getByRole("button", { name: "Sort and group" }).click();
       await page.waitForTimeout(400);
     })]],
+  ["library-rows", "Library rows: classic's app tiles | the new design's real source logos with the device badge",
+    [classic("library"), null],
+    [v2("library"), null]],
 ];
 
 const server = await createServer({ root: desktop, configFile: join(desktop, "vite.config.ts"), server: { port: 1480, strictPort: false }, logLevel: "error" });
