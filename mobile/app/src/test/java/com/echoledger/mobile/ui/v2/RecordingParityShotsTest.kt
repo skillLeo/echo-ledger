@@ -58,6 +58,7 @@ class RecordingParityShotsTest : ScreenTest() {
     private val record = System.getProperty("roborazzi.test.record") == "true"
 
     private var classic by mutableStateOf(true)
+    private var open by mutableStateOf(true)
     private var dark by mutableStateOf(false)
     private var language by mutableStateOf(EchoLanguage.English)
 
@@ -111,8 +112,15 @@ class RecordingParityShotsTest : ScreenTest() {
             EchoV2Theme(darkTheme = dark, language = language) {
                 val toasts = rememberEchoToastState()
                 CompositionLocalProvider(LocalEchoToasts provides toasts) {
-                    Box { V2RecordingScreen(vm, item, onBack = {}) }
-                    EchoToastHost(toasts)
+                    // As the shell: Back shows the Library, and the toast sits at the bottom over whatever is open.
+                    Box(Modifier.fillMaxSize()) {
+                        if (open) {
+                            V2RecordingScreen(vm, item, onBack = { open = false })
+                        } else {
+                            com.echoledger.mobile.ui.v2.library.V2LibraryScreen(vm, "AS", onOpen = {}, onTrash = {}, onAccount = {})
+                        }
+                        EchoToastHost(toasts, Modifier.align(androidx.compose.ui.Alignment.BottomCenter))
+                    }
                 }
             }
         }
@@ -181,6 +189,7 @@ class RecordingParityShotsTest : ScreenTest() {
         classicSteps()
         val left = screen("classic")
         classic = false
+        open = true
         compose.waitForIdle()
         awaitText(readyV2 ?: ready)
         v2Steps()
@@ -231,6 +240,7 @@ class RecordingParityShotsTest : ScreenTest() {
 
     @Test
     fun noAudio() {
+        item = item.copy(transcript = item.transcript!!.copy(finalStatus = "failed"))
         transcript(failed("no_audio"))
         ready = "Nothing was heard"
         readyV2 = if (urdu) "کوئی آواز نہیں" else "Nothing was heard"
@@ -246,6 +256,7 @@ class RecordingParityShotsTest : ScreenTest() {
 
     @Test
     fun failedTranscription() {
+        item = item.copy(transcript = item.transcript!!.copy(finalStatus = "failed"))
         transcript(failed("provider_timeout"))
         ready = "Transcription failed."
         for (l in EchoLanguage.entries) {

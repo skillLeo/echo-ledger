@@ -320,11 +320,12 @@ private fun V2RecordingPage(
 
         RecordingSheet.Delete -> DeleteRecordingDialog(onDelete = {
             sheet = null
-            vm.delete(item)
-            // The page goes at once; its Undo lives on in the shell's toast host, so it runs on the view model's scope
-            // (the page's own scope is cancelled with it).
+            // The page goes at once; the delete, then its Undo, live on in the shell's toast host on the view model's
+            // scope (the page's own scope is cancelled with it). Undo shows only once the server has it in Trash.
             val keep = vm.viewModelScope
-            keep.launch { toasts.showUndo(text.deleted, undo) { keep.launch { vm.restore(item.id) } } }
+            keep.launch {
+                if (vm.deleteAndWait(item)) toasts.showUndo(text.deleted, undo) { keep.launch { vm.restore(item.id) } }
+            }
             onBack()
         }, onDismiss = { sheet = null })
 
@@ -510,7 +511,7 @@ private fun transcriptInstead(
             {
                 val res = androidx.compose.ui.platform.LocalContext.current.resources
                 Text(
-                    TranscriptText.waitingForEngine(t) ?: transcribingLine(res, t.progress ?: item.transcript?.finalProgress),
+                    waitingWords(res, t) ?: transcribingLine(res, t.progress ?: item.transcript?.finalProgress),
                     style = EchoV2.type.body,
                     color = EchoV2.colors.textSecondary
                 )

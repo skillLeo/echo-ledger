@@ -88,6 +88,17 @@ fun timeLeft(res: Resources, seconds: Long): String = if (seconds < 60) {
     res.getString(R.string.v2_rec_minutes, ((seconds + 30) / 60).toInt())
 }
 
+/**
+ * Classic's "Waiting to transcribe — retrying at 2:05 pm" (an Urdu or Auto transcript waiting for its best engine),
+ * in the screen's language and locale; null when it is not waiting.
+ */
+fun waitingWords(res: Resources, t: TranscriptDto, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String? {
+    val at = t.retryAt?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: return null
+    val locale = res.configuration.locales[0] ?: java.util.Locale.getDefault()
+    val time = at.atZone(zone).format(java.time.format.DateTimeFormatter.ofPattern("h:mm a", locale))
+    return res.getString(if (t.retryReason == "rate_limited") R.string.v2_rec_waiting_busy else R.string.v2_rec_waiting, time)
+}
+
 /** "Transcribing · part 2 of 3 · about 20 s left" (classic's TranscriptText.transcribing), in the screen's language. */
 fun transcribingLine(res: Resources, progress: ProgressDto?): String {
     val total = progress?.total ?: 0
@@ -112,7 +123,7 @@ fun stepLine(res: Resources, item: LibraryItem, transcript: TranscriptDto?, step
         s[RecordingSteps.Step.UPLOAD] == RecordingSteps.State.ACTIVE -> res.getString(R.string.v2_rec_step_uploading)
 
         s[RecordingSteps.Step.TRANSCRIBE] == RecordingSteps.State.ACTIVE -> {
-            transcript?.let { TranscriptText.waitingForEngine(it) }?.let { return it }
+            transcript?.let { waitingWords(res, it) }?.let { return it }
             val progress: ProgressDto? = transcript?.progress ?: item.transcript?.finalProgress
             val total = progress?.total ?: 0
             val done = progress?.done ?: 0
