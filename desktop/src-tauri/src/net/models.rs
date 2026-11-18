@@ -85,6 +85,9 @@ pub struct ServerConfig {
     /// The person chose "Switch back to classic" (contract 2.0.0-a); anything but `true` is off.
     #[serde(default, deserialize_with = "lenient_bool")]
     pub ui_classic: bool,
+    /// The design switch (contract 2.0.0-g), as sent: `ui_flags::UiDesign::read` makes it safe.
+    #[serde(default)]
+    pub ui_design: Option<serde_json::Value>,
     /// `{"keep_hours": 48}` (contract 2.0.0-b): how long a deleted recording can be restored; read with
     /// [`ServerConfig::trash_keep_hours`].
     #[serde(default)]
@@ -97,7 +100,7 @@ pub const TRASH_KEEP_HOURS: u64 = 48;
 impl ServerConfig {
     /// The interface flags of this config (contract 2.0.0-a).
     pub fn ui(&self) -> crate::ui_flags::UiFlags {
-        crate::ui_flags::UiFlags::read(self.ui_flags.as_ref(), self.ui_classic)
+        crate::ui_flags::UiFlags::read(self.ui_flags.as_ref(), self.ui_classic).with_design(self.ui_design.as_ref())
     }
 
     /// How many hours a deleted recording can be restored (contract 2.0.0-b): 48 when the server is older or sends no
@@ -114,6 +117,9 @@ pub struct UiAnswer {
     pub ui_flags: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "lenient_bool")]
     pub ui_classic: bool,
+    /// Since 2.0.0-g.
+    #[serde(default)]
+    pub ui_design: Option<serde_json::Value>,
 }
 
 /// `config.app_update` (docs/API.md "Updates, announcements and maintenance"). `refused`: the server answers this
@@ -1330,6 +1336,24 @@ pub struct AssistStartRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recording_session_id: Option<String>,
     pub practice: bool,
+    /// The transports this app can use (contract 1.9.0-q): the server picks one for the session. Left out when empty
+    /// (the server then reads `["relay"]`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub transports: Vec<String>,
+}
+
+impl AssistStartRequest {
+    /// What this app can use: the relay's WebSocket and HTTP mode.
+    pub fn transports() -> Vec<String> {
+        vec!["relay".into(), "http".into()]
+    }
+}
+
+/// HTTP mode's block (contract 1.9.0-q): where each message is posted, and the session as `ready` would say it.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct AssistHttpDto {
+    pub live_url: String,
+    pub ready: crate::assist::protocol::Ready,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -1372,7 +1396,13 @@ pub struct AssistPlanDto {
 #[derive(Clone, Debug, Deserialize)]
 pub struct AssistStartAnswer {
     pub session: AssistSessionDto,
-    pub relay: AssistRelayDto,
+    /// `relay` or `http` (contract 1.9.0-q); a server before it answers none, which is the relay.
+    #[serde(default)]
+    pub transport: Option<String>,
+    #[serde(default)]
+    pub relay: Option<AssistRelayDto>,
+    #[serde(default)]
+    pub http: Option<AssistHttpDto>,
     #[serde(default)]
     pub stt: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "lenient")]
@@ -1382,7 +1412,10 @@ pub struct AssistStartAnswer {
 /// `200` of `POST /api/assist/sessions/{id}/token`: new relay and speech tokens.
 #[derive(Clone, Debug, Deserialize)]
 pub struct AssistTokenAnswer {
-    pub relay: AssistRelayDto,
+    #[serde(default)]
+    pub relay: Option<AssistRelayDto>,
+    #[serde(default)]
+    pub http: Option<AssistHttpDto>,
     #[serde(default)]
     pub stt: Option<serde_json::Value>,
     /// The assist time left now, when the server says.

@@ -181,6 +181,7 @@ describe("caption overlay", () => {
 
   it("draws nothing while EchoLedger's windows are off the screen, and shows its privacy badge otherwise", async () => {
     respond("privacy_status", { badge: "private", badgeLabel: "Private", platform: "windows" });
+    respond("privacy_window_share", { which: "captions", shown: false, state: "hidden", badge: "Hidden from screen shares", switchLabel: "Show captions in screen shares" });
     const { container } = await renderOverlay();
     await act(async () => emitEvent("overlay:visibility", true));
     expect(root(container)).not.toHaveClass("overlay-hidden");

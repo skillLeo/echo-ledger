@@ -1,12 +1,12 @@
 {
     "api_version": "1.1",
     "device": {
-        "id": "01m6s1x7sg4bzyqqf2rg5a2cyf",
+        "id": "01m7ng9kqap6f5v3d60dzkp7qz",
         "name": "Sample phone",
         "platform": "android",
         "source_device": "phone"
     },
-    "server_time": "2026-11-06T18:28:33+00:00",
+    "server_time": "2026-11-17T19:38:43+00:00",
     "retention_days": 30,
     "upload": {
         "chunk_size_bytes": 5242880,
@@ -239,6 +239,12 @@
         "live_assist": true
     },
     "ui_classic": false,
+    "ui_design": {
+        "choice": null,
+        "current": "classic",
+        "can_try": true,
+        "can_switch_back": false
+    },
     "relay_pins": [
         "sha256/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
         "sha256/AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="

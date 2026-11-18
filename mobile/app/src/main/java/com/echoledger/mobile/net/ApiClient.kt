@@ -57,6 +57,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -949,13 +950,15 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
 
     /**
      * `POST /api/assist/sessions` (Live Assist, docs/API_ASSIST.md): a session of this phone, linked to its recording
-     * ([recordingSessionId]) or a practice. `409 session_active` when one runs already.
+     * ([recordingSessionId]) or a practice. `409 session_active` when one runs already. [transports]: what this phone can
+     * use (contract 1.9.0-q: `relay`, `http`); the server answers which one the session uses.
      */
     suspend fun startAssist(
         prepId: String?,
         mode: String?,
         recordingSessionId: String?,
-        practice: Boolean
+        practice: Boolean,
+        transports: List<String> = listOf("relay", "http")
     ): com.echoledger.mobile.data.AssistStartDto {
         val body = buildJsonObject {
             prepId?.let { put("prep_id", it) }
@@ -963,9 +966,30 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
             put("platform", "android")
             recordingSessionId?.let { put("recording_session_id", it) }
             put("practice", practice)
+            put("transports", buildJsonArray { transports.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
         }.toString().toRequestBody(jsonType)
         return call(request("assist/sessions").post(body).build(), com.echoledger.mobile.data.AssistStartDto.serializer())!!
     }
+
+    /**
+     * Live Assist HTTP mode (contract 1.9.0-q): one app message ([json]) POSTed to the session's `http.live_url`, whose
+     * answer is a stream of server-sent events. Null when [liveUrl] is not on this server (the device token never goes
+     * to another host) or not https (plain http only to a local test server, as for the API itself).
+     */
+    fun assistLive(liveUrl: String, json: String): okhttp3.Call? {
+        val live = liveUrl.toHttpUrlOrNull() ?: return null
+        val api = base.toHttpUrlOrNull() ?: return null
+        if (live.host != api.host || live.port != api.port || live.scheme != api.scheme) return null
+        val req = Request.Builder().url(live)
+            .header("Accept", "text/event-stream")
+            .apply { token?.let { header("Authorization", "Bearer $it") } }
+            .post(json.toRequestBody(jsonType))
+            .build()
+        return liveHttp.newCall(req)
+    }
+
+    /** The API's client (its pins kept) that never follows a redirect: the meeting's words go to this server or nowhere. */
+    private val liveHttp: OkHttpClient by lazy { http.newBuilder().followRedirects(false).followSslRedirects(false).build() }
 
     /** `POST /api/assist/sessions/{id}/token`: new relay grant (tokens last at most 15 minutes). */
     suspend fun assistToken(id: String): com.echoledger.mobile.data.AssistTokenDto = call(

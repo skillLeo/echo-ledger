@@ -4,7 +4,7 @@
 import { useId } from "react";
 import type { CaptionStyle, Corner, Settings } from "../../../lib/ipc";
 import { setting } from "../../../lib/settingsRegistry";
-import { COLOUR_PRESETS, CaptionPreview, captionsShareLine } from "../../../views/main/CaptureSettings";
+import { COLOUR_PRESETS, CaptionPreview, CAPTIONS_SHARE_LINE } from "../../../views/main/CaptureSettings";
 import { ListRow } from "../../components";
 import { Group, LinkSetting, ResetDefaults, SegmentedSetting, SelectSetting, SliderSetting, SwitchSetting, type Patch } from "./rows";
 
@@ -12,7 +12,7 @@ export function CaptionsPageV2({ settings, patch, onStyle }: { settings: Setting
   return (
     <>
       <CaptionPreview style={settings.captionStyle} />
-      <Group footer={<><p>{captionsShareLine(settings.hideFromSharing)}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
+      <Group footer={<><p>{CAPTIONS_SHARE_LINE}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
         <SwitchSetting id="captions.enabled" on={settings.captionsOnRecord} onChange={(v) => void patch({ captionsOnRecord: v })} />
         <LinkSetting id="captions.style" onOpen={onStyle} />
       </Group>

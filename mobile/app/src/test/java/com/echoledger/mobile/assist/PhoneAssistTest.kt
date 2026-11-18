@@ -280,8 +280,13 @@ class PhoneAssistTest {
             val pins = listOf("sha256/" + "A".repeat(43) + "=")
             assertEquals(AssistHub.Start.NoRecording, AssistHub.start(client, pins, scope))
             AssistHub.recordingSession("rec-1", bothSides = false)
+            // The relay is always offered first (HTTP mode is the server's fallback, never the phone's choice); a session
+            // the server puts on the relay while this phone has no relay pins can't be trusted, so it is ended at once.
             assertEquals(AssistHub.Start.NotSetUp, AssistHub.start(client, emptyList(), scope))
-            assertEquals(0, api.requestCount)
+            val offered = Json.parseToJsonElement(requests.poll(5, TimeUnit.SECONDS)!!.body!!.utf8()).jsonObject
+            assertEquals(listOf("relay", "http"), offered["transports"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals("/api/assist/sessions/a1/end", requests.poll(5, TimeUnit.SECONDS)!!.url.encodedPath)
+            assertNull(AssistHub.active.value)
 
             accept()
             val started = AssistHub.start(client, pins, scope) as AssistHub.Start.Started
@@ -290,6 +295,7 @@ class PhoneAssistTest {
             assertEquals("android", body.s("platform"))
             assertEquals("rec-1", body.s("recording_session_id"))
             assertEquals("false", body.s("practice"))
+            assertEquals(listOf("relay", "http"), body["transports"]!!.jsonArray.map { it.jsonPrimitive.content })
             assertEquals(started.assist, AssistHub.active.value)
 
             // A mono recording: automatic suggestions paused from the start.
@@ -387,7 +393,7 @@ class PhoneAssistTest {
                     .body("""{"relay":{"url":"wss://relay.example/v1/assist","token":"t9"},"stt":null,"plan":{"seconds_left":900}}""")
                     .build()
             }
-            val fresh = server.token("a1")!!
+            val fresh = server.token("a1") as RelayGrant
             assertEquals("t9", fresh.token)
             assertEquals(900L, fresh.secondsLeft)
         } finally {

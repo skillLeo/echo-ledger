@@ -7,7 +7,7 @@ import { api, errorMessage, type Account, type StorageInfo } from "../../lib/ipc
 import { fileSize } from "../../lib/format";
 import { openUpgradeSheet, plansAbove, useEntitlements } from "../../lib/entitlements";
 import { Avatar, Badge, Button, Card, EmptyState, Icons, List, ListRow, Loading, Progress, Skeleton, SkeletonRow } from "../components";
-import { anyV2, setClassic, type UiState } from "../flags";
+import { useDesignSwitch, type UiState } from "../flags";
 import { initials } from "./initials";
 
 export { initials };
@@ -129,29 +129,16 @@ export function StorageCard() {
 }
 
 /** "Switch back to classic" while a redesigned screen is on; "Use the new look" once the person went back. */
-export function ClassicSwitch({ state, onState }: { state: UiState; onState: (next: UiState) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  if (!anyV2(state) && !state.classic) return null;
-  const toClassic = !state.classic;
-  const flip = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      onState(await setClassic(toClassic));
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+export function ClassicSwitch(_props: { state?: UiState; onState?: (next: UiState) => void }) {
+  // At the foot of the new design's Settings, as in its Appearance; classic offers the new design from its Appearance.
+  const design = useDesignSwitch();
+  if (!design.canSwitchBack) return null;
   return (
     <Card className="el-classic" label="Look">
       <List label="Look">
-        <ListRow compact icon={Icons.AppearanceIcon} iconStyle="plain"
-          title={toClassic ? "You're using the new look" : "You're using the classic look"}
-          meta={error ?? (toClassic ? "The classic screens stay available while the new ones roll out." : "The new screens are ready for you.")}
-          control={<Button size="sm" loading={busy} loadingLabel="Switching…" onClick={() => void flip()}>{toClassic ? "Switch back to classic" : "Use the new look"}</Button>} />
+        <ListRow compact icon={Icons.AppearanceIcon} iconStyle="plain" title="You're using the new design"
+          meta={design.error ?? "Classic stays available while the new design is finished."}
+          control={<Button size="sm" loading={design.busy} loadingLabel="Switching…" onClick={() => void design.choose("classic")}>Switch back to classic</Button>} />
       </List>
     </Card>
   );

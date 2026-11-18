@@ -24,6 +24,20 @@ describe("Group by", () => {
     expect(groupBy(items, "language", "newest", now).map((g) => g.label)).toEqual(["EN", "UR", "Automatic"]);
   });
 
+  it("groups by app: the server's name, an app without one in words, voice notes together, none as Other, last", () => {
+    const apps = [
+      makeItem("w", { source_app: "whatsapp", source_app_label: "WhatsApp" }),
+      makeItem("s", { source_app: "signal_call", source_app_label: undefined }),
+      makeItem("z", { source_app: "zoom", source_app_label: undefined }),
+      makeItem("n", { source_app: undefined, source_app_label: undefined }),
+      makeItem("v", { source_app: "voice_note", source_app_label: "Voice note" }),
+      makeItem("v2", { source_app: "voice_note", source_app_label: undefined }),
+    ];
+    expect(groupBy(apps, "app", "newest", now).map((g) => [g.label, g.items.map((i) => i.id)])).toEqual([
+      ["Signal call", ["s"]], ["Voice notes", ["v", "v2"]], ["WhatsApp", ["w"]], ["Zoom", ["z"]], ["Other", ["n"]],
+    ]);
+  });
+
   it("is one headerless group for None, and nothing for nothing", () => {
     expect(groupBy(items, "none", "newest", now)).toEqual([{ key: "none", label: "", items }]);
     expect(groupBy([], "date", "newest", now)).toEqual([]);

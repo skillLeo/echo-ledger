@@ -2,16 +2,23 @@ package com.echoledger.mobile.assist
 
 /**
  * [AssistServer] on the phone's own API client (docs/API_ASSIST.md "Sessions"). The relay's pins come from the last
- * config (`relay_pins`, never the server's own pins); a call that fails is null or false, never an exception.
+ * config (`relay_pins`, never the server's own pins); HTTP mode's POSTs go over the API client itself (the server's own
+ * pins, and the connection it keeps). A call that fails is null or false, never an exception.
  */
 class ApiAssistServer(
     private val api: suspend () -> com.echoledger.mobile.net.ApiClient?,
     private val relayPins: suspend () -> List<String>
 ) : AssistServer {
-    override suspend fun token(sessionId: String): RelayGrant? = runCatching {
+    override suspend fun token(sessionId: String): LiveGrant? = runCatching {
         val answer = (api() ?: return null).assistToken(sessionId)
-        RelayGrant(answer.relay.url, answer.relay.token, answer.relay.expiresAt, relayPins(), answer.plan?.secondsLeft)
+        val seconds = answer.plan?.secondsLeft
+        when {
+            answer.transport == "http" -> answer.http?.let { HttpGrant.of(it, sessionId, seconds) }
+            else -> answer.relay?.let { RelayGrant(it.url, it.token, it.expiresAt, relayPins(), seconds) }
+        }
     }.getOrNull()
+
+    override suspend fun liveCall(url: String, json: String): okhttp3.Call? = runCatching { api()?.assistLive(url, json) }.getOrNull()
 
     override suspend fun turns(sessionId: String, rows: List<TurnRow>): Boolean = runCatching {
         (api() ?: return false).assistTurns(sessionId, rows)

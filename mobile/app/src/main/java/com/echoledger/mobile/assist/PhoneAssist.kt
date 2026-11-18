@@ -15,8 +15,14 @@ import kotlinx.coroutines.launch
 
 /** The server side of a Live Assist session (docs/API_ASSIST.md "Sessions"), as the phone needs it; tests give their own. */
 interface AssistServer {
-    /** `POST /api/assist/sessions/{id}/token`: a new relay grant (with the relay's pins), or null when it failed. */
-    suspend fun token(sessionId: String): RelayGrant?
+    /**
+     * `POST /api/assist/sessions/{id}/token`: a new relay grant (with the relay's pins) or, in HTTP mode, a new `http`
+     * block; null when it failed.
+     */
+    suspend fun token(sessionId: String): LiveGrant?
+
+    /** HTTP mode: one message's POST to the session's live URL, not yet sent; null when that URL can't be trusted. */
+    suspend fun liveCall(url: String, json: String): okhttp3.Call? = null
 
     /** `POST …/turns`: final turns in a batch; false when they did not arrive (they are sent again). */
     suspend fun turns(sessionId: String, rows: List<TurnRow>): Boolean
@@ -46,8 +52,11 @@ data class TurnRow(
  * relay; the phone's own (`me`) only as finished turns, never partials (a suggestion is never triggered from `me`).
  * Partials and the final of one turn share `turn_id` (`o-1`, `o-2`… and `m-1`…). The engines say nothing of silence, so a
  * partial's `silence_ms` is how long its words have not changed.
+ *
+ * In HTTP mode ([http], contract 1.9.0-q) there are no speculative starts: the other side's partials are not sent, and
+ * the phone's own turn sends one partial as soon as it begins (it tells a waiting question that the moment has passed).
  */
-class TurnFeeder(private val elapsed: () -> Long) {
+class TurnFeeder(private val http: Boolean = false, private val elapsed: () -> Long) {
     private val numbers = mutableMapOf(true to 0, false to 0)
     private val open = mutableMapOf<Boolean, Pair<String, Long>>() // channel -> (last words, since)
 
@@ -61,13 +70,18 @@ class TurnFeeder(private val elapsed: () -> Long) {
     /** A partial: the relay's message (none for `me`) and the card's line. */
     @Synchronized
     fun partial(other: Boolean, text: String): Pair<ClientMessage?, AssistMessage.Turn> {
+        val begins = other !in open
         val turnId = openTurn(other)
         val now = elapsed()
         val (words, since) = open[other] ?: ("" to now)
         val unchanged = words == text
         open[other] = text to (if (unchanged) since else now)
         val silence = if (unchanged) now - since else 0
-        val relay = if (other) ClientMessage.TurnPartial(Turn(turnId, true, text, silenceMs = silence)) else null
+        val relay = when {
+            http -> ClientMessage.TurnPartial(Turn(turnId, false, text)).takeIf { !other && begins }
+            other -> ClientMessage.TurnPartial(Turn(turnId, true, text, silenceMs = silence))
+            else -> null
+        }
         return relay to AssistMessage.Turn(turnId, other, text, final = false)
     }
 
@@ -117,12 +131,14 @@ class TurnBatch {
 }
 
 /**
- * A Live Assist session of this phone (one at a time; the phone never shows another device's session): the relay
- * connection, the captions as turns, the turns for the server, and what the card reads ([AssistAdapter]).
+ * A Live Assist session of this phone (one at a time; the phone never shows another device's session): the live
+ * transport the server chose ([RelayGrant]: the relay's WebSocket; [HttpGrant]: HTTP mode, contract 1.9.0-q), the
+ * captions as turns, the turns for the server, and what the card reads ([AssistAdapter]). Both transports carry the same
+ * messages to the same card.
  */
 class PhoneAssist(
     val sessionId: String,
-    grant: RelayGrant,
+    grant: LiveGrant,
     override val meetingType: MeetingType?,
     private val server: AssistServer,
     private val scope: CoroutineScope,
@@ -131,6 +147,7 @@ class PhoneAssist(
     secondsLeft: Long? = null,
     private val elapsed: () -> Long = android.os.SystemClock::elapsedRealtime,
     relayPolicy: RelayPolicy = RelayPolicy(),
+    httpPolicy: HttpPolicy = HttpPolicy(),
     clock: () -> Long = System::currentTimeMillis,
     /**
      * Both sides recorded apart. A mono recording has one mixed channel, so the person's own words would ask for
@@ -141,7 +158,10 @@ class PhoneAssist(
     private val history = ArrayDeque<AssistMessage>()
     private val flow = MutableSharedFlow<AssistMessage>(extraBufferCapacity = 512)
     override val messages: SharedFlow<AssistMessage> = flow.asSharedFlow()
-    private val turns = TurnFeeder(elapsed)
+
+    /** HTTP mode: the server keeps the turns itself, so none are batched for `…/turns`. */
+    private val http = grant is HttpGrant
+    private val turns = TurnFeeder(http, elapsed)
     private val batch = TurnBatch()
     private val shown = mutableSetOf<String>()
 
@@ -152,30 +172,48 @@ class PhoneAssist(
     @Volatile var whenFinished: (() -> Unit)? = null
     private var batcher: Job? = null
 
-    private val relay = RelayClient(
-        grant = grant,
-        // Each new token also brings this month's assist time for the card.
-        refresh = { server.token(sessionId)?.also { fresh -> fresh.secondsLeft?.let { emit(AssistMessage.Budget(it, null)) } } },
-        scope = scope,
-        meetingType = meetingType,
-        policy = relayPolicy,
-        clock = clock,
-        elapsed = elapsed,
-        onEvent = ::onRelay,
-        onEnded = ::finish
-    )
+    private val relay: LiveTransport = when (grant) {
+        is RelayGrant -> RelayClient(
+            grant = grant,
+            refresh = { fresh() as? RelayGrant },
+            scope = scope,
+            meetingType = meetingType,
+            policy = relayPolicy,
+            clock = clock,
+            elapsed = elapsed,
+            onEvent = ::onRelay,
+            onEnded = ::finish
+        )
+
+        is HttpGrant -> HttpLiveClient(
+            grant = grant,
+            refresh = { fresh() as? HttpGrant },
+            call = server::liveCall,
+            scope = scope,
+            meetingType = meetingType,
+            policy = httpPolicy,
+            elapsed = elapsed,
+            onEvent = ::onRelay,
+            onEnded = ::finish
+        )
+    }
+
+    /** A new grant from the server; each also brings this month's assist time for the card. */
+    private suspend fun fresh(): LiveGrant? =
+        server.token(sessionId)?.also { fresh -> fresh.secondsLeft?.let { emit(AssistMessage.Budget(it, null)) } }
 
     init {
         secondsLeft?.let { emit(AssistMessage.Budget(it, null)) }
     }
 
-    /** Connects to the relay and starts sending the turns in batches. */
+    /** Connects and, on the relay, starts sending the turns in batches. */
     fun start() {
         if (!autoSuggestions) {
             relay.send(ClientMessage.ContextUpdate(PAUSED))
             emit(AssistMessage.AutoPaused)
         }
         relay.start()
+        if (http) return
         batcher = scope.launch {
             while (isActive) {
                 delay(TurnBatch.EVERY_MS)
@@ -194,7 +232,7 @@ class PhoneAssist(
             val (message, line, row) = turns.final(other, text, startMs, endMs)
             relay.send(message)
             emit(line)
-            if (batch.add(row)) scope.launch { sendTurns() }
+            if (!http && batch.add(row)) scope.launch { sendTurns() }
         } else {
             val (message, line) = turns.partial(other, text)
             message?.let(relay::send)

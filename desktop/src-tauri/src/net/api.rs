@@ -15,9 +15,22 @@ use crate::error::{AppError, AppResult};
 pub struct ApiClient {
     base: String,
     http: reqwest::Client,
+    /// For Live Assist's streams: no total timeout, no redirects ([`super::pinning::build_live_client`]).
+    live: reqwest::Client,
     token: Option<String>,
     /// This install's id (since v1.6, P3), sent by every sign-in route so the same computer keeps its row.
     install_id: Option<String>,
+}
+
+/// A transcript the month's minutes can't cover (`budget_exceeded` with `minutes_needed` and `minutes_left`), in the
+/// person's words (pure).
+pub fn budget_sentence(needed: u64, left: u64) -> String {
+    let needs = if needed == 1 { "1 minute".to_string() } else { format!("{needed} minutes") };
+    match left {
+        0 => format!("This needs {needs} and no minutes are left this month."),
+        1 => format!("This needs {needs}, and 1 minute is left this month."),
+        _ => format!("This needs {needs}, and {left} minutes are left this month."),
+    }
 }
 
 impl ApiClient {
@@ -27,7 +40,8 @@ impl ApiClient {
             return Err(AppError::msg("The server URL must start with https:// (http is only allowed for localhost)."));
         }
         let http = build_http_client(&base, pins).map_err(AppError::Message)?;
-        Ok(Self { base, http, token, install_id: None })
+        let live = super::pinning::build_live_client(&base, pins).map_err(AppError::Message)?;
+        Ok(Self { base, http, live, token, install_id: None })
     }
 
     /// The same client sending `install_id` with every sign-in (v1.6, P3); none leaves it out (an older app's body).
@@ -92,8 +106,11 @@ impl ApiClient {
             .and_then(|v| v.trim().parse::<u64>().ok());
         let body: serde_json::Value = resp.json().await.unwrap_or_default();
         let code = body.get("code").and_then(|c| c.as_str()).map(str::to_string);
+        let minutes = |key: &str| body.get(key).and_then(serde_json::Value::as_u64);
         let message = if code.as_deref() == Some("feature_not_in_plan") {
             crate::plan::feature_text_with(body.get("feature").and_then(|f| f.as_str()), body.get("lowest_plan").and_then(|f| f.as_str()))
+        } else if let (Some("budget_exceeded"), Some(needed), Some(left)) = (code.as_deref(), minutes("minutes_needed"), minutes("minutes_left")) {
+            budget_sentence(needed, left)
         } else {
             body.get("message").and_then(|m| m.as_str()).unwrap_or("request failed").to_string()
         };
@@ -583,6 +600,13 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `PUT /api/account/ui` (contract 2.0.0-g): the design switch, `v2` (Try the new design), `classic` (Switch back
+    /// to classic) or none (back to the default). `422 design_not_available` when there is nothing to try.
+    pub async fn set_ui_design(&self, design: Option<&str>) -> AppResult<crate::net::models::UiAnswer> {
+        let resp = self.authed(self.http.put(self.url("account/ui")))?.json(&json!({ "design": design })).send().await?;
+        Self::parse(resp).await
+    }
+
     /// `POST /api/assist/sessions` (Live Assist 1.9.0-e): starts a session; the relay and speech tokens come back.
     pub async fn assist_start(&self, request: &AssistStartRequest) -> AppResult<AssistStartAnswer> {
         let resp = self.authed(self.http.post(self.url("assist/sessions")))?.json(request).send().await?;
@@ -607,6 +631,30 @@ impl ApiClient {
     pub async fn assist_token(&self, session_id: &str) -> AppResult<AssistTokenAnswer> {
         let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/token"))))?.send().await?;
         Self::parse(resp).await
+    }
+
+    /// HTTP mode (contract 1.9.0-q): one app message posted to the session's `live_url`, whose answer is a stream of
+    /// server-sent events. Only an address on this server gets the device token. A refusal before the stream starts
+    /// comes back as the usual error (`426`, `409 session_ended`, `429`, `503` …).
+    pub async fn assist_live(&self, live_url: &str, body: String) -> AppResult<reqwest::Response> {
+        if !live_url.starts_with(&format!("{}/api/", self.base)) {
+            return Err(AppError::msg("Live Assist's address is not on this server."));
+        }
+        let token = self.token.as_deref().ok_or(AppError::NotPaired)?;
+        let resp = self
+            .live
+            .post(live_url)
+            .bearer_auth(token)
+            .header("Accept", "text/event-stream")
+            .header("Content-Type", "application/json")
+            .body(body)
+            .send()
+            .await?;
+        // A redirect is a refusal (the client follows none): the meeting's words are posted to this address only.
+        if resp.status().is_success() {
+            return Ok(resp);
+        }
+        Err(Self::error(resp).await)
     }
 
     /// `POST /api/assist/sessions/{id}/end`: the session ends and its report is made.
@@ -929,13 +977,44 @@ impl ApiClient {
 
     /// `POST /api/sessions/export` (since v1.1): the finished transcripts of many recordings in one zip file.
     pub async fn export_sessions(&self, ids: &[String], format: &str) -> AppResult<(Vec<u8>, String)> {
-        let resp = self.authed(self.http.post(self.url("sessions/export")))?.json(&json!({ "ids": ids, "format": format })).send().await?;
+        self.export_sessions_as(ids, format, None).await
+    }
+
+    /// The same in a Show as view (`roman` | `english` | `urdu`, since v1.4): each transcript whose view is ready is
+    /// exported in it, the others in their own words.
+    pub async fn export_sessions_as(&self, ids: &[String], format: &str, view: Option<&str>) -> AppResult<(Vec<u8>, String)> {
+        let mut body = json!({ "ids": ids, "format": format });
+        if let Some(view) = view {
+            body["view"] = json!(view);
+        }
+        let resp = self.authed(self.http.post(self.url("sessions/export")))?.json(&body).send().await?;
         if !resp.status().is_success() {
             return Err(Self::error(resp).await);
         }
         let disposition = resp.headers().get(reqwest::header::CONTENT_DISPOSITION).and_then(|v| v.to_str().ok()).unwrap_or_default().to_string();
         let bytes = resp.bytes().await?.to_vec();
         Ok((bytes, filename_from_disposition(&disposition).unwrap_or_else(|| "EchoLedger transcripts.zip".to_string())))
+    }
+
+    /// `POST /api/sessions/{id}/transcribe` (since v1.8): the transcript of an audio-only recording starts now; `202`
+    /// with the session and its transcript.
+    pub async fn transcribe_session(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("sessions/{id}/transcribe"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/sessions/transcribe` (since v1.8): "Transcribe selected" for 1 to 50 recordings; `202` with the ones
+    /// that `started`, the ones `skipped` (each with its `code`) and the `minutes`. All or nothing for the budget.
+    pub async fn transcribe_sessions(&self, ids: &[String]) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url("sessions/transcribe")))?.json(&json!({ "ids": ids })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/sessions/transcribe-estimate` (since v1.8): the minutes transcribing these would use and the minutes
+    /// left this month (`null` = no limit), with each recording's minutes; nothing starts.
+    pub async fn transcribe_estimate(&self, ids: &[String]) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url("sessions/transcribe-estimate")))?.json(&json!({ "ids": ids })).send().await?;
+        Self::parse(resp).await
     }
 
     /// `POST /api/clients` (since v1.1): a new client folder.

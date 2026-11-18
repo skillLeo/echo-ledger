@@ -9,6 +9,8 @@ use tauri::ipc::Channel as IpcChannel;
 use crate::audio::types::Channel;
 use crate::net::models::SegmentDto;
 
+/// `Probe` is the latency probe's note (development only: `stt::latency`). The caption just sent carried word `id`
+/// and the window says when it has painted it. Timings only.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "kind")]
 pub enum CaptionEvent {
@@ -16,6 +18,7 @@ pub enum CaptionEvent {
     Final { speaker: String, channel: u8, text: String, start_ms: u64, end_ms: u64 },
     Status { live: bool, recording: bool, provider: Option<String>, message: Option<String> },
     Clear,
+    Probe { id: u64 },
 }
 
 /// Fan-out to every subscribed webview (overlay, dictation box, main window).
@@ -70,6 +73,7 @@ impl ShownCaptions {
     pub fn push(&mut self, event: &CaptionEvent) {
         match event {
             CaptionEvent::Clear => *self = Self::default(),
+            CaptionEvent::Probe { .. } => {}
             CaptionEvent::Status { .. } => self.status = Some(event.clone()),
             CaptionEvent::Partial { channel, .. } | CaptionEvent::Final { channel, .. } => {
                 // A channel has one partial line, and its final turn replaces it.

@@ -12,6 +12,7 @@ import { SHORTCUT_ACTIONS, setting } from "../../../lib/settingsRegistry";
 import { appKeys } from "../../../views/main/AppSettings";
 import { Button, ListRow } from "../../components";
 import { Group, ResetDefaults, SegmentedSetting, type Run } from "./rows";
+import { useDesignSwitch } from "../../flags";
 
 /** The theme: the app's own when it hands it down (the top bar's toggle follows), else this page's. */
 export function useThemeChoice(theme?: ThemeChoice, onTheme?: (t: ThemeChoice) => void): [ThemeChoice, (t: ThemeChoice) => void] {
@@ -41,8 +42,21 @@ export function AppearancePageV2({ theme, onTheme }: { theme: ThemeChoice; onThe
         <SegmentedSetting id="appearance.density" value={prefs.density} onChange={(v) => setPref({ density: v })} />
         <SegmentedSetting id="appearance.clock" value={prefs.clock} onChange={(v) => setPref({ clock: v })} />
       </Group>
+      <DesignRowV2 />
       <ResetDefaults page="Appearance" onReset={() => { onTheme("system"); setPref({ ...DEFAULT_PREFERENCES }); }} />
     </>
+  );
+}
+
+/** The way back to classic (docs/PLAN_V2_PARITY.md 0), while the server says there is one (`can_switch_back`). */
+function DesignRowV2() {
+  const design = useDesignSwitch();
+  if (!design.canSwitchBack) return null;
+  return (
+    <Group footer={<>{design.error && <p className="el-field__error" role="alert">{design.error}</p>}<p>Classic stays available while the new design is finished.</p></>}>
+      <ListRow compact anchor="appearance.design" title={setting("appearance.design").title} value="New design"
+        control={<Button size="sm" loading={design.busy} loadingLabel="Switching…" onClick={() => void design.choose("classic")}>Switch back to classic</Button>} />
+    </Group>
   );
 }
 

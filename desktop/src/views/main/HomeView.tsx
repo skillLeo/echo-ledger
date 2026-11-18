@@ -35,7 +35,7 @@ function useRecent(): LibraryItem[] | null {
   return items;
 }
 
-export function HomeView({ status, run, onImport, needsYou, onReview, onFailed, onActivity, onOpenRecording, onLibrary }: {
+export function HomeView({ status, run, onImport, needsYou, onReview, onFailed, onActivity, onOpenRecording, onLibrary, assistOn, projects }: {
   status: AppStatus;
   run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
   onImport?: () => void;
@@ -46,6 +46,9 @@ export function HomeView({ status, run, onImport, needsYou, onReview, onFailed, 
   onActivity: () => void;
   onOpenRecording: (id: string) => void;
   onLibrary: () => void;
+  /** Live Assist is on for this person; its section shows with Record. */
+  assistOn?: boolean;
+  projects?: { id: string; name: string }[];
 }) {
   const recent = useRecent();
   const problems = needsYou.filter(needsAction).length;
@@ -100,7 +103,7 @@ export function HomeView({ status, run, onImport, needsYou, onReview, onFailed, 
         </section>
       )}
       <section aria-label="Record" className="home-section home-record">
-        <RecordView status={status} run={run} onImport={onImport} />
+        <RecordView status={status} run={run} onImport={onImport} assistOn={assistOn} projects={projects} />
       </section>
     </div>
   );

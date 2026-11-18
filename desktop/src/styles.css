@@ -1733,6 +1733,21 @@ span.privacy-badge { cursor: default; }
 .rec-actions .privacy-badge.visible, .overlay-card .privacy-badge.visible, .review-badge .privacy-badge.visible, .translate-badge .privacy-badge.visible { color: #ffca16; }
 .review-badge { align-self: flex-end; display: flex; }
 .review-badge .privacy-badge { background: rgba(24, 25, 27, 0.86); }
+/* Screen-share visibility per window (v2.0): the card's and the captions' badge says what the system reads back. */
+.window-share { position: relative; display: inline-flex; align-items: center; }
+.window-share-badge { display: inline-flex; align-items: center; gap: 4px; flex: none; height: 20px; padding: 0 5px; border: 0; border-radius: var(--radius-full); background: transparent; color: #b0b4ba; font: inherit; font-size: var(--text-xs); font-weight: 600; white-space: nowrap; cursor: pointer; }
+span.window-share-badge { cursor: default; background: var(--surface-3); color: var(--text-muted); height: 22px; padding: 0 var(--space-2); }
+.window-share-badge.hidden { color: #3dd68c; }
+.window-share-badge.shown, .window-share-badge.could_not_hide { color: #ffca16; }
+span.window-share-badge.hidden { color: var(--success); }
+span.window-share-badge.shown, span.window-share-badge.could_not_hide { color: var(--warning); }
+.window-share-badge:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
+.window-share-menu { position: absolute; top: 24px; left: 0; z-index: 5; display: flex; flex-direction: column; gap: 6px; min-width: 220px; padding: 8px; border-radius: var(--radius-md, 8px); background: rgba(24, 25, 27, 0.96); color: #e8e9eb; font-size: var(--text-xs); }
+.share-hide { position: relative; display: inline-flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.share-durations { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 180px; padding: 4px; border-radius: var(--radius-md, 8px); background: var(--surface-2, var(--surface-3)); }
+.share-durations .btn { justify-content: flex-start; }
+.share-custom { display: flex; gap: 6px; align-items: center; padding: 4px; }
+.share-custom input { width: 64px; }
 .translate-badge { position: absolute; top: 6px; right: 8px; }
 .translate-overlay { position: relative; }
 .privacy-lines { margin: 0 0 var(--space-4); }
@@ -1794,3 +1809,10 @@ html[data-window="share-check-control"], html[data-window="share-check-control"]
    title in the link colour (D-090). */
 .set-row.set-action .set-title { color: var(--accent-text); font-weight: 600; }
 .set-row.set-action:disabled .set-title { color: var(--text-muted); }
+/* The first paint and a window that couldn't draw (index.html, WindowErrorBoundary): centred words on the window's own
+   background, in the theme the window uses. */
+.boot { display: flex; align-items: center; justify-content: center; height: 100%; background: var(--bg); color: var(--text-muted); }
+.boot--error > div { max-width: 420px; text-align: center; color: var(--text); }
+.boot--error p { margin: 0 0 8px; }
+.boot__detail { font-size: 12px; color: var(--text-muted); word-break: break-word; }
+.record-assist { margin-top: 14px; }

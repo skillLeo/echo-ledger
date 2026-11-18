@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { MAX_CAPTION_LINES, captionsReducer, initialCaptions, isAtEnd, visibleLines, type CaptionState } from "./OverlayApp";
+import { describe, expect, it, vi } from "vitest";
+import { MAX_CAPTION_LINES, captionsReducer, initialCaptions, isAtEnd, reportPainted, visibleLines, type CaptionState } from "./OverlayApp";
+import { callsOf, flushAsync, resetTauriMock } from "../../test/tauri";
+
+vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
+vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 const final = (text: string, channel = 1) => ({ kind: "final" as const, channel, speaker: channel === 2 ? "Client" : "Me", text, startMs: 0, endMs: 1 });
 
@@ -8,6 +12,45 @@ describe("captionsReducer", () => {
     const state = captionsReducer(initialCaptions, { kind: "partial", channel: 2, text: "hel", speaker: "Client" });
     expect(state.partial[2]).toBe("hel");
     expect(state.lines).toHaveLength(0);
+  });
+
+  it("shows interim words as each arrives and replaces them with the final, which nothing holds back", () => {
+    // Word by word while the person is still speaking: each interim replaces the last one at once.
+    let state = initialCaptions;
+    const shown: string[] = [];
+    for (const text of ["so", "so the", "so the numbers", "so the numbers are"]) {
+      state = captionsReducer(state, { kind: "partial", channel: 1, text, speaker: "Me" });
+      shown.push(state.partial[1]);
+    }
+    expect(shown).toEqual(["so", "so the", "so the numbers", "so the numbers are"]);
+    expect(state.lines).toHaveLength(0);
+    // The final replaces the interim line with the finished turn.
+    state = captionsReducer(state, final("So the numbers are in."));
+    expect(state.partial[1]).toBeUndefined();
+    expect(state.lines.map((l) => l.text)).toEqual(["So the numbers are in."]);
+    // The next turn's interim words show right after, before its final.
+    state = captionsReducer(state, { kind: "partial", channel: 1, text: "next", speaker: "Me" });
+    expect(state.partial[1]).toBe("next");
+  });
+
+  it("clears a channel's interim line when a turn has no words yet, instead of drawing an empty one", () => {
+    let state = captionsReducer(initialCaptions, { kind: "partial", channel: 2, text: "hello", speaker: "Client" });
+    state = captionsReducer(state, { kind: "partial", channel: 2, text: "  ", speaker: "Client" });
+    expect(state.partial).toEqual({});
+  });
+
+  it("leaves the captions as they are for the latency probe's note, and says when its word was painted", async () => {
+    resetTauriMock();
+    const before = captionsReducer(initialCaptions, { kind: "partial", channel: 1, text: "word", speaker: "Me" });
+    expect(captionsReducer(before, { kind: "probe", id: 7 })).toBe(before);
+    let frame: (() => void) | null = null;
+    reportPainted(7, (cb) => { frame = cb; });
+    await flushAsync();
+    expect(callsOf("caption_probe_painted")).toEqual([], "not before the frame");
+    frame!();
+    await new Promise((r) => setTimeout(r, 0));
+    await flushAsync();
+    expect(callsOf("caption_probe_painted")).toEqual([{ id: 7 }]);
   });
 
   it("promotes a final turn and clears that channel's partial only", () => {

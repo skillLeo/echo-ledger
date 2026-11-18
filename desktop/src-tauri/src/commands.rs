@@ -57,6 +57,8 @@ pub struct AppStatus {
     pub server: crate::server_notice::ServerNotices,
     /// Said once after "Keep automatically" became Ask me ([`crate::settings::AFTER_CALL_NOTICE`]); none otherwise.
     pub after_call_notice: Option<&'static str>,
+    /// Said once after the v2.0 update, on the main window, with Hide ([`crate::privacy::share::SHARE_NOTICE`]).
+    pub share_notice: Option<&'static str>,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
@@ -82,12 +84,16 @@ pub fn status(app: &AppHandle) -> AppStatus {
         let ready = state.ready.lock().unwrap_or_else(|p| p.into_inner());
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
-    let share_demo = (settings.hide_from_sharing != crate::settings::ShareHiding::Off).then(|| app.try_state::<crate::privacy::Privacy>().is_some_and(|p| p.demo_active(std::time::Instant::now())));
+    let main_share = Some(match settings.main_share_hide.filter(|h| crate::privacy::share::main_hidden(Some(h), crate::privacy::now_ms())) {
+        Some(hide) => crate::tray::MainShare::Hidden(crate::privacy::share::tray_line(&hide, chrono::Local::now())),
+        None => crate::tray::MainShare::Shown { call: crate::privacy::call_detected(app) },
+    });
     let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| crate::tray::hidden_line(&p));
-    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo, hidden, translate: crate::translate::is_running() };
+    let held_back = app.try_state::<crate::privacy::Privacy>().and_then(|p| p.held_back().first().map(|l| crate::privacy::held_back_line(l)));
+    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), main_share, held_back, hidden, translate: crate::translate::is_running() };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
-    crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
+    crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches.clone(), state.viewer_refusal());
     AppStatus {
         paired: state.is_paired(),
         server_url: settings.server_url.clone(),
@@ -116,6 +122,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
         device_note: state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()),
         server: state.server_notices(),
         after_call_notice: settings.after_call_notice.then_some(crate::settings::AFTER_CALL_NOTICE),
+        share_notice: settings.share_notice.then_some(crate::privacy::share::SHARE_NOTICE),
     }
 }
 
@@ -970,6 +977,14 @@ pub fn subscribe_captions(window: WebviewWindow, on_event: IpcChannel<CaptionEve
     hub.subscribe(window.label(), on_event);
 }
 
+/// The latency probe (development only): the captions window painted word `id`. Nothing happens unless the probe runs.
+#[tauri::command]
+pub fn caption_probe_painted(id: u64) {
+    if crate::stt::latency::enabled() {
+        crate::stt::latency::painted(id);
+    }
+}
+
 /// The page has attached its listeners: it gets the events kept while its window was built (C9, lifecycle.rs).
 #[tauri::command]
 pub fn window_ready(app: AppHandle, window: WebviewWindow) {
@@ -1781,7 +1796,8 @@ fn main_window_handle(app: &AppHandle) -> isize {
     }
 }
 /// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
-pub const SESSION_PATCH_KEYS: [&str; 5] = ["title", "client_id", "pinned", "keep", "labels"];
+/// `language` (since v1.2) changes the recording's language without re-transcribing it.
+pub const SESSION_PATCH_KEYS: [&str; 6] = ["title", "client_id", "pinned", "keep", "labels", "language"];
 pub const CLIENT_PATCH_KEYS: [&str; 8] = ["name", "color", "avatar", "pinned", "language", "ai_notes", "parent_id", "screens"];
 pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
@@ -1831,8 +1847,10 @@ pub async fn sessions_bulk(app: AppHandle, ids: Vec<String>, action: String, cli
 /// Saves the finished transcripts of the selected recordings as one zip file where the person chooses; returns its
 /// path, or `None` when they cancel.
 #[tauri::command]
-pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -> AppResult<Option<String>> {
+pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String, view: Option<String>) -> AppResult<Option<String>> {
     ensure_unlocked(&app.state::<AppState>())?;
+    // Show as: each transcript in the view on screen where it is ready (anything else: their own words).
+    let view = view.filter(|v| EXPORT_VIEWS.contains(&v.as_str()));
     if !BULK_EXPORT_FORMATS.contains(&format.as_str()) {
         return Err(AppError::msg("That export format is not available."));
     }
@@ -1840,10 +1858,46 @@ pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -
         return Err(AppError::msg(format!("Choose between 1 and {MAX_BULK} recordings.")));
     }
     let state = app.state::<AppState>();
-    let (bytes, filename) = state.api()?.export_sessions(&ids, &format).await?;
+    let (bytes, filename) = state.api()?.export_sessions_as(&ids, &format, view.as_deref()).await?;
     let Some(path) = crate::files::ask_save_path(&app, &filename, "Zip archive").await else { return Ok(None) };
     std::fs::write(&path, bytes)?;
     Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// The most recordings one Transcribe selected or estimate takes (the server's limit).
+pub const MAX_TRANSCRIBE: usize = 50;
+
+/// Checks a selection to transcribe or estimate before anything is sent (pure).
+pub fn check_transcribe(ids: &[String]) -> AppResult<()> {
+    if ids.is_empty() || ids.len() > MAX_TRANSCRIBE {
+        return Err(AppError::msg(format!("Choose between 1 and {MAX_TRANSCRIBE} recordings.")));
+    }
+    Ok(())
+}
+
+/// Transcribe on an audio-only recording (since v1.8): its transcript starts now; the library shows it processing.
+#[tauri::command]
+pub async fn session_transcribe(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let answer = app.state::<AppState>().api()?.transcribe_session(&id).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(answer)
+}
+
+/// Transcribe selected (since v1.8): `{started, skipped, minutes}`; nothing starts when the minutes left can't cover
+/// them all.
+#[tauri::command]
+pub async fn sessions_transcribe(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
+    check_transcribe(&ids)?;
+    let answer = app.state::<AppState>().api()?.transcribe_sessions(&ids).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(answer)
+}
+
+/// What Transcribe selected would use, shown before it starts: `{minutes, minutes_left, items}`.
+#[tauri::command]
+pub async fn sessions_transcribe_estimate(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
+    check_transcribe(&ids)?;
+    app.state::<AppState>().api()?.transcribe_estimate(&ids).await
 }
 
 /// The body of `POST /api/clients`: a trimmed name, and `parent_id` only for a subfolder (a top-level project sends
@@ -2600,11 +2654,39 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
     let state = app.state::<AppState>();
     let api = state.api()?;
     let answer = api.set_ui_classic(classic).await?;
+    Ok(took_ui_answer(&app, answer))
+}
+
+/// The design switch (contract 2.0.0-g): `v2` is Try the new design, `classic` is Switch back to classic, none is the
+/// default. `PUT /api/account/ui`, its answer kept in the cached config and returned in the `ui_flags` shape; the config
+/// is then read again in the background. `422 design_not_available` comes back as it is (nothing open to try).
+#[tauri::command]
+pub async fn ui_design_set(app: AppHandle, design: Option<String>) -> AppResult<crate::ui_flags::UiFlags> {
+    check_design(design.as_deref())?;
+    let answer = app.state::<AppState>().api()?.set_ui_design(design.as_deref()).await?;
+    Ok(took_ui_answer(&app, answer))
+}
+
+/// The design switch's value before anything is sent (pure): `v2`, `classic` or none.
+pub fn check_design(design: Option<&str>) -> AppResult<()> {
+    if design.is_some_and(|d| !matches!(d, "v2" | "classic")) {
+        return Err(AppError::msg("That design is not one of the choices."));
+    }
+    Ok(())
+}
+
+/// A `PUT /api/account/ui` answer: kept in the cached config, the window told, the config read again in the background
+/// (the contract asks for it right after the PUT); the flags as the window reads them.
+fn took_ui_answer(app: &AppHandle, answer: crate::net::models::UiAnswer) -> crate::ui_flags::UiFlags {
+    let state = app.state::<AppState>();
     if let Some(config) = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
         config.ui_flags = answer.ui_flags.clone();
         config.ui_classic = answer.ui_classic;
+        if answer.ui_design.is_some() {
+            config.ui_design = answer.ui_design.clone();
+        }
     }
-    crate::actions::emit_status(&app);
+    crate::actions::emit_status(app);
     let reader = app.clone();
     tauri::async_runtime::spawn(async move {
         let state = reader.state::<AppState>();
@@ -2615,7 +2697,7 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
             crate::actions::emit_status(&reader);
         }
     });
-    Ok(crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic))
+    crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic).with_design(answer.ui_design.as_ref())
 }
 
 // ---- Live Assist (docs/API_ASSIST.md 1.9.0-g; the card's commands, desktop/src/v2/assist/adapter.ts) ----------------
@@ -3202,6 +3284,68 @@ pub fn privacy_open_check(app: AppHandle) {
 pub async fn privacy_diagnostics(app: AppHandle, window: WebviewWindow) -> AppResult<String> {
     crate::privacy::from_main_window(window.label())?;
     Ok(crate::privacy::check::diagnostics_text(&app))
+}
+
+/// "Hide from screen shares" for the main window, until the time chosen (Settings, the one-time notice). Only the main
+/// window asks.
+#[tauri::command]
+pub fn privacy_main_hide(app: AppHandle, window: WebviewWindow, choice: crate::privacy::share::HideFor) -> AppResult<crate::privacy::check::PrivacyStatus> {
+    crate::privacy::from_main_window(window.label())?;
+    crate::privacy::hide_main(&app, choice)?;
+    Ok(crate::privacy::check::status(&app))
+}
+
+/// "Show now": the main window is in screen shares again.
+#[tauri::command]
+pub fn privacy_main_show(app: AppHandle, window: WebviewWindow) -> AppResult<crate::privacy::check::PrivacyStatus> {
+    crate::privacy::from_main_window(window.label())?;
+    crate::privacy::show_main_in_shares(&app, None)?;
+    Ok(crate::privacy::check::status(&app))
+}
+
+/// The card's or the captions' badge: the window's real state, read back from the system. A window asks about itself;
+/// the main window names the one it means.
+#[tauri::command]
+pub async fn privacy_window_share(app: AppHandle, window: WebviewWindow, which: Option<crate::privacy::share::Pinned>) -> AppResult<crate::privacy::WindowShareView> {
+    let which = pinned_for(window.label(), which)?;
+    Ok(crate::privacy::window_share_now(&app, which).await)
+}
+
+/// The card's or the captions' own switch: "Show this card in screen shares" or hide it again. Showing comes only from
+/// that window's own badge; the main window, naming it, may only hide it again. No other window and no other setting.
+#[tauri::command]
+pub async fn privacy_window_share_set(app: AppHandle, window: WebviewWindow, which: Option<crate::privacy::share::Pinned>, shown: bool) -> AppResult<crate::privacy::WindowShareView> {
+    let which = pinned_for_set(window.label(), which, shown)?;
+    crate::privacy::set_shown_in_shares(&app, which, shown)?;
+    Ok(crate::privacy::window_share_now(&app, which).await)
+}
+
+/// Which window a per-window switch is about (pure): the card or the captions about themselves; the main window must name
+/// one; any other window, or a window naming another, is refused.
+pub fn pinned_for(label: &str, which: Option<crate::privacy::share::Pinned>) -> AppResult<crate::privacy::share::Pinned> {
+    match (crate::privacy::share::Pinned::of_label(label), which) {
+        (Some(own), None) => Ok(own),
+        (Some(own), Some(asked)) if own == asked => Ok(own),
+        (None, Some(asked)) if label == crate::lifecycle::MAIN => Ok(asked),
+        _ => Err(AppError::msg("Only that window, or EchoLedger's main window, can change this.")),
+    }
+}
+
+/// Which window a per-window switch changes (pure): as [`pinned_for`], and showing only from that window itself. The
+/// main window may hide the card or the captions again, never show them.
+pub fn pinned_for_set(label: &str, which: Option<crate::privacy::share::Pinned>, shown: bool) -> AppResult<crate::privacy::share::Pinned> {
+    let pinned = pinned_for(label, which)?;
+    if shown && crate::privacy::share::Pinned::of_label(label) != Some(pinned) {
+        return Err(AppError::msg("Show it in screen shares from its own badge, on that window."));
+    }
+    Ok(pinned)
+}
+
+/// The one-time notice ("EchoLedger now shows in screen shares unless you hide it.") was closed. Only the main window.
+#[tauri::command]
+pub fn share_notice_dismiss(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
+    crate::privacy::from_main_window(window.label())?;
+    crate::privacy::dismiss_share_notice(&app)
 }
 
 /// Moves the floating windows to the display that isn't the main one (so the main one can be shared).

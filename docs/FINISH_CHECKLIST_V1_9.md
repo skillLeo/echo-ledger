@@ -4,6 +4,11 @@ Plan: docs/PLAN_V1_9.md (local only). Research: docs/research/screen-share-priva
 v1.8, and ships as a v1.8.x release; Phase L starts after the v1.8.0 tag. The Live Assist answer card never ships
 without Phase S.
 
+> **Status 2026-11-18 03:52 PKT (paused):**
+> - Live Assist is live for everyone on the VPS relay; the HTTP (shared hosting) path is an emergency-only choice.
+> - The screen-share per-window rule (main window shown, Live Assist card and captions always hidden unless shown from their own badge) is approved on b-desktop-share-default and ships in Mac 2.0.2.
+> - Full state: [RESUME_HERE.md](RESUME_HERE.md).
+
 ## Needs Hassam
 
 | # | What | Why | What to do |

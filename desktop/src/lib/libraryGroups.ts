@@ -3,6 +3,16 @@
 // opened here for Recently opened. Pure parts are tested; storage is a per-computer convenience and may be missing.
 import type { LibraryItem } from "./ipc";
 import { dayGroup, itemState, type SortKey } from "./library";
+import { sourceLabel as appWords } from "./controls";
+
+/**
+ * A recording's source as the Library names it, for Group by and the v2 Source filter alike: the server's name, else
+ * the app's name, an unknown app id in words ("signal_call" → "Signal call"), "Other" when there is none.
+ */
+export function sourceLabel(item: Pick<LibraryItem, "source_app" | "source_app_label">): string {
+  if (item.source_app === "voice_note") return "Voice notes";
+  return item.source_app_label || (item.source_app ? appWords(item.source_app) : "Other");
+}
 
 export type GroupKey = "date" | "app" | "project" | "language" | "status" | "device" | "none";
 
@@ -31,7 +41,7 @@ function groupOf(item: LibraryItem, by: GroupKey, now: Date): string {
     case "date":
       return dayGroup(item.started_at, now);
     case "app":
-      return item.source_app === "voice_note" ? "Voice notes" : item.source_app_label || "Other";
+      return sourceLabel(item);
     case "project":
       return item.client?.name ?? "No project";
     case "language":

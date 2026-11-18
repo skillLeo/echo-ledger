@@ -34,13 +34,46 @@ pub const KNOWN: [&str; 12] = [
 /// The event the window hears when the cached flags change.
 pub const EVENT: &str = "ui:flags";
 
-/// The flags as the window reads them: every known flag, on or off, and the person's "classic" choice.
+/// The flags as the window reads them: every known flag, on or off, the person's "classic" choice, and the design
+/// switch (contract 2.0.0-g; `null` from an older server, which shows only the 2.0.0-a switch).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct UiFlags {
     #[serde(rename = "ui_flags")]
     pub flags: BTreeMap<String, bool>,
     #[serde(rename = "ui_classic")]
     pub classic: bool,
+    #[serde(rename = "ui_design")]
+    pub design: Option<UiDesign>,
+}
+
+/// The design switch (contract 2.0.0-g, docs/API.md "The design switch"): what the person chose (`v2`, `classic`, or
+/// never), which design they see now, and which of the two Settings rows to show.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+pub struct UiDesign {
+    #[serde(default)]
+    pub choice: Option<String>,
+    #[serde(default)]
+    pub current: String,
+    #[serde(default)]
+    pub can_try: bool,
+    #[serde(default)]
+    pub can_switch_back: bool,
+}
+
+impl UiDesign {
+    /// The block as sent, made safe (pure): a choice other than `v2` or `classic` is none, a `current` other than `v2`
+    /// is `classic`, and anything that is not such an object is none.
+    pub fn read(raw: Option<&serde_json::Value>) -> Option<Self> {
+        let object = raw?.as_object()?;
+        let word = |key: &str| object.get(key).and_then(serde_json::Value::as_str);
+        let yes = |key: &str| object.get(key) == Some(&serde_json::Value::Bool(true));
+        Some(UiDesign {
+            choice: word("choice").filter(|c| matches!(*c, "v2" | "classic")).map(str::to_string),
+            current: if word("current") == Some("v2") { "v2" } else { "classic" }.to_string(),
+            can_try: yes("can_try"),
+            can_switch_back: yes("can_switch_back"),
+        })
+    }
 }
 
 impl Default for UiFlags {
@@ -58,7 +91,13 @@ impl UiFlags {
             .iter()
             .map(|name| ((*name).to_string(), object.and_then(|o| o.get(*name)).is_some_and(|v| *v == serde_json::Value::Bool(true))))
             .collect();
-        UiFlags { flags, classic }
+        UiFlags { flags, classic, design: None }
+    }
+
+    /// The same with the design switch's block (contract 2.0.0-g), as sent.
+    pub fn with_design(mut self, raw: Option<&serde_json::Value>) -> Self {
+        self.design = UiDesign::read(raw);
+        self
     }
 
     pub fn is_on(&self, name: &str) -> bool {
@@ -136,7 +175,21 @@ mod tests {
         assert_eq!(json["ui_flags"]["ui_v2.shell"], true);
         assert_eq!(json["ui_flags"]["live_assist"], false);
         assert_eq!(json["ui_classic"], true);
-        assert_eq!(json.as_object().unwrap().len(), 2);
+        assert_eq!(json["ui_design"], serde_json::Value::Null, "an older server: no design switch block");
+        assert_eq!(json.as_object().unwrap().len(), 3);
+        let with = serde_json::to_value(UiFlags::default().with_design(Some(&json!({"choice": "v2", "current": "v2", "can_try": false, "can_switch_back": true})))).unwrap();
+        assert_eq!(with["ui_design"], json!({"choice": "v2", "current": "v2", "can_try": false, "can_switch_back": true}));
+    }
+
+    #[test]
+    fn the_design_switch_block_is_read_safely() {
+        let read = |raw: serde_json::Value| UiDesign::read(Some(&raw));
+        assert_eq!(read(json!({"choice": null, "current": "classic", "can_try": true, "can_switch_back": false})),
+            Some(UiDesign { choice: None, current: "classic".into(), can_try: true, can_switch_back: false }));
+        assert_eq!(read(json!({"choice": "beta", "current": "v3", "can_try": "yes", "can_switch_back": 1})),
+            Some(UiDesign { choice: None, current: "classic".into(), can_try: false, can_switch_back: false }), "unknown values are the safe ones");
+        assert_eq!(read(json!("v2")), None);
+        assert_eq!(UiDesign::read(None), None);
     }
 
     #[test]

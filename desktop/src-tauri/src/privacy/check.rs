@@ -856,6 +856,14 @@ pub struct PrivacyStatus {
     pub hidden_for_share: bool,
     /// The person opened the main window during that share: it says it may be in the screen share.
     pub main_in_share: bool,
+    /// The main window is hidden from screen shares (v2.0), and until when ("until 14:30"); none: shown.
+    pub main_hide: Option<super::share::MainHide>,
+    pub main_hidden_until: Option<String>,
+    /// A call is detected: "Until this call ends" is offered.
+    pub call_detected: bool,
+    /// The person showed the Live Assist card / the captions in screen shares, on that window.
+    pub show_card: bool,
+    pub show_captions: bool,
     /// Which share that is, counted in this run: the notice closed in one share shows again in the next.
     pub share_number: u64,
     /// The share's sharing bar is on screen: "Show EchoLedger windows" is not offered (they come back when it ends).
@@ -908,15 +916,20 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     let (platform, build, remote, mismatch) = (facts.platform, facts.build, facts.remote, facts.mismatch);
     let now = std::time::Instant::now();
     let badge = status::badge(&facts);
+    let choice = super::choice_now(app);
     #[cfg(target_os = "macos")]
     let permission = crate::screens::platform::macos::permission();
     #[cfg(not(target_os = "macos"))]
     let permission = true;
-    let lines = match platform {
+    let mut lines = match platform {
         Platform::Windows => super::win::lines(build, remote, settings.old_windows_sharing, mismatch, changed_outside),
-        Platform::Mac => mac_lines(permission, super::watch::allowed(settings.hide_from_sharing, settings.share_one_window, false, false)),
+        Platform::Mac => mac_lines(permission, super::watch::allowed(&choice, settings.share_one_window, false)),
         Platform::Other => Vec::new(),
     };
+    // A card or captions kept off because its flag did not hold: said first.
+    for label in privacy.held_back().iter().rev() {
+        lines.insert(0, super::win::Line::warning(&super::held_back_line(label)));
+    }
     let mac_version = os_version();
     // Read before the answer is put together: no lock is held while the displays are asked of the main thread below.
     let share = privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone();
@@ -943,7 +956,12 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         demo_seconds_left: privacy.demo_left(now).map(|d| d.as_secs().max(1)),
         hidden_by_shortcut: privacy.hidden_for(super::HideReason::Person),
         hidden_for_share: privacy.hidden_for(super::HideReason::Share),
-        main_in_share: privacy.main_in_share(settings.hide_from_sharing),
+        main_in_share: privacy.main_in_share(choice.main_hidden),
+        main_hide: settings.main_share_hide.filter(|_| choice.main_hidden),
+        main_hidden_until: settings.main_share_hide.filter(|_| choice.main_hidden).map(|h| super::share::until_words(&h, chrono::Local::now())),
+        call_detected: super::call_detected(app),
+        show_card: choice.show_card,
+        show_captions: choice.show_captions,
         share_number: privacy.share_number(),
         bar_on_screen: privacy.bar_holds(),
         share,

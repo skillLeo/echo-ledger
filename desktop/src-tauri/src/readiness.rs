@@ -121,7 +121,7 @@ pub enum Protection {
     NotChecked,
     /// The last check saw them in a share.
     Visible,
-    /// Hide from screen sharing is off.
+    /// The other floating windows are shown in screen shares (`hideFromSharing` off).
     Off,
 }
 
@@ -234,7 +234,7 @@ pub fn evaluate(inputs: &ReadyInputs, now: chrono::DateTime<chrono::Utc>) -> Rea
             Protection::BlackBox => ok("overlay_protection", LABEL, Some("This Windows version shows a black box where EchoLedger is: its text stays private.".into())),
             Protection::NotChecked => ok("overlay_protection", LABEL, Some("Not checked on this computer yet: EchoLedger checks it by itself.".into())),
             Protection::Visible => problem("overlay_protection", LABEL, "The last check saw EchoLedger's windows in a screen share on this computer.", Some(privacy), false),
-            Protection::Off => problem("overlay_protection", LABEL, "Hide from screen sharing is off: EchoLedger's windows show in a screen share.", Some(Fix { label: "Turn it on", ..privacy }), false),
+            Protection::Off => problem("overlay_protection", LABEL, "EchoLedger's other floating windows show in a screen share. The Live Assist card and the captions stay hidden.", Some(Fix { label: "Turn it on", ..privacy }), false),
         }));
     }
 

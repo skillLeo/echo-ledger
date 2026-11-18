@@ -196,3 +196,7 @@ The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share pr
    Pause leaves the meeting in front; ⌘H hides the window, not the controls; Dock Quit while recording closes within
    20 s and the recording is kept (not "Recovered"); ⌘Q twice keeps it too. Not run: start at login (MAC-32 e), the
    phone-as-viewer whole-screen shares for Zoom (both capture modes), MAC-22 on macOS 14.4/15 (no machine).
+
+## Paused 2026-11-18 03:52 PKT
+
+Owner devices now: Mac 2.0.1 (installed 2026-11-17, start-up check passed), phone S25 2.0.1 (code 21, `install -r`). Windows 1.8.2 is not yet tested on the owner's laptop. Next device step after resume: build Mac 2.0.2 from v1.1 once b-desktop-share-default is merged, run `sh scripts/smoke-mac.sh <app> 180`, then install it over 2.0.1. See docs/RESUME_HERE.md.

@@ -121,7 +121,8 @@ it('hides the sections that do not match the search and shows the ones that do',
 
     $page->set('data.settings_search', 'time zone');
     $html = $page->html();
-    expect($hiddenSections($html))->toBe(1)
+    // General's other sections (Vocabulary, Live Assist connection) hide.
+    expect($hiddenSections($html))->toBe(2)
         ->and($html)->toContain('Language &amp; time');
 
     $page->set('data.settings_search', '');
