@@ -892,3 +892,208 @@ DT-SET-159,desktop,Settings,"Privacy policy (link, about.privacy)",Settings › 
 DT-SET-160,desktop,Settings,"Terms (link, about.terms)",Settings › Support › About › Terms,"Settings › Support › About › Terms (v2 page, same control)",done,"src/v2/settings/pages/pages.test.tsx › ""parity with today's Settings pages, in every state"""
 DT-SET-161,desktop,Settings,"Sign out (action, signout)",Settings › Sign out,Settings list › Sign out (same place),done,"src/v2/settings/settings.test.tsx › ""shows the profile card with the plan chip and Upgrade, then the groups"""
 DT-SET-GRP,desktop,Settings,"Settings groups with an icon each, and search across every setting","Classic Settings list (icons per page, search field)","v2 Settings: goal groups, an icon per row, search over every setting (plan 5 also asks for a one-line description per group, which classic didn't have)",partial,"src/v2/settings/settings.test.tsx › ""search finds an individual setting and jumps to it; back returns to the list"""
+WEB-NAV-001,web,Sidebar,Home,Sidebar > Home,Sidebar > Home,done,tests/Feature/V2/WebParityTest.php (WEB-NAV-001)
+WEB-NAV-002,web,Sidebar,Library,Sidebar > Library,Sidebar > Library > All recordings,done,tests/Feature/V2/WebParityTest.php (WEB-NAV-002)
+WEB-NAV-003,web,Sidebar,"Projects, with each project and its count under it","Sidebar > Projects (each project, its count, New project)","Sidebar > Library > Projects (the list is on the Projects page, not in the sidebar)",partial,none
+WEB-NAV-004,web,Sidebar,Record,Sidebar and phone bottom bar > Record (record in the browser),"Live > Record > Voice note; no Record at the top of the sidebar (plan 2: ""● Record"" / ""Upload recording"" first)",partial,tests/Feature/V2/WebParityTest.php (WEB-NAV-004)
+WEB-NAV-005,web,Sidebar,Upload,Sidebar > Upload,Library > Upload button and drop zone; no sidebar entry,partial,tests/Feature/V2/WebParityTest.php (WEB-NAV-005)
+WEB-NAV-006,web,Sidebar,Activity with its count,Sidebar > Activity,Top bar bell only; plan 2 wants Activity with its badge at the bottom of the sidebar,partial,none
+WEB-NAV-007,web,Sidebar,"Create menu (+): New project, Request link, Upload files",Top bar > + (Create),Not in v2,missing,none
+WEB-NAV-008,web,Sidebar,"Library places with counts: All, Today, This week, Waiting, Pinned, Failed uploads",Sidebar > Library places,"Library > saved-view chips (All, Today, Untranscribed, Pinned, Voice notes); This week, Waiting and Failed uploads are not there",partial,tests/Feature/V2/WebParityTest.php (WEB-NAV-008)
+WEB-NAV-009,web,Sidebar,"Smart folders with counts: Inbox, WhatsApp, WhatsApp Business, Meet, Zoom, Teams, SIM, Voice notes, Imported",Sidebar > Library folders,"Library > Source chip (Any source, Inbox, the apps, Phone, Voice notes, Imported)",done,tests/Feature/V2/WebParityTest.php (WEB-NAV-009)
+WEB-NAV-010,web,Sidebar,"Sharing: With me, My links, Request links",Sidebar > Shared > With me / My links / Request links,Sidebar > Library > Shared opens Shared with me only; My links and Request links have no way in,partial,none
+WEB-NAV-011,web,Sidebar,"Live Assist: Sessions, Preps, Settings",Sidebar > Live Assist group,"Live > Tools (Live Assist sessions, Preps)",done,tests/Feature/V2/WebParityTest.php (WEB-NAV-011)
+WEB-NAV-012,web,Sidebar,Find a page,Sidebar > Find a page box,Top bar search and commands (Ctrl/Cmd K),done,tests/Feature/V2/WebParityTest.php (WEB-NAV-012)
+WEB-NAV-013,web,Sidebar,Fold the sidebar to icons ([ key),Sidebar > Collapse sidebar,Sidebar > Collapse,done,tests/Feature/V2/WebParityTest.php (WEB-NAV-013)
+WEB-NAV-014,web,Sidebar,Resize the sidebar by dragging,"Sidebar edge (drag, arrow keys)",Not in v2,missing,none
+WEB-NAV-015,web,Frame,Breadcrumbs above each page title,Above the title (e.g. Library > Search),Not in v2,missing,none
+WEB-NAV-016,web,Frame,Phone-width bottom bar,"Bottom bar: Home, Library, Record, Activity, More","Bottom bar: Home, Library, Live, Ask (plan 2: Library, Projects, Record, Live, Ask)",partial,tests/Feature/V2/WebParityTest.php (WEB-NAV-016)
+WEB-NAV-017,web,Frame,Help and shortcuts,"? key, top bar ? button, sidebar",Sidebar and avatar menu > Help and shortcuts,done,tests/Feature/V2/WebParityTest.php (WEB-NAV-017)
+WEB-NAV-018,web,Frame,Workspace switcher,Top bar > workspace,Top bar > workspace,done,tests/Feature/V2/WebParityTest.php (WEB-NAV-018)
+WEB-NAV-019,web,Frame,"Avatar menu: Settings, Plan and usage, Upgrade, theme, Admin panel, Sign out",Top bar > avatar,Top bar > avatar,done,tests/Feature/V2/WebParityTest.php (WEB-NAV-019)
+WEB-NAV-020,web,Frame,Notifications bell,Top bar > bell,Top bar > bell,done,tests/Feature/V2/WebParityTest.php (WEB-NAV-020)
+WEB-NAV-021,web,Frame,"Search recordings, transcripts, pages and settings (Ctrl/Cmd K)",Top bar search,Top bar search,done,tests/Feature/V2/WebParityTest.php (WEB-NAV-021)
+WEB-NAV-022,web,Frame,Get the apps,Home and Help > Get the apps,Get the apps page (Home and Help),done,none
+WEB-KEY-001,web,Keyboard,/ focuses the list's search,Everywhere,Everywhere (same handler),done,none
+WEB-KEY-002,web,Keyboard,? opens Help and shortcuts,Everywhere,Everywhere,done,none
+WEB-KEY-003,web,Keyboard,"Esc closes a panel, menu or dialog",Everywhere,Everywhere,done,none
+WEB-KEY-004,web,Keyboard,J / K next and previous recording,Library,Not in v2: the handler looks for the classic list (.el-library-list),missing,none
+WEB-KEY-005,web,Keyboard,Enter opens the current recording,Library,Not in v2 (same handler),missing,none
+WEB-KEY-006,web,Keyboard,X selects the current recording,Library,Not in v2 (same handler),missing,none
+WEB-KEY-007,web,Keyboard,Esc clears the selection,Library,Not in v2 (same handler),missing,none
+WEB-KEY-008,web,Keyboard,"Ctrl/Cmd+A selects all, Shift-click a range, Delete deletes with undo (plan 3)",Not in classic either,Not in v2,missing,none
+WEB-KEY-009,web,Keyboard,"Space play or pause, ← → 5 s (Shift 10 s)",Recording page player,Recording page player (same player),done,tests/Feature/V2/WebParityTest.php (WEB-KEY-009)
+WEB-LIB-001,web,Library,"Search titles, projects and transcripts",Library > search pill,Library > search field,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-001)
+WEB-LIB-002,web,Library,Filter: Source device,Library > Filters,Library > Filters (in the search field); plan 3 wants them as chips,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-002)
+WEB-LIB-003,web,Library,Filter: Source app,Library > Filters,Library > Filters (in the search field); plan 3 wants them as chips,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-003)
+WEB-LIB-004,web,Library,Filter: Project,Library > Filters,Library > Filters (in the search field); plan 3 wants them as chips,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-004)
+WEB-LIB-005,web,Library,Filter: Status,Library > Filters,Library > Filters (in the search field); plan 3 wants them as chips,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-005)
+WEB-LIB-006,web,Library,Filter: Bookmark tag,Library > Filters,Library > Filters (in the search field); plan 3 wants them as chips,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-006)
+WEB-LIB-007,web,Library,Filter: Label,Library > Filters,Library > Filters (in the search field); plan 3 wants them as chips,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-007)
+WEB-LIB-008,web,Library,Filter: Has bookmarks,Library > Filters,Library > Filters (in the search field); plan 3 wants them as chips,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-008)
+WEB-LIB-009,web,Library,Filter: Date from / until,Library > Filters,Library > Filters (in the search field); plan 3 wants them as chips,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-009)
+WEB-LIB-010,web,Library,"Applied filters as chips with ×, Clear all",Library > under the search,Library > under the search,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-010)
+WEB-LIB-011,web,Library,Sort: Newest,Library > Sort by,Library > order chip,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-011)
+WEB-LIB-012,web,Library,Sort: Oldest,Library > Sort by,Library > order chip,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-012)
+WEB-LIB-013,web,Library,Sort: Longest,Library > Sort by,Library > order chip,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-013)
+WEB-LIB-014,web,Library,Sort: Shortest,Library > Sort by,Library > order chip,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-014)
+WEB-LIB-015,web,Library,Sort: Name A–Z,Library > Sort by,Library > order chip,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-015)
+WEB-LIB-016,web,Library,Sort: Recently opened,Library > Sort by,Library > order chip,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-016)
+WEB-LIB-017,web,Library,Group by: Date,Library > Group by,Library: grouped by day (fixed),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-017)
+WEB-LIB-018,web,Library,Group by: App / Type,Library > Group by,Not in v2 (always by day),missing,none
+WEB-LIB-019,web,Library,Group by: Project,Library > Group by,Not in v2 (always by day),missing,none
+WEB-LIB-020,web,Library,Group by: Language,Library > Group by,Not in v2 (always by day),missing,none
+WEB-LIB-021,web,Library,Group by: Status,Library > Group by,Not in v2 (always by day),missing,none
+WEB-LIB-022,web,Library,Group by: Device,Library > Group by,Not in v2 (always by day),missing,none
+WEB-LIB-023,web,Library,Group by: None,Library > Group by,Not in v2 (always by day),missing,none
+WEB-LIB-024,web,Library,List or Table layout,Library > Show as List / Table (and Settings > Appearance > Library view),Not in v2 (list only),missing,none
+WEB-LIB-025,web,Library,Columns (Table layout),Library > Table > Columns,Not in v2,missing,none
+WEB-LIB-026,web,Library,Saved view: All,Sidebar / Library,Library > All,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-026)
+WEB-LIB-027,web,Library,Saved view: Today,Sidebar / Library,Library > Today,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-027)
+WEB-LIB-028,web,Library,Saved view: This week,Sidebar / Library,Not in v2,missing,none
+WEB-LIB-029,web,Library,Saved view: Waiting for decision,Sidebar / Library and the Waiting line,Not in v2 (Home lists what needs you),missing,none
+WEB-LIB-030,web,Library,Saved view: Bookmarked,Library,Not in v2 (the Has bookmarks filter does the same),partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-030)
+WEB-LIB-031,web,Library,"Saved view: Failed uploads, with Retry and Delete on each row",Sidebar / Library and the Failed uploads line,Not in v2 as a view; Retry shows on a failed row,partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-031)
+WEB-LIB-032,web,Library,Saved view: Pinned,Sidebar / Library,Library > Pinned,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-032)
+WEB-LIB-033,web,Library,Saved view: Untranscribed / Audio only (plan 3),Not in classic,Library > Untranscribed; Audio only comes with call rules,partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-033)
+WEB-LIB-034,web,Library,"Section headers with counts that collapse (Pinned · 4, Today, Yesterday, This week, Older)",Library > Group by Date headers,"Library > day headers (no counts, no collapse, no Pinned section)",partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-034)
+WEB-LIB-035,web,Library,Select a whole group from its header,Library > group header checkbox,Library > day header checkbox,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-035)
+WEB-LIB-036,web,Library,Select all,Library > select all,Library > Select all,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-036)
+WEB-LIB-037,web,Library,Pin or unpin from the row (star),Library row > star,Not on the v2 row (row menu or bulk Pin),partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-037)
+WEB-LIB-038,web,Library,"Row: source, device, project, time, length","Library row (""WhatsApp · Galaxy S25"")","Library row: source and project, time and length; no device",partial,none
+WEB-LIB-039,web,Library,Row: status while uploading or transcribing,"Library row (Transcribing, Failed)",Library row: Untranscribed chip; no Transcribing / Uploading,partial,none
+WEB-LIB-040,web,Library,Row: real source logo with a device badge (plan 3),Library row tile,Library row (generic icons),missing,none
+WEB-LIB-041,web,Library,"Row: transcript snippet, important flag, label colour dot, unread dot, Audio · N days left (plan 3)",Not in classic,"Not in v2 (server fields: label colours, important, unread come with the parity server work)",missing,none
+WEB-LIB-042,web,Library,Row menu: Open,Library row > More,Library row > More,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-042)
+WEB-LIB-043,web,Library,Row menu: Rename,Library row > More,Library row > More,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-043)
+WEB-LIB-044,web,Library,Row menu: Send to WhatsApp,Library row > More,Library row > More,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-044)
+WEB-LIB-045,web,Library,Row menu: Delete (Recently deleted for the Trash time),Library row > More,Library row > More,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-045)
+WEB-LIB-046,web,Library,Right-click a row opens its menu (plan 3),Not in classic,Not in v2,missing,none
+WEB-LIB-047,web,Library,Click a row opens it beside the list; Ctrl/Cmd/Shift/middle click opens its page,Library row,Library row (same),done,none
+WEB-LIB-048,web,Library,Selected: Move to project,Library > select > bar,Library > select > bar (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-048)
+WEB-LIB-049,web,Library,Selected: Add label,Library > select > bar,Library > select > bar (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-049)
+WEB-LIB-050,web,Library,Selected: Remove label,Library > select > bar,Library > select > bar (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-050)
+WEB-LIB-051,web,Library,Selected: Pin,Library > select > bar,Library > select > bar (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-051)
+WEB-LIB-052,web,Library,Selected: Unpin,Library > select > bar,Library > select > bar (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-052)
+WEB-LIB-053,web,Library,Selected: Keep forever,Library > select > bar,Library > select > bar (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-053)
+WEB-LIB-054,web,Library,Selected: Stop keeping,Library > select > bar,Library > select > bar (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-054)
+WEB-LIB-055,web,Library,Selected: Export transcripts,Library > select > bar,Library > select > bar (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-055)
+WEB-LIB-056,web,Library,Selected: Delete,Library > select > bar,Library > select > bar (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-056)
+WEB-LIB-057,web,Library,"Export formats: Word, Text, Markdown, Subtitles (.srt, .vtt), JSON, in a chosen view",Library > select > Export,Library > select > Export (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-057)
+WEB-LIB-058,web,Library,Export as a web page (.html) for many (plan 3),Not in classic (one recording only),Not in v2,missing,none
+WEB-LIB-059,web,Library,"Selected: Transcribe all, with the minutes first (plan 3)",Not in classic,Not in v2 (the server part is on the call-rules branch),missing,none
+WEB-LIB-060,web,Library,"Selected: Copy for AI, Mark important (plan 3)",Not in classic,Not in v2,missing,none
+WEB-LIB-061,web,Library,Upload by drag and drop on the list,Library drop zone,Library drop zone (same),done,tests/Feature/V2/WebParityTest.php (WEB-LIB-061)
+WEB-LIB-062,web,Library,New voice note,Library empty state / Upload,Library > New voice note,done,tests/Feature/V2/WebParityTest.php (WEB-LIB-062)
+WEB-LIB-063,web,Library,"Waiting for decision line (""4 calls waiting · Review"")",Library top,Not in v2 (Home lists what needs you),partial,none
+WEB-LIB-064,web,Library,"Failed uploads line (""Failed uploads (2) · See why"")",Library top,Not in v2,missing,none
+WEB-LIB-065,web,Library,Plan limit line,Library top,Library top (same widget),done,none
+WEB-LIB-066,web,Library,"Empty states: Clear search and filters, Show all recordings, Upload a voice note, Sign in a device",Library when nothing shows,Library (same actions),done,none
+WEB-LIB-067,web,Library,The list refreshes while a recording uploads or is transcribed,Library,Library (same),done,none
+WEB-LIB-068,web,Library,Per page 5 / 10 / 25 / 50 and pages,Library foot,"Library foot (same); plan 3 wants lazy loading for 2,000+",partial,tests/Feature/V2/WebParityTest.php (WEB-LIB-068)
+WEB-LIB-069,web,Library,Swipe left Delete / right Pin (phone width),Not in classic,Not in v2,missing,none
+WEB-LIB-070,web,Library,Setup checklist card and one Needs action line at the top (plan 2),Home,Home,partial,none
+WEB-REC-001,web,Recording page,Action: Share,"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-001)
+WEB-REC-002,web,Recording page,Action: Move to project,"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-002)
+WEB-REC-003,web,Recording page,Action: Delete,"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-003)
+WEB-REC-004,web,Recording page,Action: Rename,"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-004)
+WEB-REC-005,web,Recording page,Action: Download (audio and transcript in the chosen view),"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-005)
+WEB-REC-006,web,Recording page,"Action: Show as (Original, Roman Urdu, اردو, English)","Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-006)
+WEB-REC-007,web,Recording page,Action: Send to WhatsApp,"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-007)
+WEB-REC-008,web,Recording page,Action: Rename speakers,"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-008)
+WEB-REC-009,web,Recording page,Action: Find and replace,"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-009)
+WEB-REC-010,web,Recording page,Action: History (restore an earlier version),"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-010)
+WEB-REC-011,web,Recording page,Action: Send to a teammate,"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-011)
+WEB-REC-012,web,Recording page,Action: Sent to,"Recording > header (Edit, buttons, ⋮)",Recording > Share / Move / Delete and More,done,tests/Feature/V2/WebParityTest.php (WEB-REC-012)
+WEB-REC-013,web,Recording page,"Action: Retry, Re-transcribe as, second engine, compare, engine results, reference (staff)",Recording > ⋮,Recording > More (same actions),done,none
+WEB-REC-014,web,Recording page,"Labels, Pin, Keep forever, Project on the recording",Recording > details row,Recording > details row (same),done,tests/Feature/V2/WebParityTest.php (WEB-REC-014)
+WEB-REC-015,web,Recording page,Mark important (plan 4),Not in classic,Not in v2 (server field to come),missing,none
+WEB-REC-016,web,Recording page,Change language and re-transcribe,Recording > ⋮ > Re-transcribe as,Recording > More,done,none
+WEB-REC-017,web,Recording page,"Player: play/pause, back and forward, speed",Recording > player,Recording > player (same),done,tests/Feature/V2/WebParityTest.php (WEB-REC-017)
+WEB-REC-018,web,Recording page,"Player: Skip silence, moment markers on the bar (plan 4)",Bookmarks and pauses list,Not in v2 as plan 4 asks,partial,tests/Feature/V2/WebParityTest.php (WEB-REC-018)
+WEB-REC-019,web,Recording page,"Copy menu: text, with timestamps, without, Copy for AI with a header (plan 4)",WhatsApp > Copy for AI; the download panel,Not as one Copy menu,partial,none
+WEB-REC-020,web,Recording page,Tabs: Transcript and Screens,Recording > Transcript / Screens,"Recording > Transcript, Summary, Ask, Moments, Details",done,tests/Feature/V2/WebParityTest.php (WEB-REC-020)
+WEB-REC-021,web,Recording page,"Views: Original, Roman Urdu, اردو, English, switched at once",Recording > view switch,Recording > view switch (same),done,tests/Feature/V2/WebParityTest.php (WEB-REC-021)
+WEB-REC-022,web,Recording page,"Find in the transcript, next and previous match",Recording > search box,Recording > search box (same),done,tests/Feature/V2/WebParityTest.php (WEB-REC-022)
+WEB-REC-023,web,Recording page,Suggested fixes: Accept / Dismiss,Recording > transcript,Recording > transcript (same),done,tests/Feature/V2/WebParityTest.php (WEB-REC-023)
+WEB-REC-024,web,Recording page,Call notes (Write notes),Recording > Call notes,Recording > Summary,done,tests/Feature/V2/WebParityTest.php (WEB-REC-024)
+WEB-REC-025,web,Recording page,"Share links table (who, views, downloads, expiry)",Recording > Share links,Recording > Details,done,tests/Feature/V2/WebParityTest.php (WEB-REC-025)
+WEB-REC-026,web,Recording page,Screens of this recording,Recording > Screens tab,Recording > Moments,done,tests/Feature/V2/WebParityTest.php (WEB-REC-026)
+WEB-REC-027,web,Recording page,"Details: source, device, length, language, created, engine, retention, project, labels",Recording > Details section,Recording > Details tab,done,tests/Feature/V2/WebParityTest.php (WEB-REC-027)
+WEB-REC-028,web,Recording page,Tap a line to play from there; speaker names You / the contact,Recording > transcript,Recording > transcript (same player),done,none
+WEB-REC-029,web,Recording page,Ask about this recording,Not in classic,Recording > Ask,done,tests/Feature/V2/WebParityTest.php (WEB-REC-029)
+WEB-REC-030,web,Recording page,Previous / Next recording,Recording > Previous / Next,Recording > Previous / Next,done,tests/Feature/V2/WebParityTest.php (WEB-REC-030)
+WEB-PRJ-001,web,Projects,"Projects list with counts, New project",Sidebar > Projects,Library > Projects,done,tests/Feature/V2/WebParityTest.php (WEB-PRJ-001)
+WEB-PRJ-002,web,Projects,"Project row menu (open, edit, delete)",Projects > More,Projects > More (same),done,none
+WEB-PRJ-003,web,Project,"Tabs: Overview, Recordings, Screens, Files, Ask, Rules",Project page,Project page (same),done,tests/Feature/V2/WebParityTest.php (WEB-PRJ-003)
+WEB-PRJ-004,web,Project,"New subfolder, Settings",Project > More,Project > More (same),done,tests/Feature/V2/WebParityTest.php (WEB-PRJ-004)
+WEB-PRJ-005,web,Projects,Rename Workspaces to Projects everywhere (plan 2),Projects (workspaces stay workspaces),Projects,done,none
+WEB-PAGE-001,web,Search page,Search page: every control of the page,Sidebar > Library > Search,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-001)
+WEB-PAGE-002,web,Upload page,Upload page: every control of the page,Sidebar > Library > Upload,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-002)
+WEB-PAGE-003,web,Activity,Activity: every control of the page,Sidebar > Activity,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-003)
+WEB-PAGE-004,web,My links,My links: every control of the page,Sidebar > Shared > My links,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-004)
+WEB-PAGE-005,web,Shared with me,Shared with me: every control of the page,Sidebar > Shared > With me,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-005)
+WEB-PAGE-006,web,Request links,Request links: every control of the page,Sidebar > Shared > Request links,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-006)
+WEB-PAGE-007,web,Recently deleted / Trash,Recently deleted / Trash: every control of the page,Sidebar > Library > Recently deleted,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-007)
+WEB-PAGE-008,web,Devices,Devices: every control of the page,Sidebar > Settings > Devices,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-008)
+WEB-PAGE-009,web,Usage,Usage: every control of the page,Sidebar > Settings > Usage,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-009)
+WEB-PAGE-010,web,Workspace,Workspace: every control of the page,Sidebar > Settings > Workspace,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-010)
+WEB-PAGE-011,web,"Help (guides, what's new, contact support)","Help (guides, what's new, contact support): every control of the page",Sidebar > Help,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-011)
+WEB-PAGE-012,web,Get the apps,Get the apps: every control of the page,Sidebar > Home > Get the apps,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-012)
+WEB-PAGE-013,web,Live Assist preps,Live Assist preps: every control of the page,Sidebar > Live Assist > Preps,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-013)
+WEB-PAGE-014,web,Live Assist sessions,Live Assist sessions: every control of the page,Sidebar > Live Assist > Sessions,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-014)
+WEB-PAGE-015,web,Live Assist settings,Live Assist settings: every control of the page,Sidebar > Live Assist > Settings,"Same page in the v2 frame (only the breadcrumb is gone, WEB-NAV-015)",done,tests/Feature/V2/WebParityTest.php (WEB-PAGE-015)
+WEB-SET-TRANSCRIPTION-LANGUAGE,web,Settings,Setting: Language,Settings > Language > Language,Settings > Language > Language (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-TRANSCRIPTION-LANGUAGE)
+WEB-SET-KEY-SAVED,web,Settings,Setting: Your Groq key,Settings > Transcription key > Your Groq key (shown when it applies),"Settings > Transcription key > Your Groq key (same page, same condition)",done,none
+WEB-SET-KEY-REMOVE,web,Settings,Setting: Remove key,Settings > Transcription key > Remove key (shown when it applies),"Settings > Transcription key > Remove key (same page, same condition)",done,none
+WEB-SET-APPEARANCE-THEME,web,Settings,Setting: Theme,Settings > Appearance > Theme,Settings > Appearance > Theme (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-APPEARANCE-THEME)
+WEB-SET-APPEARANCE-SIDEBAR,web,Settings,"Setting: Sidebar style (Light, Dark, Soft grey)",Settings > Appearance > Sidebar style,Not in v2 (one sidebar look); plan 5 says no setting may silently disappear,missing,none
+WEB-SET-APPEARANCE-DENSITY,web,Settings,Setting: Density,Settings > Appearance > Density,Settings > Appearance > Density (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-APPEARANCE-DENSITY)
+WEB-SET-APPEARANCE-CLOCK,web,Settings,Setting: Times,Settings > Appearance > Times,Settings > Appearance > Times (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-APPEARANCE-CLOCK)
+WEB-SET-APPEARANCE-LIBRARY-VIEW,web,Settings,Setting: Library view,Settings > Appearance > Library view,Settings > Appearance > Library view (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-APPEARANCE-LIBRARY-VIEW)
+WEB-SET-APPEARANCE-DESIGN,web,Settings,Setting: the design switch both ways,Settings > Appearance > Try the new design / Switch back to classic,Settings > Appearance > Switch back to classic,done,tests/Feature/InterfaceFlagsTest.php (the console both ways)
+WEB-SET-NOTIFICATIONS-EMAIL-TRANSCRIPTION,web,Settings,Setting: Transcription,Settings > Notifications > Transcription,Settings > Notifications > Transcription (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-NOTIFICATIONS-EMAIL-TRANSCRIPTION)
+WEB-SET-NOTIFICATIONS-EMAIL-ENHANCEMENT,web,Settings,Setting: Enhancement,Settings > Notifications > Enhancement,Settings > Notifications > Enhancement (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-NOTIFICATIONS-EMAIL-ENHANCEMENT)
+WEB-SET-NOTIFICATIONS-EMAIL-SHARING,web,Settings,Setting: Sharing,Settings > Notifications > Sharing,Settings > Notifications > Sharing (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-NOTIFICATIONS-EMAIL-SHARING)
+WEB-SET-NOTIFICATIONS-EMAIL-USAGE,web,Settings,Setting: Usage & limits,Settings > Notifications > Usage & limits,Settings > Notifications > Usage & limits (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-NOTIFICATIONS-EMAIL-USAGE)
+WEB-SET-NOTIFICATIONS-EMAIL-UPDATES,web,Settings,Setting: App updates,Settings > Notifications > App updates,Settings > Notifications > App updates (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-NOTIFICATIONS-EMAIL-UPDATES)
+WEB-SET-NOTIFICATIONS-EMAIL-OTHER,web,Settings,Setting: Other,Settings > Notifications > Other,Settings > Notifications > Other (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-NOTIFICATIONS-EMAIL-OTHER)
+WEB-SET-NOTIFICATIONS-EMAIL-ACCOUNT,web,Settings,Setting: Account & security,Settings > Notifications > Account & security,Settings > Notifications > Account & security (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-NOTIFICATIONS-EMAIL-ACCOUNT)
+WEB-SET-NOTIFICATIONS-EMAIL-PLAN-PAYMENTS,web,Settings,Setting: Plan & payments,Settings > Notifications > Plan & payments,Settings > Notifications > Plan & payments (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-NOTIFICATIONS-EMAIL-PLAN-PAYMENTS)
+WEB-SET-STORAGE-USED,web,Settings,Setting: Your storage,Settings > Storage > Your storage,Settings > Storage > Your storage (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-STORAGE-USED)
+WEB-SET-STORAGE-RETENTION,web,Settings,Setting: Recordings kept,Settings > Storage > Recordings kept,Settings > Storage > Recordings kept (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-STORAGE-RETENTION)
+WEB-SET-STORAGE-BIN,web,Settings,Setting: Bin,Settings > Storage > Bin,Settings > Storage > Bin (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-STORAGE-BIN)
+WEB-SET-PROFILE-NAME,web,Settings,Setting: Name,Settings > Profile > Name,Settings > Profile > Name (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PROFILE-NAME)
+WEB-SET-PROFILE-EMAIL,web,Settings,Setting: Email,Settings > Profile > Email,Settings > Profile > Email (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PROFILE-EMAIL)
+WEB-SET-PROFILE-WORKSPACE,web,Settings,Setting: Workspace,Settings > Profile > Workspace,Settings > Profile > Workspace (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PROFILE-WORKSPACE)
+WEB-SET-PLAN-CURRENT,web,Settings,Setting: Current plan,Settings > Plan & usage > Current plan (shown when it applies),"Settings > Plan & usage > Current plan (same page, same condition)",done,none
+WEB-SET-PLAN-UPGRADE,web,Settings,Setting: Upgrade,Settings > Plan & usage > Upgrade,Settings > Plan & usage > Upgrade (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PLAN-UPGRADE)
+WEB-SET-PLAN-USAGE-MINUTES,web,Settings,Setting: Transcription minutes,Settings > Plan & usage > Transcription minutes (shown when it applies),"Settings > Plan & usage > Transcription minutes (same page, same condition)",done,none
+WEB-SET-PLAN-USAGE-STORAGE,web,Settings,Setting: Storage,Settings > Plan & usage > Storage,Settings > Plan & usage > Storage (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PLAN-USAGE-STORAGE)
+WEB-SET-PLAN-USAGE-DEVICES,web,Settings,Setting: Devices,Settings > Plan & usage > Devices,Settings > Plan & usage > Devices (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PLAN-USAGE-DEVICES)
+WEB-SET-PLAN-USAGE-MEMBERS,web,Settings,Setting: Team members,Settings > Plan & usage > Team members,Settings > Plan & usage > Team members (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PLAN-USAGE-MEMBERS)
+WEB-SET-PLAN-COMPARE,web,Settings,Setting: See every feature,Settings > Plan & usage > See every feature,Settings > Plan & usage > See every feature (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PLAN-COMPARE)
+WEB-SET-PLAN-PROMO,web,Settings,Setting: Promo code,Settings > Plan & usage > Promo code,Settings > Plan & usage > Promo code (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PLAN-PROMO)
+WEB-SET-PLAN-REQUEST,web,Settings,Setting: Upgrade request,Settings > Plan & usage > Upgrade request (shown when it applies),"Settings > Plan & usage > Upgrade request (same page, same condition)",done,none
+WEB-SET-PLAN-PAYMENT-DETAILS,web,Settings,Setting: Payment details,Settings > Plan & usage > Payment details (shown when it applies),"Settings > Plan & usage > Payment details (same page, same condition)",done,none
+WEB-SET-PLAN-RECEIPT,web,Settings,Setting: Payment receipt,Settings > Plan & usage > Payment receipt (shown when it applies),"Settings > Plan & usage > Payment receipt (same page, same condition)",done,none
+WEB-SET-PLAN-HISTORY,web,Settings,Setting: Payments,Settings > Plan & usage > Payments,Settings > Plan & usage > Payments (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PLAN-HISTORY)
+WEB-SET-SECURITY-PASSWORD,web,Settings,Setting: Password,Settings > Sign-in & security > Password,Settings > Sign-in & security > Password (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-SECURITY-PASSWORD)
+WEB-SET-SECURITY-TWO-STEP,web,Settings,Setting: Two-step sign-in,Settings > Sign-in & security > Two-step sign-in,Settings > Sign-in & security > Two-step sign-in (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-SECURITY-TWO-STEP)
+WEB-SET-SECURITY-RECOVERY,web,Settings,Setting: Recovery codes,Settings > Sign-in & security > Recovery codes (shown when it applies),"Settings > Sign-in & security > Recovery codes (same page, same condition)",done,none
+WEB-SET-SECURITY-PASSKEYS,web,Settings,Setting: Passkeys,Settings > Sign-in & security > Passkeys,Settings > Sign-in & security > Passkeys (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-SECURITY-PASSKEYS)
+WEB-SET-SECURITY-GOOGLE,web,Settings,Setting: Google sign-in,Settings > Sign-in & security > Google sign-in (shown when it applies),"Settings > Sign-in & security > Google sign-in (same page, same condition)",done,none
+WEB-SET-SECURITY-BROWSERS,web,Settings,Setting: Signed-in browsers,Settings > Sign-in & security > Signed-in browsers (shown when it applies),"Settings > Sign-in & security > Signed-in browsers (same page, same condition)",done,none
+WEB-SET-SECURITY-ACTIVITY,web,Settings,Setting: Sign-in activity,Settings > Sign-in & security > Sign-in activity,Settings > Sign-in & security > Sign-in activity (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-SECURITY-ACTIVITY)
+WEB-SET-SECURITY-SIGNOUT-ALL,web,Settings,Setting: Sign out everywhere,Settings > Sign-in & security > Sign out everywhere,Settings > Sign-in & security > Sign out everywhere (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-SECURITY-SIGNOUT-ALL)
+WEB-SET-DEVICES-PAIR,web,Settings,Setting: Sign in a device,Settings > Devices > Sign in a device,Settings > Devices > Sign in a device (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-DEVICES-PAIR)
+WEB-SET-DEVICES-ITEM-REAUTH,web,Settings,Setting: Sign in again,Settings > Devices > Sign in again (shown when it applies),"Settings > Devices > Sign in again (same page, same condition)",done,none
+WEB-SET-DEVICES-ITEM-FORGET,web,Settings,Setting: Remove from list,Settings > Devices > Remove from list (shown when it applies),"Settings > Devices > Remove from list (same page, same condition)",done,none
+WEB-SET-DEVICES-CONNECTED,web,Settings,Setting: Ask an AI assistant,Settings > Devices > Ask an AI assistant,Settings > Devices > Ask an AI assistant (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-DEVICES-CONNECTED)
+WEB-SET-PRIVACY-CONSENT,web,Settings,Setting: Recording consent,Settings > Privacy & data > Recording consent,Settings > Privacy & data > Recording consent (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PRIVACY-CONSENT)
+WEB-SET-PRIVACY-EXPORT,web,Settings,Setting: Export my data,Settings > Privacy & data > Export my data,Settings > Privacy & data > Export my data (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PRIVACY-EXPORT)
+WEB-SET-PRIVACY-SUPPORT-ACCESS,web,Settings,Setting: Support access,Settings > Privacy & data > Support access,Settings > Privacy & data > Support access (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PRIVACY-SUPPORT-ACCESS)
+WEB-SET-PRIVACY-CANCEL-DELETION,web,Settings,Setting: Cancel deletion,Settings > Privacy & data > Cancel deletion (shown when it applies),"Settings > Privacy & data > Cancel deletion (same page, same condition)",done,none
+WEB-SET-PRIVACY-DELETE-ACCOUNT,web,Settings,Setting: Delete my account,Settings > Privacy & data > Delete my account,Settings > Privacy & data > Delete my account (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-PRIVACY-DELETE-ACCOUNT)
+WEB-SET-HELP-APPS,web,Settings,Setting: Get the apps,Settings > Help > Get the apps,Settings > Help > Get the apps (same page),done,tests/Feature/V2/WebParityTest.php (WEB-SET-HELP-APPS)
+WEB-SET-SIGNOUT,web,Settings,Setting: Sign out,Avatar menu > Sign out (shown when it applies),"Avatar menu > Sign out (same page, same condition)",done,none

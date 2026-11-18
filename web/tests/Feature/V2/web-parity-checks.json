@@ -1,0 +1,566 @@
+{
+ "WEB-NAV-001": [
+  "home",
+  "a: Home"
+ ],
+ "WEB-NAV-002": [
+  "library",
+  "a: All recordings"
+ ],
+ "WEB-NAV-004": [
+  "live",
+  "a: Voice note Record yourself now, in this browser"
+ ],
+ "WEB-NAV-005": [
+  "library",
+  "button: Upload"
+ ],
+ "WEB-NAV-008": [
+  "library",
+  "button: Pinned"
+ ],
+ "WEB-NAV-009": [
+  "library",
+  "button: Any source"
+ ],
+ "WEB-NAV-011": [
+  "live",
+  "a: Preps Get ready for a meeting or an interview"
+ ],
+ "WEB-NAV-012": [
+  "library",
+  "label: Search and commands"
+ ],
+ "WEB-NAV-013": [
+  "library",
+  "button: Collapse"
+ ],
+ "WEB-NAV-016": [
+  "library",
+  "nav: Home Library Live Ask"
+ ],
+ "WEB-NAV-017": [
+  "library",
+  "button: Help and shortcuts"
+ ],
+ "WEB-NAV-018": [
+  "library",
+  "a: BQ Bilal Qureshi bilal@qureshi-textiles.example Personal"
+ ],
+ "WEB-NAV-019": [
+  "library",
+  "button: BQ"
+ ],
+ "WEB-NAV-020": [
+  "library",
+  "button: Notifications"
+ ],
+ "WEB-NAV-021": [
+  "recording",
+  "kbd: Ctrl K"
+ ],
+ "WEB-KEY-009": [
+  "recording",
+  "kbd: Space"
+ ],
+ "WEB-LIB-001": [
+  "library",
+  "label: Search"
+ ],
+ "WEB-LIB-002": [
+  "library",
+  "label: Source device"
+ ],
+ "WEB-LIB-003": [
+  "library",
+  "label: Source app"
+ ],
+ "WEB-LIB-004": [
+  "library",
+  "label: Project"
+ ],
+ "WEB-LIB-005": [
+  "library",
+  "label: Status"
+ ],
+ "WEB-LIB-006": [
+  "library",
+  "label: Bookmark tag"
+ ],
+ "WEB-LIB-007": [
+  "library",
+  "label: Label"
+ ],
+ "WEB-LIB-008": [
+  "library",
+  "label: Has bookmarks"
+ ],
+ "WEB-LIB-009": [
+  "library",
+  "label: From"
+ ],
+ "WEB-LIB-010": [
+  "library",
+  "button: Clear"
+ ],
+ "WEB-LIB-011": [
+  "library",
+  "button: Newest"
+ ],
+ "WEB-LIB-012": [
+  "library",
+  "button: Oldest"
+ ],
+ "WEB-LIB-013": [
+  "library",
+  "button: Longest"
+ ],
+ "WEB-LIB-014": [
+  "library",
+  "button: Shortest"
+ ],
+ "WEB-LIB-015": [
+  "library",
+  "button: Name A–Z"
+ ],
+ "WEB-LIB-016": [
+  "library",
+  "button: Recently opened"
+ ],
+ "WEB-LIB-017": [
+  "library",
+  "h2: Today"
+ ],
+ "WEB-LIB-026": [
+  "library",
+  "button: All"
+ ],
+ "WEB-LIB-027": [
+  "library",
+  "button: Today 1"
+ ],
+ "WEB-LIB-030": [
+  "library",
+  "label: Has bookmarks"
+ ],
+ "WEB-LIB-031": [
+  "library",
+  "button: Retry"
+ ],
+ "WEB-LIB-032": [
+  "library",
+  "button: Pinned"
+ ],
+ "WEB-LIB-033": [
+  "library",
+  "button: Untranscribed 2"
+ ],
+ "WEB-LIB-034": [
+  "library",
+  "h2: Yesterday"
+ ],
+ "WEB-LIB-035": [
+  "library",
+  "input: Select/deselect group Today for bulk actions."
+ ],
+ "WEB-LIB-036": [
+  "library",
+  "input: Select/deselect all items for bulk actions."
+ ],
+ "WEB-LIB-037": [
+  "library",
+  "span: Pin"
+ ],
+ "WEB-LIB-042": [
+  "library",
+  "span: Open"
+ ],
+ "WEB-LIB-043": [
+  "library",
+  "span: Rename"
+ ],
+ "WEB-LIB-044": [
+  "library",
+  "span: Send to WhatsApp…"
+ ],
+ "WEB-LIB-045": [
+  "library",
+  "span: Delete"
+ ],
+ "WEB-LIB-048": [
+  "library",
+  "button: Move"
+ ],
+ "WEB-LIB-049": [
+  "library",
+  "span: Add label"
+ ],
+ "WEB-LIB-050": [
+  "library",
+  "span: Remove label"
+ ],
+ "WEB-LIB-051": [
+  "library",
+  "span: Pin"
+ ],
+ "WEB-LIB-052": [
+  "library",
+  "span: Unpin"
+ ],
+ "WEB-LIB-053": [
+  "library",
+  "span: Keep forever"
+ ],
+ "WEB-LIB-054": [
+  "library",
+  "span: Stop keeping"
+ ],
+ "WEB-LIB-055": [
+  "library",
+  "button: Export"
+ ],
+ "WEB-LIB-056": [
+  "library",
+  "button: Delete"
+ ],
+ "WEB-LIB-057": [
+  "library",
+  "button: Export"
+ ],
+ "WEB-LIB-061": [
+  "library",
+  "button: Upload"
+ ],
+ "WEB-LIB-062": [
+  "library",
+  "a: New voice note"
+ ],
+ "WEB-LIB-068": [
+  "library",
+  "label: Per page 5 10 25 50"
+ ],
+ "WEB-REC-001": [
+  "recording",
+  "button: Share"
+ ],
+ "WEB-REC-002": [
+  "recording",
+  "button: Move"
+ ],
+ "WEB-REC-003": [
+  "recording",
+  "button: Delete"
+ ],
+ "WEB-REC-004": [
+  "recording",
+  "span: Rename"
+ ],
+ "WEB-REC-005": [
+  "recording",
+  "button: Download"
+ ],
+ "WEB-REC-006": [
+  "recording",
+  "span: Show as…"
+ ],
+ "WEB-REC-007": [
+  "recording",
+  "span: WhatsApp"
+ ],
+ "WEB-REC-008": [
+  "recording",
+  "span: Rename speakers"
+ ],
+ "WEB-REC-009": [
+  "recording",
+  "span: Find and replace"
+ ],
+ "WEB-REC-010": [
+  "recording",
+  "span: History"
+ ],
+ "WEB-REC-011": [
+  "recording",
+  "span: Send to a teammate"
+ ],
+ "WEB-REC-012": [
+  "recording",
+  "span: Sent to"
+ ],
+ "WEB-REC-014": [
+  "recording",
+  "button: Keep forever"
+ ],
+ "WEB-REC-017": [
+  "recording",
+  "kbd: Space"
+ ],
+ "WEB-REC-018": [
+  "recording",
+  "div: Bookmarks and pauses"
+ ],
+ "WEB-REC-020": [
+  "recording",
+  "button: Moments"
+ ],
+ "WEB-REC-021": [
+  "recording",
+  "button: Roman Urdu"
+ ],
+ "WEB-REC-022": [
+  "recording",
+  "input: Find in the transcript"
+ ],
+ "WEB-REC-023": [
+  "recording",
+  "button: Accept"
+ ],
+ "WEB-REC-024": [
+  "recording",
+  "button: Write notes"
+ ],
+ "WEB-REC-025": [
+  "recording",
+  "h2: Share links"
+ ],
+ "WEB-REC-026": [
+  "recording",
+  "div: Screens of this recording"
+ ],
+ "WEB-REC-027": [
+  "recording",
+  "button: Details"
+ ],
+ "WEB-REC-029": [
+  "recording",
+  "button: Ask"
+ ],
+ "WEB-REC-030": [
+  "recording",
+  "button: Next"
+ ],
+ "WEB-PRJ-001": [
+  "projects",
+  "a: New project"
+ ],
+ "WEB-PRJ-003": [
+  "project",
+  "nav: Overview Recordings2 Screens Files Ask Rules"
+ ],
+ "WEB-PRJ-004": [
+  "project",
+  "span: New subfolder"
+ ],
+ "WEB-PAGE-001": [
+  "search",
+  "h1: "
+ ],
+ "WEB-PAGE-002": [
+  "upload",
+  "h1: "
+ ],
+ "WEB-PAGE-003": [
+  "activity",
+  "h1: "
+ ],
+ "WEB-PAGE-004": [
+  "shares",
+  "h1: "
+ ],
+ "WEB-PAGE-005": [
+  "shared-with-me",
+  "h1: "
+ ],
+ "WEB-PAGE-006": [
+  "request-links",
+  "h1: "
+ ],
+ "WEB-PAGE-007": [
+  "recently-deleted",
+  "h1: "
+ ],
+ "WEB-PAGE-008": [
+  "devices",
+  "h1: "
+ ],
+ "WEB-PAGE-009": [
+  "usage",
+  "h1: "
+ ],
+ "WEB-PAGE-010": [
+  "workspace",
+  "h1: "
+ ],
+ "WEB-PAGE-011": [
+  "help",
+  "h1: "
+ ],
+ "WEB-PAGE-012": [
+  "get-the-apps",
+  "h1: "
+ ],
+ "WEB-PAGE-013": [
+  "assist-preps",
+  "h1: "
+ ],
+ "WEB-PAGE-014": [
+  "assist-sessions",
+  "h1: "
+ ],
+ "WEB-PAGE-015": [
+  "assist-settings",
+  "h1: "
+ ],
+ "WEB-SET-TRANSCRIPTION-LANGUAGE": [
+  "settings-language",
+  "~Language"
+ ],
+ "WEB-SET-APPEARANCE-THEME": [
+  "settings-appearance",
+  "~Theme"
+ ],
+ "WEB-SET-APPEARANCE-DENSITY": [
+  "settings-appearance",
+  "~Density"
+ ],
+ "WEB-SET-APPEARANCE-CLOCK": [
+  "settings-appearance",
+  "~Times"
+ ],
+ "WEB-SET-APPEARANCE-LIBRARY-VIEW": [
+  "settings-appearance",
+  "~Library view"
+ ],
+ "WEB-SET-NOTIFICATIONS-EMAIL-TRANSCRIPTION": [
+  "settings-notifications",
+  "~Transcription"
+ ],
+ "WEB-SET-NOTIFICATIONS-EMAIL-ENHANCEMENT": [
+  "settings-notifications",
+  "~Enhancement"
+ ],
+ "WEB-SET-NOTIFICATIONS-EMAIL-SHARING": [
+  "settings-notifications",
+  "~Sharing"
+ ],
+ "WEB-SET-NOTIFICATIONS-EMAIL-USAGE": [
+  "settings-notifications",
+  "~Usage & limits"
+ ],
+ "WEB-SET-NOTIFICATIONS-EMAIL-UPDATES": [
+  "settings-notifications",
+  "~App updates"
+ ],
+ "WEB-SET-NOTIFICATIONS-EMAIL-OTHER": [
+  "settings-notifications",
+  "~Other"
+ ],
+ "WEB-SET-NOTIFICATIONS-EMAIL-ACCOUNT": [
+  "settings-notifications",
+  "~Account & security"
+ ],
+ "WEB-SET-NOTIFICATIONS-EMAIL-PLAN-PAYMENTS": [
+  "settings-notifications",
+  "~Plan & payments"
+ ],
+ "WEB-SET-STORAGE-USED": [
+  "settings-storage",
+  "~Your storage"
+ ],
+ "WEB-SET-STORAGE-RETENTION": [
+  "settings-storage",
+  "~Recordings kept"
+ ],
+ "WEB-SET-STORAGE-BIN": [
+  "settings-storage",
+  "~Bin"
+ ],
+ "WEB-SET-PROFILE-NAME": [
+  "settings-profile",
+  "~Name"
+ ],
+ "WEB-SET-PROFILE-EMAIL": [
+  "settings-profile",
+  "~Email"
+ ],
+ "WEB-SET-PROFILE-WORKSPACE": [
+  "settings-profile",
+  "~Workspace"
+ ],
+ "WEB-SET-PLAN-UPGRADE": [
+  "settings-plan",
+  "~Upgrade"
+ ],
+ "WEB-SET-PLAN-USAGE-STORAGE": [
+  "settings-plan",
+  "~Storage"
+ ],
+ "WEB-SET-PLAN-USAGE-DEVICES": [
+  "settings-plan",
+  "~Devices"
+ ],
+ "WEB-SET-PLAN-USAGE-MEMBERS": [
+  "settings-plan",
+  "~Team members"
+ ],
+ "WEB-SET-PLAN-COMPARE": [
+  "settings-plan",
+  "~See every feature"
+ ],
+ "WEB-SET-PLAN-PROMO": [
+  "settings-plan",
+  "~Promo code"
+ ],
+ "WEB-SET-PLAN-HISTORY": [
+  "settings-plan",
+  "~Payments"
+ ],
+ "WEB-SET-SECURITY-PASSWORD": [
+  "settings-security",
+  "~Password"
+ ],
+ "WEB-SET-SECURITY-TWO-STEP": [
+  "settings-security",
+  "~Two-step sign-in"
+ ],
+ "WEB-SET-SECURITY-PASSKEYS": [
+  "settings-security",
+  "~Passkeys"
+ ],
+ "WEB-SET-SECURITY-ACTIVITY": [
+  "settings-security",
+  "~Sign-in activity"
+ ],
+ "WEB-SET-SECURITY-SIGNOUT-ALL": [
+  "settings-security",
+  "~Sign out everywhere"
+ ],
+ "WEB-SET-DEVICES-PAIR": [
+  "settings-devices",
+  "~Sign in a device"
+ ],
+ "WEB-SET-DEVICES-CONNECTED": [
+  "settings-devices",
+  "~Ask an AI assistant"
+ ],
+ "WEB-SET-PRIVACY-CONSENT": [
+  "settings-privacy",
+  "~Recording consent"
+ ],
+ "WEB-SET-PRIVACY-EXPORT": [
+  "settings-privacy",
+  "~Export my data"
+ ],
+ "WEB-SET-PRIVACY-SUPPORT-ACCESS": [
+  "settings-privacy",
+  "~Support access"
+ ],
+ "WEB-SET-PRIVACY-DELETE-ACCOUNT": [
+  "settings-privacy",
+  "~Delete my account"
+ ],
+ "WEB-SET-HELP-APPS": [
+  "settings-help",
+  "~Get the apps"
+ ]
+}
