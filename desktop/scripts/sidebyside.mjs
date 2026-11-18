@@ -103,6 +103,12 @@ export const PAIRS = [
   ["library-rows", "Library rows: classic's app tiles | the new design's real source logos with the device badge",
     [classic("library"), null],
     [v2("library"), null]],
+  ["sidebar", "The sidebar: classic's | plan 2's (● Record with its menu; Library, Projects, Live, Ask; Activity with its count, Settings, the account)",
+    [classic("library"), null],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "More ways to record" }).click();
+      await page.waitForTimeout(400);
+    })]],
 ];
 
 const server = await createServer({ root: desktop, configFile: join(desktop, "vite.config.ts"), server: { port: 1480, strictPort: false }, logLevel: "error" });

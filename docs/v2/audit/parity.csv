@@ -577,15 +577,15 @@ DT-REC-147,desktop,Recording page,Details: pinned,Organise › Pin,None,missing,
 DT-NAV-001,desktop,Sidebar,Home (red live dot while recording),Sidebar › Home,"Sidebar › Home; status line ""Recording mm:ss"" instead of the dot",done,"src/v2/shell/shell.test.tsx › ""Home, Library and Settings open today's pages; Live and Ask say where to go meanwhile"""
 DT-NAV-002,desktop,Sidebar,Library,Sidebar › Library,Sidebar › Library,done,"src/v2/shell/shell.test.tsx › ""ui_v2.shell shows the new shell around today's pages"""
 DT-NAV-003,desktop,Sidebar,"Library smart folders sub-list (All, Waiting, Pinned, Failed uploads, Inbox, Imported, Shared with me, per-app) with counts",Sidebar › Library arrow,Only saved views All / Today / Untranscribed / Trash; no sub-list,partial,"src/v2/library/library.test.tsx › ""the saved views Today and Untranscribed, with their counts, from Views ▾"""
-DT-NAV-004,desktop,Sidebar,Projects,Sidebar › Projects,None in the sidebar (plan 2 puts it there),missing,none
+DT-NAV-004,desktop,Sidebar,Projects,Sidebar › Projects,Sidebar › Projects (opens the Projects page),done,"src/v2/shell/shell.test.tsx › ""Library, Projects, Activity and Settings open today's pages; Live and Ask say where to go meanwhile"""
 DT-NAV-005,desktop,Sidebar,Pinned projects sub-list (drop targets),Sidebar › Projects arrow,None,missing,none
-DT-NAV-006,desktop,Sidebar,"Activity with ""needs you"" badge",Sidebar › Activity,None in the sidebar (plan 2 puts it at the bottom),missing,none
+DT-NAV-006,desktop,Sidebar,"Activity with ""needs you"" badge",Sidebar › Activity,Sidebar foot › Activity with how many need you,done,"src/v2/shell/shell.test.tsx › ""Activity shows how many need you; none shows no badge"""
 DT-NAV-007,desktop,Sidebar,Shared,Sidebar › Shared,None,missing,none
 DT-NAV-008,desktop,Sidebar,"Shared › With me, My links, Request links",Sidebar › Shared arrow,None,missing,none
-DT-NAV-009,desktop,Sidebar,Upload,Sidebar › Upload,"Library ""Import"" only; no sidebar entry",partial,"src/v2/library/library.test.tsx › ""an empty library says what goes there"""
+DT-NAV-009,desktop,Sidebar,Upload,Sidebar › Upload,Sidebar › Record ▾ › Upload files…,done,"src/v2/shell/shell.test.tsx › ""Search (with its keys), Upload files in Record's menu, and Help & shortcuts at the foot, as classic's sidebar had"""
 DT-NAV-010,desktop,Sidebar,"Upload progress line (""Uploading N recordings…"")",Sidebar footer,None,missing,none
-DT-NAV-011,desktop,Sidebar,Search button (⌘K),Sidebar › Search,No button; Ctrl/⌘+K still opens the classic palette,partial,none
-DT-NAV-012,desktop,Sidebar,Help & shortcuts button,Sidebar footer,No button; ? opens the classic sheet,partial,none
+DT-NAV-011,desktop,Sidebar,Search button (⌘K),Sidebar › Search,"Sidebar › Search with its keys (⌘K / Ctrl+K), opening the palette",done,"src/v2/shell/shell.test.tsx › ""Search (with its keys), Upload files in Record's menu, and Help & shortcuts at the foot, as classic's sidebar had"""
+DT-NAV-012,desktop,Sidebar,Help & shortcuts button,Sidebar footer,Sidebar foot › Help & shortcuts,done,"src/v2/shell/shell.test.tsx › ""Search (with its keys), Upload files in Record's menu, and Help & shortcuts at the foot, as classic's sidebar had"""
 DT-NAV-013,desktop,Sidebar,Settings,Sidebar footer › Settings,Sidebar › Settings,done,"src/v2/shell/shell.test.tsx › ""Home, Library and Settings open today's pages; Live and Ask say where to go meanwhile"""
 DT-NAV-014,desktop,Sidebar,"Collapse sidebar (rail, ""["", auto in a narrow window)",Sidebar footer,Icons-only below 720 px only; no button or key,missing,none
 DT-NAV-015,desktop,Sidebar,Resize the sidebar (200–320 px),Sidebar edge,None,missing,none
@@ -601,10 +601,10 @@ DT-NAV-024,desktop,Top bar,Calls: Ready / Not ready — Fix chip,Top bar,"Sideba
 DT-NAV-025,desktop,Top bar,"Recording chip (app, paused, time; opens Home)",Top bar while recording,"Status ""Recording mm:ss""; no app, no paused, not clickable",partial,"src/v2/home/home.test.tsx › ""while recording the strip says so and offers Stop"""
 DT-NAV-026,desktop,Top bar,+ › Record now / Stop recording,Top bar › +,Home strip and Live tab,done,"src/v2/home/home.test.tsx › ""while recording the strip says so and offers Stop"""
 DT-NAV-027,desktop,Top bar,+ › Record a voice note,Top bar › +,"Live tab ""Voice note""",done,"src/v2/live/live.test.tsx › ""has Record, Live Assist (when on), Live Translate, Dictation and Captions"""
-DT-NAV-028,desktop,Top bar,+ › Upload files,Top bar › +,"Library ""Import"" only",partial,"src/v2/library/library.test.tsx › ""an empty library says what goes there"""
+DT-NAV-028,desktop,Top bar,+ › Upload files,Top bar › +,Sidebar › Record ▾ › Upload files…,done,"src/v2/shell/shell.test.tsx › ""Search (with its keys), Upload files in Record's menu, and Help & shortcuts at the foot, as classic's sidebar had"""
 DT-NAV-029,desktop,Top bar,+ › New project,Top bar › +,None,missing,none
 DT-NAV-030,desktop,Top bar,+ › Request link,Top bar › +,None,missing,none
-DT-NAV-031,desktop,Top bar,Notifications bell with count (opens Activity),Top bar › bell,None,missing,none
+DT-NAV-031,desktop,Top bar,Notifications bell with count (opens Activity),Top bar › bell,"Sidebar foot › Activity with its count (plan 2 puts Activity there, not a bell)",done,"src/v2/shell/shell.test.tsx › ""Activity shows how many need you; none shows no badge"""
 DT-NAV-032,desktop,Top bar,Help & shortcuts button,Top bar › ?,? key only,partial,none
 DT-NAV-033,desktop,Top bar,"Avatar menu header (name, email, plan; opens Settings)",Top bar › avatar,Sidebar foot profile (opens Settings),done,"src/v2/shell/shell.test.tsx › ""the profile sits at the sidebar's foot and opens Settings; with only part of the new design on, classic Appearance offers the way back"""
 DT-NAV-034,desktop,Top bar,Avatar › Upgrade / Plan & usage,Top bar › avatar,Settings account card Upgrade; Plan & usage,done,"src/v2/settings/settings.test.tsx › ""shows the profile card with the plan chip and Upgrade, then the groups"""
@@ -612,7 +612,7 @@ DT-NAV-035,desktop,Top bar,Avatar › Settings,Top bar › avatar,Sidebar Settin
 DT-NAV-036,desktop,Top bar,Avatar › Admin panel (super admin),Top bar › avatar,None,missing,none
 DT-NAV-037,desktop,Top bar,Avatar › Appearance System / Light / Dark,Top bar › avatar,Settings › Appearance,done,"src/v2/settings/pages/pages.test.tsx › ""theme, sidebar, density and clock are kept on this computer and followed at once; Reset puts them back"""
 DT-NAV-038,desktop,Top bar,Avatar › Sign out (asks),Top bar › avatar,Settings › Sign out,done,"src/v2/settings/settings.test.tsx › ""start-up is a switch in place; sign out asks the app"""
-DT-NAV-039,desktop,Sidebar,"""● Record"" button at the top of the sidebar (plan 2)",Classic: REC on Home and + › Record now,None,missing,none
+DT-NAV-039,desktop,Sidebar,"""● Record"" button at the top of the sidebar (plan 2)",Classic: REC on Home and + › Record now,"""● Record"" at the top of the sidebar: records now or stops; ▾ has Voice note, Upload files and the Record page",done,"src/v2/shell/shell.test.tsx › ""Record records now (or stops); its menu has a voice note and the Record page; a viewer's Record opens the page"""
 DT-PAL-001,desktop,Command palette,The palette (groups Actions / Settings / Pages / Recordings),"Ctrl/⌘+K, top bar field, sidebar Search","Classic palette over v2 with Ctrl/⌘+K; no v2 palette, no visible entry",partial,none
 DT-PAL-002,desktop,Command palette,"Ranking (name start, every word, keyword)",Typing,None in v2,missing,none
 DT-PAL-003,desktop,Command palette,"↑ ↓ choose, Enter runs, Esc closes; Clear",Palette,None in v2,missing,none

@@ -28,20 +28,71 @@ describe("the shell", () => {
     return <Shell tab={tab} onGo={setTab} status={{ kind: "ready", text: "Ready to record" }}><p>page {tab}</p></Shell>;
   }
 
-  it("has the five modules, the current one marked, and the status line", () => {
+  it("plan 2's sidebar: Record at the top; Library, Projects, Live, Ask; Activity with its count, Settings, the account and the status at the foot", () => {
     render(<Host />);
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Home", "Library", "Live", "Ask", "Settings"]);
+    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Record", "", "Library", "Projects", "Live", "Ask", "Activity", "Settings"]);
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("status")).toHaveTextContent("Ready to record");
   });
 
-  it("Home, Library and Settings open today's pages; Live and Ask say where to go meanwhile", () => {
+  it("Search (with its keys), Upload files in Record's menu, and Help & shortcuts at the foot, as classic's sidebar had", () => {
+    const onSearch = vi.fn();
+    const onUpload = vi.fn();
+    const onHelp = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onRecord={() => undefined} onSearch={onSearch} searchKeys="⌘K" onUpload={onUpload} onHelp={onHelp}><p /></Shell>);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Record", "", "Search⌘K", "Library", "Projects", "Live", "Ask", "Activity", "Settings", "Help & shortcuts"]);
+    fireEvent.click(within(nav).getByRole("button", { name: /^Search/ }));
+    expect(onSearch).toHaveBeenCalled();
+    expect(within(nav).getByRole("button", { name: /^Search/ })).toHaveAttribute("aria-keyshortcuts", "Meta+K");
+    fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Upload files…" }));
+    expect(onUpload).toHaveBeenCalled();
+    fireEvent.click(within(nav).getByRole("button", { name: "Help & shortcuts" }));
+    expect(onHelp).toHaveBeenCalled();
+  });
+
+  it("Activity shows how many need you; none shows no badge", () => {
+    const { rerender } = render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} activity={3}><p /></Shell>);
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: /^Activity/ })).toHaveTextContent("Activity3");
+    rerender(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} activity={0}><p /></Shell>);
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Activity" })).toHaveTextContent(/^Activity$/);
+  });
+
+  it("Record records now (or stops); its menu has a voice note and the Record page; a viewer's Record opens the page", () => {
+    const onRecord = vi.fn();
+    const onVoiceNote = vi.fn();
+    const onGo = vi.fn();
+    const { rerender } = render(<Shell tab="library" onGo={onGo} status={{ kind: "ready", text: "Ready" }} onRecord={onRecord} onVoiceNote={onVoiceNote}><p /></Shell>);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    fireEvent.click(within(nav).getByRole("button", { name: "Record" }));
+    expect(onRecord).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Voice note" }));
+    expect(onVoiceNote).toHaveBeenCalled();
+    fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Record page" }));
+    expect(onGo).toHaveBeenLastCalledWith("record");
+    rerender(<Shell tab="library" onGo={onGo} status={{ kind: "recording", text: "Recording 00:04" }} recording onRecord={onRecord}><p /></Shell>);
+    fireEvent.click(within(nav).getByRole("button", { name: "Stop recording" }));
+    expect(onRecord).toHaveBeenCalledTimes(2);
+    rerender(<Shell tab="library" onGo={onGo} status={{ kind: "ready", text: "Ready" }}><p /></Shell>);
+    fireEvent.click(within(nav).getByRole("button", { name: "Record" }));
+    expect(onGo).toHaveBeenLastCalledWith("record");
+  });
+
+  it("Library, Projects, Activity and Settings open today's pages; Live and Ask say where to go meanwhile", () => {
     render(<Host />);
     const nav = screen.getByRole("navigation", { name: "Main" });
     fireEvent.click(within(nav).getByRole("button", { name: "Settings" }));
     expect(screen.getByText("page settings")).toBeInTheDocument();
-    fireEvent.click(within(nav).getByRole("button", { name: "Home" }));
+    fireEvent.click(within(nav).getByRole("button", { name: "Projects" }));
+    expect(screen.getByText("page projects")).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(within(nav).getByRole("button", { name: "Activity" }));
+    expect(screen.getByText("page activity")).toBeInTheDocument();
+    fireEvent.click(within(nav).getByRole("button", { name: "Record" }));
     expect(screen.getByText("page record")).toBeInTheDocument();
     fireEvent.click(within(nav).getByRole("button", { name: "Live" }));
     expect(within(nav).getByRole("button", { name: "Live" })).toHaveAttribute("aria-current", "page");
@@ -49,7 +100,7 @@ describe("the shell", () => {
     fireEvent.click(within(nav).getByRole("button", { name: "Ask" }));
     fireEvent.click(screen.getByRole("button", { name: "Open Projects" }));
     expect(screen.getByText("page projects")).toBeInTheDocument();
-    expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("button", { name: "Projects" })).toHaveAttribute("aria-current", "page");
   });
 
   it("a Live page that loads late stays open (it suspends once, then shows)", async () => {
@@ -71,9 +122,9 @@ describe("the shell", () => {
   });
 
   it("maps today's pages to modules and words the status", () => {
-    expect(moduleOf("record")).toBe("home");
-    expect(moduleOf("activity")).toBe("home");
-    expect(moduleOf("projects")).toBe("library");
+    expect(moduleOf("record")).toBe("record");
+    expect(moduleOf("activity")).toBe("activity");
+    expect(moduleOf("projects")).toBe("projects");
     expect(moduleOf("shared")).toBe("library");
     expect(shellStatus({ recording: {}, elapsedMs: 134_000 })).toEqual({ kind: "recording", text: "Recording 02:14" });
     expect(shellStatus({ recording: null, elapsedMs: 0, callsReady: false })).toEqual({ kind: "setup", text: "Needs setup" });

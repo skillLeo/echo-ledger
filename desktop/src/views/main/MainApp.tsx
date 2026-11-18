@@ -856,7 +856,8 @@ export default function MainApp() {
       <>
         <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
         <Suspense fallback={null}>
-          <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)}
+          <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? record : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+            onUpload={canRecord ? () => void pickImport() : undefined} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={() => setHelp(true)}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
             notices={<Suspense fallback={null}><div className="el-root el-embedded">
               <AfterCallNoticeV2 text={status.afterCallNotice} onStatus={setStatus} />

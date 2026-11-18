@@ -1,26 +1,30 @@
-// The v2 app shell (ui_v2.shell): five modules in the sidebar, the status line at its foot, and the page beside it.
-// Modules not rebuilt yet show today's page inside the new frame; Live and Ask, which have no page of their own on
-// the desktop yet, say where to find them meanwhile.
+// The v2 app shell (ui_v2.shell), laid out as PLAN_V2_PARITY 2 decides for the desktop: "● Record" at the top, then
+// Library, Projects, Live and Ask; at the foot Activity (with how many need you), Settings, the account and the status
+// line. Record opens the page where recording starts (today's Home and its Live Assist card). Modules not rebuilt yet
+// show today's page inside the new frame; Live and Ask, without their page yet, say where to find them meanwhile.
 import { useState, type ReactNode } from "react";
-import { Avatar, Badge, Button, EmptyState, Icons, NavItem, Sidebar, Status } from "../components";
+import { Avatar, Badge, Button, EmptyState, Icon, Icons, NavItem, Sidebar, Status } from "../components";
+import { Menu } from "../components/Menu";
 import { initials } from "../settings/initials";
 import type { MainTab } from "../../lib/mainView";
 
-export type Module = "home" | "library" | "live" | "ask" | "settings";
+export type Module = "record" | "library" | "projects" | "live" | "ask" | "activity" | "settings";
 
-/** The module a page of today's app belongs to. */
+/** The place in the sidebar a page of today's app belongs to. */
 export function moduleOf(tab: MainTab): Module {
   switch (tab) {
-    case "record":
-    case "activity": return "home";
+    case "record": return "record";
+    case "activity": return "activity";
+    case "projects": return "projects";
     case "library":
-    case "projects":
     case "shared": return "library";
     case "settings": return "settings";
   }
 }
 
-const MODULE_TAB: Record<Exclude<Module, "live" | "ask">, MainTab> = { home: "record", library: "library", settings: "settings" };
+const MODULE_TAB: Record<Exclude<Module, "live" | "ask">, MainTab> = {
+  record: "record", library: "library", projects: "projects", activity: "activity", settings: "settings",
+};
 
 export { shellStatus, type ShellStatus } from "./status";
 import type { ShellStatus } from "./status";
@@ -40,11 +44,23 @@ export type ShellProps = {
   notices?: ReactNode;
   /** The banners above every page (one at a time). */
   banners?: ReactNode;
+  /** How many things need the person (Activity's badge); none or 0 shows no badge. */
+  activity?: number;
+  /** A recording is under way: Record says so and stops it. */
+  recording?: boolean;
+  /** Record now (or stop); without it (a viewer) Record opens the Record page. */
+  onRecord?: () => void;
+  onVoiceNote?: () => void;
+  /** Upload files (the Record menu), Search (the palette, with its keys) and Help & shortcuts, as classic's sidebar. */
+  onUpload?: () => void;
+  onSearch?: () => void;
+  searchKeys?: string;
+  onHelp?: () => void;
   /** Today's page for the current tab. */
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, me, live, ask, notices, banners, children }: ShellProps) {
+export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onVoiceNote, onUpload, onSearch, searchKeys, onHelp, children }: ShellProps) {
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   // Anything that opens a page of the app (a notice, the palette, a link) leaves Live or Ask. Worked out while
@@ -63,14 +79,17 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, chil
     setOwn(null);
     onGo(MODULE_TAB[m]);
   };
-  const item = (m: Module, label: string, icon: Parameters<typeof NavItem>[0]["icon"]) => (
-    <NavItem key={m} icon={icon} label={label} current={current === m} onClick={() => go(m)} />
+  const item = (m: Module, label: string, icon: Parameters<typeof NavItem>[0]["icon"], count?: number) => (
+    <NavItem key={m} icon={icon} label={label} current={current === m} onClick={() => go(m)} count={count} />
   );
   return (
     <div className="el-root el-shell" data-shell="v2">
       <Sidebar label="Main" brand={<span>EchoLedger</span>}
         footer={
           <div className="el-shell__foot">
+            {item("activity", "Activity", Icons.BellIcon, activity ? activity : undefined)}
+            {item("settings", "Settings", Icons.SettingsIcon)}
+            {onHelp && <NavItem icon={Icons.HelpIcon} label="Help & shortcuts" onClick={onHelp} />}
             {me && (
               <button type="button" className="el-shell__me" onClick={() => go("settings")} title={me.email} aria-describedby="el-shell-me-hint">
                 <Avatar initials={initials(me.name, me.email)} size="sm" />
@@ -84,11 +103,28 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, chil
             <div className="el-shell__status el-caption"><Status kind={status.kind} live>{status.text}</Status></div>
           </div>
         }>
-        {item("home", "Home", Icons.HomeIcon)}
+        {/* ● Record: one press records (or stops); its menu has a voice note and the Record page (calls ready, Live
+            Assist), the sheet the phone opens on a long press. */}
+        <div className="el-shell__record" role="group" aria-label="Record">
+          <Button variant={recording ? "danger" : "primary"} icon={recording ? Icons.StopIcon : Icons.RecordIcon}
+            onClick={() => (onRecord ? onRecord() : go("record"))}>{recording ? "Stop recording" : "Record"}</Button>
+          <Menu label="More ways to record" button={{ variant: recording ? "danger" : "primary", icon: Icons.ChevronDownIcon }} items={[
+            ...(onVoiceNote ? [{ label: "Voice note", icon: Icons.MicIcon, onPick: onVoiceNote }] : []),
+            ...(onUpload ? [{ label: "Upload files…", icon: Icons.ShareIcon, onPick: onUpload }] : []),
+            { label: "Record page", icon: Icons.HomeIcon, checked: current === "record", onPick: () => go("record") },
+          ]} />
+        </div>
+        {onSearch && (
+          <button type="button" className="el-nav-item el-shell__search" onClick={onSearch} aria-keyshortcuts={searchKeys === "⌘K" ? "Meta+K" : "Control+K"}>
+            <Icon icon={Icons.SearchIcon} size="md" />
+            <span className="el-nav-item__label">Search</span>
+            {searchKeys && <kbd className="el-caption el-shell__keys" aria-hidden="true">{searchKeys}</kbd>}
+          </button>
+        )}
         {item("library", "Library", Icons.LibraryIcon)}
-        {item("live", "Live", Icons.RecordIcon)}
+        {item("projects", "Projects", Icons.FolderIcon)}
+        {item("live", "Live", Icons.WaveIcon)}
         {item("ask", "Ask", Icons.AskIcon)}
-        {item("settings", "Settings", Icons.SettingsIcon)}
       </Sidebar>
       <main className="el-shell__main" aria-label={own === "live" ? "Live" : own === "ask" ? "Ask" : undefined}>
         {notices}
@@ -97,8 +133,8 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, chil
           <section className="content page-live">{live}</section>
         ) : own === "live" ? (
           <EmptyState icon={Icons.RecordIcon} title="Live is on its way"
-            body="Live Assist, Live Translate and Dictation will have their place here. Until then, start them from Home or the tray."
-            action={<Button onClick={() => go("home")}>Open Home</Button>} />
+            body="Live Assist, Live Translate and Dictation will have their place here. Until then, start them from Record or the tray."
+            action={<Button onClick={() => go("record")}>Open Record</Button>} />
         ) : own === "ask" && ask ? (
           <section className="content page-ask">{ask}</section>
         ) : own === "ask" ? (

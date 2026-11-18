@@ -124,7 +124,8 @@ describe("the app with ui_v2.home", () => {
     render(<MainApp />);
     await act(flushAsync);
     await act(flushAsync);
-    fireEvent.click(within(await screen.findByRole("navigation", { name: "Main" })).getByRole("button", { name: "Home" }));
+    fireEvent.click(within(await screen.findByRole("navigation", { name: "Main" })).getByRole("button", { name: "More ways to record" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Record page" }));
     await act(flushAsync);
     await act(flushAsync);
     expect(await screen.findByRole("heading", { level: 1, name: "Home" })).toBeInTheDocument();
