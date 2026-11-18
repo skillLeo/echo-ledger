@@ -2,123 +2,124 @@
 
 declare(strict_types=1);
 
-use App\Enums\SessionStatus;
-use App\Enums\SourceApp;
-use App\Enums\SourceDevice;
+use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Support\SettingsContext;
-use App\Models\User;
-use App\Services\Accounts\SettingsRegistry;
-use App\Services\InterfaceFlags;
-use Filament\Facades\Filament;
-use Illuminate\Support\Carbon;
-use Tests\Feature\Security\Support\SecurityFixtures as Fx;
+use App\Models\CaptureSession;
+use Livewire\Livewire;
 
 /*
- * The web rows of docs/v2/audit/parity.csv (docs/PLAN_V2_PARITY.md section 1): every row marked "done" whose test is
- * this file names a control that must be on its page in the new design. The checks are tests/Feature/V2/web-parity-checks.json
- * (row id => [page, control]); a control is "element: its text", "~text" (any control containing it) or a prefix ending in ": ".
+ * The web rows of docs/v2/audit/parity.csv (docs/PLAN_V2_PARITY.md section 1). Every web row whose test is this file has
+ * a check in web-parity-checks.json, and it must hold in the new design:
+ *  - control: an element with that text in one scope of the page (main: the page's own content, outside its navs and the
+ *    settings menu; or the sidebar, top bar, avatar menu, workspace switcher, player);
+ *  - html: the page's HTML has every given string (the frame's key handler and its target, a marker class);
+ *  - widget: a Home card renders with the given words;
+ *  - exportformats: the selection's Export offers every given format.
+ * Every page read must be drawn by the v2.0 frame, and a done web row without a test fails the sheet.
  */
+
+require_once __DIR__.'/Support/parity_world.php';
 
 const WEB_PARITY_CHECKS = __DIR__.'/web-parity-checks.json';
 
-/** The visible controls of a page: links, buttons, menu items, tabs, labels, options, headings, keys, named elements. */
-function webParityControls(string $html): array
+function webParitySheet(): array
 {
-    $doc = new DOMDocument;
-    @$doc->loadHTML('<?xml encoding="utf-8"?>'.$html);
-    $xp = new DOMXPath($doc);
-    $out = [];
-    $q = '//a|//button|//*[@role="menuitem"]|//*[@role="menuitemradio"]|//*[@role="tab"]|//*[@role="switch"]|//label|//option|//th|//h1|//h2|//h3'
-        .'|//*[contains(@class,"fi-dropdown-list-item-label")]|//*[contains(@class,"el-set-title")]|//kbd|//*[@aria-label]|//*[@title]';
-    foreach ($xp->query($q) as $node) {
-        $text = trim((string) preg_replace('/\s+/u', ' ', $node->textContent));
-        if ($text === '' && $node instanceof DOMElement) {
-            $text = trim($node->getAttribute('aria-label') ?: $node->getAttribute('title'));
-        }
-        if ($text !== '' && mb_strlen($text) <= 80) {
-            $out[$node->nodeName.': '.$text] = true;
-        }
-    }
+    $lines = file(dirname(__DIR__, 4).'/docs/v2/audit/parity.csv', FILE_IGNORE_NEW_LINES) ?: [];
 
-    return array_keys($out);
+    return array_values(array_filter(array_map('str_getcsv', array_slice($lines, 1)), fn (array $r): bool => ($r[1] ?? '') === 'web'));
 }
 
-/** @return array{0: User, 1: array<string, string>} the person, and page => URL, with a project and three recordings */
-function webParityWorld(): array
+/** Whether one check holds in [$html] (control and html checks only). */
+function webParityHolds(array $check, string $html): bool
 {
-    Carbon::setTestNow(Carbon::parse('2026-11-17 11:42:00', 'UTC'));
-    $owner = Fx::user(['name' => 'Bilal Qureshi', 'email' => 'bilal@qureshi-textiles.example']);
-    $device = Fx::device($owner, ['name' => 'Galaxy S25']);
-    $client = Fx::client($owner, 'Qureshi Textiles');
-    $rec = [];
-    foreach ([['Payment terms for the March shipment', SourceApp::WhatsApp, 1_104_000, $client->id], ['Rate for 12 mm rebar', SourceApp::PhoneCall, 452_000, null],
-        ['Umrah group booking', SourceApp::Zoom, 348_000, $client->id]] as $i => [$title, $app, $ms, $clientId]) {
-        $started = Carbon::parse('2026-11-17 09:00:00')->subHours($i * 20);
-        $rec[] = Fx::session($owner, $device, ['client_ref' => 'parity-'.$i, 'title' => $title, 'source_app' => $app, 'source_device' => SourceDevice::Phone,
-            'client_id' => $clientId, 'started_at' => $started, 'ended_at' => $started->copy()->addMilliseconds($ms), 'duration_ms' => $ms, 'status' => SessionStatus::Completed]);
-    }
-    Fx::transcript($rec[0], 'Assalam o alaikum Bilal sahib, the proforma is ready. Forty percent advance this time.');
-    Filament::setCurrentPanel('app');
-    foreach (InterfaceFlags::UI_V2 as $flag) {
-        app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
-    }
-    app(InterfaceFlags::class)->set('live_assist', true, 0, [], [], 'everyone');
-    $pages = ['home' => '/app', 'library' => '/app/sessions', 'recording' => '/app/sessions/'.$rec[0]->id, 'projects' => '/app/clients',
-        'project' => '/app/clients/'.$client->id, 'search' => '/app/search?q=proforma', 'upload' => '/app/upload', 'activity' => '/app/activity',
-        'live' => '/app/live', 'shares' => '/app/shares', 'shared-with-me' => '/app/shared-with-me', 'request-links' => '/app/request-links',
-        'recently-deleted' => '/app/recently-deleted', 'devices' => '/app/devices', 'usage' => '/app/usage', 'workspace' => '/app/workspace',
-        'help' => '/app/help', 'get-the-apps' => '/app/get-the-apps', 'assist-preps' => '/app/live-assist/preps',
-        'assist-sessions' => '/app/live-assist/sessions', 'assist-settings' => '/app/live-assist/settings'];
-    foreach (array_keys(SettingsRegistry::PAGES) as $sub) {
-        $pages['settings-'.$sub] = '/app/settings/'.$sub;
-    }
-
-    return [$owner, $pages];
+    return match ($check['type']) {
+        'control' => array_key_exists($check['key'], webParityControls($html, $check['scope'])),
+        'html' => collect($check['contains'])->every(fn (string $needle): bool => str_contains($html, $needle)),
+        default => false,
+    };
 }
 
-function webParityHas(array $controls, string $want): bool
-{
-    if (str_starts_with($want, '~')) {
-        return collect($controls)->contains(fn (string $c): bool => str_contains($c, substr($want, 1)));
-    }
-    if (str_ends_with($want, ': ')) {
-        return collect($controls)->contains(fn (string $c): bool => str_starts_with($c, $want));
-    }
-
-    return in_array($want, $controls, true);
-}
-
-it('finds every "done" web row\'s control on its page in the new design', function () {
+it('holds every web row\'s check in the new design, on pages drawn by the v2.0 frame', function () {
     $checks = json_decode((string) file_get_contents(WEB_PARITY_CHECKS), true);
     [$owner, $pages] = webParityWorld();
-    $controls = [];
-    $missing = [];
-    foreach ($checks as $id => [$page, $want]) {
-        if (! isset($controls[$page])) {
-            $this->app['auth']->forgetGuards();
-            SettingsContext::forget();
-            $response = $this->actingAs($owner->fresh(), 'web')->get($pages[$page]);
-            expect($response->getStatusCode())->toBe(200, "{$page} ({$pages[$page]}) answers in the new design");
-            $controls[$page] = webParityControls((string) $response->getContent());
-        }
-        if (! webParityHas($controls[$page], $want)) {
-            $missing[] = "{$id}: {$want} on {$page}";
+    webParityDesign(true);
+    $html = [];
+    $failed = [];
+    foreach ($checks as $id => $check) {
+        if (in_array($check['type'], ['control', 'html'], true)) {
+            $page = $check['page'];
+            if (! isset($html[$page])) {
+                $this->app['auth']->forgetGuards();
+                SettingsContext::forget();
+                $response = $this->actingAs($owner->fresh(), 'web')->get($pages[$page]);
+                expect($response->getStatusCode())->toBe(200, "{$page} answers")
+                    ->and(webParityIsV2((string) $response->getContent()))->toBeTrue("{$page} is drawn by the v2.0 frame");
+                $html[$page] = (string) $response->getContent();
+            }
+            if (! webParityHolds($check, $html[$page])) {
+                $failed[] = "{$id} on {$page}: ".json_encode($check, JSON_UNESCAPED_UNICODE);
+            }
+        } elseif ($check['type'] === 'widget') {
+            $this->actingAs($owner->fresh(), 'web');
+            $widget = Livewire::test($check['class'])->assertOk();
+            foreach ($check['see'] as $words) {
+                $widget->assertSee($words);
+            }
+        } elseif ($check['type'] === 'exportformats') {
+            // Each format is one the Export form accepts (its select refuses anything else).
+            $this->actingAs($owner->fresh(), 'web');
+            $ids = CaptureSession::query()->orderBy('started_at')->limit(2)->pluck('id')->all();
+            foreach ($check['formats'] as $format) {
+                $page = Livewire::test(ListCaptureSessions::class)->callTableBulkAction('export', $ids, data: ['format' => $format]);
+                if ($page->errors()->has('mountedActions.0.data.format')) {
+                    $failed[] = "{$id}: Export refuses {$format}";
+                }
+            }
+            $refused = Livewire::test(ListCaptureSessions::class)->callTableBulkAction('export', $ids, data: ['format' => 'exe']);
+            expect($refused->errors()->isNotEmpty())->toBeTrue('Export refuses a format it does not offer');
         }
     }
 
-    expect($missing)->toBe([]);
+    expect($failed)->toBe([]);
 });
 
-it('keeps the sheet and the checks in step: every web row this file proves has a check, and every check a row', function () {
-    // (done rows, and partial rows for the part the new design has)
+it('fails a check when the control is taken away (the checks are not empty matches)', function () {
     $checks = json_decode((string) file_get_contents(WEB_PARITY_CHECKS), true);
-    $rows = array_map('str_getcsv', array_slice(file(dirname(__DIR__, 4).'/docs/v2/audit/parity.csv', FILE_IGNORE_NEW_LINES), 1));
-    $proved = collect($rows)->filter(fn (array $r): bool => ($r[1] ?? '') === 'web' && str_contains($r[7] ?? '', 'WebParityTest.php'))
-        ->map(fn (array $r): array => [$r[0], $r[6]])->all();
+    [$owner, $pages] = webParityWorld();
+    webParityDesign(true);
+    $this->actingAs($owner->fresh(), 'web');
+    $html = (string) $this->get($pages['recording'])->getContent();
+    $revoke = collect($checks)->first(fn (array $c): bool => $c['type'] === 'control' && $c['page'] === 'recording' && $c['key'] === 'button|revoke');
 
-    foreach ($proved as [$id, $status]) {
-        // A partial row's check proves the part the new design has.
-        expect($checks)->toHaveKey($id)->and(in_array($status, ['done', 'partial'], true))->toBeTrue("{$id} is {$status}");
+    expect(webParityHolds($revoke, $html))->toBeTrue();
+    // The same page without its Revoke buttons, and without the frame's key handler.
+    $doc = new DOMDocument;
+    @$doc->loadHTML('<?xml encoding="utf-8"?>'.$html);
+    foreach (iterator_to_array((new DOMXPath($doc))->query('//button')) as $button) {
+        if (trim($button->textContent) === 'Revoke') {
+            $button->parentNode?->removeChild($button);
+        }
     }
-    expect(array_diff(array_keys($checks), array_column($proved, 0)))->toBe([]);
+    $without = (string) $doc->saveHTML();
+    expect(webParityHolds($revoke, $without))->toBeFalse()
+        ->and(webParityHolds(['type' => 'html', 'contains' => ["e.key === '/'"]], str_replace("e.key === '/'", '', $html)))->toBeFalse()
+        // A control in the settings menu is not one of the page's own.
+        ->and(webParityHolds(['type' => 'control', 'scope' => 'main', 'key' => 'a|appearance'], (string) $this->get($pages['settings-appearance'])->getContent()))->toBeFalse();
+});
+
+it('keeps the sheet and the checks in step, and every done web row tested', function () {
+    $checks = json_decode((string) file_get_contents(WEB_PARITY_CHECKS), true);
+    $rows = webParitySheet();
+
+    foreach ($rows as [$id, , , $feature, , , $status, $test]) {
+        expect(in_array($status, ['done', 'partial', 'missing', 'retired-with-approval'], true))->toBeTrue("{$id}: {$status}");
+        if ($status === 'done') {
+            expect($test)->not->toBe('none', "{$id} ({$feature}) is done without a test");
+        }
+        if (str_contains($test, 'WebParityTest.php')) {
+            expect($checks)->toHaveKey($id)->and(in_array($status, ['done', 'partial'], true))->toBeTrue("{$id} is {$status}");
+        }
+    }
+    expect(array_diff(array_keys($checks), array_column($rows, 0)))->toBe([])
+        ->and(count(array_unique(array_column($rows, 0))))->toBe(count($rows));
 });

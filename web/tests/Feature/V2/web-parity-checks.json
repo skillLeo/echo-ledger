@@ -1,566 +1,4312 @@
 {
- "WEB-NAV-001": [
-  "home",
-  "a: Home"
- ],
- "WEB-NAV-002": [
-  "library",
-  "a: All recordings"
- ],
- "WEB-NAV-004": [
-  "live",
-  "a: Voice note Record yourself now, in this browser"
- ],
- "WEB-NAV-005": [
-  "library",
-  "button: Upload"
- ],
- "WEB-NAV-008": [
-  "library",
-  "button: Pinned"
- ],
- "WEB-NAV-009": [
-  "library",
-  "button: Any source"
- ],
- "WEB-NAV-011": [
-  "live",
-  "a: Preps Get ready for a meeting or an interview"
- ],
- "WEB-NAV-012": [
-  "library",
-  "label: Search and commands"
- ],
- "WEB-NAV-013": [
-  "library",
-  "button: Collapse"
- ],
- "WEB-NAV-016": [
-  "library",
-  "nav: Home Library Live Ask"
- ],
- "WEB-NAV-017": [
-  "library",
-  "button: Help and shortcuts"
- ],
- "WEB-NAV-018": [
-  "library",
-  "a: BQ Bilal Qureshi bilal@qureshi-textiles.example Personal"
- ],
- "WEB-NAV-019": [
-  "library",
-  "button: BQ"
- ],
- "WEB-NAV-020": [
-  "library",
-  "button: Notifications"
- ],
- "WEB-NAV-021": [
-  "recording",
-  "kbd: Ctrl K"
- ],
- "WEB-KEY-009": [
-  "recording",
-  "kbd: Space"
- ],
- "WEB-LIB-001": [
-  "library",
-  "label: Search"
- ],
- "WEB-LIB-002": [
-  "library",
-  "label: Source device"
- ],
- "WEB-LIB-003": [
-  "library",
-  "label: Source app"
- ],
- "WEB-LIB-004": [
-  "library",
-  "label: Project"
- ],
- "WEB-LIB-005": [
-  "library",
-  "label: Status"
- ],
- "WEB-LIB-006": [
-  "library",
-  "label: Bookmark tag"
- ],
- "WEB-LIB-007": [
-  "library",
-  "label: Label"
- ],
- "WEB-LIB-008": [
-  "library",
-  "label: Has bookmarks"
- ],
- "WEB-LIB-009": [
-  "library",
-  "label: From"
- ],
- "WEB-LIB-010": [
-  "library",
-  "button: Clear"
- ],
- "WEB-LIB-011": [
-  "library",
-  "button: Newest"
- ],
- "WEB-LIB-012": [
-  "library",
-  "button: Oldest"
- ],
- "WEB-LIB-013": [
-  "library",
-  "button: Longest"
- ],
- "WEB-LIB-014": [
-  "library",
-  "button: Shortest"
- ],
- "WEB-LIB-015": [
-  "library",
-  "button: Name A–Z"
- ],
- "WEB-LIB-016": [
-  "library",
-  "button: Recently opened"
- ],
- "WEB-LIB-017": [
-  "library",
-  "h2: Today"
- ],
- "WEB-LIB-026": [
-  "library",
-  "button: All"
- ],
- "WEB-LIB-027": [
-  "library",
-  "button: Today 1"
- ],
- "WEB-LIB-030": [
-  "library",
-  "label: Has bookmarks"
- ],
- "WEB-LIB-031": [
-  "library",
-  "button: Retry"
- ],
- "WEB-LIB-032": [
-  "library",
-  "button: Pinned"
- ],
- "WEB-LIB-033": [
-  "library",
-  "button: Untranscribed 2"
- ],
- "WEB-LIB-034": [
-  "library",
-  "h2: Yesterday"
- ],
- "WEB-LIB-035": [
-  "library",
-  "input: Select/deselect group Today for bulk actions."
- ],
- "WEB-LIB-036": [
-  "library",
-  "input: Select/deselect all items for bulk actions."
- ],
- "WEB-LIB-037": [
-  "library",
-  "span: Pin"
- ],
- "WEB-LIB-042": [
-  "library",
-  "span: Open"
- ],
- "WEB-LIB-043": [
-  "library",
-  "span: Rename"
- ],
- "WEB-LIB-044": [
-  "library",
-  "span: Send to WhatsApp…"
- ],
- "WEB-LIB-045": [
-  "library",
-  "span: Delete"
- ],
- "WEB-LIB-048": [
-  "library",
-  "button: Move"
- ],
- "WEB-LIB-049": [
-  "library",
-  "span: Add label"
- ],
- "WEB-LIB-050": [
-  "library",
-  "span: Remove label"
- ],
- "WEB-LIB-051": [
-  "library",
-  "span: Pin"
- ],
- "WEB-LIB-052": [
-  "library",
-  "span: Unpin"
- ],
- "WEB-LIB-053": [
-  "library",
-  "span: Keep forever"
- ],
- "WEB-LIB-054": [
-  "library",
-  "span: Stop keeping"
- ],
- "WEB-LIB-055": [
-  "library",
-  "button: Export"
- ],
- "WEB-LIB-056": [
-  "library",
-  "button: Delete"
- ],
- "WEB-LIB-057": [
-  "library",
-  "button: Export"
- ],
- "WEB-LIB-061": [
-  "library",
-  "button: Upload"
- ],
- "WEB-LIB-062": [
-  "library",
-  "a: New voice note"
- ],
- "WEB-LIB-068": [
-  "library",
-  "label: Per page 5 10 25 50"
- ],
- "WEB-REC-001": [
-  "recording",
-  "button: Share"
- ],
- "WEB-REC-002": [
-  "recording",
-  "button: Move"
- ],
- "WEB-REC-003": [
-  "recording",
-  "button: Delete"
- ],
- "WEB-REC-004": [
-  "recording",
-  "span: Rename"
- ],
- "WEB-REC-005": [
-  "recording",
-  "button: Download"
- ],
- "WEB-REC-006": [
-  "recording",
-  "span: Show as…"
- ],
- "WEB-REC-007": [
-  "recording",
-  "span: WhatsApp"
- ],
- "WEB-REC-008": [
-  "recording",
-  "span: Rename speakers"
- ],
- "WEB-REC-009": [
-  "recording",
-  "span: Find and replace"
- ],
- "WEB-REC-010": [
-  "recording",
-  "span: History"
- ],
- "WEB-REC-011": [
-  "recording",
-  "span: Send to a teammate"
- ],
- "WEB-REC-012": [
-  "recording",
-  "span: Sent to"
- ],
- "WEB-REC-014": [
-  "recording",
-  "button: Keep forever"
- ],
- "WEB-REC-017": [
-  "recording",
-  "kbd: Space"
- ],
- "WEB-REC-018": [
-  "recording",
-  "div: Bookmarks and pauses"
- ],
- "WEB-REC-020": [
-  "recording",
-  "button: Moments"
- ],
- "WEB-REC-021": [
-  "recording",
-  "button: Roman Urdu"
- ],
- "WEB-REC-022": [
-  "recording",
-  "input: Find in the transcript"
- ],
- "WEB-REC-023": [
-  "recording",
-  "button: Accept"
- ],
- "WEB-REC-024": [
-  "recording",
-  "button: Write notes"
- ],
- "WEB-REC-025": [
-  "recording",
-  "h2: Share links"
- ],
- "WEB-REC-026": [
-  "recording",
-  "div: Screens of this recording"
- ],
- "WEB-REC-027": [
-  "recording",
-  "button: Details"
- ],
- "WEB-REC-029": [
-  "recording",
-  "button: Ask"
- ],
- "WEB-REC-030": [
-  "recording",
-  "button: Next"
- ],
- "WEB-PRJ-001": [
-  "projects",
-  "a: New project"
- ],
- "WEB-PRJ-003": [
-  "project",
-  "nav: Overview Recordings2 Screens Files Ask Rules"
- ],
- "WEB-PRJ-004": [
-  "project",
-  "span: New subfolder"
- ],
- "WEB-PAGE-001": [
-  "search",
-  "h1: "
- ],
- "WEB-PAGE-002": [
-  "upload",
-  "h1: "
- ],
- "WEB-PAGE-003": [
-  "activity",
-  "h1: "
- ],
- "WEB-PAGE-004": [
-  "shares",
-  "h1: "
- ],
- "WEB-PAGE-005": [
-  "shared-with-me",
-  "h1: "
- ],
- "WEB-PAGE-006": [
-  "request-links",
-  "h1: "
- ],
- "WEB-PAGE-007": [
-  "recently-deleted",
-  "h1: "
- ],
- "WEB-PAGE-008": [
-  "devices",
-  "h1: "
- ],
- "WEB-PAGE-009": [
-  "usage",
-  "h1: "
- ],
- "WEB-PAGE-010": [
-  "workspace",
-  "h1: "
- ],
- "WEB-PAGE-011": [
-  "help",
-  "h1: "
- ],
- "WEB-PAGE-012": [
-  "get-the-apps",
-  "h1: "
- ],
- "WEB-PAGE-013": [
-  "assist-preps",
-  "h1: "
- ],
- "WEB-PAGE-014": [
-  "assist-sessions",
-  "h1: "
- ],
- "WEB-PAGE-015": [
-  "assist-settings",
-  "h1: "
- ],
- "WEB-SET-TRANSCRIPTION-LANGUAGE": [
-  "settings-language",
-  "~Language"
- ],
- "WEB-SET-APPEARANCE-THEME": [
-  "settings-appearance",
-  "~Theme"
- ],
- "WEB-SET-APPEARANCE-DENSITY": [
-  "settings-appearance",
-  "~Density"
- ],
- "WEB-SET-APPEARANCE-CLOCK": [
-  "settings-appearance",
-  "~Times"
- ],
- "WEB-SET-APPEARANCE-LIBRARY-VIEW": [
-  "settings-appearance",
-  "~Library view"
- ],
- "WEB-SET-NOTIFICATIONS-EMAIL-TRANSCRIPTION": [
-  "settings-notifications",
-  "~Transcription"
- ],
- "WEB-SET-NOTIFICATIONS-EMAIL-ENHANCEMENT": [
-  "settings-notifications",
-  "~Enhancement"
- ],
- "WEB-SET-NOTIFICATIONS-EMAIL-SHARING": [
-  "settings-notifications",
-  "~Sharing"
- ],
- "WEB-SET-NOTIFICATIONS-EMAIL-USAGE": [
-  "settings-notifications",
-  "~Usage & limits"
- ],
- "WEB-SET-NOTIFICATIONS-EMAIL-UPDATES": [
-  "settings-notifications",
-  "~App updates"
- ],
- "WEB-SET-NOTIFICATIONS-EMAIL-OTHER": [
-  "settings-notifications",
-  "~Other"
- ],
- "WEB-SET-NOTIFICATIONS-EMAIL-ACCOUNT": [
-  "settings-notifications",
-  "~Account & security"
- ],
- "WEB-SET-NOTIFICATIONS-EMAIL-PLAN-PAYMENTS": [
-  "settings-notifications",
-  "~Plan & payments"
- ],
- "WEB-SET-STORAGE-USED": [
-  "settings-storage",
-  "~Your storage"
- ],
- "WEB-SET-STORAGE-RETENTION": [
-  "settings-storage",
-  "~Recordings kept"
- ],
- "WEB-SET-STORAGE-BIN": [
-  "settings-storage",
-  "~Bin"
- ],
- "WEB-SET-PROFILE-NAME": [
-  "settings-profile",
-  "~Name"
- ],
- "WEB-SET-PROFILE-EMAIL": [
-  "settings-profile",
-  "~Email"
- ],
- "WEB-SET-PROFILE-WORKSPACE": [
-  "settings-profile",
-  "~Workspace"
- ],
- "WEB-SET-PLAN-UPGRADE": [
-  "settings-plan",
-  "~Upgrade"
- ],
- "WEB-SET-PLAN-USAGE-STORAGE": [
-  "settings-plan",
-  "~Storage"
- ],
- "WEB-SET-PLAN-USAGE-DEVICES": [
-  "settings-plan",
-  "~Devices"
- ],
- "WEB-SET-PLAN-USAGE-MEMBERS": [
-  "settings-plan",
-  "~Team members"
- ],
- "WEB-SET-PLAN-COMPARE": [
-  "settings-plan",
-  "~See every feature"
- ],
- "WEB-SET-PLAN-PROMO": [
-  "settings-plan",
-  "~Promo code"
- ],
- "WEB-SET-PLAN-HISTORY": [
-  "settings-plan",
-  "~Payments"
- ],
- "WEB-SET-SECURITY-PASSWORD": [
-  "settings-security",
-  "~Password"
- ],
- "WEB-SET-SECURITY-TWO-STEP": [
-  "settings-security",
-  "~Two-step sign-in"
- ],
- "WEB-SET-SECURITY-PASSKEYS": [
-  "settings-security",
-  "~Passkeys"
- ],
- "WEB-SET-SECURITY-ACTIVITY": [
-  "settings-security",
-  "~Sign-in activity"
- ],
- "WEB-SET-SECURITY-SIGNOUT-ALL": [
-  "settings-security",
-  "~Sign out everywhere"
- ],
- "WEB-SET-DEVICES-PAIR": [
-  "settings-devices",
-  "~Sign in a device"
- ],
- "WEB-SET-DEVICES-CONNECTED": [
-  "settings-devices",
-  "~Ask an AI assistant"
- ],
- "WEB-SET-PRIVACY-CONSENT": [
-  "settings-privacy",
-  "~Recording consent"
- ],
- "WEB-SET-PRIVACY-EXPORT": [
-  "settings-privacy",
-  "~Export my data"
- ],
- "WEB-SET-PRIVACY-SUPPORT-ACCESS": [
-  "settings-privacy",
-  "~Support access"
- ],
- "WEB-SET-PRIVACY-DELETE-ACCOUNT": [
-  "settings-privacy",
-  "~Delete my account"
- ],
- "WEB-SET-HELP-APPS": [
-  "settings-help",
-  "~Get the apps"
- ]
+ "WEB-NAV-001": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|home"
+ },
+ "WEB-NAV-002": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|all recordings"
+ },
+ "WEB-NAV-003": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|projects"
+ },
+ "WEB-NAV-004": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|trash"
+ },
+ "WEB-NAV-005": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|shared"
+ },
+ "WEB-NAV-007": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|live"
+ },
+ "WEB-NAV-008": {
+  "type": "control",
+  "page": "live",
+  "scope": "main",
+  "key": "a|preps get ready for a meeting or an interview"
+ },
+ "WEB-NAV-009": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|settings"
+ },
+ "WEB-NAV-011": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|upload"
+ },
+ "WEB-NAV-012": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "wire:name=\"App\\Livewire\\ActivityBell\""
+  ]
+ },
+ "WEB-NAV-013": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|pinned"
+ },
+ "WEB-NAV-014": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|any source"
+ },
+ "WEB-NAV-015": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "button|collapse"
+ },
+ "WEB-NAV-017": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "button|help and shortcuts"
+ },
+ "WEB-NAV-018": {
+  "type": "control",
+  "page": "library",
+  "scope": "topbar",
+  "key": "label|search and commands"
+ },
+ "WEB-NAV-020": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "wire:name=\"App\\Livewire\\ActivityBell\""
+  ]
+ },
+ "WEB-NAV-022": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "v2-bn"
+  ]
+ },
+ "WEB-NAV-023": {
+  "type": "control",
+  "page": "library",
+  "scope": "switcher",
+  "key": "button|p personal owner"
+ },
+ "WEB-NAV-024": {
+  "type": "control",
+  "page": "library",
+  "scope": "switcher",
+  "key": "menuitem|personal · owner"
+ },
+ "WEB-NAV-025": {
+  "type": "control",
+  "page": "library",
+  "scope": "switcher",
+  "key": "menuitem|qureshi textiles team · owner"
+ },
+ "WEB-NAV-026": {
+  "type": "control",
+  "page": "library",
+  "scope": "switcher",
+  "key": "menuitem|manage workspace"
+ },
+ "WEB-NAV-027": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|upgrade"
+ },
+ "WEB-NAV-028": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|settings"
+ },
+ "WEB-NAV-029": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "button|system"
+ },
+ "WEB-NAV-030": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "button|light"
+ },
+ "WEB-NAV-031": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "button|dark"
+ },
+ "WEB-NAV-032": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|sign out"
+ },
+ "WEB-KEY-001": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "e.key === '/'",
+   "fi-ta-search-field"
+  ]
+ },
+ "WEB-KEY-002": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "e.key === '?'"
+  ]
+ },
+ "WEB-KEY-003": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "e.key === '['"
+  ]
+ },
+ "WEB-KEY-004": {
+  "type": "control",
+  "page": "library",
+  "scope": "topbar",
+  "key": "label|search and commands"
+ },
+ "WEB-KEY-010": {
+  "type": "html",
+  "page": "recording",
+  "contains": [
+   "el-dock",
+   "el-back",
+   "el-fwd"
+  ]
+ },
+ "WEB-LIB-001": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "h1|library"
+ },
+ "WEB-LIB-002": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|upload"
+ },
+ "WEB-LIB-005": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|project no project qureshi textiles"
+ },
+ "WEB-LIB-006": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|no project"
+ },
+ "WEB-LIB-007": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|qureshi textiles"
+ },
+ "WEB-LIB-008": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|auto (english / urdu / arabic)"
+ },
+ "WEB-LIB-009": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|english only"
+ },
+ "WEB-LIB-010": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|urdu (with english words)"
+ },
+ "WEB-LIB-011": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|arabic (with english words)"
+ },
+ "WEB-LIB-012": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|french"
+ },
+ "WEB-LIB-013": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|german"
+ },
+ "WEB-LIB-014": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|spanish"
+ },
+ "WEB-LIB-015": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|italian"
+ },
+ "WEB-LIB-016": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|portuguese"
+ },
+ "WEB-LIB-017": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|dutch"
+ },
+ "WEB-LIB-018": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|turkish"
+ },
+ "WEB-LIB-019": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|russian"
+ },
+ "WEB-LIB-020": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|clear"
+ },
+ "WEB-LIB-021": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "a|open"
+ },
+ "WEB-LIB-022": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|retry"
+ },
+ "WEB-LIB-023": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|cancel"
+ },
+ "WEB-LIB-024": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|remove"
+ },
+ "WEB-LIB-025": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|clear the list"
+ },
+ "WEB-LIB-026": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|move"
+ },
+ "WEB-LIB-027": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|label"
+ },
+ "WEB-LIB-028": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitem|add label"
+ },
+ "WEB-LIB-029": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitem|remove label"
+ },
+ "WEB-LIB-030": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|export"
+ },
+ "WEB-LIB-031": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|delete"
+ },
+ "WEB-LIB-032": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|more"
+ },
+ "WEB-LIB-033": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitem|pin"
+ },
+ "WEB-LIB-034": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitem|unpin"
+ },
+ "WEB-LIB-035": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitem|keep forever"
+ },
+ "WEB-LIB-036": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitem|stop keeping"
+ },
+ "WEB-LIB-037": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|search"
+ },
+ "WEB-LIB-038": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "input|search"
+ },
+ "WEB-LIB-039": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "h2|filters"
+ },
+ "WEB-LIB-040": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|reset"
+ },
+ "WEB-LIB-041": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|source device"
+ },
+ "WEB-LIB-042": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|source app"
+ },
+ "WEB-LIB-043": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|project"
+ },
+ "WEB-LIB-044": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|status"
+ },
+ "WEB-LIB-045": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|all"
+ },
+ "WEB-LIB-046": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|recording"
+ },
+ "WEB-LIB-047": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|uploading"
+ },
+ "WEB-LIB-048": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|processing"
+ },
+ "WEB-LIB-049": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|completed"
+ },
+ "WEB-LIB-050": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|failed"
+ },
+ "WEB-LIB-051": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|bookmark tag"
+ },
+ "WEB-LIB-052": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|requirement"
+ },
+ "WEB-LIB-053": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|budget"
+ },
+ "WEB-LIB-054": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|deadline"
+ },
+ "WEB-LIB-055": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|decision"
+ },
+ "WEB-LIB-056": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "option|follow-up"
+ },
+ "WEB-LIB-057": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|label"
+ },
+ "WEB-LIB-058": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|has bookmarks"
+ },
+ "WEB-LIB-059": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|from"
+ },
+ "WEB-LIB-060": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "label|until"
+ },
+ "WEB-LIB-061": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|apply filters"
+ },
+ "WEB-LIB-062": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|all"
+ },
+ "WEB-LIB-063": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|all"
+ },
+ "WEB-LIB-064": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|today"
+ },
+ "WEB-LIB-068": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|failed uploads"
+ },
+ "WEB-LIB-069": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|pinned"
+ },
+ "WEB-LIB-070": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|any source"
+ },
+ "WEB-LIB-071": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|any source"
+ },
+ "WEB-LIB-072": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|inbox"
+ },
+ "WEB-LIB-073": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|whatsapp"
+ },
+ "WEB-LIB-074": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|zoom"
+ },
+ "WEB-LIB-075": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|phone"
+ },
+ "WEB-LIB-076": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|voice notes"
+ },
+ "WEB-LIB-079": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "h2|today"
+ },
+ "WEB-LIB-080": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "h2|today"
+ },
+ "WEB-LIB-087": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|newest"
+ },
+ "WEB-LIB-088": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|newest"
+ },
+ "WEB-LIB-089": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|oldest"
+ },
+ "WEB-LIB-090": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|longest"
+ },
+ "WEB-LIB-091": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|shortest"
+ },
+ "WEB-LIB-092": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|name a–z"
+ },
+ "WEB-LIB-093": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitemradio|recently opened"
+ },
+ "WEB-LIB-094": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|select all"
+ },
+ "WEB-LIB-095": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "h2|today"
+ },
+ "WEB-LIB-096": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|today"
+ },
+ "WEB-LIB-098": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-LIB-099": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|send to whatsapp…"
+ },
+ "WEB-LIB-100": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitem|delete"
+ },
+ "WEB-LIB-101": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "h2|yesterday"
+ },
+ "WEB-LIB-102": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|yesterday"
+ },
+ "WEB-LIB-103": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "h2|sunday, november"
+ },
+ "WEB-LIB-104": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|sunday, november"
+ },
+ "WEB-LIB-105": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "h2|saturday, november"
+ },
+ "WEB-LIB-106": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|saturday, november"
+ },
+ "WEB-REC-001": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "h1|payment terms for the march shipment"
+ },
+ "WEB-REC-002": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|rename this recording"
+ },
+ "WEB-REC-003": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|rename speakers"
+ },
+ "WEB-REC-004": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|rename speakers"
+ },
+ "WEB-REC-005": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|find and replace"
+ },
+ "WEB-REC-006": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|history"
+ },
+ "WEB-REC-007": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|download"
+ },
+ "WEB-REC-008": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|show as…"
+ },
+ "WEB-REC-009": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|share"
+ },
+ "WEB-REC-010": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|whatsapp"
+ },
+ "WEB-REC-011": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|more"
+ },
+ "WEB-REC-012": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-REC-013": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|send to a teammate"
+ },
+ "WEB-REC-014": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|sent to"
+ },
+ "WEB-REC-015": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|re-transcribe as…"
+ },
+ "WEB-REC-016": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|delete"
+ },
+ "WEB-REC-017": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|qureshi textiles"
+ },
+ "WEB-REC-018": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|english"
+ },
+ "WEB-REC-019": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|labels"
+ },
+ "WEB-REC-020": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|pin"
+ },
+ "WEB-REC-021": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|keep forever"
+ },
+ "WEB-REC-022": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|roman urdu"
+ },
+ "WEB-REC-023": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|اردو"
+ },
+ "WEB-REC-024": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|original"
+ },
+ "WEB-REC-025": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "input|find in the transcript"
+ },
+ "WEB-REC-026": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|previous match"
+ },
+ "WEB-REC-027": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|next match"
+ },
+ "WEB-REC-028": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|yes"
+ },
+ "WEB-REC-029": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|no"
+ },
+ "WEB-REC-030": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "tab|transcript"
+ },
+ "WEB-REC-031": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "tab|screens"
+ },
+ "WEB-REC-032": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|· original words"
+ },
+ "WEB-REC-033": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|accept"
+ },
+ "WEB-REC-034": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|dismiss"
+ },
+ "WEB-REC-035": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|previous"
+ },
+ "WEB-REC-036": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|next"
+ },
+ "WEB-REC-037": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|close"
+ },
+ "WEB-REC-038": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|−"
+ },
+ "WEB-REC-039": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|+"
+ },
+ "WEB-REC-040": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "select|playback speed"
+ },
+ "WEB-REC-041": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|player options"
+ },
+ "WEB-REC-042": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "label|skip silence"
+ },
+ "WEB-REC-043": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "label|follow"
+ },
+ "WEB-REC-044": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "h3|call notes"
+ },
+ "WEB-REC-045": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|write notes"
+ },
+ "WEB-REC-046": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "tab|details"
+ },
+ "WEB-REC-047": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "h2|share links"
+ },
+ "WEB-REC-048": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "th|made"
+ },
+ "WEB-REC-049": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "th|status"
+ },
+ "WEB-REC-050": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "th|expires"
+ },
+ "WEB-REC-051": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "th|who can open it"
+ },
+ "WEB-REC-052": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "th|downloads"
+ },
+ "WEB-REC-053": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "th|views"
+ },
+ "WEB-REC-054": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "th|last opened"
+ },
+ "WEB-REC-055": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "th|made by"
+ },
+ "WEB-REC-056": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "th|actions"
+ },
+ "WEB-REC-057": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|access log"
+ },
+ "WEB-REC-058": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|revoke"
+ },
+ "WEB-PRJ-001": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "h1|projects"
+ },
+ "WEB-PRJ-002": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "a|new project"
+ },
+ "WEB-PRJ-003": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "label|search"
+ },
+ "WEB-PRJ-004": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "input|search"
+ },
+ "WEB-PRJ-005": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "label|sort by - name"
+ },
+ "WEB-PRJ-006": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "option|-"
+ },
+ "WEB-PRJ-007": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "option|name"
+ },
+ "WEB-PRJ-008": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "label|sort direction ascending descending"
+ },
+ "WEB-PRJ-009": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "option|ascending"
+ },
+ "WEB-PRJ-010": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "option|descending"
+ },
+ "WEB-PRJ-011": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "a|qt qureshi textiles recordings · last call nov automatic pin to the top"
+ },
+ "WEB-PRJ-012": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "button|pin to the top"
+ },
+ "WEB-PRJ-013": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "button|more"
+ },
+ "WEB-PRJ-014": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "a|open"
+ },
+ "WEB-PRJ-015": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-PRJ-016": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-PRJ-017": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "button|move"
+ },
+ "WEB-PRJ-018": {
+  "type": "control",
+  "page": "projects",
+  "scope": "main",
+  "key": "button|delete"
+ },
+ "WEB-PRJ-019": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "h1|qureshi textiles"
+ },
+ "WEB-PRJ-020": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|share"
+ },
+ "WEB-PRJ-021": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|actions"
+ },
+ "WEB-PRJ-022": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "a|new subfolder"
+ },
+ "WEB-PRJ-023": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|send to a teammate"
+ },
+ "WEB-PRJ-024": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|sent to"
+ },
+ "WEB-PRJ-025": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-PRJ-026": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|move"
+ },
+ "WEB-PRJ-027": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-PRJ-028": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|delete"
+ },
+ "WEB-PRJ-029": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "h3|ai notes"
+ },
+ "WEB-PRJ-030": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|copy for ai"
+ },
+ "WEB-PRJ-031": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "h3|brief"
+ },
+ "WEB-PRJ-032": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|edit"
+ },
+ "WEB-PRJ-033": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|make again"
+ },
+ "WEB-PRJ-034": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "h3|memory"
+ },
+ "WEB-PRJ-035": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "label|kind"
+ },
+ "WEB-PRJ-036": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "option|decision"
+ },
+ "WEB-PRJ-037": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "option|open question"
+ },
+ "WEB-PRJ-038": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "option|change"
+ },
+ "WEB-PRJ-039": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "option|scope"
+ },
+ "WEB-PRJ-040": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "label|line to remember"
+ },
+ "WEB-PRJ-041": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "button|add"
+ },
+ "WEB-PRJ-042": {
+  "type": "control",
+  "page": "project-overview",
+  "scope": "main",
+  "key": "h3|latest call notes"
+ },
+ "WEB-PRJ-043": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "h1|qureshi textiles"
+ },
+ "WEB-PRJ-044": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "button|share"
+ },
+ "WEB-PRJ-045": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "button|actions"
+ },
+ "WEB-PRJ-046": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "a|new subfolder"
+ },
+ "WEB-PRJ-047": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "button|send to a teammate"
+ },
+ "WEB-PRJ-048": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "button|sent to"
+ },
+ "WEB-PRJ-049": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-PRJ-050": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "button|move"
+ },
+ "WEB-PRJ-051": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-PRJ-052": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "button|delete"
+ },
+ "WEB-PRJ-053": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "label|search in this project"
+ },
+ "WEB-PRJ-054": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "input|search in qureshi textiles"
+ },
+ "WEB-PRJ-055": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "label|sort"
+ },
+ "WEB-PRJ-056": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "option|newest first"
+ },
+ "WEB-PRJ-057": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "option|oldest first"
+ },
+ "WEB-PRJ-058": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "option|by title"
+ },
+ "WEB-PRJ-059": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "option|longest first"
+ },
+ "WEB-PRJ-060": {
+  "type": "control",
+  "page": "project-recordings",
+  "scope": "main",
+  "key": "a|umrah group booking nov zoom · galaxy s · : · qureshi textiles"
+ },
+ "WEB-PRJ-061": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "h1|qureshi textiles"
+ },
+ "WEB-PRJ-062": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "button|share"
+ },
+ "WEB-PRJ-063": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "button|actions"
+ },
+ "WEB-PRJ-064": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "a|new subfolder"
+ },
+ "WEB-PRJ-065": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "button|send to a teammate"
+ },
+ "WEB-PRJ-066": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "button|sent to"
+ },
+ "WEB-PRJ-067": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-PRJ-068": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "button|move"
+ },
+ "WEB-PRJ-069": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-PRJ-070": {
+  "type": "control",
+  "page": "project-screens",
+  "scope": "main",
+  "key": "button|delete"
+ },
+ "WEB-PRJ-071": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "h1|qureshi textiles"
+ },
+ "WEB-PRJ-072": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "button|share"
+ },
+ "WEB-PRJ-073": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "button|actions"
+ },
+ "WEB-PRJ-074": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "a|new subfolder"
+ },
+ "WEB-PRJ-075": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "button|send to a teammate"
+ },
+ "WEB-PRJ-076": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "button|sent to"
+ },
+ "WEB-PRJ-077": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-PRJ-078": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "button|move"
+ },
+ "WEB-PRJ-079": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-PRJ-080": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "button|delete"
+ },
+ "WEB-PRJ-081": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "h3|paste instructions"
+ },
+ "WEB-PRJ-082": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "label|name"
+ },
+ "WEB-PRJ-083": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "label|instructions"
+ },
+ "WEB-PRJ-084": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "button|add instructions"
+ },
+ "WEB-PRJ-085": {
+  "type": "control",
+  "page": "project-files",
+  "scope": "main",
+  "key": "h3|files"
+ },
+ "WEB-PRJ-086": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "h1|qureshi textiles"
+ },
+ "WEB-PRJ-087": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|share"
+ },
+ "WEB-PRJ-088": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|actions"
+ },
+ "WEB-PRJ-089": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "a|new subfolder"
+ },
+ "WEB-PRJ-090": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|send to a teammate"
+ },
+ "WEB-PRJ-091": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|sent to"
+ },
+ "WEB-PRJ-092": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-PRJ-093": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|move"
+ },
+ "WEB-PRJ-094": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-PRJ-095": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|delete"
+ },
+ "WEB-PRJ-096": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "label|ask about qureshi textiles"
+ },
+ "WEB-PRJ-097": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|english"
+ },
+ "WEB-PRJ-098": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|roman urdu"
+ },
+ "WEB-PRJ-099": {
+  "type": "control",
+  "page": "project-ask",
+  "scope": "main",
+  "key": "button|ask asking…"
+ },
+ "WEB-PRJ-100": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "h1|qureshi textiles"
+ },
+ "WEB-PRJ-101": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "button|share"
+ },
+ "WEB-PRJ-102": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "button|actions"
+ },
+ "WEB-PRJ-103": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "a|new subfolder"
+ },
+ "WEB-PRJ-104": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "button|send to a teammate"
+ },
+ "WEB-PRJ-105": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "button|sent to"
+ },
+ "WEB-PRJ-106": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-PRJ-107": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "button|move"
+ },
+ "WEB-PRJ-108": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-PRJ-109": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "button|delete"
+ },
+ "WEB-PRJ-110": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "h3|add a rule"
+ },
+ "WEB-PRJ-111": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "label|kind"
+ },
+ "WEB-PRJ-112": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "option|title contains"
+ },
+ "WEB-PRJ-113": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "option|app is"
+ },
+ "WEB-PRJ-114": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "option|caller is (phone or email)"
+ },
+ "WEB-PRJ-115": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "label|value"
+ },
+ "WEB-PRJ-116": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "button|add"
+ },
+ "WEB-PRJ-117": {
+  "type": "control",
+  "page": "project-rules",
+  "scope": "main",
+  "key": "button|remove"
+ },
+ "WEB-SRC-001": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "h1|search"
+ },
+ "WEB-SRC-002": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "label|q"
+ },
+ "WEB-SRC-003": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "label|project"
+ },
+ "WEB-SRC-004": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|any project"
+ },
+ "WEB-SRC-005": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|qureshi textiles"
+ },
+ "WEB-SRC-006": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "label|app"
+ },
+ "WEB-SRC-007": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|any app"
+ },
+ "WEB-SRC-008": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|whatsapp"
+ },
+ "WEB-SRC-009": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|whatsapp business"
+ },
+ "WEB-SRC-010": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|whatsapp web"
+ },
+ "WEB-SRC-011": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|google meet"
+ },
+ "WEB-SRC-012": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|zoom"
+ },
+ "WEB-SRC-013": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|microsoft teams"
+ },
+ "WEB-SRC-014": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|telegram"
+ },
+ "WEB-SRC-015": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|signal"
+ },
+ "WEB-SRC-016": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|messenger"
+ },
+ "WEB-SRC-017": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|instagram"
+ },
+ "WEB-SRC-018": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|skype"
+ },
+ "WEB-SRC-019": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|slack"
+ },
+ "WEB-SRC-020": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|discord"
+ },
+ "WEB-SRC-021": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|phone call"
+ },
+ "WEB-SRC-022": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|voice note"
+ },
+ "WEB-SRC-023": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|other"
+ },
+ "WEB-SRC-024": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "label|device"
+ },
+ "WEB-SRC-025": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|any device"
+ },
+ "WEB-SRC-026": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|phone"
+ },
+ "WEB-SRC-027": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|desktop"
+ },
+ "WEB-SRC-028": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|web"
+ },
+ "WEB-SRC-029": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "label|status"
+ },
+ "WEB-SRC-030": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|any status"
+ },
+ "WEB-SRC-031": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|recording"
+ },
+ "WEB-SRC-032": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|uploading"
+ },
+ "WEB-SRC-033": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|processing"
+ },
+ "WEB-SRC-034": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|completed"
+ },
+ "WEB-SRC-035": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|failed"
+ },
+ "WEB-SRC-036": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "label|from"
+ },
+ "WEB-SRC-037": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "select|month"
+ },
+ "WEB-SRC-038": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "label|to"
+ },
+ "WEB-SRC-039": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "label|bookmark tag"
+ },
+ "WEB-SRC-040": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|any tag"
+ },
+ "WEB-SRC-041": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|requirement"
+ },
+ "WEB-SRC-042": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|budget"
+ },
+ "WEB-SRC-043": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|deadline"
+ },
+ "WEB-SRC-044": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|decision"
+ },
+ "WEB-SRC-045": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "option|follow-up"
+ },
+ "WEB-SRC-046": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "label|bookmarked only"
+ },
+ "WEB-SRC-047": {
+  "type": "control",
+  "page": "search",
+  "scope": "main",
+  "key": "a|payment terms for the march shipment"
+ },
+ "WEB-UPL-001": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "h1|upload"
+ },
+ "WEB-UPL-002": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "button|record a voice note"
+ },
+ "WEB-UPL-003": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "a|get the apps"
+ },
+ "WEB-UPL-004": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "label|project no project qureshi textiles"
+ },
+ "WEB-UPL-005": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|no project"
+ },
+ "WEB-UPL-006": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|qureshi textiles"
+ },
+ "WEB-UPL-007": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|auto (english / urdu / arabic)"
+ },
+ "WEB-UPL-008": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|english only"
+ },
+ "WEB-UPL-009": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|urdu (with english words)"
+ },
+ "WEB-UPL-010": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|arabic (with english words)"
+ },
+ "WEB-UPL-011": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|french"
+ },
+ "WEB-UPL-012": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|german"
+ },
+ "WEB-UPL-013": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|spanish"
+ },
+ "WEB-UPL-014": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|italian"
+ },
+ "WEB-UPL-015": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|portuguese"
+ },
+ "WEB-UPL-016": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|dutch"
+ },
+ "WEB-UPL-017": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|turkish"
+ },
+ "WEB-UPL-018": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "option|russian"
+ },
+ "WEB-UPL-019": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "button|upload"
+ },
+ "WEB-UPL-020": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "button|clear"
+ },
+ "WEB-UPL-021": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "a|open"
+ },
+ "WEB-UPL-022": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "button|retry"
+ },
+ "WEB-UPL-023": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "button|cancel"
+ },
+ "WEB-UPL-024": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "button|remove"
+ },
+ "WEB-UPL-025": {
+  "type": "control",
+  "page": "upload",
+  "scope": "main",
+  "key": "button|clear the list"
+ },
+ "WEB-ACT-001": {
+  "type": "control",
+  "page": "activity",
+  "scope": "main",
+  "key": "h1|activity"
+ },
+ "WEB-ACT-002": {
+  "type": "control",
+  "page": "activity",
+  "scope": "main",
+  "key": "button|mark all as read"
+ },
+ "WEB-ACT-003": {
+  "type": "control",
+  "page": "activity",
+  "scope": "main",
+  "key": "h2|needs action"
+ },
+ "WEB-ACT-004": {
+  "type": "control",
+  "page": "activity",
+  "scope": "main",
+  "key": "h2|today"
+ },
+ "WEB-ACT-005": {
+  "type": "control",
+  "page": "activity",
+  "scope": "main",
+  "key": "button|unread: transcript ready : am payment terms for the march shipment"
+ },
+ "WEB-SHR-001": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "h1|shares"
+ },
+ "WEB-SHR-002": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "h2|filters"
+ },
+ "WEB-SHR-003": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "button|reset"
+ },
+ "WEB-SHR-004": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "label|status"
+ },
+ "WEB-SHR-005": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "option|all"
+ },
+ "WEB-SHR-006": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "option|active"
+ },
+ "WEB-SHR-007": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "option|revoked or expired"
+ },
+ "WEB-SHR-008": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "button|apply filters"
+ },
+ "WEB-SHR-009": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "th|shared"
+ },
+ "WEB-SHR-010": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "th|who can open it"
+ },
+ "WEB-SHR-011": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "th|status"
+ },
+ "WEB-SHR-012": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "th|downloads"
+ },
+ "WEB-SHR-013": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "th|expires"
+ },
+ "WEB-SHR-014": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "th|views"
+ },
+ "WEB-SHR-015": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "button|views"
+ },
+ "WEB-SHR-016": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "th|last opened"
+ },
+ "WEB-SHR-017": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "th|made"
+ },
+ "WEB-SHR-018": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "button|made"
+ },
+ "WEB-SHR-019": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "th|actions"
+ },
+ "WEB-SHR-020": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "a|payment terms for the march shipment recording"
+ },
+ "WEB-SHR-021": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "button|access log"
+ },
+ "WEB-SHR-022": {
+  "type": "control",
+  "page": "shares",
+  "scope": "main",
+  "key": "button|revoke"
+ },
+ "WEB-SHR-023": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "h1|shared with me"
+ },
+ "WEB-SHR-024": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "label|search"
+ },
+ "WEB-SHR-025": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "input|search"
+ },
+ "WEB-SHR-026": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "th|title"
+ },
+ "WEB-SHR-027": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "th|from"
+ },
+ "WEB-SHR-028": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "th|note"
+ },
+ "WEB-SHR-029": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "th|sent"
+ },
+ "WEB-SHR-030": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "button|sent"
+ },
+ "WEB-SHR-031": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "th|saved"
+ },
+ "WEB-SHR-032": {
+  "type": "control",
+  "page": "shared-with-me",
+  "scope": "main",
+  "key": "h2|nothing shared with you yet"
+ },
+ "WEB-SHR-033": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "h1|request links"
+ },
+ "WEB-SHR-034": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "button|new request link"
+ },
+ "WEB-SHR-035": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "label|search"
+ },
+ "WEB-SHR-036": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "input|search"
+ },
+ "WEB-SHR-037": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "th|title"
+ },
+ "WEB-SHR-038": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "th|goes to"
+ },
+ "WEB-SHR-039": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "th|received"
+ },
+ "WEB-SHR-040": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "th|status"
+ },
+ "WEB-SHR-041": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "th|open until"
+ },
+ "WEB-SHR-042": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "th|made"
+ },
+ "WEB-SHR-043": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "th|action"
+ },
+ "WEB-SHR-044": {
+  "type": "control",
+  "page": "request-links",
+  "scope": "main",
+  "key": "button|revoke"
+ },
+ "WEB-TRS-001": {
+  "type": "control",
+  "page": "recently-deleted",
+  "scope": "main",
+  "key": "h1|recently deleted"
+ },
+ "WEB-TRS-002": {
+  "type": "control",
+  "page": "recently-deleted",
+  "scope": "main",
+  "key": "th|title"
+ },
+ "WEB-TRS-003": {
+  "type": "control",
+  "page": "recently-deleted",
+  "scope": "main",
+  "key": "th|project"
+ },
+ "WEB-TRS-004": {
+  "type": "control",
+  "page": "recently-deleted",
+  "scope": "main",
+  "key": "th|recorded"
+ },
+ "WEB-TRS-005": {
+  "type": "control",
+  "page": "recently-deleted",
+  "scope": "main",
+  "key": "th|deleted"
+ },
+ "WEB-TRS-006": {
+  "type": "control",
+  "page": "recently-deleted",
+  "scope": "main",
+  "key": "th|erased"
+ },
+ "WEB-TRS-007": {
+  "type": "control",
+  "page": "recently-deleted",
+  "scope": "main",
+  "key": "th|actions"
+ },
+ "WEB-TRS-008": {
+  "type": "control",
+  "page": "recently-deleted",
+  "scope": "main",
+  "key": "button|restore"
+ },
+ "WEB-TRS-009": {
+  "type": "control",
+  "page": "recently-deleted",
+  "scope": "main",
+  "key": "button|delete now"
+ },
+ "WEB-DEV-001": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "h1|devices"
+ },
+ "WEB-DEV-002": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "button|sign in a device"
+ },
+ "WEB-DEV-003": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "label|search"
+ },
+ "WEB-DEV-004": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "input|search"
+ },
+ "WEB-DEV-005": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "h2|filters"
+ },
+ "WEB-DEV-006": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "button|reset"
+ },
+ "WEB-DEV-007": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "label|show"
+ },
+ "WEB-DEV-008": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "option|signed in"
+ },
+ "WEB-DEV-009": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "option|signed out"
+ },
+ "WEB-DEV-010": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "option|all"
+ },
+ "WEB-DEV-011": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "button|apply filters"
+ },
+ "WEB-DEV-012": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "button|remove filter"
+ },
+ "WEB-DEV-013": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "button|remove all filters"
+ },
+ "WEB-DEV-014": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "th|name"
+ },
+ "WEB-DEV-015": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "th|status"
+ },
+ "WEB-DEV-016": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "th|type"
+ },
+ "WEB-DEV-017": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "th|platform"
+ },
+ "WEB-DEV-018": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "th|app"
+ },
+ "WEB-DEV-019": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "th|recordings"
+ },
+ "WEB-DEV-020": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "th|last seen"
+ },
+ "WEB-DEV-021": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "th|signed in"
+ },
+ "WEB-DEV-022": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "th|actions"
+ },
+ "WEB-DEV-023": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-DEV-024": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "button|sign out"
+ },
+ "WEB-DEV-025": {
+  "type": "control",
+  "page": "devices",
+  "scope": "main",
+  "key": "button|remove from list"
+ },
+ "WEB-USG-001": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "h1|usage"
+ },
+ "WEB-USG-002": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "button|download csv"
+ },
+ "WEB-USG-003": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "label|month"
+ },
+ "WEB-USG-004": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|november"
+ },
+ "WEB-USG-005": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|october"
+ },
+ "WEB-USG-006": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|september"
+ },
+ "WEB-USG-007": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|august"
+ },
+ "WEB-USG-008": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|july"
+ },
+ "WEB-USG-009": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|june"
+ },
+ "WEB-USG-010": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|may"
+ },
+ "WEB-USG-011": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|april"
+ },
+ "WEB-USG-012": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|march"
+ },
+ "WEB-USG-013": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|february"
+ },
+ "WEB-USG-014": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|january"
+ },
+ "WEB-USG-015": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "option|december"
+ },
+ "WEB-USG-016": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "h2|limits this month"
+ },
+ "WEB-USG-017": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "h2|by person"
+ },
+ "WEB-USG-018": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "h2|billable minutes per day"
+ },
+ "WEB-USG-019": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "h2|last six months"
+ },
+ "WEB-USG-020": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "h2|totals"
+ },
+ "WEB-USG-021": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "h2|by device"
+ },
+ "WEB-USG-022": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "h2|top projects"
+ },
+ "WEB-USG-023": {
+  "type": "control",
+  "page": "usage",
+  "scope": "main",
+  "key": "h2|per language"
+ },
+ "WEB-WSP-001": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "h1|workspace"
+ },
+ "WEB-WSP-002": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|switch workspace"
+ },
+ "WEB-WSP-003": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|invite"
+ },
+ "WEB-WSP-004": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|invite link"
+ },
+ "WEB-WSP-005": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|rename"
+ },
+ "WEB-WSP-006": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|hand over"
+ },
+ "WEB-WSP-007": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|delete workspace"
+ },
+ "WEB-WSP-008": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "h2|people"
+ },
+ "WEB-WSP-009": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|name"
+ },
+ "WEB-WSP-010": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|email"
+ },
+ "WEB-WSP-011": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|role"
+ },
+ "WEB-WSP-012": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|actions"
+ },
+ "WEB-WSP-013": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|change role"
+ },
+ "WEB-WSP-014": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|remove"
+ },
+ "WEB-WSP-015": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "h2|pending invitations"
+ },
+ "WEB-WSP-016": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|sent"
+ },
+ "WEB-WSP-017": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|ends"
+ },
+ "WEB-WSP-018": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|resend"
+ },
+ "WEB-WSP-019": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|cancel"
+ },
+ "WEB-WSP-020": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "h2|invite links"
+ },
+ "WEB-WSP-021": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "h2|what each role may do"
+ },
+ "WEB-WSP-022": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "button|expand section"
+ },
+ "WEB-WSP-023": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|may"
+ },
+ "WEB-WSP-024": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|owneryou"
+ },
+ "WEB-WSP-025": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|admin"
+ },
+ "WEB-WSP-026": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|member"
+ },
+ "WEB-WSP-027": {
+  "type": "control",
+  "page": "workspace",
+  "scope": "main",
+  "key": "th|viewer"
+ },
+ "WEB-HLP-001": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "h1|help"
+ },
+ "WEB-HLP-002": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|contact support"
+ },
+ "WEB-HLP-003": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "h2|the guide"
+ },
+ "WEB-HLP-004": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "label|search the guide"
+ },
+ "WEB-HLP-005": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "input|search the guide: captions, voice notes, sharing…"
+ },
+ "WEB-HLP-006": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|install the windows app"
+ },
+ "WEB-HLP-007": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|install the mac app"
+ },
+ "WEB-HLP-008": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|install the phone app"
+ },
+ "WEB-HLP-009": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|what works where"
+ },
+ "WEB-HLP-010": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|sign in on your devices"
+ },
+ "WEB-HLP-011": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|plans and your own transcription key (since v.)"
+ },
+ "WEB-HLP-012": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|find your way in the computer app (since v.)"
+ },
+ "WEB-HLP-013": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|find your way in the web console (since v.)"
+ },
+ "WEB-HLP-014": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|record automatically"
+ },
+ "WEB-HLP-015": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|live captions"
+ },
+ "WEB-HLP-016": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|after a call"
+ },
+ "WEB-HLP-017": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|bookmarks"
+ },
+ "WEB-HLP-018": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|dictation"
+ },
+ "WEB-HLP-019": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|search"
+ },
+ "WEB-HLP-020": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|import, rename, export and share"
+ },
+ "WEB-HLP-021": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|projects and vocabulary"
+ },
+ "WEB-HLP-022": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|languages"
+ },
+ "WEB-HLP-023": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|app lock"
+ },
+ "WEB-HLP-024": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|notifications (since v.)"
+ },
+ "WEB-HLP-025": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|keep recordings for a set time (retention)"
+ },
+ "WEB-HLP-026": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|usage and budget"
+ },
+ "WEB-HLP-027": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|plans, paid features and your own transcription key (computer, since v.)"
+ },
+ "WEB-HLP-028": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|screen moments: what was on the screen (since v.)"
+ },
+ "WEB-HLP-029": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|ask an ai assistant about your recordings (since v.)"
+ },
+ "WEB-HLP-030": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|live translate: games and videos"
+ },
+ "WEB-HLP-031": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "button|something is wrong?"
+ },
+ "WEB-HLP-032": {
+  "type": "control",
+  "page": "help",
+  "scope": "main",
+  "key": "h2|what's new"
+ },
+ "WEB-GTA-001": {
+  "type": "control",
+  "page": "get-the-apps",
+  "scope": "main",
+  "key": "h1|get the apps"
+ },
+ "WEB-GTA-002": {
+  "type": "control",
+  "page": "get-the-apps",
+  "scope": "main",
+  "key": "h2|download"
+ },
+ "WEB-GTA-003": {
+  "type": "control",
+  "page": "get-the-apps",
+  "scope": "main",
+  "key": "a|downloads page"
+ },
+ "WEB-GTA-004": {
+  "type": "control",
+  "page": "get-the-apps",
+  "scope": "main",
+  "key": "h2|then"
+ },
+ "WEB-GTA-005": {
+  "type": "control",
+  "page": "get-the-apps",
+  "scope": "main",
+  "key": "a|continue to echoledger"
+ },
+ "WEB-LAS-001": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "h1|live assist preps"
+ },
+ "WEB-LAS-002": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "button|new prep"
+ },
+ "WEB-LAS-003": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "h2|filters"
+ },
+ "WEB-LAS-004": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "button|reset"
+ },
+ "WEB-LAS-005": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "label|show"
+ },
+ "WEB-LAS-006": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "option|to come"
+ },
+ "WEB-LAS-007": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "option|all"
+ },
+ "WEB-LAS-008": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "button|apply filters"
+ },
+ "WEB-LAS-009": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "button|remove filter"
+ },
+ "WEB-LAS-010": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "button|remove all filters"
+ },
+ "WEB-LAS-011": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "th|meeting"
+ },
+ "WEB-LAS-012": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "th|project"
+ },
+ "WEB-LAS-013": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "th|mode"
+ },
+ "WEB-LAS-014": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "th|documents"
+ },
+ "WEB-LAS-015": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "th|when"
+ },
+ "WEB-LAS-016": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "button|when"
+ },
+ "WEB-LAS-017": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "th|status"
+ },
+ "WEB-LAS-018": {
+  "type": "control",
+  "page": "assist-preps",
+  "scope": "main",
+  "key": "h2|no preps yet"
+ },
+ "WEB-LAS-019": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "h1|live assist sessions"
+ },
+ "WEB-LAS-020": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "h2|filters"
+ },
+ "WEB-LAS-021": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "button|reset"
+ },
+ "WEB-LAS-022": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "label|show"
+ },
+ "WEB-LAS-023": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "option|all"
+ },
+ "WEB-LAS-024": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "option|calls"
+ },
+ "WEB-LAS-025": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "option|practice"
+ },
+ "WEB-LAS-026": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "button|apply filters"
+ },
+ "WEB-LAS-027": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "th|started"
+ },
+ "WEB-LAS-028": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "button|started"
+ },
+ "WEB-LAS-029": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "th|kind"
+ },
+ "WEB-LAS-030": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "th|mode"
+ },
+ "WEB-LAS-031": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "th|on"
+ },
+ "WEB-LAS-032": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "th|length"
+ },
+ "WEB-LAS-033": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "th|report"
+ },
+ "WEB-LAS-034": {
+  "type": "control",
+  "page": "assist-sessions",
+  "scope": "main",
+  "key": "h2|no sessions yet"
+ },
+ "WEB-LAS-035": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "h1|live assist settings"
+ },
+ "WEB-LAS-036": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "h2|interview"
+ },
+ "WEB-LAS-037": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "label|mode*"
+ },
+ "WEB-LAS-038": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|fast"
+ },
+ "WEB-LAS-039": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|balanced"
+ },
+ "WEB-LAS-040": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|deep"
+ },
+ "WEB-LAS-041": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|max"
+ },
+ "WEB-LAS-042": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "label|hints*"
+ },
+ "WEB-LAS-043": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|keywords"
+ },
+ "WEB-LAS-044": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|outline"
+ },
+ "WEB-LAS-045": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|full answer"
+ },
+ "WEB-LAS-046": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "label|language help*"
+ },
+ "WEB-LAS-047": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|off"
+ },
+ "WEB-LAS-048": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|urdu"
+ },
+ "WEB-LAS-049": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|roman urdu"
+ },
+ "WEB-LAS-050": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "option|arabic"
+ },
+ "WEB-LAS-051": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "h2|boss"
+ },
+ "WEB-LAS-052": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "h2|existing client"
+ },
+ "WEB-LAS-053": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "h2|new client"
+ },
+ "WEB-LAS-054": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "h2|general"
+ },
+ "WEB-LAS-055": {
+  "type": "control",
+  "page": "assist-settings",
+  "scope": "main",
+  "key": "button|save"
+ },
+ "WEB-SET-001": {
+  "type": "control",
+  "page": "settings",
+  "scope": "main",
+  "key": "h1|settings"
+ },
+ "WEB-SET-002": {
+  "type": "control",
+  "page": "settings",
+  "scope": "main",
+  "key": "a|bilal qureshi bilal@qureshi-textiles.example personal personal, owner"
+ },
+ "WEB-SET-003": {
+  "type": "control",
+  "page": "settings",
+  "scope": "main",
+  "key": "a|upgrade"
+ },
+ "WEB-SET-004": {
+  "type": "control",
+  "page": "settings",
+  "scope": "main",
+  "key": "h2|this month"
+ },
+ "WEB-SET-005": {
+  "type": "control",
+  "page": "settings",
+  "scope": "main",
+  "key": "a|plan & usage personal"
+ },
+ "WEB-SET-006": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-007": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "h1|language"
+ },
+ "WEB-SET-008": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "label|language"
+ },
+ "WEB-SET-009": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|automatic"
+ },
+ "WEB-SET-010": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|english"
+ },
+ "WEB-SET-011": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|urdu"
+ },
+ "WEB-SET-012": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|arabic"
+ },
+ "WEB-SET-013": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|french"
+ },
+ "WEB-SET-014": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|german"
+ },
+ "WEB-SET-015": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|spanish"
+ },
+ "WEB-SET-016": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|italian"
+ },
+ "WEB-SET-017": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|portuguese"
+ },
+ "WEB-SET-018": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|dutch"
+ },
+ "WEB-SET-019": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|turkish"
+ },
+ "WEB-SET-020": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "option|russian"
+ },
+ "WEB-SET-021": {
+  "type": "control",
+  "page": "settings-language",
+  "scope": "main",
+  "key": "button|reset to defaults"
+ },
+ "WEB-SET-022": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-023": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "h1|appearance"
+ },
+ "WEB-SET-024": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|system"
+ },
+ "WEB-SET-025": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|light"
+ },
+ "WEB-SET-026": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|dark"
+ },
+ "WEB-SET-028": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|comfortable"
+ },
+ "WEB-SET-029": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|compact"
+ },
+ "WEB-SET-030": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|-hour"
+ },
+ "WEB-SET-031": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|list"
+ },
+ "WEB-SET-032": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|table"
+ },
+ "WEB-SET-033": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|reset to defaults"
+ },
+ "WEB-SET-034": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-035": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "h1|notifications"
+ },
+ "WEB-SET-036": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "h2|email me about"
+ },
+ "WEB-SET-037": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "switch|transcription"
+ },
+ "WEB-SET-038": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "switch|enhancement"
+ },
+ "WEB-SET-039": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "switch|sharing"
+ },
+ "WEB-SET-040": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "switch|usage & limits"
+ },
+ "WEB-SET-041": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "switch|app updates"
+ },
+ "WEB-SET-042": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "switch|other"
+ },
+ "WEB-SET-043": {
+  "type": "control",
+  "page": "settings-notifications",
+  "scope": "main",
+  "key": "button|reset to defaults"
+ },
+ "WEB-SET-044": {
+  "type": "control",
+  "page": "settings-storage",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-045": {
+  "type": "control",
+  "page": "settings-storage",
+  "scope": "main",
+  "key": "h1|storage"
+ },
+ "WEB-SET-046": {
+  "type": "control",
+  "page": "settings-storage",
+  "scope": "main",
+  "key": "a|bin hours"
+ },
+ "WEB-SET-047": {
+  "type": "control",
+  "page": "settings-shortcuts",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-048": {
+  "type": "control",
+  "page": "settings-shortcuts",
+  "scope": "main",
+  "key": "h1|keyboard shortcuts"
+ },
+ "WEB-SET-049": {
+  "type": "control",
+  "page": "settings-shortcuts",
+  "scope": "main",
+  "key": "h2|everywhere"
+ },
+ "WEB-SET-050": {
+  "type": "control",
+  "page": "settings-shortcuts",
+  "scope": "main",
+  "key": "h2|in the library"
+ },
+ "WEB-SET-051": {
+  "type": "control",
+  "page": "settings-shortcuts",
+  "scope": "main",
+  "key": "h2|on a recording"
+ },
+ "WEB-SET-052": {
+  "type": "control",
+  "page": "settings-profile",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-053": {
+  "type": "control",
+  "page": "settings-profile",
+  "scope": "main",
+  "key": "h1|profile"
+ },
+ "WEB-SET-054": {
+  "type": "control",
+  "page": "settings-profile",
+  "scope": "main",
+  "key": "label|name"
+ },
+ "WEB-SET-055": {
+  "type": "control",
+  "page": "settings-profile",
+  "scope": "main",
+  "key": "label|email"
+ },
+ "WEB-SET-056": {
+  "type": "control",
+  "page": "settings-profile",
+  "scope": "main",
+  "key": "button|save changes"
+ },
+ "WEB-SET-057": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-058": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "h1|plan & usage"
+ },
+ "WEB-SET-059": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "h2|personal plan"
+ },
+ "WEB-SET-060": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "a|upgrade to pro"
+ },
+ "WEB-SET-061": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "h2|this month"
+ },
+ "WEB-SET-062": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "h2|included in your plan"
+ },
+ "WEB-SET-063": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "a|usage details"
+ },
+ "WEB-SET-064": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "th|feature"
+ },
+ "WEB-SET-065": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "th|free"
+ },
+ "WEB-SET-066": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "th|pro"
+ },
+ "WEB-SET-067": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "th|business"
+ },
+ "WEB-SET-068": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "h2|plans"
+ },
+ "WEB-SET-069": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "h3|pro"
+ },
+ "WEB-SET-070": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "a|choose pro"
+ },
+ "WEB-SET-071": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "h3|business"
+ },
+ "WEB-SET-072": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "a|choose business"
+ },
+ "WEB-SET-073": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "h2|payments"
+ },
+ "WEB-SET-074": {
+  "type": "control",
+  "page": "settings-plan",
+  "scope": "main",
+  "key": "button|promo code add"
+ },
+ "WEB-SET-075": {
+  "type": "control",
+  "page": "settings-security",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-076": {
+  "type": "control",
+  "page": "settings-security",
+  "scope": "main",
+  "key": "h1|sign-in & security"
+ },
+ "WEB-SET-077": {
+  "type": "control",
+  "page": "settings-security",
+  "scope": "main",
+  "key": "button|password"
+ },
+ "WEB-SET-078": {
+  "type": "control",
+  "page": "settings-security",
+  "scope": "main",
+  "key": "button|two-step sign-in off"
+ },
+ "WEB-SET-079": {
+  "type": "control",
+  "page": "settings-security",
+  "scope": "main",
+  "key": "h2|passkeys"
+ },
+ "WEB-SET-080": {
+  "type": "control",
+  "page": "settings-security",
+  "scope": "main",
+  "key": "label|add a passkey"
+ },
+ "WEB-SET-081": {
+  "type": "control",
+  "page": "settings-security",
+  "scope": "main",
+  "key": "button|add"
+ },
+ "WEB-SET-082": {
+  "type": "control",
+  "page": "settings-security",
+  "scope": "main",
+  "key": "a|sign-in activity"
+ },
+ "WEB-SET-083": {
+  "type": "control",
+  "page": "settings-security",
+  "scope": "main",
+  "key": "button|sign out everywhere"
+ },
+ "WEB-SET-084": {
+  "type": "control",
+  "page": "settings-devices",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-085": {
+  "type": "control",
+  "page": "settings-devices",
+  "scope": "main",
+  "key": "h1|devices"
+ },
+ "WEB-SET-086": {
+  "type": "control",
+  "page": "settings-devices",
+  "scope": "main",
+  "key": "button|galaxy s active s ago"
+ },
+ "WEB-SET-087": {
+  "type": "control",
+  "page": "settings-devices",
+  "scope": "main",
+  "key": "button|sign in a device"
+ },
+ "WEB-SET-088": {
+  "type": "control",
+  "page": "settings-devices",
+  "scope": "main",
+  "key": "h2|connected apps"
+ },
+ "WEB-SET-089": {
+  "type": "control",
+  "page": "settings-privacy",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-090": {
+  "type": "control",
+  "page": "settings-privacy",
+  "scope": "main",
+  "key": "h1|privacy & data"
+ },
+ "WEB-SET-091": {
+  "type": "control",
+  "page": "settings-privacy",
+  "scope": "main",
+  "key": "button|recording consent acknowledged on nov"
+ },
+ "WEB-SET-092": {
+  "type": "control",
+  "page": "settings-privacy",
+  "scope": "main",
+  "key": "button|export my data"
+ },
+ "WEB-SET-093": {
+  "type": "control",
+  "page": "settings-privacy",
+  "scope": "main",
+  "key": "button|support access off"
+ },
+ "WEB-SET-094": {
+  "type": "control",
+  "page": "settings-privacy",
+  "scope": "main",
+  "key": "a|delete my account"
+ },
+ "WEB-SET-095": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "a|settings"
+ },
+ "WEB-SET-096": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "h1|help"
+ },
+ "WEB-SET-097": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "h2|questions"
+ },
+ "WEB-SET-098": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "a|open upgrade"
+ },
+ "WEB-SET-099": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "a|open upgrade request"
+ },
+ "WEB-SET-100": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "a|open payment receipt"
+ },
+ "WEB-SET-101": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "a|open transcription minutes"
+ },
+ "WEB-SET-102": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "a|open theme"
+ },
+ "WEB-SET-103": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "a|open delete my account"
+ },
+ "WEB-SET-104": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "a|get the apps"
+ },
+ "WEB-SET-105": {
+  "type": "control",
+  "page": "settings-help",
+  "scope": "main",
+  "key": "a|keyboard shortcuts"
+ },
+ "WEB-LIB-110": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "h2|today"
+ },
+ "WEB-LIB-112": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|untranscribed"
+ },
+ "WEB-LIB-118": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|select all"
+ },
+ "WEB-LIB-119": {
+  "type": "exportformats",
+  "formats": [
+   "docx",
+   "txt",
+   "md",
+   "srt",
+   "vtt",
+   "json"
+  ]
+ },
+ "WEB-LIB-123": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|select all"
+ },
+ "WEB-REC-063": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "tab|moments"
+ },
+ "WEB-REC-064": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|revoke"
+ },
+ "WEB-REC-065": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|accept"
+ },
+ "WEB-REC-066": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "button|find and replace"
+ },
+ "WEB-HOM-001": {
+  "type": "html",
+  "page": "home",
+  "contains": [
+   "wire:name=\"App\\Filament\\Widgets\\SourceStatsOverview\""
+  ]
+ },
+ "WEB-HOM-002": {
+  "type": "html",
+  "page": "home",
+  "contains": [
+   "wire:name=\"App\\Filament\\Widgets\\SessionsChart\""
+  ]
+ },
+ "WEB-HOM-003": {
+  "type": "html",
+  "page": "home",
+  "contains": [
+   "wire:name=\"App\\Filament\\Widgets\\StorageOverview\""
+  ]
+ },
+ "WEB-SET-106": {
+  "type": "html",
+  "page": "settings-appearance",
+  "contains": [
+   "Search settings"
+  ]
+ },
+ "WEB-SET-108": {
+  "type": "html",
+  "page": "settings-appearance",
+  "contains": [
+   "el-settings-nav"
+  ]
+ },
+ "WEB-APP-005": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|switch back to classic"
+ }
 }
