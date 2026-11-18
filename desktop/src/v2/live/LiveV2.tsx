@@ -64,7 +64,7 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
           <Status kind={strip.kind} live>{strip.text}</Status>
           <span className="el-page__actions">
             {onVoiceNote && !status.recording && <Button onClick={onVoiceNote} icon={Icons.MicIcon}>Voice note</Button>}
-            {onRecord && <Button variant={status.recording ? "danger" : "primary"} icon={Icons.RecordIcon} onClick={onRecord}>{status.recording ? "Stop and save" : "Record now"}</Button>}
+            {onRecord && <Button variant={status.recording ? "danger" : "primary"} icon={Icons.RecordIcon} onClick={onRecord}>{status.recording ? "Stop and save" : "Record"}</Button>}
           </span>
         </Card>
         <Card>

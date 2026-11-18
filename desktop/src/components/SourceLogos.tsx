@@ -94,11 +94,11 @@ const MARKS: Record<string, (size: number, label?: string) => ReactNode> = {
 
 /** Which sources have a mark of their own. */
 export function hasSourceLogo(app: string | null | undefined): boolean {
-  return !!app && app in MARKS;
+  return !!app && Object.prototype.hasOwnProperty.call(MARKS, app);
 }
 
 /** The app's mark at `size` px (decorative unless `label` names it), or null when the source has none. */
 export function SourceLogo({ app, size = 40, label }: { app: string | null | undefined; size?: number; label?: string }) {
-  const mark = app ? MARKS[app] : undefined;
+  const mark = app && Object.prototype.hasOwnProperty.call(MARKS, app) ? MARKS[app] : undefined;
   return mark ? <>{mark(size, label)}</> : null;
 }

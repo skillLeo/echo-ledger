@@ -19,6 +19,10 @@ describe("source logos", () => {
     expect(hasSourceLogo("telegram")).toBe(true);
     expect(hasSourceLogo("discord")).toBe(false);
     expect(hasSourceLogo(null)).toBe(false);
+    // Only the marks' own names: never a property every object has.
+    expect(hasSourceLogo("constructor")).toBe(false);
+    expect(hasSourceLogo("toString")).toBe(false);
+    expect(render(<SourceLogo app="constructor" />).container).toBeEmptyDOMElement();
     const { container } = render(<SourceLogo app="carrier_pigeon" />);
     expect(container).toBeEmptyDOMElement();
   });

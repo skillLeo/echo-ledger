@@ -114,7 +114,7 @@ export function paletteCommands(status: AppStatus, actions: {
   const list: PaletteCommand[] = [
     recording
       ? { id: "stop", label: "Stop recording", keywords: "end finish save", run: () => actions.run(api.stopRecording) }
-      : { id: "start", label: "Record now", keywords: "start recording call meeting voice note begin", run: () => actions.run(api.recordNow) },
+      : { id: "start", label: actions.v2 ? "Record" : "Record now", keywords: "record now start recording call meeting voice note begin", run: () => actions.run(api.recordNow) },
   ];
   if (recording) {
     list.push(status.paused

@@ -563,7 +563,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top }:
                 <Button variant="quiet" icon={Icons.SelectIcon} title={`Select (${MOD}A selects all)`} onClick={() => setSelecting(true)}>Select</Button>
               )}
               {onImport && <Button onClick={onImport}>Import</Button>}
-              {onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>New recording</Button>}
+              {onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>}
             </div>
           </header>
         )}

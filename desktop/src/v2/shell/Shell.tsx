@@ -2,7 +2,10 @@
 // Library, Projects, Live and Ask; at the foot Activity (with how many need you), Settings, the account and the status
 // line. Record opens the page where recording starts (today's Home and its Live Assist card). Modules not rebuilt yet
 // show today's page inside the new frame; Live and Ask, without their page yet, say where to find them meanwhile.
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+
+/** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
+const PRESS_HOLD_MS = 3000;
 import { Avatar, Badge, Button, EmptyState, Icon, Icons, NavItem, Sidebar, Status } from "../components";
 import { Menu } from "../components/Menu";
 import { initials } from "../settings/initials";
@@ -48,8 +51,10 @@ export type ShellProps = {
   activity?: number;
   /** A recording is under way: Record says so and stops it. */
   recording?: boolean;
-  /** Record now (or stop); without it (a viewer) Record opens the Record page. */
-  onRecord?: () => void;
+  /** Record now (or stop); without it (a viewer) Record opens the Record page. Its promise ends when the core answered. */
+  onRecord?: () => unknown;
+  /** "Needs setup" in the status line opens Setup & health. */
+  onSetup?: () => void;
   onVoiceNote?: () => void;
   /** Upload files (the Record menu), Search (the palette, with its keys) and Help & shortcuts, as classic's sidebar. */
   onUpload?: () => void;
@@ -60,7 +65,23 @@ export type ShellProps = {
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onVoiceNote, onUpload, onSearch, searchKeys, onHelp, children }: ShellProps) {
+export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onSearch, searchKeys, onHelp, children }: ShellProps) {
+  // One press records or stops: while that is under way (the core answering, then the status saying so) more presses
+  // and held-down keys do nothing, so a double click never starts and stops at once.
+  const [pressing, setPressing] = useState<{ from: boolean } | null>(null);
+  if (pressing && !!recording !== pressing.from) setPressing(null);
+  useEffect(() => {
+    if (!pressing) return;
+    const fallback = window.setTimeout(() => setPressing(null), PRESS_HOLD_MS);
+    return () => window.clearTimeout(fallback);
+  }, [pressing]);
+  const pressRecord = () => {
+    if (!onRecord) return go("record");
+    if (pressing) return;
+    setPressing({ from: !!recording });
+    void Promise.resolve(onRecord()).catch(() => setPressing(null));
+  };
+  const stops = !!onRecord && !!recording;
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   // Anything that opens a page of the app (a notice, the palette, a link) leaves Live or Ask. Worked out while
@@ -100,18 +121,25 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
                 <span className="el-visually-hidden" id="el-shell-me-hint">Opens Settings</span>
               </button>
             )}
-            <div className="el-shell__status el-caption"><Status kind={status.kind} live>{status.text}</Status></div>
+            <div className="el-shell__status el-caption">
+              {status.kind === "setup" && onSetup ? (
+                <button type="button" className="el-shell__status-fix" onClick={onSetup} aria-describedby="el-shell-setup-hint">
+                  <Status kind={status.kind} live>{status.text}</Status>
+                  <span className="el-visually-hidden" id="el-shell-setup-hint">Opens Setup & health</span>
+                </button>
+              ) : <Status kind={status.kind} live>{status.text}</Status>}
+            </div>
           </div>
         }>
         {/* ● Record: one press records (or stops); its menu has a voice note and the Record page (calls ready, Live
             Assist), the sheet the phone opens on a long press. */}
-        <div className="el-shell__record" role="group" aria-label="Record">
-          <Button variant={recording ? "danger" : "primary"} icon={recording ? Icons.StopIcon : Icons.RecordIcon}
-            onClick={() => (onRecord ? onRecord() : go("record"))}>{recording ? "Stop recording" : "Record"}</Button>
-          <Menu label="More ways to record" button={{ variant: recording ? "danger" : "primary", icon: Icons.ChevronDownIcon }} items={[
+        <div className="el-shell__record" role="group" aria-label="Record" aria-current={current === "record" ? "page" : undefined}>
+          <Button variant={stops ? "danger" : "primary"} icon={stops ? Icons.StopIcon : Icons.RecordIcon} aria-disabled={pressing ? true : undefined}
+            onKeyDown={(e) => { if (e.repeat) e.preventDefault(); }} onClick={pressRecord}>{stops ? "Stop recording" : "Record"}</Button>
+          <Menu label="More ways to record" button={{ variant: stops ? "danger" : "primary", icon: Icons.ChevronDownIcon }} items={[
             ...(onVoiceNote ? [{ label: "Voice note", icon: Icons.MicIcon, onPick: onVoiceNote }] : []),
             ...(onUpload ? [{ label: "Upload files…", icon: Icons.ShareIcon, onPick: onUpload }] : []),
-            { label: "Record page", icon: Icons.HomeIcon, checked: current === "record", onPick: () => go("record") },
+            { label: "Record page", icon: Icons.HomeIcon, onPick: () => go("record") },
           ]} />
         </div>
         {onSearch && (
@@ -133,8 +161,8 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
           <section className="content page-live">{live}</section>
         ) : own === "live" ? (
           <EmptyState icon={Icons.RecordIcon} title="Live is on its way"
-            body="Live Assist, Live Translate and Dictation will have their place here. Until then, start them from Record or the tray."
-            action={<Button onClick={() => go("record")}>Open Record</Button>} />
+            body="Live Assist, Live Translate and Dictation will have their place here. Until then, start them from the Record page or the tray."
+            action={<Button onClick={() => go("record")}>Open Record page</Button>} />
         ) : own === "ask" && ask ? (
           <section className="content page-ask">{ask}</section>
         ) : own === "ask" ? (

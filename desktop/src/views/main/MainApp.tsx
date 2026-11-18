@@ -861,7 +861,8 @@ export default function MainApp() {
       <>
         <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
         <Suspense fallback={null}>
-          <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? record : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+          <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+            onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
             onUpload={canRecord ? () => void pickImport() : undefined} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={() => setHelp(true)}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
             notices={<Suspense fallback={null}><div className="el-root el-embedded">

@@ -91,7 +91,7 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
         <Status kind={strip.kind} live>{strip.text}</Status>
         {strip.kind === "recording" ? (onStop && <Button variant="danger" onClick={onStop}>Stop and save</Button>)
           : strip.kind === "setup" ? <Button variant="primary" onClick={onSetup}>Fix setup</Button>
-            : onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record now</Button>}
+            : onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>}
       </Card>
 
       {list && (

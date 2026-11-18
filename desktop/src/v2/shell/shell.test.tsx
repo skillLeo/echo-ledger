@@ -36,6 +36,40 @@ describe("the shell", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Ready to record");
   });
 
+  it("two quick presses (or a held key) on Record start exactly one recording; it works again once the status says so", async () => {
+    let answer: () => void = () => undefined;
+    const onRecord = vi.fn(() => new Promise<void>((done) => { answer = done; }));
+    const { rerender } = render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onRecord={onRecord}><p /></Shell>);
+    const record = () => within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: /^(Record|Stop recording)$/ });
+    fireEvent.click(record());
+    fireEvent.click(record());
+    fireEvent.keyDown(record(), { key: "Enter", repeat: true });
+    fireEvent.click(record());
+    expect(onRecord).toHaveBeenCalledTimes(1);
+    await act(async () => answer());
+    // Still blocked until the status changes to recording; then one press stops it.
+    fireEvent.click(record());
+    expect(onRecord).toHaveBeenCalledTimes(1);
+    rerender(<Shell tab="library" onGo={() => undefined} status={{ kind: "recording", text: "Recording 00:01" }} recording onRecord={onRecord}><p /></Shell>);
+    expect(record()).toHaveTextContent("Stop recording");
+    fireEvent.click(record());
+    fireEvent.click(record());
+    expect(onRecord).toHaveBeenCalledTimes(2);
+  });
+
+  it("without onRecord (a viewer) Record never says Stop recording; Needs setup opens Setup & health; the Record group marks the Record page", () => {
+    const onSetup = vi.fn();
+    render(<Shell tab="record" onGo={() => undefined} status={{ kind: "setup", text: "Needs setup" }} recording onSetup={onSetup}><p /></Shell>);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    expect(within(nav).getByRole("button", { name: "Record" })).toBeInTheDocument();
+    expect(within(nav).queryByRole("button", { name: "Stop recording" })).toBeNull();
+    expect(within(nav).getByRole("group", { name: "Record" })).toHaveAttribute("aria-current", "page");
+    fireEvent.click(within(nav).getByRole("button", { name: /Needs setup/ }));
+    expect(onSetup).toHaveBeenCalled();
+    fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
+    expect(screen.getByRole("menuitem", { name: "Record page" })).not.toHaveAttribute("aria-checked");
+  });
+
   it("Search (with its keys), Upload files in Record's menu, and Help & shortcuts at the foot, as classic's sidebar had", () => {
     const onSearch = vi.fn();
     const onUpload = vi.fn();
@@ -72,7 +106,7 @@ describe("the shell", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Voice note" }));
     expect(onVoiceNote).toHaveBeenCalled();
     fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Record page" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
     expect(onGo).toHaveBeenLastCalledWith("record");
     rerender(<Shell tab="library" onGo={onGo} status={{ kind: "recording", text: "Recording 00:04" }} recording onRecord={onRecord}><p /></Shell>);
     fireEvent.click(within(nav).getByRole("button", { name: "Stop recording" }));
@@ -276,7 +310,7 @@ describe("the app with the flags", () => {
     expect(input).toHaveFocus();
     // Every group and command classic has; the new design's Record page by its name.
     const labels = () => within(palette).queryAllByRole("option").map((o) => o.textContent);
-    expect(labels()).toEqual(expect.arrayContaining(["Record now", "Capture voice note playing now", "Copy the last 2 minutes of captions", "Go to Projects", "Go to Activity", "Go to Shared", "Go to Record page", "Help & shortcuts", "Sync the library"]));
+    expect(labels()).toEqual(expect.arrayContaining(["Record", "Capture voice note playing now", "Copy the last 2 minutes of captions", "Go to Projects", "Go to Activity", "Go to Shared", "Go to Record page", "Help & shortcuts", "Sync the library"]));
     expect(labels()).not.toContain("Go to Home");
     fireEvent.change(input, { target: { value: "activ" } });
     expect(within(palette).getAllByRole("option")[0]).toHaveTextContent("Go to Activity");

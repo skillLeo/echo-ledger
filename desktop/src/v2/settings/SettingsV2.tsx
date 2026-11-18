@@ -23,7 +23,7 @@ export const GOAL_GROUPS: readonly { title: string; icon: IconType; description:
   { title: "Live & overlays", icon: Icons.CaptionsIcon, description: "Captions during calls, and what others see when you share your screen.", ids: ["captions", "share_privacy"] },
   { title: "Privacy & data", icon: Icons.PrivacyIcon, description: "What is kept, for how long, and the app lock.", ids: ["privacy", "storage", "lock"] },
   { title: "Notifications", icon: Icons.BellIcon, description: "What EchoLedger tells you, and when.", ids: ["notifications"] },
-  { title: "Appearance", icon: Icons.AppearanceIcon, description: "Theme, text size and the design.", ids: ["appearance"] },
+  { title: "Appearance", icon: Icons.AppearanceIcon, description: "Theme, sidebar, density, times and the design.", ids: ["appearance"] },
   { title: "Account & plan", icon: Icons.UserIcon, description: "Your profile, plan, sign-in security and devices.", ids: ["profile", "plan", "security", "devices"] },
   { title: "Setup & health", icon: Icons.ReadyIcon, description: "Check that recording works on this computer.", ids: ["setup_health"] },
   { title: "Shortcuts & start-up", icon: Icons.KeyboardIcon, description: "Keys that start things, and opening EchoLedger when you sign in.", ids: ["shortcuts", "app.autostart"] },
