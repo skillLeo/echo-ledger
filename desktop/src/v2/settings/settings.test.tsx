@@ -32,6 +32,19 @@ describe("the goal groups", () => {
     ]);
   });
 
+  it("each has an icon and a one-line description, read with the group (PLAN_V2_PARITY 5)", async () => {
+    for (const g of GOAL_GROUPS) {
+      expect(g.icon, g.title).toBeTypeOf("function");
+      expect(g.description, g.title).toMatch(/^[A-Z].{10,80}\.$/);
+    }
+    expect(new Set(GOAL_GROUPS.map((g) => g.icon)).size).toBe(GOAL_GROUPS.length);
+    render(<SettingsV2 available={() => true} renderPage={() => null} />);
+    await act(flushAsync);
+    const recording = screen.getByRole("region", { name: "Recording" });
+    expect(recording).toHaveAccessibleDescription("Which calls are recorded, and the microphone, screen and voice used.");
+    expect(recording.querySelector(".el-group__label .el-icon")).not.toBeNull();
+  });
+
   it("a result opens its page, scrolled to the setting", () => {
     expect(sectionFor(findSetting("calls")!)).toBe("calls");
     expect(sectionFor(findSetting("calls.skip_short")!)).toBe("calls#calls.skip_short");

@@ -54,13 +54,14 @@ describe("one icon family", () => {
     }
   });
 
-  it("uses one stroke width, and only the two icon files and the brand's mark draw SVG", () => {
+  it("uses one stroke width, and only the two icon files, the brand's mark and the source apps' logos draw SVG", () => {
     expect(Icons.ICON_STROKE).toBe(1.75);
     const files = (dir: string): string[] => readdirSync(dir).flatMap((f) => {
       const path = join(dir, f);
       return statSync(path).isDirectory() ? files(path) : [path];
     });
-    const DRAWERS = ["components/Icons.tsx", "components/ControlIcons.tsx", "components/BrandMark.tsx"];
+    // SourceLogos.tsx: other apps' own marks (WhatsApp, Zoom…), which no line icon may stand in for (PLAN_V2_PARITY 3).
+    const DRAWERS = ["components/Icons.tsx", "components/ControlIcons.tsx", "components/BrandMark.tsx", "components/SourceLogos.tsx"];
     const offenders: string[] = [];
     for (const file of files(src)) {
       const name = relative(src, file).split("\\").join("/");
