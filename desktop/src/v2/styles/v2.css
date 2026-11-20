@@ -1125,3 +1125,12 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-bookmarks { display: flex; flex-wrap: wrap; gap: var(--el-space-8); padding: 0 var(--el-space-16) var(--el-space-12); }
 .el-row__label { padding-inline: var(--el-space-4); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); white-space: nowrap; }
 .el-drawer .el-page__head { padding-inline-end: var(--el-space-40); }
+
+/* Urdu never goes below urdu.caption (14/28): Nastaliq at the 12 px caption size cannot be read (D4 §2). Numbers,
+   times and code inside keep their own LTR face and size (.el-num, .el-code). */
+:lang(ur) :is(.el-button--sm, .el-field__hint, .el-field__error, .el-badge, .el-segment__note, .el-markdown table,
+  .el-swatch--auto, .el-palette .palette-group-head, .el-palette .palette-detail, .el-palette .palette-empty,
+  .el-palette .palette-foot, .el-table thead th, .el-table__group th, .el-nav-item--sub, .el-row__label) {
+  font-size: var(--el-text-urdu-caption-size);
+  line-height: var(--el-text-urdu-caption-line);
+}

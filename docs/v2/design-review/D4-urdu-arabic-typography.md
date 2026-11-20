@@ -10,13 +10,17 @@ Status: rules v1, 2026-11-21. The tokens are in tokens/global/type.json and are 
 | Urdu | Noto Nastaliq Urdu | bundled, with `unicode-range` limited to Arabic-script letters (desktop/src/styles.css:10) |
 | Arabic | Noto Naskh Arabic, then IBM Plex Sans Arabic | bundled, same range |
 
-- **Choosing the face for a text.** Urdu and Arabic share one script, so the font comes from the text's **language**, not its letters.
-  - UI text uses the app language.
-  - A transcript uses the transcript's language.
-  - Free text of unknown language (titles, notes) is Urdu when it contains an Urdu-only letter (ٹ ڈ ڑ ں ے ۓ ھ ہ ک گ پ چ ژ). Otherwise it follows the app language.
-  - Set `lang` on the element (`lang="ur"` / `lang="ar"`; on Android `LocaleSpan` or `TextStyle(localeList)`). Do not pick a font family in a screen.
-- Latin words and digits inside Urdu use Inter. That comes from the font fallback, so screens don't need to do anything.
-- Never use the phone's decorative system font for Arabic script, even when "Use phone font" is on. That switch changes the Latin face only (D1).
+- **Which language a text is.** Urdu and Arabic share one script, so decide in this order:
+  1. UI strings use the app language. A transcript uses its transcript language.
+  2. Free text (titles, notes, names, previews) is decided from its letters:
+     - **no Arabic-script letter** → Latin: LTR, the app's sans face, even in the Urdu UI (this matches EchoV2Theme `content()`);
+     - **Arabic script with an Urdu-only letter** (ٹ ڈ ڑ ں ے ۓ ھ ہ ی ک گ پ چ ژ) → Urdu;
+     - **other Arabic-script text** → the app language if it is ur or ar; otherwise Arabic.
+- **How each platform picks the face.** Screens never name a family; the shared type styles do it.
+  - Desktop classic: `--font-sans` is Inter first (styles.css:103). The Noto faces are `@font-face` rules limited to Arabic-script letters (styles.css:10–11), and `[lang="ur"]` / `[lang="ar"]` rules put Nastaliq or Naskh first for that element. Latin letters inside keep Inter.
+  - Desktop/web v2: `.el-root:lang(ur)` and `[lang="ar"]` switch to the `font.family.urdu` / `.arabic` token stacks (v2.css). Those stacks end in the system sans, so Latin inside Urdu currently falls to the system face, not Inter. **Follow-up (EL-Design, D1):** put Inter after the Noto face in both token stacks.
+  - Android v2: `EchoV2Type` sets the family explicitly. Urdu UI uses the bundled `noto_nastaliq_urdu`, Latin-only content switches to the bundled Inter (`latin`), and Arabic content must use the bundled `noto_naskh_arabic`. Never rely on `localeList` alone: it lets the system pick its own Arabic-script font.
+- The phone's decorative system font is never used for Arabic script, even when "Use phone font" is on. That switch changes the Latin face only (D1).
 
 ## 2. Sizes and line heights (tokens)
 Nastaliq has tall ascenders, deep descenders and a sloping baseline. At the same pixel size it reads about 2 px smaller than Latin, so it needs about 1.9–2× line height. Naskh needs about 1.7×.
@@ -37,7 +41,7 @@ Nastaliq has tall ascenders, deep descenders and a sloping baseline. At the same
 
 ## 3. Containers: no clipping
 1. **No fixed height on anything that holds text.** Use `min-height` / `Modifier.heightIn(min = …)` with block padding. A fixed 32 px chip clips Nastaliq descenders, and so does a 40 px tab.
-2. A single-line control's height is its token line height plus padding. Example: an Urdu chip is 28 + 2×4 = 36 px; a Latin chip is 32.
+2. A single-line control's height is its token line height plus padding. Example: an Urdu chip is 28 + 2×4 = 36 px; the Latin v2 chip is 28 (v2.css:291–293).
 3. Don't use `overflow: hidden` / `clipToBounds` on a text's block axis unless the box is at least one full token line tall. Horizontal clipping for an ellipsis is fine.
 4. Icons next to Urdu text centre on the line box, not the baseline. Nastaliq's baseline is low, so baseline alignment drops the icon.
 5. Segmented controls and tabs with mixed scripts (for example "Roman Urdu · اردو · Original") take the tallest line height of their labels, so every segment has the same height. On desktop, styles.css:360 sets `line-height: 1` on the Urdu segment. That clips; use the `urdu-caption` line instead.
@@ -51,13 +55,18 @@ Nastaliq has tall ascenders, deep descenders and a sloping baseline. At the same
 - **UI strings in the app language take the page direction.** They need nothing extra.
 
 ## 5. Things that stay left-to-right inside RTL
-Wrap each of these in an LTR isolate: web/desktop `<bdi dir="ltr">` or the `.el-num` class (`direction: ltr; unicode-bidi: isolate`); Android `BidiFormatter.getInstance(true).unicodeWrap(s, TextDirectionHeuristicsCompat.LTR)` or `⁦…⁩`.
+Wrap each of these in an LTR isolate (LRI U+2066 … PDI U+2069): web/desktop `<bdi dir="ltr">` or the `.el-num` class (`direction: ltr; unicode-bidi: isolate`); Android `BidiFormatter.getInstance(true).unicodeWrap(s, TextDirectionHeuristicsCompat.LTR)` or `⁦…⁩`.
 - times and durations (`8:12 AM`, `0:00 / 2:15`, `42:10`), speeds (`1×`), dates written with digits, percentages, file sizes;
 - phone numbers (`+92 300 1234567`), emails, URLs, file names, version numbers;
 - keyboard shortcuts (`Ctrl + Shift + D`, `Ctrl+K`);
 - Roman Urdu and English brand names inside an Urdu sentence (WhatsApp, Microsoft Teams).
 
 **Digits:** use Western digits 0–9 in every language, including the Urdu and Arabic UI. That's how Pakistani users write times and money, and it keeps timestamps, durations and phone numbers identical across languages. Format dates through the locale with Latin digits (`ur-PK-u-nu-latn`, `ar-u-nu-latn`): "20 اکتوبر 2026".
+
+## 5a. Urdu and Arabic punctuation
+- In ur/ar strings use the script's own marks: full stop ۔ (Urdu, U+06D4) or . (Arabic), comma ، (U+060C), question mark ؟ (U+061F), semicolon ؛ (U+061B). Never use the Latin ? or , in Urdu copy.
+- Inside a Latin isolate (a time, an email), punctuation stays Latin.
+- String reviews (EL-UX's strings_v2_* and the web/desktop ur files) check for this; a Latin "?" in an ur string is a copy bug.
 
 ## 6. Truncation
 - The ellipsis goes at the **logical end of the text's own direction.** An Urdu title is cut on the left; an English title in an Urdu window is cut on the right. That only works when the element itself has the text's direction (section 4). An element that inherits the page direction cuts at the wrong end, which is the "Urdu titles cut at the wrong end" bug.
@@ -84,9 +93,9 @@ Desktop: `[dir=rtl] .icon-directional { transform: scaleX(-1) }`. Only icons mar
 - The search field sits in the Urdu layout and searches both scripts. Highlight hits inside an isolate so the highlight span doesn't reorder the line.
 
 ## 9. Transcript lines
-- Each line gets its own direction (`dir="auto"` per segment), with speaker + timestamp as one LTR isolate at the line's start edge.
+- Each line gets its own direction (`dir="auto"` per segment). The speaker name gets its own `dir="auto"` (Urdu names stay RTL), and only the timestamp is an LTR isolate.
 - Urdu lines use `urdu-transcript` (19/38), with 8 px between lines of the same speaker and 16 px when the speaker changes.
-- Roman Urdu transcripts are Latin text: LTR and Inter, even in the Urdu UI.
+- Roman Urdu transcripts are Latin text: LTR and the app's sans face, even in the Urdu UI.
 
 ## 10. Check list (every screen, EN + UR, light + dark)
 1. No clipped ascenders or descenders. Check chips, tabs, segmented controls, buttons, badges and list titles at text 100 % and 200 %.
@@ -97,23 +106,26 @@ Desktop: `[dir=rtl] .icon-directional { transform: scaleX(-1) }`. Only icons mar
 6. No Urdu text smaller than 14 px.
 7. Use the real sample strings, not lorem: the Urdu and mixed titles in the desktop sample data (F1) and the phone gate3 samples.
 
-Automatic checks (EL-Fix, in widthcheck / sidebyside):
+Automatic checks (EL-Fix; widthcheck.mjs exists on b-desktop-ux / F1 and lands with it):
 - A text element whose `scrollHeight > clientHeight + 1` with `overflow-y` not visible counts as clipped.
 - A time-like string (`\d+:\d{2}`) whose visual order differs from its logical order counts as reversed.
-- Any `font-size` under 14 px on a `:lang(ur)` element counts as too small.
+- Any `font-size` under 14 px on a `:lang(ur)` element counts as too small, except LTR isolates (`.el-num`, `bdi[dir=ltr]`, `[dir=ltr]`), which keep the Latin size.
 
 ## 11. Hand-off
 **EL-Fix (classic desktop: styles.css and views; lock per bug):**
 - D-163: `dir="auto"` on banner text, page descriptions, the Re-transcribe notice, transcript segments and every list title (section 4).
 - Isolates for times, durations, speed, phone numbers and the AM/PM time in list rows (section 5). The player's time readout gets `dir="ltr"`.
 - Player transport + waveform `dir="ltr"` (section 7). Settings row chevrons flip in RTL.
-- styles.css:360: the Urdu segment's `line-height: 1` → `var(--el-text-urdu-caption-line)` (section 3.5).
-- styles.css:12–13: transcript sizes → `--el-text-urdu-transcript-*` / `--el-text-arabic-transcript-*` (same values, from tokens).
-- Add the three automatic checks above to widthcheck.mjs.
+- styles.css:360: the Urdu segment's `line-height: 1` → `var(--el-text-urdu-caption-line)` (section 3.5). styles.css:356 `height: 30px` on the segmented control → `min-height` (section 3.1). **Visual change.**
+- styles.css:12–13: transcript sizes → `--el-text-urdu-transcript-*` (19/38, the same values) and `--el-text-arabic-transcript-*` (18/30, which is 0.6 px tighter than today's 18 × 1.7 = 30.6). **Visual change (Arabic only, tiny).**
+- Add the three automatic checks above to widthcheck.mjs once F1 lands.
 
 **EL-UX (v2, all platforms):**
 - Phone list titles: `TextDirection.Content` + `maxLines = 2` for Urdu. Dates through the Latin-digit locale (this also covers U1-U4-visual point 11).
 - Use `.el-num` / `<bdi>` for every time and number on desktop/web v2 screens.
 - Phone: BidiFormatter for joined strings ("WhatsApp call · 5:12").
 
-**EL-Design (this branch):** the Urdu/Arabic tokens for title, caption and transcript; v2.css Urdu titles and captions now read the tokens (same values as before) and gain the Arabic equivalents. Next with D3: the icon map's `directional` flag. Next with D6: shared components that carry `dir="auto"` and the isolates, so screens don't have to.
+**EL-Design (phone theme; after b-phone-parity merges, because that branch rewrites EchoV2Theme.kt):**
+- EchoV2Theme.kt `face()` scales every Urdu line by 30/16. That gives title.l 45 and title.m 37.5 instead of the tokens' 44/40, and leaves the Urdu caption at 12 sp. Map them to the tokens instead: titleL/M/S → `urduTitleL/M/S`, caption/captionStrong → `urduCaption` (14/28), meta → 14/28, body → `urduBody`. Add `arabic*` styles that use the bundled Naskh. **Visual change**: Urdu captions grow from 12 to 14 sp, so phone pictures need re-shooting (EL-UX re-shoots the screens it owns).
+
+**EL-Design (this branch):** the Urdu/Arabic tokens for title, caption and transcript; v2.css Urdu titles and captions now read the tokens (same values as before) and gain the Arabic equivalents. v2.css: every element that used the 12 px caption size (small buttons, field hints and errors, badges, segment notes, markdown tables, swatches, the palette, table headers, sub-nav items, row labels) now uses urdu-caption 14/28 under `:lang(ur)`. **Visual change**: re-shoot the gallery in UR. Next with D3: the icon map's `directional` flag. Next with D6: shared components that carry `dir="auto"` and the isolates, so screens don't have to.
