@@ -86,6 +86,20 @@ default; chosen at Gate 3.
 One outline set for web and desktop (Lucide or Phosphor, 1.5 px stroke, 16/20/24), mapped by name to SF Symbols,
 Material Symbols and Fluent icons (record, transcribe, ask, moment, shield-private…). No emoji.
 
+### Settings icons (D3)
+One map for every platform: tokens/icons/settings.json. It holds the group and page ids of docs/v2/IA.md 5, each with its Lucide name (desktop and web), its Material Outlined name (the phone) and the console's `<x-el.v2.icon>` name where one exists.
+- **One meaning, one glyph.** No two groups share a glyph, and no two pages in a group share one. A group's glyph differs from its pages' glyphs; the only exception is a group with a single page (Notifications, Appearance, Setup & health). tokens/test checks all of this on desktop and on the phone.
+- **Where they show.** Group headers use the accent colour; page rows use text-secondary. Both are 20 px on desktop and web, 24 dp on the phone.
+- **Right to left.** Two glyphs mirror: Sign out's arrow, and Help's question mark, which reads as ؟ in Urdu and Arabic. Use AutoMirrored on the phone and `directional` on desktop. No other settings glyph mirrors.
+
+What the screens change to match the map (owner EL-UX; the phone icons arrive in EchoIcons.kt with D10):
+| where | now | map |
+|---|---|---|
+| desktop GOAL_GROUPS (settings/SettingsV2.tsx:21–30) | Live & overlays: captions; About & help: circle-help | radio; life-buoy |
+| desktop ROOT_ICONS (components/Icons.tsx:435–439) | profile: user; security: shield | user-round-pen; fingerprint |
+| phone SettingsGoal (settings/SettingsTree.kt:10–18 on ui/U1-4-visual) | Recording: Mic; Transcription: Notes; Account: AccountCircle; Setup: HealthAndSafety; About: Info | RadioButtonChecked; Description; Person; CheckCircle; Support |
+| phone page icons (SettingsTree.kt:49–68) | voice: VoiceNote = Mic (three mics in a row); language: Language (globe); account: AccountCircle; plan: WorkspacePremium | GraphicEq; Translate; ManageAccounts (the map's id is profile); CreditCard |
+
 ## Components (same names and options on every platform)
 Button · TextField · Select · SearchField · FilterBar · Chip · ListRow (RecordingRow, SettingRow) · Card (mixed items
 only) · Table (admin and usage only) · Tabs · Segmented · Dialog/Sheet · Toast with Undo · Banner · Badge/Status ·
