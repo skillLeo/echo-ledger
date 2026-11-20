@@ -1471,6 +1471,65 @@ html .fi-body .el-player .el-chip {
     }
 }
 
+/* ================================================================== U7 visual: top bar gap, toolbar under 720, meta separators */
+
+/* The bell's count stays inside the bell's own box, and the avatar keeps a clear space after it. */
+.v2-tb .fi-topbar-database-notifications-btn .fi-icon-btn-badge-ctn {
+    top: 0;
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+    translate: none;
+}
+
+.v2-tb > .v2-um {
+    margin-inline-start: var(--el-space-8);
+}
+
+/* Under 720: the search and the Filters button on one row; Source, the order, Group by and List / Table in one row
+   below that scrolls sideways, as the saved views do. */
+@media (max-width: 720px) {
+    .v2-library .fi-ta-header-toolbar > div:last-child:has(> .v2-lib-tools) {
+        min-width: 0;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child .fi-ta-search-field > .fi-input-wrp {
+        flex: 1 1 0;
+        order: 1;
+        min-width: 0;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child .fi-ta-filters-dropdown > .fi-dropdown-trigger {
+        order: 2;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools {
+        display: flex;
+        flex: 1 0 100%;
+        flex-wrap: nowrap;
+        order: 3;
+        margin-inline: calc(var(--el-layout-page-padding-mobile) * -1);
+        padding-inline: var(--el-layout-page-padding-mobile);
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools::-webkit-scrollbar {
+        display: none;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools > * {
+        flex: none;
+    }
+}
+
+/* The recording's meta line: each "·" stays with the item after it, so a line never ends in a separator. */
+.v2-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    white-space: nowrap;
+}
+
 /* ================================================================== 6. Moments */
 
 .v2-moment-list {

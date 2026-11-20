@@ -212,6 +212,19 @@ it('lets a row\'s title take its own direction, so an English title in Urdu ends
     expect($html)->toContain('<span class="v2-row-title" dir="auto">Payment terms for the March shipment</span>');
 });
 
+it('keeps the bell\'s count inside the bell with space before the avatar, puts the toolbar in two rows under 720, and keeps each meta separator with its item', function () {
+    $css = (string) preg_replace('/\s+/', ' ', (string) preg_replace('~/\*.*?\*/~s', '', (string) file_get_contents(resource_path('css/v2/console.css'))));
+    expect($css)
+        ->toContain('.v2-tb .fi-topbar-database-notifications-btn .fi-icon-btn-badge-ctn { top: 0; inset-inline-start: auto; inset-inline-end: 0; translate: none; }')
+        ->toContain('.v2-tb > .v2-um { margin-inline-start: var(--el-space-8); }')
+        ->toContain('.v2-library .fi-ta-header-toolbar > div:last-child .fi-ta-filters-dropdown > .fi-dropdown-trigger { order: 2; }')
+        ->toContain('.v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools { display: flex; flex: 1 0 100%; flex-wrap: nowrap; order: 3;')
+        ->toContain('overflow-x: auto;')
+        ->toContain('.v2-meta-item { display: inline-flex; align-items: center; gap: var(--el-space-8); white-space: nowrap; }');
+    // The toolbar's two rows are for phones only.
+    expect(strpos($css, '@media (max-width: 720px) { .v2-library .fi-ta-header-toolbar > div:last-child:has(> .v2-lib-tools) { min-width: 0; }'))->not->toBeFalse();
+});
+
 it('says how many calls wait for a decision, with Review, in one quiet line', function () {
     $page = Livewire::test(ListCaptureSessions::class);
     expect($page->html())->toContain('1 call waiting for a decision')->toContain('data-waiting="1"');
