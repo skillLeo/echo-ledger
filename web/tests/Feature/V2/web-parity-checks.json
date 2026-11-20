@@ -383,8 +383,8 @@
    "button|player options",
    "button|roman urdu",
    "button|write notes",
-   "button|access log",
-   "button|revoke"
+   "menuitem|actions › access log",
+   "menuitem|actions › revoke"
   ]
  },
  "WEB-PRJ-001": {
@@ -620,11 +620,11 @@
   "page": "shares",
   "scope": "main",
   "keys": [
+   "button|column manager",
    "button|views",
-   "button|made",
    "a|payment terms for the march shipment recording",
-   "button|access log",
-   "button|revoke"
+   "menuitem|actions › access log",
+   "menuitem|actions › revoke"
   ]
  },
  "WEB-SHR-003": {
@@ -643,7 +643,8 @@
   "keys": [
    "button|new request link",
    "input|search",
-   "button|revoke"
+   "button|column manager",
+   "menuitem|actions › revoke"
   ]
  },
  "WEB-TRS-001": {
@@ -674,9 +675,9 @@
    "input|search",
    "button|remove filter",
    "button|remove all filters",
-   "button|rename",
-   "button|sign out",
-   "button|remove from list"
+   "menuitem|actions › rename",
+   "menuitem|actions › sign out",
+   "menuitem|actions › remove from list"
   ]
  },
  "WEB-USG-001": {
@@ -1007,7 +1008,7 @@
   "type": "control",
   "page": "recording",
   "scope": "main",
-  "key": "button|revoke"
+  "key": "menuitem|actions › revoke"
  },
  "WEB-REC-014": {
   "type": "html",
