@@ -76,14 +76,21 @@ class AppearanceNotificationsParityTest : ScreenTest() {
         pumpUntil("defaults") { done(vm.settings.value) }
     }
 
-    private fun <S> compare(steps: List<S>, run: (S) -> Unit, where: Map<String, String>, reasons: Map<String, String>, again: () -> Unit) {
+    private fun <S> compare(
+        steps: List<S>,
+        run: (S) -> Unit,
+        where: Map<String, String>,
+        reasons: Map<String, String>,
+        v2Only: Map<String, String> = emptyMap(),
+        again: () -> Unit
+    ) {
         val today = ParityKit.shownIn(compose, steps, run)
         again()
         page = 1
         compose.waitForIdle()
         val v2 = ParityKit.shownIn(compose, steps, run)
         val first = { m: Map<String, List<S>> -> m.mapValues { it.value.first() } }
-        assertEquals(emptyList<String>(), ParityKit.problems(first(today), first(v2), where, reasons))
+        assertEquals(emptyList<String>(), ParityKit.problems(first(today), first(v2), where, reasons, v2Only))
         assertEquals(emptyList<String>(), ParityKit.presenceProblems(today, v2, where))
     }
 
@@ -132,11 +139,14 @@ class AppearanceNotificationsParityTest : ScreenTest() {
             "radio: System" to "radio: System",
             "radio: Light" to "radio: Light",
             "radio: Dark" to "radio: Dark",
-            "switch: Use phone font" to "switch: Use the phone's font"
+            "switch: Use phone font" to "switch: Use the phone's font",
+            "switch: Wallpaper colours" to "switch: Wallpaper colours"
         )
-        val wallpaper = "switch: Wallpaper colours" to "v2 takes no wallpaper colours (SettingsTree.hiddenItems)"
         val design = "button: Try the new design" to "the other direction: the new design offers Switch back to classic (DesignSwitchTest)"
-        compare(Step.entries, run, where, search + wallpaper + design) {
+        // Classic follows the phone's text size and language; the new design offers both (docs/PLAN_V2_PARITY.md section 5).
+        val v2Only = listOf("Smaller", "As on the phone", "Larger", "Largest", "English", "اردو")
+            .associate { "radio: $it" to "v2's own Text size and App language (V2AppearanceTest)" }
+        compare(Step.entries, run, where, search + design, v2Only) {
             defaults(start) { it.copy(themeMode = d.themeMode, phoneFont = d.phoneFont) }
         }
     }

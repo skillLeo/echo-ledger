@@ -4,7 +4,10 @@ import android.content.res.Resources
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -19,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.SettingsIndex
@@ -28,7 +33,6 @@ import com.echoledger.mobile.ui.v2.components.EchoDialog
 import com.echoledger.mobile.ui.v2.components.EchoEmptyState
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSearchField
-import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.help.HelpSource
@@ -267,11 +271,18 @@ fun V2SettingsRoot(
             }
             item { ProfileCardSlot(profile, onUpgrade, onRetryProfile) }
             SettingsTree.goals.forEach { (goal, pages) ->
-                item(key = goal.name) { EchoSectionHeader(stringResource(goal.title)) }
+                item(key = goal.name) { GoalHeader(goal) }
+                // Account & plan: this month's minutes first (Home's usage meter, docs/PLAN_V2_PARITY.md section 2).
+                if (goal == SettingsGoal.Account) {
+                    settings.plan.usedMinutes?.let { used ->
+                        item(key = "usage") { UsageMeter(used, settings.plan.monthlyMinutes) { onOpen("plan", "plan.usage") } }
+                    }
+                }
                 items(pages, key = { it }) { page ->
                     EchoSettingRow(
                         SettingsSearch.pageTitle(res, page),
                         value = pageValue(res, page, settings),
+                        icon = SettingsTree.pageIcons[page],
                         onClick = { onOpen(page, null) }
                     )
                 }
@@ -279,6 +290,70 @@ fun V2SettingsRoot(
             if (signedIn) {
                 item { EchoSettingRow(stringResource(R.string.v2_set_sign_out), icon = EchoIcons.SignOut, onClick = onSignOut) }
             }
+        }
+    }
+}
+
+/** A group's header: its icon, its name and its one line (docs/PLAN_V2_PARITY.md section 5). */
+@Composable
+private fun GoalHeader(goal: SettingsGoal) {
+    val c = EchoV2.colors
+    androidx.compose.foundation.layout.Row(
+        Modifier.padding(
+            start = EchoTokens.Layout.pagePaddingMobile,
+            end = EchoTokens.Layout.pagePaddingMobile,
+            top = EchoTokens.Space.s24,
+            bottom = EchoTokens.Space.s4
+        ),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        androidx.compose.material3.Icon(goal.icon, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
+        Column(Modifier.padding(start = EchoTokens.Space.s12).semantics(mergeDescendants = true) { heading() }) {
+            androidx.compose.material3.Text(stringResource(goal.title), style = EchoV2.type.label, color = c.textPrimary)
+            androidx.compose.material3.Text(stringResource(goal.description), style = EchoV2.type.caption, color = c.textSecondary)
+        }
+    }
+}
+
+/** This month's minutes as a bar ("120 of 300 minutes used"); it opens Plan & usage. */
+@Composable
+fun UsageMeter(used: Long, monthly: Long?, onClick: () -> Unit) {
+    val c = EchoV2.colors
+    val words = monthly?.let { stringResource(R.string.v2_set_usage_of, used.toInt(), it.toInt()) }
+        ?: stringResource(R.string.v2_set_usage_unlimited, used.toInt())
+    EchoSettingRow(
+        stringResource(R.string.v2_set_usage_title),
+        subtitle = words,
+        icon = EchoIcons.Plan,
+        onClick = onClick
+    )
+    monthly?.takeIf { it > 0 }?.let { limit ->
+        val share = (used.toFloat() / limit).coerceIn(0f, 1f)
+        androidx.compose.foundation.layout.Box(
+            Modifier
+                .padding(
+                    start = EchoTokens.Layout.pagePaddingMobile + EchoTokens.Icon.lg + EchoTokens.Space.s16,
+                    end = EchoTokens.Layout.pagePaddingMobile
+                )
+                .fillMaxWidth()
+                .height(EchoTokens.Space.s4)
+                .background(c.bgSubtle, androidx.compose.foundation.shape.RoundedCornerShape(EchoTokens.Radius.full))
+        ) {
+            androidx.compose.foundation.layout.Box(
+                Modifier
+                    .fillMaxWidth(share)
+                    .height(EchoTokens.Space.s4)
+                    .background(
+                        if (share >=
+                            0.9f
+                        ) {
+                            c.warning
+                        } else {
+                            c.accent
+                        },
+                        androidx.compose.foundation.shape.RoundedCornerShape(EchoTokens.Radius.full)
+                    )
+            )
         }
     }
 }

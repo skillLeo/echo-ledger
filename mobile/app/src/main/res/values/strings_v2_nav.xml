@@ -33,7 +33,6 @@
     <string name="v2_rs_off">off</string>
     <string name="v2_lib_setup_title">Finish setting up</string>
     <string name="v2_lib_setup_hide">Hide</string>
-    <string name="v2_lib_setup_hidden">Setup is in Settings › Setup &amp; health.</string>
     <string name="v2_lib_need_calls_off">Calls are not being recorded</string>
     <string name="v2_lib_need_waiting_one">1 call waiting for Keep or Discard</string>
     <string name="v2_lib_need_waiting">%1$d calls waiting for Keep or Discard</string>
