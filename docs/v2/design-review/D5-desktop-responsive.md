@@ -21,7 +21,7 @@ Status: rules v1, 2026-11-21. They are based on F1 (b-desktop-ux @ 4c69e2fe), wh
 
 Check list widths: **720, 756, 800, 1024, 1280, 1728**, each in light/dark, EN/UR, at text 100 % and 200 %.
 
-Known gap: the v2 `--el-breakpoint-compact` token is 720 (desktop/src/v2/styles/v2.css:802). The window can no longer be narrower than 720, so v2's rail rule never fires. **EL-Design will move the token to 780** so it matches classic. EL-Fix then updates tokensOnly.test.ts, which owns that check.
+Fixed with this rule set: the v2 sidebar rule used `--el-breakpoint-compact` (720), so it could never fire in a window that is at least 720 px wide. v2 now uses the new `--el-breakpoint-rail` token (780, the same as classic's AUTO_RAIL_BELOW). `compact` stays 720 for the web console. EL-Fix adds "780px" to the expected list in tokensOnly.test.ts:88.
 
 ## 3. Narrow page (< 798)
 1. **List → item.** Opening an item hides the list and its toolbar. The item fills the full width.
@@ -44,7 +44,7 @@ Known gap: the v2 `--el-breakpoint-compact` token is 720 (desktop/src/v2/styles/
 - **Player dock.** It is solid `--surface` with a hairline top border, sticks to the bottom of the scrolling area, and its height is published as `--player-dock-h`.
 - **Scroll padding.** Every scroller with sticky layers sets `scroll-padding-block-start` to the total height of the sticky layers above and `scroll-padding-block-end` to `--player-dock-h + --space-2`. Then J/K, Follow, search hits and `scrollIntoView` never land under a bar.
 - **Short window** (`max-height: 480px`, for example 200 % text in a small window): the player dock goes static, and only the top bar stays sticky.
-- **Layering:** sticky layers sit below the player dock, which sits below menus, which sit below dialogs. Menus and dialogs always sit above the player. There are no z-index tokens yet. EL-Design adds them (`z.sticky` < `z.dock` < `z.menu` < `z.dialog`, in tokens/global) with D6. Until then, keep today's values and don't add new ad-hoc ones.
+- **Layering:** use the layer tokens only: `--el-layer-sticky` 10 < `--el-layer-dock` 15 (new, the player dock) < `--el-layer-menu` 20 < `--el-layer-toast` 30 < `--el-layer-dialog` 40 < `--el-layer-overlay` 50. Menus, toasts and dialogs always sit above the player. Classic code moves to these values when it is next touched.
 
 ## 5. Columns at ≥ 798
 - **List column:** min 320 px, default 360, max 480. The person can resize it, and the choice is kept on this computer.
@@ -74,4 +74,4 @@ Known gap: the v2 `--el-breakpoint-compact` token is 720 (desktop/src/v2/styles/
 ## 9. Hand-off
 - **EL-Fix (classic):** sections 3.3 (sticky item bar), 3.6 (the remaining top bar steps), 4 (stack variables beyond the Library) and 7 (bidi isolates) are not done yet. Apply them to Home, Projects, Project, Shared, Activity and Settings, then extend the width check to the item-page Back reachability and to every screen in the matrix.
 - **EL-UX (v2):** use the same sizes through `--el-breakpoint-*`. Sections 3 and 4 apply to every v2 list/detail page. EL-Design will ship the sticky item bar as a shared component (D6).
-- **EL-Design:** in tokens/global/size.json, move `breakpoint.compact` from 720 to 780, and add `breakpoint.narrow` 798 and `breakpoint.column` 1120. Today's `medium` (1024) and `wide` stay for web. Add the sticky item bar and the z-index tokens to D6.
+- **EL-Design (done with this file):** `breakpoint.rail` 780 and `layer.dock` 15 are in tokens/global/size.json, and v2.css:802 uses the rail value. Page-width sizes (798 and 1120) stay in lib/shell.ts, because they are container sizes and not window breakpoints. v2 reads them through the same `.narrow` / `.no-column` classes. The sticky item bar comes as a shared component with D6.
