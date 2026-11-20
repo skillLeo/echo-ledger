@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\Devices;
 
+use App\Enums\SourceDevice;
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\V2Tables;
 use App\Models\Device;
 use App\Models\User;
+use App\Services\SettingsRepository;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
 use App\Support\Brand;
@@ -20,7 +23,6 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
@@ -63,35 +65,39 @@ class DeviceResource extends Resource
 
     public static function table(Table $table): Table
     {
-        // Since v2.0 (the new frame, W-201): the table fits the page at 1024 px. App and Signed in are in Columns only,
-        // and the row's actions are in one ⋮ menu (Remove from list last). Classic is as it was.
+        // Since v2.0 (the new frame, W-201): the table fits the page at 1024 px. App and Signed in are in Columns only
+        // (Signed in by the one date rule), and the row's actions are in one ⋮ menu (Remove from list last). Its words
+        // are in the console's language (only the new frame has another). Classic is as it was.
         $v2 = ConsoleV2::shell();
-        $inColumns = fn (Column $column): Column => $column->toggleable(isToggledHiddenByDefault: true);
+        $inColumns = V2Tables::inColumns(...);
 
         return $table
             ->defaultSort('last_seen_at', 'desc')
             ->columns([
                 // Since v1.6 the readable name ("Galaxy S25 Ultra", "Windows 11 PC"), or the one the person chose.
-                TextColumn::make('name')->weight('semibold')->searchable()
+                TextColumn::make('name')->label(__('Name'))->weight('semibold')->searchable()
                     ->formatStateUsing(fn (Device $record): string => $record->readableName()),
-                TextColumn::make('status')->label('Status')->badge()
+                TextColumn::make('status')->label(__('Status'))->badge()
                     ->state(fn (Device $record): string => Device::STATUS_LABELS[$record->status()])
+                    ->formatStateUsing(fn (string $state): string => __($state))
                     ->color(fn (Device $record): string => match ($record->status()) {
                         Device::ACTIVE => 'success', Device::EXPIRED => 'gray', default => 'warning',
                     })
                     ->description(fn (Device $record): ?string => $record->signed_out_at?->diffForHumans()),
-                TextColumn::make('source_device')->label('Type')->badge()
-                    ->state(fn (Device $record) => $record->sourceDevice()),
-                TextColumn::make('platform'),
-                TextColumn::make('app_version')->label('App')->placeholder('—')->when($v2, $inColumns),
-                TextColumn::make('capture_sessions_count')->label('Recordings')->badge()->color('gray'),
-                TextColumn::make('last_seen_at')->label('Last seen')->since()->placeholder('never'),
-                TextColumn::make('created_at')->label('Signed in')->date()->when($v2, $inColumns),
+                TextColumn::make('source_device')->label(__('Type'))->badge()
+                    ->state(fn (Device $record) => $record->sourceDevice())
+                    ->formatStateUsing(fn (SourceDevice $state): string => __((string) $state->getLabel())),
+                TextColumn::make('platform')->label(__('Platform')),
+                TextColumn::make('app_version')->label(__('App'))->placeholder('—')->when($v2, $inColumns),
+                TextColumn::make('capture_sessions_count')->label(__('Recordings'))->badge()->color('gray'),
+                TextColumn::make('last_seen_at')->label(__('Last seen'))->since()->placeholder(__('never')),
+                TextColumn::make('created_at')->label(__('Signed in'))->date()
+                    ->when($v2, fn (TextColumn $column): TextColumn => $inColumns(V2Tables::date($column, app(SettingsRepository::class)->displayTimezone(), withTime: false))),
             ])
             ->filters([
                 // Since v1.6 signed-out devices stay listed until they are removed: shown with this filter.
-                SelectFilter::make('shown')->label('Show')
-                    ->options(['signed_in' => 'Signed in', 'signed_out' => 'Signed out', 'all' => 'All'])
+                SelectFilter::make('shown')->label(__('Show'))
+                    ->options(['signed_in' => __('Signed in'), 'signed_out' => __('Signed out'), 'all' => __('All')])
                     ->default('signed_in')->selectablePlaceholder(false)
                     ->query(fn (Builder $query, array $data): Builder => match ($data['value'] ?? 'signed_in') {
                         'signed_out' => $query->whereNotNull('signed_out_at'),
@@ -113,7 +119,7 @@ class DeviceResource extends Resource
     private static function rowActions(bool $v2): array
     {
         $actions = [
-            Action::make('rename')
+            Action::make('rename')->label(__('Rename'))
                 ->authorize(fn (Device $record): bool => Gate::allows('update', $record))
                 ->icon(Heroicon::OutlinedPencilSquare)
                 ->color('gray')
@@ -121,26 +127,26 @@ class DeviceResource extends Resource
                 ->schema([TextInput::make('name')->required()->maxLength(60)])
                 ->action(fn (Device $record, array $data) => $record->forceFill(['name' => trim((string) $data['name']), 'name_chosen' => true])->save()),
             // Since v1.6: the person's own device that is signed out, revoked or expired comes back on its row.
-            Action::make('signInAgain')->label('Sign in again')->icon(Heroicon::OutlinedQrCode)->color('gray')
+            Action::make('signInAgain')->label(__('Sign in again'))->icon(Heroicon::OutlinedQrCode)->color('gray')
                 ->visible(fn (Device $record): bool => $record->user_id === (int) auth()->id() && $record->status() !== Device::ACTIVE)
                 ->modalHeading(fn (Device $record): string => 'Sign in '.$record->readableName().' again')
                 ->modalDescription('Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes.')
                 ->fillForm(fn (Device $record, ListDevices $livewire): array => $livewire->signInAgainForm($record))
                 ->schema([ViewField::make('pairing')->view('filament.pair-device')->hiddenLabel()])
                 ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md'),
-            Action::make('signOut')->label('Sign out')->icon(Heroicon::OutlinedArrowRightStartOnRectangle)->color('danger')
+            Action::make('signOut')->label(__('Sign out'))->icon(Heroicon::OutlinedArrowRightStartOnRectangle)->color('danger')
                 ->authorize(fn (Device $record): bool => Gate::allows('delete', $record))
                 ->visible(fn (Device $record): bool => $record->signed_out_at === null)
                 ->requiresConfirmation()
-                ->modalHeading('Sign out this device')
-                ->modalDescription('It stops working at once and asks to sign in again. Its past recordings stay in the library.')
+                ->modalHeading(__('Sign out this device'))
+                ->modalDescription(__('It stops working at once and asks to sign in again. Its past recordings stay in the library.'))
                 ->action(fn (Device $record) => $record->signOut($record->user_id === (int) auth()->id() ? 'self' : 'admin', (int) auth()->id())),
-            DeleteAction::make()->label('Remove from list')
-                ->modalHeading('Remove from the list')
-                ->modalDescription('The device is signed out (if it is not yet) and leaves this list. Its past recordings stay in the library.'),
+            DeleteAction::make()->label(__('Remove from list'))
+                ->modalHeading(__('Remove from the list'))
+                ->modalDescription(__('The device is signed out (if it is not yet) and leaves this list. Its past recordings stay in the library.')),
         ];
 
-        return $v2 ? [ActionGroup::make($actions)->label('Actions')->tooltip('Actions')] : $actions;
+        return $v2 ? V2Tables::actions($actions) : $actions;
     }
 
     public static function getPages(): array

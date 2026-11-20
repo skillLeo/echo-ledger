@@ -8,6 +8,7 @@ use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SharingActions;
+use App\Filament\Support\V2Tables;
 use App\Models\Client;
 use App\Models\RequestLink;
 use App\Models\User;
@@ -16,14 +17,12 @@ use App\Services\Sharing\RequestLinks;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -91,13 +90,14 @@ class RequestLinksPage extends Page implements HasTable
     public function table(Table $table): Table
     {
         $tz = app(SettingsRepository::class)->displayTimezone();
-        // Since v2.0 (the new frame, W-201): the table fits the page at 1024 px. The title wraps, Open until without its
-        // time (it is in the tooltip), Made in Columns only, and Revoke in the row's ⋮ menu. Classic is as it was.
+        // Since v2.0 (the new frame, W-201): the table fits the page at 1024 px. The title wraps, Open until by the one
+        // date rule (the time on a second line), Made in Columns only, and Revoke in the row's ⋮ menu. Its words are in
+        // the console's language (only the new frame has another). Classic is as it was.
         $v2 = ConsoleV2::shell();
         $actions = [
-            Action::make('revoke')->label('Revoke')->icon(Heroicon::OutlinedNoSymbol)->color('danger')
+            Action::make('revoke')->label(__('Revoke'))->icon(Heroicon::OutlinedNoSymbol)->color('danger')
                 ->visible(fn (RequestLink $link): bool => $link->isActive())
-                ->requiresConfirmation()->modalDescription('The page stops taking files at once. What was sent stays in the library.')
+                ->requiresConfirmation()->modalDescription(__('The page stops taking files at once. What was sent stays in the library.'))
                 ->action(fn (RequestLink $link) => app(RequestLinks::class)->revoke($link)),
         ];
 
@@ -105,24 +105,23 @@ class RequestLinksPage extends Page implements HasTable
             ->query(fn (): Builder => RequestLink::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->with('client'))
             ->defaultSort('created_at', 'desc')
             ->columns([
-                TextColumn::make('title')->label('Title')->limit(60)->searchable()
+                TextColumn::make('title')->label(__('Title'))->limit(60)->searchable()
                     ->when($v2, fn (TextColumn $column): TextColumn => $column->wrap()),
-                TextColumn::make('client.name')->label('Goes to')->placeholder('Inbox'),
-                TextColumn::make('received')->label('Received')
-                    ->state(fn (RequestLink $link): string => "{$link->received} of {$link->max_files}")
-                    ->description(fn (RequestLink $link): string => "up to {$link->max_mb} MB each"),
-                TextColumn::make('state')->label('Status')->badge()
+                TextColumn::make('client.name')->label(__('Goes to'))->placeholder(__('Inbox')),
+                TextColumn::make('received')->label(__('Received'))
+                    ->state(fn (RequestLink $link): string => __(':received of :max', ['received' => $link->received, 'max' => $link->max_files]))
+                    ->description(fn (RequestLink $link): string => __('up to :mb MB each', ['mb' => $link->max_mb])),
+                TextColumn::make('state')->label(__('Status'))->badge()
                     ->state(fn (RequestLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isActive() ? 'Open' : 'Expired'))
+                    ->formatStateUsing(fn (string $state): string => __($state))
                     ->color(fn (string $state): string => $state === 'Open' ? 'success' : 'gray'),
-                TextColumn::make('expires_at')->label('Open until')->dateTime('M j, Y · g:i A', $tz)->placeholder('Until revoked')
-                    ->when($v2, fn (TextColumn $column): TextColumn => $column->dateTime('j M Y', $tz)
-                        ->tooltip(fn ($state): ?string => $state?->copy()->setTimezone($tz)->format('j M Y · g:i A'))),
-                TextColumn::make('created_at')->label('Made')->since()
-                    ->when($v2, fn (Column $column): Column => $column->toggleable(isToggledHiddenByDefault: true)),
+                TextColumn::make('expires_at')->label(__('Open until'))->dateTime('M j, Y · g:i A', $tz)->placeholder(__('Until revoked'))
+                    ->when($v2, fn (TextColumn $column): TextColumn => V2Tables::date($column, $tz)),
+                TextColumn::make('created_at')->label(__('Made'))->since()->when($v2, V2Tables::inColumns(...)),
             ])
-            ->recordActions($v2 ? [ActionGroup::make($actions)->label('Actions')->tooltip('Actions')] : $actions)
+            ->recordActions($v2 ? V2Tables::actions($actions) : $actions)
             ->emptyStateIcon(Heroicon::OutlinedInboxArrowDown)
-            ->emptyStateHeading('No request links yet')
-            ->emptyStateDescription('Make one to collect voice notes, recordings or documents from anyone, without an account.');
+            ->emptyStateHeading(__('No request links yet'))
+            ->emptyStateDescription(__('Make one to collect voice notes, recordings or documents from anyone, without an account.'));
     }
 }
