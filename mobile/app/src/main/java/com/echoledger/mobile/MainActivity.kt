@@ -121,6 +121,8 @@ import com.echoledger.mobile.ui.lockAvailability
 import com.echoledger.mobile.ui.promptUnlock
 import com.echoledger.mobile.ui.reconnectUnlockPrompt
 import com.echoledger.mobile.ui.v2.shell.ClassicScreens
+import com.echoledger.mobile.ui.v2.shell.Design
+import com.echoledger.mobile.ui.v2.shell.DesignChoice
 import com.echoledger.mobile.ui.v2.shell.EchoV2Shell
 import com.echoledger.mobile.ui.v2.shell.UiFlagLatch
 import com.echoledger.mobile.ui.v2.shell.UiFlags
@@ -457,9 +459,20 @@ class MainActivity : FragmentActivity() {
         // Interface flags (contract 2.0.0-a): the server decides them; a change applies on the next screen the person
         // opens, never in the middle of a recording.
         val flagLatch = remember { UiFlagLatch() }
-        flagLatch.offer(UiFlags(settings.uiFlags, settings.uiClassic))
-        // The person's own "Switch back to classic" (or its undo) is a screen they open at once.
-        val flags = remember(loaded, tab, openItemId, showSetup, showWaiting, sharedNotes, recheck, settings.uiClassic) {
+        val design by DesignChoice.choice.collectAsState()
+        flagLatch.offer(UiFlags(settings.uiFlags, settings.uiClassic, design, settings.uiDesign))
+        // A choice kept on this phone (the server could not be reached) goes to the server once it has the switch.
+        LaunchedEffect(settings.uiDesign != null, design) {
+            val local = design
+            if (settings.uiDesign != null && local != null) {
+                // The server has no new design open for this account: its answer wins.
+                if (DesignChoice.choose(this@MainActivity, vm, local) == MainViewModel.DesignAnswer.NotAvailable) {
+                    DesignChoice.set(this@MainActivity, null)
+                }
+            }
+        }
+        // The person's own "Try the new design" or "Switch back to classic" is a screen they open at once.
+        val flags = remember(loaded, tab, openItemId, showSetup, showWaiting, sharedNotes, recheck, settings.uiClassic, design) {
             flagLatch.screenOpened(recording = RecordingService.live.value.active)
         }
         val shellOn = flags.shell
@@ -745,6 +758,21 @@ class MainActivity : FragmentActivity() {
                                 sharedNotes = null
                                 tab = TAB_LIBRARY
                                 moveTaskToBack(true)
+                            },
+                            // The new design's recording page, with ⋮ › Back to <app>, when its Library is on.
+                            page = if (shellOn && flags.library) {
+                                { item, back, source ->
+                                    com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                                        com.echoledger.mobile.ui.v2.library.V2RecordingScreen(
+                                            vm,
+                                            item,
+                                            onBack = back,
+                                            backToSource = source
+                                        )
+                                    }
+                                }
+                            } else {
+                                { item, back, source -> SessionScreen(vm, item, onBack = back, backToSource = source) }
                             }
                         )
 
@@ -847,8 +875,20 @@ class MainActivity : FragmentActivity() {
                                     )
                                 }
                             ),
-                            onSwitchToClassic = vm::setClassicUi,
-                            help = (application as EchoLedgerApp).graph.help
+                            // On this phone until the server keeps the design preference.
+                            onSwitchToClassic = { classic ->
+                                lifecycleScope.launch {
+                                    val answer = DesignChoice.choose(this@MainActivity, vm, if (classic) Design.Classic else Design.V2)
+                                    if (answer == MainViewModel.DesignAnswer.Failed) vm.designFailed()
+                                }
+                            },
+                            help = (application as EchoLedgerApp).graph.help,
+                            // The centre button: straight to recording, as classic's Record now.
+                            onRecordNow = { toggleRecording("record button") },
+                            onReadyCheck = { turnOn ->
+                                readyFix = if (turnOn) ReadyFix.TURN_ON else null
+                                showReady = true
+                            }
                         )
                     }
                 }
@@ -878,6 +918,9 @@ class MainActivity : FragmentActivity() {
 
             com.echoledger.mobile.ui.v2.live.LiveEntry.LiveTranslate ->
                 RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.GAME, onReviewWaiting = onReviewWaiting)
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.WatchTranslate ->
+                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.WATCH, onReviewWaiting = onReviewWaiting)
 
             com.echoledger.mobile.ui.v2.live.LiveEntry.Dictation -> SettingsScreen(vm, onSetup = onSetup, openPage = "voice")
 
@@ -992,7 +1035,7 @@ private const val TAB_YOU = "you"
 private val TAB_ORDER = listOf(TAB_LIBRARY, TAB_CLIENTS, TAB_RECORD, TAB_ACTIVITY, TAB_YOU)
 
 /** Library · Clients · [record] · Activity · You (since v1.3). */
-private val MAIN_TABS = listOf(
+internal val MAIN_TABS = listOf(
     NavTab(TAB_LIBRARY, "Library", Icons.Outlined.VideoLibrary, Icons.Rounded.VideoLibrary),
     NavTab(TAB_CLIENTS, "Projects", Icons.Outlined.Folder, Icons.Rounded.Folder),
     NavTab(TAB_ACTIVITY, "Activity", Icons.Outlined.Notifications, Icons.Rounded.Notifications),

@@ -16,19 +16,20 @@ today's navigation.
 
 ## The tree (the same on every platform)
 
-1 **Home**
-- 1.1 Get started checklist until everything is done: capture helper / permissions ready, a test recording,
-  transcription language.
-- 1.2 Status strip: "Ready to record" / "Needs setup" / "Recording 02:14".
-- 1.3 Needs action: untranscribed, failed, Live sessions scheduled today.
-- 1.4 Recent recordings (the last 5).
-- 1.5 Usage meter (minutes, storage) → Plan. Home is not a dashboard of charts.
+1 **Home** (no longer a tab, docs/PLAN_V2_PARITY.md section 2: its parts moved)
+- 1.1 Get started checklist: a card at the top of Library that can be hidden, until everything is done (capture helper /
+  permissions ready, a test recording, transcription language).
+- 1.2 Status: the "Calls: Ready" chip in Library's header ("Not ready · Fix", "Calls: Off").
+- 1.3 Needs action: one quiet banner at the top of Library (calls not recorded, calls waiting, uploads, transcripts);
+  the full list is Activity, the bell with a badge in Library's header.
+- 1.4 Recent recordings: Library itself (the start screen).
+- 1.5 Usage meter (minutes, storage): Settings › Account & plan.
 
 2 **Library**
 - 2.1 All recordings (default view): rows with source icon · caller or meeting name · duration · transcript snippet ·
   time · status; search + 3 quick filters (Source, Date, Status) + a Filters panel, applied filters as removable chips;
-  saved views Today · Untranscribed · Starred · Voice notes; select many → Transcribe · Move to workspace · Delete (undo).
-- 2.2 Workspaces (projects with memory): tabs Recordings · Ask · Memory & instructions.
+  saved views Today · Untranscribed · Starred · Voice notes; select many → Transcribe · Move to project · Delete (undo).
+- 2.2 Projects (with memory; a tab of its own on the phone): tabs Recordings · Ask · Memory & instructions.
 - 2.3 Trash: restore for as long as the server keeps deleted recordings (`trash.keep_hours` in the config: 48 hours
   today). The plan asks for 30 days; that changes the privacy policy's promise, so it waits for the owner's decision.
 - The recording page opens from any row: tabs Transcript · Summary · Ask · Moments · Details; actions Play · Share
@@ -41,8 +42,8 @@ today's navigation.
 - 3.3 Live Translate. 3.4 Dictation. 3.5 Captions (also a toggle inside any live session).
 
 4 **Ask**
-- 4.1 New question with a scope picker: All recordings · A workspace · One recording.
-- 4.2 Ask history. Ask inside a recording or workspace is the same component with the scope set.
+- 4.1 New question with a scope picker: All recordings · A project · One recording.
+- 4.2 Ask history. Ask inside a recording or project is the same component with the scope set.
 
 5 **Settings** (searchable; the same groups everywhere)
 - 5.1 Recording · 5.2 Transcription & language · 5.3 Live & overlays · 5.4 Privacy & data · 5.5 Notifications ·
@@ -55,16 +56,16 @@ Feature flags & rollout · Audit log.
 
 | Feature | Settings home | On/off | Also reachable from |
 |---|---|---|---|
-| WhatsApp / WA Business / SIM recording (Android) | Settings › Recording › Auto-record sources | One switch per source | Live › Record; Home status strip |
+| WhatsApp / WA Business / SIM recording (Android) | Settings › Recording › Auto-record sources | One switch per source | Live › Record; Record sheet; Library's Calls chip |
 | Meet / Zoom / Teams / Slack / any site (desktop) | Settings › Recording › Auto-record sources | One switch per source | Tray / menu bar "Arm"; Live › Record |
-| Capture helper (Shizuku/ADB) | Settings › Setup & health | Wizard | Home checklist; banner on Record |
+| Capture helper (Shizuku/ADB) | Settings › Setup & health | Wizard | Library setup card; banner on Record |
 | Live captions | Settings › Live & overlays | Switch + shortcut | "CC" in the live toolbar |
 | Screen moments | Settings › Live & overlays | Switch + shortcut | "Mark moment" on the pill |
 | Private overlay | Settings › Live & overlays | Switch + Share Check | Badge on each overlay |
-| Live Translate, Dictation, Live Assist | Live › … | Start/stop, schedule | Tray / menu bar; Home "Upcoming" |
+| Live Translate, Dictation, Live Assist | Live › … | Start/stop, schedule | Tray / menu bar; the Record sheet |
 | After-call card | Settings › Recording › After-call action | A choice | After every call |
 | Themes | Settings › Appearance | System / Light / Dark | — |
-| Plan, usage, storage | Settings › Account & plan | — | Home usage meter |
+| Plan, usage, storage | Settings › Account & plan | — | Library banner when a limit is near |
 
 ## Navigation per platform
 
@@ -73,7 +74,7 @@ Feature flags & rollout · Audit log.
 | Web console | Left sidebar: Home, Library, Live, Ask, Settings (collapsible) | Top bar + Ctrl/Cmd+K | Settings page, group list + search |
 | Windows | The same sidebar; the tray popover is a remote control | Ctrl+K | Same as web |
 | macOS | The same sidebar (split view); the menu-bar extra is a remote control; standard app menus | Cmd+K | Settings window (Cmd+,) |
-| Android | Bottom bar: Home, Library, Live, Ask; Settings from the avatar | Search field in Library and Ask | Full-screen list + search |
+| Android | Bottom bar: Library · Projects · [● Record] · Live · Ask (Record: tap records now, long-press opens the Record sheet); Activity as a bell in Library's header; Settings from the avatar | Search field in Library and Ask | Full-screen list + search |
 | iPhone | Tab bar: Home, Library, Live, Ask; Settings from the profile | Searchable lists | List + search |
 
 - The tray / menu-bar popover has at most 7 items: status line, Arm/Stop, the last 3 recordings, Open EchoLedger,

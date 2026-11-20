@@ -546,6 +546,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 // Since 2.0.0-a/b: the redesign's flags and how long Trash keeps a recording.
                                 uiFlags = config.uiFlags,
                                 uiClassic = config.uiClassic,
+                                uiDesign = config.uiDesign,
                                 relayPins = config.relayPins,
                                 trashKeepHours = config.trash?.keepHours?.takeIf { hours -> hours > 0 }
                                     ?: com.echoledger.mobile.data.TrashConfig.DEFAULT_HOURS
@@ -729,6 +730,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             refresh()
         }
         return changed
+    }
+
+    /**
+     * What [deleteMany] did: [went] the ids known to be gone (Undo brings back exactly these), [changed] how many the
+     * server deleted. When some were refused and the sync after it failed, which ones went is not known: [went] is
+     * empty and the screen says "N deleted" without Undo.
+     */
+    data class Deleted(val went: List<String>, val changed: Int)
+
+    /**
+     * Library v2's Delete (one or many), on classic's path (`POST /api/sessions/bulk` with "delete", at most
+     * [Organise.MAX_BULK]): the ids that went, worked out once the library has synced again (an id the server did not
+     * change, someone else's or one already gone, is not among them), or null when the server refused. Says nothing on
+     * success: the screen shows its own "deleted · Undo".
+     */
+    suspend fun deleteMany(ids: List<String>): Deleted? {
+        val sent = ids.take(Organise.MAX_BULK)
+        val changed = withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.bulk(sent, "delete") ?: error("Not signed in") }
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.getOrNull()
+        } ?: return null
+        if (changed >= sent.size) {
+            refresh().join()
+            return Deleted(sent, changed)
+        }
+        // Some were refused: the library as the server has it now says which went.
+        val synced = withContext(Dispatchers.IO) { runCatching { graph.library.refresh() }.isSuccess }
+        refresh().join()
+        if (!synced) return Deleted(emptyList(), changed)
+        val still = library.value.filter { !it.deleted }.mapTo(HashSet()) { it.id }
+        return Deleted(sent.filter { it !in still }.take(changed), changed)
+    }
+
+    /** Undo of [deleteMany]: restores each of [ids], then syncs once. Returns how many came back; a failure says why. */
+    suspend fun restoreMany(ids: List<String>): Int {
+        val back = withContext(Dispatchers.IO) {
+            val api = graph.api() ?: return@withContext 0
+            var failure: Throwable? = null
+            val ok = ids.count { id -> runCatching { api.restoreSession(id) }.onFailure { failure = it }.isSuccess }
+            failure?.let { _message.value = com.echoledger.mobile.core.Problems.text(it, "The recording could not be restored.") }
+            ok
+        }
+        if (back > 0) refresh().join()
+        return back
     }
 
     /** The finished transcripts of the selected recordings as one zip in the private cache (`exports/`). */
@@ -1197,6 +1242,52 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         graph.settings.update { it.copy(uiFlags = answer.uiFlags, uiClassic = answer.uiClassic) }
         refresh().join()
         return true
+    }
+
+    /** Says that the server refused a design change with an error (not that it could not be reached). */
+    fun designFailed() {
+        _message.value = "The design could not be changed. Try again."
+    }
+
+    /** What [chooseDesign] came to. [Failed]: the server answered with an error (500, 401, 403…); nothing changed. */
+    enum class DesignAnswer { Taken, NotAvailable, OnThisPhone, Failed }
+
+    /**
+     * "Try the new design" ([design] `"v2"`) or "Switch back to classic" (`"classic"`), since 2.0.0-g: the server keeps the
+     * choice and its answer is stored, then the config is read again ([DesignAnswer.Taken]). `422 design_not_available`:
+     * nothing to try for this account ([DesignAnswer.NotAvailable]). A server too old for `{"design": …}` (it answers
+     * without `ui_design`, or refuses the body with a 404 or another 422) gets the 2.0.0-a body `{"classic": …}`, and the
+     * choice stays on this phone, as it does when no server can be reached ([DesignAnswer.OnThisPhone]). Any other error
+     * keeps nothing ([DesignAnswer.Failed]).
+     */
+    suspend fun chooseDesign(design: String?): DesignAnswer {
+        val api = graph.api() ?: return DesignAnswer.OnThisPhone
+        val answer = withContext(Dispatchers.IO) { runCatching { api.setDesign(design) } }
+        val dto = answer.getOrNull()
+        val failure = answer.exceptionOrNull() as? com.echoledger.mobile.net.ApiException
+        return when {
+            dto?.uiDesign != null -> {
+                graph.settings.update { it.copy(uiFlags = dto.uiFlags, uiClassic = dto.uiClassic, uiDesign = dto.uiDesign) }
+                refresh().join()
+                DesignAnswer.Taken
+            }
+
+            failure?.code == "design_not_available" -> DesignAnswer.NotAvailable
+
+            // Not reachable (no answer at all): kept here until it is. Signed out (401) is not that.
+            answer.exceptionOrNull().let {
+                it is java.io.IOException && failure == null && it !is com.echoledger.mobile.net.NotPairedException
+            } -> DesignAnswer.OnThisPhone
+
+            dto != null || com.echoledger.mobile.ui.v2.shell.DesignServer.tooOld(failure) -> {
+                // 2.0.0-a: {"classic": true} is classic, false is the default; the flags it answers are stored.
+                val older = withContext(Dispatchers.IO) { runCatching { api.setClassicUi(design == "classic") }.getOrNull() }
+                older?.let { o -> graph.settings.update { it.copy(uiFlags = o.uiFlags, uiClassic = o.uiClassic) } }
+                DesignAnswer.OnThisPhone
+            }
+
+            else -> DesignAnswer.Failed
+        }
     }
 
     /** Retries one recording the server refused (e.g. after fixing the cause). */

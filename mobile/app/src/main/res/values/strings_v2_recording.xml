@@ -41,7 +41,7 @@
     <string name="v2_rec_back_to">Back to %1$s</string>
     <string name="v2_rec_delete">Delete</string>
     <string name="v2_rec_delete_title">Delete this recording?</string>
-    <string name="v2_rec_delete_body">It is deleted on every device. You can restore it from Trash.</string>
+    <string name="v2_rec_delete_body">It is deleted on every device. You can restore it from Recently deleted.</string>
     <string name="v2_rec_cancel">Cancel</string>
     <string name="v2_rec_export_pdf">PDF (print)</string>
     <string name="v2_rec_export_docx">Word (.docx)</string>

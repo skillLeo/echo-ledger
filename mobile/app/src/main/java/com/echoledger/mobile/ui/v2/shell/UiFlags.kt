@@ -2,22 +2,40 @@ package com.echoledger.mobile.ui.v2.shell
 
 /**
  * The interface flags of `GET /api/config` (contract 2.0.0-a, docs/API.md "Interface flags"): [flags] is `ui_flags`,
- * [classic] is `ui_classic`. The server decides them; the phone never does. A flag missing from the answer (an older
- * server) is off, a flag the app doesn't know is ignored, and "Switch back to classic" turns every `ui_v2.*` flag off
- * for this person (`live_assist` is unaffected).
+ * [classic] is `ui_classic`. A flag missing from the answer (an older server) is off and a flag the app doesn't know is
+ * ignored. The person's own [design] choice (DesignChoice: "Try the new design", "Switch back to classic") comes first:
+ * the new design turns every phone `ui_v2.*` screen on, classic turns them all off (`live_assist` is unaffected).
  */
-data class UiFlags(val flags: Map<String, Boolean> = emptyMap(), val classic: Boolean = false) {
+data class UiFlags(
+    val flags: Map<String, Boolean> = emptyMap(),
+    val classic: Boolean = false,
+    val design: Design? = DesignChoice.current,
+    /** The server's `ui_design` (2.0.0-g): which switch it offers; null on an older server. */
+    val server: com.echoledger.mobile.data.UiDesignDto? = null
+) {
     fun isOn(key: String): Boolean {
+        when (design) {
+            Design.V2 -> if (key in PHONE_V2) return true
+            Design.Classic -> if (key.startsWith(V2_PREFIX)) return false
+            null -> Unit
+        }
         if (classic && key.startsWith(V2_PREFIX)) return false
         return flags[key] == true
     }
+
+    /** The person is on the classic screens by their own choice. */
+    val chosenClassic: Boolean get() = design == Design.Classic || (design == null && classic)
 
     val shell: Boolean get() = isOn(SHELL)
     val library: Boolean get() = isOn(LIBRARY)
     val settings: Boolean get() = isOn(SETTINGS)
 
-    /** Settings shows "Switch back to classic" while any `ui_v2.*` flag is on for this person, or after they chose it. */
-    val offersClassicSwitch: Boolean get() = classic || KNOWN_V2.any { flags[it] == true }
+    /**
+     * Settings shows "Switch back to classic" while this phone shows the new design by choice, or while the server
+     * says so (`can_switch_back`; an older server: while any `ui_v2.*` flag is on, or after they chose classic).
+     */
+    val offersClassicSwitch: Boolean
+        get() = design == Design.V2 || (server?.canSwitchBack ?: (classic || KNOWN_V2.any { flags[it] == true }))
 
     companion object {
         const val V2_PREFIX = "ui_v2."
@@ -35,10 +53,13 @@ data class UiFlags(val flags: Map<String, Boolean> = emptyMap(), val classic: Bo
         const val ADMIN = "ui_v2.admin"
         const val WEBSITE = "ui_v2.website"
 
+        /** The phone's own redesigned screens: all of them on with the new design. */
+        val PHONE_V2 = setOf(SHELL, HOME, LIBRARY, RECORDING_CONTROLS, AFTER_CALL, LIVE, ASK, SETTINGS, SETUP_HEALTH)
+
         /** The `ui_v2.*` names of contract 2.0.0-a; an unknown name never counts. */
         val KNOWN_V2 = setOf(SHELL, HOME, LIBRARY, RECORDING_CONTROLS, AFTER_CALL, LIVE, ASK, SETTINGS, SETUP_HEALTH, ADMIN, WEBSITE)
 
-        val Off = UiFlags()
+        val Off = UiFlags(design = null)
     }
 }
 

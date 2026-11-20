@@ -79,7 +79,9 @@ class WorkspaceTest : ScreenTest() {
         compose.waitForIdle()
     }
 
+    /** Presses the icon once it is there (a tab's controls come with its data, slower on a loaded machine). */
     private fun pressIcon(description: String) {
+        pumpUntil(description) { compose.onAllNodes(hasContentDescription(description)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNode(hasContentDescription(description)).performScrollTo().performClick()
         compose.waitForIdle()
     }

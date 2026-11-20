@@ -33,6 +33,7 @@ fun sourceName(res: Resources, wire: String?): String = res.getString(
 object VmMessages {
     private val exact = mapOf(
         "Can't reach the server. Try again." to R.string.v2_vm_cant_reach,
+        "The design could not be changed. Try again." to R.string.v2_vm_design_failed,
         "Could not sign in" to R.string.v2_vm_could_not_sign_in,
         "Could not start the capture helper through Shizuku." to R.string.v2_vm_shizuku_start_failed,
         "Device revoked" to R.string.v2_vm_device_revoked,

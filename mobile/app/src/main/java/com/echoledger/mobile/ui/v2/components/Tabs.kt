@@ -132,21 +132,38 @@ fun EchoSegmented(options: List<String>, selectedIndex: Int, onSelect: (Int) -> 
 data class EchoDestination(val key: String, val label: String, val icon: ImageVector)
 
 /**
- * The phone's bottom bar (Home · Library · Live · Ask). Labels always show; the selected destination has the strong
- * text colour and a tinted indicator behind its icon.
+ * The phone's bottom bar (Library · Projects · [Record] · Live · Ask). Labels always show; the selected destination has
+ * the strong text colour and a tinted indicator behind its icon. [centre] (the Record button) sits in the middle of the
+ * destinations; a destination tapped again calls [onReselect] (its list scrolls to the top).
  */
 @Composable
-fun EchoBottomBar(destinations: List<EchoDestination>, selectedKey: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+fun EchoBottomBar(
+    destinations: List<EchoDestination>,
+    selectedKey: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onReselect: (String) -> Unit = {},
+    centre: (@Composable () -> Unit)? = null
+) {
     val c = EchoV2.colors
+    val half = (destinations.size + 1) / 2
     Column(modifier.fillMaxWidth().background(c.bgSurface)) {
         EchoDivider()
-        Row(Modifier.fillMaxWidth().navigationBarsPadding().selectableGroup()) {
-            destinations.forEach { d ->
+        Row(
+            Modifier.fillMaxWidth().navigationBarsPadding().selectableGroup(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            destinations.forEachIndexed { i, d ->
+                if (i == half && centre != null) {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { centre() }
+                }
                 val selected = d.key == selectedKey
                 Column(
                     Modifier
                         .weight(1f)
-                        .selectable(selected = selected, role = Role.Tab, onClick = { onSelect(d.key) })
+                        .selectable(selected = selected, role = Role.Tab, onClick = {
+                            if (selected) onReselect(d.key) else onSelect(d.key)
+                        })
                         .defaultMinSize(minHeight = EchoTokens.Space.s64)
                         .padding(vertical = EchoTokens.Space.s8),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -164,7 +181,8 @@ fun EchoBottomBar(destinations: List<EchoDestination>, selectedKey: String, onSe
                         d.label,
                         style = EchoV2.type.captionStrong,
                         color = if (selected) c.textPrimary else c.textSecondary,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
