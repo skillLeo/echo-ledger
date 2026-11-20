@@ -5,7 +5,7 @@
 // after asking; New request link opens the Request files sheet. Every row's ⋮ is always on screen (never on hover only)
 // and its right-click is the same menu; a row press (or Enter on it) opens what it stands for. Times are number isolates
 // so they read the right way round in Urdu. Built from v2 parts only.
-import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { api, errorMessage, type ClientFolder, type LibraryItem, type RequestLink, type ShareLink, type SharedItem } from "../../lib/ipc";
 import { audienceText, limitsText, linkState, receivedText, requestState, REVOKE_LINK_QUESTION, REVOKE_REQUEST_QUESTION, viewsText } from "../../lib/sharing";
 import { formatWhen } from "../../lib/format";
@@ -45,13 +45,16 @@ export function sharedMeta(item: SharedItem): ReactNode {
 const viewsLine = (link: ShareLink): ReactNode =>
   link.view_count && link.last_viewed_at ? <>{viewsText({ ...link, last_viewed_at: null })} · last viewed {when(link.last_viewed_at)}</> : viewsText(link);
 
-export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenRecording, onOpenProject, onSaved }: {
+export function SharedV2({ tab, onTab, notify, projects, focusId = null, onFocusHandled, onOpenRecording, onOpenProject, onSaved }: {
   tab: SharedTab;
   onTab: (tab: SharedTab) => void;
   notify: Notify;
   projects: readonly ClientFolder[] | null;
   /** An item of Shared with me to bring into view (an echoledger link to it was opened): a recording opens. */
   focusId?: string | null;
+  /** The link's item was brought into view (or the person went Back from it): the window forgets the request, so a
+   * later visit to Shared never opens it again. */
+  onFocusHandled?: () => void;
   onOpenRecording: (id: string) => void;
   onOpenProject: (id: string) => void;
   /** Saved: a recording (`session_id`) or a project (`client_id`) is now in this workspace. */
@@ -77,12 +80,23 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, []);
 
-  // A link to one of them: a recording opens read-only, a project is shown selected in the list.
+  // A link to one of them, handled once: a recording opens read-only, a project is shown selected in the list. A later
+  // change of the list (a row removed, Save) never opens it again; the window is told, so a later visit doesn't either.
+  const [focused, setFocused] = useState<string | null>(null);
+  const handledFocus = useRef<string | null>(null);
   useEffect(() => {
-    if (!focusId || !data.withMe) return;
+    if (!focusId) {
+      handledFocus.current = null;
+      return;
+    }
+    if (!data.withMe || handledFocus.current === focusId) return;
+    handledFocus.current = focusId;
+    setFocused(focusId);
     const item = data.withMe.find((i) => i.id === focusId);
     if (item?.kind === "session" && item.session) setOpenId(item.id);
     else if (/^[\w-]+$/.test(focusId)) document.querySelector(`[data-row-id="${focusId}"]`)?.scrollIntoView?.({ block: "nearest" });
+    onFocusHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId, data.withMe]);
 
   const titleOf = useMemo(() => {
@@ -173,7 +187,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
   const open = openId ? data.withMe?.find((i) => i.id === openId && i.session) ?? null : null;
   if (open) {
     return (
-      <SharedReader item={open} busy={busy === open.id} notify={notify} onBack={() => setOpenId(null)}
+      <SharedReader item={open} busy={busy === open.id} notify={notify} onBack={() => { setOpenId(null); setFocused(null); onFocusHandled?.(); }}
         onSave={() => void save(open)} onRemove={() => void remove(open)} />
     );
   }
@@ -188,7 +202,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
             {data.withMe.map((item) => {
               const title = sharedTitle(item);
               return (
-                <ListRow key={item.id} rowId={item.id} title={title} meta={sharedMeta(item)} selected={item.id === focusId}
+                <ListRow key={item.id} rowId={item.id} title={title} meta={sharedMeta(item)} selected={item.id === focused}
                   leading={item.session ? <SourceAvatar item={item.session} /> : undefined} icon={item.session ? undefined : Icons.FolderIcon}
                   endTop={item.saved_at ? "Saved" : undefined}
                   // A recording opens read-only; a project sent to you has nothing to open until it is saved: its menu opens.
@@ -229,8 +243,8 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
     </>
   );
 
-  /** The request links' rows; in the sheet without the right-click menu (its ⋮ stays inside the sheet). */
-  const requestRows = (list: RequestLink[], inSheet = false) => list.map((link) => {
+  /** The request links' rows: state, where files go, what came in, the limits, when it stops, and Revoke in the ⋮. */
+  const requestRows = (list: RequestLink[]) => list.map((link) => {
     const state = requestState(link);
     const title = link.title || "Request link";
     const items = requestMenu(link);
@@ -239,7 +253,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
         meta={[`Into ${projectName(link.client_id)}`, receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}
         endTop={link.expires_at ? <>{state === "Active" ? "Stops" : "Stopped"} {when(link.expires_at)}</> : "Never stops"}
         badge={<Badge tone={STATE_TONE[state]}>{state}</Badge>}
-        onContextMenu={inSheet ? undefined : rowMenu(`Actions for ${title}`, items)}
+        onContextMenu={rowMenu(`Actions for ${title}`, items)}
         actions={items.length > 0 ? more(`More for ${title}`, () => requestMenu(link)) : undefined} />
     );
   });
@@ -276,7 +290,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
 
       {context && <ContextMenu label={context.label} items={context.items} at={context.at} onClose={() => setContext(null)} />}
       {newRequest && (
-        <RequestLinkSheet projects={projects ?? []} notify={notify} requests={data.requests} renderRows={(list) => requestRows(list, true)}
+        <RequestLinkSheet projects={projects ?? []} notify={notify} onShowLinks={() => onTab("requests")}
           onMade={() => void loadRequests()} onClose={() => { setNewRequest(false); void loadRequests(); }} />
       )}
     </div>

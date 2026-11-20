@@ -71,7 +71,7 @@ function Page({ start = "with-me", focusId = null, props }: { start?: SharedTab;
   const [tab, setTab] = useState<SharedTab>(start);
   return <div className="el-root"><SharedV2 {...props} tab={tab} onTab={(t) => { setTab(t); props.onTab(t); }} focusId={focusId} projects={[project("c1", "Acme Ltd")]} /></div>;
 }
-const makeProps = () => ({ notify: vi.fn(), onOpenRecording: vi.fn(), onOpenProject: vi.fn(), onSaved: vi.fn(), onTab: vi.fn() });
+const makeProps = () => ({ notify: vi.fn(), onOpenRecording: vi.fn(), onOpenProject: vi.fn(), onSaved: vi.fn(), onTab: vi.fn(), onFocusHandled: vi.fn() });
 async function show(start: SharedTab = "with-me", focusId: string | null = null) {
   const props = makeProps();
   render(<Page start={start} focusId={focusId} props={props} />);
@@ -236,6 +236,22 @@ describe("the v2 Shared page", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Call a" })).toBeInTheDocument();
   });
 
+  it("a link's recording opens once: after Back, removing another row never opens it again", async () => {
+    const props = makeProps();
+    render(<Page focusId="a" props={props} />);
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { level: 1, name: "Call a" })).toBeInTheDocument();
+    expect(props.onFocusHandled).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+    await pick(URDU, "Remove");
+    expect(callsOf("shared_remove")).toEqual([{ id: "b" }]);
+    expect(screen.queryByRole("heading", { level: 1, name: "Call a" })).toBeNull();
+    expect(screen.getByRole("list", { name: "Shared with me" })).toHaveTextContent("Call a");
+    // Saving one (the list changes again) doesn't either.
+    await pick("Call a", "Save to my library");
+    expect(screen.queryByRole("heading", { level: 1, name: "Call a" })).toBeNull();
+  });
+
   it("a link to a project sent to you shows it selected in With me", async () => {
     await show("with-me", "p");
     expect(row("Acme").className).toMatch(/el-row--selected/);
@@ -302,7 +318,7 @@ describe("the v2 Shared page", () => {
     expect(notify).toHaveBeenCalledWith("Request link revoked", false, undefined);
   });
 
-  it("New request link: title, files go to, stops working, limits, Make link, Copy, and Revoke in the sheet", async () => {
+  it("New request link: title, files go to, stops working, limits, Make link, Copy; See your request links opens the tab, where Revoke is", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.assign(navigator, { clipboard: { writeText } });
     respond("request_link_create", { data: requestLink("r9", { url: "https://echo.test/r/abc" }) });
@@ -334,16 +350,26 @@ describe("the v2 Shared page", () => {
     expect(writeText).toHaveBeenCalledWith("https://echo.test/r/abc");
     expect(notify).toHaveBeenCalledWith("Link copied", false, { kind: "shared", tab: "requests" });
 
+    // The sheet lists no links of its own (nor reads them): they are in Shared › Request links, one press away.
+    expect(within(sheet).queryByRole("list")).toBeNull();
+    expect(callsOf("request_links")).toHaveLength(2);
+    fireEvent.click(within(sheet).getByRole("button", { name: "See your request links" }));
+    await act(flushAsync);
+    expect(screen.queryByRole("dialog", { name: "Request files" })).toBeNull();
+    expect(screen.getByRole("tab", { name: /^Request links/ })).toHaveAttribute("aria-selected", "true");
+
     const asked = answerConfirm();
     asked.mockReturnValue(true);
-    const inSheet = within(sheet).getByRole("list", { name: "Request links" });
-    fireEvent.click(within(inSheet).getAllByRole("button", { name: "More for Send me your voice notes" })[0]);
+    const tab = screen.getByRole("list", { name: "Request links" });
+    fireEvent.click(within(tab).getAllByRole("button", { name: "More for Send me your voice notes" })[0]);
     fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Revoke" }));
     await act(flushAsync);
     expect(asked).toHaveBeenCalledWith("Revoke this request link? It stops taking files from everyone who has it.");
     expect(callsOf("request_link_revoke")).toEqual([{ id: "r1" }]);
+    expect(notify).toHaveBeenCalledWith("Request link revoked", false, undefined);
 
-    fireEvent.click(within(sheet).getAllByRole("button", { name: "Close" }).at(-1)!);
+    fireEvent.click(screen.getByRole("button", { name: "New request link" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Request files" })).getAllByRole("button", { name: "Close" }).at(-1)!);
     expect(screen.queryByRole("dialog", { name: "Request files" })).toBeNull();
   });
 
@@ -467,6 +493,18 @@ describe("a shared recording, open read-only", () => {
     const marks = screen.getByRole("list", { name: "Bookmarks" });
     fireEvent.click(within(marks).getByRole("button", { name: "1:05 Invoice" }));
     expect(screen.getByRole("slider", { name: "Position" })).toHaveAttribute("aria-valuetext", expect.stringMatching(/^1:05 of/));
+  });
+
+  it("player: when the recording's details don't load but the transcript does, it says why and offers Try again", async () => {
+    fail("session_detail", "The server is unreachable.");
+    await openReader();
+    expect(screen.getByRole("list", { name: "Transcript" })).toBeInTheDocument();
+    expect(screen.getByTestId("audio-error")).toHaveTextContent("The audio didn't load. The server is unreachable.");
+    respond("session_detail", { playback_url: "https://audio.test/a.m4a", speaker_names: {} });
+    fireEvent.click(within(screen.getByTestId("audio-error")).getByRole("button", { name: "Try again" }));
+    await act(flushAsync);
+    expect(screen.queryByTestId("audio-error")).toBeNull();
+    expect(screen.getByTestId("player")).toHaveAttribute("src", "https://audio.test/a.m4a");
   });
 
   it("player: an audio link that ran out is asked for again once, then it says so", async () => {

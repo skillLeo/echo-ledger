@@ -20,16 +20,26 @@ const meta = (sourceApp: string, startedAt: string, durationMs: number, ...extra
 
 const avatar = (item: { sourceApp: string }) => <SourceAvatar size="sm" item={{ source_app: item.sourceApp, source_app_label: sourceAppLabel(item.sourceApp), source_device: undefined }} />;
 
-export function QueueV2({ say, reviewRequest }: { say: (text: string) => void; reviewRequest?: { seq: number } | null }) {
+/** Review requests already answered: a list that mounts again (after Trash, a selection, another page) keeps the
+ * request it was given, and must not open again for it. */
+const answered = new WeakSet<object>();
+
+export function QueueV2({ say, reviewRequest, onShown }: {
+  say: (text: string) => void;
+  reviewRequest?: { seq: number } | null;
+  /** What the list shows now: the Library's banner leaves these to it, so there is one Review for each. */
+  onShown?: (shown: { waiting: boolean; failed: boolean }) => void;
+}) {
   const notify: Notify = (text) => say(text);
   const q = useLibraryQueue(notify);
   const { pending, failed, verifying, importing, held, clients, busy, bulkBusy, learn } = q;
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ item: PendingItem; text: string } | null>(null);
   const field = useRef<HTMLInputElement>(null);
-  // Activity's Review: the list opens, the first waiting recording in view.
+  // Activity's Review: the list opens, the first waiting recording in view; once per request.
   useEffect(() => {
-    if (!reviewRequest) return;
+    if (!reviewRequest || answered.has(reviewRequest)) return;
+    answered.add(reviewRequest);
     setOpen(true);
     q.loadClients();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -37,6 +47,22 @@ export function QueueV2({ say, reviewRequest }: { say: (text: string) => void; r
   useEffect(() => {
     if (open && reviewRequest) document.getElementById("queue-pending-list")?.scrollIntoView?.({ block: "nearest" });
   }, [open, reviewRequest]);
+  // Once nothing waits the list closes; the next recording to arrive starts with the summary again (classic's rule).
+  // (Only once something has waited: the list reads its recordings after a Review request has opened it.)
+  const hadWaiting = useRef(false);
+  useEffect(() => {
+    if (pending.length > 0) hadWaiting.current = true;
+    else if (hadWaiting.current) {
+      hadWaiting.current = false;
+      setOpen(false);
+    }
+  }, [pending.length]);
+  const shows = { waiting: pending.length > 0, failed: failed.length > 0 };
+  useEffect(() => {
+    onShown?.(shows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shows.waiting, shows.failed]);
+  useEffect(() => () => onShown?.({ waiting: false, failed: false }), []); // eslint-disable-line react-hooks/exhaustive-deps
   if (pending.length === 0 && failed.length === 0 && verifying.length === 0 && importing.length === 0 && held.length === 0) return null;
   const shown = open && pending.length > 0;
 

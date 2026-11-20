@@ -1,29 +1,29 @@
 // Request files in the new design (classic's RequestLinksSheet, views/main/RequestLinks.tsx, the same rules and words):
 // a link anyone can use, without an account, to send voice notes, audio and video (and, for a project, documents) into
 // a project or the Inbox. Title people see, Files go to, Stops working, At most … files of … MB each, then Make link;
-// the new link is shown once to copy. Below, every request link with what it received, and Revoke (after asking).
-import { useState, type ReactNode } from "react";
-import { api, errorMessage, type ClientFolder, type RequestLink } from "../../lib/ipc";
+// the new link is shown once to copy. The links themselves, with what they received and Revoke, are in Shared › Request
+// links: "See your request links" closes the sheet and opens that tab, from wherever the sheet was opened.
+import { useState } from "react";
+import { api, errorMessage, type ClientFolder } from "../../lib/ipc";
 import { projectLabel, projectTree, visibleRows } from "../../lib/projects";
 import { EXPIRY_CHOICES, expiryTime, type ExpiryChoice } from "../../lib/sharing";
 import type { Notify } from "../../lib/notice";
-import { Banner, Button, Card, Icons, List, Select, Sheet, TextField } from "../components";
+import { Banner, Button, Icons, Select, Sheet, TextField } from "../components";
 
 /** A whole number from a field, or null when it is empty. */
 const count = (text: string): number | null => (text.trim() === "" ? null : Number.parseInt(text, 10));
 
 export const REQUEST_INTRO = "Anyone with a request link can send you voice notes, audio and video, without an account. They become recordings in the project you choose or the Inbox; a project also takes PDF, Word, text and images into its Files.";
 
-export function RequestLinkSheet({ projects, projectId = null, requests, renderRows, notify, onMade, onClose }: {
+export function RequestLinkSheet({ projects, projectId = null, notify, onMade, onShowLinks, onClose }: {
   projects: readonly ClientFolder[];
   /** The project new links send into (null: the Inbox). */
   projectId?: string | null;
-  /** Every request link (null while loading), drawn by the page's own rows (state, received, limits, Revoke). */
-  requests: RequestLink[] | null;
-  renderRows: (list: RequestLink[]) => ReactNode;
   notify: Notify;
-  /** A link was made: the list is read again. */
-  onMade: () => void;
+  /** A link was made (the Request links tab reads its list again). */
+  onMade?: () => void;
+  /** Shared › Request links: every request link with what it received, and Revoke. The sheet closes first. */
+  onShowLinks: () => void;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState("Send me your voice notes");
@@ -47,7 +47,7 @@ export function RequestLinkSheet({ projects, projectId = null, requests, renderR
     try {
       const { data } = await api.createRequestLink({ title: title.trim(), clientId: where || null, expiresAt: expiryTime(expiry, new Date(), day), maxFiles: files, maxMb: mb });
       setMade(data.url ?? null);
-      onMade();
+      onMade?.();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -92,12 +92,7 @@ export function RequestLinkSheet({ projects, projectId = null, requests, renderR
             <Button icon={Icons.CopyIcon} onClick={() => void copy()}>Copy link</Button>
           </div>
         )}
-        <section className="el-group" aria-labelledby="request-links-title">
-          <h3 id="request-links-title" className="el-caption el-body-strong el-group__title">Request links</h3>
-          {requests === null ? <p className="el-secondary">Loading…</p> : requests.length === 0 ? <p className="el-secondary">No request links yet.</p> : (
-            <Card><List label="Request links" className="el-group__rows">{renderRows(requests)}</List></Card>
-          )}
-        </section>
+        <Button variant="quiet" size="sm" icon={Icons.InboxIcon} onClick={() => { onClose(); onShowLinks(); }}>See your request links</Button>
       </div>
     </Sheet>
   );

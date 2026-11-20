@@ -67,6 +67,7 @@ const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
 const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
 const ActivityV2 = lazy(() => v2().then((m) => ({ default: m.ActivityV2 })));
 const SharedV2 = lazy(() => v2().then((m) => ({ default: m.SharedV2 })));
+const RequestLinkSheetV2 = lazy(() => v2().then((m) => ({ default: m.RequestLinkSheet })));
 const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
@@ -824,7 +825,7 @@ export default function MainApp() {
       {tab === "activity" && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <ActivityV2 status={status} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, NO_TARGET)}
+            <ActivityV2 status={status} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
               onReview={(id) => {
                 openFolder(null);
                 if (ui.flags["ui_v2.library"]) setReviewV2({ seq: ++navigations.current });
@@ -841,7 +842,7 @@ export default function MainApp() {
       {tab === "shared" && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <SharedV2 tab={sharedTab} onTab={(t) => { setSharedTab(t); setSharedFocus(null); }} notify={notify} projects={projects} focusId={sharedFocus}
+            <SharedV2 tab={sharedTab} onTab={(t) => { setSharedTab(t); setSharedFocus(null); }} notify={notify} projects={projects} focusId={sharedFocus} onFocusHandled={() => setSharedFocus(null)}
               onOpenRecording={(id) => openRecording(id)} onOpenProject={(id) => openProject(id)}
               onSaved={(saved) => { if (saved.client_id) openProject(saved.client_id); else if (saved.session_id) openRecording(saved.session_id); }} />
           </div>
@@ -883,7 +884,14 @@ export default function MainApp() {
       )}
       {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
       {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onSettings={openAccount} />}
-      {requestSheet && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
+      {requestSheet && !ui.flags["ui_v2.shell"] && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
+      {requestSheet && ui.flags["ui_v2.shell"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded">
+            <RequestLinkSheetV2 projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} onShowLinks={() => openShared("requests")} />
+          </div>
+        </Suspense>
+      )}
       <UpgradeSheet />
       <ConfirmHost />
       {toastView}

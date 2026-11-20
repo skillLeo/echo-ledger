@@ -293,6 +293,11 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
       <Card className="el-page__player">
         {detail.state === "loading" ? (
           <Loading label="Loading the audio"><Skeleton shape="block" /></Loading>
+        ) : detail.state === "error" ? (
+          // The transcript came, the recording's details (its audio) did not: say why, with one way to try again.
+          <Banner tone="danger" icon={Icons.ErrorIcon} testId="audio-error" action={<Button size="sm" onClick={() => setAttempt((n) => n + 1)}>Try again</Button>}>
+            The audio didn't load. {detail.message}
+          </Banner>
         ) : (
           <>
             {url && (

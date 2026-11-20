@@ -84,6 +84,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const knownValues = useRef<Record<string, string>>({});
   // Sort and group, remembered per view on this computer (classic's View menu).
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
+  // What the queue shows with its own Review: the banner above it leaves those out (one Review for each thing).
+  const [queueShows, setQueueShows] = useState<{ waiting: boolean; failed: boolean }>({ waiting: false, failed: false });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   // Show as List or Table, and the table's columns, kept on this computer (classic's).
@@ -623,10 +625,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           </header>
         )}
         {top && view !== "trash" && !selecting && (
-          <LibraryTop {...top} items={items}
+          <LibraryTop {...top} items={items} covered={queueShows}
             onAction={(a) => (a === "missed" ? top.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"))} />
         )}
-        {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} />}
+        {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} onShown={setQueueShows} />}
         <div className="el-page__tools">
           {view !== "trash" && (
             <div className="el-search-row">

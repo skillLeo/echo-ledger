@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { PendingItem, UploadItem } from "../../lib/ipc";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makePendingItem, makeUploadItem } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeStatus, makeUploadItem } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
 import { LibraryV2 } from "./LibraryV2";
 
@@ -213,5 +213,81 @@ describe("uploads at the top of the v2 Library", () => {
     await show();
     await act(() => emitEvent("uploads:changed", [makeUploadItem("u1", { state: "failed", title: "Late failure" })]));
     await waitFor(() => expect(screen.getByRole("heading", { name: "Uploads that need you · 1" })).toBeInTheDocument());
+  });
+});
+
+describe("one Review for each thing at the top of the v2 Library (classic's Library has only its queue for these)", () => {
+  const top = (status = makeStatus({ platform: "macos", pendingDecisions: 2, failedUploads: 1 })) =>
+    ({ status, onSetup: vi.fn(), onReadyCheck: vi.fn(), onRecord: vi.fn(), onActivity: vi.fn() });
+  beforeEach(() => {
+    respond("ready_last", { ready: true, checkedAt: "2026-11-17T10:00:00Z", checks: [] });
+    respond("permissions_status", { microphone: "allowed", systemAudio: "allowed", screen: "allowed", browserAutomation: true, platform: "macos" });
+    respond("skipped_list", []);
+  });
+
+  it("while the queue shows the waiting calls and the uploads that need you, the banner above leaves them out", async () => {
+    const items = [makeItem("a", { title: "Zoom with Acme" }), makeItem("u", { title: "Ali", status: "uploaded", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } })];
+    respond("library_list", items);
+    respond("library_refresh", items);
+    respond("bin_list", { data: [] });
+    respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
+    respond("upload_list", [makeUploadItem("f1", { state: "failed", title: "Board call" })]);
+    render(<LibraryV2 top={top()} />);
+    await act(flushAsync);
+    expect(screen.getByTestId("waiting-line")).toHaveTextContent("2 calls waiting");
+    expect(screen.getByRole("heading", { name: "Uploads that need you · 1" })).toBeInTheDocument();
+    // The banner keeps only what the queue doesn't show; there is one Review button, the queue's.
+    const banner = screen.getByTestId("needs-action");
+    expect(banner).toHaveTextContent("1 recording isn't transcribed");
+    expect(banner).not.toHaveTextContent(/wait for your decision|didn't upload/);
+    expect(within(banner).queryByRole("button", { name: /^Review/ })).not.toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Review/ })).toHaveLength(2);
+    fireEvent.click(within(banner).getByRole("button", { name: /^Review/ }));
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("with nothing in the queue, the banner still says what waits (the status counts it)", async () => {
+    respond("library_list", [makeItem("a", { title: "Zoom with Acme" })]);
+    respond("library_refresh", [makeItem("a", { title: "Zoom with Acme" })]);
+    respond("bin_list", { data: [] });
+    respond("pending_list", []);
+    respond("upload_list", []);
+    render(<LibraryV2 top={top()} />);
+    await act(flushAsync);
+    expect(screen.queryByTestId("library-queue")).toBeNull();
+    expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording didn't upload · 1 more needs you");
+    fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Review" }));
+    expect(screen.getByRole("menuitem", { name: "2 calls wait for your decision" })).toBeInTheDocument();
+  });
+
+  it("Activity's Review opens the list once: Trash and back leaves it as the person left it", async () => {
+    respond("library_list", [makeItem("a", { title: "Zoom with Acme" })]);
+    respond("library_refresh", [makeItem("a", { title: "Zoom with Acme" })]);
+    respond("bin_list", { data: [] });
+    respond("pending_list", [makePendingItem("p1")]);
+    respond("upload_list", []);
+    respond("list_clients", CLIENTS);
+    render(<LibraryV2 reviewRequest={{ seq: 7 }} />);
+    await act(flushAsync);
+    expect(waiting()).toBeInTheDocument();
+    fireEvent.click(review());
+    expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
+    await act(flushAsync);
+    expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
+    expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
+  });
+
+  it("once nothing waits the list closes; the next call to arrive starts with the summary again", async () => {
+    await show([makePendingItem("p1")]);
+    fireEvent.click(review());
+    expect(waiting()).toBeInTheDocument();
+    await act(() => emitEvent("pending:changed", []));
+    expect(screen.queryByTestId("library-queue")).toBeNull();
+    await act(() => emitEvent("pending:changed", [makePendingItem("p2")]));
+    expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
+    expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
   });
 });
