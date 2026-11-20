@@ -117,8 +117,8 @@ describe("the v2 Shared page", () => {
     expect(row(URDU)).toHaveTextContent("Saved");
     expect(row("Acme")).toHaveTextContent("Project from Imran");
     expect(screen.getByText(URDU)).toHaveAttribute("dir", "auto");
-    // The time is one left-to-right isolate (.el-num), so "4:05 PM" never turns round in Urdu.
-    expect(within(row("Call a")).getByText("Yesterday · 4:05 PM")).toHaveClass("el-num");
+    // The time is one left-to-right isolate (.el-ltr, words keep their face), so "4:05 PM" never turns round in Urdu.
+    expect(within(row("Call a")).getByText("Yesterday · 4:05 PM")).toHaveClass("el-ltr");
     expect(within(row(URDU)).queryByRole("menuitem", { name: "Save to my library" })).toBeNull();
   });
 
@@ -248,7 +248,7 @@ describe("the v2 Shared page", () => {
     expect(row("Acme kickoff")).toHaveTextContent("Active");
     expect(row("Project: Acme Ltd")).toHaveTextContent("Only omar@acme.pk · Not viewed yet");
     expect(screen.getByText("A recording").closest("li")).toHaveTextContent("Revoked");
-    expect(within(row("Acme kickoff")).getByText("Today · 9:00 AM")).toHaveClass("el-num");
+    expect(within(row("Acme kickoff")).getByText("Today · 9:00 AM")).toHaveClass("el-ltr");
     fireEvent.click(rowButton("Acme kickoff"));
     expect(onOpenRecording).toHaveBeenCalledWith("rec-1");
     await pick("Project: Acme Ltd", "Open");

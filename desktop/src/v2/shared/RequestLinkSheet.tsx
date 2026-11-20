@@ -67,7 +67,10 @@ export function RequestLinkSheet({ projects, projectId = null, requests, renderR
 
   return (
     <Sheet open title="Request files" description={REQUEST_INTRO} onClose={onClose}
-      actions={<Button disabled={busy} onClick={onClose}>Close</Button>}>
+      actions={<>
+        <Button disabled={busy} onClick={onClose}>Close</Button>
+        <Button variant="primary" disabled={!valid} loading={busy} loadingLabel="Making the link…" onClick={() => void make()}>Make link</Button>
+      </>}>
       <div className="el-form el-form--flush">
         <TextField label="Title people see" maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
         <Select label="Files go to" options={places} value={where} onChange={setWhere} />
@@ -81,7 +84,6 @@ export function RequestLinkSheet({ projects, projectId = null, requests, renderR
           <TextField label="Largest file in MB" hint="MB each, 1 to 2048" type="number" min={1} max={2048} value={maxMb} onChange={(e) => setMaxMb(e.target.value)}
             error={mbOk ? undefined : "Choose from 1 to 2048 MB."} />
         </div>
-        <Button variant="primary" disabled={!valid} loading={busy} loadingLabel="Making the link…" onClick={() => void make()}>Make link</Button>
         {error && <Banner tone="danger" icon={Icons.ErrorIcon}>{error}</Banner>}
         {made && (
           <div className="el-group" role="status">

@@ -239,7 +239,7 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
   const device = session.source_device_label ?? (session.source_device ? DEVICE_WORDS[session.source_device] ?? session.source_device : null);
   // When it was recorded, how long, and its project; the time and the length are number isolates (right way round in Urdu).
   const recorded = [
-    formatWhen(session.started_at) ? <span key="at" className="el-num">{formatWhen(session.started_at)}</span> : null,
+    formatWhen(session.started_at) ? <span key="at" className="el-ltr">{formatWhen(session.started_at)}</span> : null,
     formatDuration(session.duration_ms) ? <span key="length" className="el-num">{formatDuration(session.duration_ms)}</span> : null,
     session.client?.name ? <span key="project" dir="auto">{session.client.name}</span> : null,
   ].filter(Boolean).flatMap((part, i) => (i ? [" · ", part] : [part]));

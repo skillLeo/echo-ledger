@@ -34,7 +34,8 @@ const STATE_TONE: Record<"Active" | "Revoked" | "Expired", Tone> = { Active: "su
 type RowEvent = MouseEvent<HTMLElement> | KeyboardEvent<HTMLButtonElement>;
 
 /** A time in a row's line, kept left-to-right as one piece inside right-to-left text. */
-const when = (iso: string) => <span className="el-num">{formatWhen(iso)}</span>;
+/** A date and time with words ("Yesterday · 4:05 PM"): kept left to right in its own face; .el-num is for bare numbers. */
+const when = (iso: string) => <span className="el-ltr">{formatWhen(iso)}</span>;
 
 /** "Recording from Imran · Yesterday · 4:05 PM · “Please check the totals”", the time an isolate. */
 export function sharedMeta(item: SharedItem): ReactNode {
