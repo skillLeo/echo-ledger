@@ -25,6 +25,7 @@ import { recordingName, searchItems, type SortKey } from "../../lib/library";
 import { RecordingPage } from "./RecordingPage";
 import { SourceAvatar } from "./SourceAvatar";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
+import { QueueV2 } from "./QueueV2";
 import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
@@ -623,6 +624,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
           <LibraryTop {...top} items={items}
             onAction={(a) => (a === "missed" ? top.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"))} />
         )}
+        {view !== "trash" && !selecting && <QueueV2 say={say} />}
         <div className="el-page__tools">
           {view !== "trash" && (
             <div className="el-search-row">
