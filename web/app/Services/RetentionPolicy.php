@@ -96,14 +96,38 @@ final class RetentionPolicy
         if ($session->keep_forever || $session->status === SessionStatus::Recording) {
             return null;
         }
-        $client = $session->client_id !== null ? ($session->relationLoaded('client') ? $session->client : $session->client()->first(['id', 'retention_days'])) : null;
-        $at = $session->created_at->copy()->addDays($this->daysFor($client));
+        $at = $session->created_at->copy()->addDays($this->projectDays($session) ?? $this->settings->retentionDays());
         [$days, $from] = $this->workspaceRetention((int) $session->workspace_id);
         if ($days !== null && ($from === null || $session->created_at->gte($from))) {
             $at = $at->min($session->created_at->copy()->addDays(max(1, $days)));
         }
 
         return $at;
+    }
+
+    /**
+     * The days of [$session]'s project when it has its own (1 to 365), as applyRetention reads them. The loaded project
+     * when there is one; otherwise, as on a recording a teammate sent (Teammates::readOnly hides the sender's project),
+     * the workspace's projects with their own days, read once a request whoever is asking.
+     */
+    private function projectDays(CaptureSession $session): ?int
+    {
+        if ($session->client_id === null) {
+            return null;
+        }
+        $client = $session->relationLoaded('client') ? $session->client : null;
+        if ($client instanceof Client) {
+            return $client->retention_days !== null ? $this->daysFor($client) : null;
+        }
+        $key = 'el.project-days.'.$session->workspace_id;
+        $days = request()->attributes->get($key);
+        if (! is_array($days)) {
+            $days = Client::acrossPeople()->where('workspace_id', $session->workspace_id)->whereNotNull('retention_days')
+                ->pluck('retention_days', 'id')->map(fn ($d): int => max(1, min(365, (int) $d)))->all();
+            request()->attributes->set($key, $days);
+        }
+
+        return $days[$session->client_id] ?? null;
     }
 
     /**

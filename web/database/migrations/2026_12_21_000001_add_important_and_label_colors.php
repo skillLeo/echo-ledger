@@ -28,8 +28,13 @@ return new class extends Migration
                 $table->id();
                 $table->foreignId('workspace_id')->constrained()->cascadeOnDelete();
                 $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-                // The label in lower case: one colour per label of a person in a workspace, whatever its capitals.
-                $table->string('label_key', 40);
+                // The label in lower case (mb_strtolower, which can grow a 40-character label): one colour per label of a
+                // person in a workspace, whatever its capitals. Compared byte for byte on MySQL and MariaDB, so "Résumé"
+                // and "resume" stay two labels as they are in PHP.
+                $key = $table->string('label_key', 160);
+                if (in_array(Schema::getConnection()->getDriverName(), ['mysql', 'mariadb'], true)) {
+                    $key->collation('utf8mb4_bin');
+                }
                 $table->string('color', 7);
                 $table->timestamps();
                 $table->unique(['workspace_id', 'user_id', 'label_key']);

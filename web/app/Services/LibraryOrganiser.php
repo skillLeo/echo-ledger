@@ -259,23 +259,37 @@ final class LibraryOrganiser
             throw new ApiError(422, 'validation_failed', 'The label is required.', ['errors' => ['label' => ['The label is required.']]]);
         }
         $key = mb_strtolower($clean);
-        $carriers = SessionLabel::query()->whereRaw('LOWER(label) = ?', [$key])
-            ->whereHas('captureSession', fn (Builder $q) => $q->where('workspace_id', $workspaceId)->where('user_id', $userId));
-        $spelt = (clone $carriers)->orderBy('id')->value('label');
-        if ($spelt === null) {
+        // The person's labels, compared in PHP: SQL's LOWER() and the column's collation disagree on non-English letters
+        // ("Été", accents, Arabic marks) from one database to the next.
+        $carriers = SessionLabel::query()
+            ->join('capture_sessions', 'capture_sessions.id', '=', 'session_labels.capture_session_id')
+            ->where('capture_sessions.workspace_id', $workspaceId)->where('capture_sessions.user_id', $userId)
+            ->whereNull('capture_sessions.deleted_at')
+            ->orderBy('session_labels.id')
+            ->get(['session_labels.capture_session_id', 'session_labels.label'])
+            ->filter(fn (SessionLabel $l): bool => mb_strtolower((string) $l->label) === $key);
+        if ($carriers->isEmpty()) {
             throw new ApiError(404, 'label_not_found', 'No recording has this label.');
         }
+        $spelt = (string) $carriers->firstOrFail()->label;
         $color = $color !== null ? strtolower($color) : null;
         DB::transaction(function () use ($workspaceId, $userId, $key, $color, $carriers): void {
             $row = ['workspace_id' => $workspaceId, 'user_id' => $userId, 'label_key' => $key];
-            $color === null
-                ? LabelColor::query()->where($row)->delete()
-                : LabelColor::query()->updateOrCreate($row, ['color' => $color]);
-            CaptureSession::query()->whereIn('id', (clone $carriers)->select('capture_session_id'))->update(['updated_at' => now()]);
+            if ($color === null) {
+                LabelColor::query()->where($row)->delete();
+            } else {
+                // One statement, so two devices setting it at once never trip the unique index.
+                LabelColor::query()->upsert([[...$row, 'color' => $color, 'created_at' => now(), 'updated_at' => now()]],
+                    ['workspace_id', 'user_id', 'label_key'], ['color', 'updated_at']);
+            }
+            // A plain list of ids: MySQL refuses an UPDATE that reads its own table in a subquery (error 1093).
+            foreach ($carriers->pluck('capture_session_id')->unique()->chunk(500) as $ids) {
+                CaptureSession::query()->whereIn('id', $ids->values()->all())->update(['updated_at' => now()]);
+            }
         });
         request()->attributes->remove(self::colorsKey($workspaceId, $userId));
 
-        return ['label' => (string) $spelt, 'color' => $color];
+        return ['label' => $spelt, 'color' => $color];
     }
 
     private static function colorsKey(int $workspaceId, int $userId): string

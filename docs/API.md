@@ -1107,7 +1107,8 @@ What a Library row shows beside the title and the time (docs/PLAN_V2_PARITY.md s
 ### `PUT /api/labels/color` — `sessions:write` (since 2.0.0-i)
 The colour of one of the asking person's labels in the device's workspace.
 `{"label": "Invoice", "color": "#16A34A"}` → `200 {"label": "Invoice", "color": "#16a34a"}`; `"color": null` takes the
-colour away (`200` with `"color": null`). `label` is matched ignoring capitals and cleaned as labels are (trimmed,
+colour away (`200` with `"color": null`). `label` is matched ignoring capitals only (accents and other marks count:
+"Résumé" and "resume" are two labels; "ÉTÉ" finds "Été") and cleaned as labels are (trimmed,
 single spaces, ≤ 40); the answer spells it as the person's first recording with it does. `color` is `#rrggbb`, kept and
 returned in lower case as a project's colour is. A label none of the person's recordings in this workspace carries is
 `404 label_not_found` (a teammate's or another workspace's label counts as none). Every recording of theirs with the

@@ -14,6 +14,7 @@ use App\Models\Workspace;
 use App\Services\Accounts\AccountEraser;
 use App\Services\RetentionPolicy;
 use App\Services\SettingsRepository;
+use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
@@ -187,6 +188,29 @@ describe('label colours', function () {
             ->and(LabelColor::query()->orderBy('user_id')->pluck('user_id')->all())->toBe([$this->me->id, $mate->id]);
     });
 
+    it('matches labels in any script ignoring capitals only, the same on every database', function () {
+        $ete = rowSession($this->me);
+        $ete->labels()->create(['label' => 'Été']);
+        $resume = rowSession($this->me);
+        $resume->labels()->create(['label' => 'Résumé']);
+        $plain = rowSession($this->me);
+        $plain->labels()->create(['label' => 'resume']);
+        $urdu = rowSession($this->me);
+        $urdu->labels()->create(['label' => 'بل']);
+
+        $this->api($this->token)->putJson('/api/labels/color', ['label' => 'ÉTÉ', 'color' => '#dc2626'])->assertOk()->assertJson(['label' => 'Été']);
+        $this->api($this->token)->putJson('/api/labels/color', ['label' => 'RÉSUMÉ', 'color' => '#16a34a'])->assertOk()->assertJson(['label' => 'Résumé']);
+        $this->api($this->token)->putJson('/api/labels/color', ['label' => 'بل', 'color' => '#2563eb'])->assertOk();
+
+        $items = rowItems($this, $this->token);
+        expect($items[$ete->id]['label_colors'])->toBe(['Été' => '#dc2626'])
+            ->and($items[$resume->id]['label_colors'])->toBe(['Résumé' => '#16a34a'])
+            // Accents count: "resume" is another label and has no colour.
+            ->and($items[$plain->id]['label_colors'])->toBe([])
+            ->and($items[$urdu->id]['label_colors'])->toBe(['بل' => '#2563eb'])
+            ->and(LabelColor::query()->count())->toBe(3);
+    });
+
     it('refuses a missing label, a missing colour and a colour that is not #rrggbb', function () {
         rowSession($this->me)->labels()->create(['label' => 'Invoice']);
 
@@ -291,6 +315,28 @@ describe('expires_at', function () {
             app(RetentionPolicy::class)->applyRetention();
             expect(stored($id)->trashed())->toBeTrue();
         }
+    });
+
+    it('keeps the sender\'s project days on a recording a teammate sent, as the clean-up does', function () {
+        [$mate, $mateToken] = teammate($this);
+        $project = Client::factory()->create(['user_id' => $this->me->id, 'retention_days' => 6]);
+        $sent = rowSession($this->me, ['created_at' => now()->subDays(2), 'client_id' => $project->id]);
+        app(Teammates::class)->send($this->me, $sent, [$mate->email], null);
+        $at = $sent->created_at->copy()->addDays(6);
+
+        // The recipient sees neither the project nor a different date than the sender.
+        $shared = rowItems($this, $mateToken, 'folder=shared')[$sent->id];
+        expect($shared['client'])->toBeNull()
+            ->and($shared['expires_at'])->toBe($at->toAtomString())
+            ->and(rowItems($this, $this->token)[$sent->id]['expires_at'])->toBe($at->toAtomString());
+        app('auth')->forgetGuards();
+
+        $this->travelTo($at->copy()->subMinute());
+        app(RetentionPolicy::class)->applyRetention();
+        expect(stored($sent->id)->trashed())->toBeFalse();
+        $this->travelTo($at->copy()->addHour());
+        app(RetentionPolicy::class)->applyRetention();
+        expect(stored($sent->id)->trashed())->toBeTrue();
     });
 
     it('is left out of a tombstone', function () {
