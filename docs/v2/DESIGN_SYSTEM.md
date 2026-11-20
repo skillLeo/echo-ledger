@@ -72,6 +72,13 @@ surface stays neutral, so the app looks the same on every phone and the record b
 System fonts in the native apps (SF Pro, Segoe UI Variable, Roboto). The web uses one deliberate face, not the Inter
 default; chosen at Gate 3.
 
+### Label colours (contract 2.0.0-i)
+Eight per-person label colours, the same on every platform: grey, red, orange, amber, green, teal, blue, pink. There is no purple, as rule 2 requires.
+- **Stored value.** The server stores each colour as one theme-independent `#rrggbb`, the colour's key (tokens/global/label.json; `--el-label-<name>` in CSS; `EchoTokens.labelColours` on Android).
+- **Drawing.** Apps draw a label with `role.label.<name>.fill` / `.text` / `.dot` for the current theme. Text reaches 4.5:1 on its fill and on every background, and the dot 3:1. tokens/test checks both.
+- **Other colours.** A stored colour that is not one of the eight (set by an older app or the API) shows only as a dot in that colour, on the neutral chip with primary text. It is never used as text or fill.
+- **Picker.** The picker offers the eight colours only, as dots in a row with the name as the accessible label. Grey is the default.
+
 ### Spacing, radius, elevation, motion, density
 - Spacing on a 4 px base: 2, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64. Page padding 24 (desktop) / 16 (mobile). Rows 56
   comfortable / 44 compact on desktop, 64–72 on mobile.

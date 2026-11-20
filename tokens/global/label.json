@@ -1,0 +1,37 @@
+{
+  "label": {
+    "grey": {
+      "$type": "color",
+      "$value": "#8E8A80"
+    },
+    "red": {
+      "$type": "color",
+      "$value": "#E15F56"
+    },
+    "orange": {
+      "$type": "color",
+      "$value": "#DC6718"
+    },
+    "amber": {
+      "$type": "color",
+      "$value": "#B3820F"
+    },
+    "green": {
+      "$type": "color",
+      "$value": "#2D9A63"
+    },
+    "teal": {
+      "$type": "color",
+      "$value": "#26978F"
+    },
+    "blue": {
+      "$type": "color",
+      "$value": "#458CDE"
+    },
+    "pink": {
+      "$type": "color",
+      "$value": "#D7609C"
+    },
+    "$description": "The value the server stores for each label colour (#rrggbb, contract 2.0.0-i). Apps show role.label.<name>.* for it; any other stored colour shows as a dot only, on the neutral chip."
+  }
+}
