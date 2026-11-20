@@ -299,5 +299,7 @@
     "People: :people": "لوگ: :people",
     "Language: :language": "زبان: :language",
     "1 recording is still recording or uploading and was left alone.": "1 ریکارڈنگ ابھی ریکارڈ یا اپ لوڈ ہو رہی ہے، اسے نہیں چھیڑا گیا۔",
-    ":count recordings are still recording or uploading and were left alone.": ":count ریکارڈنگز ابھی ریکارڈ یا اپ لوڈ ہو رہی ہیں، انہیں نہیں چھیڑا گیا۔"
+    ":count recordings are still recording or uploading and were left alone.": ":count ریکارڈنگز ابھی ریکارڈ یا اپ لوڈ ہو رہی ہیں، انہیں نہیں چھیڑا گیا۔",
+    "Undo has expired": "واپسی کا وقت ختم ہو گیا",
+    "Open Trash to bring recordings back.": "ریکارڈنگز واپس لانے کے لیے ردی کھولیں۔"
 }

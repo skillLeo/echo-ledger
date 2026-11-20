@@ -11,7 +11,8 @@
         if (window.elV2LibraryKeys) return;
         window.elV2LibraryKeys = true;
         const core = window.ElLibraryKeysCore;
-        const field = (t) => t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]') !== null ? { typing: true } : t;
+        const field = (t) => t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]') !== null ? { typing: true }
+            : (t instanceof Element && t.closest('button, a[href], summary, [role="button"], [role="menuitem"]') !== null ? { control: true } : t);
         const library = () => {
             const list = document.querySelector('.v2-library');
             const host = list ? list.closest('[wire\\:id]') : null;

@@ -255,10 +255,12 @@
   "pattern": "^input\\|select/deselect group "
  },
  "WEB-LIB-009": {
-  "type": "controlmatch",
+  "type": "controls",
   "page": "library",
   "scope": "main",
-  "pattern": "^input\\|select/deselect group "
+  "keys": [
+   "button|yesterday"
+  ]
  },
  "WEB-LIB-010": {
   "type": "controlmatch",
@@ -947,12 +949,21 @@
   "key": "button|untranscribed"
  },
  "WEB-LIB-025": {
-  "type": "html",
+  "type": "selected",
   "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|leave the selection",
+   "button|select all",
+   "button|move to project",
+   "button|label",
+   "button|export",
+   "button|delete",
+   "button|more"
+  ],
   "contains": [
-   "data-selection-exit",
-   "data-selection-more",
-   "data-selection-delete"
+   "1 selected|:count selected",
+   "data-selection-more"
   ]
  },
  "WEB-LIB-027": {

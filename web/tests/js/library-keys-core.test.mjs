@@ -40,6 +40,16 @@ test('J, K, Enter, X and Esc move, open, tick and clear', () => {
     assert.equal(core.keyAction(key('Escape'), list()), null);
 });
 
+test('Enter and X on a button or a link of its own are that control\'s, not the Library\'s', () => {
+    for (const target of [{ tagName: 'BUTTON' }, { tagName: 'a' }, { tagName: 'SUMMARY' }, { control: true }]) {
+        assert.equal(core.keyAction(key('Enter', { target }), list({ at: 2 })), null);
+        assert.equal(core.keyAction(key('x', { target }), list({ at: 2 })), null);
+    }
+    // J and K still move from a focused button; Enter on the page opens the current row.
+    assert.deepEqual(core.keyAction(key('j', { target: { tagName: 'BUTTON' } }), list({ at: 0 })), { do: 'move', at: 1 });
+    assert.deepEqual(core.keyAction(key('Enter'), list({ at: 2 })), { do: 'open', at: 2 });
+});
+
 test('no key fires while the person types in a field, an editable part or a dialog', () => {
     for (const target of [{ tagName: 'INPUT' }, { tagName: 'textarea' }, { tagName: 'SELECT' }, { tagName: 'DIV', isContentEditable: true }, { typing: true }]) {
         for (const k of [key('a', { ctrlKey: true, target }), key('a', { metaKey: true, target }), key('Delete', { target }), key('Backspace', { target }), key('j', { target }), key('Escape', { target })]) {

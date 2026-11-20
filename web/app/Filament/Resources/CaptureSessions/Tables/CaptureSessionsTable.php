@@ -379,16 +379,16 @@ final class CaptureSessionsTable
         return $out;
     }
 
-    /**
-     * Delete for the v2.0 selection: the recordings go to Trash at once (each one the person may delete), and the
-     * notice offers Undo, which brings them back while the Trash still has them.
-     */
     /** Where the v2.0 selection's last Delete waits for its Undo (one batch, one person). */
     public static function undoKey(string $token): string
     {
         return 'el-library-undo:'.auth()->id().':'.$token;
     }
 
+    /**
+     * Delete for the v2.0 selection: the recordings go to Trash at once (each one the person may delete), and the
+     * notice offers Undo, which brings them back while the Trash still has them.
+     */
     public static function trashBulkAction(string $name): BulkAction
     {
         return BulkAction::make($name)->label(__('Delete'))->icon(Heroicon::OutlinedTrash)

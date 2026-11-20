@@ -141,6 +141,11 @@ class ListCaptureSessions extends ListRecords
     {
         parent::updatedActiveTab();
         $this->loadLibraryView();
+        // v2.0: another place starts with nothing selected, as a search or a filter does (Filament's own), so the
+        // selection never holds recordings the list no longer shows.
+        if (ConsoleV2::library()) {
+            $this->deselectAllTableRecords();
+        }
     }
 
     /** The view the choice is remembered for: the smart view, and the smart folder when one is chosen. */
@@ -353,9 +358,15 @@ class ListCaptureSessions extends ListRecords
     public function undoDelete(string $token = ''): void
     {
         $ids = $token !== '' ? Cache::pull(CaptureSessionsTable::undoKey($token)) : null;
+        // A token already used, or older than its half hour: nothing waits for it any more.
+        if (! is_array($ids)) {
+            Notification::make()->title(__('Undo has expired'))->body(__('Open Trash to bring recordings back.'))->warning()->send();
+
+            return;
+        }
         $back = 0;
         $policy = app(RetentionPolicy::class);
-        foreach (is_array($ids) ? CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', array_slice(array_map('strval', $ids), 0, 200))->get() : [] as $session) {
+        foreach (CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', array_slice(array_map('strval', $ids), 0, 200))->get() as $session) {
             if ($session->restorable() && Gate::allows('restore', $session)) {
                 $policy->restore($session);
                 $back++;
@@ -376,6 +387,9 @@ class ListCaptureSessions extends ListRecords
     {
         $this->folder = $folder !== null && $folder !== $this->folder && array_key_exists($folder, self::FOLDER_LABELS) && $folder !== 'shared' ? $folder : null;
         $this->resetPage();
+        if (ConsoleV2::library()) {
+            $this->deselectAllTableRecords();
+        }
         $this->loadLibraryView();
     }
 

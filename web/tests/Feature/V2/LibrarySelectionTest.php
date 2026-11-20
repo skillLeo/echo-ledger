@@ -72,9 +72,10 @@ it('moves the selected recordings to Trash at once, offers Undo, and brings them
 
     Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $token)->assertNotified('2 recordings are back');
     expect(CaptureSession::query()->whereIn('id', $ids)->count())->toBe(2);
-    // The token is spent: a second Undo brings nothing back.
+    // The token is spent: a second Undo brings nothing back and says Undo has expired.
     $this->recordings->first()->delete();
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $token)->assertNotified('0 recordings are back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $token)->assertNotified('Undo has expired');
+    expect(CaptureSession::query()->find($this->recordings->first()->id))->toBeNull();
 });
 
 it('brings back only that batch, only the person\'s own, and only what they may restore', function () {
@@ -90,7 +91,7 @@ it('brings back only that batch, only the person\'s own, and only what they may 
         ->and(CaptureSession::query()->find($earlier->id))->toBeNull()
         ->and(CaptureSession::withoutGlobalScopes()->onlyTrashed()->find($other->id))->not->toBeNull();
     // Ids sent from the browser are not a batch.
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', ids: [$earlier->id])->assertNotified('0 recordings are back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', ids: [$earlier->id])->assertNotified('Undo has expired');
     expect(CaptureSession::query()->find($earlier->id))->toBeNull();
 
     // A person the policy does not let restore gets nothing back.
@@ -146,4 +147,11 @@ it('decides the keys and the mouse as the Node test says (Ctrl/Cmd+A, Shift-clic
 
 it('starts a new page of the list with nothing selected', function () {
     Livewire::test(ListCaptureSessions::class)->call('gotoPage', 2, 'page')->assertDispatched('deselectAllTableRecords');
+});
+
+it('starts another place, folder or search of the list with nothing selected', function () {
+    $ids = $this->recordings->pluck('id')->all();
+    Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->call('openPlace', 'today')->assertDispatched('deselectAllTableRecords');
+    Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->call('chooseFolder', 'whatsapp')->assertDispatched('deselectAllTableRecords');
+    Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->set('tableSearch', 'Call 1')->assertDispatched('deselectAllTableRecords');
 });
