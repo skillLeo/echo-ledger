@@ -54,6 +54,8 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.V2Text
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.ProvidePageLook
+import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.theme.screenLocale
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.ZonedDateTime
@@ -403,9 +405,9 @@ fun V2LibraryContent(
                 if (tools != null) {
                     Box {
                         EchoIconButton(EchoIcons.More, stringResource(R.string.v2_lib_more), { menu = true })
-                        val look = com.echoledger.mobile.ui.v2.theme.rememberPageLook()
+                        val look = rememberPageLook()
                         androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            com.echoledger.mobile.ui.v2.theme.ProvidePageLook(look) {
+                            ProvidePageLook(look) {
                                 androidx.compose.material3.DropdownMenuItem(
                                     text = { Text(stringResource(R.string.v2_lib_select), style = EchoV2.type.body) },
                                     leadingIcon = { androidx.compose.material3.Icon(EchoIcons.SelectAll, null) },

@@ -11,6 +11,7 @@
         <item quantity="other">Activity, %1$d need you</item>
     </plurals>
     <string name="v2_nav_recording">Recording</string>
+    <string name="v2_nav_open_recording">Open recording</string>
     <string name="v2_calls_ready">Calls: Ready</string>
     <string name="v2_calls_not_ready">Not ready · Fix</string>
     <string name="v2_calls_off">Calls: Off</string>

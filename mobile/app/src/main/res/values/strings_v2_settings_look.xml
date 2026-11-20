@@ -13,7 +13,7 @@
     <string name="v2_set_usage_title">This month</string>
     <string name="v2_set_usage_of">%1$d of %2$d minutes used</string>
     <string name="v2_set_usage_unlimited">%1$d minutes used, no limit</string>
-    <string name="v2_set_wallpaper_help">Use your wallpaper\'s colours instead of EchoLedger\'s own.</string>
+    <string name="v2_set_wallpaper_help">Changes the classic screens only: they take your wallpaper\'s colours. The new design keeps EchoLedger\'s own colours.</string>
     <string name="v2_set_item_appearance_textsize">Text size</string>
     <string name="v2_set_textsize_help">On top of your phone\'s own text size.</string>
     <string name="v2_set_textsize_smaller">Smaller</string>

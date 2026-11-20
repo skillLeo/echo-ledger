@@ -13,7 +13,7 @@
     <string name="v2_set_usage_title">اس مہینے</string>
     <string name="v2_set_usage_of">%2$d میں سے %1$d منٹ استعمال ہوئے</string>
     <string name="v2_set_usage_unlimited">%1$d منٹ استعمال ہوئے، کوئی حد نہیں</string>
-    <string name="v2_set_wallpaper_help">EchoLedger کے اپنے رنگوں کی بجائے اپنے وال پیپر کے رنگ استعمال کریں۔</string>
+    <string name="v2_set_wallpaper_help">صرف کلاسک ڈیزائن کی اسکرینیں بدلتی ہیں: وہ آپ کے وال پیپر کے رنگ لیتی ہیں۔ نیا ڈیزائن EchoLedger کے اپنے رنگ رکھتا ہے۔</string>
     <string name="v2_set_item_appearance_textsize">متن کا سائز</string>
     <string name="v2_set_textsize_help">آپ کے فون کے اپنے متن کے سائز کے اوپر۔</string>
     <string name="v2_set_textsize_smaller">چھوٹا</string>

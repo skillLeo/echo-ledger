@@ -58,6 +58,8 @@ import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoTextField
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.ProvidePageLook
+import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /** The actions of Library's selection mode (docs/PLAN_V2_PARITY.md section 3), the same as classic's selection bar. */
@@ -153,9 +155,9 @@ fun SelectionBar(
                 exportOpen = false
                 menu = true
             })
-            val look = com.echoledger.mobile.ui.v2.theme.rememberPageLook()
+            val look = rememberPageLook()
             DropdownMenu(expanded = menu, onDismissRequest = ::close) {
-                com.echoledger.mobile.ui.v2.theme.ProvidePageLook(look) {
+                ProvidePageLook(look) {
                     if (exportOpen) {
                         // TODO-DS: a sub-menu in the shared menu component; until then Export ▸ swaps the menu for its formats.
                         SubMenuHeader(stringResource(R.string.v2_lib_export_header)) { exportOpen = false }

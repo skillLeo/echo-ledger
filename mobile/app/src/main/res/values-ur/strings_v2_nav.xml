@@ -11,6 +11,7 @@
         <item quantity="other">سرگرمی، %1$d آپ کی منتظر</item>
     </plurals>
     <string name="v2_nav_recording">ریکارڈنگ جاری ہے</string>
+    <string name="v2_nav_open_recording">ریکارڈنگ کھولیں</string>
     <string name="v2_calls_ready">کالز: تیار</string>
     <string name="v2_calls_not_ready">تیار نہیں · ٹھیک کریں</string>
     <string name="v2_calls_off">کالز: بند</string>

@@ -30,6 +30,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.core.LibraryViewChoice
@@ -75,7 +76,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * EL-Design's visual review of the phone's v2 Library, navigation and Activity (U1–U4, points 1–11), held on the
+ * The U1–U4 visual review of the phone's v2 Library, navigation and Activity (points 1–11), held on the
  * narrowest phone (360 dp) at 100 % and 130 % text, in English and in Urdu (right to left), with real text measurement.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -402,5 +403,91 @@ class VisualReviewTest {
         )
         val lastYear = october.copy(startedAt = "2025-10-20T10:00:00+00:00")
         assertEquals("Oct 20 2025", LibraryModel.time(lastYear, now, text, Locale.ENGLISH))
+    }
+
+    // Settings home: the values classic's list shows on its rows, from the same settings, in the screen's language.
+
+    @Test
+    fun settingsRowsShowClassicsValues() {
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
+        val en = app.resources
+        val ur = V2Testing.resources(EchoLanguage.Urdu)
+        val base = com.echoledger.mobile.data.AppSettings()
+        fun v(page: String, s: com.echoledger.mobile.data.AppSettings = base, res: android.content.res.Resources = en) =
+            com.echoledger.mobile.ui.v2.settings.pageValue(res, page, s)
+        assertEquals("Automatic", v("mic"))
+        assertEquals("Raw microphone", v("mic", base.copy(micSource = "mic")))
+        assertEquals("Tap to start", v("voice"))
+        assertEquals("Hold to talk", v("voice", base.copy(dictationMode = "hold")))
+        assertEquals("Not added", v("key"))
+        val withKey = base.copy(plan = base.plan.copy(transcriptionKey = com.echoledger.mobile.data.TranscriptionKeyDto(set = true)))
+        assertEquals("Added", v("key", withKey))
+        assertEquals("Not set up", v("games"))
+        assertEquals("Not set up", v("videos"))
+        val two = base.copy(
+            liveTranslate = base.liveTranslate.copy(
+                game = base.liveTranslate.game.copy(games = listOf("a", "b")),
+                watch = base.liveTranslate.watch.copy(apps = listOf("c"))
+            )
+        )
+        assertEquals("2 games", v("games", two))
+        assertEquals("1 app", v("videos", two))
+        assertEquals("Starter", v("plan", base.copy(plan = base.plan.copy(name = "Starter"))))
+        // The same words in Urdu.
+        assertEquals("خودکار", v("mic", res = ur))
+        assertEquals("شروع کرنے کے لیے ٹیپ کریں", v("voice", res = ur))
+        // Rows classic shows no value for show none here either.
+        for (page in listOf("calls", "words", "privacy", "storage", "account", "devices", "help")) assertEquals(page, null, v(page))
+    }
+
+    @Test
+    fun theSettingsHomeShowsMicrophoneAndVoiceValues() {
+        show {
+            com.echoledger.mobile.ui.v2.settings.V2SettingsRoot(
+                settings = com.echoledger.mobile.data.AppSettings(),
+                profile = com.echoledger.mobile.ui.v2.shell.ProfileState.Loading,
+                signedIn = false,
+                onUpgrade = {},
+                onRetryProfile = {},
+                onOpen = { _, _ -> },
+                onSignOut = {},
+                onBack = {}
+            )
+        }
+        compose.onNode(hasText("Microphone & audio", substring = true) and hasText("Automatic", substring = true)).assertExists()
+        compose.onNode(hasText("Voice notes & dictation", substring = true) and hasText("Tap to start", substring = true)).assertExists()
+    }
+
+    // The Record sheet scrolls, so its last rows are reachable on a narrow phone at large text.
+
+    @Test
+    fun theRecordSheetsLastRowIsReachableAt200PercentOnANarrowPhone() {
+        val went = mutableListOf<String>()
+        show {
+            com.echoledger.mobile.ui.v2.shell.V2RecordSheet(
+                RecordSheetState(
+                    AppCallCapture.BOTH_SIDES,
+                    armed = false,
+                    canArm = true,
+                    liveAssist = true,
+                    liveTranslate = true,
+                    translateLocked = null,
+                    game = false,
+                    watch = false
+                ),
+                RecordSheetActions({}, {}, {}, {}, {}, {}, {}, {}, onWatchTranslate = { went += "watch" }),
+                onDismiss = {}
+            )
+        }
+        for (l in EchoLanguage.entries) {
+            language = l
+            scale = 2f
+            compose.waitForIdle()
+            val watch = compose.onNodeWithText(words("Watch translate", "ویڈیو کا ترجمہ"))
+            watch.performScrollTo()
+            watch.assertIsDisplayed()
+        }
+        compose.onNodeWithText("ویڈیو کا ترجمہ").performClick()
+        assertEquals(listOf("watch"), went)
     }
 }

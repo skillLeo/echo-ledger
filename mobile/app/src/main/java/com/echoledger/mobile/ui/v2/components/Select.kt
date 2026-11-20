@@ -31,6 +31,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.ProvidePageLook
+import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
@@ -89,7 +91,7 @@ fun <T> EchoSelect(
                 Icon(EchoIcons.Expand, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary)
             }
         }
-        val look = com.echoledger.mobile.ui.v2.theme.rememberPageLook()
+        val look = rememberPageLook()
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
@@ -98,7 +100,7 @@ fun <T> EchoSelect(
             border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault)
         ) {
             // The menu's window starts from the activity's: keep the page's language and text size.
-            com.echoledger.mobile.ui.v2.theme.ProvidePageLook(look) {
+            ProvidePageLook(look) {
                 options.forEach { option ->
                     val isSelected = option == selected
                     DropdownMenuItem(

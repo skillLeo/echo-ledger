@@ -23,6 +23,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.R
@@ -250,6 +251,38 @@ class NarrowShotsTest : ScreenTest() {
         assertEquals(
             all,
             shoot("settings") {
+                val settings by vm.settings.collectAsState()
+                EchoV2Theme(darkTheme = dark, language = language) {
+                    CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
+                        V2SettingsRoot(
+                            settings = settings,
+                            profile = ProfileState.Ready(
+                                Profile("Asad Shah", "asad@bilaltraders.pk", "Starter", 212, 300, 1_240_000_000, 318)
+                            ),
+                            signedIn = true,
+                            onUpgrade = {},
+                            onRetryProfile = {},
+                            onOpen = { _, _ -> },
+                            onSignOut = {},
+                            onBack = {}
+                        )
+                    }
+                }
+            }
+        )
+    }
+
+    /** The end of Settings: Account & plan with this month's minutes, About, Sign out. */
+    @Test
+    fun settingsEnd() {
+        vm.updateSettings { it.copy(plan = it.plan.copy(usedMinutes = 212, monthlyMinutes = 300)) }
+        val signOut = listOf(EchoLanguage.English, EchoLanguage.Urdu).map { V2Testing.resources(it).getString(R.string.v2_set_sign_out) }
+        assertEquals(
+            all,
+            shoot("settings-end", {
+                compose.onNode(androidx.compose.ui.test.hasScrollToIndexAction())
+                    .performScrollToNode(androidx.compose.ui.test.hasText(signOut[0]) or androidx.compose.ui.test.hasText(signOut[1]))
+            }) {
                 val settings by vm.settings.collectAsState()
                 EchoV2Theme(darkTheme = dark, language = language) {
                     CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {

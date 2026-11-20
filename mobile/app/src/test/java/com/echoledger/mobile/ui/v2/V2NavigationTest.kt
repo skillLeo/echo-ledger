@@ -48,6 +48,9 @@ class V2NavigationTest : ScreenTest() {
     private var recordNow = 0
     private var micAllowed = true
 
+    /** Moves the shell's clock on (the Record button holds a moment after a tap that acted). */
+    private var skew = 0L
+
     private val classic = ClassicScreens(
         home = { Text("Classic activity") },
         library = { Text("Classic library") },
@@ -90,6 +93,7 @@ class V2NavigationTest : ScreenTest() {
             classic = classic,
             onSwitchToClassic = {},
             language = EchoLanguage.English,
+            clock = { System.currentTimeMillis() + skew },
             onRecordNow = {
                 recordNow++
                 micAllowed
@@ -127,11 +131,8 @@ class V2NavigationTest : ScreenTest() {
         compose.onNodeWithContentDescription("Record").performClick()
         assertEquals(1, recordNow)
         assertTrue(opened.isEmpty())
-        // The recording ran and stopped (a tap while it starts is ignored, so it never starts and stops at once).
-        com.echoledger.mobile.recording.RecordingService.live.value = com.echoledger.mobile.recording.LiveRecording(active = true)
-        compose.waitForIdle()
-        com.echoledger.mobile.recording.RecordingService.live.value = com.echoledger.mobile.recording.LiveRecording()
-        compose.waitForIdle()
+        // A moment later (a tap right after one that acted is ignored, so a double tap never starts and stops at once).
+        skew += 1_000
         micAllowed = false
         compose.onNodeWithContentDescription("Record").performClick()
         assertEquals(2, recordNow)

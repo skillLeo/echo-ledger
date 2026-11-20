@@ -83,6 +83,20 @@
     <string name="v2_set_value_dark">ڈارک</string>
     <string name="v2_set_value_automatic">خودکار</string>
     <string name="v2_set_value_quiet">خاموش %1$s–%2$s</string>
+    <string name="v2_set_value_raw_mic">خام مائیکروفون</string>
+    <string name="v2_set_value_tap_to_start">شروع کرنے کے لیے ٹیپ کریں</string>
+    <string name="v2_set_value_hold_to_talk">بولنے کے لیے دبائے رکھیں</string>
+    <string name="v2_set_value_added">شامل ہے</string>
+    <string name="v2_set_value_not_added">شامل نہیں</string>
+    <string name="v2_set_value_not_set_up">سیٹ اپ نہیں</string>
+    <plurals name="v2_set_value_games">
+        <item quantity="one">%1$d گیم</item>
+        <item quantity="other">%1$d گیمز</item>
+    </plurals>
+    <plurals name="v2_set_value_apps">
+        <item quantity="one">%1$d ایپ</item>
+        <item quantity="other">%1$d ایپس</item>
+    </plurals>
     <string name="v2_set_search_settings">ترتیبات تلاش کریں</string>
     <string name="v2_set_no_settings_title">\"%1$s\" سے کوئی ترتیب نہیں ملی</string>
     <string name="v2_set_no_settings_body">کوئی اور لفظ آزمائیں، جیسے زبان، لاک یا تھیم۔</string>

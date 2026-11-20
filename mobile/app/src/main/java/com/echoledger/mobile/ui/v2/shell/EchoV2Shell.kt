@@ -244,18 +244,15 @@ private fun ShellBody(
         route = V2Route.Live(entry)
     }
     val guard = remember { RecordTapGuard(clock) }
-    LaunchedEffect(recording) { guard.settled() }
 
     /**
      * The centre button, as classic's: idle, it starts a voice note now (the voice page asks for the microphone when
-     * it isn't allowed); recording, it stops. A second tap while a start is on its way is ignored.
+     * it isn't allowed); recording, it stops. A second tap soon after one that acted is ignored, whatever the recording
+     * did in between, so a double tap never starts and stops at once.
      */
     fun recordNow() {
         if (!guard.tap()) return
-        if (!onRecordNow()) {
-            guard.settled()
-            open(LiveEntry.VoiceNote)
-        }
+        if (!onRecordNow()) open(LiveEntry.VoiceNote)
     }
     fun arm(on: Boolean) {
         runCatching {
@@ -525,23 +522,19 @@ private fun ShellBody(
 }
 
 /**
- * Keeps the centre button from acting twice: after a tap that starts a recording, further taps are ignored until the
- * recording shows as running (or for [windowMs] at most), so a double tap never starts and stops at once.
+ * Keeps the centre button from acting twice: after a tap that acted, further taps are ignored for [holdMs], whatever
+ * the recording does meanwhile (the service shows a start within a few hundred milliseconds), so a double tap never
+ * starts and stops at once.
  */
-class RecordTapGuard(private val clock: () -> Long, private val windowMs: Long = 1_000) {
-    private var startedAt: Long? = null
+class RecordTapGuard(private val clock: () -> Long, private val holdMs: Long = 600) {
+    private var actedAt: Long? = null
 
     /** Whether this tap may act. */
     fun tap(): Boolean {
         val now = clock()
-        startedAt?.let { if (now - it < windowMs) return false }
-        startedAt = now
+        actedAt?.let { if (now - it < holdMs) return false }
+        actedAt = now
         return true
-    }
-
-    /** The recording started or stopped (or the tap opened the voice page): the next tap acts at once. */
-    fun settled() {
-        startedAt = null
     }
 }
 

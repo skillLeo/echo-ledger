@@ -104,6 +104,24 @@ fun pageValue(res: Resources, page: String, s: AppSettings): String? = when (pag
 
     "lock" -> res.getString(if (s.appLockEnabled) R.string.v2_set_value_on else R.string.v2_set_value_off)
 
+    // The values classic's Settings list shows (SettingsScreens.pageValue), from the same settings, in the screen's language.
+    "mic" -> res.getString(if (s.micSource == "mic") R.string.v2_set_value_raw_mic else R.string.v2_set_value_automatic)
+
+    "voice" -> res.getString(if (s.dictationMode == "hold") R.string.v2_set_value_hold_to_talk else R.string.v2_set_value_tap_to_start)
+
+    "key" -> res.getString(if (s.plan.transcriptionKey?.set == true) R.string.v2_set_value_added else R.string.v2_set_value_not_added)
+
+    // Not in the plan: the plan's badge, as classic's tag.
+    "games" -> s.plan.lockFor("live_translate")?.badge
+        ?: s.liveTranslate.game.games.size.takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.v2_set_value_games, it, it) }
+        ?: res.getString(R.string.v2_set_value_not_set_up)
+
+    "videos" -> s.plan.lockFor("live_translate")?.badge
+        ?: s.liveTranslate.watch.apps.size.takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.v2_set_value_apps, it, it) }
+        ?: res.getString(R.string.v2_set_value_not_set_up)
+
+    "plan" -> s.plan.displayName.takeIf { s.plan.name != null || s.plan.key != null }
+
     "captions" -> res.getString(if (s.captionsEnabled) R.string.v2_set_value_on else R.string.v2_set_value_off)
 
     "language" -> if (s.transcriptionLanguage ==

@@ -53,7 +53,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * EL-Lead's review of the phone's v2 shell (U1–U4): Record stops while recording (with a double-tap guard), the
+ * The U1–U4 review of the phone's v2 shell: Record stops while recording (with a double-tap guard), the
  * recording strip, Retry for failed uploads, Watch translate, Text size and App language that keep the page and reach
  * sheets and dialogs, no redraw of Library each second of a recording, and the minors.
  */
@@ -62,6 +62,9 @@ class ShellReviewFixesTest : ScreenTest() {
     private val opened = mutableListOf<LiveEntry>()
     private var recordNow = 0
     private var micAllowed = true
+
+    /** Moves the shell's clock on (the Record button's hold). */
+    private var skew = 0L
 
     private val classic = ClassicScreens(
         home = { Text("Classic activity") },
@@ -108,6 +111,7 @@ class ShellReviewFixesTest : ScreenTest() {
             classic = classic,
             onSwitchToClassic = {},
             language = EchoLanguage.English,
+            clock = { System.currentTimeMillis() + skew },
             onRecordNow = {
                 recordNow++
                 micAllowed
@@ -149,26 +153,43 @@ class ShellReviewFixesTest : ScreenTest() {
         assertEquals(1, recordNow)
         // The recording runs: the button says Stop and a tap stops it through the same toggle, opening nothing.
         live(true, 42_000)
+        skew += 700
         centre("Stop recording").performClick()
         assertEquals(2, recordNow)
         assertTrue(opened.isEmpty())
-        // While the stop is on its way a second tap does nothing.
+        // A second tap right after does nothing.
         centre("Stop recording").performClick()
         assertEquals(2, recordNow)
     }
 
     @Test
-    fun theGuardLetsTheNextTapActOnceTheRecordingChangedOrASecondWent() {
+    fun aDoubleTapStaysOneTapWhenTheRecordingStartsBetweenTheTwo() {
+        seed()
+        shell()
+        rows()
+        centre("Record").performClick()
+        // The service shows the recording within a few hundred milliseconds, before the second tap lands.
+        live(true)
+        centre("Stop recording").performClick()
+        assertEquals(1, recordNow)
+        // Once the hold is over a tap acts again.
+        skew += 700
+        centre("Stop recording").performClick()
+        assertEquals(2, recordNow)
+    }
+
+    @Test
+    fun theGuardHoldsAfterEveryTapThatActed() {
         var now = 0L
         val guard = RecordTapGuard({ now })
         assertTrue(guard.tap())
         assertFalse(guard.tap())
-        now = 999
+        now = 599
         assertFalse(guard.tap())
-        now = 1_000
+        now = 600
         assertTrue(guard.tap())
-        guard.settled()
-        assertTrue(guard.tap())
+        now = 900
+        assertFalse(guard.tap())
     }
 
     // Major: the recording strip above the bar.
@@ -335,7 +356,17 @@ class ShellReviewFixesTest : ScreenTest() {
         val title = compose.onNodeWithText(ur.getString(com.echoledger.mobile.R.string.v2_rs_title), useUnmergedTree = true)
         title.assertExists()
         assertEquals(phoneScale * 1.3f, title.layout().layoutInput.density.fontScale, 0.001f)
+        // Words looked up inside the sheet's own window are Urdu too.
+        compose.onNodeWithText(ur.getString(com.echoledger.mobile.R.string.v2_rs_record_now), useUnmergedTree = true).assertExists()
         androidx.test.espresso.Espresso.pressBack()
+        compose.waitForIdle()
+        // And inside a menu's window: Library's ⋮.
+        compose.onNode(hasContentDescription(ur.getString(com.echoledger.mobile.R.string.v2_lib_more)) and hasClickAction()).performClick()
+        val sync = compose.onNodeWithText(ur.getString(com.echoledger.mobile.R.string.v2_lib_sync), useUnmergedTree = true)
+        sync.assertExists()
+        assertEquals(phoneScale * 1.3f, sync.layout().layoutInput.density.fontScale, 0.001f)
+        androidx.test.espresso.Espresso.pressBack()
+        compose.waitForIdle()
         compose.waitForIdle()
         // A dialog: Delete for a selected recording.
         compose.onAllNodesWithText("Caller 001", substring = true).onFirst().performTouchInput { longClick() }

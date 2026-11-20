@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -78,12 +79,13 @@ fun RecordingStrip(onStop: () -> Unit, onOpen: () -> Unit, modifier: Modifier = 
     val live by com.echoledger.mobile.recording.RecordingService.live.collectAsState()
     val c = EchoV2.colors
     val recordingWords = stringResource(R.string.v2_nav_recording)
+    val openWords = stringResource(R.string.v2_nav_open_recording)
     Row(
         modifier
             .fillMaxWidth()
             .heightIn(min = EchoTokens.Layout.controlTouchMin)
             .background(c.dangerSoft)
-            .combinedClickable(role = Role.Button, onClickLabel = recordingWords, onClick = onOpen)
+            .combinedClickable(role = Role.Button, onClickLabel = openWords, onClick = onOpen)
             .padding(start = EchoTokens.Layout.pagePaddingMobile),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
@@ -189,7 +191,10 @@ class RecordSheetActions(
 @Composable
 fun V2RecordSheet(state: RecordSheetState, actions: RecordSheetActions, onDismiss: () -> Unit) {
     EchoBottomSheet(onDismiss = onDismiss, title = stringResource(R.string.v2_rs_title)) {
-        V2RecordSheetBody(state, actions, onDismiss)
+        // The rows scroll: on a narrow phone with large text they are taller than the screen.
+        androidx.compose.foundation.layout.Column(
+            Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+        ) { V2RecordSheetBody(state, actions, onDismiss) }
     }
 }
 
