@@ -24,7 +24,7 @@
   "type": "control",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|trash"
+  "key": "a|recently deleted"
  },
  "WEB-NAV-005": {
   "type": "control",
@@ -222,7 +222,7 @@
   "type": "control",
   "page": "library",
   "scope": "main",
-  "key": "button|import"
+  "key": "button|upload recording"
  },
  "WEB-LIB-002": {
   "type": "controls",
@@ -1137,7 +1137,7 @@
   "scope": "topbar",
   "keys": [
    "button|create",
-   "menuitem|create › upload files",
+   "menuitem|create › upload recording",
    "menuitem|create › new project",
    "menuitem|create › request link"
   ]

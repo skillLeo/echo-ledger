@@ -98,7 +98,12 @@ trait ManagesAppPages
                         continue;
                     }
                     $id = (string) $entry['id'];
-                    if (isset($columns[$id])) {
+                    if ($id === 'appearance.sidebar' && ConsoleV2::shell()) {
+                        // The new frame's own default is Soft grey: the choice is forgotten, so each design shows its default.
+                        $preferences = is_array($user->console_preferences) ? $user->console_preferences : [];
+                        unset($preferences['shell']['style']);
+                        $user->forceFill(['console_preferences' => $preferences])->save();
+                    } elseif (isset($columns[$id])) {
                         Shell::remember($user, $columns[$id], $entry['default']);
                     } elseif (str_starts_with($id, 'notifications.email.')) {
                         EmailPreferences::set($user, substr($id, strlen('notifications.email.')), (bool) $entry['default']);
@@ -109,6 +114,9 @@ trait ManagesAppPages
                 $user->refresh();
                 SettingsContext::forget();
                 $prefs = Shell::preferences($user);
+                if (ConsoleV2::shell()) {
+                    $prefs['style'] = ConsoleV2Nav::style($user);
+                }
                 $this->js('document.getElementById("fi-main-sidebar")?.setAttribute("data-style", '.json_encode($prefs['style']).'); document.documentElement.dataset.density = '.json_encode($prefs['density']));
                 Notification::make()->title(SettingsRegistry::pageTitle($this->subpage).' reset to defaults')->success()->send();
             });

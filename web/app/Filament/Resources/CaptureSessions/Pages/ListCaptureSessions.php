@@ -186,11 +186,19 @@ class ListCaptureSessions extends ListRecords
         return LibraryView::buckets($grouping->getId(), $this)[(string) $group] ?? [];
     }
 
-    /** The group counts are counted once per render (LibraryView). */
+    /** The group counts are counted once per render (LibraryView), and so are the views and the folders. */
     public function rendering(): void
     {
         LibraryView::forgetCounts();
+        $this->foldersOnce = null;
+        $this->v2ViewsOnce = null;
     }
+
+    /** @var array<string, array{label: string, icon: string, count: int, url: string|null}>|null the folders, for this render */
+    private ?array $foldersOnce = null;
+
+    /** @var list<array{key: string, label: string, count: int|null, on: bool}>|null the saved views, for this render */
+    private ?array $v2ViewsOnce = null;
 
     private function loadLibraryView(): void
     {
@@ -246,6 +254,12 @@ class ListCaptureSessions extends ListRecords
      */
     public function folders(): array
     {
+        return $this->foldersOnce ??= $this->countFolders();
+    }
+
+    /** @return array<string, array{label: string, icon: string, count: int, url: string|null}> */
+    private function countFolders(): array
+    {
         $counts = app(LibraryOrganiser::class)->folderCounts((int) CurrentWorkspace::id());
         $user = auth()->user();
         $counts['shared'] = $user instanceof User ? app(Teammates::class)->sharedCount($user) : 0;
@@ -264,6 +278,12 @@ class ListCaptureSessions extends ListRecords
      * @return list<array{key: string, label: string, count: int|null, on: bool}>
      */
     public function v2Views(): array
+    {
+        return $this->v2ViewsOnce ??= $this->listV2Views();
+    }
+
+    /** @return list<array{key: string, label: string, count: int|null, on: bool}> */
+    private function listV2Views(): array
     {
         $tabs = $this->getCachedTabs();
         $badge = fn (string $key): ?int => isset($tabs[$key]) && is_numeric($tabs[$key]->getBadge()) ? (int) $tabs[$key]->getBadge() : null;
@@ -389,7 +409,7 @@ class ListCaptureSessions extends ListRecords
         $ids = $token !== '' ? Cache::pull(CaptureSessionsTable::undoKey($token)) : null;
         // A token already used, or older than its half hour: nothing waits for it any more.
         if (! is_array($ids)) {
-            Notification::make()->title(__('Undo has expired'))->body(__('Open Trash to bring recordings back.'))->warning()->send();
+            Notification::make()->title(__('Undo has expired'))->body(__('Open Recently deleted to bring recordings back.'))->warning()->send();
 
             return;
         }
@@ -401,7 +421,9 @@ class ListCaptureSessions extends ListRecords
                 $back++;
             }
         }
-        Notification::make()->title($back === 1 ? __('1 recording is back') : __(':count recordings are back', ['count' => $back]))->success()->send();
+        $notice = Notification::make()->title($back === 1 ? __('1 recording is back') : __(':count recordings are back', ['count' => $back]));
+        // Nothing came back (each one was erased, or not this person's to restore): a warning, not a success.
+        ($back > 0 ? $notice->success() : $notice->warning())->send();
         $this->resetTable();
     }
 
@@ -573,10 +595,10 @@ class ListCaptureSessions extends ListRecords
         if (ConsoleAccess::readOnly()) {
             return [];
         }
-        // Since v2.0 (ui_v2.library): Import beside the one primary action, a voice note recorded here.
+        // Since v2.0 (ui_v2.library): Upload recording beside the one primary action, a voice note recorded here.
         if (ConsoleV2::library()) {
             return [
-                Action::make('upload')->label(__('Import'))->color('gray')->outlined()
+                Action::make('upload')->label(__('Upload recording'))->color('gray')->outlined()
                     ->alpineClickHandler("\$dispatch('el-upload-pick')"),
                 Action::make('voiceNote')->label(__('New voice note'))
                     ->url(fn (): string => Upload::getUrl(['record' => 1])),

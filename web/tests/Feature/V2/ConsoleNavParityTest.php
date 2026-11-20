@@ -94,11 +94,16 @@ it('offers Sidebar style (Light, Dark, Soft grey) in the new frame, starts on So
     $this->actingAs($this->owner->fresh(), 'web');
     Livewire::test(EditProfile::class, ['subpage' => 'appearance'])->call('setPreference', 'style', 'dark');
     expect(navPage($this, $this->owner, $this->pages['library']))->toContain('data-style="dark"');
+
+    // Reset to defaults gives the new frame its own default, Soft grey, back.
+    $this->actingAs($this->owner->fresh(), 'web');
+    Livewire::test(EditProfile::class, ['subpage' => 'appearance'])->callAction('resetPage');
+    expect(navPage($this, $this->owner, $this->pages['library']))->toContain('data-style="soft"');
 });
 
-it('has + in the top bar with Upload files, New project and Request link', function () {
+it('has + in the top bar with Upload recording, New project and Request link', function () {
     $html = navPage($this, $this->owner, $this->pages['search']);
-    expect(webParityControls($html, 'topbar'))->toHaveKeys(['button|create', 'menuitem|create › upload files', 'menuitem|create › new project', 'menuitem|create › request link'])
+    expect(webParityControls($html, 'topbar'))->toHaveKeys(['button|create', 'menuitem|create › upload recording', 'menuitem|create › new project', 'menuitem|create › request link'])
         ->and($html)->toContain('href="https://echoledger.test/app/clients/create"')->toContain('href="https://echoledger.test/app/request-links?action=create"');
 });
 

@@ -356,5 +356,15 @@
     "With me": "میرے ساتھ",
     "Live Assist": "لائیو اسسٹ",
     "Sessions": "سیشنز",
-    "Usage": "استعمال"
+    "Usage": "استعمال",
+    "Recently deleted": "حال ہی میں حذف شدہ",
+    "Retry": "دوبارہ کوشش کریں",
+    "The audio is not on the server yet": "آڈیو ابھی سرور پر نہیں ہے",
+    "Transcription queued": "ٹرانسکرپشن قطار میں ہے",
+    "It leaves Failed uploads while it is transcribed.": "ٹرانسکرپشن کے دوران یہ ناکام اپ لوڈز سے نکل جاتی ہے۔",
+    "Choose the same file again": "وہی فائل دوبارہ چنیں",
+    "Deletes the recording and transcript on every device. You can restore it from Recently deleted for :hours hours.": "ریکارڈنگ اور ٹرانسکرپٹ ہر ڈیوائس سے حذف ہو جاتے ہیں۔ آپ اسے :hours گھنٹے تک حال ہی میں حذف شدہ سے واپس لا سکتے ہیں۔",
+    "1 recording moved to Recently deleted": "1 ریکارڈنگ حال ہی میں حذف شدہ میں چلی گئی",
+    ":count recordings moved to Recently deleted": ":count ریکارڈنگز حال ہی میں حذف شدہ میں چلی گئیں",
+    "Open Recently deleted to bring recordings back.": "ریکارڈنگز واپس لانے کے لیے حال ہی میں حذف شدہ کھولیں۔"
 }

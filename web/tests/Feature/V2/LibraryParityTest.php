@@ -7,10 +7,12 @@ use App\Enums\SourceApp;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
+use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Services\InterfaceFlags;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -126,9 +128,17 @@ it('offers Retry and Delete on a failed recording\'s row in Failed uploads, and 
     $page = Livewire::test(ListCaptureSessions::class)->call('openPlace', 'failed');
     $page->assertCanSeeTableRecords([$this->failed])->assertCanNotSeeTableRecords([$this->call])
         ->assertTableActionVisible('retryFailed', $this->failed)->assertTableActionVisible('deleteFailed', $this->failed);
+    // Retry queues a new run of the failed transcript, which waits for the engine again.
+    Queue::fake();
+    $failed = $this->failed->finalTranscript()->first();
     $page->callTableAction('retryFailed', $this->failed)->assertNotified('Transcription queued');
-    $page->callTableAction('deleteFailed', $this->failed);
-    expect(CaptureSession::query()->find($this->failed->id))->toBeNull();
+    Queue::assertPushed(TranscribeFinalJob::class, fn (TranscribeFinalJob $job): bool => $job->transcriptId === $failed->id);
+    expect($failed->fresh()->status)->toBe(TranscriptStatus::Pending);
+    // It left Failed uploads while it waits; Delete on another failed one moves it to Recently deleted.
+    $page->assertCanNotSeeTableRecords([$this->failed]);
+    $other = Fx::session($this->owner, $this->device, ['title' => 'Another failed one', 'status' => SessionStatus::Failed]);
+    $page = Livewire::test(ListCaptureSessions::class)->call('openPlace', 'failed')->callTableAction('deleteFailed', $other);
+    expect(CaptureSession::query()->find($other->id))->toBeNull();
 });
 
 it('says how many calls wait for a decision, with Review, in one quiet line', function () {

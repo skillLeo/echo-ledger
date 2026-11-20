@@ -1,10 +1,10 @@
 {{--
-    "+" in the new top bar (classic's Create menu): Upload files, New project and Request link, from any page, in the
+    "+" in the new top bar (classic's Create menu): Upload recording, New project and Request link, from any page, in the
     console's language. On the Library the file picker opens right there.
 --}}
 @php
     $items = array_values(array_filter([
-        \App\Filament\Pages\Upload::canAccess() ? [__('Upload files'), request()->routeIs('filament.app.resources.sessions.index') ? null : \App\Filament\Pages\Upload::getUrl(), 'upload', 'upload'] : null,
+        \App\Filament\Pages\Upload::canAccess() ? [__('Upload recording'), request()->routeIs('filament.app.resources.sessions.index') ? null : \App\Filament\Pages\Upload::getUrl(), 'upload', 'upload'] : null,
         \App\Filament\Resources\Clients\ClientResource::canAccess() && \App\Filament\Resources\Clients\ClientResource::canCreate() ? [__('New project'), \App\Filament\Resources\Clients\ClientResource::getUrl('create'), 'folder', 'project'] : null,
         \App\Filament\Pages\RequestLinksPage::canAccess() ? [__('Request link'), \App\Filament\Pages\RequestLinksPage::getUrl(['action' => 'create']), 'link', 'request'] : null,
     ]));

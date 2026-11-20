@@ -240,28 +240,30 @@ final class CaptureSessionsTable
     {
         $failedView = fn (HasTable $livewire): bool => property_exists($livewire, 'activeTab') && (string) $livewire->activeTab === 'failed';
         $retry = fn (CaptureSession $record): ?string => FailedUpload::for($record)['retry'] ?? null;
+        // In the console's language under the new Library (English reads exactly as before).
+        $t = fn (string $words, array $replace = []): string => ConsoleV2::library() ? __($words, $replace) : strtr($words, collect($replace)->mapWithKeys(fn ($v, $k) => [':'.$k => $v])->all());
 
         return [
-            Action::make('retryFailed')->label('Retry')->icon(Heroicon::OutlinedArrowPath)->button()->size(Size::Small)
+            Action::make('retryFailed')->label(fn (): string => $t('Retry'))->icon(Heroicon::OutlinedArrowPath)->button()->size(Size::Small)
                 ->visible(fn (CaptureSession $record, HasTable $livewire): bool => $failedView($livewire) && $retry($record) === FailedUpload::RETRY_TRANSCRIBE)
                 ->rateLimit(10)
-                ->action(function (CaptureSession $record, FinalTranscriptCoordinator $coordinator): void {
+                ->action(function (CaptureSession $record, FinalTranscriptCoordinator $coordinator) use ($t): void {
                     if ($record->primaryRecording()->first()?->isReady() !== true) {
-                        Notification::make()->title('The audio is not on the server yet')->warning()->send();
+                        Notification::make()->title($t('The audio is not on the server yet'))->warning()->send();
 
                         return;
                     }
                     $coordinator->start($record, $record->finalTranscript()->first());
-                    Notification::make()->title('Transcription queued')->body('It leaves Failed uploads while it is transcribed.')
+                    Notification::make()->title($t('Transcription queued'))->body($t('It leaves Failed uploads while it is transcribed.'))
                         ->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
                 }),
-            Action::make('retryUpload')->label('Retry')->icon(Heroicon::OutlinedArrowUpTray)->button()->size(Size::Small)
+            Action::make('retryUpload')->label(fn (): string => $t('Retry'))->icon(Heroicon::OutlinedArrowUpTray)->button()->size(Size::Small)
                 ->visible(fn (CaptureSession $record, HasTable $livewire): bool => $failedView($livewire) && $retry($record) === FailedUpload::RETRY_UPLOAD)
-                ->tooltip('Choose the same file again')
+                ->tooltip(fn (): string => $t('Choose the same file again'))
                 ->alpineClickHandler("\$dispatch('el-upload-pick')"),
-            DeleteAction::make('deleteFailed')->label('Delete')->button()->size(Size::Small)->color('gray')
+            DeleteAction::make('deleteFailed')->label(fn (): string => $t('Delete'))->button()->size(Size::Small)->color('gray')
                 ->visible(fn (HasTable $livewire): bool => $failedView($livewire))
-                ->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for '.CaptureSession::binHours().' hours.'),
+                ->modalDescription(fn (): string => $t('Deletes the recording and transcript on every device. You can restore it from Recently deleted for :hours hours.', ['hours' => CaptureSession::binHours()])),
         ];
     }
 
@@ -329,7 +331,7 @@ final class CaptureSessionsTable
     /**
      * The v2.0 selection bar (docs/PLAN_V2_PARITY.md section 3): four main actions as icon buttons (Move to project,
      * Label, Export, Delete), then ⋮ with every other one in groups: Organise, Export, Danger (Delete last, red).
-     * Delete moves to Trash at once and offers Undo, as the apps do (the Trash keeps them for trash.keep_hours).
+     * Delete moves to Recently deleted at once and offers Undo, as the apps do (it keeps them for trash.keep_hours).
      *
      * @return list<BulkAction|BulkActionGroup>
      */
@@ -390,8 +392,8 @@ final class CaptureSessionsTable
     }
 
     /**
-     * Delete for the v2.0 selection: the recordings go to Trash at once (each one the person may delete), and the
-     * notice offers Undo, which brings them back while the Trash still has them.
+     * Delete for the v2.0 selection: the recordings go to Recently deleted at once (each one the person may delete), and the
+     * notice offers Undo, which brings them back while Recently deleted still has them.
      */
     public static function trashBulkAction(string $name): BulkAction
     {
@@ -406,7 +408,7 @@ final class CaptureSessionsTable
                     $ids[] = (string) $record->getKey();
                 }
                 $count = count($ids);
-                $notice = Notification::make()->title($count === 1 ? __('1 recording moved to Trash') : __(':count recordings moved to Trash', ['count' => $count]));
+                $notice = Notification::make()->title($count === 1 ? __('1 recording moved to Recently deleted') : __(':count recordings moved to Recently deleted', ['count' => $count]));
                 if ($busy->isNotEmpty()) {
                     $notice->body($busy->count() === 1 ? __('1 recording is still recording or uploading and was left alone.')
                         : __(':count recordings are still recording or uploading and were left alone.', ['count' => $busy->count()]));

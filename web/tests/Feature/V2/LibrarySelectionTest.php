@@ -65,7 +65,7 @@ it('moves the selected recordings to Trash at once, offers Undo, and brings them
     $notices = selectionNotices();
     preg_match('/"token":"([A-Za-z0-9]{32})"/', $notices, $m);
     $token = $m[1] ?? '';
-    expect($notices)->toContain('2 recordings moved to Trash');
+    expect($notices)->toContain('2 recordings moved to Recently deleted');
     expect(CaptureSession::query()->whereIn('id', $ids)->count())->toBe(0)
         ->and(CaptureSession::onlyTrashed()->whereIn('id', $ids)->count())->toBe(2);
     expect($token)->not->toBe('');
@@ -105,7 +105,7 @@ it('leaves a recording that is still recording or uploading where it is, and say
     $ids = [$this->recordings[0]->id, $busy->id];
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids);
-    expect(selectionNotices())->toContain('1 recording moved to Trash')->toContain('1 recording is still recording or uploading and was left alone.');
+    expect(selectionNotices())->toContain('1 recording moved to Recently deleted')->toContain('1 recording is still recording or uploading and was left alone.');
     expect(CaptureSession::query()->find($busy->id))->not->toBeNull()
         ->and(CaptureSession::query()->find($this->recordings[0]->id))->toBeNull();
 });

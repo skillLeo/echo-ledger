@@ -47,6 +47,12 @@ final class LibraryView
 
     public const DEFAULT_GROUP = 'date';
 
+    /** A group title in the console's language under the new Library; classic reads exactly as before. */
+    private static function words(string $title): string
+    {
+        return ConsoleV2::library() ? __($title) : $title;
+    }
+
     /**
      * Group by in the v2.0 Library, in the console's language (parity plan 3: date, source, project, language, status,
      * device, none). The app's group is named Source there, as its filter is.
@@ -99,23 +105,23 @@ final class LibraryView
 
                 return $q->where($q->qualifyColumn('started_at'), '>=', $start)->where($q->qualifyColumn('started_at'), '<', $start->copy()->addDay());
             }, fn (Builder $q, string $direction): Builder => ($v2Pinned() ? $q->orderByDesc($q->qualifyColumn('pinned')) : $q)->orderBy($q->qualifyColumn('started_at'), $direction)),
-            self::group('app', fn (CaptureSession $r): string => $r->source_app->value, fn (CaptureSession $r): string => (string) $r->source_app->getLabel(),
+            self::group('app', fn (CaptureSession $r): string => $r->source_app->value, fn (CaptureSession $r): string => self::words((string) $r->source_app->getLabel()),
                 fn (Builder $q, string $key): Builder => $q->where($q->qualifyColumn('source_app'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('source_app'), $direction)),
-            self::group('project', fn (CaptureSession $r): string => $r->client_id ?? 'none', fn (CaptureSession $r): string => $r->client->name ?? 'Inbox',
+            self::group('project', fn (CaptureSession $r): string => $r->client_id ?? 'none', fn (CaptureSession $r): string => $r->client->name ?? self::words('Inbox'),
                 fn (Builder $q, string $key): Builder => $key === 'none' ? $q->whereNull($q->qualifyColumn('client_id')) : $q->where($q->qualifyColumn('client_id'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy(Client::query()->select('name')->whereColumn('clients.id', 'capture_sessions.client_id')->limit(1), $direction)),
             self::group('language', fn (CaptureSession $r): string => LanguageChoice::normalize($r->language) ?? 'auto',
-                fn (CaptureSession $r): string => LanguageChoice::normalize($r->language) === null ? 'Automatic' : LanguageChoice::label($r->language),
+                fn (CaptureSession $r): string => self::words(LanguageChoice::normalize($r->language) === null ? 'Automatic' : LanguageChoice::label($r->language)),
                 fn (Builder $q, string $key): Builder => $key === 'auto'
                     ? $q->where(fn (Builder $w): Builder => $w->whereNull($q->qualifyColumn('language'))->orWhere($q->qualifyColumn('language'), '')->orWhere($q->qualifyColumn('language'), 'auto'))
                     : $q->where($q->qualifyColumn('language'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('language'), $direction)),
-            self::group('status', fn (CaptureSession $r): string => $r->status->value, fn (CaptureSession $r): string => (string) $r->status->getLabel(),
+            self::group('status', fn (CaptureSession $r): string => $r->status->value, fn (CaptureSession $r): string => self::words((string) $r->status->getLabel()),
                 fn (Builder $q, string $key): Builder => $q->where($q->qualifyColumn('status'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('status'), $direction)),
             self::group('device', fn (CaptureSession $r): string => $r->device_id !== null ? (string) $r->device_id : 'none:'.$r->source_device->value,
-                fn (CaptureSession $r): string => CaptureSessionsTable::deviceLabel($r),
+                fn (CaptureSession $r): string => self::words(CaptureSessionsTable::deviceLabel($r)),
                 fn (Builder $q, string $key): Builder => str_starts_with($key, 'none:')
                     ? $q->whereNull($q->qualifyColumn('device_id'))->where($q->qualifyColumn('source_device'), substr($key, 5))
                     : $q->where($q->qualifyColumn('device_id'), $key),

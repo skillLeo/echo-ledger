@@ -126,7 +126,7 @@ final class ConsoleV2Nav
     }
 
     /**
-     * The Library's level 2: All recordings, Shared (with me), My links, Request links and Trash, those the person can
+     * The Library's level 2: All recordings, Shared (with me), My links, Request links and Recently deleted, those the person can
      * open (Projects is a module of its own since the parity plan).
      *
      * @return list<array{key: string, label: string, url: string, active: bool}>
@@ -149,7 +149,7 @@ final class ConsoleV2Nav
             $places[] = ['key' => 'requests', 'label' => __('Request links'), 'url' => RequestLinksPage::getUrl(), 'active' => $is('filament.app.pages.request-links')];
         }
         if (RecentlyDeleted::canAccess()) {
-            $places[] = ['key' => 'trash', 'label' => __('Trash'), 'url' => RecentlyDeleted::getUrl(), 'active' => $is('filament.app.pages.recently-deleted')];
+            $places[] = ['key' => 'trash', 'label' => __('Recently deleted'), 'url' => RecentlyDeleted::getUrl(), 'active' => $is('filament.app.pages.recently-deleted')];
         }
 
         return $places;

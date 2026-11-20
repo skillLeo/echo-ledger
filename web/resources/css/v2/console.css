@@ -907,7 +907,9 @@ button.v2-row:hover {
 /* status: colour, icon and text together; one per row */
 .v2-status {
     display: inline-flex;
+    flex: none;
     align-items: center;
+    white-space: nowrap;
     gap: var(--el-space-4);
     font-size: var(--el-text-caption-size);
     font-weight: var(--el-text-body-strong-weight);
