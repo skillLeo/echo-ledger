@@ -1083,6 +1083,11 @@ button.v2-row:hover {
     padding: var(--el-space-4) var(--el-space-12);
 }
 
+/* The records grid must not size its column to the longest title, so the time stays visible at phone width. */
+.v2-library .fi-ta-content {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .v2-library .fi-ta-record {
     position: relative;
     padding: 0;

@@ -169,6 +169,11 @@ it('reads the group titles, the table\'s apps and the Failed uploads row\'s Retr
         ->assertTableActionHasLabel('deleteFailed', 'حذف کریں', $this->failed);
 });
 
+it('keeps the records grid to the page\'s width, so a long title cannot push the row\'s time off a phone screen', function () {
+    $css = (string) preg_replace('~/\*.*?\*/~s', '', (string) file_get_contents(resource_path('css/v2/console.css')));
+    expect(preg_replace('/\s+/', ' ', $css))->toContain('.v2-library .fi-ta-content { grid-template-columns: minmax(0, 1fr); }');
+});
+
 it('says how many calls wait for a decision, with Review, in one quiet line', function () {
     $page = Livewire::test(ListCaptureSessions::class);
     expect($page->html())->toContain('1 call waiting for a decision')->toContain('data-waiting="1"');
