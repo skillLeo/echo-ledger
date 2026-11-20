@@ -1761,3 +1761,22 @@ html .fi-body .el-player .el-chip {
     inline-size: var(--el-icon-md);
     block-size: var(--el-icon-md);
 }
+
+/* Right to left: a row's title keeps the list's right edge even when its words are English (dir="auto" on the title
+   makes it left to right, so its ellipsis falls at the end of its own words). D4 6. */
+html[dir='rtl'] .v2-row-title {
+    text-align: right;
+}
+
+/* A settings row's description never runs past the box at phone width: as wide as the row at most, then it wraps. */
+.el-set-text {
+    max-width: 100%;
+}
+
+/* The recording's five tabs fit a phone's width (they needed 7 px more at 390 px): a tighter gap under the compact
+   breakpoint; the row still scrolls sideways when the words are longer (Urdu, large text). */
+@media (max-width: 720px) {
+    .v2-rec-tabs .fi-tabs {
+        gap: var(--el-space-8);
+    }
+}
