@@ -2,14 +2,16 @@
 // reloaded on library:updated), as WhatsApp-style rows with the saved views All, Today, Untranscribed and Trash. One
 // feedback system: the Toast, one at a time, with Undo after a delete. Selection mode (Select, a Cmd/Ctrl- or Shift-click,
 // Cmd/Ctrl+A or X) picks several; the row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem } from "../../lib/ipc";
-import { formatDuration, rowDate } from "../../lib/format";
+import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type SearchResult } from "../../lib/ipc";
+import { formatDuration, rowDate, timestamp } from "../../lib/format";
+import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
+import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Button, Chip, Dialog, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
@@ -19,8 +21,11 @@ import {
   type FilterKey, type Filters,
 } from "./filters";
 import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
-import { searchItems, type SortKey } from "../../lib/library";
+import { recordingName, searchItems, type SortKey } from "../../lib/library";
 import { RecordingPage } from "./RecordingPage";
+import { SourceAvatar } from "./SourceAvatar";
+import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
+import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
   copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
@@ -49,12 +54,17 @@ export type LibraryV2Props = {
   onImport?: () => void;
   onRecord?: () => void;
   /** Open this recording (a notice, the palette, a link); `seq` makes the same one open again. */
-  openRequest?: { id: string; seq: number } | null;
+  openRequest?: { id: string; seq: number; ms?: number } | null;
   /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
   viewRequest?: { view: SavedView; seq: number } | null;
+  /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
+  top?: Omit<LibraryTopProps, "items" | "onAction"> & { onActivity: () => void };
+  /** Opens a project (the recording page's project name). */
+  onOpenProject?: (id: string) => void;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, onOpenProject }: LibraryV2Props) {
+  const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<SavedView>("all");
@@ -73,6 +83,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
+  // Show as List or Table, and the table's columns, kept on this computer (classic's).
+  const [layout, setLayoutNow] = useState<Layout>(loadLayout);
+  const [columns, setColumnsNow] = useState<Column[]>(loadColumns);
+  const setLayout = (l: Layout) => { setLayoutNow(l); saveLayout(l); };
+  const setColumns = (c: Column[]) => { setColumnsNow(c); saveColumns(c); };
+  const fold = (key: string) => setCollapsed((c) => { const n = new Set(c); if (n.has(key)) n.delete(key); else n.add(key); return n; });
   const [bin, setBin] = useState<BinItem[] | null>(null);
   const [binError, setBinError] = useState<string | null>(null);
   const [erase, setErase] = useState<BinItem | null>(null);
@@ -170,9 +186,33 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   useEffect(() => {
     if (openRequest) {
       setView("all");
+      setOpenAt(openRequest.ms ? { id: openRequest.id, ms: openRequest.ms, seq: openRequest.seq } : null);
       setOpenId(openRequest.id);
     }
   }, [openRequest]);
+  // Search inside transcripts (classic's "In transcripts"): from two letters, a moment after typing stops.
+  const [found, setFound] = useState<SearchResult["data"]>([]);
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2 || view === "trash") {
+      setFound([]);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      api.searchLibrary({ q }).then((r) => alive && setFound(r?.data ?? [])).catch(() => alive && setFound([]));
+    }, 350);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, view]);
+  /** A transcript match: the recording opened at its moment. */
+  const [openAt, setOpenAt] = useState<{ id: string; ms: number; seq: number } | null>(null);
+  const openHit = (id: string, ms: number) => {
+    setOpenAt({ id, ms, seq: ++seq.current });
+    setOpenId(id);
+  };
 
   const remove = async (item: LibraryItem) => {
     const title = item.title?.trim() || "Recording";
@@ -476,16 +516,32 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
     </ToastRegion>
   );
 
-  if (open) {
+  const closeOpen = () => {
+    const id = open?.id ?? null;
+    setOpenId(null);
+    setFocusAfter({ rowId: id, seq: ++seq.current });
+  };
+  const recordingPage = open && (
+    <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
+      menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
+  );
+  // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
+  // the scrim closes it. The list opens it as its own page.
+  if (open && (layout !== "table" || view === "trash")) {
     return (
       <div className="el-root el-embedded" data-v2="library" ref={root}>
-        <RecordingPage item={open} onBack={() => setOpenId(null)} onMessage={(t) => say(t)}
-          menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
+        {recordingPage}
         {dialogs}
         {toasts}
       </div>
     );
   }
+  const drawer = open && (
+    <>
+      <div className="el-drawer-scrim" aria-hidden="true" onMouseDown={closeOpen} />
+      <Drawer label={recordingName(open.title)} onClose={closeOpen}>{recordingPage}</Drawer>
+    </>
+  );
 
   const viewMenu: MenuItem[] = [
     ...LIST_VIEWS.map((v) => ({ label: VIEW_NAMES[v], checked: view === v, radio: true, count: counts?.[v], onPick: () => setView(v) })),
@@ -559,14 +615,21 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
                 <Button variant="quiet" icon={Icons.SelectIcon} title={`Select (${MOD}A selects all)`} onClick={() => setSelecting(true)}>Select</Button>
               )}
               {onImport && <Button onClick={onImport}>Import</Button>}
-              {onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>New recording</Button>}
+              {onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>}
             </div>
           </header>
+        )}
+        {top && view !== "trash" && !selecting && (
+          <LibraryTop {...top} items={items}
+            onAction={(a) => (a === "missed" ? top.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"))} />
         )}
         <div className="el-page__tools">
           {view !== "trash" && (
             <div className="el-search-row">
               <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="/" />
+              <Segmented label="Show as" value={layout} onChange={setLayout}
+                options={[{ value: "list" as Layout, label: "List" }, { value: "table" as Layout, label: "Table" }]} />
+              {layout === "table" && <Menu label="Columns" items={columnsMenu(columns, setColumns)} button={{ variant: "quiet", icon: Icons.ColumnsIcon, title: "Columns" }} />}
               <Menu label="Sort and group" items={sortMenu}
                 button={{ variant: "quiet", icon: Icons.SortIcon, title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
             </div>
@@ -574,7 +637,34 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
           <FilterBar label="Filter recordings" end={(filtersOn > 0 || (view !== "all" && view !== "trash")) && (
             <Button variant="quiet" size="sm" onClick={clearAll}>Clear all</Button>
           )}>
-            {view === "trash" ? (
+            {view !== "trash" && found.length > 0 && (
+          <section className="el-group el-hits" aria-label="Matches in transcripts">
+            <h2 className="el-caption el-body-strong el-group__title">In transcripts</h2>
+            <Card>
+              <ul className="el-group__rows">
+                {found.map((r) => {
+                  const name = recordingName(r.session.title);
+                  return (
+                    <li key={r.session.id} className="el-hit">
+                      <div className="el-hit__head">
+                        <span className="el-body-strong" dir="auto">{name}</span>
+                        <span className="el-caption el-secondary">{rowDate(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</span>
+                      </div>
+                      {r.hits.map((h) => (
+                        <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="el-hit__line" onClick={() => openHit(r.session.id, h.start_ms)}
+                          aria-label={`Play ${name} from ${timestamp(h.start_ms)}`}>
+                          <span className="el-num el-caption el-secondary">{timestamp(h.start_ms)}</span>
+                          <span dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, k) => (p.hit ? <mark key={k}>{p.text}</mark> : <span key={k}>{p.text}</span>))}</span>
+                        </button>
+                      ))}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          </section>
+        )}
+        {view === "trash" ? (
               <Chip label="All recordings" onToggle={() => setView("all")} />
             ) : (
               <>
@@ -638,6 +728,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
             body={query ? "Try another word, or clear the search to see every recording." : filtersOn ? "Take a filter off, or clear them all to see every recording."
               : view === "today" ? "Today's calls and meetings appear here as they are recorded." : view === "untranscribed" ? "Recordings without a transcript appear here." : "Recordings appear here when they fit this view."}
             action={<Button onClick={clearAll}>{query && !filtersOn ? "Clear search" : filtersOn ? "Clear filters" : "Show all"}</Button>} />
+        ) : layout === "table" ? (
+          <LibraryTable groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
+            onRow={rowClick} onRowMenu={rowMenu} recovered={recovered}
+            rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
         ) : (
           <List label="Recordings">
             {groups.map((g) => [
@@ -653,8 +747,16 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
               ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
                 const r = rowModel(item);
                 return (
-                  <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={r.meta}
-                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined} mark={r.screens ? <ScreensMark count={r.screens} /> : undefined}
+                  <ListRow key={item.id} leading={<SourceAvatar item={item} />} strong title={r.title} meta={r.meta}
+                    badge={r.badge || recovered.has(item.id) ? <>
+                      {r.badge && <Badge tone={r.badge.tone}>{r.badge.text}</Badge>}
+                      {recovered.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
+                    </> : undefined}
+                    mark={item.pinned || r.screens || item.labels?.length ? <>
+                      {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}{" "}
+                      {r.screens ? <ScreensMark count={r.screens} /> : null}
+                      {(item.labels ?? []).slice(0, 3).map((l) => [<span key={l} className="el-row__label" dir="auto">{l}</span>, " "])}
+                    </> : undefined}
                     endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
                     rowId={item.id} onClick={(e) => rowClick(item, e)} onContextMenu={(e) => rowMenu(item, e)}
                     checked={selecting ? picked.has(item.id) : undefined}
@@ -669,8 +771,34 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
         description={erase ? `"${erase.title || "Recording"}" and its transcript are erased from the server. This can't be undone.` : undefined}
         onClose={() => setErase(null)}
         actions={<><Button onClick={() => setErase(null)}>Cancel</Button><Button variant="danger" onClick={() => erase && void eraseNow(erase)}>Delete forever</Button></>} />
+      {drawer}
       {dialogs}
       {toasts}
+    </div>
+  );
+}
+
+/**
+ * A recording opened from the table: a modal panel on the end side (role="dialog"); focus moves in, Tab stays inside,
+ * Esc or Close closes it, and focus goes back to the row.
+ */
+function Drawer({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const close = useRef<HTMLButtonElement>(null);
+  const trap = useFocusTrap(panel, close);
+  return (
+    <div ref={panel} className="el-drawer" role="dialog" aria-modal="true" aria-label={label} tabIndex={-1}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !e.defaultPrevented) {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+          return;
+        }
+        trap(e);
+      }}>
+      <Button ref={close} variant="quiet" icon={Icons.CloseIcon} className="el-drawer__close" aria-label="Close" aria-keyshortcuts="Escape" onClick={onClose} />
+      {children}
     </div>
   );
 }

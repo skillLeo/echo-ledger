@@ -43,8 +43,10 @@ export type ListRowProps = {
   /** A monochrome icon in a neutral circle (recordings) or plain (settings). */
   icon?: IconType;
   iconStyle?: "avatar" | "plain";
-  /** Free leading content instead of an icon (an avatar). */
+  /** Free leading content instead of an icon (an avatar, a recording's source logo). */
   leading?: ReactNode;
+  /** The title in the strong weight, as a row with an avatar icon has it (a row with its own `leading`). */
+  strong?: boolean;
   /** Stacked on the end side: time over duration. */
   endTop?: ReactNode;
   endBottom?: ReactNode;
@@ -87,7 +89,7 @@ export type ListRowProps = {
  */
 export function ListRow({
   title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId, label, mark, anchor, disabled, expanded,
-  onContextMenu, checked, actions,
+  onContextMenu, checked, actions, strong,
 }: ListRowProps) {
   const id = useId();
   const interactive = Boolean(onClick) && !control;
@@ -113,7 +115,7 @@ export function ListRow({
         </span>
       ))}
       <span className="el-row__main">
-        <span className={`el-row__title${icon && iconStyle === "avatar" ? " el-row__title--strong" : ""}`} id={`${id}-title`} dir="auto">{title}</span>
+        <span className={`el-row__title${strong || (icon && iconStyle === "avatar") ? " el-row__title--strong" : ""}`} id={`${id}-title`} dir="auto">{title}</span>
         {(meta || badge || mark) && (
           <span className="el-row__meta el-caption">
             {badge && <span id={`${id}-badge`}>{badge}</span>}

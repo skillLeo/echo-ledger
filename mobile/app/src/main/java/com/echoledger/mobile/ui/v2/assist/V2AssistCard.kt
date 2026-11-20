@@ -94,6 +94,7 @@ private fun problemWords(state: CardState): String? {
             AssistProblem.Reconnecting -> R.string.v2_assist_error_reconnecting
             AssistProblem.Session -> R.string.v2_assist_error_session
             AssistProblem.Busy -> R.string.v2_assist_error_busy
+            AssistProblem.BusyTryAgain -> R.string.v2_assist_busy_retrying
             AssistProblem.NotSetUp -> R.string.v2_assist_error_not_set_up
             AssistProblem.Slow -> R.string.v2_assist_error_slow
             AssistProblem.Declined -> R.string.v2_assist_error_declined

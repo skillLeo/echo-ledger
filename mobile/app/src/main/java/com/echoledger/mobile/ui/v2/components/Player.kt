@@ -51,8 +51,8 @@ fun formatClock(ms: Long): String {
 }
 
 /**
- * The recording player: the seek bar with the position and the length, then back 10 s, play or pause, forward 10 s and
- * the speed. Media controls never mirror: the timeline runs left to right in every language.
+ * The recording player: the seek bar with the position and the length (and its [markers]), then back 10 s, play or
+ * pause, forward 10 s and the speed. Media controls never mirror: the timeline runs left to right in every language.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +65,9 @@ fun EchoPlayer(
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
     onSpeed: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Moments to mark on the track (bookmarks), in ms from the start; none by default. */
+    markers: List<Long> = emptyList()
 ) {
     val c = EchoV2.colors
     val clock = "${formatClock(positionMs)} / ${formatClock(durationMs)}"
@@ -80,6 +82,12 @@ fun EchoPlayer(
                         val y = size.height / 2
                         drawLine(c.borderDefault, Offset(0f, y), Offset(size.width, y), size.height, StrokeCap.Round)
                         drawLine(c.accent, Offset(0f, y), Offset(size.width * state.value, y), size.height, StrokeCap.Round)
+                        if (durationMs > 0) {
+                            markers.forEach { at ->
+                                val x = size.width * (at.toFloat() / durationMs).coerceIn(0f, 1f)
+                                drawCircle(c.warning, radius = size.height * 1.5f, center = Offset(x, y))
+                            }
+                        }
                     }
                 },
                 modifier = Modifier

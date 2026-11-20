@@ -50,4 +50,9 @@
     <string name="v2_assist_ended">Live Assist has ended.</string>
     <string name="v2_assist_start">Start Live Assist</string>
     <string name="v2_assist_start_help">Suggestions on screen while they talk, in the call pill</string>
+    <string name="v2_assist_not_started">Live Assist could not start. The recording goes on.</string>
+    <string name="v2_assist_offline">Can\'t reach the server. Check the connection and try again.</string>
+    <string name="v2_assist_server">The server had a problem. Try again in a minute.</string>
+    <string name="v2_assist_certificate">The server\'s certificate is not the one this phone expects. Check the server address.</string>
+    <string name="v2_assist_busy_retrying">Live Assist is busy right now. Try again in a moment.</string>
 </resources>

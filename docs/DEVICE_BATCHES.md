@@ -200,3 +200,39 @@ The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share pr
 ## Paused 2026-11-18 03:52 PKT
 
 Owner devices now: Mac 2.0.1 (installed 2026-11-17, start-up check passed), phone S25 2.0.1 (code 21, `install -r`). Windows 1.8.2 is not yet tested on the owner's laptop. Next device step after resume: build Mac 2.0.2 from v1.1 once b-desktop-share-default is merged, run `sh scripts/smoke-mac.sh <app> 180`, then install it over 2.0.1. See docs/RESUME_HERE.md.
+
+## Tonight 20:00–21:30 PKT (2026-11-18) — 2.0.2, about 75 minutes
+
+Builds:
+- **Mac:** 2.0.2 is already installed in /Applications. Its start-up check passed.
+- **Phone:** the 2.0.2 APK (code 22) is built from release/v2.0.2. It is installed over Wi-Fi with `adb install -r`, so data is kept. The S25 needs Settings › Developer options › Wireless debugging on.
+- **Windows:** the 2.0.2 installer is the `EchoLedger-windows-x64` artifact of the Desktop (Windows) run on release/v2.0.2 (Actions → Desktop (Windows) → release/v2.0.2 → Artifacts).
+
+Gate 3: approved 2026-11-17, no images pending.
+
+### 1. Mac (2.0.2), 30 min
+1. **Screen share, 12 min.** Start a Zoom or Meet call and share the whole screen.
+   - The EchoLedger main window shows in the share.
+   - Tray › Hide from screen shares › 15 minutes: the main window disappears from the share, and the tray reads "Hidden until …".
+   - Start Live Assist: the card is not in the share.
+   - Tap the card's badge › Show in screen shares: the card appears. Close the card, start it again: it is hidden again.
+   - Same with captions.
+   - The one-time notice "EchoLedger now shows in screen shares unless you hide it" appeared once.
+2. **Captions, 5 min.** Play a YouTube video in Chrome and start Live Captions. Words appear within about 1 second of speech.
+3. **Chrome in Live Translate, 5 min (S2).** Start Live Translate and check Chrome is in the app list while a video plays. If it isn't, note the Chrome version.
+4. **Black window / scrolling, 8 min (S1).** Open Library, a recording, Settings, Projects and Activity. Scroll each with the trackpad, then a mouse. Note any screen that goes black or won't scroll.
+
+### 2. Phone S25 (2.0.2), 20 min
+1. Turn on Wireless debugging; the lead installs 2.0.2 (2 min, no data cleared).
+2. Open the app: classic, recordings all there, record a 20 s voice note and check it transcribes.
+3. Settings › Appearance › Try the new design. The text uses the app's font, not the Samsung handwriting font.
+4. Library: long-press a row for selection mode, then Move, Label, Delete with Undo; filter chips; Sort and group.
+5. Open a recording: Show as Roman Urdu / اردو / English, Copy ▾, ⋮ › Export, player speed and skip silence.
+6. Settings › Appearance › Switch back to classic. Classic is back.
+
+### 3. Windows laptop (2.0.2), 25 min (this replaces the open 1.8.2 test)
+1. Download the artifact and run the installer over the existing install.
+2. It starts once with no crash; a second launch while it starts doesn't crash. Sign in is kept.
+3. Record 1 minute from the microphone, stop, and check it transcribes.
+4. Live Captions on a YouTube video: words within about 1 second.
+5. Share the screen in Meet in Chrome. The main window shows; Live Assist card and captions don't. Hide the main window for 15 minutes from the tray.
