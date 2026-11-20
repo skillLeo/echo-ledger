@@ -288,7 +288,7 @@ describe("MainApp sidebar and keys", () => {
         window.dispatchEvent(new Event("resize"));
       });
       expect(app()).toHaveClass("narrow", "no-column");
-      // Folding the sidebar gives the page 796 px: still narrow, and the column needs 1040.
+      // Folding the sidebar gives the page 796 px: still narrow, and the column needs 1120.
       fireEvent.click(screen.getByRole("button", { name: "Collapse the sidebar" }));
       expect(app()).toHaveClass("narrow", "no-column");
       // 1200 − 64 = 1136 px: room for the column; with the 320 px sidebar back, 880 px: the Library's two parts, no column.

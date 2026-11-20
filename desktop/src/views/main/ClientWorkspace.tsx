@@ -621,7 +621,7 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
           <div className="group-label">In transcripts</div>
           {found.map((r) => (
             <div key={r.session.id} className="hit-card">
-              <div className="item-title">{recordingName(r.session.title)}</div>
+              <div className="item-title" dir="auto">{recordingName(r.session.title)}</div>
               {r.hits.map((h) => (
                 <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="hit" onClick={() => onOpen(r.session.id, h.start_ms)}
                   aria-label={`Play ${recordingName(r.session.title)} from ${timestamp(h.start_ms)}`}>
@@ -649,7 +649,7 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
                 <div className="row">
                   <span className={`avatar app-${appKind(item.source_app)}`}><AppTileIcon app={item.source_app} /></span>
                   <div className="item-main">
-                    <div className="item-line"><span className="item-title">{recordingName(item.title)}</span><span className="item-time">{formatWhen(item.started_at).split(" · ")[0]}</span></div>
+                    <div className="item-line"><span className="item-title" dir="auto">{recordingName(item.title)}</span><span className="item-time">{formatWhen(item.started_at).split(" · ")[0]}</span></div>
                     <div className="item-sub">{[formatDuration(item.duration_ms), item.language_chip && item.language_chip !== "Auto" ? item.language_chip : null, folderName(item) ? `in ${folderName(item)}` : null].filter(Boolean).join(" · ")}</div>
                   </div>
                 </div>

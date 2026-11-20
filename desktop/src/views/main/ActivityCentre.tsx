@@ -201,7 +201,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
       <button type="button" className={`activity-item ${i.read ? "" : "unread"}`} onClick={() => void choose(i)}>
         <ActivityTile kind={i.kind} />
         <span className="activity-main">
-          <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span>{i.title}</span>{i.session_id && recovered.has(i.session_id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}</span>
+          <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span dir="auto">{i.title}</span>{i.session_id && recovered.has(i.session_id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}</span>
           <span className="activity-body">{i.body}</span>
         </span>
         {i.at && <span className="item-time">{shortWhen(i.at)}</span>}
