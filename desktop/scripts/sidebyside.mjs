@@ -129,6 +129,9 @@ export const PAIRS = [
       await page.waitForTimeout(1200);
     })],
     [`${v2("library")}&calls=notready`, null]],
+  ["library-queue", "The top of the Library list: waiting calls (Review open: Keep all, Discard all, Keep, Discard, Rename, Choose project, Language), Importing with Cancel, Uploads that need you (Retry, Discard), Waiting for another account (Discard all 2), Checking upload",
+    [`${classic("library")}&uploads=1`, steps(click("Review")), { width: 1600, height: 1400 }],
+    [`${v2("library")}&uploads=1`, steps(click("Review")), { width: 1600, height: 1400 }]],
   ["transcript-search", "Search inside transcripts: classic's \"In transcripts\" | the new design's, with the words marked",
     [classic("library"), steps(async (page) => {
       await page.getByPlaceholder("Search", { exact: true }).first().fill("launch");
