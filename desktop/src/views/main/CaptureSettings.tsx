@@ -198,7 +198,7 @@ export function CallSitesPage({ rules, onSave }: { rules: SiteRule[]; onSave: (r
         <form className="set-row set-form" onSubmit={(e) => { e.preventDefault(); void add(); }}>
           <label className="sr-only" htmlFor={appId}>App</label>
           <select id={appId} className="input set-select" value={app} onChange={(e) => setApp(e.target.value)}>
-            {SITE_RULE_APPS.map(([value, name]) => <option key={value} value={value}>{name}</option>)}
+            {SITE_RULE_APPS.map(([value, name]) => <option dir="auto" key={value} value={value}>{name}</option>)}
           </select>
           <label className="sr-only" htmlFor={textId}>Address or title contains</label>
           <input id={textId} className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Address or title contains" />
@@ -336,8 +336,8 @@ export function CaptionPreview({ style }: { style: CaptionStyle }) {
   return (
     <div className="set-preview" aria-hidden="true">
       <div className="caption-sample" style={{ fontSize: size, background: `rgba(24, 25, 27, ${style.opacity / 100})` }}>
-        <div><span style={{ color: style.clientColor ?? DEFAULT_CLIENT_COLOR }}>{style.compact ? "" : "Client  "}</span>Can you send the estimate by Monday?</div>
-        <div><span style={{ color: style.meColor ?? DEFAULT_ME_COLOR }}>{style.compact ? "" : "Me  "}</span>Yes, with the timeline.</div>
+        <div dir="auto"><span style={{ color: style.clientColor ?? DEFAULT_CLIENT_COLOR }}>{style.compact ? "" : "Client  "}</span>Can you send the estimate by Monday?</div>
+        <div dir="auto"><span style={{ color: style.meColor ?? DEFAULT_ME_COLOR }}>{style.compact ? "" : "Me  "}</span>Yes, with the timeline.</div>
       </div>
     </div>
   );

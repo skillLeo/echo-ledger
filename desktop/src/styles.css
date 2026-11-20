@@ -353,11 +353,12 @@ label.field { display: grid; gap: 6px; margin-bottom: var(--space-3); color: var
 
 /* Segmented control: 2-4 choices (the phone's SegmentedControl). */
 .segmented { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-full); background: var(--surface-2); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
-.segmented > button { height: 30px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
+.segmented > button { min-height: 30px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
 .segmented > button:hover { color: var(--text); }
 .segmented > button[aria-pressed="true"], .segmented > button[aria-selected="true"], .segmented > button[aria-checked="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border); }
 .segmented > button:disabled { opacity: 0.5; cursor: default; }
-.segmented > button[lang="ur"] { font-family: "Noto Nastaliq Urdu", var(--font-sans); font-size: 14px; line-height: 1; }
+/* D4 §3.5: Nastaliq needs its own line (14/28); line-height 1 cut its tall letters, and the control grows to fit. */
+.segmented > button[lang="ur"] { font-family: "Noto Nastaliq Urdu", var(--font-sans); font-size: 14px; line-height: var(--el-text-urdu-caption-line, 28px); }
 
 /* ---------- Library: search pill, filter chips, rows and the list + detail split ---------- */
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
@@ -413,6 +414,17 @@ select.chip option { color: var(--text); background: var(--surface); }
    ellipsis there; a Latin one on the right. It still lines up with the row's start (the window's direction, not the title's). */
 :is(.item-title, .tree-name, .lib-title, .queue-title, .activity-title, .recent-title, .data-title, .import-title)[dir="auto"], .activity-title > [dir="auto"] { text-align: left; unicode-bidi: plaintext; }
 [dir="rtl"] :is(.item-title, .tree-name, .lib-title, .queue-title, .activity-title, .recent-title, .data-title, .import-title)[dir="auto"], [dir="rtl"] .activity-title > [dir="auto"] { text-align: right; }
+/* D-163 (D4 §4–7): the desktop's words are English in every window, so in a right-to-left (Urdu) window each piece of
+   text takes its own direction from its first letter: an English line keeps its order ("Northwind · 42:10",
+   "Transcribing…", "2 calls waiting", a full stop at its end) and an Urdu title stays right to left. It stays on the
+   window's start side (match-parent; plain "start" would follow the text). Classic only: v2 (.el-root) has its own
+   rules. The alignment has no specificity, so an element's own alignment still wins; buttons keep theirs (centred). */
+:where([dir="rtl"] .app) :is(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div, button):not(.el-root, .el-root *) { unicode-bidi: plaintext; }
+:where([dir="rtl"] .app) :where(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div):not(.el-root, .el-root *) { text-align: match-parent; }
+/* Times read as in English in every window ("8:12 AM", "0:00 / 2:15"). */
+.item-time, .player-time, .seg-time, .app :is(.item-time, .player-time, .seg-time) { direction: ltr; unicode-bidi: isolate; }
+/* Chevrons that point along the reading direction turn round; disclosures (down/up) and the external-link icon don't. */
+[dir="rtl"] :is(.set-trail:not(.disclosure):not(.set-ext), .crumb-step svg, .back-link svg, .screen-step svg) { transform: scaleX(-1); }
 /* A title that is cut gets its ellipsis at its own end. */
 .activity-title[dir="auto"] { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item-time { flex: none; font-size: var(--text-xs); color: var(--text-muted); }

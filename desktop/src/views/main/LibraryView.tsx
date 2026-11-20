@@ -1226,15 +1226,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         <LibraryFilters state={filters} onChange={setFilters} counts={viewCounts} tags={tags} showBookmarks={anyBookmarks || filters.tags.size > 0} />
         {(folders.length > 0 || folder !== null) && (
           <select className={`chip ${folder !== null ? "active" : ""}`} value={folder ?? "*"} onChange={(e) => setFolder(e.target.value === "*" ? null : e.target.value)} aria-label="Filter by project">
-            <option value="*">All projects</option>
-            <option value="">No project</option>
-            {folders.map((cl) => <option key={cl.id} value={cl.id}>{`${folderBadge(cl)} · ${cl.name}`}</option>)}
+            <option dir="auto" value="*">All projects</option>
+            <option dir="auto" value="">No project</option>
+            {folders.map((cl) => <option dir="auto" key={cl.id} value={cl.id}>{`${folderBadge(cl)} · ${cl.name}`}</option>)}
           </select>
         )}
         {(labels.length > 0 || label !== null) && (
           <select className={`chip ${label !== null ? "active" : ""}`} value={label ?? ""} onChange={(e) => setLabel(e.target.value || null)} aria-label="Label">
-            <option value="">Any label</option>
-            {labels.map((l) => <option key={l} value={l}>{l}</option>)}
+            <option dir="auto" value="">Any label</option>
+            {labels.map((l) => <option dir="auto" key={l} value={l}>{l}</option>)}
           </select>
         )}
         <ViewMenu sections={[
@@ -1496,8 +1496,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
                       <span className="head-chip retranscribe-row">
                         <LanguageChipSelect value={retranscribeLanguage} onChange={setRetranscribeLanguage}>
-                          {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
-                          <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}</optgroup>
+                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
+                          <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}</optgroup>
                         </LanguageChipSelect>
                         <button type="button" className="btn ghost compact" onClick={() => void retranscribe()}>
                           {englishRisk && englishWarned ? "Re-transcribe anyway" : "Re-transcribe"}
@@ -1627,7 +1627,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       {openSuggestions.length > 0 && showAs === "original" && !editing && !readOnly && (
                         <div className="suggestions-note" role="status">
                           <SparkleIcon size={15} />
-                          <span>{openSuggestions.length === 1 ? "1 suggested fix" : `${openSuggestions.length} suggested fixes`}: words that may have been misheard are underlined.</span>
+                          <span dir="auto">{openSuggestions.length === 1 ? "1 suggested fix" : `${openSuggestions.length} suggested fixes`}: words that may have been misheard are underlined.</span>
                           <button type="button" className="btn text compact" onClick={() => setOpenSuggestion(openSuggestions[0].id)}>Review</button>
                         </div>
                       )}

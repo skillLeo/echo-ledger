@@ -370,17 +370,17 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                         onBlur={() => setAssigning(null)}
                         onKeyDown={(e) => e.key === "Escape" && setAssigning(null)}
                       >
-                        <option value="">No project</option>
-                        {!knownClient && <option value={item.clientId ?? ""}>{item.clientName ?? item.clientId}</option>}
-                        {(clients ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        <option dir="auto" value="">No project</option>
+                        {!knownClient && <option dir="auto" value={item.clientId ?? ""}>{item.clientName ?? item.clientId}</option>}
+                        {(clients ?? []).map((c) => <option dir="auto" key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     )}
                     <div className="queue-actions">
                       <select className={`chip queue-language ${item.language ? "active" : ""}`} aria-label="Language" title="Language of the transcript" disabled={isBusy}
                         value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
-                        {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
+                        {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
                         <optgroup label="More languages">
-                          {MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
+                          {MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
                         </optgroup>
                       </select>
                       <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Choose project</button>

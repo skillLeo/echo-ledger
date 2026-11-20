@@ -211,6 +211,88 @@ function coveredWhenReached() {
   return [...new Set(found)].slice(0, 20);
 }
 
+/**
+ * In the page: the type problems of D4 (docs/v2/design-review/D4-urdu-arabic-typography.md §10).
+ * - clipped: a text box shorter than its own lines, so it cuts them top or bottom (a fixed-height control round
+ *   Nastaliq's taller lines);
+ * - reversed: times read out of order ("AM 8:12", "2:15 / 0:00"), outside real Urdu or Arabic sentences;
+ * - small Urdu: Urdu or Arabic letters under 14 px (Latin isolates keep the Latin size);
+ * - stop first: an English sentence whose full stop is drawn before its last letter, and out of order: English text
+ *   whose first character is drawn after its last on one line ("…Transcribing", "calls waiting 2"); both took a
+ *   right-to-left window's direction instead of their own.
+ */
+function textProblems() {
+  const found = [];
+  const ARABIC = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  const name = (el) => `${el.tagName.toLowerCase()}.${[...el.classList].slice(0, 3).join(".")} "${(el.textContent || "").trim().slice(0, 30)}"`;
+  const shown = (el) => {
+    for (let e = el; e && e !== document.documentElement; e = e.parentElement) {
+      const s = getComputedStyle(e);
+      if (s.display === "none" || s.visibility === "hidden" || Number(s.opacity) < 0.05) return false;
+    }
+    const r = el.getBoundingClientRect();
+    // A screen-reader-only label (the rail's shortcut hints: a 1 px box clipped to nothing) is not text on screen.
+    if (/rect\(0(px)?,? 0(px)?,? 0(px)?,? 0(px)?\)/.test(getComputedStyle(el).clip)) return false;
+    return r.width > 1 && r.height > 1 && r.bottom > 0 && r.top < innerHeight;
+  };
+  const ownText = (el) => [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("").trim();
+  const isolate = (el) => !!el.closest(".el-num, bdi[dir=ltr], [dir=ltr]");
+  for (const el of document.querySelectorAll("body *")) {
+    const text = ownText(el);
+    if (!text || !shown(el)) continue;
+    const s = getComputedStyle(el);
+    if (/(hidden|clip)/.test(s.overflowY) && s.webkitLineClamp === "none" && el.scrollHeight > el.clientHeight + 1 && el.clientHeight > 0) {
+      found.push(`clipped: ${name(el)} ${el.scrollHeight} > ${el.clientHeight}`);
+    }
+    const urdu = el.matches(":lang(ur), :lang(ar)") || ARABIC.test(text);
+    if (urdu && ARABIC.test(text) && Number.parseFloat(s.fontSize) < 14 && !isolate(el)) found.push(`small Urdu: ${name(el)} ${s.fontSize}`);
+  }
+  const stops = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let t = stops.nextNode(); t; t = stops.nextNode()) {
+    const text = t.textContent.replace(/\s+$/, "");
+    const at = text.length - 1;
+    if (!text.endsWith(".") || !/[A-Za-z0-9)”"']/.test(text[at - 1] ?? "") || ARABIC.test(text) || !t.parentElement || !shown(t.parentElement)) continue;
+    const box = (i) => { const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 1); return r.getClientRects()[0]; };
+    const stop = box(at), letter = box(at - 1);
+    if (stop && letter && Math.abs(stop.top - letter.top) < 4 && stop.left < letter.left) found.push(`stop first: ${name(t.parentElement)}`);
+  }
+  const english = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let t = english.nextNode(); t; t = english.nextNode()) {
+    const raw = t.textContent;
+    const start = raw.search(/\S/), end = raw.search(/\S\s*$/);
+    if (start < 0 || end - start < 2 || !/[A-Za-z]/.test(raw) || ARABIC.test(raw) || !t.parentElement || !shown(t.parentElement)) continue;
+    const box = (i) => { const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 1); return r.getClientRects()[0]; };
+    const first = box(start), last = box(end);
+    if (first && last && Math.abs(first.top - last.top) < 4 && first.left > last.left + 1) found.push(`out of order: ${name(t.parentElement)}`);
+  }
+  // Times: in the smallest element holding two or more of them (or a time and AM/PM), each on the same line must come
+  // after the one before it, left to right, as in English.
+  const TOKEN = /\d{1,2}:\d{2}|\b[AP]M\b/g;
+  const count = (t) => (t.match(TOKEN) || []).length;
+  for (const el of document.querySelectorAll("body *")) {
+    const n = count(el.textContent || "");
+    // Checked where the times sit side by side, not again in each container above that.
+    if (n < 2 || [...el.children].some((c) => count(c.textContent || "") >= 2) || !shown(el)) continue;
+    if (getComputedStyle(el).direction === "rtl" && ARABIC.test(el.textContent)) continue;
+    const marks = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      for (const m of t.textContent.matchAll(TOKEN)) {
+        const range = document.createRange();
+        range.setStart(t, m.index);
+        range.setEnd(t, m.index + m[0].length);
+        const r = range.getClientRects()[0];
+        if (r) marks.push({ token: m[0], r });
+      }
+    }
+    for (let i = 1; i < marks.length; i++) {
+      const a = marks[i - 1], b = marks[i];
+      if (Math.abs(a.r.top - b.r.top) < 4 && b.r.left < a.r.left) { found.push(`reversed: ${name(el)} "${b.token}" drawn before "${a.token}"`); break; }
+    }
+  }
+  return [...new Set(found)].slice(0, 30);
+}
+
 /** The Library's J / K: each row the cursor lands on must be in sight, under the group header, not behind it. */
 async function keyboardRows(page) {
   const found = [];
@@ -240,7 +322,7 @@ async function selfTest(base) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await page.goto(`${base}scripts/screens/index.html?screen=library&theme=light`);
   await page.waitForTimeout(1500);
-  const caught = await page.evaluate(({ problems, covered }) => {
+  const caught = await page.evaluate(({ problems, covered, textProblems }) => {
     const run = (src) => (0, eval)(`(${src})`)();
     const results = {};
     // 1. A word on a select's value: the select keeps no room for it.
@@ -273,6 +355,23 @@ async function selfTest(base) {
     document.querySelector(".content").prepend(away);
     results.outOfSight = run(covered).some((p) => p.startsWith("not in sight when reached:"));
     away.remove();
+    // 4. D4: a reversed time, Urdu cut by its own box, small Urdu; and a correct time in a right-to-left window.
+    const type = document.createElement("div");
+    type.style.cssText = "position:fixed;left:20px;top:500px;z-index:50;background:#fff;font-size:16px";
+    type.innerHTML = '<div id="t-rev" dir="rtl">8:12 AM</div><div id="t-ok" dir="rtl"><span dir="ltr">0:00 / 2:15</span></div>'
+      + '<div id="t-clip" style="line-height:1.6;height:20px;overflow:hidden;font-size:16px">ادائیگی کا منصوبہ</div><div id="t-small" style="font-size:12px">قرض کی واپسی</div>'
+      + '<p id="t-stop" dir="rtl">Use Re-transcribe to try the next engine.</p><p id="t-stop-ok" dir="rtl"><span dir="auto">Synced a minute ago.</span></p>'
+      + '<div dir="rtl"><span id="t-order">Transcribing…</span></div>';
+    document.body.appendChild(type);
+    const typed = run(textProblems);
+    results.reversedTime = typed.some((p) => p.startsWith("reversed:") && p.includes("8:12"));
+    results.isolatedTimeClean = !typed.some((p) => p.includes("0:00 / 2:15"));
+    results.clippedUrdu = typed.some((p) => p.startsWith("clipped:") && p.includes("ادائیگی"));
+    results.smallUrdu = typed.some((p) => p.startsWith("small Urdu:"));
+    results.stopFirst = typed.some((p) => p.startsWith("stop first:") && p.includes("Use Re-transcribe"));
+    results.ownDirectionClean = !typed.some((p) => p.includes("Synced a minute"));
+    results.outOfOrder = typed.some((p) => p.startsWith("out of order:") && p.includes("Transcribing"));
+    type.remove();
     // 3. A sticky header with no scroll padding for it: a row brought into view lands behind it.
     const head = document.querySelector(".group-head");
     const list = head?.closest(".list");
@@ -284,14 +383,14 @@ async function selfTest(base) {
       head.style.height = "";
     }
     return results;
-  }, { problems: problems.toString(), covered: coveredWhenReached.toString() });
+  }, { problems: problems.toString(), covered: coveredWhenReached.toString(), textProblems: textProblems.toString() });
   await page.close();
   const missed = Object.entries(caught).filter(([, ok]) => !ok).map(([k]) => k);
-  if (missed.length || Object.keys(caught).length < 5) {
+  if (missed.length || Object.keys(caught).length < 12) {
     console.error(`self-test: the checks missed ${missed.join(", ") || "a case"}`);
     return false;
   }
-  console.log("self-test: overlap, word on a select, a control out of sight and a covered row are caught; a line cut with … is not");
+  console.log("self-test: overlap, word on a select, a control out of sight, a covered row, a reversed time, clipped and small Urdu, a full stop drawn first, English out of order are caught; a line cut with …, an isolated time and a sentence in its own direction are not");
   return true;
 }
 
@@ -319,7 +418,7 @@ try {
     // The picture is the page as opened, before the checks scroll it and J/K moves the cursor.
     const file = `${name}-${w}-${theme}-${lang}.png`;
     await page.screenshot({ path: join(out, file) });
-    const found = [...await page.evaluate(problems), ...await page.evaluate(coveredWhenReached), ...(name === "library" ? await keyboardRows(page) : [])];
+    const found = [...await page.evaluate(problems), ...await page.evaluate(textProblems), ...await page.evaluate(coveredWhenReached), ...(name === "library" ? await keyboardRows(page) : [])];
     if (found.length || errors.length) failed++;
     report.push({ screen: name, width: w, theme, lang, problems: found, errors, file });
     console.log(`${name} ${w} ${theme} ${lang}: ${found.length} problems${errors.length ? `, ${errors.length} errors` : ""}`);

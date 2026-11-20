@@ -100,13 +100,13 @@ export function RulesSection({ project, notify }: { project: Pick<ClientFolder, 
           <form className="rule-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
             <label htmlFor={kindId} className="sr-only">Kind of rule</label>
             <select id={kindId} className="select" value={kind} onChange={(e) => { setKind(e.target.value as RuleKind); setValue(""); setError(null); }}>
-              {RULE_KINDS.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+              {RULE_KINDS.map(([k, label]) => <option dir="auto" key={k} value={k}>{label}</option>)}
             </select>
             <label htmlFor={valueId} className="sr-only">{kind === "app" ? "App" : kind === "contact" ? "Contact number or email" : "Title contains"}</label>
             {kind === "app" ? (
               <select id={valueId} className="select" value={value} onChange={(e) => setValue(e.target.value)}>
-                <option value="">Choose the app</option>
-                {RULE_APPS.map((app) => <option key={app} value={app}>{SOURCE_APP_LABELS[app] ?? app}</option>)}
+                <option dir="auto" value="">Choose the app</option>
+                {RULE_APPS.map((app) => <option dir="auto" key={app} value={app}>{SOURCE_APP_LABELS[app] ?? app}</option>)}
               </select>
             ) : (
               <input id={valueId} className="input" maxLength={120} placeholder={PLACEHOLDER[kind]} value={value} dir="auto" onChange={(e) => setValue(e.target.value)} />
