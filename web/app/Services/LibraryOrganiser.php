@@ -19,6 +19,7 @@ use App\Services\Titles\AutoTitles;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
 use App\Support\Brand;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -120,16 +121,35 @@ final class LibraryOrganiser
      */
     public function counts(int $workspaceId, ?string $zone = null): array
     {
-        $counts = [];
+        $conditions = [];
         foreach (self::VIEWS as $view) {
-            $query = CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson();
-            if ($view !== 'waiting') {
-                $query->where('status', '!=', SessionStatus::Recording->value);
-            }
-            $counts[$view] = $this->applyView($query, $view, $zone)->count();
+            $conditions[$view] = fn (Builder $q): Builder => $this->applyView(
+                $view === 'waiting' ? $q : $q->where($q->qualifyColumn('status'), '!=', SessionStatus::Recording->value), $view, $zone);
         }
 
-        return $counts;
+        return $this->tally($workspaceId, $conditions);
+    }
+
+    /**
+     * Counts the person's recordings in the workspace that meet each condition, in one pass over them (plan B6: one
+     * query instead of one a condition). Each condition is the very filter the library lists with, compiled into a
+     * `SUM(CASE WHEN …)`, so a count always matches its list.
+     *
+     * @param  array<string, Closure(Builder<CaptureSession>): Builder<CaptureSession>>  $conditions
+     * @return array<string, int>
+     */
+    private function tally(int $workspaceId, array $conditions): array
+    {
+        $query = CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson();
+        $grammar = $query->getQuery()->getGrammar();
+        foreach ($conditions as $name => $condition) {
+            $only = $condition(CaptureSession::query()->withoutGlobalScopes())->getQuery();
+            $where = (string) preg_replace('/^where /', '', $grammar->compileWheres($only));
+            $query->selectRaw('COALESCE(SUM(CASE WHEN '.$where.' THEN 1 ELSE 0 END), 0) as '.$grammar->wrap($name), $only->getBindings());
+        }
+        $row = (array) $query->toBase()->first();
+
+        return array_map(fn ($n): int => (int) $n, array_intersect_key($row, $conditions));
     }
 
     /**
@@ -165,14 +185,16 @@ final class LibraryOrganiser
      */
     public function folderCounts(int $workspaceId): array
     {
-        $counts = [];
+        $conditions = [];
         foreach (self::FOLDERS as $folder) {
-            $counts[$folder] = $folder === 'shared' ? 0
-                : $this->applyFolder(CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson()
-                    ->where('status', '!=', SessionStatus::Recording->value), $folder)->count();
+            if ($folder !== 'shared') {
+                $conditions[$folder] = fn (Builder $q): Builder => $this->applyFolder($q->where($q->qualifyColumn('status'), '!=', SessionStatus::Recording->value), $folder);
+            }
         }
+        $counts = $this->tally($workspaceId, $conditions);
 
-        return $counts;
+        // In the order of FOLDERS, `shared` (others' recordings) counted by Teammates.
+        return array_map(fn (string $folder): int => $counts[$folder] ?? 0, array_combine(self::FOLDERS, self::FOLDERS));
     }
 
     /** How many of the workspace's recordings wait for Keep or Discard (the Library's chip, since v1.5). */
