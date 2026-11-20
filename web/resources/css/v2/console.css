@@ -1794,3 +1794,54 @@ html[dir='rtl'] .v2-row-title {
 .fi-ta-filter-indicators-badges-ctn .fi-badge .fi-badge-delete-btn {
     color: var(--el-role-accent-text);
 }
+
+/* A recording's source mark (filament/v2/components/source-logo.blade.php) with the device it came from in a small
+   badge on the end side, as on the phone and the desktop app. The mark draws itself; only its frame is ours. */
+.v2-source {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    inline-size: var(--el-space-32);
+    block-size: var(--el-space-32);
+}
+
+.v2-source--sm {
+    inline-size: var(--el-space-24);
+    block-size: var(--el-space-24);
+}
+
+.v2-source-mark {
+    inline-size: 100%;
+    block-size: 100%;
+}
+
+.v2-source-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-source-device {
+    position: absolute;
+    inset-block-end: calc(-1 * var(--el-space-2));
+    inset-inline-end: calc(-1 * var(--el-space-2));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-space-16);
+    block-size: var(--el-space-16);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-source-device svg {
+    inline-size: var(--el-space-12);
+    block-size: var(--el-space-12);
+}
