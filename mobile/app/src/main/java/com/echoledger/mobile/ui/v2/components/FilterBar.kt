@@ -31,7 +31,15 @@ data class EchoFilter(val key: String, val label: String)
  * rest on colour alone; screen readers hear "selected" or "not selected".
  */
 @Composable
-fun EchoChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+fun EchoChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    /** The chip opens a menu or sheet (Views, Source, Date…): a 16 dp chevron on its end side, never a "▾" in the text. */
+    dropdown: Boolean = false,
+) {
     val c = EchoV2.colors
     Surface(
         modifier = modifier
@@ -51,6 +59,7 @@ fun EchoChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Mo
         ) {
             if (selected) Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.md))
             Text(label, style = EchoV2.type.label, maxLines = 1)
+            if (dropdown) Icon(EchoIcons.Expand, null, Modifier.size(EchoTokens.Icon.sm))
         }
     }
 }
