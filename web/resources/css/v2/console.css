@@ -274,6 +274,7 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
 
     /* Folded: a rail of icons, their names as tooltips. */
     .v2-sb.v2-rail .v2-sb-label,
+    .v2-sb.v2-rail .v2-sb-resize,
     .v2-sb.v2-rail .v2-sb-sub,
     .v2-sb.v2-rail .v2-sb-count {
         display: none;
@@ -294,6 +295,159 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
 
 [dir='rtl'] .v2-sb-collapse .v2-icon {
     transform: scaleX(-1);
+}
+
+/* "Upload recording" at the top: the one accent button of the frame (parity plan 2). */
+.v2-sb-record {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--el-space-8);
+    min-height: var(--el-component-button-height);
+    margin-inline: var(--el-space-4);
+    padding-inline: var(--el-space-12);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    font-size: var(--el-text-body-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-sb-record:hover,
+.v2-sb-record.is-on {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-sb-record .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-subitem.is-child {
+    padding-inline-start: var(--el-space-16);
+}
+
+.v2-sb-count.is-alert {
+    min-width: var(--el-icon-md);
+    padding-inline: var(--el-space-4);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-danger-default);
+    color: var(--el-role-text-on-accent);
+    text-align: center;
+}
+
+/* The edge that resizes the sidebar (drag, or the arrow keys). */
+.v2-sb-inner {
+    position: relative;
+}
+
+.v2-sb-resize {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: calc(-1 * var(--el-space-4));
+    width: var(--el-space-8);
+    cursor: col-resize;
+    z-index: var(--el-layer-sticky);
+}
+
+.v2-sb-resize:hover,
+.v2-sb-resize:focus-visible {
+    background-color: var(--el-role-accent-soft);
+    outline: none;
+}
+
+body.el-resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+/* Only on a computer: below it the sidebar is the menu's drawer. */
+.v2-sb-resize {
+    display: none;
+}
+
+@media (min-width: 1024px) {
+    .v2-sb-resize {
+        display: block;
+    }
+}
+
+/* Settings › Appearance › Sidebar style: Soft grey (the frame's own), Light, or Dark (the light theme's sidebar drawn
+   in its text colour; under the dark theme every sidebar is dark already). */
+.v2-sb[data-style='light'] {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-sb[data-style='light'] .v2-sb-item:hover,
+.v2-sb[data-style='light'] .v2-sb-subitem:hover,
+.v2-sb[data-style='light'] .v2-sb-item.is-on {
+    background-color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] {
+    background-color: var(--el-role-text-primary);
+    border-inline-end-color: var(--el-role-text-primary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-logo,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-item,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-subitem,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-subcount {
+    color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-item:hover,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-subitem:hover,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-item.is-on {
+    border-color: transparent;
+    background-color: var(--el-role-text-secondary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-subitem.is-on {
+    color: var(--el-role-accent-soft);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-foot {
+    border-top-color: var(--el-role-text-secondary);
+}
+
+/* A menu item with its icon (the new frame's own glyphs). */
+.v2-menu-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-8);
+}
+
+.v2-menu-item .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    color: var(--el-role-text-secondary);
+}
+
+/* The section above a page's title (Library › Search). */
+.v2-crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--el-space-4);
+    margin-bottom: var(--el-space-4);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-crumbs .v2-crumbs-sep {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-crumbs-link:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-crumbs-here {
+    color: var(--el-role-text-primary);
 }
 
 /* the top bar */
@@ -444,6 +598,24 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
 .v2-bn-item.is-on {
     color: var(--el-role-accent-text);
     font-weight: var(--el-text-body-strong-weight);
+}
+
+/* Record: the big centre button in the accent colour, as in the phone app. */
+.v2-bn-record-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-component-button-height);
+    height: var(--el-component-button-height);
+    margin-top: calc(-1 * var(--el-space-12));
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    box-shadow: var(--el-shadow-1);
+}
+
+.v2-bn-record {
+    color: var(--el-role-text-primary);
 }
 
 .v2-bn-item.is-off {
@@ -735,7 +907,9 @@ button.v2-row:hover {
 /* status: colour, icon and text together; one per row */
 .v2-status {
     display: inline-flex;
+    flex: none;
     align-items: center;
+    white-space: nowrap;
     gap: var(--el-space-4);
     font-size: var(--el-text-caption-size);
     font-weight: var(--el-text-body-strong-weight);
@@ -909,6 +1083,11 @@ button.v2-row:hover {
     padding: var(--el-space-4) var(--el-space-12);
 }
 
+/* The records grid must not size its column to the longest title, so the time stays visible at phone width. */
+.v2-library .fi-ta-content {
+    grid-template-columns: minmax(0, 1fr);
+}
+
 .v2-library .fi-ta-record {
     position: relative;
     padding: 0;
@@ -965,10 +1144,6 @@ button.v2-row:hover {
     font-weight: var(--el-text-body-strong-weight);
 }
 
-.v2-library .fi-ta-group-header .fi-ta-group-description {
-    display: none;
-}
-
 .v2-library .fi-ta-record {
     border: 0;
     border-radius: var(--el-radius-md);
@@ -1001,6 +1176,18 @@ button.v2-row:hover {
     white-space: nowrap;
 }
 
+/* A long second line ends in "…" inside the row: the time, the length and the star keep their place on a phone. */
+.v2-lib-line {
+    overflow: hidden;
+}
+
+.v2-library .fi-ta-record-content-ctn,
+.v2-library .fi-ta-record-content,
+.v2-library .fi-ta-record-content .fi-ta-col,
+.v2-lib-row {
+    min-width: 0;
+}
+
 .v2-row-value time {
     color: var(--el-role-text-secondary);
     font-size: var(--el-text-caption-size);
@@ -1015,6 +1202,123 @@ button.v2-row:hover {
     .v2-lib-row {
         min-height: var(--el-component-list-row-height-mobile);
         padding-inline: var(--el-space-4);
+    }
+}
+
+/* The Library's List / Table switch: two segments in one outline, the one shown filled. */
+.v2-seg {
+    display: inline-flex;
+    padding: var(--el-space-2);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-component-chip-radius);
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-seg-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-4);
+    min-height: calc(var(--el-component-chip-height) - var(--el-space-4));
+    padding-inline: var(--el-space-8);
+    border-radius: var(--el-component-chip-radius);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-seg-item.is-on {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-seg-item .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+@media (max-width: 720px) {
+    .v2-seg-label {
+        position: absolute;
+        width: var(--el-border-hairline);
+        height: var(--el-border-hairline);
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
+
+/* "4 calls waiting for a decision · Review": one quiet line above the list. */
+.v2-lib-waiting {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    margin: 0;
+    padding: var(--el-space-8) var(--el-space-12);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-lib-waiting .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* A section's count after its name: "Pinned · 4 recordings". */
+.v2-library .fi-ta-group-header .fi-ta-group-header-text,
+.v2-library .fi-ta-group-header > div:has(.fi-ta-group-heading) {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+}
+
+.v2-library .fi-ta-group-header .fi-ta-group-description {
+    display: inline;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-library .fi-ta-group-header .fi-ta-group-description::before {
+    content: '· ';
+}
+
+/* The row's star: shown on a pinned row, and on the row you point at. */
+.v2-row-pin {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-icon-lg);
+    height: var(--el-icon-lg);
+    border-radius: var(--el-radius-sm);
+    color: var(--el-role-text-secondary);
+    opacity: 0;
+}
+
+.v2-row-pin .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-row-pin.is-on {
+    color: var(--el-role-warning-default);
+    opacity: 1;
+}
+
+.v2-lib-row:hover .v2-row-pin,
+.v2-row-pin:focus-visible {
+    opacity: 1;
+}
+
+.v2-row-pin:hover {
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-primary);
+}
+
+@media (hover: none) {
+    .v2-row-pin {
+        opacity: 1;
     }
 }
 
@@ -1165,6 +1469,65 @@ html .fi-body .el-player .el-chip {
     .v2-chips::-webkit-scrollbar {
         display: none;
     }
+}
+
+/* ================================================================== U7 visual: top bar gap, toolbar under 720, meta separators */
+
+/* The bell's count stays inside the bell's own box, and the avatar keeps a clear space after it. */
+.v2-tb .fi-topbar-database-notifications-btn .fi-icon-btn-badge-ctn {
+    top: 0;
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+    translate: none;
+}
+
+.v2-tb > .v2-um {
+    margin-inline-start: var(--el-space-8);
+}
+
+/* Under 720: the search and the Filters button on one row; Source, the order, Group by and List / Table in one row
+   below that scrolls sideways, as the saved views do. */
+@media (max-width: 720px) {
+    .v2-library .fi-ta-header-toolbar > div:last-child:has(> .v2-lib-tools) {
+        min-width: 0;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child .fi-ta-search-field > .fi-input-wrp {
+        flex: 1 1 0;
+        order: 1;
+        min-width: 0;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child .fi-ta-filters-dropdown > .fi-dropdown-trigger {
+        order: 2;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools {
+        display: flex;
+        flex: 1 0 100%;
+        flex-wrap: nowrap;
+        order: 3;
+        margin-inline: calc(var(--el-layout-page-padding-mobile) * -1);
+        padding-inline: var(--el-layout-page-padding-mobile);
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools::-webkit-scrollbar {
+        display: none;
+    }
+
+    .v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-tools > * {
+        flex: none;
+    }
+}
+
+/* The recording's meta line: each "·" stays with the item after it, so a line never ends in a separator. */
+.v2-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    white-space: nowrap;
 }
 
 /* ================================================================== 6. Moments */
@@ -1369,4 +1732,51 @@ html .fi-body .el-player .el-chip {
 .v2-details-row dd {
     margin: 0;
     text-align: end;
+}
+
+/* ================================================================== selection mode (parity plan 3) */
+/* × first, then the four icon actions and ⋮; the count and Select all are the table's own indicator beside them. */
+.v2-sel-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-4);
+}
+
+.v2-sel-exit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-component-chip-height);
+    block-size: var(--el-component-chip-height);
+    border-radius: var(--el-radius-full);
+    color: var(--el-role-text-primary);
+}
+
+.v2-sel-exit:hover,
+.v2-sel-exit:focus-visible {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-sel-exit svg {
+    inline-size: var(--el-icon-md);
+    block-size: var(--el-icon-md);
+}
+
+/* Right to left: a row's title keeps the list's right edge even when its words are English (dir="auto" on the title
+   makes it left to right, so its ellipsis falls at the end of its own words). D4 6. */
+html[dir='rtl'] .v2-row-title {
+    text-align: right;
+}
+
+/* A settings row's description never runs past the box at phone width: as wide as the row at most, then it wraps. */
+.el-set-text {
+    max-width: 100%;
+}
+
+/* The recording's five tabs fit a phone's width (they needed 7 px more at 390 px): a tighter gap under the compact
+   breakpoint; the row still scrolls sideways when the words are longer (Urdu, large text). */
+@media (max-width: 720px) {
+    .v2-rec-tabs .fi-tabs {
+        gap: var(--el-space-8);
+    }
 }

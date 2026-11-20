@@ -222,6 +222,8 @@ function isoApiCases(array $b): array
         'api.sessions.destroy' => ['DELETE', "/api/sessions/{$s}", [], 404],
         'api.sessions.update' => ['PATCH', "/api/sessions/{$s}", ['title' => 'hijacked'], 404],
         'api.sessions.bulk' => ['POST', '/api/sessions/bulk', ['ids' => [$s], 'action' => 'delete'], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('changed') === 0],
+        // Since 2.0.0-i: the other side's label is no label of this person's, so nothing is coloured or re-synced.
+        'api.labels.color' => ['PUT', '/api/labels/color', ['label' => 'bobsecretlabel', 'color' => '#000000'], 404],
         'api.clients.store' => ['POST', '/api/clients', ['name' => 'Alice new client'], fn (TestResponse $r): bool => $r->status() === 201],
         'api.clients.update' => ['PATCH', "/api/clients/{$b['client']->id}", ['name' => 'hijacked'], 404],
         'api.clients.destroy' => ['DELETE', "/api/clients/{$b['client']->id}", [], 404],

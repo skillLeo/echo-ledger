@@ -7,13 +7,13 @@
         x-data="{ theme: localStorage.getItem('filament:theme:mode') || 'system', saved: false,
             pick(value) { this.theme = value; window.dispatchEvent(new CustomEvent('theme-changed', { detail: value })); this.saved = true; setTimeout(() => this.saved = false, 2000) } }"
         x-on:theme-changed.window="theme = $event.detail">
-        <span class="el-set-text"><span class="el-set-title" id="el-pref-theme">Theme</span></span>
+        <span class="el-set-text"><span class="el-set-title" id="el-pref-theme">{{ __('Theme') }}</span></span>
         <span class="el-set-control" style="align-items:center;gap:8px">
             <span class="el-set-saved" x-show="saved" x-cloak aria-hidden="true">@svg('heroicon-m-check')</span>
             <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-theme">
                 @foreach (['system' => 'System', 'light' => 'Light', 'dark' => 'Dark'] as $value => $label)
                     <button type="button" role="radio" x-bind:aria-checked="theme === '{{ $value }}' ? 'true' : 'false'" x-bind:tabindex="theme === '{{ $value }}' ? 0 : -1"
-                        x-on:click="pick('{{ $value }}')">{{ $label }}</button>
+                        x-on:click="pick('{{ $value }}')">{{ __($label) }}</button>
                 @endforeach
             </span>
         </span>
@@ -22,13 +22,13 @@
         @php($entry = \App\Services\Accounts\SettingsRegistry::byId()[$id])
         <div class="el-set-row is-stacked" id="setting-{{ $id }}" tabindex="-1" data-setting="{{ $id }}" x-data="{ value: @js($prefs[$key]), saved: false,
                 pick(v) { this.value = v; this.saved = false; $wire.setPreference('{{ $key }}', v).then((ok) => { this.saved = ok; setTimeout(() => this.saved = false, 2000) }) } }">
-            <span class="el-set-text"><span class="el-set-title" id="el-pref-{{ $key }}">{{ $entry['title'] }}</span></span>
+            <span class="el-set-text"><span class="el-set-title" id="el-pref-{{ $key }}">{{ __($entry['title']) }}</span></span>
             <span class="el-set-control" style="align-items:center;gap:8px">
                 <span class="el-set-saved" x-show="saved" x-cloak aria-hidden="true">@svg('heroicon-m-check')</span>
                 <span class="el-segmented" role="radiogroup" aria-labelledby="el-pref-{{ $key }}">
                     @foreach ($options as $value => $label)
                         <button type="button" role="radio" x-bind:aria-checked="value === '{{ $value }}' ? 'true' : 'false'" x-bind:tabindex="value === '{{ $value }}' ? 0 : -1"
-                            x-on:click="pick('{{ $value }}')">{{ $label }}</button>
+                            x-on:click="pick('{{ $value }}')">{{ __($label) }}</button>
                     @endforeach
                 </span>
             </span>

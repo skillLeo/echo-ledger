@@ -96,6 +96,19 @@ class Client extends Model
         return $this->keyterms()->orderBy('id')->pluck('term')->map(fn ($t): string => (string) $t)->values()->all();
     }
 
+    /**
+     * Since 2.0.0-i a library item carries `expires_at`, which follows the project's days: when they change, its
+     * recordings get a new updated_at so the other devices sync the new date (from the API and the console alike).
+     */
+    protected static function booted(): void
+    {
+        static::updated(function (Client $client): void {
+            if ($client->wasChanged('retention_days')) {
+                CaptureSession::query()->withoutGlobalScopes()->where('client_id', $client->id)->whereNull('deleted_at')->update(['updated_at' => now()]);
+            }
+        });
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {

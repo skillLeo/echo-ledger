@@ -139,6 +139,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->middleware($own)->name('api.sessions.destroy');
             Route::patch('sessions/{id}', [OrganiseController::class, 'update'])->middleware($own)->name('api.sessions.update');
             Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->middleware($own)->name('api.sessions.bulk');
+            // Since 2.0.0-i: a label's colour in the workspace.
+            Route::put('labels/color', [OrganiseController::class, 'labelColor'])->middleware($own)->name('api.labels.color');
             Route::post('clients', [OrganiseController::class, 'storeClient'])->middleware($own)->name('api.clients.store');
             Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->middleware($own)->name('api.clients.update');
             // Projects (v1.5): deleting one sends its recordings to the Inbox and its subfolders up a level.
