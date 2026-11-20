@@ -1443,7 +1443,9 @@ html .fi-body .el-player .el-chip {
     background-color: var(--el-role-bg-subtle);
 }
 
-/* counts on the bell and on tabs: the accent with its own text colour */
+/* counts on the bell, on tabs and on a table's Filter button: the accent with its own text colour (readable in dark,
+   where Filament's own tinted badge was teal on teal) */
+.fi-ta .fi-icon-btn-badge-ctn .fi-badge,
 .v2-tb .fi-icon-btn-badge-ctn .fi-badge {
     border-radius: var(--el-radius-full);
     background-color: var(--el-role-accent-default);
@@ -1779,4 +1781,16 @@ html[dir='rtl'] .v2-row-title {
     .v2-rec-tabs .fi-tabs {
         gap: var(--el-space-8);
     }
+}
+
+/* A table's applied filters ("Show: Signed in"): the accent's soft tint with the accent's text colour, which reaches
+   4.5:1 in both themes (Filament's primary badge drew dark teal on dark teal in dark mode). */
+.fi-ta-filter-indicators-badges-ctn .fi-badge {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    box-shadow: none;
+}
+
+.fi-ta-filter-indicators-badges-ctn .fi-badge .fi-badge-delete-btn {
+    color: var(--el-role-accent-text);
 }
