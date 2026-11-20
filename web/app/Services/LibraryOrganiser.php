@@ -52,7 +52,8 @@ final class LibraryOrganiser
 
     public const BULK_ACTIONS = ['move', 'label', 'unlabel', 'pin', 'unpin', 'keep', 'unkeep', 'delete'];
 
-    public const EXPORT_FORMATS = ['txt', 'md', 'srt', 'vtt', 'json', 'docx'];
+    /** Since 2.0.0-h (parity plan 3) also html, as one recording's export already has. */
+    public const EXPORT_FORMATS = ['txt', 'md', 'srt', 'vtt', 'json', 'docx', 'html'];
 
     public const MAX_LABELS = 20;
 

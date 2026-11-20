@@ -214,7 +214,8 @@ describe('zip export', function () {
     it('says when nothing can be exported and refuses other owners\' recordings', function () {
         $foreign = CaptureSession::factory()->create();
         $this->postJson('/api/sessions/export', ['ids' => [$foreign->id], 'format' => 'txt'])->assertStatus(409)->assertJsonPath('code', 'nothing_to_export');
-        $this->postJson('/api/sessions/export', ['ids' => [$foreign->id], 'format' => 'html'])->assertStatus(422);
+        // Since 2.0.0-h html is a format too (parity plan 3); an unknown one is still refused.
+        $this->postJson('/api/sessions/export', ['ids' => [$foreign->id], 'format' => 'exe'])->assertStatus(422);
     });
 });
 
@@ -238,4 +239,24 @@ describe('client folders', function () {
         $foreign = Client::factory()->create(['user_id' => User::factory()]);
         $this->patchJson("/api/clients/{$foreign->id}", ['pinned' => true])->assertNotFound();
     });
+});
+
+it('exports many recordings as web pages (html) through the API', function () {
+    $session = CaptureSession::factory()->create(['user_id' => $this->owner, 'device_id' => $this->device->id]);
+    $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'text' => 'Hello <script>alert(1)</script>.',
+        'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello <script>alert(1)</script>.']]]);
+
+    $response = $this->postJson('/api/sessions/export', ['ids' => [$session->id], 'format' => 'html'])->assertOk();
+    expect($response->headers->get('X-Export-Count'))->toBe('1')->and($response->headers->get('Content-Type'))->toBe('application/zip');
+    // The zip holds one web page with the words in it, and a <script> in the words is text, never markup.
+    $path = tempnam(sys_get_temp_dir(), 'el-zip');
+    file_put_contents($path, $response->getContent());
+    $zip = new ZipArchive;
+    expect($zip->open($path))->toBeTrue();
+    $names = array_map(fn (int $i): string => (string) $zip->getNameIndex($i), range(0, $zip->numFiles - 1));
+    $page = collect($names)->first(fn (string $n): bool => str_ends_with($n, '.html'));
+    $body = (string) $zip->getFromName((string) $page);
+    $zip->close();
+    unlink($path);
+    expect($page)->not->toBeNull()->and($body)->toContain('Hello &lt;script&gt;alert(1)&lt;/script&gt;.')->not->toContain('<script>alert(1)');
 });

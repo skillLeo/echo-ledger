@@ -8,11 +8,13 @@ use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Pages\Upload;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\PlanLimitWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\LibraryView;
+use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\Shell;
 use App\Filament\Support\WhatsAppActions;
@@ -21,6 +23,7 @@ use App\Models\Client;
 use App\Models\User;
 use App\Services\ConsoleUploads;
 use App\Services\LibraryOrganiser;
+use App\Services\RetentionPolicy;
 use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
@@ -40,6 +43,8 @@ use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Livewire;
@@ -318,6 +323,48 @@ class ListCaptureSessions extends ListRecords
     }
 
     /** A recording moved by a drop on the sidebar: the list is drawn again with it in its new place. */
+    /**
+     * The page's listeners, with the v2.0 selection's Undo only under the new Library (the classic page stays as it was).
+     *
+     * @return array<string, string>
+     */
+    protected function getListeners(): array
+    {
+        return [...parent::getListeners(), ...(ConsoleV2::library() ? ['el-library-undo-delete' => 'undoDelete'] : [])];
+    }
+
+    /** v2.0: another page of the list, or another page size, starts with nothing selected, so Delete takes what is on screen. */
+    public function updatedPaginators(): void
+    {
+        if (ConsoleV2::library()) {
+            $this->deselectAllTableRecords();
+        }
+    }
+
+    public function updatingTableRecordsPerPage(): void
+    {
+        $this->updatedPaginators();
+    }
+
+    /**
+     * Undo of the v2.0 selection's Delete: the batch that Delete just moved (its token, this person's only) comes back
+     * from Trash while Trash still keeps it, each recording only when the person may restore it.
+     */
+    public function undoDelete(string $token = ''): void
+    {
+        $ids = $token !== '' ? Cache::pull(CaptureSessionsTable::undoKey($token)) : null;
+        $back = 0;
+        $policy = app(RetentionPolicy::class);
+        foreach (is_array($ids) ? CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', array_slice(array_map('strval', $ids), 0, 200))->get() : [] as $session) {
+            if ($session->restorable() && Gate::allows('restore', $session)) {
+                $policy->restore($session);
+                $back++;
+            }
+        }
+        Notification::make()->title($back === 1 ? __('1 recording is back') : __(':count recordings are back', ['count' => $back]))->success()->send();
+        $this->resetTable();
+    }
+
     #[On('el-library-changed')]
     public function libraryChanged(): void
     {
@@ -430,7 +477,7 @@ class ListCaptureSessions extends ListRecords
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_AFTER, fn (): string => Livewire::current() instanceof self && ! ConsoleV2::library() ? view('filament.library.toolbar')->render() : '');
             // Since v2.0 (ui_v2.library): the quick filters right after the search field.
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_SEARCH_AFTER, fn (): string => Livewire::current() instanceof self && ConsoleV2::library() ? view('filament.v2.library-toolbar')->render() : '');
-            FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view('filament.library.bulk-bar'), scopes: self::class);
+            FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view(ConsoleV2::library() ? 'filament.v2.bulk-bar' : 'filament.library.bulk-bar'), scopes: self::class);
         }
     }
 

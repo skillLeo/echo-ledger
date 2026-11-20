@@ -50,7 +50,10 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class CaptureSessionsTable
@@ -302,6 +305,9 @@ final class CaptureSessionsTable
      */
     public static function bulkBar(): array
     {
+        if (ConsoleV2::library()) {
+            return self::v2BulkBar();
+        }
         $actions = collect(self::bulkActions())->keyBy(fn (BulkAction $action): string => (string) $action->getName());
         $small = fn (BulkAction $action): BulkAction => $action->button()->size(Size::Small);
 
@@ -314,6 +320,102 @@ final class CaptureSessionsTable
             BulkActionGroup::make([$actions['pin'], $actions['unpin'], $actions['keep'], $actions['unkeep']])->label('More')
                 ->icon(Heroicon::OutlinedEllipsisHorizontal)->button()->size(Size::Small)->color('gray'),
         ];
+    }
+
+    /**
+     * The v2.0 selection bar (docs/PLAN_V2_PARITY.md section 3): four main actions as icon buttons (Move to project,
+     * Label, Export, Delete), then ⋮ with every other one in groups: Organise, Export, Danger (Delete last, red).
+     * Delete moves to Trash at once and offers Undo, as the apps do (the Trash keeps them for trash.keep_hours).
+     *
+     * @return list<BulkAction|BulkActionGroup>
+     */
+    public static function v2BulkBar(): array
+    {
+        $actions = collect(self::bulkActions())->keyBy(fn (BulkAction $action): string => (string) $action->getName());
+        // The ⋮ menu's own copies (an action is drawn once, and the bar's are icon buttons).
+        $menu = collect(self::bulkActions())->keyBy(fn (BulkAction $action): string => (string) $action->getName())
+            ->map(fn (BulkAction $action): BulkAction => $action->name($action->getName().'InMenu'));
+        $icon = fn (BulkAction|BulkActionGroup $action, string $label): BulkAction|BulkActionGroup => $action->label(__($label))->tooltip(__($label))->iconButton()->color('gray');
+
+        return [
+            $icon($actions['move'], 'Move to project'),
+            $icon(BulkActionGroup::make([$actions['label'], $actions['unlabel']])->icon(Heroicon::OutlinedTag), 'Label'),
+            $icon(BulkActionGroup::make(self::exportFormatActions('export'))->icon(Heroicon::OutlinedArrowDownTray), 'Export'),
+            $icon(self::trashBulkAction('trash'), 'Delete')->color('danger')->extraAttributes(['data-selection-delete' => true]),
+            BulkActionGroup::make([
+                BulkActionGroup::make([$menu['pin'], $menu['unpin'], $menu['keep'], $menu['unkeep'], $menu['move'], $menu['label'], $menu['unlabel']])
+                    ->label(__('Organise'))->dropdown(false),
+                BulkActionGroup::make(self::exportFormatActions('exportInMenu'))->label(__('Export'))->dropdown(false),
+                BulkActionGroup::make([self::trashBulkAction('trashFromMenu')->label(__('Delete'))->color('danger')])->label(__('Danger'))->dropdown(false),
+            ])->label(__('More'))->tooltip(__('More'))->icon(Heroicon::OutlinedEllipsisVertical)->iconButton()->color('gray')
+                ->extraAttributes(['data-selection-more' => true]),
+        ];
+    }
+
+    /** The v2.0 Export sub-menu's formats (parity plan 3), in its order. */
+    public const V2_EXPORT_FORMATS = [
+        'docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Subtitles (.vtt)',
+        'html' => 'Web page (.html)', 'json' => 'JSON',
+    ];
+
+    /**
+     * One action per format of the v2.0 Export sub-menu: each asks only which view (Show as) and downloads one zip.
+     *
+     * @return list<BulkAction>
+     */
+    public static function exportFormatActions(string $prefix): array
+    {
+        $out = [];
+        foreach (self::V2_EXPORT_FORMATS as $format => $label) {
+            $out[] = BulkAction::make($prefix.ucfirst($format))->label(__($label))
+                ->modalHeading(__('Export as :format', ['format' => __($label)]))->modalSubmitActionLabel(__('Export'))
+                ->schema([
+                    Select::make('view')->label(__('Show as'))->placeholder(__('Original words'))->options(TranscriptViews::VIEWS)
+                        ->helperText(__('A recording whose view is not made yet keeps its original words.')),
+                ])
+                ->action(fn (Collection $records, array $data): ?StreamedResponse => self::exportDownload($records, $format, $data['view'] ?? null));
+        }
+
+        return $out;
+    }
+
+    /**
+     * Delete for the v2.0 selection: the recordings go to Trash at once (each one the person may delete), and the
+     * notice offers Undo, which brings them back while the Trash still has them.
+     */
+    /** Where the v2.0 selection's last Delete waits for its Undo (one batch, one person). */
+    public static function undoKey(string $token): string
+    {
+        return 'el-library-undo:'.auth()->id().':'.$token;
+    }
+
+    public static function trashBulkAction(string $name): BulkAction
+    {
+        return BulkAction::make($name)->label(__('Delete'))->icon(Heroicon::OutlinedTrash)
+            ->authorizeIndividualRecords('delete')
+            ->action(function (Collection $records): void {
+                // A recording still being made or uploaded stays where it is: Trash and Undo would race its upload.
+                $busy = $records->filter(fn (Model $r): bool => $r instanceof CaptureSession && in_array($r->status, [SessionStatus::Recording, SessionStatus::Uploading], true));
+                $ids = [];
+                foreach ($records->diff($busy) as $record) {
+                    $record->delete();
+                    $ids[] = (string) $record->getKey();
+                }
+                $count = count($ids);
+                $notice = Notification::make()->title($count === 1 ? __('1 recording moved to Trash') : __(':count recordings moved to Trash', ['count' => $count]));
+                if ($busy->isNotEmpty()) {
+                    $notice->body($busy->count() === 1 ? __('1 recording is still recording or uploading and was left alone.')
+                        : __(':count recordings are still recording or uploading and were left alone.', ['count' => $busy->count()]));
+                }
+                if ($count > 0) {
+                    // Undo brings back this batch only: the ids wait under a one-off token for the person who deleted them.
+                    $token = Str::random(32);
+                    Cache::put(self::undoKey($token), $ids, now()->addMinutes(30));
+                    $notice->actions([Action::make('undo')->label(__('Undo'))->button()->dispatch('el-library-undo-delete', ['token' => $token])->close()]);
+                }
+                ($count > 0 ? $notice->success() : $notice->warning())->send();
+            })
+            ->deselectRecordsAfterCompletion();
     }
 
     /**
@@ -365,21 +467,29 @@ final class CaptureSessionsTable
                         ->options(TranscriptViews::VIEWS)
                         ->helperText('A recording whose view is not made yet keeps its original words.'),
                 ])
-                ->action(function (Collection $records, array $data): ?StreamedResponse {
-                    $view = is_string($data['view'] ?? null) && array_key_exists($data['view'], TranscriptViews::VIEWS) ? $data['view'] : null;
-                    try {
-                        $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), (string) $data['format'], $view);
-                    } catch (ApiError $e) {
-                        Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
-
-                        return null;
-                    }
-
-                    return response()->streamDownload(function () use ($file): void {
-                        echo $file['body'];
-                    }, $file['filename'], ['Content-Type' => 'application/zip']);
-                }),
+                ->action(fn (Collection $records, array $data): ?StreamedResponse => self::exportDownload($records, (string) $data['format'], $data['view'] ?? null)),
         ];
+    }
+
+    /**
+     * The finished transcripts of [$records] in one zip, in [$format] and the Show as [$view] (null: original words).
+     *
+     * @param  Collection<int, CaptureSession>  $records
+     */
+    public static function exportDownload(Collection $records, string $format, mixed $view): ?StreamedResponse
+    {
+        $view = is_string($view) && array_key_exists($view, TranscriptViews::VIEWS) ? $view : null;
+        try {
+            $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), $format, $view);
+        } catch (ApiError $e) {
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
+
+            return null;
+        }
+
+        return response()->streamDownload(function () use ($file): void {
+            echo $file['body'];
+        }, $file['filename'], ['Content-Type' => 'application/zip']);
     }
 
     /**

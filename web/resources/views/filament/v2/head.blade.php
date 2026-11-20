@@ -19,3 +19,5 @@
         new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ['class'] });
     })();
 </script>
+@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-keys')
+@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.copy')

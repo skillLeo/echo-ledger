@@ -270,6 +270,13 @@ trait ManagesAppPages
                 ['Enter', 'Open it'],
                 ['X', 'Select it'],
                 ['Esc', 'Close the recording on the right, or clear the selection'],
+                // Since v2.0 (ui_v2.library, parity plan 3): the selection's keys and mouse.
+                ...(ConsoleV2::library() ? [
+                    [$mac ? '⌘ A' : 'Ctrl A', 'Select every recording on the page'],
+                    ['Shift click', 'Select a range'],
+                    ['Delete', 'Delete the selection (Undo in the notice)'],
+                    ['Right-click', 'The recording\'s menu, or the selection\'s'],
+                ] : []),
             ],
             'On a recording' => [
                 ['Space', 'Play or pause'],
