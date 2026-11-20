@@ -100,7 +100,14 @@ class AppPanelProvider extends PanelProvider
             return $part === 'crumbs' ? view('filament.v2.back-link', $back) : '';
         }
         if (ConsoleV2::shell()) {
-            return '';
+            // Since the parity work the new frame shows the section above the title too (Library › Search), in the
+            // console's language; a page still carries no subtitle of its own there.
+            if ($part !== 'crumbs' || $page->getBreadcrumbs() !== []) {
+                return '';
+            }
+            $crumbs = Shell::crumbs($page::class, (string) $page->getTitle());
+
+            return count($crumbs) > 1 ? view('filament.v2.crumbs', ['crumbs' => $crumbs]) : '';
         }
         if ($part === 'crumbs') {
             return $page->getBreadcrumbs() === [] ? view('filament.shell.page-crumbs', ['crumbs' => Shell::crumbs($page::class, (string) $page->getTitle())]) : '';

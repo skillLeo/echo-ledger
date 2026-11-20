@@ -8,11 +8,13 @@ use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Pages\Upload;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\PlanLimitWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\LibraryView;
+use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\Shell;
 use App\Filament\Support\WhatsAppActions;
@@ -21,6 +23,7 @@ use App\Models\Client;
 use App\Models\User;
 use App\Services\ConsoleUploads;
 use App\Services\LibraryOrganiser;
+use App\Services\RetentionPolicy;
 use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
@@ -40,6 +43,8 @@ use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Livewire;
@@ -136,6 +141,11 @@ class ListCaptureSessions extends ListRecords
     {
         parent::updatedActiveTab();
         $this->loadLibraryView();
+        // v2.0: another place starts with nothing selected, as a search or a filter does (Filament's own), so the
+        // selection never holds recordings the list no longer shows.
+        if (ConsoleV2::library()) {
+            $this->deselectAllTableRecords();
+        }
     }
 
     /** The view the choice is remembered for: the smart view, and the smart folder when one is chosen. */
@@ -176,11 +186,19 @@ class ListCaptureSessions extends ListRecords
         return LibraryView::buckets($grouping->getId(), $this)[(string) $group] ?? [];
     }
 
-    /** The group counts are counted once per render (LibraryView). */
+    /** The group counts are counted once per render (LibraryView), and so are the views and the folders. */
     public function rendering(): void
     {
         LibraryView::forgetCounts();
+        $this->foldersOnce = null;
+        $this->v2ViewsOnce = null;
     }
+
+    /** @var array<string, array{label: string, icon: string, count: int, url: string|null}>|null the folders, for this render */
+    private ?array $foldersOnce = null;
+
+    /** @var list<array{key: string, label: string, count: int|null, on: bool}>|null the saved views, for this render */
+    private ?array $v2ViewsOnce = null;
 
     private function loadLibraryView(): void
     {
@@ -236,6 +254,12 @@ class ListCaptureSessions extends ListRecords
      */
     public function folders(): array
     {
+        return $this->foldersOnce ??= $this->countFolders();
+    }
+
+    /** @return array<string, array{label: string, icon: string, count: int, url: string|null}> */
+    private function countFolders(): array
+    {
         $counts = app(LibraryOrganiser::class)->folderCounts((int) CurrentWorkspace::id());
         $user = auth()->user();
         $counts['shared'] = $user instanceof User ? app(Teammates::class)->sharedCount($user) : 0;
@@ -255,6 +279,12 @@ class ListCaptureSessions extends ListRecords
      */
     public function v2Views(): array
     {
+        return $this->v2ViewsOnce ??= $this->listV2Views();
+    }
+
+    /** @return list<array{key: string, label: string, count: int|null, on: bool}> */
+    private function listV2Views(): array
+    {
         $tabs = $this->getCachedTabs();
         $badge = fn (string $key): ?int => isset($tabs[$key]) && is_numeric($tabs[$key]->getBadge()) ? (int) $tabs[$key]->getBadge() : null;
         $place = $this->activePlace();
@@ -273,6 +303,35 @@ class ListCaptureSessions extends ListRecords
         }
 
         return array_map(fn (array $v): array => $v + ['on' => $v['key'] === $place], $views);
+    }
+
+    /**
+     * The v2.0 Library's "Views ▾": every view of the classic Library's All recordings menu, in its order, with
+     * Untranscribed last, each with its count.
+     *
+     * @return list<array{key: string, label: string, count: int|null, on: bool}>
+     */
+    public function v2ViewMenu(): array
+    {
+        $tabs = $this->getCachedTabs();
+        $place = $this->activePlace();
+        $menu = [['key' => 'all', 'label' => __('All recordings'), 'count' => null]];
+        foreach ([...array_keys(self::VIEW_LABELS), 'untranscribed'] as $key) {
+            if (isset($tabs[$key])) {
+                $badge = $tabs[$key]->getBadge();
+                $menu[] = ['key' => $key, 'label' => (string) $tabs[$key]->getLabel(), 'count' => is_numeric($badge) ? (int) $badge : null];
+            }
+        }
+
+        return array_map(fn (array $v): array => [...$v, 'label' => __($v['label']), 'on' => $v['key'] === $place], $menu);
+    }
+
+    /** How many calls wait for Keep or Discard (the v2.0 Library's quiet line). */
+    public function v2Waiting(): int
+    {
+        $tabs = $this->getCachedTabs();
+
+        return isset($tabs['waiting']) && is_numeric($tabs['waiting']->getBadge()) ? (int) $tabs['waiting']->getBadge() : 0;
     }
 
     /** The empty state's "Show all recordings": no smart view and no folder. */
@@ -318,6 +377,56 @@ class ListCaptureSessions extends ListRecords
     }
 
     /** A recording moved by a drop on the sidebar: the list is drawn again with it in its new place. */
+    /**
+     * The page's listeners, with the v2.0 selection's Undo only under the new Library (the classic page stays as it was).
+     *
+     * @return array<string, string>
+     */
+    protected function getListeners(): array
+    {
+        return [...parent::getListeners(), ...(ConsoleV2::library() ? ['el-library-undo-delete' => 'undoDelete'] : [])];
+    }
+
+    /** v2.0: another page of the list, or another page size, starts with nothing selected, so Delete takes what is on screen. */
+    public function updatedPaginators(): void
+    {
+        if (ConsoleV2::library()) {
+            $this->deselectAllTableRecords();
+        }
+    }
+
+    public function updatingTableRecordsPerPage(): void
+    {
+        $this->updatedPaginators();
+    }
+
+    /**
+     * Undo of the v2.0 selection's Delete: the batch that Delete just moved (its token, this person's only) comes back
+     * from Recently deleted while it still keeps it, each recording only when the person may restore it.
+     */
+    public function undoDelete(string $token = ''): void
+    {
+        $ids = $token !== '' ? Cache::pull(CaptureSessionsTable::undoKey($token)) : null;
+        // A token already used, or older than its half hour: nothing waits for it any more.
+        if (! is_array($ids)) {
+            Notification::make()->title(__('Undo has expired'))->body(__('Open Recently deleted to bring recordings back.'))->warning()->send();
+
+            return;
+        }
+        $back = 0;
+        $policy = app(RetentionPolicy::class);
+        foreach (CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', array_slice(array_map('strval', $ids), 0, 200))->get() as $session) {
+            if ($session->restorable() && Gate::allows('restore', $session)) {
+                $policy->restore($session);
+                $back++;
+            }
+        }
+        $notice = Notification::make()->title($back === 1 ? __('1 recording is back') : __(':count recordings are back', ['count' => $back]));
+        // Nothing came back (each one was erased, or not this person's to restore): a warning, not a success.
+        ($back > 0 ? $notice->success() : $notice->warning())->send();
+        $this->resetTable();
+    }
+
     #[On('el-library-changed')]
     public function libraryChanged(): void
     {
@@ -329,6 +438,9 @@ class ListCaptureSessions extends ListRecords
     {
         $this->folder = $folder !== null && $folder !== $this->folder && array_key_exists($folder, self::FOLDER_LABELS) && $folder !== 'shared' ? $folder : null;
         $this->resetPage();
+        if (ConsoleV2::library()) {
+            $this->deselectAllTableRecords();
+        }
         $this->loadLibraryView();
     }
 
@@ -430,8 +542,25 @@ class ListCaptureSessions extends ListRecords
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_AFTER, fn (): string => Livewire::current() instanceof self && ! ConsoleV2::library() ? view('filament.library.toolbar')->render() : '');
             // Since v2.0 (ui_v2.library): the quick filters right after the search field.
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_SEARCH_AFTER, fn (): string => Livewire::current() instanceof self && ConsoleV2::library() ? view('filament.v2.library-toolbar')->render() : '');
-            FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view('filament.library.bulk-bar'), scopes: self::class);
+            FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view(ConsoleV2::library() ? 'filament.v2.bulk-bar' : 'filament.library.bulk-bar'), scopes: self::class);
         }
+    }
+
+    /**
+     * The v2.0 row's star: pins the recording to the top (its Pinned section), or unpins it, as the classic row's star
+     * does. Only a recording of this Library, and never in a read-only console.
+     */
+    public function togglePin(string $id): void
+    {
+        if (! ConsoleV2::library() || ConsoleAccess::readOnly()) {
+            return;
+        }
+        $session = CaptureSessionResource::getEloquentQuery()->find($id);
+        if (! $session instanceof CaptureSession) {
+            return;
+        }
+        app(LibraryOrganiser::class)->update($session, ['pinned' => ! $session->pinned]);
+        $this->flushCachedTableRecords();
     }
 
     /** The recording shown beside the list on wide screens (a plain click on a row picks it). */
@@ -466,12 +595,13 @@ class ListCaptureSessions extends ListRecords
         if (ConsoleAccess::readOnly()) {
             return [];
         }
-        // Since v2.0 (ui_v2.library): Import beside the one primary action, a voice note recorded here.
+        // Since v2.0 (ui_v2.library): Upload recording is the one primary action (the web's main action, PLAN_V2_PARITY
+        // section 2), with a voice note recorded here beside it.
         if (ConsoleV2::library()) {
             return [
-                Action::make('upload')->label(__('Import'))->color('gray')->outlined()
+                Action::make('upload')->label(__('Upload recording'))
                     ->alpineClickHandler("\$dispatch('el-upload-pick')"),
-                Action::make('voiceNote')->label(__('New voice note'))
+                Action::make('voiceNote')->label(__('New voice note'))->color('gray')->outlined()
                     ->url(fn (): string => Upload::getUrl(['record' => 1])),
             ];
         }

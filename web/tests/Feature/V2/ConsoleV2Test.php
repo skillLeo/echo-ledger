@@ -64,7 +64,7 @@ describe('the frame', function () {
             expect($html)->toContain('data-module="'.$module.'"');
         }
         expect($html)->toContain('class="fi-sidebar fi-main-sidebar v2-sb"')->toContain('v2-bn')
-            ->toContain('All recordings')->toContain('Projects')->toContain('Trash')
+            ->toContain('All recordings')->toContain('Projects')->toContain('Recently deleted')
             // the design values' head: tokens.css follows Filament's dark mode
             ->toContain('root.dataset.theme')
             ->and(substr_count($html, 'aria-current="page"'))->toBeGreaterThanOrEqual(1);

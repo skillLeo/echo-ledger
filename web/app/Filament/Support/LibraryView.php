@@ -47,6 +47,23 @@ final class LibraryView
 
     public const DEFAULT_GROUP = 'date';
 
+    /** A group title in the console's language under the new Library; classic reads exactly as before. */
+    private static function words(string $title): string
+    {
+        return ConsoleV2::library() ? __($title) : $title;
+    }
+
+    /**
+     * Group by in the v2.0 Library, in the console's language (parity plan 3: date, source, project, language, status,
+     * device, none). The app's group is named Source there, as its filter is.
+     *
+     * @return array<string, string>
+     */
+    public static function v2Groups(): array
+    {
+        return array_map(fn (string $label): string => __($label), array_replace(self::GROUPS, ['app' => 'Source']));
+    }
+
     public const DEFAULT_SORT = 'newest';
 
     /** @return list<Group> */
@@ -54,9 +71,16 @@ final class LibraryView
     {
         $zone = fn (): string => app(SettingsRepository::class)->displayTimezone();
         $day = fn (CaptureSession $r): string => $r->started_at->copy()->setTimezone($zone())->format('Y-m-d');
+        // Since v2.0 (ui_v2.library) pinned recordings head the date groups in a section of their own, "Pinned · 4",
+        // as in the apps (parity plan 3); the days below hold the rest.
+        $v2Pinned = fn (): bool => ConsoleV2::library();
+        $dateKey = fn (CaptureSession $r): string => $v2Pinned() && $r->pinned ? self::PINNED : $day($r);
 
         return [
-            self::group('date', $day, function (CaptureSession $r) use ($zone): string {
+            self::group('date', $dateKey, function (CaptureSession $r) use ($zone, $v2Pinned): string {
+                if ($v2Pinned() && $r->pinned) {
+                    return __('Pinned');
+                }
                 $at = $r->started_at->copy()->setTimezone($zone());
                 $now = Carbon::now($zone());
 
@@ -70,28 +94,34 @@ final class LibraryView
                     $at->year === $now->year => $at->format('l, M j'),
                     default => $at->format('l, M j, Y'),
                 };
-            }, function (Builder $q, string $key) use ($zone): Builder {
+            }, function (Builder $q, string $key) use ($zone, $v2Pinned): Builder {
+                if ($v2Pinned() && $key === self::PINNED) {
+                    return $q->where($q->qualifyColumn('pinned'), true);
+                }
                 $start = Carbon::parse($key, $zone())->startOfDay()->utc();
+                if ($v2Pinned()) {
+                    $q->where($q->qualifyColumn('pinned'), false);
+                }
 
                 return $q->where($q->qualifyColumn('started_at'), '>=', $start)->where($q->qualifyColumn('started_at'), '<', $start->copy()->addDay());
-            }, fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('started_at'), $direction)),
-            self::group('app', fn (CaptureSession $r): string => $r->source_app->value, fn (CaptureSession $r): string => (string) $r->source_app->getLabel(),
+            }, fn (Builder $q, string $direction): Builder => ($v2Pinned() ? $q->orderByDesc($q->qualifyColumn('pinned')) : $q)->orderBy($q->qualifyColumn('started_at'), $direction)),
+            self::group('app', fn (CaptureSession $r): string => $r->source_app->value, fn (CaptureSession $r): string => self::words((string) $r->source_app->getLabel()),
                 fn (Builder $q, string $key): Builder => $q->where($q->qualifyColumn('source_app'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('source_app'), $direction)),
-            self::group('project', fn (CaptureSession $r): string => $r->client_id ?? 'none', fn (CaptureSession $r): string => $r->client->name ?? 'Inbox',
+            self::group('project', fn (CaptureSession $r): string => $r->client_id ?? 'none', fn (CaptureSession $r): string => $r->client->name ?? self::words('Inbox'),
                 fn (Builder $q, string $key): Builder => $key === 'none' ? $q->whereNull($q->qualifyColumn('client_id')) : $q->where($q->qualifyColumn('client_id'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy(Client::query()->select('name')->whereColumn('clients.id', 'capture_sessions.client_id')->limit(1), $direction)),
             self::group('language', fn (CaptureSession $r): string => LanguageChoice::normalize($r->language) ?? 'auto',
-                fn (CaptureSession $r): string => LanguageChoice::normalize($r->language) === null ? 'Automatic' : LanguageChoice::label($r->language),
+                fn (CaptureSession $r): string => self::words(LanguageChoice::normalize($r->language) === null ? 'Automatic' : LanguageChoice::label($r->language)),
                 fn (Builder $q, string $key): Builder => $key === 'auto'
                     ? $q->where(fn (Builder $w): Builder => $w->whereNull($q->qualifyColumn('language'))->orWhere($q->qualifyColumn('language'), '')->orWhere($q->qualifyColumn('language'), 'auto'))
                     : $q->where($q->qualifyColumn('language'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('language'), $direction)),
-            self::group('status', fn (CaptureSession $r): string => $r->status->value, fn (CaptureSession $r): string => (string) $r->status->getLabel(),
+            self::group('status', fn (CaptureSession $r): string => $r->status->value, fn (CaptureSession $r): string => self::words((string) $r->status->getLabel()),
                 fn (Builder $q, string $key): Builder => $q->where($q->qualifyColumn('status'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('status'), $direction)),
             self::group('device', fn (CaptureSession $r): string => $r->device_id !== null ? (string) $r->device_id : 'none:'.$r->source_device->value,
-                fn (CaptureSession $r): string => CaptureSessionsTable::deviceLabel($r),
+                fn (CaptureSession $r): string => self::words(CaptureSessionsTable::deviceLabel($r)),
                 fn (Builder $q, string $key): Builder => str_starts_with($key, 'none:')
                     ? $q->whereNull($q->qualifyColumn('device_id'))->where($q->qualifyColumn('source_device'), substr($key, 5))
                     : $q->where($q->qualifyColumn('device_id'), $key),
@@ -132,9 +162,12 @@ final class LibraryView
             ->orderQueryUsing(fn (Builder $query, string $direction): Builder => $order($query, $direction));
     }
 
+    /** The key of the v2.0 Library's Pinned section (never a day). */
+    public const PINNED = 'pinned';
+
     /** The columns each group's key is made from. */
     private const COUNT_COLUMNS = [
-        'date' => ['started_at'], 'app' => ['source_app'], 'project' => ['client_id'], 'language' => ['language'],
+        'date' => ['started_at', 'pinned'], 'app' => ['source_app'], 'project' => ['client_id'], 'language' => ['language'],
         'status' => ['status'], 'device' => ['device_id', 'source_device'],
     ];
 

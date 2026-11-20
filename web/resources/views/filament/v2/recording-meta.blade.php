@@ -8,11 +8,10 @@
 <span class="v2-rec-meta">
     <x-el.v2.icon :name="$row['icon']" />
     <span><bdi>{{ $row['line'] }}</bdi></span>
-    <span aria-hidden="true">·</span>
-    <span>{{ $at->translatedFormat('j M, '.(\App\Filament\Support\Shell::timeFormat() === 'H:i' ? 'H:i' : 'g:i a')) }}</span>
+    {{-- Each separator stays with the item after it, so a line never ends in "·". --}}
+    <span class="v2-meta-item"><span aria-hidden="true">·</span> <span>{{ $at->translatedFormat('j M, '.(\App\Filament\Support\Shell::timeFormat() === 'H:i' ? 'H:i' : 'g:i a')) }}</span></span>
     @if ($row['length'] !== '')
-        <span aria-hidden="true">·</span>
-        <span class="v2-mono">{{ $row['length'] }}</span>
+        <span class="v2-meta-item"><span aria-hidden="true">·</span> <span class="v2-mono">{{ $row['length'] }}</span></span>
     @endif
     @if ($row['status'] !== null)
         <span @class(['v2-status', 'is-'.$row['status']['tone']])><x-el.v2.icon :name="$row['status']['icon']" />{{ $row['status']['label'] }}</span>

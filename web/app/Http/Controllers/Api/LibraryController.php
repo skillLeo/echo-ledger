@@ -46,6 +46,8 @@ final class LibraryController extends Controller
             'tz' => ['nullable', 'timezone:all'],
             'label' => ['nullable', 'string', 'max:40'],
             'pinned' => ['nullable', 'boolean'],
+            // Since 2.0.0-i: the person's flag.
+            'important' => ['nullable', 'boolean'],
             // Since v1.5: a smart folder, and a project's subfolders with `client_id`.
             'folder' => ['nullable', Rule::in(LibraryOrganiser::FOLDERS)],
             'include_subfolders' => ['nullable', 'boolean'],
@@ -107,6 +109,9 @@ final class LibraryController extends Controller
         }
         if ($request->has('pinned') && $data['pinned'] !== null) {
             $query->where('pinned', $request->boolean('pinned'));
+        }
+        if ($request->has('important') && $data['important'] !== null) {
+            $query->where('important', $request->boolean('important'));
         }
 
         $page = $query->orderByDesc('updated_at')->orderByDesc('id')
