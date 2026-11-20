@@ -106,6 +106,7 @@ class V2ShellTest : ScreenTest() {
     @Test
     fun deleteMovesToTrashAndUndoRestores() {
         seed()
+        server.on("POST", "/api/sessions/bulk", FakeServer.json(200, """{"changed": 1}"""))
         shell(v2)
         // A long press starts selection mode (docs/PLAN_V2_PARITY.md 3); Delete asks first.
         compose.onNodeWithText("Bilal Traders", substring = true).performTouchInput { longClick() }
@@ -113,8 +114,9 @@ class V2ShellTest : ScreenTest() {
         compose.onNodeWithContentDescription("Delete").performClick()
         compose.onNodeWithText("Delete this recording?").assertExists()
         compose.onNodeWithText("Delete 1").performClick()
-        compose.waitUntil(5_000) { server.requestsTo("DELETE", "/api/sessions/01JA").isNotEmpty() }
-        compose.onNodeWithText("Moved to Trash").assertExists()
+        // Classic's path (bulk "delete"); Undo shows once it went.
+        compose.waitUntil(5_000) { server.requestsTo("POST", "/api/sessions/bulk").any { it.bodyText().contains("\"delete\"") } }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Recording deleted").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Undo").performClick()
         compose.waitUntil(5_000) { server.requestsTo("POST", "/api/sessions/01JA/restore").isNotEmpty() }
     }

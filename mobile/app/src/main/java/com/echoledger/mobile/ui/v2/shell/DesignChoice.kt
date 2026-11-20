@@ -48,7 +48,7 @@ object DesignChoice {
         when (answer) {
             MainViewModel.DesignAnswer.Taken -> set(context, null)
             MainViewModel.DesignAnswer.OnThisPhone -> set(context, design)
-            MainViewModel.DesignAnswer.NotAvailable -> Unit
+            MainViewModel.DesignAnswer.NotAvailable, MainViewModel.DesignAnswer.Failed -> Unit
         }
         return answer
     }
@@ -66,4 +66,11 @@ object DesignChoice {
         }.apply()
         state.value = design
     }
+}
+
+/** Which answers to `{"design": …}` mean the server is older than the design switch (2.0.0-g). */
+object DesignServer {
+    /** A 404 (no such route) or a 422 that is not `design_not_available` (the body was not understood). */
+    fun tooOld(failure: com.echoledger.mobile.net.ApiException?): Boolean =
+        failure != null && (failure.status == 404 || (failure.status == 422 && failure.code != "design_not_available"))
 }

@@ -655,6 +655,8 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
                         val answer = com.echoledger.mobile.ui.v2.shell.DesignChoice.choose(context, vm, v2)
                         if (answer == MainViewModel.DesignAnswer.NotAvailable) {
                             vm.showMessage("The new design isn't open for your account yet.")
+                        } else if (answer == MainViewModel.DesignAnswer.Failed) {
+                            vm.showMessage(MainViewModel.DESIGN_FAILED)
                         }
                     }
                 }.takeIf { offered }

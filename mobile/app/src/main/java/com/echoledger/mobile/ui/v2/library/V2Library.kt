@@ -187,15 +187,32 @@ fun V2LibraryScreen(
     val undo = EchoV2.strings.undo
     val ticked = remember(picked, visible) { visible.mapTo(HashSet()) { it.id }.let { ids -> picked.filter { it in ids }.toSet() } }
     androidx.activity.compose.BackHandler(enabled = ticked.isNotEmpty()) { picked = emptySet() }
-    val movedN = { n: Int -> context.resources.getString(R.string.v2_lib_n_moved, n) }
+    val deletedN = { n: Int -> context.resources.getString(R.string.v2_lib_n_moved, n) }
+    val restoredN = { n: Int -> context.resources.getString(R.string.v2_lib_n_restored, n) }
+    val capWords = stringResource(R.string.v2_lib_select_cap, com.echoledger.mobile.core.Organise.MAX_BULK)
+
+    /** Ticks [ids] (or unticks them all when [off]), never more than the server takes at once, with the reason. */
+    fun pick(ids: Collection<String>, off: Boolean = false) {
+        if (off) {
+            picked = picked - ids.toSet()
+            return
+        }
+        val room = com.echoledger.mobile.core.Organise.MAX_BULK - picked.size
+        val adding = ids.filter { it !in picked }
+        picked = picked + adding.take(room.coerceAtLeast(0))
+        if (adding.size > room) scope.launch { toasts.show(capWords) }
+    }
+
+    // Classic's path for one or many: bulk "delete"; Undo shows only once they went, and brings back exactly those.
     fun deleteRows(items: List<LibraryItem>) {
-        if (items.size == 1) {
-            vm.delete(items.single())
-            scope.launch { toasts.showUndo(text.deleted, undo) { scope.launch { vm.restore(items.single().id) } } }
-        } else {
-            scope.launch {
-                if (vm.bulk(items.map { it.id }, "delete") != null) {
-                    toasts.showUndo(movedN(items.size), undo) { scope.launch { items.forEach { vm.restore(it.id) } } }
+        scope.launch {
+            val went = vm.deleteMany(items.map { it.id }) ?: return@launch
+            if (went.isEmpty()) return@launch
+            val message = if (went.size == 1) text.deleted else deletedN(went.size)
+            toasts.showUndo(message, undo) {
+                scope.launch {
+                    val back = vm.restoreMany(went)
+                    if (back > 0) toasts.show(restoredN(back))
                 }
             }
         }
@@ -231,7 +248,7 @@ fun V2LibraryScreen(
         initials = initials,
         onOpen = {
             if (ticked.isNotEmpty()) {
-                picked = if (it.id in picked) picked - it.id else picked + it.id
+                pick(listOf(it.id), off = it.id in picked)
             } else {
                 vm.markOpened(it.item)
                 onOpen(it.item)
@@ -249,21 +266,24 @@ fun V2LibraryScreen(
             folded = folded,
             onFold = { key -> folded = if (key in folded) folded - key else folded + key },
             selected = ticked,
-            onToggle = { row -> picked = if (row.id in picked) picked - row.id else picked + row.id },
+            onToggle = { row -> pick(listOf(row.id), off = row.id in picked) },
             onSelectGroup = { g ->
                 val ids = g.rows.map { it.id }.toSet()
-                picked = if (picked.containsAll(ids)) picked - ids else picked + ids
+                pick(ids, off = picked.containsAll(ids))
             },
             selectionBar = {
                 SelectionBar(
                     count = ticked.size,
-                    allSelected = ticked.size == visible.size,
+                    allSelected = ticked.size == minOf(visible.size, com.echoledger.mobile.core.Organise.MAX_BULK),
                     oneTitle = visible.firstOrNull { it.id == ticked.singleOrNull() }?.title,
                     folders = folders,
                     labels = labels,
                     keepHours = settings.trashKeepHours,
                     onClose = { picked = emptySet() },
-                    onSelectAll = { all -> picked = if (all) visible.map { it.id }.toSet() else emptySet() },
+                    onSelectAll = { all ->
+                        picked = emptySet()
+                        if (all) pick(visible.map { it.id })
+                    },
                     onAction = ::act
                 )
             },

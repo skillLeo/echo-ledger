@@ -10,7 +10,7 @@
     <string name="v2_account_and_settings">اکاؤنٹ اور ترتیبات</string>
     <string name="v2_today">آج</string>
     <string name="v2_untranscribed">ٹرانسکرپٹ باقی</string>
-    <string name="v2_trash">ردی</string>
+    <string name="v2_trash">حال ہی میں حذف شدہ</string>
     <string name="v2_yesterday">کل</string>
     <string name="v2_transcribing">ٹرانسکرپٹ بن رہا ہے</string>
     <string name="v2_uploading">اپ لوڈ ہو رہی ہے</string>
@@ -24,7 +24,7 @@
     <string name="v2_load_error_body">انٹرنیٹ کنکشن چیک کریں۔ اس فون پر موجود ریکارڈنگز محفوظ ہیں۔</string>
     <string name="v2_offline_banner">آف لائن۔ آخری بار سنک ہونے والی لائبریری دکھائی جا رہی ہے۔</string>
     <string name="v2_try_again">دوبارہ کوشش کریں</string>
-    <string name="v2_deleted">ردی میں منتقل ہو گئی</string>
+    <string name="v2_deleted">ریکارڈنگ حذف ہو گئی</string>
     <string name="v2_restored">واپس آ گئی</string>
     <string name="v2_delete">حذف کریں</string>
     <string name="v2_cancel">منسوخ</string>
@@ -32,8 +32,8 @@
     <string name="v2_erase_now">ابھی مٹا دیں</string>
     <string name="v2_erase_title">یہ ریکارڈنگ ابھی مٹا دیں؟</string>
     <string name="v2_erase_body">آڈیو اور ٹرانسکرپٹ ہمیشہ کے لیے مٹ جائیں گے۔ یہ واپس نہیں ہو سکتا۔</string>
-    <string name="v2_trash_empty_title">ردی خالی ہے</string>
-    <string name="v2_trash_error">ردی لوڈ نہیں ہو سکی۔ انٹرنیٹ کنکشن چیک کریں۔</string>
+    <string name="v2_trash_empty_title">حال ہی میں کچھ حذف نہیں ہوا</string>
+    <string name="v2_trash_error">حال ہی میں حذف شدہ لوڈ نہیں ہو سکیں۔ انٹرنیٹ کنکشن چیک کریں۔</string>
     <string name="v2_trash_keeps">حذف کی ہوئی ریکارڈنگز یہاں %1$s رہتی ہیں، پھر ان کی آڈیو اور ٹرانسکرپٹ مٹا دیے جاتے ہیں۔</string>
     <string name="v2_erases_on">%1$s کو مٹ جائے گی</string>
     <string name="v2_share">شیئر</string>
@@ -94,6 +94,7 @@
     <string name="v2_source_phone_call">فون کال</string>
     <string name="v2_source_voice_note">وائس نوٹ</string>
     <string name="v2_source_other">دیگر</string>
+    <string name="v2_vm_design_failed">ڈیزائن نہیں بدلا جا سکا۔ دوبارہ کوشش کریں۔</string>
     <string name="v2_vm_cant_reach">سرور تک رسائی نہیں ہو سکی۔ دوبارہ کوشش کریں۔</string>
     <string name="v2_vm_could_not_sign_in">سائن ان نہیں ہو سکا</string>
     <string name="v2_vm_shizuku_start_failed">شیزوکو کے ذریعے کیپچر ہیلپر شروع نہیں ہو سکا۔</string>

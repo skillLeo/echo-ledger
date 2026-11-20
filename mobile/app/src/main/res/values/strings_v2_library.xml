@@ -37,7 +37,7 @@
     <string name="v2_lib_remove_label">Remove %1$s</string>
     <string name="v2_lib_delete_title">Delete %1$d recordings?</string>
     <string name="v2_lib_delete_one_title">Delete this recording?</string>
-    <string name="v2_lib_delete_body">You can restore them from Trash for %1$s.</string>
+    <string name="v2_lib_delete_body">You can restore them from Recently deleted for %1$s.</string>
     <string name="v2_lib_delete_confirm">Delete %1$d</string>
     <string name="v2_lib_cancel">Cancel</string>
     <string name="v2_lib_title">Title</string>
@@ -95,7 +95,9 @@
     <string name="v2_lib_nothing_matches">Nothing matches</string>
     <string name="v2_lib_nothing_matches_body">No recording fits these filters.</string>
     <string name="v2_lib_clear_filters">Clear filters</string>
-    <string name="v2_lib_n_moved">%1$d moved to Trash</string>
+    <string name="v2_lib_n_restored">%1$d restored</string>
+    <string name="v2_lib_select_cap">You can select up to %1$d recordings at a time.</string>
+    <string name="v2_lib_n_moved">%1$d deleted</string>
     <string name="v2_lib_ready">Ready</string>
     <string name="v2_lib_transcribing">Transcribing</string>
     <string name="v2_lib_needs_you">Needs you</string>

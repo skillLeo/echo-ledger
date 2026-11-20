@@ -31,6 +31,7 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -39,7 +40,9 @@ import org.junit.Test
  * Keep; the swipes; sections that fold and select; Sync now; Group by and Density; "Nothing matches" with Clear filters.
  */
 class V2LibraryActionsTest : ScreenTest() {
-    private fun seed() {
+    private var openedAt: Pair<String, Long>? = null
+
+    private fun seed(rows: List<String>? = null) {
         runBlocking { app.pairLocally(server) }
         server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
         server.on(
@@ -48,7 +51,7 @@ class V2LibraryActionsTest : ScreenTest() {
             FakeServer.json(
                 200,
                 ServerFixtures.libraryPage(
-                    listOf(
+                    rows ?: listOf(
                         ServerFixtures.libraryItem("01JA", title = "Bilal Traders", preview = "New rate for 40 cartons of basmati"),
                         ServerFixtures.libraryItem("01JB", title = "Rehman and Sons Textiles", sourceApp = "phone_call", finalStatus = null)
                     )
@@ -60,12 +63,24 @@ class V2LibraryActionsTest : ScreenTest() {
         runBlocking { app.graph.library.refresh() }
         show {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
-                CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
-                    V2LibraryScreen(vm, initials = "AS", onOpen = {}, onTrash = {}, onAccount = {})
+                val toasts = rememberEchoToastState()
+                CompositionLocalProvider(LocalEchoToasts provides toasts) {
+                    androidx.compose.foundation.layout.Box {
+                        V2LibraryScreen(
+                            vm,
+                            initials = "AS",
+                            onOpen = {},
+                            onTrash = {},
+                            onAccount = {},
+                            onOpenAt = { item, ms -> openedAt = item.id to ms }
+                        )
+                        com.echoledger.mobile.ui.v2.components.EchoToastHost(toasts)
+                    }
                 }
             }
         }
-        pumpUntil("the library") { compose.onAllNodesWithText("Bilal Traders", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        val first = if (rows == null) "Bilal Traders" else "Caller 001"
+        pumpUntil("the library") { compose.onAllNodesWithText(first, substring = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun select(title: String) = compose.onNodeWithText(title, substring = true).performTouchInput { longClick() }
@@ -149,11 +164,93 @@ class V2LibraryActionsTest : ScreenTest() {
     @Test
     fun swipeRightPinsAndSwipeLeftDeletes() {
         seed()
-        server.on("DELETE", "/api/sessions/01JB", FakeServer.empty(204))
+        server.on("POST", "/api/sessions/01JB/restore", FakeServer.empty(204))
         compose.onNodeWithText("Rehman and Sons Textiles", substring = true).performTouchInput { swipeLeft() }
-        pumpUntil("deleted") { server.requestsTo("DELETE", "/api/sessions/01JB").isNotEmpty() }
+        // Classic's path: bulk "delete"; Undo shows once it went and brings it back.
+        assertTrue(bulk("delete").contains("01JB"))
+        pumpUntil("Recording deleted · Undo") { compose.onAllNodesWithText("Recording deleted").fetchSemanticsNodes().isNotEmpty() }
+        click("Undo")
+        pumpUntil("restored") { server.requestsTo("POST", "/api/sessions/01JB/restore").isNotEmpty() }
         compose.onNodeWithText("Bilal Traders", substring = true).performTouchInput { swipeRight() }
         bulk("pin")
+    }
+
+    @Test
+    fun undoAfterDeletingManyRestoresEveryOne() {
+        seed()
+        server.on("POST", "/api/sessions/bulk", FakeServer.json(200, """{"changed": 2}"""))
+        server.on("POST", "/api/sessions/01JA/restore", FakeServer.empty(204))
+        server.on("POST", "/api/sessions/01JB/restore", FakeServer.empty(204))
+        select("Bilal Traders")
+        compose.onNodeWithText("Rehman and Sons Textiles", substring = true).performClick()
+        compose.onNodeWithContentDescription("Delete").performClick()
+        click("Delete 2")
+        val body = bulk("delete")
+        assertTrue(body, body.contains("01JA") && body.contains("01JB"))
+        pumpUntil("2 deleted · Undo") { compose.onAllNodesWithText("2 deleted").fetchSemanticsNodes().isNotEmpty() }
+        click("Undo")
+        pumpUntil("both restored") {
+            server.requestsTo("POST", "/api/sessions/01JA/restore").isNotEmpty() &&
+                server.requestsTo("POST", "/api/sessions/01JB/restore").isNotEmpty()
+        }
+        pumpUntil("2 restored") { compose.onAllNodesWithText("2 restored").fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun aSelectedRowThatIsNoLongerShownIsSkipped() {
+        seed()
+        select("Bilal Traders")
+        compose.onNodeWithText("Rehman and Sons Textiles", substring = true).performClick()
+        compose.onNodeWithText("2 selected").assertExists()
+        // Another device deleted Rehman and Sons: after the sync only Bilal Traders is shown, and only it is deleted.
+        server.on(
+            "GET",
+            "/api/library",
+            FakeServer.json(
+                200,
+                ServerFixtures.libraryPage(
+                    listOf(ServerFixtures.libraryItem("01JA", title = "Bilal Traders"), ServerFixtures.tombstone("01JB"))
+                )
+            )
+        )
+        runBlocking { app.graph.library.refresh() }
+        pumpUntil("synced") { compose.onAllNodesWithText("Rehman and Sons Textiles", substring = true).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("1 selected").assertExists()
+        compose.onNodeWithContentDescription("Delete").performClick()
+        click("Delete 1")
+        val body = bulk("delete")
+        assertTrue(body, body.contains("01JA") && !body.contains("01JB"))
+    }
+
+    @Test
+    fun selectAllStopsAtWhatTheServerTakesAtOnceAndSaysWhy() {
+        seed((1..205).map { ServerFixtures.libraryItem("01K%03d".format(it), title = "Caller %03d".format(it)) })
+        select("Caller 001")
+        compose.onNodeWithContentDescription("Select all").performClick()
+        compose.onNodeWithText("200 selected").assertExists()
+        pumpUntil("the reason") {
+            compose.onAllNodesWithText("You can select up to 200 recordings at a time.").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    @Test
+    fun searchFindsTranscriptWordsOnTheServerAndOpensAtTheMoment() {
+        seed()
+        server.on(
+            "GET",
+            "/api/search",
+            FakeServer.json(
+                200,
+                """{"data":[{"session":${ServerFixtures.libraryItem("01JB", title = "Rehman and Sons Textiles")},
+                   "hits":[{"transcript_id":"t","segment_index":3,"start_ms":65000,"speaker":"Client",
+                   "snippet":"the invoice for June","highlights":[[4,11]]}],"hit_count":1}],"next_page":null}"""
+            )
+        )
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("invoice")
+        compose.waitUntil(10_000) { server.requestsTo("GET", "/api/search").any { it.url.query.orEmpty().contains("q=invoice") } }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("Transcripts").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("the invoice for June").performClick()
+        assertEquals("01JB" to 65_000L, openedAt)
     }
 
     @Test

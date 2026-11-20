@@ -37,7 +37,7 @@
     <string name="v2_lib_remove_label">%1$s ہٹائیں</string>
     <string name="v2_lib_delete_title">%1$d ریکارڈنگز حذف کریں؟</string>
     <string name="v2_lib_delete_one_title">یہ ریکارڈنگ حذف کریں؟</string>
-    <string name="v2_lib_delete_body">آپ انہیں %1$s تک ٹریش سے واپس لا سکتے ہیں۔</string>
+    <string name="v2_lib_delete_body">آپ انہیں %1$s تک حال ہی میں حذف شدہ سے واپس لا سکتے ہیں۔</string>
     <string name="v2_lib_delete_confirm">%1$d حذف کریں</string>
     <string name="v2_lib_cancel">منسوخ کریں</string>
     <string name="v2_lib_title">عنوان</string>
@@ -95,7 +95,9 @@
     <string name="v2_lib_nothing_matches">کچھ نہیں ملا</string>
     <string name="v2_lib_nothing_matches_body">کوئی ریکارڈنگ ان فلٹرز پر پوری نہیں اترتی۔</string>
     <string name="v2_lib_clear_filters">فلٹر صاف کریں</string>
-    <string name="v2_lib_n_moved">%1$d ٹریش میں چلی گئیں</string>
+    <string name="v2_lib_n_restored">%1$d واپس آ گئیں</string>
+    <string name="v2_lib_select_cap">آپ ایک وقت میں زیادہ سے زیادہ %1$d ریکارڈنگز منتخب کر سکتے ہیں۔</string>
+    <string name="v2_lib_n_moved">%1$d حذف ہو گئیں</string>
     <string name="v2_lib_ready">تیار</string>
     <string name="v2_lib_transcribing">ٹرانسکرائب ہو رہی ہے</string>
     <string name="v2_lib_needs_you">آپ کی ضرورت ہے</string>

@@ -863,7 +863,8 @@ class MainActivity : FragmentActivity() {
                             // On this phone until the server keeps the design preference.
                             onSwitchToClassic = { classic ->
                                 lifecycleScope.launch {
-                                    DesignChoice.choose(this@MainActivity, vm, if (classic) Design.Classic else Design.V2)
+                                    val answer = DesignChoice.choose(this@MainActivity, vm, if (classic) Design.Classic else Design.V2)
+                                    if (answer == MainViewModel.DesignAnswer.Failed) vm.showMessage(MainViewModel.DESIGN_FAILED)
                                 }
                             },
                             help = (application as EchoLedgerApp).graph.help

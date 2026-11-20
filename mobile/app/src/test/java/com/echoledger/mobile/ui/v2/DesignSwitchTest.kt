@@ -159,6 +159,30 @@ class DesignSwitchTest : ScreenTest() {
     }
 
     @Test
+    fun aServerTooOldForTheDesignBodyGetsTheClassicBodyAndTheChoiceStaysHere() {
+        kotlinx.coroutines.runBlocking { app.pairLocally(server) }
+        // 2.0.0-a: no ui_design in the answer.
+        server.on("PUT", "/api/account/ui", FakeServer.json(200, """{"ui_flags": {"ui_v2.shell": false}, "ui_classic": false}"""))
+        val answer = choose(Design.V2)
+        assertEquals(com.echoledger.mobile.ui.MainViewModel.DesignAnswer.OnThisPhone, answer)
+        val bodies = server.requestsTo("PUT", "/api/account/ui").map { it.bodyText() }
+        assertEquals(listOf("""{"design":"v2"}""", """{"classic":false}"""), bodies)
+        assertEquals(Design.V2, DesignChoice.current)
+    }
+
+    @Test
+    fun aServerErrorKeepsNothingOnThisPhone() {
+        for (status in listOf(500, 401, 403)) {
+            forget()
+            kotlinx.coroutines.runBlocking { app.pairLocally(server) }
+            server.on("PUT", "/api/account/ui", FakeServer.json(status, """{"message": "No"}"""))
+            val answer = choose(Design.V2)
+            assertEquals("HTTP $status", com.echoledger.mobile.ui.MainViewModel.DesignAnswer.Failed, answer)
+            assertNull("HTTP $status", DesignChoice.current)
+        }
+    }
+
+    @Test
     fun classicOffersTheNewDesignOnlyWhileTheServerHasOneToTry() {
         val offer = com.echoledger.mobile.data.UiDesignDto(current = "classic", canTry = true)
         assertTrue(DesignChoice.offersTry(offer))

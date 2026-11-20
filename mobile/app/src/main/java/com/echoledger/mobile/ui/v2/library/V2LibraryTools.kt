@@ -186,7 +186,7 @@ fun SelectionBar(
             }
         }
 
-        "rename" -> RenameSheet(oneTitle.orEmpty(), { sheet = null }) {
+        "rename" -> SelectionRenameSheet(oneTitle.orEmpty(), { sheet = null }) {
             sheet = null
             onAction(SelectionAction.Rename(it))
         }
@@ -303,7 +303,7 @@ private fun LabelSheet(labels: List<String>, onDismiss: () -> Unit, onAction: (S
 }
 
 @Composable
-private fun RenameSheet(title: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+private fun SelectionRenameSheet(title: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var words by remember { mutableStateOf(title) }
     EchoBottomSheet(onDismiss = onDismiss, title = stringResource(R.string.v2_lib_rename)) {
         Column(
