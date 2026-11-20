@@ -62,10 +62,18 @@
   ]
  },
  "WEB-NAV-013": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
   "scope": "main",
-  "key": "button|pinned"
+  "keys": [
+   "menuitem|views › all recordings",
+   "menuitem|views › today",
+   "menuitem|views › this week",
+   "menuitem|views › waiting for decision",
+   "menuitem|views › pinned",
+   "menuitem|views › failed uploads",
+   "button|voice notes"
+  ]
  },
  "WEB-NAV-014": {
   "type": "control",
@@ -213,11 +221,14 @@
   "page": "library",
   "scope": "main",
   "keys": [
-   "button|all",
-   "button|all",
-   "button|today",
-   "button|failed uploads",
-   "button|pinned"
+   "button|views",
+   "menuitem|views › all recordings",
+   "menuitem|views › today",
+   "menuitem|views › this week",
+   "menuitem|views › waiting for decision",
+   "menuitem|views › bookmarked",
+   "menuitem|views › failed uploads",
+   "menuitem|views › pinned"
   ]
  },
  "WEB-LIB-003": {
@@ -936,18 +947,6 @@
    "a|keyboard shortcuts"
   ]
  },
- "WEB-LIB-017": {
-  "type": "control",
-  "page": "library",
-  "scope": "main",
-  "key": "button|yesterday"
- },
- "WEB-LIB-019": {
-  "type": "control",
-  "page": "library",
-  "scope": "main",
-  "key": "button|untranscribed"
- },
  "WEB-LIB-025": {
   "type": "selected",
   "page": "library",
@@ -1056,5 +1055,48 @@
   "page": "settings-appearance",
   "scope": "main",
   "key": "button|switch back to classic"
+ },
+ "WEB-LIB-016": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "menuitem|views › this week",
+   "menuitem|views › waiting for decision",
+   "menuitem|views › bookmarked"
+  ]
+ },
+ "WEB-LIB-004": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|list"
+ },
+ "WEB-LIB-005": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|table"
+ },
+ "WEB-LIB-006": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|group by: date",
+   "menuitem|group by: date › date",
+   "menuitem|group by: date › source",
+   "menuitem|group by: date › project",
+   "menuitem|group by: date › language",
+   "menuitem|group by: date › status",
+   "menuitem|group by: date › device",
+   "menuitem|group by: date › none"
+  ]
+ },
+ "WEB-LIB-011": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|pin to the top"
  }
 }

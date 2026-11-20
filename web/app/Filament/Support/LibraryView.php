@@ -47,6 +47,17 @@ final class LibraryView
 
     public const DEFAULT_GROUP = 'date';
 
+    /**
+     * Group by in the v2.0 Library, in the console's language (parity plan 3: date, source, project, language, status,
+     * device, none). The app's group is named Source there, as its filter is.
+     *
+     * @return array<string, string>
+     */
+    public static function v2Groups(): array
+    {
+        return array_map(fn (string $label): string => __($label), array_replace(self::GROUPS, ['app' => 'Source']));
+    }
+
     public const DEFAULT_SORT = 'newest';
 
     /** @return list<Group> */
@@ -54,9 +65,16 @@ final class LibraryView
     {
         $zone = fn (): string => app(SettingsRepository::class)->displayTimezone();
         $day = fn (CaptureSession $r): string => $r->started_at->copy()->setTimezone($zone())->format('Y-m-d');
+        // Since v2.0 (ui_v2.library) pinned recordings head the date groups in a section of their own, "Pinned · 4",
+        // as in the apps (parity plan 3); the days below hold the rest.
+        $v2Pinned = fn (): bool => ConsoleV2::library();
+        $dateKey = fn (CaptureSession $r): string => $v2Pinned() && $r->pinned ? self::PINNED : $day($r);
 
         return [
-            self::group('date', $day, function (CaptureSession $r) use ($zone): string {
+            self::group('date', $dateKey, function (CaptureSession $r) use ($zone, $v2Pinned): string {
+                if ($v2Pinned() && $r->pinned) {
+                    return __('Pinned');
+                }
                 $at = $r->started_at->copy()->setTimezone($zone());
                 $now = Carbon::now($zone());
 
@@ -70,11 +88,17 @@ final class LibraryView
                     $at->year === $now->year => $at->format('l, M j'),
                     default => $at->format('l, M j, Y'),
                 };
-            }, function (Builder $q, string $key) use ($zone): Builder {
+            }, function (Builder $q, string $key) use ($zone, $v2Pinned): Builder {
+                if ($v2Pinned() && $key === self::PINNED) {
+                    return $q->where($q->qualifyColumn('pinned'), true);
+                }
                 $start = Carbon::parse($key, $zone())->startOfDay()->utc();
+                if ($v2Pinned()) {
+                    $q->where($q->qualifyColumn('pinned'), false);
+                }
 
                 return $q->where($q->qualifyColumn('started_at'), '>=', $start)->where($q->qualifyColumn('started_at'), '<', $start->copy()->addDay());
-            }, fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('started_at'), $direction)),
+            }, fn (Builder $q, string $direction): Builder => ($v2Pinned() ? $q->orderByDesc($q->qualifyColumn('pinned')) : $q)->orderBy($q->qualifyColumn('started_at'), $direction)),
             self::group('app', fn (CaptureSession $r): string => $r->source_app->value, fn (CaptureSession $r): string => (string) $r->source_app->getLabel(),
                 fn (Builder $q, string $key): Builder => $q->where($q->qualifyColumn('source_app'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('source_app'), $direction)),
@@ -132,9 +156,12 @@ final class LibraryView
             ->orderQueryUsing(fn (Builder $query, string $direction): Builder => $order($query, $direction));
     }
 
+    /** The key of the v2.0 Library's Pinned section (never a day). */
+    public const PINNED = 'pinned';
+
     /** The columns each group's key is made from. */
     private const COUNT_COLUMNS = [
-        'date' => ['started_at'], 'app' => ['source_app'], 'project' => ['client_id'], 'language' => ['language'],
+        'date' => ['started_at', 'pinned'], 'app' => ['source_app'], 'project' => ['client_id'], 'language' => ['language'],
         'status' => ['status'], 'device' => ['device_id', 'source_device'],
     ];
 

@@ -285,6 +285,35 @@ class ListCaptureSessions extends ListRecords
         return array_map(fn (array $v): array => $v + ['on' => $v['key'] === $place], $views);
     }
 
+    /**
+     * The v2.0 Library's "Views ▾": every view of the classic Library's All recordings menu, in its order, with
+     * Untranscribed last, each with its count.
+     *
+     * @return list<array{key: string, label: string, count: int|null, on: bool}>
+     */
+    public function v2ViewMenu(): array
+    {
+        $tabs = $this->getCachedTabs();
+        $place = $this->activePlace();
+        $menu = [['key' => 'all', 'label' => __('All recordings'), 'count' => null]];
+        foreach ([...array_keys(self::VIEW_LABELS), 'untranscribed'] as $key) {
+            if (isset($tabs[$key])) {
+                $badge = $tabs[$key]->getBadge();
+                $menu[] = ['key' => $key, 'label' => (string) $tabs[$key]->getLabel(), 'count' => is_numeric($badge) ? (int) $badge : null];
+            }
+        }
+
+        return array_map(fn (array $v): array => [...$v, 'label' => __($v['label']), 'on' => $v['key'] === $place], $menu);
+    }
+
+    /** How many calls wait for Keep or Discard (the v2.0 Library's quiet line). */
+    public function v2Waiting(): int
+    {
+        $tabs = $this->getCachedTabs();
+
+        return isset($tabs['waiting']) && is_numeric($tabs['waiting']->getBadge()) ? (int) $tabs['waiting']->getBadge() : 0;
+    }
+
     /** The empty state's "Show all recordings": no smart view and no folder. */
     public function showAllRecordings(): void
     {
@@ -493,6 +522,23 @@ class ListCaptureSessions extends ListRecords
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_SEARCH_AFTER, fn (): string => Livewire::current() instanceof self && ConsoleV2::library() ? view('filament.v2.library-toolbar')->render() : '');
             FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view(ConsoleV2::library() ? 'filament.v2.bulk-bar' : 'filament.library.bulk-bar'), scopes: self::class);
         }
+    }
+
+    /**
+     * The v2.0 row's star: pins the recording to the top (its Pinned section), or unpins it, as the classic row's star
+     * does. Only a recording of this Library, and never in a read-only console.
+     */
+    public function togglePin(string $id): void
+    {
+        if (! ConsoleV2::library() || ConsoleAccess::readOnly()) {
+            return;
+        }
+        $session = CaptureSessionResource::getEloquentQuery()->find($id);
+        if (! $session instanceof CaptureSession) {
+            return;
+        }
+        app(LibraryOrganiser::class)->update($session, ['pinned' => ! $session->pinned]);
+        $this->flushCachedTableRecords();
     }
 
     /** The recording shown beside the list on wide screens (a plain click on a row picks it). */

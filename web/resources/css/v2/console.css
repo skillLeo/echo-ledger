@@ -965,10 +965,6 @@ button.v2-row:hover {
     font-weight: var(--el-text-body-strong-weight);
 }
 
-.v2-library .fi-ta-group-header .fi-ta-group-description {
-    display: none;
-}
-
 .v2-library .fi-ta-record {
     border: 0;
     border-radius: var(--el-radius-md);
@@ -1015,6 +1011,123 @@ button.v2-row:hover {
     .v2-lib-row {
         min-height: var(--el-component-list-row-height-mobile);
         padding-inline: var(--el-space-4);
+    }
+}
+
+/* The Library's List / Table switch: two segments in one outline, the one shown filled. */
+.v2-seg {
+    display: inline-flex;
+    padding: var(--el-space-2);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-component-chip-radius);
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-seg-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-4);
+    min-height: calc(var(--el-component-chip-height) - var(--el-space-4));
+    padding-inline: var(--el-space-8);
+    border-radius: var(--el-component-chip-radius);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-seg-item.is-on {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-seg-item .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+@media (max-width: 720px) {
+    .v2-seg-label {
+        position: absolute;
+        width: var(--el-border-hairline);
+        height: var(--el-border-hairline);
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
+
+/* "4 calls waiting for a decision · Review": one quiet line above the list. */
+.v2-lib-waiting {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    margin: 0;
+    padding: var(--el-space-8) var(--el-space-12);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-lib-waiting .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* A section's count after its name: "Pinned · 4 recordings". */
+.v2-library .fi-ta-group-header .fi-ta-group-header-text,
+.v2-library .fi-ta-group-header > div:has(.fi-ta-group-heading) {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+}
+
+.v2-library .fi-ta-group-header .fi-ta-group-description {
+    display: inline;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-library .fi-ta-group-header .fi-ta-group-description::before {
+    content: '· ';
+}
+
+/* The row's star: shown on a pinned row, and on the row you point at. */
+.v2-row-pin {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-icon-lg);
+    height: var(--el-icon-lg);
+    border-radius: var(--el-radius-sm);
+    color: var(--el-role-text-secondary);
+    opacity: 0;
+}
+
+.v2-row-pin .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-row-pin.is-on {
+    color: var(--el-role-warning-default);
+    opacity: 1;
+}
+
+.v2-lib-row:hover .v2-row-pin,
+.v2-row-pin:focus-visible {
+    opacity: 1;
+}
+
+.v2-row-pin:hover {
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-primary);
+}
+
+@media (hover: none) {
+    .v2-row-pin {
+        opacity: 1;
     }
 }
 

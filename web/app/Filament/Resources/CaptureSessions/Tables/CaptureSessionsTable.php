@@ -76,7 +76,7 @@ final class CaptureSessionsTable
             ->groups(LibraryView::groups())
             ->groupingSettingsHidden()
             ->groupingDirectionSettingHidden()
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(ConsoleV2::library() ? ['labels', 'finalTranscript', 'client'] : 'labels'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(ConsoleV2::library() ? ['labels', 'finalTranscript', 'client', 'device'] : 'labels'))
             // The phone's list: one row per recording (tile, title, time, a second line, a status only when needed).
             // Since v1.6 (P4.4) the Library's List/Table switch shows a table instead, its columns chosen in Columns.
             // Since v2.0 (ui_v2.library) the rows of the apps' Library: filament.v2.library-row.
@@ -100,7 +100,7 @@ final class CaptureSessionsTable
                 TextColumn::make('status')->hidden(),
                 TextColumn::make('finalTranscript.status')->label('Transcript')->hidden(),
             ]))
-            ->columnManagerTriggerAction(fn (Action $action): Action => $action->label('Columns')->icon(Heroicon::OutlinedViewColumns))
+            ->columnManagerTriggerAction(fn (Action $action): Action => $action->label(__('Columns'))->icon(Heroicon::OutlinedViewColumns))
             ->recordClasses(fn (CaptureSession $record, HasTable $livewire): ?string => property_exists($livewire, 'selected') && $livewire->selected === $record->id ? 'el-current' : null)
             ->filters([
                 SelectFilter::make('source_device')->label('Source device')->options(SourceDevice::class)->multiple(),
@@ -209,20 +209,24 @@ final class CaptureSessionsTable
         $zone = fn (): string => app(SettingsRepository::class)->displayTimezone();
 
         return [
-            TextColumn::make('title')->label('Title')->weight('medium')
+            TextColumn::make('title')->label(__('Title'))->weight('medium')
                 ->state(fn (CaptureSession $r): string => $r->displayTitle())
                 ->extraAttributes(fn (CaptureSession $r): array => ['data-recording' => $r->id, 'draggable' => ConsoleAccess::readOnly() ? 'false' : 'true', 'class' => 'el-table-title'])
                 ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
-            TextColumn::make('source_app')->label('App')->toggleable(),
-            TextColumn::make('client.name')->label('Project')->placeholder('Inbox')->toggleable(),
-            TextColumn::make('device.name')->label('Device')->state(fn (CaptureSession $r): string => self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
-            TextColumn::make('duration_ms')->label('Length')->formatStateUsing(fn (?int $state): string => self::duration($state))->toggleable(),
-            TextColumn::make('started_at')->label('Date')->toggleable()
-                ->formatStateUsing(fn (CaptureSession $r): string => $r->started_at->copy()->setTimezone($zone())->format('M j, Y · '.Shell::timeFormat())),
+            TextColumn::make('source_app')->label(__('App'))->toggleable(),
+            TextColumn::make('client.name')->label(__('Project'))->placeholder(__('Inbox'))->toggleable(),
+            TextColumn::make('device.name')->label(__('Device'))->state(fn (CaptureSession $r): string => self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('duration_ms')->label(__('Length'))->formatStateUsing(fn (?int $state): string => self::duration($state))->toggleable(),
+            TextColumn::make('started_at')->label(__('Date'))->toggleable()
+                // Since v2.0 in the console's language (English reads exactly as before).
+                ->formatStateUsing(fn (CaptureSession $r): string => ConsoleV2::library()
+                    ? $r->started_at->copy()->setTimezone($zone())->locale(app()->getLocale())->translatedFormat('j M Y · '.Shell::timeFormat())
+                    : $r->started_at->copy()->setTimezone($zone())->format('M j, Y · '.Shell::timeFormat())),
             // A status only when it needs the person, as in the list: never "Completed".
-            TextColumn::make('status')->label('Status')->badge()->toggleable()
-                ->state(fn (CaptureSession $r): ?SessionStatus => $r->status === SessionStatus::Completed ? null : $r->status),
-            TextColumn::make('labels.label')->label('Labels')->badge()->color('gray')->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('status')->label(__('Status'))->badge()->toggleable()
+                ->state(fn (CaptureSession $r): ?SessionStatus => $r->status === SessionStatus::Completed ? null : $r->status)
+                ->formatStateUsing(fn (?SessionStatus $state): string => ConsoleV2::library() ? __((string) $state?->getLabel()) : (string) $state?->getLabel()),
+            TextColumn::make('labels.label')->label(__('Labels'))->badge()->color('gray')->toggleable(isToggledHiddenByDefault: true),
         ];
     }
 

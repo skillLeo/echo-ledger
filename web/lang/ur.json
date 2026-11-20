@@ -301,5 +301,19 @@
     "1 recording is still recording or uploading and was left alone.": "1 ریکارڈنگ ابھی ریکارڈ یا اپ لوڈ ہو رہی ہے، اسے نہیں چھیڑا گیا۔",
     ":count recordings are still recording or uploading and were left alone.": ":count ریکارڈنگز ابھی ریکارڈ یا اپ لوڈ ہو رہی ہیں، انہیں نہیں چھیڑا گیا۔",
     "Undo has expired": "واپسی کا وقت ختم ہو گیا",
-    "Open Trash to bring recordings back.": "ریکارڈنگز واپس لانے کے لیے ردی کھولیں۔"
+    "Open Trash to bring recordings back.": "ریکارڈنگز واپس لانے کے لیے ردی کھولیں۔",
+    "Views": "ویوز",
+    "This week": "اس ہفتے",
+    "Waiting for decision": "فیصلے کی منتظر",
+    "Bookmarked": "بُک مارک شدہ",
+    "Group by": "گروپ بندی",
+    "Date": "تاریخ",
+    "List": "فہرست",
+    "Table": "جدول",
+    "Unpin": "پن ہٹائیں",
+    "Pin to the top": "اوپر پن کریں",
+    "Web upload": "ویب اپ لوڈ",
+    "Review": "دیکھیں",
+    ":count call waiting for a decision|:count calls waiting for a decision": ":count کال فیصلے کی منتظر ہے|:count کالز فیصلے کی منتظر ہیں",
+    "Columns": "کالم"
 }
