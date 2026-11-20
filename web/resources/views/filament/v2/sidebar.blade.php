@@ -1,6 +1,6 @@
 {{--
     The v2.0 sidebar (docs/PLAN_V2_PARITY.md section 2, docs/v2/IA.md): the brand, "Upload recording" at the top (the
-    web's Record), then Home, Library (All recordings, Shared, My links, Request links, Trash), Projects (the first few
+    web's Record), then Home, Library (All recordings, Shared, My links, Request links, Recently deleted), Projects (the first few
     with their counts), Live and Ask; at the foot Activity with what needs you, Settings, Help and Collapse. Its edge
     resizes it (drag, or the arrow keys), and its look is the person's Sidebar style (Light, Dark, Soft grey). It keeps
     Filament's sidebar contract (filamentSidebar, $store.sidebar), so on phones it is the drawer the menu button opens;

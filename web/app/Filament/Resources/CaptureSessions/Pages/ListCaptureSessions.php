@@ -402,7 +402,7 @@ class ListCaptureSessions extends ListRecords
 
     /**
      * Undo of the v2.0 selection's Delete: the batch that Delete just moved (its token, this person's only) comes back
-     * from Trash while Trash still keeps it, each recording only when the person may restore it.
+     * from Recently deleted while it still keeps it, each recording only when the person may restore it.
      */
     public function undoDelete(string $token = ''): void
     {

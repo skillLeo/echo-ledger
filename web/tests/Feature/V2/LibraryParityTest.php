@@ -141,6 +141,34 @@ it('offers Retry and Delete on a failed recording\'s row in Failed uploads, and 
     expect(CaptureSession::query()->find($other->id))->toBeNull();
 });
 
+it('reads the group titles, the table\'s apps and the Failed uploads row\'s Retry and Delete in Urdu when the console is in Urdu', function () {
+    $prefs = $this->owner->console_preferences ?? [];
+    $prefs['shell'] = ['app_language' => 'ur'];
+    $this->owner->forceFill(['console_preferences' => $prefs])->save();
+    $this->actingAs($this->owner->fresh(), 'web');
+    app()->setLocale('ur');
+    $heads = function (string $html): array {
+        preg_match_all('~<[^>]*class="[^"]*fi-ta-group-heading[^"]*"[^>]*>(.*?)</~s', $html, $m);
+
+        return array_map(fn (string $t): string => trim(html_entity_decode(strip_tags($t))), $m[1]);
+    };
+
+    $page = Livewire::test(ListCaptureSessions::class);
+    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'app')->html())))->toContain('واٹس ایپ')->toContain('فون کال')->not->toContain('WhatsApp');
+    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'project')->html())))->toContain('ان باکس')->not->toContain('Inbox');
+    expect(implode(' | ', $heads($page->call('setLibraryGroup', 'status')->html())))->toContain('ناکام')->not->toContain('Failed');
+
+    // The table's App column too.
+    $page->call('setLibraryGroup', 'none')->call('setLibraryLayout', 'table')
+        ->assertTableColumnFormattedStateSet('source_app', 'واٹس ایپ', $this->call)
+        ->assertTableColumnFormattedStateSet('source_app', 'فون کال', $this->pinned)
+        ->assertTableColumnFormattedStateNotSet('source_app', 'Phone call', $this->pinned);
+
+    $failed = Livewire::test(ListCaptureSessions::class)->call('openPlace', 'failed');
+    $failed->assertTableActionHasLabel('retryFailed', 'دوبارہ کوشش کریں', $this->failed)
+        ->assertTableActionHasLabel('deleteFailed', 'حذف کریں', $this->failed);
+});
+
 it('says how many calls wait for a decision, with Review, in one quiet line', function () {
     $page = Livewire::test(ListCaptureSessions::class);
     expect($page->html())->toContain('1 call waiting for a decision')->toContain('data-waiting="1"');

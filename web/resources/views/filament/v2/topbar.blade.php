@@ -1,6 +1,6 @@
 {{--
     The v2.0 top bar, beside the sidebar: the menu button on phones and tablets, the workspace, search and commands
-    (Ctrl/⌘+K), then + (Upload files, New project, Request link), the bell (only what needs you) and the avatar menu (Settings lives there on phones, as in the apps).
+    (Ctrl/⌘+K), then + (Upload recording, New project, Request link), the bell (only what needs you) and the avatar menu (Settings lives there on phones, as in the apps).
 --}}
 @php
     use Filament\Livewire\GlobalSearch;

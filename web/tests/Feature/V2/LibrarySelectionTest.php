@@ -18,8 +18,8 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * The v2.0 Library's selection mode (docs/PLAN_V2_PARITY.md section 3): × to leave, the count, Select all, four main
- * actions (Move to project, Label, Export, Delete) and ⋮ with Organise, Export and Danger; Delete goes to Trash at once
- * with Undo. Classic keeps its own bar (ClassicGoldenTest).
+ * actions (Move to project, Label, Export, Delete) and ⋮ with Organise, Export and Danger; Delete goes to Recently deleted
+ * at once with Undo. Classic keeps its own bar (ClassicGoldenTest).
  */
 
 beforeEach(function () {
@@ -58,7 +58,7 @@ function selectionNotices(): string
     return (string) json_encode($notices->notifications->toArray(), JSON_UNESCAPED_UNICODE);
 }
 
-it('moves the selected recordings to Trash at once, offers Undo, and brings them back', function () {
+it('moves the selected recordings to Recently deleted at once, offers Undo, and brings them back', function () {
     $ids = $this->recordings->take(2)->pluck('id')->all();
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids)->assertHasNoTableBulkActionErrors();
@@ -86,7 +86,8 @@ it('brings back only that batch, only the person\'s own, and only what they may 
     $earlier->delete();
     Cache::put(CaptureSessionsTable::undoKey('batch'), [(string) $mine->id, (string) $other->id], now()->addMinutes(5));
 
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'batch')->assertNotified('1 recording is back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'batch');
+    expect(selectionNotices())->toContain('1 recording is back')->toContain('"status":"success"');
     expect(CaptureSession::query()->find($mine->id))->not->toBeNull()
         ->and(CaptureSession::query()->find($earlier->id))->toBeNull()
         ->and(CaptureSession::withoutGlobalScopes()->onlyTrashed()->find($other->id))->not->toBeNull();
@@ -97,7 +98,10 @@ it('brings back only that batch, only the person\'s own, and only what they may 
     // A person the policy does not let restore gets nothing back.
     Gate::before(fn ($user, string $ability) => $ability === 'restore' ? false : null);
     Cache::put(CaptureSessionsTable::undoKey('denied'), [(string) $earlier->id], now()->addMinutes(5));
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'denied')->assertNotified('0 recordings are back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'denied');
+    // Nothing came back: the notice is a warning, not a success.
+    $notices = selectionNotices();
+    expect($notices)->toContain('0 recordings are back')->toContain('"status":"warning"')->not->toContain('"status":"success"');
 });
 
 it('leaves a recording that is still recording or uploading where it is, and says so', function () {

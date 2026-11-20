@@ -213,9 +213,11 @@ final class CaptureSessionsTable
                 ->state(fn (CaptureSession $r): string => $r->displayTitle())
                 ->extraAttributes(fn (CaptureSession $r): array => ['data-recording' => $r->id, 'draggable' => ConsoleAccess::readOnly() ? 'false' : 'true', 'class' => 'el-table-title'])
                 ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
-            TextColumn::make('source_app')->label(__('App'))->toggleable(),
+            // The app's and the device's names in the console's language under the new Library (English as before).
+            TextColumn::make('source_app')->label(__('App'))->toggleable()
+                ->formatStateUsing(fn (?SourceApp $state): string => ConsoleV2::library() ? __((string) $state?->getLabel()) : (string) $state?->getLabel()),
             TextColumn::make('client.name')->label(__('Project'))->placeholder(__('Inbox'))->toggleable(),
-            TextColumn::make('device.name')->label(__('Device'))->state(fn (CaptureSession $r): string => self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('device.name')->label(__('Device'))->state(fn (CaptureSession $r): string => ConsoleV2::library() ? __(self::deviceLabel($r)) : self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
             TextColumn::make('duration_ms')->label(__('Length'))->formatStateUsing(fn (?int $state): string => self::duration($state))->toggleable(),
             TextColumn::make('started_at')->label(__('Date'))->toggleable()
                 // Since v2.0 in the console's language (English reads exactly as before).
