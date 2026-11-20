@@ -104,10 +104,10 @@ it('fails a check when the control is taken away (the checks are not empty match
     webParityDesign(true);
     $this->actingAs($owner->fresh(), 'web');
     $html = (string) $this->get($pages['recording'])->getContent();
-    $revoke = collect($checks)->first(fn (array $c): bool => $c['type'] === 'control' && $c['page'] === 'recording' && $c['key'] === 'button|revoke');
+    $revoke = collect($checks)->first(fn (array $c): bool => $c['type'] === 'control' && $c['page'] === 'recording' && $c['key'] === 'menuitem|actions › revoke');
 
     expect(webParityHolds($revoke, $html))->toBeTrue();
-    // The same page without its Revoke buttons, and without the frame's key handler.
+    // The same page without its Revoke buttons (in the share links' ⋮ menu since W-201), and without the frame's key handler.
     $doc = new DOMDocument;
     @$doc->loadHTML('<?xml encoding="utf-8"?>'.$html);
     foreach (iterator_to_array((new DOMXPath($doc))->query('//button')) as $button) {

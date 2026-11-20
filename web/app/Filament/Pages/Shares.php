@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\SharingActions;
 use App\Http\Controllers\Api\ShareController;
 use App\Models\ShareLink;
@@ -15,10 +16,12 @@ use App\Services\ShareLinks;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -52,6 +55,22 @@ class Shares extends Page implements HasTable
     public function table(Table $table): Table
     {
         $tz = app(SettingsRepository::class)->displayTimezone();
+        // Since v2.0 (the new frame, W-201): the table fits the page at 1024 px. What was shared wraps, Downloads, Last
+        // opened and Made are in Columns only (Made still sorts when shown), and the row's actions are in one ⋮ menu.
+        // Classic is as it was.
+        $v2 = ConsoleV2::shell();
+        $inColumns = fn (Column $column): Column => $column->toggleable(isToggledHiddenByDefault: true);
+        $actions = [
+            Action::make('log')->label('Access log')->icon(Heroicon::OutlinedListBullet)->color('gray')
+                ->modalHeading('Access log')->modalSubmitAction(false)->modalCancelActionLabel('Close')
+                ->modalContent(fn (ShareLink $link): View => view('filament.pages.share-log', [
+                    'views' => $link->views()->latest('viewed_at')->limit(200)->get(), 'tz' => $tz,
+                ])),
+            Action::make('revoke')->label('Revoke')->icon(Heroicon::OutlinedNoSymbol)->color('danger')
+                ->visible(fn (ShareLink $link): bool => $link->isOpen())
+                ->requiresConfirmation()->modalDescription('The link stops working at once.')
+                ->action(fn (ShareLink $link) => app(ShareLinks::class)->revoke($link)),
+        ];
 
         return $table
             ->query(fn (): Builder => ShareController::workspaceLinks((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId())->with(['captureSession', 'client']))
@@ -65,19 +84,21 @@ class Shares extends Page implements HasTable
                         $link->client !== null => ClientResource::getUrl('view', ['record' => $link->client]),
                         $link->captureSession !== null && ! $link->captureSession->trashed() => CaptureSessionResource::getUrl('view', ['record' => $link->captureSession]),
                         default => null,
-                    }),
+                    })
+                    ->when($v2, fn (TextColumn $column): TextColumn => $column->wrap()),
                 TextColumn::make('audience')->label('Who can open it')->wrap()
                     ->state(fn (ShareLink $link): string => SharingActions::audienceLabel($link)),
                 TextColumn::make('state')->label('Status')->badge()
                     ->state(fn (ShareLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isOpen() ? 'Active' : 'Expired'))
                     ->color(fn (string $state): string => $state === 'Active' ? 'success' : 'gray'),
-                TextColumn::make('allow_download')->label('Downloads')->state(fn (ShareLink $link): string => $link->allow_download ? 'Allowed' : 'Read and listen'),
+                TextColumn::make('allow_download')->label('Downloads')->state(fn (ShareLink $link): string => $link->allow_download ? 'Allowed' : 'Read and listen')
+                    ->when($v2, $inColumns),
                 // The hour on a line of its own: a link can last an hour, and the row keeps room for Revoke.
                 TextColumn::make('expires_at')->label('Expires')->date('M j, Y', $tz)->placeholder('Never')
                     ->description(fn (ShareLink $link): ?string => $link->expires_at?->setTimezone($tz)->format('g:i A')),
                 TextColumn::make('view_count')->label('Views')->numeric()->sortable(),
-                TextColumn::make('last_viewed_at')->label('Last opened')->since()->placeholder('Never'),
-                TextColumn::make('created_at')->label('Made')->since()->sortable(),
+                TextColumn::make('last_viewed_at')->label('Last opened')->since()->placeholder('Never')->when($v2, $inColumns),
+                TextColumn::make('created_at')->label('Made')->since()->sortable()->when($v2, $inColumns),
             ])
             // The filter button's badge shows once a filter is on, not as a 0 (see the theme).
             ->filtersTriggerAction(fn (Action $action, Table $table): Action => $action
@@ -90,17 +111,7 @@ class Shares extends Page implements HasTable
                         default => $query,
                     }),
             ])
-            ->recordActions([
-                Action::make('log')->label('Access log')->icon(Heroicon::OutlinedListBullet)->color('gray')
-                    ->modalHeading('Access log')->modalSubmitAction(false)->modalCancelActionLabel('Close')
-                    ->modalContent(fn (ShareLink $link): View => view('filament.pages.share-log', [
-                        'views' => $link->views()->latest('viewed_at')->limit(200)->get(), 'tz' => $tz,
-                    ])),
-                Action::make('revoke')->label('Revoke')->icon(Heroicon::OutlinedNoSymbol)->color('danger')
-                    ->visible(fn (ShareLink $link): bool => $link->isOpen())
-                    ->requiresConfirmation()->modalDescription('The link stops working at once.')
-                    ->action(fn (ShareLink $link) => app(ShareLinks::class)->revoke($link)),
-            ])
+            ->recordActions($v2 ? [ActionGroup::make($actions)->label('Actions')->tooltip('Actions')] : $actions)
             ->emptyStateIcon(Heroicon::OutlinedLink)
             ->emptyStateHeading('No share links yet')
             ->emptyStateDescription('Use Share on a recording or a project to make a view-only link.');

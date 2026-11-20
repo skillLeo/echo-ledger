@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages;
 
 use App\Filament\Concerns\FullConsoleOnly;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SharingActions;
 use App\Models\Client;
@@ -15,12 +16,14 @@ use App\Services\Sharing\RequestLinks;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -88,12 +91,22 @@ class RequestLinksPage extends Page implements HasTable
     public function table(Table $table): Table
     {
         $tz = app(SettingsRepository::class)->displayTimezone();
+        // Since v2.0 (the new frame, W-201): the table fits the page at 1024 px. The title wraps, Open until without its
+        // time (it is in the tooltip), Made in Columns only, and Revoke in the row's ⋮ menu. Classic is as it was.
+        $v2 = ConsoleV2::shell();
+        $actions = [
+            Action::make('revoke')->label('Revoke')->icon(Heroicon::OutlinedNoSymbol)->color('danger')
+                ->visible(fn (RequestLink $link): bool => $link->isActive())
+                ->requiresConfirmation()->modalDescription('The page stops taking files at once. What was sent stays in the library.')
+                ->action(fn (RequestLink $link) => app(RequestLinks::class)->revoke($link)),
+        ];
 
         return $table
             ->query(fn (): Builder => RequestLink::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->with('client'))
             ->defaultSort('created_at', 'desc')
             ->columns([
-                TextColumn::make('title')->label('Title')->limit(60)->searchable(),
+                TextColumn::make('title')->label('Title')->limit(60)->searchable()
+                    ->when($v2, fn (TextColumn $column): TextColumn => $column->wrap()),
                 TextColumn::make('client.name')->label('Goes to')->placeholder('Inbox'),
                 TextColumn::make('received')->label('Received')
                     ->state(fn (RequestLink $link): string => "{$link->received} of {$link->max_files}")
@@ -101,15 +114,13 @@ class RequestLinksPage extends Page implements HasTable
                 TextColumn::make('state')->label('Status')->badge()
                     ->state(fn (RequestLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isActive() ? 'Open' : 'Expired'))
                     ->color(fn (string $state): string => $state === 'Open' ? 'success' : 'gray'),
-                TextColumn::make('expires_at')->label('Open until')->dateTime('M j, Y · g:i A', $tz)->placeholder('Until revoked'),
-                TextColumn::make('created_at')->label('Made')->since(),
+                TextColumn::make('expires_at')->label('Open until')->dateTime('M j, Y · g:i A', $tz)->placeholder('Until revoked')
+                    ->when($v2, fn (TextColumn $column): TextColumn => $column->dateTime('j M Y', $tz)
+                        ->tooltip(fn ($state): ?string => $state?->copy()->setTimezone($tz)->format('j M Y · g:i A'))),
+                TextColumn::make('created_at')->label('Made')->since()
+                    ->when($v2, fn (Column $column): Column => $column->toggleable(isToggledHiddenByDefault: true)),
             ])
-            ->recordActions([
-                Action::make('revoke')->label('Revoke')->icon(Heroicon::OutlinedNoSymbol)->color('danger')
-                    ->visible(fn (RequestLink $link): bool => $link->isActive())
-                    ->requiresConfirmation()->modalDescription('The page stops taking files at once. What was sent stays in the library.')
-                    ->action(fn (RequestLink $link) => app(RequestLinks::class)->revoke($link)),
-            ])
+            ->recordActions($v2 ? [ActionGroup::make($actions)->label('Actions')->tooltip('Actions')] : $actions)
             ->emptyStateIcon(Heroicon::OutlinedInboxArrowDown)
             ->emptyStateHeading('No request links yet')
             ->emptyStateDescription('Make one to collect voice notes, recordings or documents from anyone, without an account.');
