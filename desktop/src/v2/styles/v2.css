@@ -1189,6 +1189,10 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
   white-space: nowrap;
 }
 .el-label-chip--removable { padding-inline-end: var(--el-space-2); }
+/* On its own chip the dot takes the label's text colour: the dot colour is 3:1 on the backgrounds, not on its fill. */
+.el-label-chip .el-label-dot { background: var(--label-text); }
+/* A colour outside the eight can be anything (an older app, the API): a hairline ring keeps its dot visible. */
+.el-label--other.el-label-dot, .el-label--other .el-label-dot { background: var(--label-dot); border: var(--el-border-hairline) solid var(--el-role-border-strong); }
 .el-label-chip__name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .el-label-chip > .el-chip__remove { color: inherit; }
 .el-label-chip > .el-chip__remove:hover { background: color-mix(in srgb, currentColor 12%, transparent); color: inherit; }

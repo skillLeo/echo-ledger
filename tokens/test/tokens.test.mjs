@@ -32,6 +32,8 @@ for (const theme of ['light', 'dark']) {
         assert.ok(ratio(c('text'), bg) >= 4.5, `label.${n}.text on ${bg}: ${ratio(c('text'), bg).toFixed(2)}`);
       }
       for (const bg of ['canvas', 'surface', 'subtle']) assert.ok(ratio(c('dot'), v('bg', bg)) >= 3, `label.${n}.dot on bg.${bg}`);
+      // On its own chip the dot is drawn in the text colour (v2.css .el-label-chip .el-label-dot), so that pair must hold 3:1 too.
+      assert.ok(ratio(c('text'), c('fill')) >= 3, `label.${n}.text as the chip's dot`);
     }
   });
   test(`${theme}: text on the accent and on the record button reaches 4.5:1`, () => {
