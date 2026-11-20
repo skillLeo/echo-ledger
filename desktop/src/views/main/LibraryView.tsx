@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useStickyHeight } from "../../lib/stickyHeight";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type MeetingPackFormat, type ScreenMoment, type LibraryItem, type SearchResult, type SharedItem, type SmartFolder, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
@@ -1432,11 +1433,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             <>
               <div className="detail-body">
                 {/* A narrow window shows the recording in place of the list (styles.css .app.narrow .library.has-open); Back returns to it. */}
-                {!tableView && (
-                  <button type="button" className="btn ghost compact detail-back" onClick={backToList}>
-                    <span className="detail-back-icon" aria-hidden="true"><LucideChevronLeftIcon size={16} /></span>Back
-                  </button>
-                )}
+                {!tableView && <ItemBar title={recordingName(current.title)} onBack={backToList} />}
                 {findOpen && transcript && (
                   <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, currentMatch)} onStep={stepFind}
                     onClose={() => { setFindOpen(false); setFindQuery(""); }} />
@@ -1733,5 +1730,35 @@ function LanguageChipSelect({ value, onChange, children }: { value: string; onCh
       <span className="chip-key" aria-hidden="true">Language</span>
       <select aria-label="Language to re-transcribe in" value={value} onChange={(e) => onChange(e.target.value)}>{children}</select>
     </label>
+  );
+}
+
+/**
+ * The recording's bar on a narrow page (D5 §3.3, D-165): Back, and once the header's title has scrolled under the bar the
+ * title too, cut at its own end. It sticks under the top bar and gives its height to the page's scroll padding
+ * (--item-bar-h), so the find bar and what the keyboard brings into view stop under it. Hidden on a wide page.
+ */
+function ItemBar({ title, onBack }: { title: string; onBack: () => void }) {
+  const bar = useRef<HTMLDivElement>(null);
+  const [titled, setTitled] = useState(false);
+  useStickyHeight(bar, "--item-bar-h");
+  useEffect(() => {
+    const check = () => {
+      const el = bar.current;
+      const head = el?.closest(".detail-body")?.querySelector(".detail-title");
+      if (!el || !head) return;
+      setTitled(head.getBoundingClientRect().bottom <= el.getBoundingClientRect().bottom);
+    };
+    // The page scrolls (.content), not the window: scroll events don't bubble, so listen while they come down.
+    document.addEventListener("scroll", check, true);
+    return () => document.removeEventListener("scroll", check, true);
+  }, []);
+  return (
+    <div ref={bar} className={`item-bar ${titled ? "titled" : ""}`.trim()}>
+      <button type="button" className="btn ghost compact detail-back" onClick={onBack}>
+        <span className="detail-back-icon" aria-hidden="true"><LucideChevronLeftIcon size={16} /></span>Back
+      </button>
+      <span className="item-bar-title" dir="auto" aria-hidden={!titled}>{title}</span>
+    </div>
   );
 }

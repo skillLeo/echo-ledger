@@ -419,6 +419,17 @@ try {
     const file = `${name}-${w}-${theme}-${lang}.png`;
     await page.screenshot({ path: join(out, file) });
     const found = [...await page.evaluate(problems), ...await page.evaluate(textProblems), ...await page.evaluate(coveredWhenReached), ...(name === "library" ? await keyboardRows(page) : [])];
+    // D5 §3.3: scrolled down a recording on a narrow page, Back is still in sight (the item bar keeps it).
+    if (name === "recording-scrolled") {
+      const back = await page.evaluate(() => {
+        const el = document.querySelector(".detail .detail-back");
+        if (!el || getComputedStyle(el).display === "none") return "ok";
+        const r = el.getBoundingClientRect();
+        const top = r.bottom > 0 && r.top < innerHeight ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+        return top && (el === top || el.contains(top)) ? "ok" : `Back out of sight after scrolling (${Math.round(r.top)} px)`;
+      });
+      if (back !== "ok") found.push(back);
+    }
     if (found.length || errors.length) failed++;
     report.push({ screen: name, width: w, theme, lang, problems: found, errors, file });
     console.log(`${name} ${w} ${theme} ${lang}: ${found.length} problems${errors.length ? `, ${errors.length} errors` : ""}`);
