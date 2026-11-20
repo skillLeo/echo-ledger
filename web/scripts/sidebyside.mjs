@@ -37,6 +37,9 @@ const screens = [
     { name: 'library-group', path: '/app/sessions', classic: openMenu('[data-menu="group"]'), v2: openMenu('[data-menu="group"]') },
     { name: 'library-table', path: '/app/sessions', classic: openMenu('[data-layout="table"]'), v2: openMenu('[data-layout="table"]'), after: openMenu('[data-layout="list"]') },
     { name: 'library-rows', path: '/app/sessions', classic: null, v2: null },
+    { name: 'nav-create', path: '/app/search?q=proforma', classic: openMenu('.el-tb-create'), v2: openMenu('.v2-tb-create') },
+    { name: 'settings-appearance', path: '/app/settings/appearance', classic: null, v2: null },
+    { name: 'nav-phone', path: '/app/sessions', width: 390, classic: null, v2: null },
 ];
 
 async function signIn(context) {
@@ -59,6 +62,7 @@ async function shoot(theme, design) {
     const page = await context.newPage();
     const shots = {};
     for (const s of screens.filter((s) => only.length === 0 || only.includes(s.name))) {
+        await page.setViewportSize({ width: s.width ?? 1280, height: 820 });
         await page.goto(base + s.path);
         await settle(page, 1200);
         if (s[design]) await s[design](page);

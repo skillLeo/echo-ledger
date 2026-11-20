@@ -18,6 +18,40 @@
         sync();
         new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ['class'] });
     })();
+    // The new frame's sidebar: the classic shell's (its width, the rail, what it remembers), with the edge that resizes
+    // it following the reading direction (right to left in Urdu the sidebar is on the right, so dragging left widens it).
+    window.elV2Sidebar = window.elV2Sidebar || ((config) => {
+        const base = window.elShellSidebar(config);
+        const sign = () => (document.documentElement.dir === 'rtl' ? -1 : 1);
+        return {
+            ...base,
+            startResize(e) {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                const startX = e.clientX;
+                const start = this.width;
+                const move = (m) => this.setWidth(start + sign() * (m.clientX - startX), false);
+                const up = () => {
+                    window.removeEventListener('pointermove', move);
+                    window.removeEventListener('pointerup', up);
+                    document.body.classList.remove('el-resizing');
+                    this.setWidth(this.width, true);
+                };
+                document.body.classList.add('el-resizing');
+                window.addEventListener('pointermove', move);
+                window.addEventListener('pointerup', up);
+            },
+            resizeKey(e) {
+                const step = (e.shiftKey ? 40 : 16) * sign();
+                if (e.key === 'ArrowLeft') this.setWidth(this.width - step, true);
+                else if (e.key === 'ArrowRight') this.setWidth(this.width + step, true);
+                else if (e.key === 'Home') this.setWidth(config.min, true);
+                else if (e.key === 'End') this.setWidth(config.max, true);
+                else return;
+                e.preventDefault();
+            },
+        };
+    });
 </script>
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-keys')
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.copy')

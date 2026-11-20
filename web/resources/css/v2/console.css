@@ -274,6 +274,7 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
 
     /* Folded: a rail of icons, their names as tooltips. */
     .v2-sb.v2-rail .v2-sb-label,
+    .v2-sb.v2-rail .v2-sb-resize,
     .v2-sb.v2-rail .v2-sb-sub,
     .v2-sb.v2-rail .v2-sb-count {
         display: none;
@@ -294,6 +295,159 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
 
 [dir='rtl'] .v2-sb-collapse .v2-icon {
     transform: scaleX(-1);
+}
+
+/* "Upload recording" at the top: the one accent button of the frame (parity plan 2). */
+.v2-sb-record {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--el-space-8);
+    min-height: var(--el-component-button-height);
+    margin-inline: var(--el-space-4);
+    padding-inline: var(--el-space-12);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    font-size: var(--el-text-body-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-sb-record:hover,
+.v2-sb-record.is-on {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-sb-record .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-subitem.is-child {
+    padding-inline-start: var(--el-space-16);
+}
+
+.v2-sb-count.is-alert {
+    min-width: var(--el-icon-md);
+    padding-inline: var(--el-space-4);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-danger-default);
+    color: var(--el-role-text-on-accent);
+    text-align: center;
+}
+
+/* The edge that resizes the sidebar (drag, or the arrow keys). */
+.v2-sb-inner {
+    position: relative;
+}
+
+.v2-sb-resize {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: calc(-1 * var(--el-space-4));
+    width: var(--el-space-8);
+    cursor: col-resize;
+    z-index: var(--el-layer-sticky);
+}
+
+.v2-sb-resize:hover,
+.v2-sb-resize:focus-visible {
+    background-color: var(--el-role-accent-soft);
+    outline: none;
+}
+
+body.el-resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+/* Only on a computer: below it the sidebar is the menu's drawer. */
+.v2-sb-resize {
+    display: none;
+}
+
+@media (min-width: 1024px) {
+    .v2-sb-resize {
+        display: block;
+    }
+}
+
+/* Settings › Appearance › Sidebar style: Soft grey (the frame's own), Light, or Dark (the light theme's sidebar drawn
+   in its text colour; under the dark theme every sidebar is dark already). */
+.v2-sb[data-style='light'] {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-sb[data-style='light'] .v2-sb-item:hover,
+.v2-sb[data-style='light'] .v2-sb-subitem:hover,
+.v2-sb[data-style='light'] .v2-sb-item.is-on {
+    background-color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] {
+    background-color: var(--el-role-text-primary);
+    border-inline-end-color: var(--el-role-text-primary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-logo,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-item,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-subitem,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-subcount {
+    color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-item:hover,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-subitem:hover,
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-item.is-on {
+    border-color: transparent;
+    background-color: var(--el-role-text-secondary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-subitem.is-on {
+    color: var(--el-role-accent-soft);
+}
+
+:root[data-theme='light'] .v2-sb[data-style='dark'] .v2-sb-foot {
+    border-top-color: var(--el-role-text-secondary);
+}
+
+/* A menu item with its icon (the new frame's own glyphs). */
+.v2-menu-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-8);
+}
+
+.v2-menu-item .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    color: var(--el-role-text-secondary);
+}
+
+/* The section above a page's title (Library › Search). */
+.v2-crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--el-space-4);
+    margin-bottom: var(--el-space-4);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-crumbs .v2-crumbs-sep {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-crumbs-link:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-crumbs-here {
+    color: var(--el-role-text-primary);
 }
 
 /* the top bar */
@@ -444,6 +598,24 @@ html[lang='ur'] .fi-wi-stats-overview-stat-value {
 .v2-bn-item.is-on {
     color: var(--el-role-accent-text);
     font-weight: var(--el-text-body-strong-weight);
+}
+
+/* Record: the big centre button in the accent colour, as in the phone app. */
+.v2-bn-record-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-component-button-height);
+    height: var(--el-component-button-height);
+    margin-top: calc(-1 * var(--el-space-12));
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    box-shadow: var(--el-shadow-1);
+}
+
+.v2-bn-record {
+    color: var(--el-role-text-primary);
 }
 
 .v2-bn-item.is-off {
@@ -995,6 +1167,18 @@ button.v2-row:hover {
 
 .v2-lib-line .v2-row-meta {
     white-space: nowrap;
+}
+
+/* A long second line ends in "…" inside the row: the time, the length and the star keep their place on a phone. */
+.v2-lib-line {
+    overflow: hidden;
+}
+
+.v2-library .fi-ta-record-content-ctn,
+.v2-library .fi-ta-record-content,
+.v2-library .fi-ta-record-content .fi-ta-col,
+.v2-lib-row {
+    min-width: 0;
 }
 
 .v2-row-value time {

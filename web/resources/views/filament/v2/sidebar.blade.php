@@ -1,14 +1,27 @@
 {{--
-    The v2.0 sidebar (docs/v2/IA.md "Navigation per platform": Home, Library, Live, Ask, Settings), the desktop app's
-    frame: the brand, the five modules, and under Library its level 2 (All recordings, Projects, Shared, Trash). Help
-    and Collapse at the bottom. It keeps Filament's sidebar contract (filamentSidebar, $store.sidebar), so on phones it
-    is the drawer the menu button opens; folded on a computer it is a rail of icons with their names as tooltips.
+    The v2.0 sidebar (docs/PLAN_V2_PARITY.md section 2, docs/v2/IA.md): the brand, "Upload recording" at the top (the
+    web's Record), then Home, Library (All recordings, Shared, My links, Request links, Trash), Projects (the first few
+    with their counts), Live and Ask; at the foot Activity with what needs you, Settings, Help and Collapse. Its edge
+    resizes it (drag, or the arrow keys), and its look is the person's Sidebar style (Light, Dark, Soft grey). It keeps
+    Filament's sidebar contract (filamentSidebar, $store.sidebar), so on phones it is the drawer the menu button opens;
+    folded on a computer it is a rail of icons with their names as tooltips.
 --}}
 @php
     use App\Filament\Support\ConsoleV2Nav;
+    use App\Filament\Support\Shell;
 
-    $nav = ConsoleV2Nav::modules();
+    $modules = collect(ConsoleV2Nav::modules())->keyBy('key');
+    $nav = $modules->except('settings')->values()->all();
+    $settings = $modules->get('settings');
     $library = ConsoleV2Nav::libraryPlaces();
+    $projects = ConsoleV2Nav::projects();
+    $upload = ConsoleV2Nav::upload();
+    $activity = ConsoleV2Nav::activity();
+    $prefs = Shell::preferences();
+    $config = [
+        'width' => $prefs['width'], 'min' => Shell::WIDTH_MIN, 'max' => Shell::WIDTH_MAX, 'usual' => Shell::WIDTH_DEFAULT,
+        'collapsed' => $prefs['collapsed'], 'open' => $prefs['open'], 'pages' => [], 'place' => null,
+    ];
 @endphp
 <div>
     {{-- format-ignore-start --}}
@@ -22,8 +35,9 @@
         x-on:keydown.escape.document="handleEscape($event)"
         id="fi-main-sidebar"
         class="fi-sidebar fi-main-sidebar v2-sb"
+        data-style="{{ ConsoleV2Nav::style() }}"
     >
-        <div class="v2-sb-inner">
+        <div class="v2-sb-inner" x-data="elV2Sidebar(@js($config))">
             <header class="v2-sb-brand">
                 <a href="{{ filament()->getHomeUrl() }}" class="v2-sb-logo" aria-label="{{ __(':app home', ['app' => \App\Support\Brand::name()]) }}">
                     {{-- The name alone, as the desktop app's sidebar shows it. --}}
@@ -34,6 +48,15 @@
                 </button>
             </header>
 
+            @if ($upload !== null)
+                {{-- The web's Record (parity plan 2): a file from the computer, or a voice note recorded here. --}}
+                <a href="{{ $upload['url'] }}" @class(['v2-sb-record', 'is-on' => $upload['active']]) data-sidebar-upload
+                    x-bind:title="$el.closest('.v2-rail') ? @js($upload['label']) : null">
+                    <x-el.v2.icon name="record" />
+                    <span class="v2-sb-label">{{ $upload['label'] }}</span>
+                </a>
+            @endif
+
             <nav class="v2-sb-nav" aria-label="{{ __('Main') }}">
                 <ul class="v2-sb-list">
                     @foreach ($nav as $item)
@@ -43,9 +66,6 @@
                                     x-bind:title="$el.closest('.v2-rail') ? @js($item['label']) : null" data-module="{{ $item['key'] }}">
                                     <x-el.v2.icon :name="$item['icon']" :filled="$item['active']" />
                                     <span class="v2-sb-label">{{ $item['label'] }}</span>
-                                    @if (filled($item['badge'] ?? null))
-                                        <span class="v2-sb-count"><span class="v2-sr">{{ __(', needs you:') }} </span>{{ $item['badge'] }}</span>
-                                    @endif
                                 </a>
                             @else
                                 {{-- A module this console can't open: shown with the reason, never hidden (IA level rules). --}}
@@ -58,10 +78,22 @@
                                 <ul class="v2-sb-sub" aria-label="{{ __('Library') }}">
                                     @foreach ($library as $place)
                                         <li>
-                                            <a href="{{ $place['url'] }}" @class(['v2-sb-subitem', 'is-on' => $place['active']]) @if ($place['active']) aria-current="page" @endif>
+                                            <a href="{{ $place['url'] }}" @class(['v2-sb-subitem', 'is-on' => $place['active']]) @if ($place['active']) aria-current="page" @endif data-place="{{ $place['key'] }}">
                                                 <span class="v2-sb-label">{{ $place['label'] }}</span>
-                                                @if (($place['count'] ?? 0) > 0)
-                                                    <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($place['count']) }}</span>
+                                            </a>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                            @if ($item['key'] === 'projects' && $item['url'] !== null && $projects !== [])
+                                <ul class="v2-sb-sub" aria-label="{{ __('Projects') }}">
+                                    @foreach ($projects as $project)
+                                        <li>
+                                            <a href="{{ $project['url'] }}" @class(['v2-sb-subitem', 'is-child' => $project['depth'] > 0, 'is-on' => $project['active']])
+                                                @if ($project['active']) aria-current="page" @endif data-project="{{ $project['id'] }}">
+                                                <span class="v2-sb-label"><bdi>{{ $project['name'] }}</bdi></span>
+                                                @if ($project['count'] > 0)
+                                                    <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($project['count']) }}</span>
                                                 @endif
                                             </a>
                                         </li>
@@ -74,6 +106,23 @@
             </nav>
 
             <div class="v2-sb-foot">
+                @if ($activity !== null)
+                    <a href="{{ $activity['url'] }}" @class(['v2-sb-item', 'is-on' => $activity['active']]) @if ($activity['active']) aria-current="page" @endif
+                        x-bind:title="$el.closest('.v2-rail') ? @js($activity['label']) : null" data-module="activity">
+                        <x-el.v2.icon name="bell" :filled="$activity['active']" />
+                        <span class="v2-sb-label">{{ $activity['label'] }}</span>
+                        @if ($activity['badge'] !== null)
+                            <span class="v2-sb-count is-alert"><span class="v2-sr">{{ __(', needs you:') }} </span>{{ $activity['badge'] }}</span>
+                        @endif
+                    </a>
+                @endif
+                @if ($settings !== null)
+                    <a href="{{ $settings['url'] }}" @class(['v2-sb-item', 'is-on' => $settings['active']]) @if ($settings['active']) aria-current="page" @endif
+                        x-bind:title="$el.closest('.v2-rail') ? @js($settings['label']) : null" data-module="settings">
+                        <x-el.v2.icon name="settings" :filled="$settings['active']" />
+                        <span class="v2-sb-label">{{ $settings['label'] }}</span>
+                    </a>
+                @endif
                 <button type="button" class="v2-sb-item" x-on:click="$dispatch('el-help')" x-bind:title="$el.closest('.v2-rail') ? @js(__('Help and shortcuts')) : null">
                     <x-el.v2.icon name="help" />
                     <span class="v2-sb-label">{{ __('Help and shortcuts') }}</span>
@@ -85,6 +134,12 @@
                     <span class="v2-sb-label">{{ __('Collapse') }}</span>
                 </button>
             </div>
+
+            {{-- The edge resizes the sidebar: drag it, or the arrow keys (Shift for bigger steps); a double-click is the usual width. --}}
+            <div class="v2-sb-resize" role="separator" aria-orientation="vertical" aria-label="{{ __('Resize the sidebar') }}" tabindex="0" x-show="! rail()"
+                aria-valuemin="{{ Shell::WIDTH_MIN }}" aria-valuemax="{{ Shell::WIDTH_MAX }}" aria-valuenow="{{ $prefs['width'] }}" x-bind:aria-valuenow="width"
+                title="{{ __('Drag to resize. Double-click for the usual width.') }}"
+                x-on:pointerdown="startResize($event)" x-on:dblclick="setWidth(usual, true)" x-on:keydown="resizeKey($event)"></div>
         </div>
     </div>
     {{-- format-ignore-end --}}

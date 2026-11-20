@@ -8,6 +8,7 @@ use App\Exceptions\ApiError;
 use App\Filament\Pages\GetTheApps;
 use App\Filament\Pages\RecentlyDeleted;
 use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\ConsoleV2Nav;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SettingsContext;
 use App\Filament\Support\Shell;
@@ -36,12 +37,15 @@ trait ManagesAppPages
     public function appearanceData(): array
     {
         $prefs = Shell::preferences($this->account());
+        // Since the parity work the new frame offers the sidebar's style too; it starts on Soft grey, its own look.
+        if (ConsoleV2::shell()) {
+            $prefs['style'] = ConsoleV2Nav::style($this->account());
+        }
 
         return [
             'prefs' => $prefs,
-            // The new frame (v2.0) has one sidebar look, so its style is not offered there.
             'rows' => [
-                ...(ConsoleV2::shell() ? [] : ['style' => ['appearance.sidebar', Shell::STYLES]]),
+                'style' => ['appearance.sidebar', ConsoleV2::shell() ? array_map(fn (string $label): string => __($label), Shell::STYLES) : Shell::STYLES],
                 'density' => ['appearance.density', Shell::DENSITIES],
                 'clock' => ['appearance.clock', ['12h' => '12-hour', '24h' => '24-hour']],
                 'layout' => ['appearance.library_view', Shell::LAYOUTS],

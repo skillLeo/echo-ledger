@@ -12,10 +12,13 @@
   "key": "a|all recordings"
  },
  "WEB-NAV-003": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|projects"
+  "keys": [
+   "a|projects",
+   "a|qureshi textiles"
+  ]
  },
  "WEB-NAV-004": {
   "type": "control",
@@ -49,17 +52,18 @@
   "key": "a|settings"
  },
  "WEB-NAV-011": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
-  "scope": "main",
-  "key": "button|import"
+  "scope": "sidebar",
+  "keys": [
+   "a|upload recording"
+  ]
  },
  "WEB-NAV-012": {
-  "type": "html",
+  "type": "controlmatch",
   "page": "library",
-  "contains": [
-   "wire:name=\"App\\Livewire\\ActivityBell\""
-  ]
+  "scope": "sidebar",
+  "pattern": "^a\\|activity , needs you:$"
  },
  "WEB-NAV-013": {
   "type": "controls",
@@ -110,7 +114,11 @@
   "type": "html",
   "page": "library",
   "contains": [
-   "v2-bn"
+   "data-bottom=\"library\"",
+   "data-bottom=\"projects\"",
+   "data-bottom=\"record\"",
+   "data-bottom=\"live\"",
+   "data-bottom=\"ask\""
   ]
  },
  "WEB-NAV-023": {
@@ -1098,5 +1106,58 @@
   "page": "library",
   "scope": "main",
   "key": "button|pin to the top"
+ },
+ "WEB-NAV-006": {
+  "type": "controls",
+  "page": "library",
+  "scope": "sidebar",
+  "keys": [
+   "a|my links",
+   "a|request links"
+  ]
+ },
+ "WEB-NAV-010": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|upload recording"
+ },
+ "WEB-NAV-016": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "class=\"v2-sb-resize\" role=\"separator\"",
+   "x-on:pointerdown=\"startResize($event)\"",
+   "x-on:keydown=\"resizeKey($event)\""
+  ]
+ },
+ "WEB-NAV-019": {
+  "type": "controls",
+  "page": "library",
+  "scope": "topbar",
+  "keys": [
+   "button|create",
+   "menuitem|create › upload files",
+   "menuitem|create › new project",
+   "menuitem|create › request link"
+  ]
+ },
+ "WEB-NAV-021": {
+  "type": "html",
+  "page": "search",
+  "contains": [
+   "<nav class=\"v2-crumbs\" aria-label=\"Breadcrumbs\">",
+   "class=\"v2-crumbs-link\">Library</a>"
+  ]
+ },
+ "WEB-SET-003": {
+  "type": "controls",
+  "page": "settings-appearance",
+  "scope": "main",
+  "keys": [
+   "button|light",
+   "button|dark",
+   "button|soft grey"
+  ]
  }
 }
