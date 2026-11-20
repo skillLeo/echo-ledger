@@ -31,7 +31,8 @@ export function Player({
   skipLabels = { back: "Back 10 seconds", forward: "Forward 10 seconds" },
 }: PlayerProps) {
   return (
-    <div className="el-player">
+    // dir="ltr": skip back, play, skip forward and the slider read left to right in every language (D4 7).
+    <div className="el-player" dir="ltr">
       {onSkip && <Button variant="quiet" icon={BackIcon} aria-label={skipLabels.back} title={skipLabels.back} onClick={() => onSkip(-10)} />}
       <Button variant="primary" className="el-player__play" icon={playing ? PauseIcon : PlayIcon} aria-label={playing ? labels.pause : labels.play} onClick={onToggle} />
       {onSkip && <Button variant="quiet" icon={ForwardIcon} aria-label={skipLabels.forward} title={skipLabels.forward} onClick={() => onSkip(10)} />}

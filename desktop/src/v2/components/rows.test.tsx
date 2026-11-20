@@ -5,6 +5,7 @@ import { EmptyState } from "./EmptyState";
 import { Banner } from "./Banner";
 import { Dialog } from "./Dialog";
 import { Button } from "./Button";
+import { Player } from "./media";
 
 describe("ListRow options for lists whose rows act only through ⋮ (Shared)", () => {
   const row = (extra: Record<string, unknown>) => render(
@@ -42,5 +43,14 @@ describe("free text in the shared components takes its own direction (D4 4)", ()
     expect(screen.getByText("When a teammate sends you a recording, it shows here.")).toHaveAttribute("dir", "auto");
     expect(screen.getByText("Calls are not being recorded.")).toHaveAttribute("dir", "auto");
     expect(screen.getByText("Anyone with a request link can send you voice notes.")).toHaveAttribute("dir", "auto");
+  });
+});
+
+describe("the player never mirrors (D4 7)", () => {
+  it("keeps skip back, play, skip forward and the slider left to right inside a right-to-left page", () => {
+    const { container } = render(
+      <div dir="rtl"><Player playing={false} position={0} duration={486} onToggle={() => undefined} onSeek={() => undefined} onSkip={() => undefined} /></div>,
+    );
+    expect(container.querySelector(".el-player")).toHaveAttribute("dir", "ltr");
   });
 });
