@@ -1,6 +1,7 @@
 // Tools around a recording's transcript in the library (plan B6, B7, B10, B11): player controls, the activity
 // timeline, find and replace, speaker names, history, export, share links and "Add to vocabulary".
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useStickyHeight } from "../../lib/stickyHeight";
 import { api, errorMessage, type ExportFormat, type LearnOffer, type MeetingPackFormat, type Segment, type ShareLink, type TranscriptRevision, type TranscriptSuggestion } from "../../lib/ipc";
 import { formatWhen, timestamp } from "../../lib/format";
 import { SPEEDS, timelinePercent, waveformBars, PLAYER_HINT, PLAYER_KEYS } from "../../lib/player";
@@ -80,21 +81,9 @@ export function PlayerDock({ playing, nowMs, durationMs, onToggle, onSkip, child
   below?: React.ReactNode;
 }) {
   const dock = useRef<HTMLDivElement>(null);
-  // The dock sticks over the end of what scrolls behind it: its height is that scroller's scroll padding
-  // (styles.css --player-dock-h), so the line Follow brings into view, a find match or a focused line is never under it.
-  useLayoutEffect(() => {
-    const el = dock.current;
-    const root = document.documentElement;
-    if (!el) return;
-    const measure = () => root.style.setProperty("--player-dock-h", `${Math.ceil(el.getBoundingClientRect().height)}px`);
-    measure();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
-    observer?.observe(el);
-    return () => {
-      observer?.disconnect();
-      root.style.removeProperty("--player-dock-h");
-    };
-  }, []);
+  // Its height is the scroll padding of what scrolls behind it (styles.css --player-dock-h): the line Follow brings
+  // into view, a find match or a focused line is never under it.
+  useStickyHeight(dock, "--player-dock-h");
   return (
     <div ref={dock} className="player-dock" role="region" aria-label="Player">
       <div className="player-row">

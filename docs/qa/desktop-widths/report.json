@@ -1,6 +1,70 @@
 [
 {
 "screen": "library",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 756,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
 "width": 800,
 "theme": "light",
 "lang": "en",
@@ -17,6 +81,22 @@
 },
 {
 "screen": "library",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 800,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
 "width": 1024,
 "theme": "light",
 "lang": "en",
@@ -33,6 +113,22 @@
 },
 {
 "screen": "library",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 1024,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
 "width": 1280,
 "theme": "light",
 "lang": "en",
@@ -49,6 +145,22 @@
 },
 {
 "screen": "library",
+"width": 1280,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
 "width": 1728,
 "theme": "light",
 "lang": "en",
@@ -64,6 +176,86 @@
 "errors": []
 },
 {
+"screen": "library",
+"width": 1728,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "library",
+"width": 1728,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 756,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
 "screen": "recording",
 "width": 800,
 "theme": "light",
@@ -75,6 +267,22 @@
 "screen": "recording",
 "width": 800,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 800,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -97,6 +305,22 @@
 },
 {
 "screen": "recording",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 1024,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
 "width": 1280,
 "theme": "light",
 "lang": "en",
@@ -113,6 +337,22 @@
 },
 {
 "screen": "recording",
+"width": 1280,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
 "width": 1728,
 "theme": "light",
 "lang": "en",
@@ -123,6 +363,86 @@
 "screen": "recording",
 "width": 1728,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 1728,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording",
+"width": 1728,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 756,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -145,6 +465,22 @@
 },
 {
 "screen": "recording-scrolled",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 800,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
 "width": 1024,
 "theme": "light",
 "lang": "en",
@@ -161,6 +497,22 @@
 },
 {
 "screen": "recording-scrolled",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 1024,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
 "width": 1280,
 "theme": "light",
 "lang": "en",
@@ -177,6 +529,22 @@
 },
 {
 "screen": "recording-scrolled",
+"width": 1280,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
 "width": 1728,
 "theme": "light",
 "lang": "en",
@@ -192,6 +560,86 @@
 "errors": []
 },
 {
+"screen": "recording-scrolled",
+"width": 1728,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "recording-scrolled",
+"width": 1728,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 756,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
 "screen": "projects",
 "width": 800,
 "theme": "light",
@@ -203,6 +651,22 @@
 "screen": "projects",
 "width": 800,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 800,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -225,6 +689,22 @@
 },
 {
 "screen": "projects",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 1024,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
 "width": 1280,
 "theme": "light",
 "lang": "en",
@@ -241,6 +721,22 @@
 },
 {
 "screen": "projects",
+"width": 1280,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
 "width": 1728,
 "theme": "light",
 "lang": "en",
@@ -251,6 +747,86 @@
 "screen": "projects",
 "width": 1728,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 1728,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "projects",
+"width": 1728,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 756,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -273,6 +849,22 @@
 },
 {
 "screen": "project",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 800,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
 "width": 1024,
 "theme": "light",
 "lang": "en",
@@ -289,6 +881,22 @@
 },
 {
 "screen": "project",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 1024,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
 "width": 1280,
 "theme": "light",
 "lang": "en",
@@ -305,6 +913,22 @@
 },
 {
 "screen": "project",
+"width": 1280,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
 "width": 1728,
 "theme": "light",
 "lang": "en",
@@ -320,6 +944,86 @@
 "errors": []
 },
 {
+"screen": "project",
+"width": 1728,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "project",
+"width": 1728,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 756,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
 "screen": "activity",
 "width": 800,
 "theme": "light",
@@ -331,6 +1035,22 @@
 "screen": "activity",
 "width": 800,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 800,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -353,6 +1073,22 @@
 },
 {
 "screen": "activity",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 1024,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
 "width": 1280,
 "theme": "light",
 "lang": "en",
@@ -369,6 +1105,22 @@
 },
 {
 "screen": "activity",
+"width": 1280,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
 "width": 1728,
 "theme": "light",
 "lang": "en",
@@ -384,6 +1136,86 @@
 "errors": []
 },
 {
+"screen": "activity",
+"width": 1728,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "activity",
+"width": 1728,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 756,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
 "screen": "shared",
 "width": 800,
 "theme": "light",
@@ -395,6 +1227,22 @@
 "screen": "shared",
 "width": 800,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 800,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -417,6 +1265,22 @@
 },
 {
 "screen": "shared",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 1024,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
 "width": 1280,
 "theme": "light",
 "lang": "en",
@@ -433,6 +1297,22 @@
 },
 {
 "screen": "shared",
+"width": 1280,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
 "width": 1728,
 "theme": "light",
 "lang": "en",
@@ -448,6 +1328,86 @@
 "errors": []
 },
 {
+"screen": "shared",
+"width": 1728,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "shared",
+"width": 1728,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 756,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
 "screen": "record",
 "width": 800,
 "theme": "light",
@@ -459,6 +1419,22 @@
 "screen": "record",
 "width": 800,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 800,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -481,6 +1457,22 @@
 },
 {
 "screen": "record",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 1024,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
 "width": 1280,
 "theme": "light",
 "lang": "en",
@@ -497,6 +1489,22 @@
 },
 {
 "screen": "record",
+"width": 1280,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
 "width": 1728,
 "theme": "light",
 "lang": "en",
@@ -507,6 +1515,86 @@
 "screen": "record",
 "width": 1728,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 1728,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "record",
+"width": 1728,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 756,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -529,6 +1617,22 @@
 },
 {
 "screen": "settings",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 800,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
 "width": 1024,
 "theme": "light",
 "lang": "en",
@@ -539,6 +1643,22 @@
 "screen": "settings",
 "width": 1024,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 1024,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -561,6 +1681,22 @@
 },
 {
 "screen": "settings",
+"width": 1280,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
 "width": 1728,
 "theme": "light",
 "lang": "en",
@@ -571,6 +1707,86 @@
 "screen": "settings",
 "width": 1728,
 "theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 1728,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings",
+"width": 1728,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 720,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 720,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 720,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 720,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 756,
+"theme": "light",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 756,
+"theme": "light",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 756,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 756,
+"theme": "dark",
 "lang": "ur",
 "problems": [],
 "errors": []
@@ -593,6 +1809,22 @@
 },
 {
 "screen": "settings-account",
+"width": 800,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 800,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
 "width": 1024,
 "theme": "light",
 "lang": "en",
@@ -609,6 +1841,22 @@
 },
 {
 "screen": "settings-account",
+"width": 1024,
+"theme": "dark",
+"lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 1024,
+"theme": "dark",
+"lang": "ur",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
 "width": 1280,
 "theme": "light",
 "lang": "en",
@@ -625,9 +1873,17 @@
 },
 {
 "screen": "settings-account",
-"width": 1728,
-"theme": "light",
+"width": 1280,
+"theme": "dark",
 "lang": "en",
+"problems": [],
+"errors": []
+},
+{
+"screen": "settings-account",
+"width": 1280,
+"theme": "dark",
+"lang": "ur",
 "problems": [],
 "errors": []
 },
@@ -635,479 +1891,23 @@
 "screen": "settings-account",
 "width": 1728,
 "theme": "light",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "library",
-"width": 800,
-"theme": "dark",
 "lang": "en",
 "problems": [],
 "errors": []
 },
 {
-"screen": "library",
-"width": 1024,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "library",
-"width": 1280,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "library",
+"screen": "settings-account",
 "width": 1728,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording",
-"width": 800,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording",
-"width": 1024,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording",
-"width": 1280,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording",
-"width": 1728,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "projects",
-"width": 800,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "projects",
-"width": 1024,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "projects",
-"width": 1280,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "projects",
-"width": 1728,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "activity",
-"width": 800,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "activity",
-"width": 1024,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "activity",
-"width": 1280,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "activity",
-"width": 1728,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings",
-"width": 800,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings",
-"width": 1024,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings",
-"width": 1280,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings",
-"width": 1728,
-"theme": "dark",
-"lang": "en",
-"problems": [],
-"errors": []
-},
-{
-"screen": "library",
-"width": 800,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "library",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "library",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "library",
-"width": 1728,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording",
-"width": 800,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording",
-"width": 1728,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording-scrolled",
-"width": 800,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording-scrolled",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording-scrolled",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "recording-scrolled",
-"width": 1728,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "projects",
-"width": 800,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "projects",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "projects",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "projects",
-"width": 1728,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "project",
-"width": 800,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "project",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "project",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "project",
-"width": 1728,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "activity",
-"width": 800,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "activity",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "activity",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "activity",
-"width": 1728,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "shared",
-"width": 800,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "shared",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "shared",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "shared",
-"width": 1728,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "record",
-"width": 800,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "record",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "record",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "record",
-"width": 1728,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings",
-"width": 800,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings",
-"width": 1728,
-"theme": "dark",
+"theme": "light",
 "lang": "ur",
 "problems": [],
 "errors": []
 },
 {
 "screen": "settings-account",
-"width": 800,
+"width": 1728,
 "theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings-account",
-"width": 1024,
-"theme": "dark",
-"lang": "ur",
-"problems": [],
-"errors": []
-},
-{
-"screen": "settings-account",
-"width": 1280,
-"theme": "dark",
-"lang": "ur",
+"lang": "en",
 "problems": [],
 "errors": []
 },

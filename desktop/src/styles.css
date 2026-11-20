@@ -383,9 +383,9 @@ select.chip option { color: var(--text); background: var(--surface); }
 .select { height: 36px; background: var(--surface); border: 1px solid var(--border-strong); color: var(--text); border-radius: var(--radius-field); padding: 0 var(--space-2); font: inherit; font-size: var(--text-sm); cursor: pointer; }
 
 .library { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.45fr); gap: var(--space-4); min-height: 280px; }
-.list { overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding-right: var(--space-1); scroll-padding-block-start: var(--group-head-h); }
-/* A row brought into view (the arrow keys, a link) lands under the sticky group header, never behind it. */
-:root { --group-head-h: 40px; }
+.list { overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding-right: var(--space-1); scroll-padding-block-start: var(--group-head-h, 0px); }
+/* A row brought into view (the arrow keys, a link) lands under the sticky group header, never behind it: the header
+   measures its own drawn height (lib/stickyHeight.ts). */
 .group { display: flex; flex-direction: column; gap: 0; }
 .group-label { font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); }
 /* Group headers (Phase 1C): name and count, collapse, a box for the whole group; they stay at the top while it scrolls. */
@@ -411,8 +411,10 @@ select.chip option { color: var(--text); background: var(--surface); }
 .item-title { flex: 1; min-width: 0; font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* A title keeps its own direction (dir="auto"): an Urdu or Arabic one is cut at its own end, on the left, with the
    ellipsis there; a Latin one on the right. It still lines up with the row's start (the window's direction, not the title's). */
-.item-title[dir="auto"], .tree-name[dir="auto"], .lib-title[dir="auto"], .queue-title[dir="auto"], .activity-title > [dir="auto"] { text-align: left; unicode-bidi: plaintext; }
-[dir="rtl"] :is(.item-title, .tree-name, .lib-title, .queue-title)[dir="auto"], [dir="rtl"] .activity-title > [dir="auto"] { text-align: right; }
+:is(.item-title, .tree-name, .lib-title, .queue-title, .activity-title, .recent-title, .data-title, .import-title)[dir="auto"], .activity-title > [dir="auto"] { text-align: left; unicode-bidi: plaintext; }
+[dir="rtl"] :is(.item-title, .tree-name, .lib-title, .queue-title, .activity-title, .recent-title, .data-title, .import-title)[dir="auto"], [dir="rtl"] .activity-title > [dir="auto"] { text-align: right; }
+/* A title that is cut gets its ellipsis at its own end. */
+.activity-title[dir="auto"] { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item-time { flex: none; font-size: var(--text-xs); color: var(--text-muted); }
 .item-sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-sub > span:not(.pill) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -644,7 +646,7 @@ button.segment.active { background: var(--accent-soft); }
 .app.narrow .library:not(.has-open):not(.as-table) > .detail { display: none; }
 .app.narrow .library:not(.as-table) > .list { max-height: none; overflow: visible; }
 .app.narrow .library:not(.as-table) .group-head { top: calc(-1 * var(--space-5)); }
-.app.narrow .content.page-library { scroll-padding-block-start: calc(var(--group-head-h) - var(--space-5)); }
+.app.narrow .content.page-library { scroll-padding-block-start: var(--group-head-h, 0px); }
 /* The top bar fits a half-screen window: tighter gaps instead of the avatar running out of the window. */
 .app.narrow .topbar { gap: var(--space-1); padding: 0 var(--space-3); }
 .app.narrow .topbar-search-text { display: none; }
@@ -739,7 +741,7 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .check input { accent-color: var(--accent); }
 .select.compact, .input.compact { height: 30px; min-height: 30px; padding: 0 var(--space-2); font-size: var(--text-xs); width: auto; border-radius: var(--radius-sm); }
 /* The docked player: play, ±10 s, the time, the waveform and the speed, pinned to the bottom of the recording. */
-.player-dock { position: sticky; bottom: 0; z-index: 4; display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-4) var(--space-3); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--border); }
+.player-dock { position: sticky; bottom: 0; z-index: 4; display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-4) var(--space-3); background: var(--surface); border-top: 1px solid var(--border); }
 /* A narrow recording page puts the waveform on its own line rather than scrolling sideways (D-046). */
 .player-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); min-width: 0; }
 .play-btn { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--accent-strong); color: var(--on-accent); display: grid; place-items: center; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out); }
