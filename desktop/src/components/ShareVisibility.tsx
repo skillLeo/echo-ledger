@@ -55,7 +55,7 @@ export function HideDurations({ callDetected, onChosen }: { callDetected: boolea
         <div className="share-custom" data-testid="share-custom">
           <input type="number" min={1} aria-label="How long" value={amount} onChange={(e) => setAmount(e.target.value)} />
           <select aria-label="Unit" value={unit} onChange={(e) => setUnit(e.target.value as CustomUnit)}>
-            {CUSTOM_UNITS.map(([u]) => <option key={u} value={u}>{u}</option>)}
+            {CUSTOM_UNITS.map(([u]) => <option dir="auto" key={u} value={u}>{u}</option>)}
           </select>
           <button type="button" className="btn compact" onClick={hideCustom}>Hide</button>
         </div>

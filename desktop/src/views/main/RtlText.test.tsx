@@ -86,8 +86,11 @@ describe("a select's English words in a right-to-left window", () => {
 describe("every classic select's options", () => {
   it("take their own direction (a closed select draws its option's words; in right to left \"Auto (English)\" would turn round)", () => {
     const dir = dirname(fileURLToPath(import.meta.url));
-    const missing = readdirSync(dir).filter((f) => f.endsWith(".tsx") && !f.includes(".test."))
-      .flatMap((f) => readFileSync(join(dir, f), "utf8").split("\n").map((line, i) => [f, i + 1, line] as const))
+    // The classic views, and the classic shared component with a select (the screen-share choice).
+    const files = [...readdirSync(dir).filter((f) => f.endsWith(".tsx") && !f.includes(".test.")).map((f) => join(dir, f)),
+      join(dir, "../../components/ShareVisibility.tsx")];
+    const missing = files
+      .flatMap((f) => readFileSync(f, "utf8").split("\n").map((line, i) => [f.split("/").pop(), i + 1, line] as const))
       .filter(([, , line]) => /<option[\s>]/.test(line) && !/<option[^>]*dir="auto"/.test(line))
       .map(([f, n]) => `${f}:${n}`);
     expect(missing).toEqual([]);
