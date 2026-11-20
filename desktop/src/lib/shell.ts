@@ -21,7 +21,7 @@ export function sidebarFolded(chosen: boolean, windowWidth: number, openedAnyway
 /** Under this page width (window minus sidebar) the Library's list and recording stack and the page scrolls. */
 export const NARROW_CONTENT = 798;
 /** Under this page width the Library's and Projects' nested column is left out (the sidebar lists the same). */
-export const COLUMN_CONTENT = 1040;
+export const COLUMN_CONTENT = 1120;
 
 const WIDTH_KEY = "echoledger-sidebar-width";
 const COLLAPSED_KEY = "echoledger-sidebar";

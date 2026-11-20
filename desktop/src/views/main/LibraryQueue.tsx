@@ -347,7 +347,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                             onBlur={() => void saveRename()}
                           />
                         ) : (
-                          <div className="queue-title">{title}</div>
+                          <div className="queue-title" dir="auto">{title}</div>
                         )}
                         <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName)}</div>
                       </div>
@@ -441,7 +441,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                 <div className="row">
                   <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
                   <div className="item-main">
-                    <div className="queue-title">{title}</div>
+                    <div className="queue-title" dir="auto">{title}</div>
                     <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
                   </div>
                 </div>
@@ -470,7 +470,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                 <div className="row">
                   <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
                   <div className="item-main">
-                    <div className="queue-title">{title}</div>
+                    <div className="queue-title" dir="auto">{title}</div>
                     <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
                   </div>
                   <button type="button" className="btn ghost compact" disabled={bulkBusy || busy === item.id} onClick={() => void discardUpload(item)}>Discard</button>
@@ -490,7 +490,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
           <div className="row">
             <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
             <div className="item-main">
-              <div className="queue-title">{uploadTitle(item)}</div>
+              <div className="queue-title" dir="auto">{uploadTitle(item)}</div>
               <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
             </div>
             <span className="queue-status"><span className="spinner" aria-hidden="true" />Checking upload…</span>

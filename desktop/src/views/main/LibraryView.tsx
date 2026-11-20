@@ -20,7 +20,7 @@ import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needs
 import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { GroupHeader, ViewMenu } from "./LibraryGrouping";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { AlertIcon, AppTileIcon, appKind, ChatIcon, CloseIcon, ColumnsIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, ListIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TableIcon, TrashIcon } from "../../components/Icons";
+import { AlertIcon, AppTileIcon, LucideChevronLeftIcon, appKind, ChatIcon, CloseIcon, ColumnsIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, ListIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TableIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
@@ -899,6 +899,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  /** Back (a narrow window, where the recording takes the list's place): the list again, focus on the row it came from. */
+  const backToList = () => {
+    const id = selected;
+    setSelected(null);
+    if (id) window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`)?.focus());
+  };
+
   const openHit = (id: string, ms: number) => {
     pendingSeek.current = ms;
     setHitSelected(id);
@@ -1176,7 +1183,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         </>} />
       <div className="page-split">
       {aside}
-      <div className="page-main library-main">
+      <div className={`page-main library-main ${current && !tableView ? "has-open" : ""}`}>
       {!shared && (
       <div className="toolbar library-toolbar" role="toolbar" aria-label="Library tools">
         <label className="searchbox compact library-search">
@@ -1215,7 +1222,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         <button type="button" className="chip" aria-pressed={selecting} onClick={() => (selecting ? endSelecting() : setSelecting(true))}>{selecting ? "Cancel selection" : "Select"}</button>
       </div>
       )}
-      <div className={`library ${tableView ? "as-table" : ""}`}>
+      <div className={`library ${tableView ? "as-table" : ""} ${current && !tableView ? "has-open" : ""}`}>
         <div className="list" data-testid="library-list">
           {binOpen && <BinPanel notify={notify} onClose={() => setBinOpen(false)} />}
           {shared && (
@@ -1241,7 +1248,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               <div className="group-label">In transcripts</div>
               {shownHits.map((r) => (
                 <div key={r.session.id} className="hit-card">
-                  <div className="item-title">{recordingName(r.session.title)}</div>
+                  <div className="item-title" dir="auto">{recordingName(r.session.title)}</div>
                   <div className="small muted">{formatWhen(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</div>
                   {r.hits.map((h) => (
                     <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="hit" onClick={() => openHit(r.session.id, h.start_ms)}
@@ -1347,7 +1354,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         {avatar}
                         <div className="item-main">
                           <div className="item-line">
-                            <span className="item-title" data-motion="title">{recordingName(item.title)}</span>
+                            <span className="item-title" dir="auto" data-motion="title">{recordingName(item.title)}</span>
                             {recovered.has(item.id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}
                             {item.pinned && <span className="pin-star" aria-label="Pinned"><PinIcon size={14} /></span>}
                             <span className="item-time">{rowTime(item.started_at)}</span>
@@ -1393,6 +1400,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
           {current && (
             <>
               <div className="detail-body">
+                {/* A narrow window shows the recording in place of the list (styles.css .app.narrow .library.has-open); Back returns to it. */}
+                {!tableView && (
+                  <button type="button" className="btn ghost compact detail-back" onClick={backToList}>
+                    <span className="detail-back-icon" aria-hidden="true"><LucideChevronLeftIcon size={16} /></span>Back
+                  </button>
+                )}
                 {findOpen && transcript && (
                   <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, currentMatch)} onStep={stepFind}
                     onClose={() => { setFindOpen(false); setFindQuery(""); }} />
@@ -1414,11 +1427,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {!readOnly && <button className="btn danger ghost icon-only" aria-label="Delete" title="Delete this recording" onClick={() => remove(current.id)}><TrashIcon size={18} /></button>}
                   </div>
                   {readOnly ? (
-                    <h2 className="detail-title" data-motion="title">{recordingName(current.title)}</h2>
+                    <h2 className="detail-title" dir="auto" data-motion="title">{recordingName(current.title)}</h2>
                   ) : renaming?.id === current.id && renaming.where === "detail" ? (
                     <TitleEditor className="detail-title-input" initial={current.title ?? ""} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
                   ) : (
-                    <h2 className="detail-title" data-motion="title">
+                    <h2 className="detail-title" dir="auto" data-motion="title">
                       <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{recordingName(current.title)}</button>
                       {current.title_auto && (
                         <span className="auto-title small muted" data-testid="auto-title" title="EchoLedger named it from what was said. Click the title to give it your own; yours is never replaced.">
