@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { LibraryItem } from "../../lib/ipc";
 import { groupPick } from "../../lib/libraryGroups";
+import { useStickyHeight } from "../../lib/stickyHeight";
 import { CheckIcon, ChevronDownIcon } from "../../components/ControlIcons";
 
 /** A toolbar menu of choices, one of them ticked ("Group by: Date ▾"). */
@@ -119,8 +120,12 @@ export function GroupHeader({ label, items, picked, collapsed, onToggle, onPick 
     if (boxRef.current) boxRef.current.indeterminate = state === "some";
   }, [state]);
   const count = `${items.length} recording${items.length === 1 ? "" : "s"}`;
+  // Its drawn height is the list's top scroll padding (styles.css --group-head-h): a row the keyboard or a link brings
+  // into view stops under the header, never behind it.
+  const head = useRef<HTMLDivElement>(null);
+  useStickyHeight(head, "--group-head-h");
   return (
-    <div className="group-head" data-testid="group-head">
+    <div ref={head} className="group-head" data-testid="group-head">
       <label className="group-pick" title={state === "all" ? `Clear ${label}` : `Select all in ${label}`} onClick={(e) => e.stopPropagation()}>
         <input ref={boxRef} type="checkbox" className="group-box" checked={state === "all"} aria-checked={state === "some" ? "mixed" : state === "all"}
           aria-label={`Select all in ${label}`} onChange={onPick} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} />

@@ -55,44 +55,62 @@ async function renderLibrary() {
   return within(screen.getByTestId("library-list"));
 }
 
+/** The Library inside the window's frame: `.app.narrow` as MainApp sets it on a page under 798 px. */
+async function renderNarrow(narrow = true) {
+  render(<div className={`app ${narrow ? "narrow" : ""}`}><main className="content page-library"><LibraryView notify={vi.fn()} /></main></div>);
+  await flushAsync();
+  return within(screen.getByTestId("library-list"));
+}
+const shownNow = (el: Element | null) => !!el && getComputedStyle(el).display !== "none";
+const open = async (list: ReturnType<typeof within>, title: string) => {
+  fireEvent.click(list.getByText(title).closest("button")!);
+  await flushAsync();
+};
+
 describe("a recording on a narrow page (the half-screen window)", () => {
-  it("marks the open recording so it takes the list's place, and Back brings the list back with focus on its row", async () => {
-    const list = await renderLibrary();
-    const library = document.querySelector(".library")!;
-    expect(library).not.toHaveClass("has-open");
-    fireEvent.click(list.getByText("Zoom with Acme").closest("button")!);
-    await flushAsync();
-    expect(library).toHaveClass("has-open");
-    expect(document.querySelector(".library-main")).toHaveClass("has-open");
-    // Shown by .app.narrow only (the stylesheet is loaded here, so jsdom hides it and can't name it): found by its class.
-    const back = document.querySelector<HTMLButtonElement>(".detail .detail-back")!;
-    expect(back.tagName).toBe("BUTTON");
-    expect(back).toHaveTextContent(/^Back$/);
-    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((f) => { f(0); return 0; });
+  it("takes the list's place, with Back focused; Back brings the list back with focus on its row", async () => {
+    const list = await renderNarrow();
+    expect(shownNow(screen.getByTestId("library-list"))).toBe(true);
+    // Nothing open: the list is the page, no empty "Select a recording" box under it.
+    expect(shownNow(document.querySelector(".detail"))).toBe(false);
+    await open(list, "Zoom with Acme");
+    expect(shownNow(screen.getByTestId("library-list"))).toBe(false);
+    expect(shownNow(document.querySelector(".library-toolbar"))).toBe(false);
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(back).toHaveFocus();
     fireEvent.click(back);
     await flushAsync();
-    expect(library).not.toHaveClass("has-open");
-    expect(document.activeElement).toBe(document.querySelector('[data-row="a"]'));
-    raf.mockRestore();
+    expect(shownNow(screen.getByTestId("library-list"))).toBe(true);
+    expect(document.querySelector('[data-row="a"]')).toHaveFocus();
   });
 
-  it("hides the list and the toolbar only on a narrow page, and Back only there", () => {
-    expect(prop(".app.narrow .library.has-open > .list", "display")).toBe("none");
-    expect(prop(".app.narrow .library-main.has-open > .library-toolbar", "display")).toBe("none");
-    expect(prop(".detail-back", "display")).toBe("none");
-    expect(prop(".app.narrow .library.has-open .detail-back", "display")).toBe("inline-flex");
+  it("Esc goes back to the list the same way, and J / K do nothing while the list is out of sight", async () => {
+    const list = await renderNarrow();
+    await open(list, "Zoom with Acme");
+    fireEvent.keyDown(document.body, { key: "j" });
+    fireEvent.keyDown(document.body, { key: "k" });
+    await flushAsync();
+    expect(document.querySelector(".item.cursor")).toBeNull();
+    expect(screen.getByRole("button", { name: "Back" })).toHaveFocus();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await flushAsync();
+    expect(shownNow(screen.getByTestId("library-list"))).toBe(true);
+    expect(document.querySelector('[data-row="a"]')).toHaveFocus();
+    // With the list back, J moves again.
+    fireEvent.keyDown(document.body, { key: "j" });
+    expect(document.querySelector(".item.cursor")).not.toBeNull();
   });
 
-  it("with nothing open shows the list as the page: no empty recording box, the page scrolls, headers stick at its edge", () => {
-    expect(prop(".app.narrow .library:not(.has-open):not(.as-table) > .detail", "display")).toBe("none");
-    expect(prop(".app.narrow .library:not(.as-table) > .list", "max-height")).toBe("none");
-    expect(prop(".app.narrow .library:not(.as-table) > .list", "overflow")).toBe("visible");
-    expect(prop(".app.narrow .library:not(.as-table) .group-head", "top")).toBe("calc(-1 * var(--space-5))");
-    expect(prop(".app.narrow .content.page-library", "scroll-padding-block-start")).toContain("var(--group-head-h)");
+  it("on a wide page keeps the list beside the recording, with no Back and focus left where it was", async () => {
+    const list = await renderNarrow(false);
+    await open(list, "Zoom with Acme");
+    expect(shownNow(screen.getByTestId("library-list"))).toBe(true);
+    expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
   });
 
-  it("fits the top bar in a half-screen window", () => {
+  it("fits the top bar in a half-screen window, and the page scrolls under sticky headers at its edge", () => {
     expect(prop(".app.narrow .topbar", "gap")).toBe("var(--space-1)");
+    expect(prop(".app.narrow .library:not(.as-table) .group-head", "top")).toBe("calc(-1 * var(--space-5))");
   });
 
   it("leaves the nested column out until the list and a readable recording fit beside it (1280 px with the sidebar)", () => {
@@ -108,10 +126,14 @@ describe("titles keep their own direction", () => {
     for (const title of ["Zoom with Acme", "ادائیگی کا منصوبہ اور قرض کی واپسی", "Payment plan میں loan کی واپسی"]) {
       expect(list.getByText(title)).toHaveAttribute("dir", "auto");
     }
-    expect(prop('.item-title[dir="auto"]', "text-align")).toBe("left");
-    expect(prop('[dir="rtl"] .activity-title > [dir="auto"]', "text-align")).toBe("right");
-    expect(prop('.item-title[dir="auto"]', "unicode-bidi")).toBe("plaintext");
-    expect(prop(".item-title", "text-overflow")).toBe("ellipsis");
+    // Lined up with the row's start (the window's direction), cut at the title's own end (plaintext).
+    const urdu = list.getByText("ادائیگی کا منصوبہ اور قرض کی واپسی");
+    expect(getComputedStyle(urdu).textAlign).toBe("left");
+    expect(getComputedStyle(urdu).unicodeBidi).toBe("plaintext");
+    expect(getComputedStyle(urdu).textOverflow).toBe("ellipsis");
+    document.documentElement.dir = "rtl";
+    expect(getComputedStyle(urdu).textAlign).toBe("right");
+    document.documentElement.dir = "";
   });
 });
 
@@ -126,14 +148,22 @@ describe("selects with their word on them (Project, Language)", () => {
 });
 
 describe("sticky bars never hide what they stick over", () => {
-  it("keeps a row brought into view under the group header, not behind it", () => {
-    expect(prop(".list", "scroll-padding-block-start")).toBe("var(--group-head-h)");
-    expect(prop(".group-head", "background")).toBe("var(--surface)");
+  it("the group header gives its drawn height as the list's top scroll padding, while one is on screen", async () => {
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ height: 57.2 } as DOMRect);
+    const view = render(<LibraryView notify={vi.fn()} />);
+    await flushAsync();
+    expect(document.documentElement.style.getPropertyValue("--group-head-h")).toBe("58px");
+    expect(getComputedStyle(screen.getByTestId("library-list")).getPropertyValue("scroll-padding-block-start")).toBe("var(--group-head-h, 0px)");
+    view.unmount();
+    expect(document.documentElement.style.getPropertyValue("--group-head-h")).toBe("");
+    rect.mockRestore();
   });
 
-  it("keeps the last lines and the line Follow plays clear of the player (its height is the scroll padding)", () => {
+  it("the player gives its height as the bottom scroll padding of the recording and of a narrow page, and is solid", () => {
     expect(prop(".detail", "scroll-padding-block-end")).toContain("var(--player-dock-h");
     expect(prop(".app.narrow .content.page-library", "scroll-padding-block-end")).toContain("var(--player-dock-h");
+    expect(prop(".player-dock", "background")).toBe("var(--surface)");
+    expect(prop(".player-dock", "backdrop-filter")).toBe("");
     const height = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ height: 96.4 } as DOMRect);
     const view = render(<PlayerDock playing={false} nowMs={0} durationMs={1000} onToggle={() => undefined} onSkip={() => undefined}>{null}</PlayerDock>);
     expect(document.documentElement.style.getPropertyValue("--player-dock-h")).toBe("97px");

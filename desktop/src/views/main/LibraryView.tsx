@@ -862,6 +862,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
     const key = listKey(e);
     if (!key) return;
+    // A narrow window shows the recording in the list's place: J, K, Enter and X have no list to act on there.
+    if (key !== "close" && listHidden()) return;
     if (key === "next" || key === "previous") {
       const at = rows.findIndex((i) => i.id === (cursor ?? selected));
       const next = rows[stepIndex(at, rows.length, key === "next" ? 1 : -1)];
@@ -886,7 +888,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     } else if (key === "close") {
       if (selected) {
         e.preventDefault();
-        setSelected(null);
+        backToList();
       } else if (selecting) {
         e.preventDefault();
         endSelecting();
@@ -899,12 +901,31 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  /** Back (a narrow window, where the recording takes the list's place): the list again, focus on the row it came from. */
-  const backToList = () => {
-    const id = selected;
-    setSelected(null);
-    if (id) window.requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`)?.focus());
+  /** Whether the list is out of sight: a narrow window with a recording open (styles.css .app.narrow .library.has-open). */
+  const listHidden = () => {
+    const list = document.querySelector<HTMLElement>('[data-testid="library-list"]');
+    return !!list && getComputedStyle(list).display === "none";
   };
+  // There the recording takes the list's place: focus moves to its Back, so the keyboard and a screen reader start in
+  // the recording, and Back (or Esc) returns to the row.
+  useEffect(() => {
+    if (!selected || !listHidden()) return;
+    document.querySelector<HTMLElement>(".detail .detail-back")?.focus();
+  }, [selected]);
+
+  /** Back (a narrow window, where the recording takes the list's place): the list again, focus on the row it came from. */
+  const returnTo = useRef<string | null>(null);
+  const backToList = () => {
+    returnTo.current = selected;
+    setSelected(null);
+  };
+  // Once the list is drawn again (focus can't go to a row out of sight).
+  useEffect(() => {
+    const id = returnTo.current;
+    if (selected || !id) return;
+    returnTo.current = null;
+    document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`)?.focus();
+  }, [selected]);
 
   const openHit = (id: string, ms: number) => {
     pendingSeek.current = ms;
