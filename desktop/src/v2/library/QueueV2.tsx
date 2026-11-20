@@ -2,7 +2,7 @@
 // recordings waiting for Keep / Discard behind one line "2 calls waiting · Review", files being imported with Cancel,
 // uploads that need the person with Retry / Discard, recordings waiting for another account, and uploads the server is
 // still checking. Built from the v2 card, list rows, buttons and menus only.
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { PendingItem, UploadItem } from "../../lib/ipc";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, menuLabel } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
@@ -20,13 +20,23 @@ const meta = (sourceApp: string, startedAt: string, durationMs: number, ...extra
 
 const avatar = (item: { sourceApp: string }) => <SourceAvatar size="sm" item={{ source_app: item.sourceApp, source_app_label: sourceAppLabel(item.sourceApp), source_device: undefined }} />;
 
-export function QueueV2({ say }: { say: (text: string) => void }) {
+export function QueueV2({ say, reviewRequest }: { say: (text: string) => void; reviewRequest?: { seq: number } | null }) {
   const notify: Notify = (text) => say(text);
   const q = useLibraryQueue(notify);
   const { pending, failed, verifying, importing, held, clients, busy, bulkBusy, learn } = q;
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ item: PendingItem; text: string } | null>(null);
   const field = useRef<HTMLInputElement>(null);
+  // Activity's Review: the list opens, the first waiting recording in view.
+  useEffect(() => {
+    if (!reviewRequest) return;
+    setOpen(true);
+    q.loadClients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewRequest?.seq]);
+  useEffect(() => {
+    if (open && reviewRequest) document.getElementById("queue-pending-list")?.scrollIntoView?.({ block: "nearest" });
+  }, [open, reviewRequest]);
   if (pending.length === 0 && failed.length === 0 && verifying.length === 0 && importing.length === 0 && held.length === 0) return null;
   const shown = open && pending.length > 0;
 
@@ -69,7 +79,7 @@ export function QueueV2({ say }: { say: (text: string) => void }) {
       {pending.length > 0 && (
         <Card className="el-library-setup" label="Waiting recordings">
           <div className="el-group__head" data-testid="waiting-line" title={waitingSummary(pending)}>
-            <h2 className="el-body-strong">{waitingLine(pending)}</h2>
+            <h2 className="el-title-s">{waitingLine(pending)}</h2>
             <Button size="sm" variant="quiet" aria-expanded={shown} aria-controls={shown ? "queue-pending-list" : undefined} onClick={review}>
               {shown ? "Hide" : "Review"}
             </Button>
@@ -171,7 +181,7 @@ function Section({ title, count, label, note, end, testId, children }: {
   return (
     <Card className="el-library-setup" label={label ?? title}>
       <div className="el-group__head" data-testid={testId}>
-        <h2 className="el-body-strong">{title} · {count}</h2>
+        <h2 className="el-title-s">{title} · {count}</h2>
         {end}
       </div>
       {note && <p className="el-caption el-secondary">{note}</p>}

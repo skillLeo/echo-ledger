@@ -56,6 +56,8 @@ export type LibraryV2Props = {
   onRecord?: () => void;
   /** Open this recording (a notice, the palette, a link); `seq` makes the same one open again. */
   openRequest?: { id: string; seq: number; ms?: number } | null;
+  /** Open the waiting recordings at the top of the list (Activity's Review); `seq` makes it open again. */
+  reviewRequest?: { seq: number } | null;
   /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
   viewRequest?: { view: SavedView; seq: number } | null;
   /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
@@ -64,7 +66,7 @@ export type LibraryV2Props = {
   onOpenProject?: (id: string) => void;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, onOpenProject }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -624,7 +626,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
           <LibraryTop {...top} items={items}
             onAction={(a) => (a === "missed" ? top.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"))} />
         )}
-        {view !== "trash" && !selecting && <QueueV2 say={say} />}
+        {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} />}
         <div className="el-page__tools">
           {view !== "trash" && (
             <div className="el-search-row">

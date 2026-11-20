@@ -411,17 +411,17 @@ DT-LIB-120,desktop,Library,"Shared with me › ""Save to my library""",Shared wi
 DT-LIB-121,desktop,Library,"Shared with me › ""Remove""",Shared with me › Remove,None,missing,none
 DT-LIB-122,desktop,Library,Shared with me empty state and loading,Shared with me,None,missing,none
 DT-LIB-123,desktop,Library,Projects tree in the Library column (drop targets),Library column › Projects,None,missing,none
-DT-LIB-124,desktop,Library,"Waiting queue line ""N calls waiting"" with ""Review"" / ""Hide""",Top of the list,None (Home shows a count),missing,none
-DT-LIB-125,desktop,Library,"Waiting queue ""Keep all"" / ""Discard all""",Queue › Review,None,missing,none
-DT-LIB-126,desktop,Library,"Waiting item ""Keep"" / ""Discard""",Queue › item,None,missing,none
-DT-LIB-127,desktop,Library,"Waiting item ""Rename""",Queue › item › Rename,None,missing,none
-DT-LIB-128,desktop,Library,"Waiting item ""Choose project""",Queue › item › Choose project,None,missing,none
-DT-LIB-129,desktop,Library,"Waiting item ""Language"" (main and ""More languages"")",Queue › item › Language,None,missing,none
-DT-LIB-130,desktop,Library,"Waiting item ""Remember the language"" prompt",Queue › item after picking a language,None,missing,none
-DT-LIB-131,desktop,Library,"""Importing"" section with progress and ""Cancel""",Top of list while importing,None,missing,none
-DT-LIB-132,desktop,Library,"""Uploads that need you"" with ""Retry"" / ""Discard""",Top of list when uploads failed,None (Home shows a count),missing,none
-DT-LIB-133,desktop,Library,"""Waiting for another account"" (held uploads) with ""Discard"" / ""Discard all N""",Top of list,None,missing,none
-DT-LIB-134,desktop,Library,"""Checking upload…"" verifying row",Top of list,None,missing,none
+DT-LIB-124,desktop,Library,"Waiting queue line ""N calls waiting"" with ""Review"" / ""Hide""",Top of the list,"Library top: ""N calls waiting"" with Review / Hide (QueueV2)",done,"src/v2/library/queue.test.tsx › ""says how many wait; Review opens the list, Hide closes it"""
+DT-LIB-125,desktop,Library,"Waiting queue ""Keep all"" / ""Discard all""",Queue › Review,Review › Keep all / Discard all (one question),done,"src/v2/library/queue.test.tsx › ""Keep all keeps every one; Discard all asks once and discards nothing when cancelled"""
+DT-LIB-126,desktop,Library,"Waiting item ""Keep"" / ""Discard""",Queue › item,Review › each row Keep / Discard (asks),done,"src/v2/library/queue.test.tsx › ""Keep keeps one with pending_keep; Discard asks first"""
+DT-LIB-127,desktop,Library,"Waiting item ""Rename""",Queue › item › Rename,Review › row ⋮ › Rename…,done,"src/v2/library/queue.test.tsx › ""Rename… saves the new title with pending_rename"""
+DT-LIB-128,desktop,Library,"Waiting item ""Choose project""",Queue › item › Choose project,Review › row ⋮ › Choose project ▸,done,"src/v2/library/queue.test.tsx › ""Choose project ▸ offers No project and every project, and assigns the one picked"""
+DT-LIB-129,desktop,Library,"Waiting item ""Language"" (main and ""More languages"")",Queue › item › Language,"Review › row ⋮ › Language ▸ (main, then More languages)",done,"src/v2/library/queue.test.tsx › ""Language ▸ (main languages, then More languages) sets the language and asks to remember it for the project"""
+DT-LIB-130,desktop,Library,"Waiting item ""Remember the language"" prompt",Queue › item after picking a language,"""Remember the language"" Yes / No after picking a language",done,"src/v2/library/queue.test.tsx › ""Language ▸ (main languages, then More languages) sets the language and asks to remember it for the project"""
+DT-LIB-131,desktop,Library,"""Importing"" section with progress and ""Cancel""",Top of list while importing,"Library top: Importing · N, progress bar, Cancel",done,"src/v2/library/queue.test.tsx › ""Importing: each file with its progress and Cancel (no question: the file is still on the computer)"""
+DT-LIB-132,desktop,Library,"""Uploads that need you"" with ""Retry"" / ""Discard""",Top of list when uploads failed,"Library top: Uploads that need you · N with the error, Retry / Discard",done,"src/v2/library/queue.test.tsx › ""Uploads that need you: the error, Retry, and Discard after asking"""
+DT-LIB-133,desktop,Library,"""Waiting for another account"" (held uploads) with ""Discard"" / ""Discard all N""",Top of list,"Library top: Waiting for another account · N, Discard / Discard all N",done,"src/v2/library/queue.test.tsx › ""Waiting for another account: which account, Discard, and Discard all N with one question"""
+DT-LIB-134,desktop,Library,"""Checking upload…"" verifying row",Top of list,"Library top: ""Checking upload…"" row",done,"src/v2/library/queue.test.tsx › ""Checking upload…: a recording the server is still checking, without actions"""
 DT-LIB-135,desktop,Library,Loading skeleton rows,First open,"Loading ""Loading recordings""",done,"src/v2/library/library.test.tsx › ""loading, then an error with its one fix"""
 DT-LIB-136,desktop,Library,"Sync error banner (keeps the saved list) with ""Retry""",Sync fails,Only when the local read fails; refresh failures are silent,partial,"src/v2/library/library.test.tsx › ""loading, then an error with its one fix"""
 DT-LIB-137,desktop,Library,"Empty library with ""Import files""",Library with no recordings,"""No recordings yet"" with ""Import""",done,"src/v2/library/library.test.tsx › ""an empty library says what goes there"""
@@ -666,17 +666,17 @@ DT-HOME-020,desktop,Record,Uploads waiting to retry (errors),Home › Record,"""
 DT-HOME-021,desktop,Record,Live Translate card,Home › Live Translate,Live tab › Live Translate,done,"src/v2/live/translate.test.tsx › ""maps every control today's panel has, and nothing it doesn't"""
 DT-HOME-022,desktop,Record,"Live Assist (new session, upcoming sessions)",Home › Record (live_assist on),Live tab › Live Assist (same section),done,"src/v2/live/assistClassic.test.tsx › ""classic's Home (its Record page) lists the sessions and New session opens the same prep screen as the new design"""
 DT-HOME-023,desktop,Record,"Viewer notice ""Recording is off for viewers""",Home for a viewer,Record hidden with no explanation,partial,none
-DT-ACT-001,desktop,Activity,"Activity page (""N things need you…"")","Sidebar, bell, palette",Classic page in the v2 frame; no nav entry,partial,none
-DT-ACT-002,desktop,Activity,Keep or discard? (Review → first waiting),Activity,Home row; no focus on the first,partial,"src/v2/home/home.test.tsx › ""needs action shows only the kinds with something in them, in words"""
-DT-ACT-003,desktop,Activity,Uploads that need you › Open,Activity,Home row,partial,"src/v2/home/home.test.tsx › ""needs action shows only the kinds with something in them, in words"""
-DT-ACT-004,desktop,Activity,Needs action notifications,Activity,None,missing,none
-DT-ACT-005,desktop,Activity,"In progress (uploads %, transcribing)",Activity,None,missing,none
-DT-ACT-006,desktop,Activity,"Skipped short calls: Show / Hide, Restore",Activity,Home row opens the classic Activity,partial,"src/v2/home/home.test.tsx › ""shows the status strip, the checklist, what needs action, the recent recordings and the month"""
-DT-ACT-007,desktop,Activity,"Notification row (marks read, opens)",Activity,None,missing,none
-DT-ACT-008,desktop,Activity,Mark all read,Activity,None,missing,none
-DT-ACT-009,desktop,Activity,"Today / Earlier, unread dot, Recovered chip",Activity,None,missing,none
-DT-ACT-010,desktop,Activity,"Load error, skeleton, ""All caught up""",Activity,None,missing,none
-DT-ACT-011,desktop,Activity,Badge count on sidebar and bell,Sidebar / top bar,None,missing,none
+DT-ACT-001,desktop,Activity,"Activity page (""N things need you…"")","Sidebar, bell, palette","Sidebar › Activity: the v2 Activity page (ActivityV2) with its title and ""N things need you…"" line",done,"src/v2/activity/activity.test.tsx › ""has its title and the one line that says how many things need you, and hands the list to the badge""; src/v2/shell/shell.test.tsx › ""in the app, Activity opens the new design's Activity page, and its Review opens the Library with the waiting calls"""
+DT-ACT-002,desktop,Activity,Keep or discard? (Review → first waiting),Activity,Activity › Needs action › Keep or discard? › Review (Library opens with the waiting calls open),done,"src/v2/activity/activity.test.tsx › ""Needs action: Keep or discard? › Review opens the first waiting recording""; src/v2/shell/shell.test.tsx › ""in the app, Activity opens the new design's Activity page, and its Review opens the Library with the waiting calls"""
+DT-ACT-003,desktop,Activity,Uploads that need you › Open,Activity,Activity › Needs action › Uploads that need you › Open,done,"src/v2/activity/activity.test.tsx › ""Needs action: Uploads that need you › Open, and the unread problems the badge counts"""
+DT-ACT-004,desktop,Activity,Needs action notifications,Activity,Activity › Needs action: unread problems and upgrade answers,done,"src/v2/activity/activity.test.tsx › ""Needs action: Uploads that need you › Open, and the unread problems the badge counts"""
+DT-ACT-005,desktop,Activity,"In progress (uploads %, transcribing)",Activity,"Activity › In progress: uploads with %, transcribing, Open",done,"src/v2/activity/activity.test.tsx › ""In progress: uploads with their percent and recordings being transcribed, with Open"""
+DT-ACT-006,desktop,Activity,"Skipped short calls: Show / Hide, Restore",Activity,"Activity › ""Skipped N short calls"" · Show / Hide · Restore",done,"src/v2/activity/activity.test.tsx › ""Skipped short calls: one line, Show / Hide, Restore says what happened"""
+DT-ACT-007,desktop,Activity,"Notification row (marks read, opens)",Activity,"Activity › a notification row (marks read, opens its recording)",done,"src/v2/activity/activity.test.tsx › ""a notification marks itself read and opens its recording; Mark all read reads them all"""
+DT-ACT-008,desktop,Activity,Mark all read,Activity,Activity › Mark all read,done,"src/v2/activity/activity.test.tsx › ""a notification marks itself read and opens its recording; Mark all read reads them all"""
+DT-ACT-009,desktop,Activity,"Today / Earlier, unread dot, Recovered chip",Activity,"Activity › Today / Earlier; ""Unread"" badge; ""Recovered"" in the row",done,"src/v2/activity/activity.test.tsx › ""groups the rest by Today and Earlier, the time today and the day before; a recovered recording says Recovered"""
+DT-ACT-010,desktop,Activity,"Load error, skeleton, ""All caught up""",Activity,"Activity › loading rows, load error with Retry, ""All caught up""",done,"src/v2/activity/activity.test.tsx › ""loading, a load error with Retry, and All caught up"""
+DT-ACT-011,desktop,Activity,Badge count on sidebar and bell,Sidebar / top bar,"Sidebar › Activity with its count (plan 2: the v2 shell has no top bar, so no bell)",done,"src/v2/activity/activity.test.tsx › ""the sidebar's Activity shows how many things need you"""
 DT-SHR-001,desktop,Shared,Shared page (With me / My links / Request links),Sidebar › Shared,None,missing,none
 DT-SHR-002,desktop,Shared,"With me › Open; sender, date, note, ""Saved"" badge",Shared › With me,None,missing,none
 DT-SHR-003,desktop,Shared,"Shared with me: Open, Save to my library, Remove",Library › Shared with me,None,missing,none

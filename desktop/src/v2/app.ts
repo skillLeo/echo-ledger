@@ -12,3 +12,4 @@ export { LiveAssistClassic } from "./live/LiveAssistSection";
 export { AskV2 } from "./ask/AskV2";
 export { WorkspaceV2 } from "./workspace/WorkspaceV2";
 export { AfterCallNoticeV2 } from "./shell/AfterCallNotice";
+export { ActivityV2 } from "./activity/ActivityV2";

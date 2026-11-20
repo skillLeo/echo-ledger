@@ -4,7 +4,7 @@ import { Suspense, lazy, useState } from "react";
 import MainApp from "../../views/main/MainApp";
 import type { MainTab } from "../../lib/mainView";
 import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeEntitlements, makeItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeEntitlements, makeItem, makePendingItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { Shell, moduleOf } from "./Shell";
 import { shellStatus } from "./status";
@@ -325,6 +325,29 @@ describe("the app with the flags", () => {
     expect(document.querySelector("[data-shell=v2]")).not.toBeNull();
     expect(document.querySelector(".sidebar")).toBeNull();
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("in the app, Activity opens the new design's Activity page, and its Review opens the Library with the waiting calls", async () => {
+    backend({ "ui_v2.shell": true, "ui_v2.library": true });
+    respond("activity_list", { data: [], unread_count: 0 });
+    respond("pending_list", [makePendingItem("p1", { title: "Board call" })]);
+    respond("upload_list", []);
+    respond("skipped_list", []);
+    respond("bin_list", { data: [] });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.click(within(nav).getByRole("button", { name: /^Activity/ }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(document.querySelector("[data-v2=activity]")).not.toBeNull();
+    expect(document.querySelector(".activity-page")).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("list", { name: "Waiting recordings" })).toHaveTextContent("Board call");
   });
 
   it("in the app, two quick presses on the sidebar's Record send one record_now", async () => {
