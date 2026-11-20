@@ -9,7 +9,7 @@
     x-on:click="if (window.matchMedia('(min-width: 1024px)').matches && ! ($event.ctrlKey || $event.metaKey || $event.shiftKey || $event.button !== 0) && typeof $wire.selectRecording === 'function') { $event.preventDefault(); $wire.selectRecording('{{ $row['id'] }}') }">
     <span class="v2-row-tile" title="{{ $row['source'] }}"><x-el.v2.icon :name="$row['icon']" /></span>
     <span class="v2-row-main">
-        <span class="v2-row-title"><bdi>{{ $row['title'] }}</bdi></span>
+        <span class="v2-row-title" dir="auto">{{ $row['title'] }}</span>
         <span class="v2-lib-line">
             @if ($row['status'] !== null)
                 <span @class(['v2-status', 'is-'.$row['status']['tone']])>

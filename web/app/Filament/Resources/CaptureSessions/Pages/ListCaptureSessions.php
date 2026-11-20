@@ -595,12 +595,13 @@ class ListCaptureSessions extends ListRecords
         if (ConsoleAccess::readOnly()) {
             return [];
         }
-        // Since v2.0 (ui_v2.library): Upload recording beside the one primary action, a voice note recorded here.
+        // Since v2.0 (ui_v2.library): Upload recording is the one primary action (the web's main action, PLAN_V2_PARITY
+        // section 2), with a voice note recorded here beside it.
         if (ConsoleV2::library()) {
             return [
-                Action::make('upload')->label(__('Upload recording'))->color('gray')->outlined()
+                Action::make('upload')->label(__('Upload recording'))
                     ->alpineClickHandler("\$dispatch('el-upload-pick')"),
-                Action::make('voiceNote')->label(__('New voice note'))
+                Action::make('voiceNote')->label(__('New voice note'))->color('gray')->outlined()
                     ->url(fn (): string => Upload::getUrl(['record' => 1])),
             ];
         }

@@ -101,6 +101,15 @@ it('offers Sidebar style (Light, Dark, Soft grey) in the new frame, starts on So
     expect(navPage($this, $this->owner, $this->pages['library']))->toContain('data-style="soft"');
 });
 
+it('keeps Help and shortcuts in reach, as classic\'s top bar ? does: in the sidebar\'s foot, in the avatar menu, and its dialog on the page', function () {
+    $html = navPage($this, $this->owner, $this->pages['library']);
+    $side = navSidebar($html);
+    $foot = substr($side, (int) strpos($side, 'class="v2-sb-foot"'));
+    expect($foot)->toContain("x-on:click=\"\$dispatch('el-help')\"")->toContain('Help and shortcuts')
+        ->and(collect(array_keys(webParityControls($html, 'usermenu')))->filter(fn (string $k): bool => str_starts_with($k, 'menuitem|') && str_ends_with($k, '› help and shortcuts'))->count())->toBe(1)
+        ->and($html)->toContain('x-on:el-help.window="open = true"');
+});
+
 it('has + in the top bar with Upload recording, New project and Request link', function () {
     $html = navPage($this, $this->owner, $this->pages['search']);
     expect(webParityControls($html, 'topbar'))->toHaveKeys(['button|create', 'menuitem|create › upload recording', 'menuitem|create › new project', 'menuitem|create › request link'])

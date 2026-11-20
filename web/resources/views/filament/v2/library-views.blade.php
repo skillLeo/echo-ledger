@@ -19,7 +19,7 @@
         </x-slot>
         <x-filament::dropdown.list>
             @foreach ($menu as $view)
-                <x-filament::dropdown.list.item wire:click="openPlace('{{ $view['key'] }}')" x-on:click="close()" :badge="$view['count']" badge-color="gray"
+                <x-filament::dropdown.list.item wire:click="openPlace('{{ $view['key'] }}')" x-on:click="close()" :icon="$view['on'] ? 'heroicon-m-check' : null" :badge="$view['count']" badge-color="gray"
                     role="menuitemradio" aria-checked="{{ $view['on'] ? 'true' : 'false' }}" data-option="view-{{ $view['key'] }}">
                     {{ $view['label'] }}
                 </x-filament::dropdown.list.item>

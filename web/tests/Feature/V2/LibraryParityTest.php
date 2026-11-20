@@ -10,6 +10,7 @@ use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Services\InterfaceFlags;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
@@ -172,6 +173,43 @@ it('reads the group titles, the table\'s apps and the Failed uploads row\'s Retr
 it('keeps the records grid to the page\'s width, so a long title cannot push the row\'s time off a phone screen', function () {
     $css = (string) preg_replace('~/\*.*?\*/~s', '', (string) file_get_contents(resource_path('css/v2/console.css')));
     expect(preg_replace('/\s+/', ' ', $css))->toContain('.v2-library .fi-ta-content { grid-template-columns: minmax(0, 1fr); }');
+});
+
+/** One option of a v2 menu, as drawn: the element that carries data-option="<option>" up to its closing tag. */
+function libraryMenuOption(string $html, string $option): string
+{
+    preg_match('~<(\w+)[^>]*data-option="'.preg_quote($option, '~').'"[^>]*>.*?</\1>~s', $html, $m);
+
+    return $m[0] ?? '';
+}
+
+it('ticks the current choice in the Group by, Sort, Source and Views menus, as classic does', function () {
+    // The tick is heroicon m-check (classic's), read by its path.
+    $page = Livewire::test(ListCaptureSessions::class);
+    $html = $page->html();
+    expect(libraryMenuOption($html, 'group-date'))->toContain('aria-checked="true"')->toContain('M16.704 4.153')
+        ->and(libraryMenuOption($html, 'group-app'))->toContain('aria-checked="false"')->not->toContain('M16.704 4.153')
+        ->and(libraryMenuOption($html, 'sort-newest'))->toContain('aria-checked="true"')->toContain('M16.704 4.153')
+        ->and(libraryMenuOption($html, 'sort-oldest'))->not->toContain('M16.704 4.153')
+        ->and(libraryMenuOption($html, 'view-all'))->toContain('M16.704 4.153');
+
+    // The tick follows the choice.
+    $html = $page->call('setLibraryGroup', 'app')->call('setLibrarySort', 'oldest')->html();
+    expect(libraryMenuOption($html, 'group-app'))->toContain('aria-checked="true"')->toContain('M16.704 4.153')
+        ->and(libraryMenuOption($html, 'group-date'))->not->toContain('M16.704 4.153')
+        ->and(libraryMenuOption($html, 'sort-oldest'))->toContain('M16.704 4.153')
+        ->and(libraryMenuOption($html, 'sort-newest'))->not->toContain('M16.704 4.153');
+});
+
+it('makes Upload recording the filled primary action and New voice note the outlined one', function () {
+    Livewire::test(ListCaptureSessions::class)
+        ->assertActionExists('upload', fn (Action $a): bool => $a->getLabel() === 'Upload recording' && ! $a->isOutlined() && in_array($a->getColor(), [null, 'primary'], true))
+        ->assertActionExists('voiceNote', fn (Action $a): bool => $a->getLabel() === 'New voice note' && $a->isOutlined() && $a->getColor() === 'gray');
+});
+
+it('lets a row\'s title take its own direction, so an English title in Urdu ends in its own "…"', function () {
+    $html = Livewire::test(ListCaptureSessions::class)->html();
+    expect($html)->toContain('<span class="v2-row-title" dir="auto">Payment terms for the March shipment</span>');
 });
 
 it('says how many calls wait for a decision, with Review, in one quiet line', function () {
