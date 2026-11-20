@@ -82,7 +82,8 @@ class EditProfile extends BaseEditProfile
 
     public function getTitle(): string
     {
-        return $this->subpage === '' ? 'Settings' : SettingsRegistry::pageTitle($this->subpage);
+        // In the console's language under the new frame (English reads exactly as before).
+        return __($this->subpage === '' ? 'Settings' : SettingsRegistry::pageTitle($this->subpage));
     }
 
     /** The page draws its own title in the content column. */

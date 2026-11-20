@@ -12,16 +12,19 @@
   "key": "a|all recordings"
  },
  "WEB-NAV-003": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|projects"
+  "keys": [
+   "a|projects",
+   "a|qureshi textiles"
+  ]
  },
  "WEB-NAV-004": {
   "type": "control",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|trash"
+  "key": "a|recently deleted"
  },
  "WEB-NAV-005": {
   "type": "control",
@@ -49,23 +52,32 @@
   "key": "a|settings"
  },
  "WEB-NAV-011": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
-  "scope": "main",
-  "key": "button|import"
- },
- "WEB-NAV-012": {
-  "type": "html",
-  "page": "library",
-  "contains": [
-   "wire:name=\"App\\Livewire\\ActivityBell\""
+  "scope": "sidebar",
+  "keys": [
+   "a|upload recording"
   ]
  },
+ "WEB-NAV-012": {
+  "type": "controlmatch",
+  "page": "library",
+  "scope": "sidebar",
+  "pattern": "^a\\|activity , needs you:$"
+ },
  "WEB-NAV-013": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
   "scope": "main",
-  "key": "button|pinned"
+  "keys": [
+   "menuitem|views › all recordings",
+   "menuitem|views › today",
+   "menuitem|views › this week",
+   "menuitem|views › waiting for decision",
+   "menuitem|views › pinned",
+   "menuitem|views › failed uploads",
+   "button|voice notes"
+  ]
  },
  "WEB-NAV-014": {
   "type": "control",
@@ -102,7 +114,11 @@
   "type": "html",
   "page": "library",
   "contains": [
-   "v2-bn"
+   "data-bottom=\"library\"",
+   "data-bottom=\"projects\"",
+   "data-bottom=\"record\"",
+   "data-bottom=\"live\"",
+   "data-bottom=\"ask\""
   ]
  },
  "WEB-NAV-023": {
@@ -206,18 +222,21 @@
   "type": "control",
   "page": "library",
   "scope": "main",
-  "key": "button|import"
+  "key": "button|upload recording"
  },
  "WEB-LIB-002": {
   "type": "controls",
   "page": "library",
   "scope": "main",
   "keys": [
-   "button|all",
-   "button|all",
-   "button|today",
-   "button|failed uploads",
-   "button|pinned"
+   "button|views",
+   "menuitem|views › all recordings",
+   "menuitem|views › today",
+   "menuitem|views › this week",
+   "menuitem|views › waiting for decision",
+   "menuitem|views › bookmarked",
+   "menuitem|views › failed uploads",
+   "menuitem|views › pinned"
   ]
  },
  "WEB-LIB-003": {
@@ -255,10 +274,12 @@
   "pattern": "^input\\|select/deselect group "
  },
  "WEB-LIB-009": {
-  "type": "controlmatch",
+  "type": "controls",
   "page": "library",
   "scope": "main",
-  "pattern": "^input\\|select/deselect group "
+  "keys": [
+   "button|yesterday"
+  ]
  },
  "WEB-LIB-010": {
   "type": "controlmatch",
@@ -934,25 +955,22 @@
    "a|keyboard shortcuts"
   ]
  },
- "WEB-LIB-017": {
-  "type": "control",
-  "page": "library",
-  "scope": "main",
-  "key": "button|yesterday"
- },
- "WEB-LIB-019": {
-  "type": "control",
-  "page": "library",
-  "scope": "main",
-  "key": "button|untranscribed"
- },
  "WEB-LIB-025": {
-  "type": "html",
+  "type": "selected",
   "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|leave the selection",
+   "button|select all",
+   "button|move to project",
+   "button|label",
+   "button|export",
+   "button|delete",
+   "button|more"
+  ],
   "contains": [
-   "data-selection-exit",
-   "data-selection-more",
-   "data-selection-delete"
+   "1 selected|:count selected",
+   "data-selection-more"
   ]
  },
  "WEB-LIB-027": {
@@ -1045,5 +1063,101 @@
   "page": "settings-appearance",
   "scope": "main",
   "key": "button|switch back to classic"
+ },
+ "WEB-LIB-016": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "menuitem|views › this week",
+   "menuitem|views › waiting for decision",
+   "menuitem|views › bookmarked"
+  ]
+ },
+ "WEB-LIB-004": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|list"
+ },
+ "WEB-LIB-005": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|table"
+ },
+ "WEB-LIB-006": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|group by: date",
+   "menuitem|group by: date › date",
+   "menuitem|group by: date › source",
+   "menuitem|group by: date › project",
+   "menuitem|group by: date › language",
+   "menuitem|group by: date › status",
+   "menuitem|group by: date › device",
+   "menuitem|group by: date › none"
+  ]
+ },
+ "WEB-LIB-011": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|pin to the top"
+ },
+ "WEB-NAV-006": {
+  "type": "controls",
+  "page": "library",
+  "scope": "sidebar",
+  "keys": [
+   "a|my links",
+   "a|request links"
+  ]
+ },
+ "WEB-NAV-010": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|upload recording"
+ },
+ "WEB-NAV-016": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "class=\"v2-sb-resize\" role=\"separator\"",
+   "x-on:pointerdown=\"startResize($event)\"",
+   "x-on:keydown=\"resizeKey($event)\""
+  ]
+ },
+ "WEB-NAV-019": {
+  "type": "controls",
+  "page": "library",
+  "scope": "topbar",
+  "keys": [
+   "button|create",
+   "menuitem|create › upload recording",
+   "menuitem|create › new project",
+   "menuitem|create › request link"
+  ]
+ },
+ "WEB-NAV-021": {
+  "type": "html",
+  "page": "search",
+  "contains": [
+   "<nav class=\"v2-crumbs\" aria-label=\"Breadcrumbs\">",
+   "class=\"v2-crumbs-link\">Library</a>"
+  ]
+ },
+ "WEB-SET-003": {
+  "type": "controls",
+  "page": "settings-appearance",
+  "scope": "main",
+  "keys": [
+   "button|light",
+   "button|dark",
+   "button|soft grey"
+  ]
  }
 }

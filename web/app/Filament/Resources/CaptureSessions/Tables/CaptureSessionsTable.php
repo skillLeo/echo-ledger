@@ -76,7 +76,7 @@ final class CaptureSessionsTable
             ->groups(LibraryView::groups())
             ->groupingSettingsHidden()
             ->groupingDirectionSettingHidden()
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(ConsoleV2::library() ? ['labels', 'finalTranscript', 'client'] : 'labels'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(ConsoleV2::library() ? ['labels', 'finalTranscript', 'client', 'device'] : 'labels'))
             // The phone's list: one row per recording (tile, title, time, a second line, a status only when needed).
             // Since v1.6 (P4.4) the Library's List/Table switch shows a table instead, its columns chosen in Columns.
             // Since v2.0 (ui_v2.library) the rows of the apps' Library: filament.v2.library-row.
@@ -100,7 +100,7 @@ final class CaptureSessionsTable
                 TextColumn::make('status')->hidden(),
                 TextColumn::make('finalTranscript.status')->label('Transcript')->hidden(),
             ]))
-            ->columnManagerTriggerAction(fn (Action $action): Action => $action->label('Columns')->icon(Heroicon::OutlinedViewColumns))
+            ->columnManagerTriggerAction(fn (Action $action): Action => $action->label(__('Columns'))->icon(Heroicon::OutlinedViewColumns))
             ->recordClasses(fn (CaptureSession $record, HasTable $livewire): ?string => property_exists($livewire, 'selected') && $livewire->selected === $record->id ? 'el-current' : null)
             ->filters([
                 SelectFilter::make('source_device')->label('Source device')->options(SourceDevice::class)->multiple(),
@@ -209,20 +209,26 @@ final class CaptureSessionsTable
         $zone = fn (): string => app(SettingsRepository::class)->displayTimezone();
 
         return [
-            TextColumn::make('title')->label('Title')->weight('medium')
+            TextColumn::make('title')->label(__('Title'))->weight('medium')
                 ->state(fn (CaptureSession $r): string => $r->displayTitle())
                 ->extraAttributes(fn (CaptureSession $r): array => ['data-recording' => $r->id, 'draggable' => ConsoleAccess::readOnly() ? 'false' : 'true', 'class' => 'el-table-title'])
                 ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
-            TextColumn::make('source_app')->label('App')->toggleable(),
-            TextColumn::make('client.name')->label('Project')->placeholder('Inbox')->toggleable(),
-            TextColumn::make('device.name')->label('Device')->state(fn (CaptureSession $r): string => self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
-            TextColumn::make('duration_ms')->label('Length')->formatStateUsing(fn (?int $state): string => self::duration($state))->toggleable(),
-            TextColumn::make('started_at')->label('Date')->toggleable()
-                ->formatStateUsing(fn (CaptureSession $r): string => $r->started_at->copy()->setTimezone($zone())->format('M j, Y · '.Shell::timeFormat())),
+            // The app's and the device's names in the console's language under the new Library (English as before).
+            TextColumn::make('source_app')->label(__('App'))->toggleable()
+                ->formatStateUsing(fn (?SourceApp $state): string => ConsoleV2::library() ? __((string) $state?->getLabel()) : (string) $state?->getLabel()),
+            TextColumn::make('client.name')->label(__('Project'))->placeholder(__('Inbox'))->toggleable(),
+            TextColumn::make('device.name')->label(__('Device'))->state(fn (CaptureSession $r): string => ConsoleV2::library() ? __(self::deviceLabel($r)) : self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('duration_ms')->label(__('Length'))->formatStateUsing(fn (?int $state): string => self::duration($state))->toggleable(),
+            TextColumn::make('started_at')->label(__('Date'))->toggleable()
+                // Since v2.0 in the console's language (English reads exactly as before).
+                ->formatStateUsing(fn (CaptureSession $r): string => ConsoleV2::library()
+                    ? $r->started_at->copy()->setTimezone($zone())->locale(app()->getLocale())->translatedFormat('j M Y · '.Shell::timeFormat())
+                    : $r->started_at->copy()->setTimezone($zone())->format('M j, Y · '.Shell::timeFormat())),
             // A status only when it needs the person, as in the list: never "Completed".
-            TextColumn::make('status')->label('Status')->badge()->toggleable()
-                ->state(fn (CaptureSession $r): ?SessionStatus => $r->status === SessionStatus::Completed ? null : $r->status),
-            TextColumn::make('labels.label')->label('Labels')->badge()->color('gray')->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('status')->label(__('Status'))->badge()->toggleable()
+                ->state(fn (CaptureSession $r): ?SessionStatus => $r->status === SessionStatus::Completed ? null : $r->status)
+                ->formatStateUsing(fn (?SessionStatus $state): string => ConsoleV2::library() ? __((string) $state?->getLabel()) : (string) $state?->getLabel()),
+            TextColumn::make('labels.label')->label(__('Labels'))->badge()->color('gray')->toggleable(isToggledHiddenByDefault: true),
         ];
     }
 
@@ -236,28 +242,30 @@ final class CaptureSessionsTable
     {
         $failedView = fn (HasTable $livewire): bool => property_exists($livewire, 'activeTab') && (string) $livewire->activeTab === 'failed';
         $retry = fn (CaptureSession $record): ?string => FailedUpload::for($record)['retry'] ?? null;
+        // In the console's language under the new Library (English reads exactly as before).
+        $t = fn (string $words, array $replace = []): string => ConsoleV2::library() ? __($words, $replace) : strtr($words, collect($replace)->mapWithKeys(fn ($v, $k) => [':'.$k => $v])->all());
 
         return [
-            Action::make('retryFailed')->label('Retry')->icon(Heroicon::OutlinedArrowPath)->button()->size(Size::Small)
+            Action::make('retryFailed')->label(fn (): string => $t('Retry'))->icon(Heroicon::OutlinedArrowPath)->button()->size(Size::Small)
                 ->visible(fn (CaptureSession $record, HasTable $livewire): bool => $failedView($livewire) && $retry($record) === FailedUpload::RETRY_TRANSCRIBE)
                 ->rateLimit(10)
-                ->action(function (CaptureSession $record, FinalTranscriptCoordinator $coordinator): void {
+                ->action(function (CaptureSession $record, FinalTranscriptCoordinator $coordinator) use ($t): void {
                     if ($record->primaryRecording()->first()?->isReady() !== true) {
-                        Notification::make()->title('The audio is not on the server yet')->warning()->send();
+                        Notification::make()->title($t('The audio is not on the server yet'))->warning()->send();
 
                         return;
                     }
                     $coordinator->start($record, $record->finalTranscript()->first());
-                    Notification::make()->title('Transcription queued')->body('It leaves Failed uploads while it is transcribed.')
+                    Notification::make()->title($t('Transcription queued'))->body($t('It leaves Failed uploads while it is transcribed.'))
                         ->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
                 }),
-            Action::make('retryUpload')->label('Retry')->icon(Heroicon::OutlinedArrowUpTray)->button()->size(Size::Small)
+            Action::make('retryUpload')->label(fn (): string => $t('Retry'))->icon(Heroicon::OutlinedArrowUpTray)->button()->size(Size::Small)
                 ->visible(fn (CaptureSession $record, HasTable $livewire): bool => $failedView($livewire) && $retry($record) === FailedUpload::RETRY_UPLOAD)
-                ->tooltip('Choose the same file again')
+                ->tooltip(fn (): string => $t('Choose the same file again'))
                 ->alpineClickHandler("\$dispatch('el-upload-pick')"),
-            DeleteAction::make('deleteFailed')->label('Delete')->button()->size(Size::Small)->color('gray')
+            DeleteAction::make('deleteFailed')->label(fn (): string => $t('Delete'))->button()->size(Size::Small)->color('gray')
                 ->visible(fn (HasTable $livewire): bool => $failedView($livewire))
-                ->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for '.CaptureSession::binHours().' hours.'),
+                ->modalDescription(fn (): string => $t('Deletes the recording and transcript on every device. You can restore it from Recently deleted for :hours hours.', ['hours' => CaptureSession::binHours()])),
         ];
     }
 
@@ -325,7 +333,7 @@ final class CaptureSessionsTable
     /**
      * The v2.0 selection bar (docs/PLAN_V2_PARITY.md section 3): four main actions as icon buttons (Move to project,
      * Label, Export, Delete), then ⋮ with every other one in groups: Organise, Export, Danger (Delete last, red).
-     * Delete moves to Trash at once and offers Undo, as the apps do (the Trash keeps them for trash.keep_hours).
+     * Delete moves to Recently deleted at once and offers Undo, as the apps do (it keeps them for trash.keep_hours).
      *
      * @return list<BulkAction|BulkActionGroup>
      */
@@ -379,16 +387,16 @@ final class CaptureSessionsTable
         return $out;
     }
 
-    /**
-     * Delete for the v2.0 selection: the recordings go to Trash at once (each one the person may delete), and the
-     * notice offers Undo, which brings them back while the Trash still has them.
-     */
     /** Where the v2.0 selection's last Delete waits for its Undo (one batch, one person). */
     public static function undoKey(string $token): string
     {
         return 'el-library-undo:'.auth()->id().':'.$token;
     }
 
+    /**
+     * Delete for the v2.0 selection: the recordings go to Recently deleted at once (each one the person may delete), and the
+     * notice offers Undo, which brings them back while Recently deleted still has them.
+     */
     public static function trashBulkAction(string $name): BulkAction
     {
         return BulkAction::make($name)->label(__('Delete'))->icon(Heroicon::OutlinedTrash)
@@ -402,7 +410,7 @@ final class CaptureSessionsTable
                     $ids[] = (string) $record->getKey();
                 }
                 $count = count($ids);
-                $notice = Notification::make()->title($count === 1 ? __('1 recording moved to Trash') : __(':count recordings moved to Trash', ['count' => $count]));
+                $notice = Notification::make()->title($count === 1 ? __('1 recording moved to Recently deleted') : __(':count recordings moved to Recently deleted', ['count' => $count]));
                 if ($busy->isNotEmpty()) {
                     $notice->body($busy->count() === 1 ? __('1 recording is still recording or uploading and was left alone.')
                         : __(':count recordings are still recording or uploading and were left alone.', ['count' => $busy->count()]));

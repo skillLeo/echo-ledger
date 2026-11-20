@@ -18,8 +18,8 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * The v2.0 Library's selection mode (docs/PLAN_V2_PARITY.md section 3): × to leave, the count, Select all, four main
- * actions (Move to project, Label, Export, Delete) and ⋮ with Organise, Export and Danger; Delete goes to Trash at once
- * with Undo. Classic keeps its own bar (ClassicGoldenTest).
+ * actions (Move to project, Label, Export, Delete) and ⋮ with Organise, Export and Danger; Delete goes to Recently deleted
+ * at once with Undo. Classic keeps its own bar (ClassicGoldenTest).
  */
 
 beforeEach(function () {
@@ -58,23 +58,24 @@ function selectionNotices(): string
     return (string) json_encode($notices->notifications->toArray(), JSON_UNESCAPED_UNICODE);
 }
 
-it('moves the selected recordings to Trash at once, offers Undo, and brings them back', function () {
+it('moves the selected recordings to Recently deleted at once, offers Undo, and brings them back', function () {
     $ids = $this->recordings->take(2)->pluck('id')->all();
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids)->assertHasNoTableBulkActionErrors();
     $notices = selectionNotices();
     preg_match('/"token":"([A-Za-z0-9]{32})"/', $notices, $m);
     $token = $m[1] ?? '';
-    expect($notices)->toContain('2 recordings moved to Trash');
+    expect($notices)->toContain('2 recordings moved to Recently deleted');
     expect(CaptureSession::query()->whereIn('id', $ids)->count())->toBe(0)
         ->and(CaptureSession::onlyTrashed()->whereIn('id', $ids)->count())->toBe(2);
     expect($token)->not->toBe('');
 
     Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $token)->assertNotified('2 recordings are back');
     expect(CaptureSession::query()->whereIn('id', $ids)->count())->toBe(2);
-    // The token is spent: a second Undo brings nothing back.
+    // The token is spent: a second Undo brings nothing back and says Undo has expired.
     $this->recordings->first()->delete();
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $token)->assertNotified('0 recordings are back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $token)->assertNotified('Undo has expired');
+    expect(CaptureSession::query()->find($this->recordings->first()->id))->toBeNull();
 });
 
 it('brings back only that batch, only the person\'s own, and only what they may restore', function () {
@@ -85,18 +86,22 @@ it('brings back only that batch, only the person\'s own, and only what they may 
     $earlier->delete();
     Cache::put(CaptureSessionsTable::undoKey('batch'), [(string) $mine->id, (string) $other->id], now()->addMinutes(5));
 
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'batch')->assertNotified('1 recording is back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'batch');
+    expect(selectionNotices())->toContain('1 recording is back')->toContain('"status":"success"');
     expect(CaptureSession::query()->find($mine->id))->not->toBeNull()
         ->and(CaptureSession::query()->find($earlier->id))->toBeNull()
         ->and(CaptureSession::withoutGlobalScopes()->onlyTrashed()->find($other->id))->not->toBeNull();
     // Ids sent from the browser are not a batch.
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', ids: [$earlier->id])->assertNotified('0 recordings are back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', ids: [$earlier->id])->assertNotified('Undo has expired');
     expect(CaptureSession::query()->find($earlier->id))->toBeNull();
 
     // A person the policy does not let restore gets nothing back.
     Gate::before(fn ($user, string $ability) => $ability === 'restore' ? false : null);
     Cache::put(CaptureSessionsTable::undoKey('denied'), [(string) $earlier->id], now()->addMinutes(5));
-    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'denied')->assertNotified('0 recordings are back');
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: 'denied');
+    // Nothing came back: the notice is a warning, not a success.
+    $notices = selectionNotices();
+    expect($notices)->toContain('0 recordings are back')->toContain('"status":"warning"')->not->toContain('"status":"success"');
 });
 
 it('leaves a recording that is still recording or uploading where it is, and says so', function () {
@@ -104,7 +109,7 @@ it('leaves a recording that is still recording or uploading where it is, and say
     $ids = [$this->recordings[0]->id, $busy->id];
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids);
-    expect(selectionNotices())->toContain('1 recording moved to Trash')->toContain('1 recording is still recording or uploading and was left alone.');
+    expect(selectionNotices())->toContain('1 recording moved to Recently deleted')->toContain('1 recording is still recording or uploading and was left alone.');
     expect(CaptureSession::query()->find($busy->id))->not->toBeNull()
         ->and(CaptureSession::query()->find($this->recordings[0]->id))->toBeNull();
 });
@@ -146,4 +151,11 @@ it('decides the keys and the mouse as the Node test says (Ctrl/Cmd+A, Shift-clic
 
 it('starts a new page of the list with nothing selected', function () {
     Livewire::test(ListCaptureSessions::class)->call('gotoPage', 2, 'page')->assertDispatched('deselectAllTableRecords');
+});
+
+it('starts another place, folder or search of the list with nothing selected', function () {
+    $ids = $this->recordings->pluck('id')->all();
+    Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->call('openPlace', 'today')->assertDispatched('deselectAllTableRecords');
+    Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->call('chooseFolder', 'whatsapp')->assertDispatched('deselectAllTableRecords');
+    Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->set('tableSearch', 'Call 1')->assertDispatched('deselectAllTableRecords');
 });

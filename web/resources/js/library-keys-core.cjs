@@ -15,6 +15,12 @@
         return !! target && (TYPING.includes(String(target.tagName || '').toLowerCase()) || target.isContentEditable === true || target.typing === true);
     }
 
+    /** Whether a key lands on a button or a link of its own (its Enter or X is that control's, not the Library's). */
+    const CONTROLS = ['button', 'a', 'summary'];
+    function isControl(target) {
+        return !! target && (CONTROLS.includes(String(target.tagName || '').toLowerCase()) || target.control === true);
+    }
+
     /**
      * What a key does in the Library. e: {key, ctrlKey, metaKey, altKey, defaultPrevented, target}; s: {modal, items
      * (rows on screen), at (the current row, -1 for none), checked (rows ticked on screen), selected (what the table
@@ -30,6 +36,7 @@
             const at = s.at < 0 ? 0 : Math.max(0, Math.min(s.items - 1, s.at + (key === 'j' ? 1 : -1)));
             return { do: 'move', at };
         }
+        if ((key === 'Enter' || key === 'x') && isControl(e.target)) return null;
         if (key === 'Enter' && s.at >= 0) return { do: 'open', at: s.at };
         if (key === 'x' && s.at >= 0) return { do: 'toggle', at: s.at };
         if (key === 'Escape' && s.checked > 0) return { do: 'clear' };
@@ -54,5 +61,5 @@
         return s.rowChecked && s.checked > 1 ? 'selection-menu' : 'row-menu';
     }
 
-    return { isTyping, keyAction, clickAction, contextAction };
+    return { isTyping, isControl, keyAction, clickAction, contextAction };
 });

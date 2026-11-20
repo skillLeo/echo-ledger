@@ -16,8 +16,10 @@ use Livewire\Livewire;
  *  - controls: every one of a list of such controls (a menu with its items, a page's controls as they were);
  *  - controlmatch: a control whose key matches a pattern (a part of every row, whose id differs);
  *  - html: the page's HTML has every given string (the frame's key handler and its target, a marker class);
+ *  - selected: the page as it draws once something is selected (the selection bar's own x-show is true then): every
+ *    given control, and every given string (the count's words);
  *  - widget: a Home card renders with the given words;
- *  - exportformats: the selection's Export offers every given format.
+ *  - exportformats: the selection's Export offers every given format, and each one downloads a zip.
  * Every page read must be drawn by the v2.0 frame, and a done web row without a test fails the sheet.
  */
 
@@ -32,7 +34,7 @@ function webParitySheet(): array
     return array_values(array_filter(array_map('str_getcsv', array_slice($lines, 1)), fn (array $r): bool => ($r[1] ?? '') === 'web'));
 }
 
-/** Whether one check holds in [$html] (control, controls, controlmatch and html checks only). */
+/** Whether one check holds in [$html] (control, controls, controlmatch, html and selected checks only). */
 function webParityHolds(array $check, string $html): bool
 {
     return match ($check['type']) {
@@ -40,8 +42,16 @@ function webParityHolds(array $check, string $html): bool
         'controls' => $check['keys'] !== [] && array_diff($check['keys'], array_keys(webParityControls($html, $check['scope']))) === [],
         'controlmatch' => preg_grep('~'.$check['pattern'].'~u', array_keys(webParityControls($html, $check['scope']))) !== [],
         'html' => collect($check['contains'])->every(fn (string $needle): bool => str_contains($html, $needle)),
+        'selected' => webParityHolds(['type' => 'controls', 'scope' => $check['scope'], 'keys' => $check['keys']], webParitySelected($html))
+            && webParityHolds(['type' => 'html', 'contains' => $check['contains']], $html),
         default => false,
     };
+}
+
+/** The page as it shows with something selected: the selection's own x-show (the count, Select all) is true then. */
+function webParitySelected(string $html): string
+{
+    return str_replace(['x-show="getSelectedRecordsCount()"', 'x-show="canSelectAllRecords()"'], '', $html);
 }
 
 it('holds every web row\'s check in the new design, on pages drawn by the v2.0 frame', function () {
@@ -51,7 +61,7 @@ it('holds every web row\'s check in the new design, on pages drawn by the v2.0 f
     $html = [];
     $failed = [];
     foreach ($checks as $id => $check) {
-        if (in_array($check['type'], ['control', 'controls', 'controlmatch', 'html'], true)) {
+        if (in_array($check['type'], ['control', 'controls', 'controlmatch', 'html', 'selected'], true)) {
             $page = $check['page'];
             if (! isset($html[$page])) {
                 $this->app['auth']->forgetGuards();
@@ -73,11 +83,13 @@ it('holds every web row\'s check in the new design, on pages drawn by the v2.0 f
         } elseif ($check['type'] === 'exportformats') {
             // Each format is an item of the new Library's Export sub-menu, and downloads.
             $this->actingAs($owner->fresh(), 'web');
-            $ids = CaptureSession::query()->orderBy('started_at')->limit(2)->pluck('id')->all();
+            $ids = CaptureSession::query()->whereHas('finalTranscript')->orderBy('started_at')->pluck('id')->all();
+            expect($ids)->not->toBe([], 'the world has a transcript to export');
             foreach ($check['formats'] as $format) {
                 $page = Livewire::test(ListCaptureSessions::class)->callTableBulkAction('export'.ucfirst($format), $ids, data: ['view' => null]);
-                if ($page->errors()->isNotEmpty()) {
-                    $failed[] = "{$id}: Export ▸ {$format} refused";
+                $download = data_get($page->effects, 'download');
+                if ($page->errors()->isNotEmpty() || ! is_array($download) || ! str_ends_with((string) ($download['name'] ?? ''), '.zip') || ($download['content'] ?? '') === '') {
+                    $failed[] = "{$id}: Export ▸ {$format} did not download";
                 }
             }
         }
@@ -108,6 +120,10 @@ it('fails a check when the control is taken away (the checks are not empty match
         ->and(webParityHolds(['type' => 'html', 'contains' => ["e.key === '/'"]], str_replace("e.key === '/'", '', $html)))->toBeFalse()
         // A control drawn hidden (under an x-show the page may not be in) is not there.
         ->and(webParityHolds($revoke, str_replace('<main', '<main x-show="open"', $html)))->toBeFalse()
+        // The selection's bar holds only with its controls, and only as drawn once something is selected.
+        ->and(webParityHolds($checks['WEB-LIB-025'], $library = (string) $this->get($pages['library'])->getContent()))->toBeTrue()
+        ->and(webParityHolds($checks['WEB-LIB-025'], str_replace('aria-label="Move to project"', '', $library)))->toBeFalse()
+        ->and(webParityHolds(['type' => 'controls', 'scope' => 'main', 'keys' => ['button|move to project']], $library))->toBeFalse()
         // A control in the settings menu is not one of the page's own.
         ->and(webParityHolds(['type' => 'control', 'scope' => 'main', 'key' => 'a|appearance'], (string) $this->get($pages['settings-appearance'])->getContent()))->toBeFalse();
 });
