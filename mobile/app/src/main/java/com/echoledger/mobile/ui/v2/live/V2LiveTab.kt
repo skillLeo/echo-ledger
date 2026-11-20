@@ -15,8 +15,11 @@ import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 
-/** What the Live tab opens (docs/v2/IA.md 3). */
-enum class LiveEntry { Record, VoiceNote, LiveAssist, LiveTranslate, Dictation, Captions }
+/**
+ * What the Live tab opens (docs/v2/IA.md 3); [LiveTranslate] is Game translate and [WatchTranslate] Watch translate, as
+ * classic's tiles.
+ */
+enum class LiveEntry { Record, VoiceNote, LiveAssist, LiveTranslate, WatchTranslate, Dictation, Captions }
 
 /**
  * The Live tab v2 (behind `ui_v2.live`): everything during a call or session, as plain rows. Live Assist shows only
@@ -51,10 +54,16 @@ fun V2LiveTab(liveAssist: Boolean, liveTranslate: Boolean, onOpen: (LiveEntry) -
             EchoSectionHeader(stringResource(R.string.v2_livetab_tools_section))
             if (liveTranslate) {
                 EchoSettingRow(
-                    stringResource(R.string.v2_livetab_translate),
-                    subtitle = stringResource(R.string.v2_livetab_translate_help),
-                    icon = EchoIcons.Live,
+                    stringResource(R.string.v2_rs_game),
+                    subtitle = stringResource(R.string.v2_livetab_game_help),
+                    icon = EchoIcons.Games,
                     onClick = { onOpen(LiveEntry.LiveTranslate) }
+                )
+                EchoSettingRow(
+                    stringResource(R.string.v2_rs_watch),
+                    subtitle = stringResource(R.string.v2_livetab_watch_help),
+                    icon = EchoIcons.Videos,
+                    onClick = { onOpen(LiveEntry.WatchTranslate) }
                 )
             }
             EchoSettingRow(

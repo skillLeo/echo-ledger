@@ -6,7 +6,11 @@
     <string name="v2_nav_record_more">More ways to record</string>
     <string name="v2_nav_stop">Stop recording</string>
     <string name="v2_nav_activity">Activity</string>
-    <string name="v2_nav_activity_n">Activity, %1$d need you</string>
+    <plurals name="v2_nav_activity_n">
+        <item quantity="one">Activity, %1$d needs you</item>
+        <item quantity="other">Activity, %1$d need you</item>
+    </plurals>
+    <string name="v2_nav_recording">Recording</string>
     <string name="v2_calls_ready">Calls: Ready</string>
     <string name="v2_calls_not_ready">Not ready · Fix</string>
     <string name="v2_calls_off">Calls: Off</string>
@@ -28,7 +32,10 @@
     <string name="v2_rs_dictation">Dictation</string>
     <string name="v2_rs_dictation_help">Type with your voice in any app</string>
     <string name="v2_rs_translate">Live Translate</string>
-    <string name="v2_rs_translate_status">Game: %1$s · Watch: %2$s</string>
+    <string name="v2_rs_game">Game translate</string>
+    <string name="v2_rs_watch">Watch translate</string>
+    <string name="v2_rs_game_status">Game: %1$s</string>
+    <string name="v2_rs_watch_status">Watch: %1$s</string>
     <string name="v2_rs_on">on</string>
     <string name="v2_rs_off">off</string>
     <string name="v2_lib_setup_title">Finish setting up</string>
@@ -50,6 +57,11 @@
     <string name="v2_act_retry">Retry</string>
     <string name="v2_act_dismiss">Dismiss</string>
     <string name="v2_act_update">Update</string>
+    <!-- Activity titles of the server's kinds, for a screen not in English (English shows the server's own). -->
+    <string name="v2_act_k_upload_failed">Upload failed</string>
+    <string name="v2_act_k_transcript_ready">Transcript ready</string>
+    <string name="v2_act_k_transcript_failed">Transcription failed</string>
+    <string name="v2_act_k_device">New device signed in</string>
     <string name="v2_act_missed">Missed recording</string>
     <string name="v2_act_phone_call">Phone call</string>
     <string name="v2_act_app_call">%1$s call</string>

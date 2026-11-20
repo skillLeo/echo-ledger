@@ -6,7 +6,11 @@
     <string name="v2_nav_record_more">ریکارڈ کرنے کے مزید طریقے</string>
     <string name="v2_nav_stop">ریکارڈنگ روکیں</string>
     <string name="v2_nav_activity">سرگرمی</string>
-    <string name="v2_nav_activity_n">سرگرمی، %1$d آپ کی منتظر</string>
+    <plurals name="v2_nav_activity_n">
+        <item quantity="one">سرگرمی، %1$d آپ کی منتظر</item>
+        <item quantity="other">سرگرمی، %1$d آپ کی منتظر</item>
+    </plurals>
+    <string name="v2_nav_recording">ریکارڈنگ جاری ہے</string>
     <string name="v2_calls_ready">کالز: تیار</string>
     <string name="v2_calls_not_ready">تیار نہیں · ٹھیک کریں</string>
     <string name="v2_calls_off">کالز: بند</string>
@@ -28,7 +32,10 @@
     <string name="v2_rs_dictation">ڈکٹیشن</string>
     <string name="v2_rs_dictation_help">کسی بھی ایپ میں آواز سے لکھیں</string>
     <string name="v2_rs_translate">لائیو ترجمہ</string>
-    <string name="v2_rs_translate_status">گیم: %1$s · دیکھیں: %2$s</string>
+    <string name="v2_rs_game">گیم کا ترجمہ</string>
+    <string name="v2_rs_watch">ویڈیو کا ترجمہ</string>
+    <string name="v2_rs_game_status">گیم: %1$s</string>
+    <string name="v2_rs_watch_status">ویڈیو: %1$s</string>
     <string name="v2_rs_on">آن</string>
     <string name="v2_rs_off">آف</string>
     <string name="v2_lib_setup_title">سیٹ اپ مکمل کریں</string>
@@ -50,6 +57,11 @@
     <string name="v2_act_retry">دوبارہ کوشش کریں</string>
     <string name="v2_act_dismiss">ہٹائیں</string>
     <string name="v2_act_update">اپ ڈیٹ</string>
+    <!-- Activity titles of the server's kinds, for a screen not in English (English shows the server's own). -->
+    <string name="v2_act_k_upload_failed">اپ لوڈ ناکام</string>
+    <string name="v2_act_k_transcript_ready">ٹرانسکرپٹ تیار</string>
+    <string name="v2_act_k_transcript_failed">ٹرانسکرپشن ناکام</string>
+    <string name="v2_act_k_device">نئی ڈیوائس سائن ان ہوئی</string>
     <string name="v2_act_missed">ریکارڈنگ رہ گئی</string>
     <string name="v2_act_phone_call">فون کال</string>
     <string name="v2_act_app_call">%1$s کال</string>

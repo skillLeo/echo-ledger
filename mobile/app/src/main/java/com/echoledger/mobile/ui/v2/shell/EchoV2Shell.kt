@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -45,6 +47,7 @@ import com.echoledger.mobile.ui.v2.home.HomeModel
 import com.echoledger.mobile.ui.v2.home.LibraryTop
 import com.echoledger.mobile.ui.v2.home.LibraryTopActions
 import com.echoledger.mobile.ui.v2.home.V2LibraryTop
+import com.echoledger.mobile.ui.v2.home.setupShowsCapture
 import com.echoledger.mobile.ui.v2.library.LibraryExtras
 import com.echoledger.mobile.ui.v2.library.SavedView
 import com.echoledger.mobile.ui.v2.library.V2LibraryScreen
@@ -61,6 +64,8 @@ import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import com.echoledger.mobile.ui.v2.theme.systemEchoLanguage
 import com.echoledger.mobile.ui.v2.workspace.V2WorkspaceScreen
 import com.echoledger.mobile.ui.v2.workspace.V2WorkspacesScreen
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** The one feedback system of the v2 screens: every message and Undo goes through this toast host. */
@@ -145,7 +150,7 @@ fun EchoV2Shell(
             CompositionLocalProvider(LocalEchoToasts provides toasts) {
                 MessagesToToasts(vm, toasts)
                 Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
-                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck)
+                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock)
                     EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
                 }
             }
@@ -201,7 +206,8 @@ private fun ShellBody(
     onSwitchToClassic: (Boolean) -> Unit,
     help: HelpSource?,
     onRecordNow: () -> Boolean,
-    onReadyCheck: (Boolean) -> Unit
+    onReadyCheck: (Boolean) -> Unit,
+    clock: () -> Long
 ) {
     val text = v2Text
     val context = LocalContext.current
@@ -215,7 +221,9 @@ private fun ShellBody(
     val settings by vm.settings.collectAsState()
     val pending by vm.pending.collectAsState()
     val missed by vm.missed.collectAsState()
-    val live by RecordingService.live.collectAsState()
+    // Only whether a recording runs: the elapsed time ticks every second, and only the strip above the bar reads it.
+    val recording by remember { RecordingService.live.map { it.active }.distinctUntilChanged() }
+        .collectAsState(RecordingService.live.value.active)
     val translating by com.echoledger.mobile.translate.LiveTranslateService.state.collectAsState()
     val setup = rememberSetupFacts(vm, 0)
     val readiness = remember(setup) { Readiness.evaluate(setup.ready) }
@@ -235,8 +243,19 @@ private fun ShellBody(
     fun open(entry: LiveEntry) {
         route = V2Route.Live(entry)
     }
+    val guard = remember { RecordTapGuard(clock) }
+    LaunchedEffect(recording) { guard.settled() }
+
+    /**
+     * The centre button, as classic's: idle, it starts a voice note now (the voice page asks for the microphone when
+     * it isn't allowed); recording, it stops. A second tap while a start is on its way is ignored.
+     */
     fun recordNow() {
-        if (live.active || !onRecordNow()) open(LiveEntry.VoiceNote)
+        if (!guard.tap()) return
+        if (!onRecordNow()) {
+            guard.settled()
+            open(LiveEntry.VoiceNote)
+        }
     }
     fun arm(on: Boolean) {
         runCatching {
@@ -256,7 +275,8 @@ private fun ShellBody(
                 liveTranslate = settings.plan.liveTranslate,
                 translateLocked = lock?.badge?.takeIf { !settings.plan.liveTranslate },
                 game = translating == com.echoledger.mobile.translate.TranslateMode.GAME,
-                watch = translating == com.echoledger.mobile.translate.TranslateMode.WATCH
+                watch = translating == com.echoledger.mobile.translate.TranslateMode.WATCH,
+                blocked = com.echoledger.mobile.translate.TranslateStatus.blocked(context)
             ),
             RecordSheetActions(
                 onRecordNow = ::recordNow,
@@ -266,6 +286,7 @@ private fun ShellBody(
                 onLiveAssist = { open(LiveEntry.LiveAssist) },
                 onDictation = { open(LiveEntry.Dictation) },
                 onLiveTranslate = { open(LiveEntry.LiveTranslate) },
+                onWatchTranslate = { open(LiveEntry.WatchTranslate) },
                 onLocked = classic.upgrade
             ),
             onDismiss = { recordSheet = false }
@@ -375,42 +396,42 @@ private fun ShellBody(
 
                     V2Route.Tabs -> when (tab) {
                         V2Tab.Library -> if (flags.library) {
-                            val home = HomeModel.state(
-                                HomeFacts(
-                                    chip = readiness.chip,
-                                    callsPossible = setup.callsPossible,
-                                    captureReady = setup.helperReady,
-                                    micAllowed = setup.ready.capabilities.micPermission,
-                                    notificationsAllowed = setup.ready.capabilities.notificationPermission,
-                                    live = live,
-                                    library = library,
-                                    pending = pending,
-                                    transcriptionLanguage = settings.transcriptionLanguage,
-                                    syncing = false,
-                                    hasSynced = true,
-                                    offline = false,
-                                    usedMinutes = null,
-                                    monthlyMinutes = null
+                            // Worked out again only when what it reads changes (not each second of a recording).
+                            val home = remember(readiness, setup, recording, library, pending, settings.transcriptionLanguage) {
+                                HomeModel.state(
+                                    HomeFacts(
+                                        chip = readiness.chip,
+                                        callsPossible = setup.callsPossible,
+                                        captureReady = setup.helperReady,
+                                        micAllowed = setup.ready.capabilities.micPermission,
+                                        notificationsAllowed = setup.ready.capabilities.notificationPermission,
+                                        live = com.echoledger.mobile.recording.LiveRecording(active = recording),
+                                        library = library,
+                                        pending = pending,
+                                        transcriptionLanguage = settings.transcriptionLanguage,
+                                        syncing = false,
+                                        hasSynced = true,
+                                        offline = false,
+                                        usedMinutes = null,
+                                        monthlyMinutes = null
+                                    )
                                 )
-                            )
-                            V2LibraryScreen(
-                                vm = vm,
-                                initials = initials,
-                                onOpen = { route = V2Route.Recording(it.id) },
-                                onTrash = { route = V2Route.Trash },
-                                onAccount = { route = V2Route.Settings },
-                                initialViews = libraryViews,
-                                onOpenAt = { item, at -> route = V2Route.Recording(item.id, atMs = at) },
-                                extras = LibraryExtras(
-                                    actions = {
-                                        ActivityBell(activityBadge(serverUnread, missed, pending)) { route = V2Route.Activity }
-                                    },
+                            }
+                            val badge = activityBadge(serverUnread, missed, pending)
+                            val failedIds = remember(pending) { pending.filter { it.state == "failed" }.map { it.id } }
+                            val extras = remember(home, readiness.chip, badge, settings.setupCardHidden, failedIds, reselected) {
+                                LibraryExtras(
+                                    actions = { ActivityBell(badge) { route = V2Route.Activity } },
                                     status = { CallsChip(readiness.chip, { onReadyCheck(false) }) },
                                     top = {
                                         V2LibraryTop(
                                             home.checklist,
                                             settings.setupCardHidden,
-                                            LibraryTop.banner(readiness.chip, home.needsAction),
+                                            LibraryTop.banner(
+                                                readiness.chip,
+                                                home.needsAction,
+                                                setupShowsCapture(home.checklist, settings.setupCardHidden)
+                                            ),
                                             LibraryTopActions(
                                                 onSetup = { route = V2Route.Setup },
                                                 onAllow = { route = V2Route.Setup },
@@ -419,15 +440,39 @@ private fun ShellBody(
                                                 onHideSetup = { vm.updateSettings { it.copy(setupCardHidden = true) } },
                                                 onFix = { onReadyCheck(false) },
                                                 onReview = { route = V2Route.Activity },
-                                                onRetryUploads = { vm.retryPending() }
+                                                // Classic's Retry: each upload that failed, sent again.
+                                                onRetryUploads = { failedIds.forEach(vm::retryUpload) }
                                             )
                                         )
                                     },
                                     scrollToTop = reselected
                                 )
+                            }
+                            SideEffect { ShellStats.libraryCompositions++ }
+                            V2LibraryScreen(
+                                vm = vm,
+                                initials = initials,
+                                onOpen = { route = V2Route.Recording(it.id) },
+                                onTrash = { route = V2Route.Trash },
+                                onAccount = { route = V2Route.Settings },
+                                initialViews = libraryViews,
+                                onOpenAt = { item, at -> route = V2Route.Recording(item.id, atMs = at) },
+                                extras = extras
                             )
                         } else {
-                            classic.library()
+                            Column(Modifier.fillMaxSize()) {
+                                // Without v2 Library the bell and the avatar still lead to Activity and to Settings
+                                // (where Switch back to classic is).
+                                androidx.compose.foundation.layout.Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s4),
+                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    ActivityBell(activityBadge(serverUnread, missed, pending)) { route = V2Route.Activity }
+                                    AccountButton()
+                                }
+                                Box(Modifier.weight(1f).fillMaxWidth()) { classic.library() }
+                            }
                         }
 
                         V2Tab.Projects -> if (flags.isOn(UiFlags.ASK)) {
@@ -461,6 +506,8 @@ private fun ShellBody(
             }
         }
         if (route == V2Route.Tabs) {
+            // While recording: the time and Stop above the bar, as classic's strip; a tap opens the voice page.
+            if (recording) RecordingStrip(onStop = ::recordNow, onOpen = { open(LiveEntry.VoiceNote) })
             EchoBottomBar(
                 destinations = listOf(
                     EchoDestination(V2Tab.Library.name, text.library, EchoIcons.Library),
@@ -471,10 +518,37 @@ private fun ShellBody(
                 selectedKey = tab.name,
                 onSelect = { tab = V2Tab.valueOf(it) },
                 onReselect = { reselected++ },
-                centre = { EchoRecordButton(live.active, onTap = ::recordNow, onLongPress = { recordSheet = true }) }
+                centre = { EchoRecordButton(recording, onTap = ::recordNow, onLongPress = { recordSheet = true }) }
             )
         }
     }
+}
+
+/**
+ * Keeps the centre button from acting twice: after a tap that starts a recording, further taps are ignored until the
+ * recording shows as running (or for [windowMs] at most), so a double tap never starts and stops at once.
+ */
+class RecordTapGuard(private val clock: () -> Long, private val windowMs: Long = 1_000) {
+    private var startedAt: Long? = null
+
+    /** Whether this tap may act. */
+    fun tap(): Boolean {
+        val now = clock()
+        startedAt?.let { if (now - it < windowMs) return false }
+        startedAt = now
+        return true
+    }
+
+    /** The recording started or stopped (or the tap opened the voice page): the next tap acts at once. */
+    fun settled() {
+        startedAt = null
+    }
+}
+
+/** How often the shell drew Library (tests: a recording's ticking clock must not redraw it). */
+@androidx.annotation.VisibleForTesting
+internal object ShellStats {
+    var libraryCompositions = 0
 }
 
 /** Settings › Setup & health: the v2 wizard and checks with `ui_v2.setup_health`, else the classic setup. */

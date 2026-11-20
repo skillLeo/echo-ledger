@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
@@ -101,7 +102,8 @@ class V2NavigationTest : ScreenTest() {
     fun theBarIsLibraryProjectsRecordLiveAskAndLibraryComesFirst() {
         seed()
         shell()
-        compose.onNodeWithText("Recordings").assertExists()
+        // The page is called what its tab is called.
+        compose.onNode(hasText("Library") and isHeading()).assertExists()
         val tabs = compose.onAllNodes(
             androidx.compose.ui.test.SemanticsMatcher.expectValue(
                 androidx.compose.ui.semantics.SemanticsProperties.Role,
@@ -125,6 +127,11 @@ class V2NavigationTest : ScreenTest() {
         compose.onNodeWithContentDescription("Record").performClick()
         assertEquals(1, recordNow)
         assertTrue(opened.isEmpty())
+        // The recording ran and stopped (a tap while it starts is ignored, so it never starts and stops at once).
+        com.echoledger.mobile.recording.RecordingService.live.value = com.echoledger.mobile.recording.LiveRecording(active = true)
+        compose.waitForIdle()
+        com.echoledger.mobile.recording.RecordingService.live.value = com.echoledger.mobile.recording.LiveRecording()
+        compose.waitForIdle()
         micAllowed = false
         compose.onNodeWithContentDescription("Record").performClick()
         assertEquals(2, recordNow)
@@ -219,13 +226,13 @@ class V2NavigationTest : ScreenTest() {
         shell()
         compose.onNode(hasScrollToIndexAction()).performScrollToIndex(55)
         compose.onAllNodesWithText("Caller 060", substring = true).fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }
-        compose.onNodeWithText("Library").performClick()
+        compose.onNode(hasText("Library") and !isHeading()).performClick()
         compose.waitUntil(5_000) {
             compose.onAllNodesWithText("Caller 060", substring = true).fetchSemanticsNodes().isEmpty()
         }
         compose.onNodeWithText("Caller 060", substring = true).assertDoesNotExist()
         compose.onAllNodesWithText("Caller 05", substring = true).fetchSemanticsNodes()
-        compose.onNodeWithText("Recordings").assertIsDisplayed()
+        compose.onNode(hasText("Library") and isHeading()).assertIsDisplayed()
     }
 
     @Test
@@ -235,13 +242,16 @@ class V2NavigationTest : ScreenTest() {
         vm.reloadLocal()
         shell()
         pumpUntil("the badge") {
-            compose.onAllNodes(hasContentDescription("Activity, 1 need you")).fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodes(hasContentDescription("Activity, 1 needs you")).fetchSemanticsNodes().isNotEmpty()
         }
-        // One quiet banner: the most urgent thing (calls not recorded on this test phone) and how many more.
-        compose.onNodeWithText("Calls are not being recorded · 1 more").assertExists()
-        compose.onNodeWithText("Fix").performClick()
+        // One quiet banner. Calls are not recorded on this test phone, but the setup card's "Call recording ready" row
+        // and the chip say so already: the banner says the next thing, the call waiting.
+        compose.onNodeWithText("Call recording ready").assertExists()
+        compose.onNodeWithText("Calls are not being recorded", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("1 call waiting for Keep or Discard").assertExists()
+        compose.onNodeWithText("Not ready · Fix").performClick()
         assertEquals(listOf(false), readyChecks)
-        compose.onNodeWithContentDescription("Activity, 1 need you").performClick()
+        compose.onNodeWithContentDescription("Activity, 1 needs you").performClick()
         compose.onNodeWithText("Needs action").assertExists()
         compose.onNodeWithText("Keep").assertExists()
         compose.onNodeWithText("Discard").assertExists()

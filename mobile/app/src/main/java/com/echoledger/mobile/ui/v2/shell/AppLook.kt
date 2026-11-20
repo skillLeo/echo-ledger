@@ -25,14 +25,13 @@ object AppLook {
         else -> system
     }
 
-    /** Draws [content] with the text [size] on top of the phone's font scale. */
+    /**
+     * Draws [content] with the text [size] on top of the phone's font scale. The density is always provided (also at
+     * the phone's own size), so changing the size keeps [content] where it is instead of building it again.
+     */
     @Composable
     fun TextSize(size: String, content: @Composable () -> Unit) {
         val factor = scale(size)
-        if (factor == 1f) {
-            content()
-            return
-        }
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale * factor), content = content)
     }

@@ -22,7 +22,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.R
@@ -269,7 +271,8 @@ fun V2SettingsRoot(
                 }
                 return@LazyColumn
             }
-            item { ProfileCardSlot(profile, onUpgrade, onRetryProfile) }
+            // This month's minutes show once: as the bar in Account & plan when the plan has them, else on the card.
+            item { ProfileCardSlot(profile, onUpgrade, onRetryProfile, showMinutes = settings.plan.usedMinutes == null) }
             SettingsTree.goals.forEach { (goal, pages) ->
                 item(key = goal.name) { GoalHeader(goal) }
                 // Account & plan: this month's minutes first (Home's usage meter, docs/PLAN_V2_PARITY.md section 2).
@@ -338,6 +341,11 @@ fun UsageMeter(used: Long, monthly: Long?, onClick: () -> Unit) {
                 .fillMaxWidth()
                 .height(EchoTokens.Space.s4)
                 .background(c.bgSubtle, androidx.compose.foundation.shape.RoundedCornerShape(EchoTokens.Radius.full))
+                // Read as a progress bar ("70 percent"), with the words on the row above.
+                .semantics {
+                    progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(share, 0f..1f)
+                    contentDescription = words
+                }
         ) {
             androidx.compose.foundation.layout.Box(
                 Modifier

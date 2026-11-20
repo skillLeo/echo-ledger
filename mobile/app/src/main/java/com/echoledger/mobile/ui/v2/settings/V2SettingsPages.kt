@@ -53,7 +53,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun Modifier.highlightedIf(on: Boolean): Modifier = if (on) background(EchoV2.colors.accentSoft) else this
 
-/** Appearance: the theme (System, Light, Dark), the phone's font, and Classic look while v2 is on. */
+/**
+ * Appearance: the theme (System, Light, Dark), Wallpaper colours, the phone's font, Text size and App language (both
+ * applied across the v2 screens, their sheets, dialogs and menus included), and Switch back to classic while v2 is on.
+ */
 @Composable
 fun AppearancePage(
     settings: AppSettings,

@@ -3,6 +3,7 @@ package com.echoledger.mobile.ui.v2
 import androidx.compose.material3.Text
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
@@ -90,7 +91,7 @@ class V2ShellTest : ScreenTest() {
     fun libraryIsTheV2OneAndOtherTabsStayClassic() {
         seed()
         shell(v2)
-        compose.onNodeWithText("Recordings").assertExists()
+        compose.onNode(hasText("Library") and isHeading()).assertExists()
         compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
         compose.onNodeWithText("Live").performClick()
         compose.onNodeWithText("Classic live").assertExists()
@@ -352,10 +353,13 @@ class V2ShellTest : ScreenTest() {
         // A tap adds a row while selecting; Select all and Unselect all.
         compose.onNodeWithText("Rehman and Sons Textiles", substring = true).performClick()
         compose.onNodeWithText("2 selected").assertExists()
-        compose.onNodeWithContentDescription("Unselect all").performClick()
+        // Select all and Unselect all are in ⋮.
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Unselect all").performClick()
         compose.onNodeWithText("2 selected").assertDoesNotExist()
         compose.onNodeWithText("Bilal Traders", substring = true).performTouchInput { longClick() }
-        compose.onNodeWithContentDescription("Select all").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Select all").performClick()
         compose.onNodeWithText("2 selected").assertExists()
         // ⋮ › Pin goes to the server for both, then selection ends.
         compose.onNodeWithContentDescription("More").performClick()

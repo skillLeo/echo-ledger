@@ -208,8 +208,13 @@ fun V2LibraryScreen(
     // Classic's path for one or many: bulk "delete"; Undo shows only once they went, and brings back exactly those.
     fun deleteRows(items: List<LibraryItem>) {
         scope.launch {
-            val went = vm.deleteMany(items.map { it.id }) ?: return@launch
-            if (went.isEmpty()) return@launch
+            val outcome = vm.deleteMany(items.map { it.id }) ?: return@launch
+            val went = outcome.went
+            if (went.isEmpty()) {
+                // Some went, but the sync after it failed, so which is not known: say how many, without Undo.
+                if (outcome.changed > 0) toasts.show(if (outcome.changed == 1) text.deleted else deletedN(outcome.changed))
+                return@launch
+            }
             val message = if (went.size == 1) text.deleted else deletedN(went.size)
             toasts.showUndo(message, undo) {
                 scope.launch {
@@ -287,7 +292,8 @@ fun V2LibraryScreen(
                         picked = emptySet()
                         if (all) pick(visible.map { it.id })
                     },
-                    onAction = ::act
+                    onAction = ::act,
+                    choices = OrganiseChoices.of(visible.filter { it.id in ticked })
                 )
             },
             filterRow = { LibraryFilterRow(filters, folders, labels, tags, languages) { filters = it } },
@@ -390,48 +396,52 @@ fun V2LibraryContent(
         if (selecting) {
             tools!!.selectionBar()
         } else {
-            EchoTopBar(text.recordings, large = true) {
+            EchoTopBar(stringResource(R.string.v2_library), large = true) {
                 onProjects?.let { EchoIconButton(EchoIcons.Folder, stringResource(R.string.v2_ws_projects), it) }
                 if (tools == null) EchoIconButton(EchoIcons.Delete, text.trash, onTrash)
                 extras?.actions?.invoke()
+                if (tools != null) {
+                    Box {
+                        EchoIconButton(EchoIcons.More, stringResource(R.string.v2_lib_more), { menu = true })
+                        val look = com.echoledger.mobile.ui.v2.theme.rememberPageLook()
+                        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            com.echoledger.mobile.ui.v2.theme.ProvidePageLook(look) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.v2_lib_select), style = EchoV2.type.body) },
+                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.SelectAll, null) },
+                                    onClick = {
+                                        menu = false
+                                        tools.onSelect()
+                                    }
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.v2_lib_sync), style = EchoV2.type.body) },
+                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Sync, null) },
+                                    onClick = {
+                                        menu = false
+                                        tools.onSync()
+                                    }
+                                )
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.v2_lib_recently_deleted), style = EchoV2.type.body) },
+                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Delete, null) },
+                                    onClick = {
+                                        menu = false
+                                        onTrash()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                // The avatar last, at the top end, as on every main screen.
                 Box(
                     Modifier
                         .size(EchoTokens.Layout.controlTouchMin)
                         .clickable(onClickLabel = text.accountAndSettings, onClick = onAccount)
                         .semantics { contentDescription = text.accountAndSettings },
                     contentAlignment = Alignment.Center
-                ) { EchoAvatar(initials = initials) }
-                if (tools != null) {
-                    Box {
-                        EchoIconButton(EchoIcons.More, stringResource(R.string.v2_lib_more), { menu = true })
-                        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text(stringResource(R.string.v2_lib_select), style = EchoV2.type.body) },
-                                leadingIcon = { androidx.compose.material3.Icon(EchoIcons.SelectAll, null) },
-                                onClick = {
-                                    menu = false
-                                    tools.onSelect()
-                                }
-                            )
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text(stringResource(R.string.v2_lib_sync), style = EchoV2.type.body) },
-                                leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Sync, null) },
-                                onClick = {
-                                    menu = false
-                                    tools.onSync()
-                                }
-                            )
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = { Text(stringResource(R.string.v2_lib_recently_deleted), style = EchoV2.type.body) },
-                                leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Delete, null) },
-                                onClick = {
-                                    menu = false
-                                    onTrash()
-                                }
-                            )
-                        }
-                    }
-                }
+                ) { com.echoledger.mobile.ui.v2.shell.PersonAvatar(initials) }
             }
         }
         if (!selecting && extras != null) {
@@ -601,6 +611,8 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
     val pinned = stringResource(R.string.v2_lib_pinned_mark)
     EchoListRow(
         title = row.title,
+        // A selected row is tinted all across, as classic's is.
+        modifier = if (selected == true) Modifier.background(c.accentSoft) else Modifier,
         meta = row.meta,
         titleEnd = row.time,
         metaEnd = {
@@ -616,7 +628,8 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
                     )
                 }
                 if (screens > 0) ScreensCountMark(screens)
-                Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary)
+                // A length never breaks over two lines, at any text size.
+                Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary, maxLines = 1, softWrap = false)
             }
         },
         status = statusBadge(row.status, text),

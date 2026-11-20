@@ -54,7 +54,6 @@ import com.echoledger.mobile.ui.v2.components.EchoChip
 import com.echoledger.mobile.ui.v2.components.EchoDialog
 import com.echoledger.mobile.ui.v2.components.EchoIconButton
 import com.echoledger.mobile.ui.v2.components.EchoIcons
-import com.echoledger.mobile.ui.v2.components.EchoRadio
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoTextField
@@ -87,9 +86,30 @@ fun exportName(format: String): String = stringResource(
 )
 
 /**
- * Selection mode's top bar: ✕, "3 selected", Select all or Unselect all; four main actions as icons (Move to project,
- * Label, Share or export, Delete) and the rest in ⋮ (Organise: Pin, Unpin, Keep forever, Allow auto clean-up, Rename;
- * Export ▸ each format; Delete last).
+ * Which of Pin / Unpin and Keep forever / Allow auto clean-up the selection's ⋮ offers: only the one that applies, both
+ * only when the selection is mixed (some pinned and some not).
+ */
+data class OrganiseChoices(val pin: Boolean, val unpin: Boolean, val keep: Boolean, val unkeep: Boolean) {
+    companion object {
+        /** Every action, for a selection whose recordings are not known. */
+        val ALL = OrganiseChoices(pin = true, unpin = true, keep = true, unkeep = true)
+
+        fun of(items: List<com.echoledger.mobile.data.LibraryItem>): OrganiseChoices {
+            if (items.isEmpty()) return ALL
+            return OrganiseChoices(
+                pin = items.any { !it.pinned },
+                unpin = items.any { it.pinned },
+                keep = items.any { !it.keep },
+                unkeep = items.any { it.keep }
+            )
+        }
+    }
+}
+
+/**
+ * Selection mode's top bar: ✕, "3 selected" on one line, three actions as icons (Move to project, Label, Delete) and
+ * the rest in ⋮: Select all or Unselect all, Share; Organise (Pin or Unpin, Keep forever or Allow auto clean-up, as
+ * [choices] says, and Rename for one); Export ▸ with each format; Delete last.
  */
 @Composable
 fun SelectionBar(
@@ -101,11 +121,17 @@ fun SelectionBar(
     keepHours: Int,
     onClose: () -> Unit,
     onSelectAll: (Boolean) -> Unit,
-    onAction: (SelectionAction) -> Unit
+    onAction: (SelectionAction) -> Unit,
+    choices: OrganiseChoices = OrganiseChoices.ALL
 ) {
     val c = EchoV2.colors
     var sheet by remember { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf(false) }
+    var exportOpen by remember { mutableStateOf(false) }
+    fun close() {
+        menu = false
+        exportOpen = false
+    }
     Row(
         Modifier.fillMaxWidth().background(c.bgSurface).padding(horizontal = EchoTokens.Space.s4, vertical = EchoTokens.Space.s4),
         verticalAlignment = Alignment.CenterVertically
@@ -115,53 +141,79 @@ fun SelectionBar(
             stringResource(R.string.v2_lib_selected, count),
             style = EchoV2.type.titleS,
             color = c.textPrimary,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).semantics { heading() }
-        )
-        EchoIconButton(
-            EchoIcons.SelectAll,
-            stringResource(if (allSelected) R.string.v2_lib_unselect_all else R.string.v2_lib_select_all),
-            { onSelectAll(!allSelected) }
         )
         EchoIconButton(EchoIcons.Move, stringResource(R.string.v2_lib_move), { sheet = "move" })
         EchoIconButton(EchoIcons.Label, stringResource(R.string.v2_lib_label), { sheet = "label" })
-        EchoIconButton(EchoIcons.Share, stringResource(R.string.v2_lib_export), { sheet = "export" })
         EchoIconButton(EchoIcons.Delete, stringResource(R.string.v2_lib_delete), { sheet = "delete" })
         Box {
-            EchoIconButton(EchoIcons.More, stringResource(R.string.v2_lib_more), { menu = true })
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                MenuHeader(stringResource(R.string.v2_lib_organise))
-                MenuItem(EchoIcons.Pin, stringResource(R.string.v2_lib_pin)) {
-                    menu = false
-                    onAction(SelectionAction.Pin(true))
-                }
-                MenuItem(EchoIcons.Unpin, stringResource(R.string.v2_lib_unpin)) {
-                    menu = false
-                    onAction(SelectionAction.Pin(false))
-                }
-                MenuItem(EchoIcons.Keep, stringResource(R.string.v2_lib_keep)) {
-                    menu = false
-                    onAction(SelectionAction.Keep(true))
-                }
-                MenuItem(EchoIcons.Keep, stringResource(R.string.v2_lib_unkeep)) {
-                    menu = false
-                    onAction(SelectionAction.Keep(false))
-                }
-                if (oneTitle != null) {
-                    MenuItem(EchoIcons.Rename, stringResource(R.string.v2_lib_rename)) {
-                        menu = false
-                        sheet = "rename"
+            EchoIconButton(EchoIcons.More, stringResource(R.string.v2_lib_more), {
+                exportOpen = false
+                menu = true
+            })
+            val look = com.echoledger.mobile.ui.v2.theme.rememberPageLook()
+            DropdownMenu(expanded = menu, onDismissRequest = ::close) {
+                com.echoledger.mobile.ui.v2.theme.ProvidePageLook(look) {
+                    if (exportOpen) {
+                        // TODO-DS: a sub-menu in the shared menu component; until then Export ▸ swaps the menu for its formats.
+                        SubMenuHeader(stringResource(R.string.v2_lib_export_header)) { exportOpen = false }
+                        Organise.EXPORT_FORMATS.forEach { (format, _) ->
+                            MenuItem(EchoIcons.Export, exportName(format)) {
+                                close()
+                                onAction(SelectionAction.Export(format))
+                            }
+                        }
+                        return@ProvidePageLook
                     }
-                }
-                MenuHeader(stringResource(R.string.v2_lib_export_header))
-                Organise.EXPORT_FORMATS.forEach { (format, _) ->
-                    MenuItem(EchoIcons.Export, exportName(format)) {
-                        menu = false
-                        onAction(SelectionAction.Export(format))
+                    MenuItem(
+                        EchoIcons.SelectAll,
+                        stringResource(if (allSelected) R.string.v2_lib_unselect_all else R.string.v2_lib_select_all)
+                    ) {
+                        close()
+                        onSelectAll(!allSelected)
                     }
-                }
-                MenuItem(EchoIcons.Delete, stringResource(R.string.v2_lib_delete), danger = true) {
-                    menu = false
-                    sheet = "delete"
+                    MenuItem(EchoIcons.Share, stringResource(R.string.v2_lib_share)) {
+                        close()
+                        sheet = "export"
+                    }
+                    MenuHeader(stringResource(R.string.v2_lib_organise))
+                    if (choices.pin) {
+                        MenuItem(EchoIcons.Pin, stringResource(R.string.v2_lib_pin)) {
+                            close()
+                            onAction(SelectionAction.Pin(true))
+                        }
+                    }
+                    if (choices.unpin) {
+                        MenuItem(EchoIcons.Unpin, stringResource(R.string.v2_lib_unpin)) {
+                            close()
+                            onAction(SelectionAction.Pin(false))
+                        }
+                    }
+                    if (choices.keep) {
+                        MenuItem(EchoIcons.Keep, stringResource(R.string.v2_lib_keep)) {
+                            close()
+                            onAction(SelectionAction.Keep(true))
+                        }
+                    }
+                    if (choices.unkeep) {
+                        MenuItem(com.echoledger.mobile.ui.v2.shell.PendingIcons.AutoDelete, stringResource(R.string.v2_lib_unkeep)) {
+                            close()
+                            onAction(SelectionAction.Keep(false))
+                        }
+                    }
+                    if (oneTitle != null) {
+                        MenuItem(EchoIcons.Rename, stringResource(R.string.v2_lib_rename)) {
+                            close()
+                            sheet = "rename"
+                        }
+                    }
+                    SubMenuItem(EchoIcons.Export, stringResource(R.string.v2_lib_export_header)) { exportOpen = true }
+                    MenuItem(EchoIcons.Delete, stringResource(R.string.v2_lib_delete), danger = true) {
+                        close()
+                        sheet = "delete"
+                    }
                 }
             }
         }
@@ -230,6 +282,32 @@ private fun MenuItem(icon: ImageVector, words: String, danger: Boolean = false, 
         text = { Text(words, style = EchoV2.type.body, color = tint) },
         leadingIcon = { Icon(icon, null, tint = tint) },
         onClick = onClick
+    )
+}
+
+/** A menu row that opens a sub-menu: its icon, its words and ▸ (mirrored in right-to-left). */
+// TODO-DS: belongs with the shared menu component.
+@Composable
+private fun SubMenuItem(icon: ImageVector, words: String, onClick: () -> Unit) {
+    val tint = EchoV2.colors.textPrimary
+    DropdownMenuItem(
+        text = { Text(words, style = EchoV2.type.body, color = tint) },
+        leadingIcon = { Icon(icon, null, tint = tint) },
+        trailingIcon = { Icon(EchoIcons.Next, null, tint = EchoV2.colors.textSecondary) },
+        onClick = onClick
+    )
+}
+
+/** A sub-menu's first row: back (‹, mirrored in right-to-left) and the sub-menu's name; it goes back to the menu. */
+// TODO-DS: belongs with the shared menu component.
+@Composable
+private fun SubMenuHeader(words: String, onBack: () -> Unit) {
+    val back = stringResource(R.string.v2_back)
+    DropdownMenuItem(
+        text = { Text(words, style = EchoV2.type.captionStrong, color = EchoV2.colors.textSecondary) },
+        leadingIcon = { Icon(EchoIcons.Previous, null, tint = EchoV2.colors.textSecondary) },
+        onClick = onBack,
+        modifier = Modifier.semantics { contentDescription = "$back, $words" }
     )
 }
 
@@ -508,18 +586,37 @@ fun clearChip(chip: FilterChip, f: V2Filters): V2Filters = when (chip) {
     FilterChip.Bookmark -> f.copy(base = f.base.copy(tags = emptySet()))
 }
 
-/** Sort and group (the button in the search row): Group by, Sort by and Density, remembered per view on this phone. */
+/**
+ * Sort and group (the button in the search row): Group by, Sort by and Density as chip groups (as classic has them),
+ * so all three fit on one screen; remembered per view on this phone. One chip of each group is on.
+ */
 @Composable
 fun SortGroupSheet(choice: LibraryViewChoice, onDismiss: () -> Unit, onChoose: (LibraryViewChoice) -> Unit) {
     EchoBottomSheet(onDismiss = onDismiss, title = stringResource(R.string.v2_lib_sort_group)) {
-        Column(Modifier.padding(horizontal = EchoTokens.Space.s12)) {
-            EchoSectionHeader(stringResource(R.string.v2_lib_group_by))
-            GroupBy.entries.forEach { g -> EchoRadio(choice.groupBy == g, { onChoose(choice.copy(group = g.key)) }, groupName(g)) }
-            EchoSectionHeader(stringResource(R.string.v2_lib_sort_by))
-            LibrarySort.entries.forEach { s -> EchoRadio(choice.sortBy == s, { onChoose(choice.copy(sort = s.key)) }, sortName(s)) }
-            EchoSectionHeader(stringResource(R.string.v2_lib_density))
-            Density.entries.forEach { d -> EchoRadio(choice.densityOf == d, { onChoose(choice.copy(density = d.key)) }, densityName(d)) }
+        Column(Modifier.padding(bottom = EchoTokens.Space.s16)) {
+            ChoiceGroup(stringResource(R.string.v2_lib_group_by), GroupBy.entries, choice.groupBy, { groupName(it) }) {
+                onChoose(choice.copy(group = it.key))
+            }
+            ChoiceGroup(stringResource(R.string.v2_lib_sort_by), LibrarySort.entries, choice.sortBy, { sortName(it) }) {
+                onChoose(choice.copy(sort = it.key))
+            }
+            ChoiceGroup(stringResource(R.string.v2_lib_density), Density.entries, choice.densityOf, { densityName(it) }) {
+                onChoose(choice.copy(density = it.key))
+            }
         }
+    }
+}
+
+/** One group of the sheet: its heading and its choices as chips that wrap, the chosen one on. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun <T> ChoiceGroup(title: String, all: List<T>, chosen: T, name: @Composable (T) -> String, onPick: (T) -> Unit) {
+    EchoSectionHeader(title)
+    androidx.compose.foundation.layout.FlowRow(
+        Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
+        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+    ) {
+        all.forEach { option -> EchoChip(name(option), option == chosen, { onPick(option) }) }
     }
 }
 

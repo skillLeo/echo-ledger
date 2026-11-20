@@ -124,6 +124,7 @@ class V2LibraryActionsTest : ScreenTest() {
 
     @Test
     fun exportAsEachFormatAsksTheServer() {
+        V2Testing.freshFileProvider()
         seed()
         server.on("POST", "/api/sessions/export", FakeServer.json(200, "{}"))
         for ((format, name) in listOf(
@@ -135,10 +136,22 @@ class V2LibraryActionsTest : ScreenTest() {
             "json" to "JSON"
         )) {
             if (compose.onAllNodesWithText("1 selected").fetchSemanticsNodes().isEmpty()) select("Bilal Traders")
-            compose.onNodeWithContentDescription("Share or export").performClick()
+            // ⋮ › Export ▸ › the format.
+            compose.onNodeWithContentDescription("More").performClick()
+            click("Export")
             click(name)
             pumpUntil("export $format") { server.requestsTo("POST", "/api/sessions/export").any { it.bodyText().contains("\"$format\"") } }
+            // Shared before the next one is asked for (each export replaces the last file).
+            pumpUntil("shared $format") { org.robolectric.Shadows.shadowOf(app).nextStartedActivity != null }
         }
+        // ⋮ › Share asks for the format in a sheet, as the bar's Share did.
+        val before = server.requestsTo("POST", "/api/sessions/export").size
+        if (compose.onAllNodesWithText("1 selected").fetchSemanticsNodes().isEmpty()) select("Bilal Traders")
+        compose.onNodeWithContentDescription("More").performClick()
+        click("Share")
+        click("Word (.docx)")
+        pumpUntil("asked") { server.requestsTo("POST", "/api/sessions/export").size > before }
+        pumpUntil("shared") { org.robolectric.Shadows.shadowOf(app).nextStartedActivity != null }
     }
 
     @Test
@@ -149,8 +162,28 @@ class V2LibraryActionsTest : ScreenTest() {
         compose.onNodeWithContentDescription("More").performClick()
         click("Keep forever")
         bulk("keep")
+        // Now kept on the server: the menu offers Allow auto clean-up, and no longer Keep forever.
+        server.on(
+            "GET",
+            "/api/library",
+            FakeServer.json(
+                200,
+                ServerFixtures.libraryPage(
+                    listOf(
+                        ServerFixtures.libraryItem(
+                            "01JA",
+                            title = "Bilal Traders"
+                        ).replace("\"deleted\":false", "\"deleted\":false,\"keep\":true"),
+                        ServerFixtures.libraryItem("01JB", title = "Rehman and Sons Textiles", sourceApp = "phone_call", finalStatus = null)
+                    )
+                )
+            )
+        )
+        runBlocking { app.graph.library.refresh() }
+        pumpUntil("kept") { vm.library.value.any { it.id == "01JA" && it.keep } }
         select("Bilal Traders")
         compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Keep forever").assertDoesNotExist()
         click("Allow auto clean-up")
         bulk("unkeep")
         select("Bilal Traders")
@@ -197,6 +230,52 @@ class V2LibraryActionsTest : ScreenTest() {
     }
 
     @Test
+    fun whenTheServerDeletesOneOfTwoUndoBringsBackOnlyThatOne() {
+        seed()
+        server.on("POST", "/api/sessions/bulk", FakeServer.json(200, """{"changed": 1}"""))
+        server.on("POST", "/api/sessions/01JA/restore", FakeServer.empty(204))
+        server.on("POST", "/api/sessions/01JB/restore", FakeServer.empty(204))
+        select("Bilal Traders")
+        compose.onNodeWithText("Rehman and Sons Textiles", substring = true).performClick()
+        // After the delete the server has Bilal Traders gone and Rehman and Sons still there.
+        server.on(
+            "GET",
+            "/api/library",
+            FakeServer.json(
+                200,
+                ServerFixtures.libraryPage(
+                    listOf(
+                        ServerFixtures.tombstone("01JA"),
+                        ServerFixtures.libraryItem("01JB", title = "Rehman and Sons Textiles", sourceApp = "phone_call", finalStatus = null)
+                    )
+                )
+            )
+        )
+        compose.onNodeWithContentDescription("Delete").performClick()
+        click("Delete 2")
+        bulk("delete")
+        pumpUntil("Recording deleted · Undo") { compose.onAllNodesWithText("Recording deleted").fetchSemanticsNodes().isNotEmpty() }
+        click("Undo")
+        pumpUntil("restored") { server.requestsTo("POST", "/api/sessions/01JA/restore").isNotEmpty() }
+        assertTrue(server.requestsTo("POST", "/api/sessions/01JB/restore").isEmpty())
+    }
+
+    @Test
+    fun whenTheSyncAfterAPartialDeleteFailsItSaysHowManyWithoutUndo() {
+        seed()
+        server.on("POST", "/api/sessions/bulk", FakeServer.json(200, """{"changed": 1}"""))
+        select("Bilal Traders")
+        compose.onNodeWithText("Rehman and Sons Textiles", substring = true).performClick()
+        // The sync after the delete fails: which one went is not known.
+        server.on("GET", "/api/library", FakeServer.json(500, """{"message":"Server error","code":"server_error"}"""))
+        compose.onNodeWithContentDescription("Delete").performClick()
+        click("Delete 2")
+        bulk("delete")
+        pumpUntil("Recording deleted") { compose.onAllNodesWithText("Recording deleted").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Undo").assertDoesNotExist()
+    }
+
+    @Test
     fun aSelectedRowThatIsNoLongerShownIsSkipped() {
         seed()
         select("Bilal Traders")
@@ -226,7 +305,8 @@ class V2LibraryActionsTest : ScreenTest() {
     fun selectAllStopsAtWhatTheServerTakesAtOnceAndSaysWhy() {
         seed((1..205).map { ServerFixtures.libraryItem("01K%03d".format(it), title = "Caller %03d".format(it)) })
         select("Caller 001")
-        compose.onNodeWithContentDescription("Select all").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        click("Select all")
         compose.onNodeWithText("200 selected").assertExists()
         pumpUntil("the reason") {
             compose.onAllNodesWithText("You can select up to 200 recordings at a time.").fetchSemanticsNodes().isNotEmpty()

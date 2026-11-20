@@ -197,7 +197,15 @@ class NavigationParityShotsTest : ScreenTest() {
                     }
                 }
             },
-            each = { compose.waitUntil(5_000) { compose.onAllNodesWithText("Upload failed").fetchSemanticsNodes().isNotEmpty() } }
+            each = {
+                compose.waitUntil(5_000) {
+                    (
+                        compose.onAllNodesWithText("Upload failed").fetchSemanticsNodes() +
+                            compose.onAllNodesWithText("اپ لوڈ ناکام").fetchSemanticsNodes()
+                        )
+                        .isNotEmpty()
+                }
+            }
         )
     )
 }

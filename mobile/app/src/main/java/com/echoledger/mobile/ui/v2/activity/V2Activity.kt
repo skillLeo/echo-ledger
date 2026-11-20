@@ -2,13 +2,16 @@ package com.echoledger.mobile.ui.v2.activity
 
 import android.content.res.Resources
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -30,6 +33,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.MissedFix
 import com.echoledger.mobile.calls.MissedItem
@@ -115,7 +120,8 @@ fun V2ActivityScreen(vm: MainViewModel, actions: ActivityActions, modifier: Modi
         actions = actions,
         onKeep = { vm.decide(it.id, keep = true) },
         onDiscard = { batch.discard(it.id) },
-        onRetryUploads = { vm.retryPending() },
+        // Classic's Retry: each upload that failed, sent again (retryPending only nudges the queued ones).
+        onRetryUploads = { pending.filter { it.state == "failed" }.forEach { vm.retryUpload(it.id) } },
         onRestore = { vm.restoreSkipped(it) },
         onMissedRead = { vm.readMissed(it) },
         onMissedDismiss = { vm.dismissMissed(it) },
@@ -381,23 +387,110 @@ private fun time(at: String?, today: LocalDate, locale: java.util.Locale): Strin
 
 @Composable
 private fun ActivityRow(item: com.echoledger.mobile.data.ActivityItemDto, today: LocalDate, locale: java.util.Locale, onClick: () -> Unit) {
-    val problem = item.isProblem()
-    EchoListRow(
-        title = item.title.ifBlank { stringResource(R.string.v2_act_update) },
+    val res = LocalContext.current.resources
+    UnreadListRow(
+        title = ActivityWords.title(res, item, locale),
         meta = item.body.ifBlank { null },
         titleEnd = time(item.at, today, locale),
-        leading = { EchoAvatar(icon = if (problem) EchoIcons.Error else EchoIcons.Bell) },
-        trailing = if (!item.read) ({ UnreadDot() }) else null,
-        tall = true,
+        leading = { EchoAvatar(icon = ActivityWords.icon(item)) },
+        unread = !item.read,
         onClick = onClick
     )
 }
 
+/** An Activity row's icon and title, as classic has them, the title in the screen's language for the kinds it knows. */
+object ActivityWords {
+    /** Classic's icons: the missed call, a problem, a device, else the check of something done. */
+    fun icon(item: com.echoledger.mobile.data.ActivityItemDto): androidx.compose.ui.graphics.vector.ImageVector {
+        val kind = item.kind.orEmpty()
+        return when {
+            kind == "missed_recording" -> EchoIcons.Missed
+            item.isProblem() -> EchoIcons.Error
+            kind.contains("device") -> EchoIcons.Devices
+            else -> EchoIcons.Check
+        }
+    }
+
+    private fun known(kind: String): Int? = when {
+        kind == "upload_failed" -> R.string.v2_act_k_upload_failed
+        kind == "transcript_ready" -> R.string.v2_act_k_transcript_ready
+        kind == "transcript_failed" -> R.string.v2_act_k_transcript_failed
+        kind.contains("device") -> R.string.v2_act_k_device
+        else -> null
+    }
+
+    /**
+     * The server writes its titles in English ("Upload failed — retry", "Pixel 9 signed in"); English shows them as
+     * they are, another language shows the phone's own words for the kinds it knows (the server's title otherwise).
+     */
+    fun title(res: Resources, item: com.echoledger.mobile.data.ActivityItemDto, locale: java.util.Locale): String {
+        val server = item.title.ifBlank { res.getString(R.string.v2_act_update) }
+        if (locale.language == "en") return server
+        return known(item.kind.orEmpty())?.let(res::getString) ?: server
+    }
+}
+
+/**
+ * A row as [EchoListRow] lays it out (72 dp, the avatar, the title and time, one meta line), with the unread dot just
+ * before the title, as classic has it.
+ */
+// TODO-DS: an unread mark on EchoListRow's title; until then this row copies its layout.
+@Composable
+private fun UnreadListRow(
+    title: String,
+    meta: String?,
+    titleEnd: String,
+    leading: @Composable () -> Unit,
+    unread: Boolean,
+    onClick: (() -> Unit)?
+) {
+    val c = EchoV2.colors
+    val type = EchoV2.type
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = EchoTokens.Component.listRowHeightMobileTall)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .semantics(mergeDescendants = true) {}
+            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
+    ) {
+        leading()
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                if (unread) UnreadDot()
+                Text(
+                    title,
+                    style = type.content(title, type.bodyStrong),
+                    color = c.textPrimary,
+                    maxLines = if (com.echoledger.mobile.ui.v2.theme.largeText()) 2 else 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = com.echoledger.mobile.ui.v2.components.startAlign(),
+                    modifier = Modifier.weight(1f)
+                )
+                Text(titleEnd, style = type.mono, color = c.textSecondary, maxLines = 1)
+            }
+            meta?.let {
+                Text(
+                    it,
+                    style = type.content(it, type.meta),
+                    color = c.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = com.echoledger.mobile.ui.v2.components.startAlign(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun UnreadDot() = Box(
-    Modifier.padding(
-        EchoTokens.Space.s4
-    ).background(EchoV2.colors.accent, androidx.compose.foundation.shape.CircleShape).padding(EchoTokens.Space.s4)
+    Modifier
+        .size(EchoTokens.Component.statusDotSize)
+        .background(EchoV2.colors.accent, androidx.compose.foundation.shape.CircleShape)
 )
 
 /** A missed recording: "Missed recording", the call and its length, why in plain words, and the fix. */
@@ -414,25 +507,31 @@ private fun MissedRow(item: MissedItem, today: LocalDate, locale: java.util.Loca
         item.durationS?.let { formatClock(it * 1000) }
     ).joinToString(" · ")
     Column {
-        EchoListRow(
+        UnreadListRow(
             title = stringResource(R.string.v2_act_missed),
             meta = call,
             titleEnd = time(java.time.Instant.ofEpochMilli(item.startedAtMs).toString(), today, locale),
             leading = { EchoAvatar(icon = EchoIcons.Missed) },
-            trailing = if (!item.read) ({ UnreadDot() }) else null,
-            tall = true,
+            unread = !item.read,
             onClick = onClick
         )
+        // Why and the fix start under the row's text, after the avatar column.
+        val textStart = EchoTokens.Layout.pagePaddingMobile + EchoTokens.Component.avatarSize + EchoTokens.Space.s16
         Text(
             MissedWords.why(res, item),
             style = EchoV2.type.caption,
             color = EchoV2.colors.textSecondary,
-            modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
+            modifier = Modifier.padding(start = textStart, end = EchoTokens.Layout.pagePaddingMobile)
         )
         EchoButton(
             MissedWords.fix(res, item.button),
             onFix,
-            Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+            Modifier.padding(
+                start = textStart,
+                end = EchoTokens.Layout.pagePaddingMobile,
+                top = EchoTokens.Space.s8,
+                bottom = EchoTokens.Space.s8
+            ),
             kind = EchoButtonKind.Secondary
         )
     }

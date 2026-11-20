@@ -36,14 +36,15 @@ class ParityShots(private val compose: ComposeContentTestRule) {
     private var classicSide by mutableStateOf(true)
 
     /**
-     * Draws [classic] and [v2] in every variant; [each] runs after each change (to open a dialog, wait for data). Returns
-     * the variants drawn ("light-en" …).
+     * Draws [classic] and [v2] in every variant, or in [only] those ("light-en", "dark-ur" …); [each] runs after each
+     * change (to open a dialog, wait for data). Returns the variants drawn ("light-en" …).
      */
     fun shoot(
         name: String,
         classic: @Composable (dark: Boolean) -> Unit,
         v2: @Composable (dark: Boolean, language: EchoLanguage) -> Unit,
-        each: () -> Unit = {}
+        each: () -> Unit = {},
+        only: Set<String>? = null
     ): List<String> {
         compose.setContent {
             if (classicSide) {
@@ -58,6 +59,8 @@ class ParityShots(private val compose: ComposeContentTestRule) {
         val drawn = mutableListOf<String>()
         val variants = listOf(false, true).flatMap { d -> EchoLanguage.entries.map { it to d } }
         for ((l, d) in variants) {
+            val variant = "${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}"
+            if (only != null && variant !in only) continue
             language = l
             dark = d
             classicSide = true
@@ -68,7 +71,6 @@ class ParityShots(private val compose: ComposeContentTestRule) {
             compose.waitForIdle()
             each()
             val right = compose.onRoot().captureToImage().asAndroidBitmap()
-            val variant = "${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}"
             if (record) save(pair(left, right), File(out, "$name-$variant.png"))
             drawn += variant
         }

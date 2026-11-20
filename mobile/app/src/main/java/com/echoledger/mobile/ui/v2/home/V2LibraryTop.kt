@@ -47,10 +47,14 @@ data class NeedsBanner(val kind: Kind, val count: Int, val more: Int) {
 }
 
 object LibraryTop {
-    /** The banner (most urgent first: calls not recorded, calls waiting, uploads, transcripts), or none. */
-    fun banner(chip: ReadyChip, needs: List<NeedsAction>): NeedsBanner? {
+    /**
+     * The banner (most urgent first: calls not recorded, calls waiting, uploads, transcripts), or none. While the setup
+     * card shows its "Call recording ready" row ([setupShowsCapture]), calls not recorded is left to that row and the
+     * Calls chip, so the page says it once.
+     */
+    fun banner(chip: ReadyChip, needs: List<NeedsAction>, setupShowsCapture: Boolean = false): NeedsBanner? {
         val all = buildList {
-            if (chip == ReadyChip.NOT_READY) add(NeedsBanner.Kind.CallsOff to 1)
+            if (chip == ReadyChip.NOT_READY && !setupShowsCapture) add(NeedsBanner.Kind.CallsOff to 1)
             needs.filterIsInstance<NeedsAction.WaitingDecision>().size.takeIf { it > 0 }?.let { add(NeedsBanner.Kind.Waiting to it) }
             needs.filterIsInstance<NeedsAction.FailedUploads>().firstOrNull()?.let { add(NeedsBanner.Kind.FailedUploads to it.ids.size) }
             needs.filterIsInstance<NeedsAction.FailedTranscripts>().firstOrNull()?.let {
@@ -120,6 +124,10 @@ private fun NeedsLine(banner: NeedsBanner, actions: LibraryTopActions) {
         onAction = run
     )
 }
+
+/** Whether the setup card is on screen with its "Call recording ready" row still to do. */
+fun setupShowsCapture(checklist: List<Pair<ChecklistItem, Boolean>>, setupHidden: Boolean): Boolean =
+    !setupHidden && checklist.any { (item, done) -> item == ChecklistItem.Capture && !done }
 
 /** "Finish setting up": what is done and what is left, each with its one action; Hide puts it away. */
 @Composable

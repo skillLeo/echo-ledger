@@ -733,21 +733,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
+     * What [deleteMany] did: [went] the ids known to be gone (Undo brings back exactly these), [changed] how many the
+     * server deleted. When some were refused and the sync after it failed, which ones went is not known: [went] is
+     * empty and the screen says "N deleted" without Undo.
+     */
+    data class Deleted(val went: List<String>, val changed: Int)
+
+    /**
      * Library v2's Delete (one or many), on classic's path (`POST /api/sessions/bulk` with "delete", at most
      * [Organise.MAX_BULK]): the ids that went, worked out once the library has synced again (an id the server did not
      * change, someone else's or one already gone, is not among them), or null when the server refused. Says nothing on
      * success: the screen shows its own "deleted · Undo".
      */
-    suspend fun deleteMany(ids: List<String>): List<String>? {
+    suspend fun deleteMany(ids: List<String>): Deleted? {
         val sent = ids.take(Organise.MAX_BULK)
         val changed = withContext(Dispatchers.IO) {
             runCatching { graph.api()?.bulk(sent, "delete") ?: error("Not signed in") }
                 .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.getOrNull()
         } ?: return null
+        if (changed >= sent.size) {
+            refresh().join()
+            return Deleted(sent, changed)
+        }
+        // Some were refused: the library as the server has it now says which went.
+        val synced = withContext(Dispatchers.IO) { runCatching { graph.library.refresh() }.isSuccess }
         refresh().join()
-        if (changed >= sent.size) return sent
+        if (!synced) return Deleted(emptyList(), changed)
         val still = library.value.filter { !it.deleted }.mapTo(HashSet()) { it.id }
-        return sent.filter { it !in still }.take(changed)
+        return Deleted(sent.filter { it !in still }.take(changed), changed)
     }
 
     /** Undo of [deleteMany]: restores each of [ids], then syncs once. Returns how many came back; a failure says why. */
