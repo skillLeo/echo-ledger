@@ -1,0 +1,12 @@
+/* TODO-DS: the Shared page's rows until the design system has these as ListRow options (move them into v2.css then).
+   1. The row's ⋮ is always on screen, quiet and in the secondary text colour, never shown on hover only.
+   2. A row's line wraps to two lines in a narrow window instead of cutting the time off ("8:…"). */
+[data-v2=shared] .el-row__actions { opacity: 1; color: var(--el-role-text-secondary); }
+[data-v2=shared] .el-row__meta-text {
+  white-space: normal;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}

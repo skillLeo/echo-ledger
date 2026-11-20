@@ -3,8 +3,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeTranscript } from "../../test/fixtures";
+import { CALL_SEGMENTS, makeItem, makeTranscript } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
 import { answerConfirmForTests } from "../../lib/confirm";
 import type { ClientFolder, RequestLink, ShareLink, SharedItem } from "../../lib/ipc";
@@ -76,6 +79,12 @@ async function show(start: SharedTab = "with-me", focusId: string | null = null)
   return props;
 }
 const row = (title: string) => screen.getByText(title).closest("li") as HTMLElement;
+/** The row's own button: a press (or Enter on it, a native button) opens what the row stands for. */
+const rowButton = (title: string) => within(row(title)).getByRole("button", { name: title });
+const pick = async (title: string, action: string) => {
+  fireEvent.click(within(await menuOf(title)).getByRole("menuitem", { name: action }));
+  await act(flushAsync);
+};
 const menuOf = async (title: string) => {
   fireEvent.click(within(row(title)).getByRole("button", { name: `More for ${title}` }));
   return screen.getByRole("menu");
@@ -85,7 +94,8 @@ describe("the v2 Shared page", () => {
   it("has its title, the three tabs With me / My links / Request links with their counts, and switches between them", async () => {
     const { onTab } = await show();
     expect(screen.getByRole("heading", { level: 1, name: "Shared" })).toBeInTheDocument();
-    expect(screen.getByText("What teammates sent you, the links you made, and links people use to send you files.")).toBeInTheDocument();
+    // The description finds its own direction, so in Urdu its full stop stays at its end.
+    expect(screen.getByText("What teammates sent you, the links you made, and links people use to send you files.")).toHaveAttribute("dir", "auto");
     const tabs = within(screen.getByRole("tablist", { name: "Shared" })).getAllByRole("tab").map((t) => t.textContent);
     expect(tabs).toEqual(["With me · 3", "My links · 2", "Request links · 1"]);
     expect(screen.getByRole("tab", { name: "With me · 3" })).toHaveAttribute("aria-selected", "true");
@@ -102,22 +112,52 @@ describe("the v2 Shared page", () => {
     expect(within(list).getAllByRole("listitem")).toHaveLength(3);
     expect(row("Call a")).toHaveTextContent("Recording from Imran · Yesterday · 4:05 PM");
     expect(row("Call a")).toHaveTextContent("“Please check the totals”");
-    expect(row("Call a")).not.toHaveTextContent("Saved to my library");
+    expect(row("Call a")).not.toHaveTextContent("Saved");
     expect(row(URDU)).toHaveTextContent("Recording from sara@acme.pk");
-    expect(row(URDU)).toHaveTextContent("Saved to my library");
+    expect(row(URDU)).toHaveTextContent("Saved");
     expect(row("Acme")).toHaveTextContent("Project from Imran");
     expect(screen.getByText(URDU)).toHaveAttribute("dir", "auto");
-    expect(within(row(URDU)).queryByRole("button", { name: `Save ${URDU} to my library` })).toBeNull();
+    // The time is one left-to-right isolate (.el-num), so "4:05 PM" never turns round in Urdu.
+    expect(within(row("Call a")).getByText("Yesterday · 4:05 PM")).toHaveClass("el-num");
+    expect(within(row(URDU)).queryByRole("menuitem", { name: "Save to my library" })).toBeNull();
+  });
+
+  it("rows have no hover-only actions: the ⋮ is always there on every tab, and the row itself opens the item", async () => {
+    const { onOpenRecording } = await show();
+    // The ⋮ is in the row without hovering or focusing it, and the page's style keeps it on screen.
+    for (const title of ["Call a", URDU, "Acme"]) expect(within(row(title)).getByRole("button", { name: `More for ${title}` })).toBeInTheDocument();
+    expect(within(row("Call a")).queryByRole("button", { name: /^(Open|Save)/ })).toBeNull();
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "shared.css"), "utf8");
+    expect(css).toMatch(/\[data-v2=shared\] \.el-row__actions \{ opacity: 1;/);
+    expect(document.querySelector("[data-v2=shared]")).not.toBeNull();
+    // The row is one native button (Enter on it presses it): it opens the recording read-only.
+    expect(rowButton("Call a").tagName).toBe("BUTTON");
+    rowButton("Call a").focus();
+    expect(rowButton("Call a")).toHaveFocus();
+    fireEvent.click(rowButton("Call a"));
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { level: 1, name: "Call a" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+    // A project sent to you has nothing to open until it is saved: its row opens its menu.
+    fireEvent.click(rowButton("Acme"));
+    expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Save to my library", "Remove"]);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+
+    fireEvent.click(screen.getByRole("tab", { name: "My links · 2" }));
+    expect(within(row("Acme kickoff")).getByRole("button", { name: "More for Acme kickoff" })).toBeInTheDocument();
+    fireEvent.click(rowButton("Acme kickoff"));
+    expect(onOpenRecording).toHaveBeenCalledWith("rec-1");
+    fireEvent.click(screen.getByRole("tab", { name: "Request links · 1" }));
+    expect(within(screen.getAllByText("Send me your voice notes")[0].closest("li") as HTMLElement).getByRole("button", { name: "More for Send me your voice notes" })).toBeInTheDocument();
   });
 
   it("With me › Open shows the recording read-only: who sent it, the note, the player and the transcript, and Back", async () => {
     await show();
-    fireEvent.click(within(row("Call a")).getByRole("button", { name: "Open Call a" }));
-    await act(flushAsync);
+    await pick("Call a", "Open");
     expect(screen.getByRole("heading", { level: 1, name: "Call a" })).toHaveAttribute("dir", "auto");
     expect(screen.getByText("Read-only")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("“Please check the totals” You can play and read it. Save to my library makes a copy you can change.");
-    expect(screen.getByText("From Imran · Yesterday · 4:05 PM · 2:05")).toBeInTheDocument();
+    expect(screen.getByTestId("reader-sent")).toHaveTextContent("From Imran · Yesterday · 4:05 PM · “Please check the totals” You can play and read it. Save to my library makes a copy you can change.");
+    expect(screen.getByText("You can play and read it. Save to my library makes a copy you can change.")).toHaveAttribute("dir", "auto");
     expect(callsOf("session_detail")).toEqual([{ id: "s-a" }]);
     expect(callsOf("transcript_detail")).toEqual([{ id: "tr-s-a" }]);
     expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
@@ -132,11 +172,10 @@ describe("the v2 Shared page", () => {
 
   it("Save to my library makes a copy, marks the row Saved and says where it went", async () => {
     const { notify, onSaved } = await show();
-    fireEvent.click(within(row("Call a")).getByRole("button", { name: "Save Call a to my library" }));
-    await act(flushAsync);
+    await pick("Call a", "Save to my library");
     expect(callsOf("shared_save")).toEqual([{ id: "a" }]);
-    expect(row("Call a")).toHaveTextContent("Saved to my library");
-    expect(within(row("Call a")).queryByRole("button", { name: "Save Call a to my library" })).toBeNull();
+    expect(row("Call a")).toHaveTextContent("Saved");
+    expect(within(await menuOf("Call a")).queryByRole("menuitem", { name: "Save to my library" })).toBeNull();
     expect(notify).toHaveBeenCalledWith("Saved to your Library", false, { kind: "recording", id: "copy-1" });
     expect(onSaved).toHaveBeenCalledWith({ session_id: "copy-1" }, expect.objectContaining({ id: "a" }));
   });
@@ -144,11 +183,10 @@ describe("the v2 Shared page", () => {
   it("Save to my library also works from the read-only view, and a project saves to your projects", async () => {
     respond("shared_save", { client_id: "c9" });
     const { notify } = await show();
-    fireEvent.click(within(row("Acme")).getByRole("button", { name: "Save Acme to my library" }));
-    await act(flushAsync);
+    await pick("Acme", "Save to my library");
     expect(notify).toHaveBeenCalledWith("Saved Acme to your projects", false, { kind: "project", id: "c9" });
     respond("shared_save", { session_id: "copy-1" });
-    fireEvent.click(within(row("Call a")).getByRole("button", { name: "Open Call a" }));
+    fireEvent.click(rowButton("Call a"));
     await act(flushAsync);
     fireEvent.click(screen.getByRole("button", { name: "Save to my library" }));
     await act(flushAsync);
@@ -210,9 +248,10 @@ describe("the v2 Shared page", () => {
     expect(row("Acme kickoff")).toHaveTextContent("Active");
     expect(row("Project: Acme Ltd")).toHaveTextContent("Only omar@acme.pk · Not viewed yet");
     expect(screen.getByText("A recording").closest("li")).toHaveTextContent("Revoked");
-    fireEvent.click(within(row("Acme kickoff")).getByRole("button", { name: "Open Acme kickoff" }));
+    expect(within(row("Acme kickoff")).getByText("Today · 9:00 AM")).toHaveClass("el-num");
+    fireEvent.click(rowButton("Acme kickoff"));
     expect(onOpenRecording).toHaveBeenCalledWith("rec-1");
-    fireEvent.click(within(row("Project: Acme Ltd")).getByRole("button", { name: "Open Project: Acme Ltd" }));
+    await pick("Project: Acme Ltd", "Open");
     expect(onOpenProject).toHaveBeenCalledWith("c1");
 
     const asked = answerConfirm();
@@ -344,3 +383,191 @@ describe("the v2 Shared page", () => {
   });
 });
 
+// The read-only view keeps every control classic's Library keeps for a recording a teammate sent (LibraryView with
+// readOnly): each one below, one test each.
+describe("a shared recording, open read-only", () => {
+  /** Opens "Call a" (a 8:06 recording from Zoom on a computer, in project Acme Ltd) from With me. */
+  async function openReader(session: Partial<SharedItem["session"] & object> = {}) {
+    respond("shared_with_me", { data: [sent("a", {
+      note: "Please check the totals",
+      session: makeItem("s-a", { title: "Call a", duration_ms: 486_000, source_app_label: "Zoom", source_device_label: "Desktop",
+        client: { id: "c1", name: "Acme Ltd" } as ClientFolder, ...session } as never),
+    })] });
+    const props = await show();
+    fireEvent.click(rowButton("Call a"));
+    await act(flushAsync);
+    return props;
+  }
+  const player = () => screen.getByTestId("player") as HTMLAudioElement;
+
+  it("head: the source and device, the title, when it was recorded with its length and project, and Transcribed in", async () => {
+    await openReader({ transcript: { final_status: "completed", final_transcript_id: "tr-s-a", live_available: false, preview: null, final_language: "ur" } as never });
+    expect(screen.getByTestId("source-line")).toHaveTextContent("Zoom · Desktop");
+    expect(screen.getByTestId("source-line")).toHaveAttribute("dir", "auto");
+    const recorded = screen.getByTestId("recorded");
+    expect(recorded).toHaveTextContent(/^Oct 24 · .+ · 8:06 · Acme Ltd$/);
+    expect(within(recorded).getByText("8:06")).toHaveClass("el-num");
+    expect(screen.getByText("Transcribed in Urdu")).toHaveAttribute("dir", "auto");
+  });
+
+  it("head: the wrong-script note, and the retry line while it waits to be transcribed", async () => {
+    respond("transcript_detail", makeTranscript({ status: "pending", segments: [], retry_at: new Date(2026, 9, 28, 16, 30).toISOString() }));
+    await openReader({ transcript: { final_status: "pending", final_transcript_id: "tr-s-a", live_available: false, preview: null, script_warning: "latin" } as never });
+    expect(screen.getByText("Waiting to transcribe — retrying at 4:30 pm")).toBeInTheDocument();
+    expect(screen.getByText(/^Wrong script detected: Urdu written in English letters/)).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Transcribing" })).getByRole("heading", { name: "Transcribing" })).toBeInTheDocument();
+  });
+
+  it("player: the length is the recording's (8:06) when the audio file says 1 s or nothing yet", async () => {
+    respond("transcript_detail", makeTranscript({ segments: CALL_SEGMENTS.slice(0, 2) }));
+    await openReader();
+    const slider = screen.getByRole("slider", { name: "Position" });
+    expect(slider).toHaveAttribute("aria-valuetext", "0:00 of 8:06");
+    Object.defineProperty(player(), "duration", { value: 1, configurable: true });
+    fireEvent.loadedMetadata(player());
+    expect(slider).toHaveAttribute("aria-valuetext", "0:00 of 8:06");
+    Object.defineProperty(player(), "duration", { value: Number.NaN, configurable: true });
+    fireEvent.durationChange(player());
+    expect(slider).toHaveAttribute("aria-valuetext", "0:00 of 8:06");
+  });
+
+  it("player: play and pause, back and forward 10 s, speed, Skip silence, Follow and the keys", async () => {
+    const play = vi.fn(() => Promise.resolve());
+    const pause = vi.fn();
+    Object.assign(HTMLMediaElement.prototype, { play, pause });
+    await openReader();
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    expect(play).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Forward 10 seconds" }));
+    expect(screen.getByRole("slider", { name: "Position" })).toHaveAttribute("aria-valuetext", expect.stringMatching(/^0:10 of/));
+    fireEvent.click(screen.getByRole("button", { name: "Back 10 seconds" }));
+    expect(screen.getByRole("slider", { name: "Position" })).toHaveAttribute("aria-valuetext", expect.stringMatching(/^0:00 of/));
+    fireEvent.click(screen.getByRole("combobox", { name: /^Playback speed/ }));
+    fireEvent.click(screen.getByRole("option", { name: "1.5×" }));
+    expect(player().playbackRate).toBe(1.5);
+    const skip = screen.getByRole("switch", { name: "Skip silence" });
+    expect(skip).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(skip);
+    expect(skip).toHaveAttribute("aria-checked", "true");
+    const follow = screen.getByRole("switch", { name: "Follow" });
+    expect(follow).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(follow);
+    expect(follow).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText(/plays · /)).toBeInTheDocument();
+    // Space plays or pauses (the audio is paused in jsdom, so it plays).
+    play.mockClear();
+    fireEvent.keyDown(document.body, { key: " " });
+    expect(play).toHaveBeenCalled();
+  });
+
+  it("player: the bookmarks play from their moment", async () => {
+    respond("session_detail", { playback_url: "https://audio.test/a.m4a", speaker_names: {}, markers: [{ id: "m1", at_ms: 65_000, tag: "Invoice", note: "Totals" }] });
+    Object.assign(HTMLMediaElement.prototype, { play: vi.fn(() => Promise.resolve()), pause: vi.fn() });
+    await openReader();
+    const marks = screen.getByRole("list", { name: "Bookmarks" });
+    fireEvent.click(within(marks).getByRole("button", { name: "1:05 Invoice" }));
+    expect(screen.getByRole("slider", { name: "Position" })).toHaveAttribute("aria-valuetext", expect.stringMatching(/^1:05 of/));
+  });
+
+  it("player: an audio link that ran out is asked for again once, then it says so", async () => {
+    await openReader();
+    respond("session_detail", { playback_url: "https://audio.test/fresh.m4a" });
+    fireEvent.error(player());
+    await act(flushAsync);
+    expect(player()).toHaveAttribute("src", "https://audio.test/fresh.m4a");
+    fireEvent.error(player());
+    await act(flushAsync);
+    expect(screen.getByText("Playback link expired. Open the recording again.")).toBeInTheDocument();
+  });
+
+  it("transcript: its kind line, and Copy ▾ with Copy text, Copy with timestamps and Copy for AI", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    const { notify } = await openReader();
+    const bar = screen.getByRole("toolbar", { name: "Find and copy" });
+    expect(bar).toHaveTextContent("Final transcript");
+    fireEvent.click(within(bar).getByRole("button", { name: "Copy" }));
+    expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Copy text", "Copy with timestamps", "Copy for AI"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy text" }));
+    await act(flushAsync);
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("Hello, this is Sam."));
+    expect(notify).toHaveBeenLastCalledWith("Copied", false, undefined);
+    fireEvent.click(within(bar).getByRole("button", { name: "Copy" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy with timestamps" }));
+    await act(flushAsync);
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("[0:12] Imran: Hi Sam, thanks for calling back."));
+    expect(notify).toHaveBeenLastCalledWith("Copied with timestamps", false, undefined);
+    fireEvent.click(within(bar).getByRole("button", { name: "Copy" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy for AI" }));
+    await act(flushAsync);
+    expect(writeText).toHaveBeenLastCalledWith(expect.stringMatching(/^# Call a\n/));
+    expect(notify).toHaveBeenLastCalledWith("Copied for AI, with the note on unsure words", false, undefined);
+  });
+
+  it("transcript: an edited final transcript says so, and live captions say the final one is pending", async () => {
+    respond("transcript_detail", makeTranscript({ edited_at: NOW.toISOString() }));
+    await openReader();
+    expect(screen.getByRole("toolbar", { name: "Find and copy" })).toHaveTextContent("Final transcript · edited");
+    fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+    respond("transcript_detail", makeTranscript({ kind: "live" }));
+    fireEvent.click(rowButton("Call a"));
+    await act(flushAsync);
+    expect(screen.getByRole("toolbar", { name: "Find and copy" })).toHaveTextContent("Live captions (final transcript pending)");
+  });
+
+  it("transcript: Find (the button and Cmd/Ctrl+F) marks every match and steps through them", async () => {
+    await openReader();
+    fireEvent.keyDown(document.body, { key: "f", ctrlKey: true });
+    const find = screen.getByRole("search", { name: "Find in this transcript" });
+    fireEvent.change(within(find).getByRole("searchbox"), { target: { value: "sam" } });
+    expect(within(find).getByRole("status")).toHaveTextContent("1 of 2");
+    expect(document.querySelectorAll("mark.el-find")).toHaveLength(2);
+    fireEvent.click(within(find).getByRole("button", { name: "Next match" }));
+    expect(within(find).getByRole("status")).toHaveTextContent("2 of 2");
+    fireEvent.click(within(find).getByRole("button", { name: "Close find" }));
+    expect(screen.queryByRole("search")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Find" }));
+    expect(screen.getByRole("search", { name: "Find in this transcript" })).toBeInTheDocument();
+  });
+
+  it("transcript: Show as shows the owner's ready views (never makes one), and only when they are ready", async () => {
+    respond("transcript_detail", makeTranscript({ views: { available: ["roman"], status: "ready" } }));
+    respond("transcript_views", { status: "ready", available: ["roman"], roman: ["Salam, main Sam hoon.", "Hi Sam, thanks for calling back.", null, null], english: null, model: null, made_at: null, error: null, kept: { roman: [1] } });
+    await openReader();
+    const showAs = screen.getByRole("radiogroup", { name: "Show as" });
+    expect(within(showAs).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Roman Urdu", "Original"]);
+    fireEvent.click(within(showAs).getByRole("radio", { name: "Roman Urdu" }));
+    await act(flushAsync);
+    expect(screen.getByText("Salam, main Sam hoon.")).toBeInTheDocument();
+    expect(screen.getByText("Roman Urdu view. The transcript itself is unchanged.")).toBeInTheDocument();
+    expect(screen.getByText("· original words")).toBeInTheDocument();
+    expect(callsOf("transcript_views_make")).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+    respond("transcript_detail", makeTranscript({ views: { available: ["roman"], status: "none" } }));
+    fireEvent.click(rowButton("Call a"));
+    await act(flushAsync);
+    expect(screen.queryByRole("radiogroup", { name: "Show as" })).toBeNull();
+  });
+
+  it("transcript: what a second transcription heard shows under its line", async () => {
+    respond("transcript_detail", makeTranscript({ segments: [{ ...CALL_SEGMENTS[0], check: { provider: "groq", label: "Groq Whisper", text: "Hello, this is Tam." } }] }));
+    await openReader();
+    expect(screen.getByText("A second transcription heard: Hello, this is Tam.")).toBeInTheDocument();
+    expect(screen.queryByText(/Groq/)).toBeNull();
+  });
+
+  it("transcript: failed, empty, and not transcribed yet, in classic's words", async () => {
+    respond("transcript_detail", makeTranscript({ status: "failed", error_code: "no_audio", segments: [] }));
+    await openReader();
+    expect(screen.getByText("Transcription failed.")).toBeInTheDocument();
+    expect(screen.getByText("No audio was captured in this recording. Check your microphone and the audio device, then try again.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Try again|Re-transcribe/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+    respond("transcript_detail", makeTranscript({ segments: [] }));
+    fireEvent.click(rowButton("Call a"));
+    await act(flushAsync);
+    expect(screen.getByText("No speech was detected in this recording.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeDisabled();
+  });
+});

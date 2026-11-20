@@ -2,9 +2,10 @@
 // RequestLinks.tsx, the same commands and words): what teammates sent you, the links you made, and your request links,
 // each a tab with its count. With me also holds what the Library's Shared with me folder holds: a recording opens
 // read-only (SharedReader), Save to my library makes a copy here, Remove takes it off the list. A link can be revoked
-// after asking; New request link opens the Request files sheet. Each row's right-click is the same menu as its ⋮.
-// Built from v2 parts only.
-import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
+// after asking; New request link opens the Request files sheet. Every row's ⋮ is always on screen (never on hover only)
+// and its right-click is the same menu; a row press (or Enter on it) opens what it stands for. Times are number isolates
+// so they read the right way round in Urdu. Built from v2 parts only.
+import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { api, errorMessage, type ClientFolder, type LibraryItem, type RequestLink, type ShareLink, type SharedItem } from "../../lib/ipc";
 import { audienceText, limitsText, linkState, receivedText, requestState, REVOKE_LINK_QUESTION, REVOKE_REQUEST_QUESTION, viewsText } from "../../lib/sharing";
 import { formatWhen } from "../../lib/format";
@@ -16,7 +17,9 @@ import { Badge, Banner, Button, Card, EmptyState, Icons, List, ListRow, Loading,
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "../library/SourceAvatar";
 import { SharedReader } from "./SharedReader";
-import { sharedMeta, sharedTitle } from "./model";
+import { sharedTitle } from "./model";
+import { senderOf } from "../../views/main/SharedView";
+import "./shared.css";
 import { RequestLinkSheet } from "./RequestLinkSheet";
 
 /** What each tab lists, read when the page opens; null while loading (a server without it gives an empty list). */
@@ -29,6 +32,17 @@ interface SharedData {
 const STATE_TONE: Record<"Active" | "Revoked" | "Expired", Tone> = { Active: "success", Revoked: "neutral", Expired: "neutral" };
 
 type RowEvent = MouseEvent<HTMLElement> | KeyboardEvent<HTMLButtonElement>;
+
+/** A time in a row's line, kept left-to-right as one piece inside right-to-left text. */
+const when = (iso: string) => <span className="el-num">{formatWhen(iso)}</span>;
+
+/** "Recording from Imran · Yesterday · 4:05 PM · “Please check the totals”", the time an isolate. */
+export function sharedMeta(item: SharedItem): ReactNode {
+  return <>{item.kind === "project" ? "Project" : "Recording"} from {senderOf(item)}{item.sent_at && <> · {when(item.sent_at)}</>}{item.note ? ` · “${item.note}”` : ""}</>;
+}
+/** "3 views · last viewed Today · 9:00 AM", as lib/sharing's viewsText, the time an isolate. */
+const viewsLine = (link: ShareLink): ReactNode =>
+  link.view_count && link.last_viewed_at ? <>{viewsText({ ...link, last_viewed_at: null })} · last viewed {when(link.last_viewed_at)}</> : viewsText(link);
 
 export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenRecording, onOpenProject, onSaved }: {
   tab: SharedTab;
@@ -175,14 +189,11 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
               return (
                 <ListRow key={item.id} rowId={item.id} title={title} meta={sharedMeta(item)} selected={item.id === focusId}
                   leading={item.session ? <SourceAvatar item={item.session} /> : undefined} icon={item.session ? undefined : Icons.FolderIcon}
-                  badge={item.saved_at ? <Badge tone="success">Saved to my library</Badge> : undefined}
-                  onClick={item.session ? () => setOpenId(item.id) : undefined}
+                  endTop={item.saved_at ? "Saved" : undefined}
+                  // A recording opens read-only; a project sent to you has nothing to open until it is saved: its menu opens.
+                  onClick={item.session ? () => setOpenId(item.id) : rowMenu(`Actions for ${title}`, withMeMenu(item))}
                   onContextMenu={rowMenu(`Actions for ${title}`, withMeMenu(item))}
-                  actions={<>
-                    {item.session && <Button size="sm" variant="quiet" onClick={() => setOpenId(item.id)} aria-label={`Open ${title}`}>Open</Button>}
-                    {!item.saved_at && <Button size="sm" disabled={busy === item.id} onClick={() => void save(item)} aria-label={`Save ${title} to my library`}>Save to my library</Button>}
-                    {more(`More for ${title}`, () => withMeMenu(item))}
-                  </>} />
+                  actions={more(`More for ${title}`, () => withMeMenu(item))} />
               );
             })}
           </List>
@@ -204,14 +215,11 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
               const items = linkMenu(link);
               return (
                 <ListRow key={link.id} rowId={link.id} icon={link.client_id && !link.session_id ? Icons.FolderIcon : Icons.LinkIcon} title={title}
-                  meta={`${audienceText(link)} · ${viewsText(link)}${link.expires_at ? ` · until ${formatWhen(link.expires_at)}` : ""}`}
+                  meta={<>{audienceText(link)} · {viewsLine(link)}{link.expires_at && <> · until {when(link.expires_at)}</>}</>}
                   badge={<Badge tone={STATE_TONE[state]}>{state}</Badge>}
                   onClick={link.session_id || link.client_id ? () => openLink(link) : undefined}
                   onContextMenu={rowMenu(`Actions for ${title}`, items)}
-                  actions={<>
-                    {(link.session_id || link.client_id) && <Button size="sm" variant="quiet" onClick={() => openLink(link)} aria-label={`Open ${title}`}>Open</Button>}
-                    {items.length > 0 && more(`More for ${title}`, () => linkMenu(link))}
-                  </>} />
+                  actions={items.length > 0 ? more(`More for ${title}`, () => linkMenu(link)) : undefined} />
               );
             })}
           </List>
@@ -228,7 +236,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
     return (
       <ListRow key={link.id} rowId={link.id} icon={Icons.InboxIcon} title={title}
         meta={[`Into ${projectName(link.client_id)}`, receivedText(link.received), limitsText(link) || null].filter(Boolean).join(" · ")}
-        endTop={link.expires_at ? `${state === "Active" ? "Stops" : "Stopped"} ${formatWhen(link.expires_at)}` : "Never stops"}
+        endTop={link.expires_at ? <>{state === "Active" ? "Stops" : "Stopped"} {when(link.expires_at)}</> : "Never stops"}
         badge={<Badge tone={STATE_TONE[state]}>{state}</Badge>}
         onContextMenu={inSheet ? undefined : rowMenu(`Actions for ${title}`, items)}
         actions={items.length > 0 ? more(`More for ${title}`, () => requestMenu(link)) : undefined} />
@@ -247,7 +255,7 @@ export function SharedV2({ tab, onTab, notify, projects, focusId = null, onOpenR
       <header className="el-page__head">
         <div className="el-page__titles">
           <h1 className="el-title-l">Shared</h1>
-          <p className="el-secondary">What teammates sent you, the links you made, and links people use to send you files.</p>
+          <p className="el-secondary" dir="auto">What teammates sent you, the links you made, and links people use to send you files.</p>
         </div>
         <div className="el-page__actions">
           <Button variant="primary" icon={Icons.InboxIcon} onClick={() => setNewRequest(true)}>New request link</Button>
