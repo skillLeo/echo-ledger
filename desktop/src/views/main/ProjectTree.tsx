@@ -48,7 +48,7 @@ export function ProjectTree({ projects, label, variant, selectedId = null, expan
                 </span>
               ) : (
                 <>
-                  <span className="tree-name">{project.name}</span>
+                  <span className="tree-name" dir="auto">{project.name}</span>
                   {count > 0 && <span className="tree-count" aria-hidden="true">{count}</span>}
                 </>
               )}

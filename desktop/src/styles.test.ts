@@ -112,7 +112,8 @@ describe("library layout down to the minimum window (A6.DU5)", () => {
 
   it("covers the smallest window the app allows", () => {
     const main = tauriConf.app.windows.find((w) => w.label === "main")!;
-    expect(main.minWidth).toBe(860);
+    // Half of a 1440 pt screen (the owner works in half screens).
+    expect(main.minWidth).toBe(720);
     expect(main.minWidth).toBeLessThanOrEqual(1029);
   });
 
@@ -127,7 +128,7 @@ describe("library layout down to the minimum window (A6.DU5)", () => {
     const column = Number.parseFloat(prop(".page-split", "grid-template-columns"));
     const split = Number.parseFloat(resolve(prop(".page-split", "gap"), "dark"));
     expect(library + column + split).toBeLessThanOrEqual(COLUMN_CONTENT);
-    // The default sidebar is 240 px: the smallest window (860 px) has a narrow page, and so does a wide sidebar there.
+    // The default sidebar is 240 px: the smallest window (720 px) has a narrow page, and so does a wide sidebar there.
     expect(SIDEBAR_DEFAULT).toBe(240);
     expect(tauriConf.app.windows.find((w) => w.label === "main")!.minWidth - SIDEBAR_DEFAULT).toBeLessThan(NARROW_CONTENT);
   });
