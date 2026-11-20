@@ -80,7 +80,7 @@ export function SelectionBar({ label, count, allSelected, onToggleAll, onExit, a
 
   // The toolbar's arrow keys: along the bar's own buttons (never into an open menu, whose list keeps its keys).
   const move = (e: KeyboardEvent<HTMLDivElement>) => {
-    const rtl = bar.current ? getComputedStyle(bar.current).direction === "rtl" : false;
+    const rtl = bar.current ? bar.current.closest("[dir]")?.getAttribute("dir") === "rtl" || getComputedStyle(bar.current).direction === "rtl" : false;
     const next = rtl ? "ArrowLeft" : "ArrowRight";
     const prev = rtl ? "ArrowRight" : "ArrowLeft";
     if (![next, prev, "Home", "End"].includes(e.key) || typing(e.target)) return;

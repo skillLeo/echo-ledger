@@ -189,7 +189,9 @@
 /* Grouped menus with icons, shortcuts and sub-menus (a recording's ⋮, Export ▸), and the same menu at the pointer. */
 .el-menu__item { position: relative; list-style: none; }
 .el-menu__group { padding: var(--el-space-8) var(--el-space-8) var(--el-space-4); color: var(--el-role-text-secondary); }
-.el-menu__group:first-child { padding-block-start: var(--el-space-4); }
+.el-menu__section { display: contents; }
+.el-menu__section > ul { margin: 0; padding: 0; }
+.el-menu__section:first-child .el-menu__group { padding-block-start: var(--el-space-4); }
 .el-menu__label { flex: 1; }
 .el-menu__icon-space { inline-size: var(--el-space-16); flex: none; }
 .el-menu__shortcut { font-family: inherit; color: var(--el-role-text-secondary); padding-inline-start: var(--el-space-16); }

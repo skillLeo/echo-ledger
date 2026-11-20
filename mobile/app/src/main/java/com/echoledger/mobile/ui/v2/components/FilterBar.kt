@@ -1,6 +1,7 @@
 package com.echoledger.mobile.ui.v2.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -44,7 +45,14 @@ fun EchoChip(
     Surface(
         modifier = modifier
             .minimumInteractiveComponentSize()
-            .selectable(selected = selected, enabled = enabled, role = Role.Checkbox, onClick = onClick),
+            // A chip that opens a choice is announced as a drop-down list (as EchoSelect is), not as a checkbox.
+            .then(
+                if (dropdown) {
+                    Modifier.clickable(enabled = enabled, role = Role.DropdownList, onClick = onClick)
+                } else {
+                    Modifier.selectable(selected = selected, enabled = enabled, role = Role.Checkbox, onClick = onClick)
+                }
+            ),
         shape = RoundedCornerShape(EchoTokens.Component.chipRadius),
         color = if (selected) c.accentSoft else c.bgSurface,
         contentColor = if (selected) c.accentText else c.textPrimary,

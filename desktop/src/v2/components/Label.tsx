@@ -38,14 +38,15 @@ const STORED = /^#[0-9a-f]{6}$/i;
  * Any other colour (set by an older app or the API) reaches the CSS only as --label-own, which the stylesheet uses for
  * the dot alone: never as text or fill. A value that isn't #rrggbb isn't used at all (the dot stays neutral).
  */
-function look(colour: string): { className: string; style?: CSSProperties } {
+function look(colour: string | null | undefined): { className: string; style?: CSSProperties } {
+  if (!colour) return { className: "el-label--other" }; // no colour stored (older data): the neutral chip
   const name = labelColourName(colour);
   if (name) return { className: `el-label--${name}` };
   return STORED.test(colour.trim()) ? { className: "el-label--other", style: { ["--label-own" as string]: colour.trim() } } : { className: "el-label--other" };
 }
 
 /** A label's colour dot alone (a row's labels when there is no room for chips); named by the label for assistive tools. */
-export function LabelDot({ name, colour }: { name: string; colour: string }) {
+export function LabelDot({ name, colour }: { name: string; colour: string | null | undefined }) {
   const { className, style } = look(colour);
   return <span className={`el-label-dot ${className}`} style={style} role="img" aria-label={name} />;
 }
@@ -55,7 +56,7 @@ export function LabelDot({ name, colour }: { name: string; colour: string }) {
  * neutral chip with primary text and only the dot in the stored colour for any other. With onRemove it has its own
  * remove button, like an applied filter's Chip.
  */
-export function LabelChip({ name, colour, onRemove, removeLabel }: { name: string; colour: string; onRemove?: () => void; removeLabel?: string }) {
+export function LabelChip({ name, colour, onRemove, removeLabel }: { name: string; colour: string | null | undefined; onRemove?: () => void; removeLabel?: string }) {
   const { className, style } = look(colour);
   return (
     <span className={`el-label-chip ${className}${onRemove ? " el-label-chip--removable" : ""}`} style={style}>

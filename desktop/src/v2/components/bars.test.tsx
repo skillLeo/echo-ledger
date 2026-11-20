@@ -117,6 +117,16 @@ describe("SelectionBar", () => {
     expect(close).toHaveFocus();
   });
 
+  it("in right-to-left the arrow keys follow the reading direction", () => {
+    render(<div dir="rtl"><Host /></div>);
+    const close = screen.getByRole("button", { name: "Cancel selection" });
+    close.focus();
+    fireEvent.keyDown(close, { key: "ArrowLeft" });
+    expect(screen.getByRole("button", { name: "Select all" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "ArrowRight" });
+    expect(close).toHaveFocus();
+  });
+
   it("with nothing picked the title asks for a pick and the actions can't be pressed", () => {
     render(<SelectionBar label="Selected" count={0} allSelected={false} onToggleAll={() => undefined} onExit={() => undefined} actions={actions()} main={MAIN} />);
     expect(screen.getByRole("heading")).toHaveTextContent("Select items");
@@ -140,6 +150,20 @@ describe("SortGroupMenu", () => {
     for (const header of ["Sort", "Group by", "Density"]) expect(within(menu).getByText(header)).toBeInTheDocument();
     const checked = within(menu).getAllByRole("menuitemradio").filter((i) => i.getAttribute("aria-checked") === "true").map((i) => i.textContent);
     expect(checked).toEqual(["Newest", "Date", "Comfortable"]);
+  });
+
+  it("each section is its own named group, so its header is announced and its ticks are a radio set of their own", () => {
+    render(<Host />);
+    fireEvent.click(screen.getByRole("button", { name: "Sort and group" }));
+    const menu = screen.getByRole("menu", { name: "Sort and group" });
+    const groups = within(menu).getAllByRole("group");
+    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual(["Sort", "Group by", "Density"]);
+    expect(groups.map((g) => within(g).getAllByRole("menuitemradio").filter((i) => i.getAttribute("aria-checked") === "true").length)).toEqual([1, 1, 1]);
+    // The arrow keys still run through every option, across the groups.
+    const first = within(groups[0]).getAllByRole("menuitemradio")[0];
+    expect(first).toHaveFocus();
+    for (let n = 0; n < 4; n++) fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });
+    expect(within(groups[1]).getAllByRole("menuitemradio")[0]).toHaveFocus();
   });
 
   it("calls onChange with the whole new value and stays open for the next pick", () => {
@@ -243,6 +267,45 @@ describe("StickyItemBar", () => {
     expect(root.style.getPropertyValue(ITEM_BAR_HEIGHT)).toBe("0px");
     unmount();
     expect(root.style.getPropertyValue(ITEM_BAR_HEIGHT)).toBe("");
+  });
+
+  it("with two bars mounted the root keeps the taller one, and clears only when both are gone", () => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { height: this.classList.contains("el-itembar__bar") ? (this.closest("[data-tall]") ? 60 : 44) : 0 } as DOMRect;
+    });
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const root = document.documentElement;
+    const a = render(<StickyItemBar title="One" onBack={() => undefined} />);
+    const b = render(<div data-tall><StickyItemBar title="Two" onBack={() => undefined} /></div>);
+    expect(root.style.getPropertyValue(ITEM_BAR_HEIGHT)).toBe("60px");
+    b.unmount();
+    expect(root.style.getPropertyValue(ITEM_BAR_HEIGHT)).toBe("44px");
+    a.unmount();
+    expect(root.style.getPropertyValue(ITEM_BAR_HEIGHT)).toBe("");
+  });
+
+  it("watches a header that mounts after the bar, and a new header when the item changes", () => {
+    const io = fakeObserver();
+    function Late({ show, name }: { show: boolean; name: string }) {
+      const [head, setHead] = useState<Element | null>(null);
+      return (
+        <>
+          <StickyItemBar title={name} onBack={() => undefined} sentinel={head} />
+          {show && <header key={name} ref={setHead}><h1>{name}</h1></header>}
+        </>
+      );
+    }
+    const { rerender } = render(<Late show={false} name="First" />);
+    rerender(<Late show name="First" />);
+    expect(io.made.at(-1)?.target).toHaveTextContent("First");
+    rerender(<Late show name="Second" />);
+    expect(io.made.at(-1)?.target).toHaveTextContent("Second");
+  });
+
+  it("the ⋮ button carries the menu's name as its tooltip", () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    render(<StickyItemBar title="One" onBack={() => undefined} menu={{ label: "Recording menu", items: [{ label: "Rename" }] }} />);
+    expect(screen.getByRole("button", { name: "Recording menu" })).toHaveAttribute("title", "Recording menu");
   });
 
   it("follows its height with a ResizeObserver when there is one", () => {
@@ -352,6 +415,14 @@ describe("LabelDot and LabelChip", () => {
     const chip = container.querySelector(".el-label-chip")!;
     expect(chip).toHaveClass("el-label--other");
     expect(chip.getAttribute("style")).toBeNull();
+  });
+
+  it("no stored colour at all draws the neutral chip", () => {
+    const { container } = render(<><LabelDot name="Old" colour={null} /><LabelChip name="Older" colour={undefined} /></>);
+    for (const el of container.querySelectorAll(".el-label-dot, .el-label-chip")) {
+      if (!el.closest(".el-label-chip") || el.classList.contains("el-label-chip")) expect(el).toHaveClass("el-label--other");
+      expect((el as HTMLElement).style.getPropertyValue("--label-own")).toBe("");
+    }
   });
 
   it("the dot alone is named by its label; a chip can be removed with its own button", () => {

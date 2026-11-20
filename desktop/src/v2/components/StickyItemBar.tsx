@@ -28,13 +28,24 @@ function scroller(el: Element): Element | null {
  * top, the top bar sticky inside it), its height is taken off the top: the header is out of sight once it is under
  * the top bar. With no sentinel, or where IntersectionObserver is missing, the bar always shows.
  */
-function useScrolledPast(sentinel?: RefObject<Element | null>): boolean {
+function useScrolledPast(sentinel?: Sentinel): boolean {
   const watchable = !!sentinel && typeof IntersectionObserver === "function";
   const [past, setPast] = useState(!watchable);
+  // The element to watch, read after every render: a ref filled late (the header mounts after the bar) or a new
+  // element (another recording opened in place) re-runs the observer below. Setting the same element again is a no-op.
+  const [el, setEl] = useState<Element | null>(null);
+  // A passive effect: it runs once the whole commit's refs are set, including a header drawn after the bar.
   useEffect(() => {
-    const el = sentinel?.current;
-    if (!watchable || !el) {
+    setEl(sentinel && "current" in sentinel ? sentinel.current : sentinel ?? null);
+  });
+  useEffect(() => {
+    if (!watchable) {
       setPast(true);
+      return;
+    }
+    // A header that isn't on the page yet hasn't been scrolled past.
+    if (!el) {
+      setPast(false);
       return;
     }
     const root = scroller(el);
@@ -47,18 +58,27 @@ function useScrolledPast(sentinel?: RefObject<Element | null>): boolean {
     }, { root, rootMargin: `${-top}px 0% 0% 0%` });
     io.observe(el);
     return () => io.disconnect();
-  }, [sentinel, watchable]);
+  }, [el, watchable]);
   return past;
+}
+
+/** The drawn heights of every mounted bar (0 while hidden): the root variable is the tallest, so two bars on one page
+ * (a split view, the gallery) never overwrite each other, and it is cleared when the last one unmounts. */
+const heights = new Map<object, number>();
+function publishTallest(name: string) {
+  const root = document.documentElement;
+  if (heights.size === 0) root.style.removeProperty(name);
+  else root.style.setProperty(name, `${Math.round(Math.max(...heights.values()))}px`);
 }
 
 /** Publishes an element's drawn height on the document root while mounted (0 while it is hidden), and clears it after. */
 function usePublishedHeight(ref: RefObject<HTMLElement | null>, name: string, shown: boolean) {
+  const me = useRef({}).current;
   useLayoutEffect(() => {
-    const root = document.documentElement;
     const el = ref.current;
     const publish = () => {
-      const h = shown && el ? el.getBoundingClientRect().height : 0;
-      root.style.setProperty(name, `${Math.round(h)}px`);
+      heights.set(me, shown && el ? el.getBoundingClientRect().height : 0);
+      publishTallest(name);
     };
     publish();
     if (!el || !shown) return;
@@ -70,9 +90,12 @@ function usePublishedHeight(ref: RefObject<HTMLElement | null>, name: string, sh
     }
     window.addEventListener("resize", publish);
     return () => window.removeEventListener("resize", publish);
-  }, [ref, name, shown]);
-  useLayoutEffect(() => () => { document.documentElement.style.removeProperty(name); }, [name]);
+  }, [ref, name, shown, me]);
+  useLayoutEffect(() => () => { heights.delete(me); publishTallest(name); }, [name, me]);
 }
+
+/** The item's header: a ref, or the element itself (from a callback ref kept in state). */
+export type Sentinel = RefObject<Element | null> | Element | null;
 
 export type StickyItemBarProps = {
   /** The item's title, on one line with an ellipsis; its own direction (an Urdu title in an English window). */
@@ -80,7 +103,7 @@ export type StickyItemBarProps = {
   onBack: () => void;
   backLabel?: string;
   /** The item's header (or a mark at its end): the bar shows once it has scrolled out. Without one, the bar always shows. */
-  sentinel?: RefObject<Element | null>;
+  sentinel?: Sentinel;
   /** The item's ⋮ menu, the same items as the one in its header. */
   menu?: { label: string; items: readonly MenuItem[] | (() => readonly MenuItem[]) };
 };
@@ -101,7 +124,7 @@ export function StickyItemBar({ title, onBack, backLabel = "Back", sentinel, men
       <div className="el-itembar__bar" ref={bar} hidden={!shown} data-shown={shown || undefined}>
         <Button variant="quiet" size="sm" icon={ChevronStartIcon} directional aria-label={backLabel} title={backLabel} onClick={onBack} />
         <span className="el-itembar__title el-body-strong" dir="auto" title={title}>{title}</span>
-        {menu && <Menu label={menu.label} items={menu.items} button={{ variant: "quiet", size: "sm", icon: MoreIcon }} />}
+        {menu && <Menu label={menu.label} items={menu.items} button={{ variant: "quiet", size: "sm", icon: MoreIcon, title: menu.label }} />}
       </div>
     </div>
   );
