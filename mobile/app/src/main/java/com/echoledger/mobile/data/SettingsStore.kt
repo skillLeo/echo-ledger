@@ -120,6 +120,12 @@ data class AppSettings(
     val dynamicColour: Boolean = false,
     /** Show text in the phone's own font instead of the bundled Inter (since v1.3; sizes always follow the phone). */
     val phoneFont: Boolean = false,
+    /** The new design's text size (since 2.0): `system` (the phone's), `smaller`, `larger` or `largest`, on top of the phone's. */
+    val textSize: String = "system",
+    /** The new design's language (since 2.0): `system` (the phone's), `en` or `ur`. */
+    val appLanguage: String = "system",
+    /** The setup card at the top of the new design's Library was hidden (since 2.0); Setup & health still has it all. */
+    val setupCardHidden: Boolean = false,
     /** The last five Library searches (since v1.3), newest first; this phone only. */
     val recentSearches: List<String> = emptyList(),
     /** Group by, Sort by and Density per Library view (since v1.6, Phase 1C D1/D4); this phone only. */

@@ -116,7 +116,9 @@ fun V2LibraryScreen(
     /** Projects (Workspaces), while `ui_v2.ask` is on. */
     onProjects: (() -> Unit)? = null,
     /** A transcript match of a search opens the recording at its moment. */
-    onOpenAt: (LibraryItem, Long) -> Unit = { item, _ -> onOpen(item) }
+    onOpenAt: (LibraryItem, Long) -> Unit = { item, _ -> onOpen(item) },
+    /** What the shell adds: the Calls chip, the Activity bell, the setup card and the Needs action banner. */
+    extras: LibraryExtras? = null
 ) {
     val text = v2Text
     val library by vm.library.collectAsState()
@@ -261,6 +263,7 @@ fun V2LibraryScreen(
         onAccount = onAccount,
         modifier = modifier,
         onProjects = onProjects,
+        extras = extras,
         tools = LibraryTools(
             groups = groups,
             folded = folded,
@@ -301,6 +304,18 @@ fun V2LibraryScreen(
         )
     )
 }
+
+/**
+ * What the shell adds to Library (docs/PLAN_V2_PARITY.md section 2): [actions] in the header before the avatar (the
+ * Activity bell), [status] under the title (the "Calls: Ready" chip), [top] above the rows (the setup card and the one
+ * Needs action banner), and [scrollToTop], which goes up by one each time the Library tab is tapped again.
+ */
+class LibraryExtras(
+    val actions: @Composable () -> Unit = {},
+    val status: @Composable () -> Unit = {},
+    val top: @Composable () -> Unit = {},
+    val scrollToTop: Int = 0
+)
 
 /** What the full Library adds to [V2LibraryContent]; null keeps the simple page (previews and older tests). */
 class LibraryTools(
@@ -360,9 +375,13 @@ fun V2LibraryContent(
     onAccount: () -> Unit,
     modifier: Modifier = Modifier,
     onProjects: (() -> Unit)? = null,
-    tools: LibraryTools? = null
+    tools: LibraryTools? = null,
+    extras: LibraryExtras? = null
 ) {
     val c = EchoV2.colors
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val scrollToTop = extras?.scrollToTop ?: 0
+    LaunchedEffect(scrollToTop) { if (scrollToTop > 0) listState.animateScrollToItem(0) }
     val text = v2Text
     var actionsFor by remember { mutableStateOf<V2Row?>(null) }
     var menu by remember { mutableStateOf(false) }
@@ -374,6 +393,7 @@ fun V2LibraryContent(
             EchoTopBar(text.recordings, large = true) {
                 onProjects?.let { EchoIconButton(EchoIcons.Folder, stringResource(R.string.v2_ws_projects), it) }
                 if (tools == null) EchoIconButton(EchoIcons.Delete, text.trash, onTrash)
+                extras?.actions?.invoke()
                 Box(
                     Modifier
                         .size(EchoTokens.Layout.controlTouchMin)
@@ -414,6 +434,11 @@ fun V2LibraryContent(
                 }
             }
         }
+        if (!selecting && extras != null) {
+            Box(Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile).padding(bottom = EchoTokens.Space.s8)) {
+                extras.status()
+            }
+        }
         if (!selecting) {
             Row(
                 Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
@@ -449,7 +474,8 @@ fun V2LibraryContent(
                 onRefresh = { tools?.onSync?.invoke() ?: onRetry() },
                 modifier = Modifier.weight(1f)
             ) {
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize(), state = listState) {
+                    if (extras != null && !selecting) item(key = "extras-top") { extras.top() }
                     if (state.offline) {
                         item {
                             EchoBanner(

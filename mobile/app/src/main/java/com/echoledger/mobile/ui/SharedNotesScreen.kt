@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.SharedNotes
+import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.ui.design.TextButton
 import kotlinx.coroutines.delay
 
@@ -55,7 +56,15 @@ internal fun SharedNotesScreen(
     localIds: List<String>,
     onLeave: () -> Unit,
     sourceApp: String? = null,
-    onBackToSource: () -> Unit = {}
+    onBackToSource: () -> Unit = {},
+    /** The note's page: classic's, or the new design's ([backToSource] is its "Back to WhatsApp"). */
+    page: @Composable (
+        item: LibraryItem,
+        onBack: () -> Unit,
+        backToSource: Pair<String, () -> Unit>
+    ) -> Unit = { item, onBack, backToSource ->
+        SessionScreen(vm, item, onBack = onBack, backToSource = backToSource)
+    }
 ) {
     val context = LocalContext.current
     val pending by vm.pending.collectAsState()
@@ -86,12 +95,7 @@ internal fun SharedNotesScreen(
     val item = showing?.let { s -> library.firstOrNull { it.id == s } }
     if (item != null) {
         // One note goes back to the app it came from; from a list, back returns to the list.
-        SessionScreen(
-            vm,
-            item,
-            onBack = { if (opened != null && localIds.size > 1) opened = null else onLeave() },
-            backToSource = (sourceApp ?: "the app") to onBackToSource
-        )
+        page(item, { if (opened != null && localIds.size > 1) opened = null else onLeave() }, (sourceApp ?: "the app") to onBackToSource)
         return
     }
 

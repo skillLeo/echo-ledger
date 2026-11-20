@@ -136,10 +136,12 @@ fun V2SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /** Help v2's source (the phone core's); without one, Help opens its classic page. */
-    help: HelpSource? = null
+    help: HelpSource? = null,
+    /** A page to open at once (a recording's "Check your key" opens the key page). */
+    initialPage: String? = null
 ) {
     val settings by vm.settings.collectAsState()
-    var route by remember { mutableStateOf<SettingsRoute>(SettingsRoute.Root) }
+    var route by remember(initialPage) { mutableStateOf<SettingsRoute>(initialPage?.let { SettingsRoute.Page(it) } ?: SettingsRoute.Root) }
     var profile by remember { mutableStateOf<ProfileState>(ProfileState.Loading) }
     var attempt by remember { mutableIntStateOf(0) }
     var confirmSignOut by remember { mutableStateOf(false) }

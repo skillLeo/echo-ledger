@@ -343,7 +343,8 @@ fun systemEchoLanguage(): EchoLanguage =
 
 /**
  * The v2 theme: EchoTokens mapped onto Material 3. Light or dark follows the system unless [darkTheme] says otherwise.
- * There is no wallpaper (dynamic) colour: the accent stays teal and the surfaces stay neutral.
+ * [wallpaperColours] (Settings › Appearance, Android 12 and later; off by default) takes the wallpaper's accent; the
+ * surfaces stay neutral and Record, success, warning and danger keep their fixed colours.
  * [language] sets the text face, the components' own words and the layout direction (Urdu is right to left).
  */
 @Composable
@@ -352,9 +353,16 @@ fun EchoV2Theme(
     language: EchoLanguage = systemEchoLanguage(),
     /** "Use the phone's font" (Settings › Appearance; off by default): the phone's own Latin face, not Inter. */
     phoneFont: Boolean = false,
+    wallpaperColours: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colors = if (darkTheme) EchoV2Colors.Dark else EchoV2Colors.Light
+    val base = if (darkTheme) EchoV2Colors.Dark else EchoV2Colors.Light
+    val context = LocalContext.current
+    val colors = if (wallpaperColours && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        remember(base, context) { base.withWallpaper(context) }
+    } else {
+        base
+    }
     val type = EchoV2Type.of(language, phoneFont)
     val direction = if (language.rtl) LayoutDirection.Rtl else LayoutDirection.Ltr
     ProvideLanguage(language) {
@@ -369,6 +377,24 @@ fun EchoV2Theme(
             MaterialTheme(colorScheme = colors.toMaterial(), typography = type.material(), shapes = EchoV2Shapes, content = content)
         }
     }
+}
+
+/** The wallpaper's accent (Android 12 and later) in place of the teal one; everything else stays. */
+@androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.S)
+fun EchoV2Colors.withWallpaper(context: android.content.Context): EchoV2Colors {
+    val m = if (isDark) {
+        androidx.compose.material3.dynamicDarkColorScheme(context)
+    } else {
+        androidx.compose.material3.dynamicLightColorScheme(context)
+    }
+    return copy(
+        accent = m.primary,
+        accentSoft = m.primaryContainer,
+        accentText = m.primary,
+        accentFocus = m.primary,
+        textOnAccent = m.onPrimary,
+        inverseAccent = m.inversePrimary
+    )
 }
 
 /** The locale whose values-* folder holds [this] language's words. */

@@ -656,7 +656,7 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
                         if (answer == MainViewModel.DesignAnswer.NotAvailable) {
                             vm.showMessage("The new design isn't open for your account yet.")
                         } else if (answer == MainViewModel.DesignAnswer.Failed) {
-                            vm.showMessage(MainViewModel.DESIGN_FAILED)
+                            vm.designFailed()
                         }
                     }
                 }.takeIf { offered }

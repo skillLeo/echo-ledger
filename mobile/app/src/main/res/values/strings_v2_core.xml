@@ -163,7 +163,7 @@
     <string name="v2_vm_ws_the_project_could_not_be_deleted">The project could not be deleted.</string>
     <string name="v2_vm_ws_the_project_could_not_be_moved">The project could not be moved.</string>
     <string name="v2_vm_ws_the_project_could_not_be_renamed">The project could not be renamed.</string>
-    <string name="v2_vm_ws_the_project_s_workspace_could_not_be_loa">The project\'s workspace could not be loaded.</string>
+    <string name="v2_vm_ws_the_project_s_workspace_could_not_be_loa">The project could not be loaded.</string>
     <string name="v2_vm_ws_the_report_could_not_be_sent">The report could not be sent.</string>
     <string name="v2_vm_ws_the_request_link_could_not_be_made">The request link could not be made.</string>
     <string name="v2_vm_ws_the_request_link_could_not_be_turned_off">The request link could not be turned off.</string>

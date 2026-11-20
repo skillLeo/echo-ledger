@@ -115,7 +115,13 @@ object SettingsReset {
     fun resetPage(page: String, group: SettingsGroup, s: AppSettings): AppSettings {
         val d = AppSettings()
         return when (page) {
-            "appearance" -> s.copy(themeMode = d.themeMode, dynamicColour = d.dynamicColour, phoneFont = d.phoneFont)
+            "appearance" -> s.copy(
+                themeMode = d.themeMode,
+                dynamicColour = d.dynamicColour,
+                phoneFont = d.phoneFont,
+                textSize = d.textSize,
+                appLanguage = d.appLanguage
+            )
 
             "notifications" -> s.copy(
                 activityNotifications = d.activityNotifications,

@@ -50,7 +50,12 @@ class LibraryParityShotsTest : ScreenTest() {
                 ServerFixtures.libraryPage(
                     listOf(
                         ServerFixtures.libraryItem("01JA", title = "Bilal Traders", preview = "New rate for 40 cartons of basmati"),
-                        ServerFixtures.libraryItem("01JB", title = "Rehman and Sons Textiles", sourceApp = "phone_call", finalStatus = null),
+                        ServerFixtures.libraryItem(
+                            "01JB",
+                            title = "Rehman and Sons Textiles",
+                            sourceApp = "phone_call",
+                            finalStatus = null
+                        ),
                         ServerFixtures.libraryItem("01JC", title = "Karachi Cargo", sourceApp = "google_meet", client = null)
                     )
                 )
@@ -61,7 +66,11 @@ class LibraryParityShotsTest : ScreenTest() {
 
     /** A word in English and in Urdu, so a step finds its control on either side and in either language. */
     private fun words(id: Int): List<String> {
-        val ur = app.createConfigurationContext(Configuration(app.resources.configuration).apply { setLocale(Locale.forLanguageTag("ur-PK")) })
+        val ur = app.createConfigurationContext(
+            Configuration(app.resources.configuration).apply {
+                setLocale(Locale.forLanguageTag("ur-PK"))
+            }
+        )
         return listOf(app.getString(id), ur.getString(id))
     }
 

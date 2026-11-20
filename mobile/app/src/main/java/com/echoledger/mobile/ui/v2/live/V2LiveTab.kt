@@ -25,7 +25,7 @@ enum class LiveEntry { Record, VoiceNote, LiveAssist, LiveTranslate, Dictation, 
 @Composable
 fun V2LiveTab(liveAssist: Boolean, liveTranslate: Boolean, onOpen: (LiveEntry) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
-        EchoTopBar(stringResource(R.string.v2_livetab_title), large = true)
+        EchoTopBar(stringResource(R.string.v2_livetab_title), large = true) { com.echoledger.mobile.ui.v2.shell.AccountButton() }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             EchoSettingRow(
                 stringResource(R.string.v2_livetab_record),

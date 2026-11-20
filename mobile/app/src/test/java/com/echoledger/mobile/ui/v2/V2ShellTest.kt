@@ -92,8 +92,8 @@ class V2ShellTest : ScreenTest() {
         shell(v2)
         compose.onNodeWithText("Recordings").assertExists()
         compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
-        compose.onNodeWithText("Home").performClick()
-        compose.onNodeWithText("Classic home").assertExists()
+        compose.onNodeWithText("Live").performClick()
+        compose.onNodeWithText("Classic live").assertExists()
     }
 
     @Test
@@ -151,11 +151,12 @@ class V2ShellTest : ScreenTest() {
 
     private fun homeWithWaitingCalls(vararg ids: String) {
         seed()
-        // Later ids are newer calls, so Home lists them first.
+        // Later ids are newer calls, so Activity lists them first.
         ids.forEachIndexed { i, id -> app.storeRecording(id = id, state = "pending_decision", startedAt = "2026-10-24T09:0$i:00Z") }
         vm.reloadLocal()
         shell(UiFlags(mapOf("ui_v2.shell" to true, "ui_v2.home" to true, "ui_v2.library" to true)))
-        compose.onNodeWithText("Home").performClick()
+        // Home's Needs action is Activity now: the bell in Library's header.
+        compose.onNodeWithContentDescription("Activity", substring = true).performClick()
         compose.waitUntil(5_000) { runCatching { compose.onAllNodesWithText("Discard")[ids.size - 1].fetchSemanticsNode() }.isSuccess }
         compose.mainClock.autoAdvance = false
     }

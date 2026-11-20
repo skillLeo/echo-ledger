@@ -149,7 +149,11 @@ fun V2AskContent(
 ) {
     val c = EchoV2.colors
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
-        if (!inProject) EchoTopBar(stringResource(R.string.v2_ask_title), large = true)
+        if (!inProject) {
+            EchoTopBar(stringResource(R.string.v2_ask_title), large = true) {
+                com.echoledger.mobile.ui.v2.shell.AccountButton()
+            }
+        }
         if (projects.isEmpty()) {
             EchoEmptyState(
                 stringResource(R.string.v2_ask_no_projects_title),

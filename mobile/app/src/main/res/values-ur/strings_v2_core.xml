@@ -163,7 +163,7 @@
     <string name="v2_vm_ws_the_project_could_not_be_deleted">پروجیکٹ حذف نہیں ہو سکا۔</string>
     <string name="v2_vm_ws_the_project_could_not_be_moved">پروجیکٹ منتقل نہیں ہو سکا۔</string>
     <string name="v2_vm_ws_the_project_could_not_be_renamed">پروجیکٹ کا نام نہیں بدل سکا۔</string>
-    <string name="v2_vm_ws_the_project_s_workspace_could_not_be_loa">پروجیکٹ کا ورک اسپیس لوڈ نہیں ہو سکا۔</string>
+    <string name="v2_vm_ws_the_project_s_workspace_could_not_be_loa">پروجیکٹ لوڈ نہیں ہو سکا۔</string>
     <string name="v2_vm_ws_the_report_could_not_be_sent">رپورٹ بھیجی نہیں جا سکی۔</string>
     <string name="v2_vm_ws_the_request_link_could_not_be_made">درخواست کا لنک نہیں بن سکا۔</string>
     <string name="v2_vm_ws_the_request_link_could_not_be_turned_off">درخواست کا لنک بند نہیں ہو سکا۔</string>

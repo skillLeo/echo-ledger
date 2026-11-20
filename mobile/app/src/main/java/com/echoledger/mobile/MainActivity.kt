@@ -758,6 +758,21 @@ class MainActivity : FragmentActivity() {
                                 sharedNotes = null
                                 tab = TAB_LIBRARY
                                 moveTaskToBack(true)
+                            },
+                            // The new design's recording page, with ⋮ › Back to <app>, when its Library is on.
+                            page = if (shellOn && flags.library) {
+                                { item, back, source ->
+                                    com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                                        com.echoledger.mobile.ui.v2.library.V2RecordingScreen(
+                                            vm,
+                                            item,
+                                            onBack = back,
+                                            backToSource = source
+                                        )
+                                    }
+                                }
+                            } else {
+                                { item, back, source -> SessionScreen(vm, item, onBack = back, backToSource = source) }
                             }
                         )
 
@@ -864,10 +879,16 @@ class MainActivity : FragmentActivity() {
                             onSwitchToClassic = { classic ->
                                 lifecycleScope.launch {
                                     val answer = DesignChoice.choose(this@MainActivity, vm, if (classic) Design.Classic else Design.V2)
-                                    if (answer == MainViewModel.DesignAnswer.Failed) vm.showMessage(MainViewModel.DESIGN_FAILED)
+                                    if (answer == MainViewModel.DesignAnswer.Failed) vm.designFailed()
                                 }
                             },
-                            help = (application as EchoLedgerApp).graph.help
+                            help = (application as EchoLedgerApp).graph.help,
+                            // The centre button: straight to recording, as classic's Record now.
+                            onRecordNow = { toggleRecording("record button") },
+                            onReadyCheck = { turnOn ->
+                                readyFix = if (turnOn) ReadyFix.TURN_ON else null
+                                showReady = true
+                            }
                         )
                     }
                 }
@@ -1011,7 +1032,7 @@ private const val TAB_YOU = "you"
 private val TAB_ORDER = listOf(TAB_LIBRARY, TAB_CLIENTS, TAB_RECORD, TAB_ACTIVITY, TAB_YOU)
 
 /** Library · Clients · [record] · Activity · You (since v1.3). */
-private val MAIN_TABS = listOf(
+internal val MAIN_TABS = listOf(
     NavTab(TAB_LIBRARY, "Library", Icons.Outlined.VideoLibrary, Icons.Rounded.VideoLibrary),
     NavTab(TAB_CLIENTS, "Projects", Icons.Outlined.Folder, Icons.Rounded.Folder),
     NavTab(TAB_ACTIVITY, "Activity", Icons.Outlined.Notifications, Icons.Rounded.Notifications),

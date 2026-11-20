@@ -1231,6 +1231,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /** Says that the server refused a design change with an error (not that it could not be reached). */
+    fun designFailed() {
+        _message.value = "The design could not be changed. Try again."
+    }
+
     /** What [chooseDesign] came to. [Failed]: the server answered with an error (500, 401, 403…); nothing changed. */
     enum class DesignAnswer { Taken, NotAvailable, OnThisPhone, Failed }
 
@@ -1798,9 +1803,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        /** Said when the server refused a design change with an error (not when it could not be reached). */
-        const val DESIGN_FAILED = "The design could not be changed. Try again."
-
         /** Recordings remembered for Sort by Recently opened. */
         private const val OPENED_KEEP = 300
 

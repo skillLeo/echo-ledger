@@ -97,6 +97,9 @@ object SettingsTransfer {
         "themeMode",
         "dynamicColour",
         "phoneFont",
+        "textSize",
+        "appLanguage",
+        "setupCardHidden",
         "recentSearches",
         // How this phone shows the Library, and what was opened on it (since v1.6).
         "libraryViews",
