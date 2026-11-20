@@ -638,7 +638,7 @@ button.segment.active { background: var(--accent-soft); }
    two would otherwise share 45 % of the height each and the player would sit on the recording's head). */
 .detail-back { display: none; }
 .app.narrow .library.has-open > .list, .app.narrow .library-main.has-open > .library-toolbar { display: none; }
-.app.narrow .library.has-open .detail-back { display: inline-flex; margin: 0 0 var(--space-2) calc(-1 * var(--space-2)); }
+.app.narrow .library.has-open .detail-back { display: inline-flex; margin: 0 0 var(--space-2); margin-inline-start: calc(-1 * var(--space-2)); }
 [dir="rtl"] .detail-back-icon { display: inline-flex; transform: scaleX(-1); }
 /* With nothing open there, the list is the page (no empty "Select a recording" box under it): it grows with its rows, the
    page scrolls, and the group headers stick to the page's top edge (inside its padding, as the find bar does). The table's

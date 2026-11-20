@@ -101,6 +101,38 @@ describe("a recording on a narrow page (the half-screen window)", () => {
     expect(document.querySelector(".item.cursor")).not.toBeNull();
   });
 
+  it("in Table view Esc returns focus to the row's title (a table row itself can't take focus)", async () => {
+    window.localStorage.setItem("echoledger-library-layout", "table");
+    const list = await renderNarrow();
+    fireEvent.click(list.getByRole("button", { name: "Zoom with Acme" }));
+    await flushAsync();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await flushAsync();
+    expect(document.querySelector('[data-row="a"] .lib-title')).toHaveFocus();
+  });
+
+  it("in Shared with me Esc goes back to the list too, with focus on the card's Open", async () => {
+    respond("shared_with_me", { data: [{ id: "01JDSHARE1", kind: "session", from: { name: "Imran" }, note: null, title: "Call with Omar", sent_at: null, saved_at: null, client: null,
+      session: makeItem("other-1", { title: "Call with Omar" }) }] });
+    render(<div className="app narrow"><main className="content page-library"><LibraryView notify={vi.fn()} smartFolder="shared" /></main></div>);
+    await flushAsync();
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    await flushAsync();
+    expect(shownNow(screen.getByTestId("library-list"))).toBe(false);
+    expect(screen.getByRole("button", { name: "Back" })).toHaveFocus();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await flushAsync();
+    expect(shownNow(screen.getByTestId("library-list"))).toBe(true);
+    const openButton = screen.getByRole("button", { name: "Open" });
+    expect(openButton).toHaveFocus();
+    expect(openButton).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("pulls Back to the start edge in either direction (right in Urdu), not always to the left", () => {
+    expect(prop(".app.narrow .library.has-open .detail-back", "margin-inline-start")).toBe("calc(-1 * var(--space-2))");
+    expect(prop(".app.narrow .library.has-open .detail-back", "margin-left")).toBe("");
+  });
+
   it("on a wide page keeps the list beside the recording, with no Back and focus left where it was", async () => {
     const list = await renderNarrow(false);
     await open(list, "Zoom with Acme");

@@ -19,7 +19,7 @@ const engines = { webkit, chromium };
 const engineName = arg("engine") ?? "webkit";
 process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 
-const WIDTHS = (arg("widths") ?? "720,756,800,1024,1280,1728").split(",").map(Number);
+const WIDTHS = (arg("widths") ?? "720,756,780,800,1024,1280,1728").split(",").map(Number);
 const HEIGHT = 900;
 const THEMES = (arg("themes") ?? "light,dark").split(",");
 const LANGS = (arg("langs") ?? "en,ur").split(",");
@@ -36,22 +36,44 @@ const showList = async (p) => {
   await p.evaluate(() => document.querySelectorAll("*").forEach((el) => { if (el.scrollTop) el.scrollTop = 0; }));
   await p.waitForTimeout(200);
 };
-/** [name, fixture screen, steps to reach it] */
+/** Open a page from the sidebar (a label in the full sidebar, an icon with a title in the rail). */
+const sidebar = (label) => async (p) => {
+  await p.locator(".sidebar .nav").getByRole("button", { name: label, exact: true }).first().click();
+  await p.waitForTimeout(600);
+};
+/**
+ * [name, fixture screen, steps to reach it, what proves the page is that screen]. A screen whose picture is of another
+ * page checks nothing, so a run that doesn't reach the page fails.
+ */
 const SCREENS = [
-  ["library", "library", showList],
-  ["recording", "library", openRecording],
+  ["library", "library", showList, ".page-library .list .item:visible"],
+  ["recording", "library", openRecording, ".library.has-open .detail"],
   ["recording-scrolled", "library", async (p) => {
     await openRecording(p);
     await p.evaluate(() => document.querySelectorAll(".detail, .content").forEach((el) => el.scrollTo?.(0, el.scrollHeight)));
     await p.waitForTimeout(300);
-  }],
-  ["projects", "projects", null],
-  ["project", "project", null],
-  ["activity", "activity", null],
-  ["shared", "shared", null],
-  ["record", "record", null],
-  ["settings", "settings", null],
-  ["settings-account", "settings-account", null],
+  }, ".library.has-open .detail"],
+  ["projects", "projects", null, ".page-projects .projects-home"],
+  ["project", "project", async (p) => {
+    await p.locator(".projects-home .tree-open").filter({ hasText: "Acme Holdings" }).filter({ visible: true }).first().click();
+    await p.waitForTimeout(600);
+  }, ".page-projects .project-page"],
+  ["activity", "activity", null, ".page-activity .activity-page"],
+  ["shared", "shared", sidebar("Shared"), ".page-shared .shared-page"],
+  ["shared-with-me", "shared", async (p) => {
+    // Shared › With me › Open: the same at every width (the Library's folder column is hidden below 1120 px of page).
+    await sidebar("Shared")(p);
+    await p.locator(".shared-page").getByRole("button", { name: "Open", exact: true }).first().click();
+    await p.waitForTimeout(600);
+  }, "[data-testid=shared-banner]"],
+  ["record", "record", null, ".page-record .home-page"],
+  ["settings", "settings", null, ".page-settings .settings-root"],
+  // Settings pages with the widest selects, and Profile.
+  ...["Profile", "Calls & meetings", "Microphone & audio", "Captions", "Voice notes & dictation", "Custom words"].map((title) => [
+    `settings-${title.toLowerCase().split(/[^a-z]+/)[0]}`, "settings", async (p) => {
+      await p.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: title }).first().click();
+      await p.waitForTimeout(600);
+    }, `.page-settings h1:text-is("${title}")`]),
 ].filter(([name]) => !only || only.includes(name));
 
 /**
@@ -71,10 +93,13 @@ function problems() {
     return r.width > 1 && r.height > 1;
   };
   const name = (el) => `${el.tagName.toLowerCase()}.${[...el.classList].slice(0, 3).join(".")} "${(el.value || el.textContent || "").trim().slice(0, 30)}"`;
-  /** The part of a box its scroll areas leave in sight (a word scrolled out of a list is not on screen). */
+  /**
+   * The part of a box its scroll areas leave in sight (a word scrolled out of a list is not on screen), starting with the
+   * element itself: a line cut with "…" draws only up to its own edge.
+   */
   const inSight = (el, r) => {
     let { left, top, right, bottom } = r;
-    for (let e = el.parentElement; e; e = e.parentElement) {
+    for (let e = el; e; e = e.parentElement) {
       if (getComputedStyle(e).overflow === "visible") continue;
       const c = e.getBoundingClientRect();
       left = Math.max(left, c.left); top = Math.max(top, c.top); right = Math.min(right, c.right); bottom = Math.min(bottom, c.bottom);
@@ -175,7 +200,9 @@ function coveredWhenReached() {
     const r = el.getBoundingClientRect();
     for (const y of from === "end" ? [r.top + 3] : [r.bottom - 3]) {
       const top = document.elementFromPoint(r.left + r.width / 2, y);
-      if (!top || el.contains(top) || top.contains(el)) continue;
+      // No element at the point: it is outside the window, so not in sight once reached.
+      if (!top) { found.push(`not in sight when reached: ${name(el)}`); break; }
+      if (el.contains(top) || top.contains(el)) continue;
       const bar = sticky(top);
       if (bar && !bar.contains(el) && !bar.matches("[role=dialog], .modal, .sheet, .scrim, .toast, .drawer")) { found.push(`covered when reached: ${name(el)} under ${name(bar)}`); break; }
     }
@@ -197,7 +224,8 @@ async function keyboardRows(page) {
       if (!row) return null;
       const r = row.getBoundingClientRect();
       const top = document.elementFromPoint(r.left + r.width / 2, r.top + 4);
-      return top && !row.contains(top) && !top.contains(row) ? `J/K: "${row.textContent.trim().slice(0, 30)}" under ${top.className}` : null;
+      if (!top) return `J/K: "${row.textContent.trim().slice(0, 30)}" outside the window`;
+      return !row.contains(top) && !top.contains(row) ? `J/K: "${row.textContent.trim().slice(0, 30)}" under ${top.className}` : null;
     });
     if (bad) found.push(bad);
   }
@@ -231,6 +259,20 @@ async function selfTest(base) {
     document.body.appendChild(over);
     results.rowTitle = run(problems).some((p) => p.startsWith("overlap:"));
     over.remove();
+    // 2b. Not a fault: a line cut with "…" before a button draws nothing under it (the Shared rows, a project's rules).
+    const cut = document.createElement("div");
+    cut.style.cssText = "position:fixed;left:400px;top:420px;width:260px;display:flex;z-index:50;background:#fff";
+    cut.innerHTML = '<span style="flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">A long line that is cut before the button next to it</span><button>Open</button>';
+    document.body.appendChild(cut);
+    results.ellipsisClean = !run(problems).some((p) => p.startsWith("overlap:"));
+    cut.remove();
+    // 2c. A control that reaching it can't bring into the window (clipped far past the edge): not in sight.
+    const away = document.createElement("div");
+    away.style.cssText = "position:relative;overflow:clip;width:40px;height:40px";
+    away.innerHTML = '<button style="position:absolute;left:4000px;top:0">Out of sight</button>';
+    document.querySelector(".content").prepend(away);
+    results.outOfSight = run(covered).some((p) => p.startsWith("not in sight when reached:"));
+    away.remove();
     // 3. A sticky header with no scroll padding for it: a row brought into view lands behind it.
     const head = document.querySelector(".group-head");
     const list = head?.closest(".list");
@@ -245,11 +287,11 @@ async function selfTest(base) {
   }, { problems: problems.toString(), covered: coveredWhenReached.toString() });
   await page.close();
   const missed = Object.entries(caught).filter(([, ok]) => !ok).map(([k]) => k);
-  if (missed.length || Object.keys(caught).length < 3) {
+  if (missed.length || Object.keys(caught).length < 5) {
     console.error(`self-test: the checks missed ${missed.join(", ") || "a case"}`);
     return false;
   }
-  console.log("self-test: overlap, word on a select and covered row are caught");
+  console.log("self-test: overlap, word on a select, a control out of sight and a covered row are caught; a line cut with … is not");
   return true;
 }
 
@@ -262,7 +304,7 @@ const browser = await engines[engineName].launch();
 let failed = 0;
 try {
   if (!(await selfTest(base))) process.exit(1);
-  for (const [name, screen, step] of SCREENS) for (const w of WIDTHS) for (const theme of THEMES) for (const lang of LANGS) {
+  for (const [name, screen, step, reached] of SCREENS) for (const w of WIDTHS) for (const theme of THEMES) for (const lang of LANGS) {
     const page = await browser.newPage({ viewport: { width: w, height: HEIGHT }, colorScheme: theme });
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message.split("\n")[0]));
@@ -273,10 +315,12 @@ try {
     } catch (e) {
       errors.push(`step failed: ${String(e.message).split("\n")[0]}`);
     }
-    const found = [...await page.evaluate(problems), ...await page.evaluate(coveredWhenReached), ...(name === "library" ? await keyboardRows(page) : [])];
-    if (found.length || errors.length) failed++;
+    if (!(await page.locator(reached).count())) errors.push(`not on the ${name} page (${reached} missing)`);
+    // The picture is the page as opened, before the checks scroll it and J/K moves the cursor.
     const file = `${name}-${w}-${theme}-${lang}.png`;
     await page.screenshot({ path: join(out, file) });
+    const found = [...await page.evaluate(problems), ...await page.evaluate(coveredWhenReached), ...(name === "library" ? await keyboardRows(page) : [])];
+    if (found.length || errors.length) failed++;
     report.push({ screen: name, width: w, theme, lang, problems: found, errors, file });
     console.log(`${name} ${w} ${theme} ${lang}: ${found.length} problems${errors.length ? `, ${errors.length} errors` : ""}`);
     await page.close();

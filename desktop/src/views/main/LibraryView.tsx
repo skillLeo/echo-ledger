@@ -849,12 +849,23 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
 
   // J / K move through the list, Enter opens, X selects, Esc closes, "/" searches (v1.6, P4.4). Never while typing,
   // with a dialog or menu open, or with a modifier held.
+  /**
+   * Focus a row by what can take focus in it: a list row is a button, a table row (<tr>) has its title button, and a
+   * Shared with me card has its Open. Returns the row.
+   */
+  const focusRow = (id: string) => {
+    const row = document.querySelector<HTMLElement>(shared ? `[data-shared="${CSS.escape(id)}"]` : `[data-row="${CSS.escape(id)}"]`);
+    (row instanceof HTMLButtonElement ? row : row?.querySelector<HTMLElement>(shared ? "button[aria-pressed]" : ".lib-title"))?.focus();
+    return row;
+  };
   const listKeyRef = useRef<(e: KeyboardEvent) => void>(() => undefined);
   listKeyRef.current = (e: KeyboardEvent) => {
-    if (e.defaultPrevented || e.repeat || shared) return;
+    if (e.defaultPrevented || e.repeat) return;
     const target = e.target instanceof HTMLElement ? e.target : null;
     if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
     if (document.querySelector(".palette-backdrop, .sheet-backdrop, .menu-pop, .row-menu-pop, details[open] > .bulk-pop, .suggest-pop, .filter-panel")) return;
+    // Shared with me has no Library list to move through; only Esc (back from the open recording) applies there.
+    if (shared && listKey(e) !== "close") return;
     if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault();
       searchRef.current?.focus();
@@ -871,9 +882,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       e.preventDefault();
       setCursor(next.id);
       // The row takes the focus too (MANUAL_QA 16-P9): a screen reader reads it, and Enter or Space opens it.
-      const row = document.querySelector<HTMLElement>(`[data-row="${CSS.escape(next.id)}"]`);
-      (row instanceof HTMLButtonElement ? row : row?.querySelector<HTMLElement>(".lib-title"))?.focus();
-      row?.scrollIntoView?.({ block: "nearest" });
+      focusRow(next.id)?.scrollIntoView?.({ block: "nearest" });
     } else if (key === "open") {
       // Enter on a button is the button's own.
       if (!cursor || target?.tagName === "BUTTON" || target?.tagName === "A") return;
@@ -916,7 +925,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   /** Back (a narrow window, where the recording takes the list's place): the list again, focus on the row it came from. */
   const returnTo = useRef<string | null>(null);
   const backToList = () => {
-    returnTo.current = selected;
+    returnTo.current = shared ? sharedOpen?.id ?? null : selected;
+    if (shared) setSharedOpen(null);
     setSelected(null);
   };
   // Once the list is drawn again (focus can't go to a row out of sight).
@@ -924,7 +934,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     const id = returnTo.current;
     if (selected || !id) return;
     returnTo.current = null;
-    document.querySelector<HTMLElement>(`[data-row="${CSS.escape(id)}"]`)?.focus();
+    focusRow(id);
   }, [selected]);
 
   const openHit = (id: string, ms: number) => {

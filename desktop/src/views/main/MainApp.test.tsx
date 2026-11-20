@@ -281,7 +281,7 @@ describe("MainApp sidebar and keys", () => {
       const app = () => document.querySelector(".app")!;
       expect(app()).not.toHaveClass("narrow");
       expect(app()).not.toHaveClass("no-column");
-      // The smallest window with the widest sidebar: 860 − 320 = 540 px of page.
+      // An 860 px window with the widest sidebar: 860 − 320 = 540 px of page (under 780 the sidebar is the rail).
       fireEvent.keyDown(screen.getByRole("separator", { name: "Resize the sidebar" }), { key: "End" });
       act(() => {
         Object.defineProperty(window, "innerWidth", { configurable: true, value: 860 });
