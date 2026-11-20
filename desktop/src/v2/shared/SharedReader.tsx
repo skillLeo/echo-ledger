@@ -9,7 +9,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage, type SharedItem, type TranscriptDetail, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
-import { failureLine, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn, transcriptStatusLine } from "../../lib/languages";
+import { failureLine, needsKeyAction, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn, transcriptStatusLine } from "../../lib/languages";
+import { openSettingsSection } from "../../lib/entitlements";
+import { NEEDS_KEY_TEXT } from "../../views/main/Upgrade";
 import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerName } from "../../lib/player";
 import { transcribingLine } from "../../lib/progress";
 import { NO_AUDIO_HINT } from "../../lib/pending";
@@ -346,7 +348,10 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
             action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
         ) : tDetail?.status === "failed" ? (
           <EmptyState tone="error" icon={Icons.ErrorIcon} title="Transcription failed."
-            body={<>{failureLine(tDetail.error_code)}{tDetail.error_code === "no_audio" ? ` ${NO_AUDIO_HINT}` : ""}</>} />
+            body={<>{failureLine(tDetail.error_code)}{tDetail.error_code === "no_audio" ? ` ${NO_AUDIO_HINT}` : ""}{tDetail.error_code === "needs_transcription_key" ? ` ${NEEDS_KEY_TEXT}` : ""}</>}
+            action={needsKeyAction(tDetail.error_code) ? (
+              <Button onClick={() => openSettingsSection("transcription-key")}>{tDetail.error_code === "own_key_rejected" ? "Check my Groq key" : "Add my Groq key"}</Button>
+            ) : undefined} />
         ) : tDetail && isTranscribing(tDetail.status) ? (
           <EmptyState icon={Icons.PendingIcon} title="Transcribing" body={transcribingLine(session.transcript?.final_progress ?? tDetail.progress)} />
         ) : segments.length > 0 ? (

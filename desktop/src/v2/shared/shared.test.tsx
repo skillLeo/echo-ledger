@@ -557,6 +557,25 @@ describe("a shared recording, open read-only", () => {
     expect(screen.queryByText(/Groq/)).toBeNull();
   });
 
+  it("transcript: failed for want of a Groq key offers Add my Groq key (Check my Groq key when refused), as classic", async () => {
+    const opened: string[] = [];
+    const listen = (e: Event) => opened.push((e as CustomEvent<string>).detail);
+    window.addEventListener("echoledger:open-settings-section", listen);
+    try {
+      respond("transcript_detail", makeTranscript({ status: "failed", error_code: "needs_transcription_key", segments: [] }));
+      await openReader();
+      fireEvent.click(screen.getByRole("button", { name: "Add my Groq key" }));
+      expect(opened).toEqual(["transcription-key"]);
+      fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+      respond("transcript_detail", makeTranscript({ status: "failed", error_code: "own_key_rejected", segments: [] }));
+      fireEvent.click(rowButton("Call a"));
+      await act(flushAsync);
+      expect(screen.getByRole("button", { name: "Check my Groq key" })).toBeInTheDocument();
+    } finally {
+      window.removeEventListener("echoledger:open-settings-section", listen);
+    }
+  });
+
   it("transcript: failed, empty, and not transcribed yet, in classic's words", async () => {
     respond("transcript_detail", makeTranscript({ status: "failed", error_code: "no_audio", segments: [] }));
     await openReader();
