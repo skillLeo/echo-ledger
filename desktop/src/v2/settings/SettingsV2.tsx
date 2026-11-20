@@ -10,21 +10,24 @@ import { SETTINGS, breadcrumbOf, titleV2, type SettingEntry } from "../../lib/se
 import { ROOT_ICONS } from "../../components/Icons";
 import { getThemeChoice } from "../../lib/theme";
 import { useEntitlements } from "../../lib/entitlements";
-import { Button, Card, Chip, EmptyState, Icons, List, ListRow, ListSection, SearchField, Toggle, type IconType } from "../components";
+import { Button, Card, Chip, EmptyState, Icon, Icons, List, ListRow, ListSection, SearchField, Toggle, type IconType } from "../components";
 import { AccountCard } from "./AccountCard";
 
-/** The goal groups of IA 5 and the root entries each holds (one home per feature). */
-export const GOAL_GROUPS: readonly { title: string; ids: readonly string[] }[] = [
-  { title: "Recording", ids: ["calls", "mic", "screen", "voice"] },
-  { title: "Transcription & language", ids: ["transcription.language", "words", "key"] },
-  { title: "Live & overlays", ids: ["captions", "share_privacy"] },
-  { title: "Privacy & data", ids: ["privacy", "storage", "lock"] },
-  { title: "Notifications", ids: ["notifications"] },
-  { title: "Appearance", ids: ["appearance"] },
-  { title: "Account & plan", ids: ["profile", "plan", "security", "devices"] },
-  { title: "Setup & health", ids: ["setup_health"] },
-  { title: "Shortcuts & start-up", ids: ["shortcuts", "app.autostart"] },
-  { title: "About & help", ids: ["help", "about"] },
+/**
+ * The goal groups of IA 5 and the root entries each holds (one home per feature), each with its icon and a one-line
+ * description of what is inside (PLAN_V2_PARITY 5).
+ */
+export const GOAL_GROUPS: readonly { title: string; icon: IconType; description: string; ids: readonly string[] }[] = [
+  { title: "Recording", icon: Icons.RecordIcon, description: "Which calls are recorded, and the microphone, screen and voice used.", ids: ["calls", "mic", "screen", "voice"] },
+  { title: "Transcription & language", icon: Icons.TranscriptIcon, description: "The languages your calls are in, your own words, and your transcription key.", ids: ["transcription.language", "words", "key"] },
+  { title: "Live & overlays", icon: Icons.CaptionsIcon, description: "Captions during calls, and what others see when you share your screen.", ids: ["captions", "share_privacy"] },
+  { title: "Privacy & data", icon: Icons.PrivacyIcon, description: "What is kept, for how long, and the app lock.", ids: ["privacy", "storage", "lock"] },
+  { title: "Notifications", icon: Icons.BellIcon, description: "What EchoLedger tells you, and when.", ids: ["notifications"] },
+  { title: "Appearance", icon: Icons.AppearanceIcon, description: "Theme, sidebar, density, times and the design.", ids: ["appearance"] },
+  { title: "Account & plan", icon: Icons.UserIcon, description: "Your profile, plan, sign-in security and devices.", ids: ["profile", "plan", "security", "devices"] },
+  { title: "Setup & health", icon: Icons.ReadyIcon, description: "Check that recording works on this computer.", ids: ["setup_health"] },
+  { title: "Shortcuts & start-up", icon: Icons.KeyboardIcon, description: "Keys that start things, and opening EchoLedger when you sign in.", ids: ["shortcuts", "app.autostart"] },
+  { title: "About & help", icon: Icons.HelpIcon, description: "Help and shortcuts, what's new, and the version.", ids: ["help", "about"] },
 ];
 
 /** Every root entry of the registry sits in exactly one goal group (sign out has its own row). */
@@ -38,6 +41,7 @@ export function sectionFor(entry: SettingEntry): string {
   return entry.kind === "page" ? entry.id : `${entry.page ?? entry.id}#${entry.id}`;
 }
 
+const slug = (t: string) => t.toLowerCase().replace(/[^a-z]+/g, "-");
 const THEME_WORDS = { system: "System", light: "Light", dark: "Dark" } as const;
 const iconOf = (id: string): IconType => (ROOT_ICONS[id] as IconType | undefined) ?? Icons.SettingsIcon;
 
@@ -138,8 +142,12 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
             const rows = g.ids.map(row).filter(Boolean);
             if (rows.length === 0) return null;
             return (
-              <section key={g.title} className="el-group" aria-label={g.title}>
-                <h2 className="el-caption el-body-strong el-group__title">{g.title}</h2>
+              <section key={g.title} className="el-group" aria-label={g.title} aria-describedby={`group-${slug(g.title)}`}>
+                <div className="el-group__label">
+                  <Icon icon={g.icon} />
+                  <h2 className="el-caption el-body-strong el-group__title">{g.title}</h2>
+                </div>
+                <p className="el-caption el-secondary el-group__desc" id={`group-${slug(g.title)}`}>{g.description}</p>
                 <Card><List label={g.title} className="el-group__rows">{rows}</List></Card>
               </section>
             );

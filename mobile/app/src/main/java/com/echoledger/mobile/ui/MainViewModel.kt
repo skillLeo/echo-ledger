@@ -1132,11 +1132,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { (graph.api() ?: throw NotPairedException()).deleteSession(id) }
     }.onSuccess { refresh() }
 
-    fun delete(item: LibraryItem) = viewModelScope.launch {
-        runCatching { withContext(Dispatchers.IO) { graph.api()?.deleteSession(item.id) } }
+    fun delete(item: LibraryItem) = viewModelScope.launch { deleteAndWait(item) }
+
+    /** Deletes [item] on the server and says whether it went (to Trash); a failure says why, as [delete] does. */
+    suspend fun deleteAndWait(item: LibraryItem): Boolean =
+        runCatching { withContext(Dispatchers.IO) { graph.api()?.deleteSession(item.id) ?: error("Not signed in") } }
             .onSuccess { refresh() }
             .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The recording could not be deleted.") }
-    }
+            .isSuccess
 
     /** Names, types and sizes of picked files (read off the main thread). */
     suspend fun describeFiles(uris: List<android.net.Uri>): List<com.echoledger.mobile.share.FileImport.Picked> =

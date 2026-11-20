@@ -105,6 +105,8 @@ export function paletteCommands(status: AppStatus, actions: {
   folders?: readonly PaletteFolder[];
   openFolder?: (folder: SmartFolder) => void;
   extra?: PaletteExtra;
+  /** The new design's words: its Record page is classic's Home. */
+  v2?: boolean;
 }): PaletteCommand[] {
   const extra = actions.extra ?? {};
   const recording = !!status.recording;
@@ -112,7 +114,7 @@ export function paletteCommands(status: AppStatus, actions: {
   const list: PaletteCommand[] = [
     recording
       ? { id: "stop", label: "Stop recording", keywords: "end finish save", run: () => actions.run(api.stopRecording) }
-      : { id: "start", label: "Record now", keywords: "start recording call meeting voice note begin", run: () => actions.run(api.recordNow) },
+      : { id: "start", label: actions.v2 ? "Record" : "Record now", keywords: "record now start recording call meeting voice note begin", run: () => actions.run(api.recordNow) },
   ];
   if (recording) {
     list.push(status.paused
@@ -139,7 +141,7 @@ export function paletteCommands(status: AppStatus, actions: {
       { id: `folder-${folder}`, label: `Go to ${label}`, keywords: "smart folder library recordings", run: () => openFolder(folder) }
     )) : []),
     { id: "projects", label: "Go to Projects", keywords: "clients folders workspace brief notes files ask", run: () => actions.go("projects") },
-    { id: "record", label: "Go to Home", keywords: "record microphone detection start", run: () => actions.go("record") },
+    { id: "record", label: actions.v2 ? "Go to Record page" : "Go to Home", keywords: actions.v2 ? "home record microphone detection start live assist" : "record microphone detection start", run: () => actions.go("record") },
     { id: "ready", label: "Check calls will be recorded", keywords: "ready check permissions microphone fix readiness", run: () => actions.go("record") },
     { id: "activity", label: "Go to Activity", keywords: "notifications bell", run: () => actions.go("activity") },
     { id: "shared", label: "Go to Shared", keywords: "shared with me links request links", run: () => actions.go("shared") },
@@ -152,7 +154,7 @@ export function paletteCommands(status: AppStatus, actions: {
   return list;
 }
 
-export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder, pages = [], extra, settings }: {
+export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder, pages = [], extra, settings, look = "classic" }: {
   status: AppStatus;
   onClose: () => void;
   onGo: (tab: MainTab) => void;
@@ -166,6 +168,8 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   extra?: PaletteExtra;
   /** Every single setting by name (v1.7), from the settings registry. */
   settings?: (query: string) => PaletteSetting[];
+  /** "v2": drawn with the new design's values (v2.css .el-palette), the same rows, keys and ranking. */
+  look?: "classic" | "v2";
 }) {
   const [query, setQuery] = useState("");
   const entitlements = useEntitlements();
@@ -178,7 +182,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const inputRef = useRef<HTMLInputElement | null>(null);
   // Where the pointer last was over the list: only its own movement chooses a row (see `pointed`).
   const pointer = useRef<{ x: number; y: number } | null>(null);
-  const commands = useMemo(() => paletteCommands(status, { go: onGo, run, folders, openFolder: onFolder, extra }), [status, onGo, run, folders, onFolder, extra]);
+  const commands = useMemo(() => paletteCommands(status, { go: onGo, run, folders, openFolder: onFolder, extra, v2: look === "v2" }), [status, onGo, run, folders, onFolder, extra, look]);
 
   useEffect(() => {
     const q = query.trim();
@@ -267,7 +271,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   };
 
   return (
-    <div className="palette-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={`palette-backdrop${look === "v2" ? " el-root el-palette" : ""}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onKeyDown={onKey}>
         <div className="palette-field">
           <LucideSearchIcon size={16} />

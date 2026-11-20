@@ -188,7 +188,10 @@ class VendorNamesTest {
         "v2_tr_key_intro",
         "v2_tr_key_step1",
         "v2_tr_key_open",
-        "v2_tr_key_field"
+        "v2_tr_key_field",
+        // The v2 recording page's failure lines for the same step (classic's two sentences above, in Urdu too).
+        "v2_rec_fail_needs_key",
+        "v2_rec_fail_own_key"
     )
 
     /** Every text of the app's resources (strings, labels, descriptions) and manifests. */

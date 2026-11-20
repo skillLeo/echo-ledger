@@ -345,7 +345,7 @@ class HttpLiveClient(
         const val MAX_REFUSAL_BYTES = 64 * 1024L
 
         const val CONNECTION_FAILED = "Live Assist couldn't reach the server. Try again."
-        const val BUSY = "Live Assist is busy right now. Trying again."
+        const val BUSY = "Live Assist is busy right now. Try again in a moment."
 
         /** `"code": "…"` near the start of a refusal's body. */
         private val CODE = Regex("\"code\"\\s*:\\s*\"([a-z_]+)\"")
