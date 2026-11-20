@@ -132,6 +132,54 @@
         "fontWeight": 400
       }
     },
+    "urdu-title-l": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.urdu}",
+        "fontSize": "24px",
+        "lineHeight": "44px",
+        "fontWeight": 600
+      },
+      "$description": "Nastaliq page title: Latin size, line height + 12 for its tall ascenders and deep descenders"
+    },
+    "urdu-title-m": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.urdu}",
+        "fontSize": "20px",
+        "lineHeight": "40px",
+        "fontWeight": 600
+      }
+    },
+    "urdu-title-s": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.urdu}",
+        "fontSize": "16px",
+        "lineHeight": "30px",
+        "fontWeight": 600
+      }
+    },
+    "urdu-caption": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.urdu}",
+        "fontSize": "14px",
+        "lineHeight": "28px",
+        "fontWeight": 400
+      },
+      "$description": "Nastaliq below 14 px is unreadable: Urdu meta text never goes smaller"
+    },
+    "urdu-transcript": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.urdu}",
+        "fontSize": "19px",
+        "lineHeight": "38px",
+        "fontWeight": 400
+      },
+      "$description": "Transcript and reading text (line height 2)"
+    },
     "arabic-body": {
       "$type": "typography",
       "$value": {
@@ -140,6 +188,52 @@
         "lineHeight": "26px",
         "fontWeight": 400
       }
+    },
+    "arabic-title-l": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.arabic}",
+        "fontSize": "24px",
+        "lineHeight": "36px",
+        "fontWeight": 600
+      }
+    },
+    "arabic-title-m": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.arabic}",
+        "fontSize": "20px",
+        "lineHeight": "32px",
+        "fontWeight": 600
+      }
+    },
+    "arabic-title-s": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.arabic}",
+        "fontSize": "16px",
+        "lineHeight": "26px",
+        "fontWeight": 600
+      }
+    },
+    "arabic-caption": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.arabic}",
+        "fontSize": "13px",
+        "lineHeight": "22px",
+        "fontWeight": 400
+      }
+    },
+    "arabic-transcript": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.arabic}",
+        "fontSize": "18px",
+        "lineHeight": "30px",
+        "fontWeight": 400
+      },
+      "$description": "Transcript and reading text (line height about 1.7)"
     },
     "body-mobile": {
       "$type": "typography",
