@@ -89,6 +89,7 @@ fun <T> EchoSelect(
                 Icon(EchoIcons.Expand, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary)
             }
         }
+        val look = com.echoledger.mobile.ui.v2.theme.rememberPageLook()
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
@@ -96,24 +97,27 @@ fun <T> EchoSelect(
             containerColor = c.bgOverlay,
             border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault)
         ) {
-            options.forEach { option ->
-                val isSelected = option == selected
-                DropdownMenuItem(
-                    text = { Text(optionLabel(option), style = type.content(optionLabel(option), type.body)) },
-                    onClick = {
-                        open = false
-                        onSelect(option)
-                    },
-                    trailingIcon = if (isSelected) {
-                        { Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.lg), tint = c.accentText) }
-                    } else {
-                        null
-                    },
-                    colors = MenuDefaults.itemColors(textColor = c.textPrimary),
-                    modifier = Modifier
-                        .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
-                        .semantics { this.selected = isSelected }
-                )
+            // The menu's window starts from the activity's: keep the page's language and text size.
+            com.echoledger.mobile.ui.v2.theme.ProvidePageLook(look) {
+                options.forEach { option ->
+                    val isSelected = option == selected
+                    DropdownMenuItem(
+                        text = { Text(optionLabel(option), style = type.content(optionLabel(option), type.body)) },
+                        onClick = {
+                            open = false
+                            onSelect(option)
+                        },
+                        trailingIcon = if (isSelected) {
+                            { Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.lg), tint = c.accentText) }
+                        } else {
+                            null
+                        },
+                        colors = MenuDefaults.itemColors(textColor = c.textPrimary),
+                        modifier = Modifier
+                            .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
+                            .semantics { this.selected = isSelected }
+                    )
+                }
             }
         }
     }

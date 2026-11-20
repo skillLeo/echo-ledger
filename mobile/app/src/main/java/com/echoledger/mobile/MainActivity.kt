@@ -919,6 +919,9 @@ class MainActivity : FragmentActivity() {
             com.echoledger.mobile.ui.v2.live.LiveEntry.LiveTranslate ->
                 RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.GAME, onReviewWaiting = onReviewWaiting)
 
+            com.echoledger.mobile.ui.v2.live.LiveEntry.WatchTranslate ->
+                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.WATCH, onReviewWaiting = onReviewWaiting)
+
             com.echoledger.mobile.ui.v2.live.LiveEntry.Dictation -> SettingsScreen(vm, onSetup = onSetup, openPage = "voice")
 
             com.echoledger.mobile.ui.v2.live.LiveEntry.Captions -> SettingsScreen(vm, onSetup = onSetup, openPage = "captions")

@@ -45,8 +45,12 @@ fun EchoDialog(
     onDismiss: () -> Unit,
     destructive: Boolean = false
 ) {
+    val look = com.echoledger.mobile.ui.v2.theme.rememberPageLook()
     Dialog(onDismissRequest = onDismiss) {
-        EchoDialogContent(title, text, confirmLabel, onConfirm, dismissLabel, onDismiss, destructive)
+        // The dialog's window starts from the activity's: keep the page's language and text size.
+        com.echoledger.mobile.ui.v2.theme.ProvidePageLook(look) {
+            EchoDialogContent(title, text, confirmLabel, onConfirm, dismissLabel, onDismiss, destructive)
+        }
     }
 }
 
@@ -103,6 +107,7 @@ fun EchoBottomSheet(onDismiss: () -> Unit, title: String? = null, content: @Comp
     val c = EchoV2.colors
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    val look = com.echoledger.mobile.ui.v2.theme.rememberPageLook()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = state,
@@ -111,11 +116,14 @@ fun EchoBottomSheet(onDismiss: () -> Unit, title: String? = null, content: @Comp
         contentColor = c.textPrimary,
         dragHandle = { SheetHandle() }
     ) {
-        SheetBody(
-            title = title,
-            onClose = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } },
-            content = content
-        )
+        // The sheet's window starts from the activity's: keep the page's language and text size.
+        com.echoledger.mobile.ui.v2.theme.ProvidePageLook(look) {
+            SheetBody(
+                title = title,
+                onClose = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } },
+                content = content
+            )
+        }
     }
 }
 

@@ -38,7 +38,8 @@ import java.util.Locale
 
 /**
  * The colour roles of the v2 design system (docs/v2/DESIGN_SYSTEM.md) for one theme. Components read these, never the
- * raw palette. v2 takes no wallpaper colours: the accent stays teal and the surfaces stay neutral.
+ * raw palette. With Wallpaper colours on (Settings › Appearance) only the accent follows the wallpaper ([withWallpaper]);
+ * the surfaces stay neutral and Record, success, warning and danger keep their fixed colours.
  */
 @Immutable
 data class EchoV2Colors(
@@ -403,31 +404,70 @@ val EchoLanguage.locale: Locale get() = if (this == EchoLanguage.Urdu) Locale.fo
 /**
  * Draws [content] with the resources of [language] when the phone's own language is another one (a preview, a test,
  * or an app language chosen in Settings). The activity stays the context's base, so starting activities still works.
+ * The locals are always provided (the phone's own when they match), so changing the language keeps [content] where
+ * it is instead of building it again.
  */
 @Composable
 fun ProvideLanguage(language: EchoLanguage, content: @Composable () -> Unit) {
     val config = LocalConfiguration.current
     val current = config.locales[0]?.language
     val matches = if (language == EchoLanguage.Urdu) current == "ur" else current != "ur"
-    if (matches) {
-        content()
-        return
-    }
     val context = LocalContext.current
-    val localized = remember(context, config, language) {
-        val wanted = Configuration(config).apply { setLocale(language.locale) }
-        val res = context.createConfigurationContext(wanted).resources
-        object : ContextWrapper(context) {
-            override fun getResources(): Resources = res
+    val localized = remember(context, config, language, matches) {
+        if (matches) {
+            context
+        } else {
+            val wanted = Configuration(config).apply { setLocale(language.locale) }
+            val res = context.createConfigurationContext(wanted).resources
+            object : ContextWrapper(context) {
+                override fun getResources(): Resources = res
+            }
         }
     }
     CompositionLocalProvider(
         LocalContext provides localized,
-        LocalConfiguration provides localized.resources.configuration,
+        LocalConfiguration provides if (matches) config else localized.resources.configuration,
         LocalResources provides localized.resources,
         content = content
     )
 }
+
+/**
+ * The page's look as the shell set it (its language's context and resources, its text size, its direction), for
+ * what draws in a window of its own (a dialog, a sheet, a menu): such a window starts again from the activity's, so
+ * without this an app language or text size chosen in Settings would not reach it.
+ */
+class PageLook(
+    val context: android.content.Context,
+    val configuration: Configuration,
+    val resources: Resources,
+    val density: androidx.compose.ui.unit.Density,
+    val direction: LayoutDirection
+)
+
+/** The look of the page this is drawn in. */
+@Composable
+fun rememberPageLook(): PageLook {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val resources = LocalResources.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    return remember(context, configuration, resources, density, direction) {
+        PageLook(context, configuration, resources, density, direction)
+    }
+}
+
+/** Draws [content] (inside a dialog, sheet or menu window) with the page's [look]. */
+@Composable
+fun ProvidePageLook(look: PageLook, content: @Composable () -> Unit) = CompositionLocalProvider(
+    LocalContext provides look.context,
+    LocalConfiguration provides look.configuration,
+    LocalResources provides look.resources,
+    androidx.compose.ui.platform.LocalDensity provides look.density,
+    LocalLayoutDirection provides look.direction,
+    content = content
+)
 
 /** Dialogs on the phone share the sheet radius (16), so the phone uses three radii. */
 val PhoneDialogRadius = EchoTokens.Component.sheetRadius
