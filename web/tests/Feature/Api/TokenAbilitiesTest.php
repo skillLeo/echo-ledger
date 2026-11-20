@@ -69,6 +69,8 @@ function abilityRoutes(): array
         'add replacement' => ['POST', '/api/vocabulary/replacements', 'sessions:write'],
         'organise session' => ['PATCH', "/api/sessions/{$id}", 'sessions:write'],
         'bulk action' => ['POST', '/api/sessions/bulk', 'sessions:write'],
+        // Since 2.0.0-i: a label's colour.
+        'label colour' => ['PUT', '/api/labels/color', 'sessions:write'],
         'bulk export' => ['POST', '/api/sessions/export', 'library:read'],
         'smart views' => ['GET', '/api/library/views', 'library:read'],
         'create client' => ['POST', '/api/clients', 'sessions:write'],

@@ -3,7 +3,13 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-h (2026-11-18, accepted by the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-i (2026-11-21, accepted by the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-i (accepted 2026-11-21): the parity plan's row indicators (docs/PLAN_V2_PARITY.md section 3). Library items carry
+`important`, `label_colors` and `expires_at`; `PATCH /api/sessions/{id}` takes `important` and answers with `opened`;
+`POST /api/sessions/bulk` takes `important` and `unimportant`; `GET /api/library` takes `important=1|0`; `GET
+/api/library/views` gives each label its `color`; the new `PUT /api/labels/color` sets one. The unread dot is the
+existing `opened` (since v1.3). Only additions: older apps ignore the new fields. See "Important, label colours and days
+left (since 2.0.0-i)".
 2.0.0-h (accepted 2026-11-18): `POST /api/sessions/export` takes `html` too (parity plan 3: Export ▸ Web page for many recordings); the words are escaped in each page.
 2.0.0-g: the design switch both ways (docs/PLAN_V2_PARITY.md section 0): each `ui_v2.*` flag has an availability (`off`,
 `opt_in`, `everyone`); a person's own design choice (`classic`, `v2` or none); `GET /api/config` and the new `GET
@@ -1031,7 +1037,7 @@ A bookmark added after the call: `{"at_ms": 61250, "tag": "Decision", "note": "S
 Query: `since` (ISO-8601 with any offset; items with `updated_at >= since`, **including tombstones**), `source`
 (comma list of `phone,desktop,web`), `source_app`, `client_id`, `status`, `cursor`, `limit` (1–100, default 50), `tag`
 (sessions with a bookmark of that tag) and `bookmarked=1` (sessions with any bookmark; both since v1.1), `view`, `tz`,
-`label` and `pinned` (since v1.1, see "Organising the library").
+`label` and `pinned` (since v1.1, see "Organising the library"), and `important` (since 2.0.0-i).
 Returns every session of the owner from **every** device, except sessions still in status `recording` (listed only
 when `status=recording` is given).
 ```json
@@ -1045,6 +1051,7 @@ when `status=recording` is given).
     "transcript": {"final_status": "completed", "final_transcript_id": "01JB…", "live_available": true,
                    "live_transcript_id": "01JB…", "preview": "first 160 characters…"},
     "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"], "opened": false,
+    "important": false, "label_colors": {"Invoice": "#16a34a"}, "expires_at": "2026-12-14T09:00:00+00:00",
     "updated_at": "…"},
    {"id": "01JC…", "client_ref": "9a1d…", "deleted": true, "updated_at": "…"}
  ],
@@ -1073,17 +1080,51 @@ not decided Keep or Discard), `bookmarked`, `failed` (session `failed` or an upl
 `label` matches a recording label ignoring capitals; `pinned=1` / `pinned=0` filter by pin.
 
 ### `GET /api/library/views?tz=` — `library:read` (since v1.1)
-`200 {"views": {"today": 2, "this_week": 9, "waiting": 0, "bookmarked": 4, "failed": 1, "pinned": 3}, "labels": [{"label": "Invoice", "count": 5}]}`.
-Counts match what `GET /api/library?view=…` lists.
+`200 {"views": {"today": 2, "this_week": 9, "waiting": 0, "bookmarked": 4, "failed": 1, "pinned": 3}, "labels": [{"label": "Invoice", "count": 5, "color": "#16a34a"}]}`.
+Counts match what `GET /api/library?view=…` lists. Each label's `color` (since 2.0.0-i) is `null` until one is chosen.
+
+### Important, label colours and days left (since 2.0.0-i)
+What a Library row shows beside the title and the time (docs/PLAN_V2_PARITY.md section 3):
+- `important` (boolean, default `false`): the person flagged the recording. Set it with `PATCH /api/sessions/{id}`
+  `{"important": true}` or `POST /api/sessions/bulk` with `important` / `unimportant`; `GET /api/library?important=1`
+  lists the flagged ones (`0` the others). It changes nothing else (not the order, not retention).
+- `label_colors`: `{label: "#rrggbb"}` for the item's labels that have a colour, the label spelt as on this recording
+  (labels without one are left out; an empty object `{}` when none has). Labels belong to the person who made the
+  recording, and so do their colours: every recording of theirs with that label (capitals ignored) shows it, and a
+  teammate in the same workspace has colours of their own. A label without a colour is drawn in the apps' neutral
+  colour; the colours the apps offer are the design system's (any `#rrggbb` is accepted).
+- `expires_at`: when retention moves the recording to Trash (audio and text), worked out as the hourly clean-up does:
+  `created_at` plus the project's own days, else the general setting; the plan's days (or the owner's own, set by the
+  super admin) when they come first, for recordings made since the plan's retention was set. `null` when it is kept
+  forever (`keep`), still `recording`, or on a tombstone. The clean-up runs hourly, so the move happens within an hour
+  after `expires_at`. The apps show "N days left" with N = the hours left divided by 24, rounded up, and never below 0
+  ("0 days left" on its last day); they work it out from `expires_at` and the device clock, so the number stays right
+  between syncs. Changing `keep`, the recording's project or that project's days gives the recording a new
+  `updated_at`; a change of the general setting or of a plan's days reaches the apps on their next full refresh.
+- The unread dot is `opened: false` (since v1.3): the asking person has not opened the recording yet. Library lists and
+  (since 2.0.0-i) the `PATCH /api/sessions/{id}` answer carry it; opening never changes `updated_at`.
+
+### `PUT /api/labels/color` — `sessions:write` (since 2.0.0-i)
+The colour of one of the asking person's labels in the device's workspace.
+`{"label": "Invoice", "color": "#16A34A"}` → `200 {"label": "Invoice", "color": "#16a34a"}`; `"color": null` takes the
+colour away (`200` with `"color": null`). `label` is matched ignoring capitals only (accents and other marks count:
+"Résumé" and "resume" are two labels; "ÉTÉ" finds "Été") and cleaned as labels are (trimmed,
+single spaces, ≤ 40); the answer spells it as the person's first recording with it does. `color` is `#rrggbb`, kept and
+returned in lower case as a project's colour is. A label none of the person's recordings in this workspace carries is
+`404 label_not_found` (a teammate's or another workspace's label counts as none). Every recording of theirs with the
+label gets a new `updated_at`, so the other devices pick the colour up on their next sync. `422 validation_failed` for
+an empty label, a missing `color`, or a colour that is not `#rrggbb`. A viewer's device gets `403 not_allowed`, as for
+every other change.
 
 ### `PATCH /api/sessions/{id}` — `sessions:write` (since v1.1)
 Body, every field optional: `title` (≤ 200; empty clears it), `client_id` (a client of the owner, `null` = no
-client), `pinned` (boolean), `keep` (boolean, since B17: never deleted by retention) and `labels` (the complete list: trimmed, single spaces, ≤ 40 characters, duplicates
+client), `pinned` (boolean), `keep` (boolean, since B17: never deleted by retention), `important` (boolean, since 2.0.0-i) and `labels` (the complete list: trimmed, single spaces, ≤ 40 characters, duplicates
 ignoring capitals and blanks dropped, at most 20 → else `422 too_many_labels`). Returns `200 {"data": <library item>}`.
 `404 session_not_found`; another owner's client is `404 client_not_found`.
 
 ### `POST /api/sessions/bulk` — `sessions:write` (since v1.1)
-`{"ids": ["01JB…"], "action": "move|label|unlabel|pin|unpin|keep|unkeep|delete", "client_id": "01JB…" | null, "label": "Invoice"}`.
+`{"ids": ["01JB…"], "action": "move|label|unlabel|pin|unpin|keep|unkeep|important|unimportant|delete", "client_id": "01JB…" | null, "label": "Invoice"}`
+(`important` / `unimportant` since 2.0.0-i).
 Up to 200 ids; ids of other owners are ignored. `move` uses `client_id` (`null` = no client), `label` / `unlabel`
 need `label`, `delete` makes tombstones exactly like `DELETE /api/sessions/{id}`. `200 {"changed": 2}`.
 
