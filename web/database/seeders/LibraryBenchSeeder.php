@@ -52,6 +52,12 @@ final class LibraryBenchSeeder extends Seeder
             $user = User::query()->where('email', $p === 0 ? self::EMAIL : "bench{$p}@echoledger.local")->first()
                 ?? User::factory()->create(['email' => $p === 0 ? self::EMAIL : "bench{$p}@echoledger.local", 'name' => 'Bench '.($p + 1)]);
             // The measured person's transcripts are as long as their calls; the others' stay short to keep the database small.
+            // Run again, it leaves a seeded person as they are: the measured library stays the same size.
+            if (DB::table('capture_sessions')->where('user_id', $user->id)->exists()) {
+                $this->command?->info("{$user->email}: already seeded");
+
+                continue;
+            }
             $this->library($user, $perPerson, $p === 0);
             $this->command?->info("{$user->email}: {$perPerson} recordings");
         }
@@ -60,15 +66,19 @@ final class LibraryBenchSeeder extends Seeder
     private function library(User $user, int $count, bool $full): void
     {
         $workspaceId = (int) $user->current_workspace_id;
-        $phone = Device::factory()->create(['user_id' => $user->id, 'platform' => 'android', 'name' => 'Phone']);
-        $laptop = Device::factory()->create(['user_id' => $user->id, 'platform' => 'windows', 'name' => 'Laptop']);
-        $clients = collect(range(1, 12))->map(fn (int $i): Client => Client::query()->create([
-            'workspace_id' => $workspaceId, 'user_id' => $user->id, 'name' => "Project {$i}", 'color' => '#2563eb',
-            'retention_days' => $i === 1 ? 14 : null,
-        ]))->pluck('id')->all();
+        // A run that stopped half way left its devices, projects and colours: reuse them rather than add more.
+        $device = fn (string $platform, string $name): Device => Device::query()->withoutGlobalScopes()->where('user_id', $user->id)->where('name', $name)->first()
+            ?? Device::factory()->create(['user_id' => $user->id, 'platform' => $platform, 'name' => $name]);
+        $phone = $device('android', 'Phone');
+        $laptop = $device('windows', 'Laptop');
+        $clients = collect(range(1, 12))->map(fn (int $i): Client => Client::acrossPeople()->firstOrCreate(
+            ['workspace_id' => $workspaceId, 'user_id' => $user->id, 'name' => "Project {$i}"],
+            ['color' => '#2563eb', 'retention_days' => $i === 1 ? 14 : null],
+        ))->pluck('id')->all();
         foreach (array_slice(self::LABELS, 0, 5) as $i => $label) {
-            DB::table('label_colors')->insert(['workspace_id' => $workspaceId, 'user_id' => $user->id, 'label_key' => mb_strtolower($label),
-                'color' => ['#dc2626', '#16a34a', '#2563eb', '#ca8a04', '#db2777'][$i], 'created_at' => now(), 'updated_at' => now()]);
+            DB::table('label_colors')->upsert([['workspace_id' => $workspaceId, 'user_id' => $user->id, 'label_key' => mb_strtolower($label),
+                'color' => ['#dc2626', '#16a34a', '#2563eb', '#ca8a04', '#db2777'][$i], 'created_at' => now(), 'updated_at' => now()]],
+                ['workspace_id', 'user_id', 'label_key'], ['color', 'updated_at']);
         }
 
         $now = Carbon::now()->utc();

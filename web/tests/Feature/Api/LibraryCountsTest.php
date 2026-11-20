@@ -13,8 +13,11 @@ use App\Models\Client;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\LibraryOrganiser;
+use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\Workspaces;
+use Database\Seeders\LibraryBenchSeeder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
@@ -100,6 +103,60 @@ it('counts each view and folder exactly as its list holds it, on a library with 
     // Something in every folder and view, so none of them passes by being zero on both sides.
     expect(collect($views['views'])->filter()->count())->toBe(count(LibraryOrganiser::VIEWS))
         ->and(collect($folders)->except('shared')->filter()->count())->toBe(count(LibraryOrganiser::FOLDERS) - 1);
+});
+
+it('counts the views in the same few queries for 3 recordings or 60', function () {
+    $queries = function (): int {
+        app('auth')->forgetGuards();
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->getJson('/api/library/views')->assertOk();
+        $n = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $n;
+    };
+    foreach (range(1, 3) as $i) {
+        counted($this, ['started_at' => now()->subHours($i)]);
+    }
+    $queries(); // the first answer also reads what is kept for the rest of the run (settings, the schema)
+    $small = $queries();
+    $project = Client::factory()->create(['user_id' => $this->owner]);
+    foreach (range(1, 57) as $i) {
+        $s = counted($this, ['started_at' => now()->subHours($i), 'pinned' => $i % 5 === 0, 'client_id' => $i % 2 === 0 ? $project->id : null,
+            'source_app' => [SourceApp::WhatsApp, SourceApp::Zoom, SourceApp::VoiceNote, SourceApp::PhoneCall][$i % 4]]);
+        if ($i % 3 === 0) {
+            $s->markers()->create(['at_ms' => $i, 'tag' => 'Price']);
+            $s->labels()->create(['label' => "Label {$i}"]);
+        }
+    }
+
+    // Plan B6: 23 queries before, one a view and one a folder; now one for the views and one for the folders.
+    expect($queries())->toBe($small)->and($small)->toBeLessThanOrEqual(10);
+});
+
+it('counts what a teammate sent in the shared folder, as its list holds it', function () {
+    $me = User::query()->findOrFail($this->owner);
+    $mate = User::factory()->create();
+    app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->device->workspace_id), $mate);
+    foreach (range(1, 2) as $i) {
+        $sent = CaptureSession::factory()->create(['user_id' => $mate->id, 'workspace_id' => $this->device->workspace_id, 'started_at' => now()->subHours($i)]);
+        app(Teammates::class)->send($mate, $sent, [$me->email], null);
+    }
+    app('auth')->forgetGuards();
+
+    $shared = $this->getJson('/api/library/views')->assertOk()->json('folders.shared');
+    expect($shared)->toBe(2)->and($shared)->toBe(listed($this, 'folder=shared'));
+});
+
+it('measures only local or testing databases', function () {
+    app()['env'] = 'production';
+    try {
+        $this->artisan('echoledger:library-bench')->assertFailed();
+        expect(fn () => (new LibraryBenchSeeder)->run())->toThrow(RuntimeException::class, 'local or testing');
+    } finally {
+        app()['env'] = 'testing';
+    }
 });
 
 it('counts zero everywhere in an empty library', function () {

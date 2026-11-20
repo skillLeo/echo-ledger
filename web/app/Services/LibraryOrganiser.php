@@ -144,7 +144,8 @@ final class LibraryOrganiser
         $grammar = $query->getQuery()->getGrammar();
         foreach ($conditions as $name => $condition) {
             $only = $condition(CaptureSession::query()->withoutGlobalScopes())->getQuery();
-            $where = (string) preg_replace('/^where /', '', $grammar->compileWheres($only));
+            // A condition that filters nothing (a view or folder with no rule) counts every recording.
+            $where = trim((string) preg_replace('/^where /', '', $grammar->compileWheres($only))) ?: '1 = 1';
             $query->selectRaw('COALESCE(SUM(CASE WHEN '.$where.' THEN 1 ELSE 0 END), 0) as '.$grammar->wrap($name), $only->getBindings());
         }
         $row = (array) $query->toBase()->first();
