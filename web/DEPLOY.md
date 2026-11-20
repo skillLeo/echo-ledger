@@ -55,8 +55,12 @@ reconciler and the 30-day retention cleanup.
 - **Migration `2026_12_21_000001`:** recordings get `important` (false for every one, with an index next to
   `pinned`'s) and the new table `label_colors` (one row per coloured label of a person in a workspace; it goes with the
   person or the workspace by its foreign keys). Nothing existing is rewritten, so the migration is quick at any size.
-- **Before:** the usual database dump. **Rehearsal** on a copy: `migrate --pretend` lists only this migration; `migrate
-  --force`, then `migrate:rollback --step=1 --force`, then `migrate --force` again, all clean.
+- **Before:** the usual database dump. **Rehearsal** on a copy, on the Mac, with the dump and this release's `web/`:
+  `deploy/rehearse-migrations.sh --dump <backup>/db.sql.gz --web <release>/web --expect <new migrations> --checks
+  deploy/checks/2.0.0-i.sql`. It imports the dump into a throwaway MariaDB and runs `migrate --pretend`, `migrate`, the
+  checks, `migrate:rollback`, the checks, and `migrate` again, with the row counts compared at each step; it ends with
+  "REHEARSAL PASSED" or stops at the first failure. It never connects to the server and needs none of its keys.
+  (On 50,000 recordings: about two minutes; the migration itself 0.4 s up, 0.15 s down.)
 - **Rollback** (`migrate:rollback --step=1`) drops the column and the table: the important flags and label colours
   people set since the deploy are lost; recordings, labels and everything else stay. To keep them, restore the dump
   instead and accept that anything else written since is lost.

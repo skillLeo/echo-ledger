@@ -58,7 +58,9 @@ final class LibraryController extends Controller
         // The `shared` folder (since v1.5) is what others sent this person, from their workspaces, read-only.
         $shared = ($data['folder'] ?? null) === 'shared';
         $query = ($shared ? $teammates->sharedSessions($device->user) : CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id))->with([
-            'device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels',
+            'device', 'client', 'markers:id,capture_session_id,tag,at_ms', 'labels',
+            // Since B6 without the transcripts' lines and search copy, which a row never reads.
+            'transcripts' => fn ($q) => $q->select(LibraryItemResource::TRANSCRIPT_COLUMNS),
             // Only this user's own "opened" row: whether to show the unopened dot (since v1.3).
             'opens' => fn ($q) => $q->where('user_id', $device->user_id),
         ])->withCount('screens');
