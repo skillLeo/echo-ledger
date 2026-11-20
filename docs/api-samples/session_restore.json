@@ -1,7 +1,7 @@
 {
     "data": {
-        "id": "01m6ye2p5g4pzdswx5zk8k6mqd",
-        "client_ref": "7f821531-fecc-4421-b541-6def5e83e13a",
+        "id": "01m7xfb6jh5gn4c9razwyqb7v3",
+        "client_ref": "d30342ed-ddb5-4ebb-9c5e-6e5fb2063166",
         "deleted": false,
         "source_device": "phone",
         "source_device_label": "Phone",
@@ -9,11 +9,11 @@
         "source_app": "whatsapp",
         "source_app_label": "WhatsApp",
         "device": {
-            "id": "01m6ye2p56zjcp7wg7e84ad5f3",
+            "id": "01m7xfb6fkees8mv060swzmvns",
             "name": "Galaxy S25 Ultra"
         },
         "client": {
-            "id": "01m6ye2pxw2edzngbjzxyst6xt",
+            "id": "01m7xfba5acp9t29w18vqdbr11",
             "name": "Sample project, renamed",
             "color": "#8b5cf6",
             "avatar": null
@@ -22,15 +22,15 @@
         "title": "Retainer check-in, renamed",
         "title_auto": false,
         "caller": null,
-        "started_at": "2026-11-07T10:15:00+00:00",
-        "ended_at": "2026-11-07T10:15:19+00:00",
+        "started_at": "2026-11-19T10:15:00+00:00",
+        "ended_at": "2026-11-19T10:15:19+00:00",
         "duration_ms": 19375,
         "status": "completed",
         "language": null,
         "language_chip": "EN",
         "transcript": {
             "final_status": "completed",
-            "final_transcript_id": "01m6ye2pa0hrvg3cmb68rrfrfs",
+            "final_transcript_id": "01m7xfb7qtmzgj5n5ngnmpcs1k",
             "live_available": false,
             "live_transcript_id": null,
             "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
@@ -61,6 +61,9 @@
         "labels": [
             "Sample"
         ],
-        "updated_at": "2026-11-08T20:37:28+00:00"
+        "important": false,
+        "label_colors": {},
+        "expires_at": "2026-12-20T21:56:02+00:00",
+        "updated_at": "2026-11-20T21:56:06+00:00"
     }
 }

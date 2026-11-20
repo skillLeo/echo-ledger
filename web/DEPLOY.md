@@ -51,6 +51,18 @@ reconciler and the 30-day retention cleanup.
 10. In **Admin → API Credentials** paste the AssemblyAI API key and press **Generate** for the webhook secret.
    In **Admin → Settings** pick providers per use-case and add the certificate pins (see below).
 
+## Row indicators (contract 2.0.0-i)
+- **Migration `2026_12_21_000001`:** recordings get `important` (false for every one, with an index next to
+  `pinned`'s) and the new table `label_colors` (one row per coloured label of a person in a workspace; it goes with the
+  person or the workspace by its foreign keys). Nothing existing is rewritten, so the migration is quick at any size.
+- **Before:** the usual database dump. **Rehearsal** on a copy: `migrate --pretend` lists only this migration; `migrate
+  --force`, then `migrate:rollback --step=1 --force`, then `migrate --force` again, all clean.
+- **Rollback** (`migrate:rollback --step=1`) drops the column and the table: the important flags and label colours
+  people set since the deploy are lost; recordings, labels and everything else stay. To keep them, restore the dump
+  instead and accept that anything else written since is lost.
+- **Check after:** `GET /api/library?limit=1` with a device token carries `important`, `label_colors` and `expires_at`;
+  older apps ignore them.
+
 ## Cron (the only background process)
 ```
 * * * * * cd /home/USER/echoledger/web && php artisan schedule:run >> /dev/null 2>&1
