@@ -61,7 +61,8 @@ class ListDevices extends ListRecords
 
                     return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($payload), 'url' => rtrim((string) config('app.url'), '/')]];
                 })
-                ->schema([ViewField::make('pairing')->view('filament.pair-device')->hiddenLabel()])
+                // The new frame's copy of the window's body has its words in the console's language (W-207).
+                ->schema([ViewField::make('pairing')->view($v2 ? 'filament.v2.pair-device' : 'filament.pair-device')->hiddenLabel()])
                 ->modalSubmitAction(false)
                 ->modalCancelActionLabel($t('Done'))
                 ->modalWidth('md'),

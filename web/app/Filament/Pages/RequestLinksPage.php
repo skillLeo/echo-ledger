@@ -74,7 +74,8 @@ class RequestLinksPage extends Page implements HasTable
             Action::make('create')->label($t('New request link'))->icon(Heroicon::OutlinedPlus)
                 ->modalDescription($t('Anyone with the link can send you files on a page of this server, without an account.'))
                 ->schema([
-                    TextInput::make('title')->label($t('What you ask for'))->placeholder(RequestLinks::DEFAULT_TITLE)->maxLength(200),
+                    // Left empty, the server names it RequestLinks::DEFAULT_TITLE: only the placeholder is in the console's language.
+                    TextInput::make('title')->label($t('What you ask for'))->placeholder($t(RequestLinks::DEFAULT_TITLE))->maxLength(200),
                     Select::make('client_id')->label($t('Project'))->placeholder($t('Inbox (sound and video only)'))->searchable()
                         ->options(fn (): array => SharingActions::folderOptions())
                         ->helperText($t('With a project, PDF, Word, text and image files go to its Files too.')),
