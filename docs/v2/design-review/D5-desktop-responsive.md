@@ -7,7 +7,7 @@ Status: rules v1, 2026-11-21. They are based on F1 (b-desktop-ux @ 4c69e2fe), wh
 - **Page width** decides the layout. The page width is the window width minus the sidebar or rail, and it is measured where the page is drawn (MainApp `pageWidth`). The window width alone cannot decide, because the sidebar can be anywhere from 64 to 320 px.
 - **Window width** decides one thing only: whether the sidebar shows as the rail.
 - Use container queries or a measured class (`.narrow`, `.no-column`). Do not use `@media (width…)` for page layout. Media queries are fine only for `prefers-*` and `max-height`.
-- Every number lives in one place: lib/shell.ts for classic, tokens `--el-breakpoint-*` for v2. A test keeps the two in sync.
+- Every number lives in one place: lib/shell.ts for classic, tokens `--el-breakpoint-*` for v2. tokens/test/tokens.test.mjs checks that `AUTO_RAIL_BELOW` equals `breakpoint.rail` and that the v2 sidebar's media query uses that width.
 
 ## 2. Sizes
 | name | rule | value | what changes |
@@ -21,7 +21,7 @@ Status: rules v1, 2026-11-21. They are based on F1 (b-desktop-ux @ 4c69e2fe), wh
 
 Check list widths: **720, 756, 800, 1024, 1280, 1728**, each in light/dark, EN/UR, at text 100 % and 200 %.
 
-Fixed with this rule set: the v2 sidebar rule used `--el-breakpoint-compact` (720), so it could never fire in a window that is at least 720 px wide. v2 now uses the new `--el-breakpoint-rail` token (780, the same as classic's AUTO_RAIL_BELOW). `compact` stays 720 for the web console. EL-Fix adds "780px" to the expected list in tokensOnly.test.ts:88.
+Fixed with this rule set: the v2 sidebar rule used `--el-breakpoint-compact` (720), so it could never fire in a window that is at least 720 px wide. v2 now uses the new `--el-breakpoint-rail` token (780, the same as classic's AUTO_RAIL_BELOW). `compact` stays 720 for the web console. tokensOnly.test.ts:88 lists 780px among the allowed media-query widths (changed under EL-Lead's lock).
 
 ## 3. Narrow page (< 798)
 1. **List → item.** Opening an item hides the list and its toolbar. The item fills the full width.
@@ -40,17 +40,17 @@ Fixed with this rule set: the v2 sidebar rule used `--el-breakpoint-compact` (72
    Never drop: the workspace switcher, the bell, the avatar.
 
 ## 4. Sticky layers and safe areas
-- **One stack, top to bottom:** top bar → page sticky bar (item bar or find bar) → section header. Each one's top is the sum of the drawn heights above it. Measure them at runtime the way F1 does (`useStickyHeight` → `--topbar-h`, `--item-bar-h`, `--group-head-h`). Never hard-code 40 px, because headers grow at 200 % text.
+- **One stack, top to bottom:** top bar → page sticky bar (item bar or find bar) → section header. Each one's top is the sum of the drawn heights above it. Measure them at runtime the way F1 does with `useStickyHeight`. F1 already publishes `--group-head-h` and `--player-dock-h`; `--topbar-h` and `--item-bar-h` are **new** and come with the sticky item bar. Never hard-code 40 px, because headers grow at 200 % text.
 - **Player dock.** It is solid `--surface` with a hairline top border, sticks to the bottom of the scrolling area, and its height is published as `--player-dock-h`.
 - **Scroll padding.** Every scroller with sticky layers sets `scroll-padding-block-start` to the total height of the sticky layers above and `scroll-padding-block-end` to `--player-dock-h + --space-2`. Then J/K, Follow, search hits and `scrollIntoView` never land under a bar.
 - **Short window** (`max-height: 480px`, for example 200 % text in a small window): the player dock goes static, and only the top bar stays sticky.
 - **Layering:** use the layer tokens only: `--el-layer-sticky` 10 < `--el-layer-dock` 15 (new, the player dock) < `--el-layer-menu` 20 < `--el-layer-toast` 30 < `--el-layer-dialog` 40 < `--el-layer-overlay` 50. Menus, toasts and dialogs always sit above the player. Classic code moves to these values when it is next touched.
 
 ## 5. Columns at ≥ 798
-- **List column:** min 320 px, default 360, max 480. The person can resize it, and the choice is kept on this computer.
+- **List column:** min 320 px, default 360, max 480. The person can resize it, and the choice is kept on this computer (**new**, not built yet; see §9).
 - **Detail column:** min 360 px and takes the rest.
 - If both minimums plus padding (64 + 320 + 16 + 360 = 760) plus a scrollbar don't fit, the page is narrow (section 3). No in-between layout squeezes either column.
-- The table view (as-table) keeps its own drawer. The drawer is 420 px, and below 1120 it becomes full-width with Back, like section 3.
+- The table view (as-table) keeps its own drawer. The drawer is `min(640px, 100vw − 120px)`, as in classic (styles.css:1425). Below 798 it becomes full-width with Back, like section 3 (not done yet; see §9).
 
 ## 6. Text size 130 % / 200 %
 - Rows grow in height. They never get clipped and never truncate a title to fewer than about 12 characters. At 200 % the row's meta line may wrap onto a second line.
@@ -72,6 +72,6 @@ Fixed with this rule set: the v2 sidebar rule used `--el-breakpoint-compact` (72
 6. Light/dark, EN/UR and 100/200 % pictures go in docs/qa/desktop-widths/ (classic) or docs/v2/design-review/<id>/ (v2).
 
 ## 9. Hand-off
-- **EL-Fix (classic):** sections 3.3 (sticky item bar), 3.6 (the remaining top bar steps), 4 (stack variables beyond the Library) and 7 (bidi isolates) are not done yet. Apply them to Home, Projects, Project, Shared, Activity and Settings, then extend the width check to the item-page Back reachability and to every screen in the matrix.
+- **EL-Fix (classic):** sections 3.3 (sticky item bar), 3.6 (the remaining top bar steps), 4 (stack variables beyond the Library) 7 (bidi isolates), 5 (the resizable list column) and the drawer's full width below 798 are not done yet. Apply them to Home, Projects, Project, Shared, Activity and Settings, then extend the width check to the item-page Back reachability and to every screen in the matrix.
 - **EL-UX (v2):** use the same sizes through `--el-breakpoint-*`. Sections 3 and 4 apply to every v2 list/detail page. EL-Design will ship the sticky item bar as a shared component (D6).
-- **EL-Design (done with this file):** `breakpoint.rail` 780 and `layer.dock` 15 are in tokens/global/size.json, and v2.css:802 uses the rail value. Page-width sizes (798 and 1120) stay in lib/shell.ts, because they are container sizes and not window breakpoints. v2 reads them through the same `.narrow` / `.no-column` classes. The sticky item bar comes as a shared component with D6.
+- **EL-Design (done with this file):** `breakpoint.rail` 780 and `layer.dock` 15 are in tokens/global/size.json, and v2.css:803 uses the rail value, and tokens/test checks both against lib/shell.ts. Page-width sizes (798 and 1120) stay in lib/shell.ts, because they are container sizes and not window breakpoints. v2 reads them through the same `.narrow` / `.no-column` classes. The sticky item bar comes as a shared component with D6.

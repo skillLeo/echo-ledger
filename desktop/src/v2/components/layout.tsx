@@ -11,7 +11,7 @@ export function Avatar({ initials, size = "md" }: { initials: string; size?: "sm
   return <span className={`el-avatar${size === "sm" ? " el-avatar--sm" : ""}`} aria-hidden="true">{initials}</span>;
 }
 
-/** The app's primary navigation; below the compact breakpoint it keeps its icons only. */
+/** The app's primary navigation; below the rail breakpoint (780 px window) it keeps its icons only. */
 export function Sidebar({ label, brand, children, footer }: { label: string; brand?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
     <nav className="el-sidebar" aria-label={label}>

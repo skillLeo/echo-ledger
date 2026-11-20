@@ -799,7 +799,7 @@ button.el-step__head { cursor: pointer; }
 
 /* Below the rail breakpoint the sidebar keeps its icons only; the names stay for assistive tools and as tooltips. The
    window is never narrower than 720 px, so this is classic's AUTO_RAIL_BELOW (lib/shell.ts), not the web's compact.
-   Media queries cannot read variables: the width mirrors --el-breakpoint-rail (tokensOnly.test.ts checks it). */
+   Media queries cannot read variables: the width mirrors --el-breakpoint-rail and AUTO_RAIL_BELOW (tokens/test/tokens.test.mjs checks both). */
 @media (width < 780px) {
   .el-sidebar { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
   .el-sidebar__brand { display: none; }
