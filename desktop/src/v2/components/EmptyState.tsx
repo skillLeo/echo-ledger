@@ -11,7 +11,7 @@ export function EmptyState({ icon, title, body, action, tone = "empty" }: { icon
       role={tone === "error" ? "alert" : undefined}>
       {icon && <span className="el-empty__icon"><Icon icon={icon} size="lg" /></span>}
       <h2 className="el-title-m">{title}</h2>
-      {body && <p className="el-empty__body">{body}</p>}
+      {body && <p className="el-empty__body" dir="auto">{body}</p>}
       {action && <div className="el-empty__action">{action}</div>}
     </section>
   );
