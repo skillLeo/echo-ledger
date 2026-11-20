@@ -27,6 +27,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
@@ -57,23 +58,33 @@ class RequestLinksPage extends Page implements HasTable
         return $schema->components([EmbeddedTable::make()]);
     }
 
+    /** Since v2.0 (W-207): in the new frame the title is in the console's language; classic keeps its English. */
+    public function getTitle(): string|Htmlable
+    {
+        return ConsoleV2::shell() ? __('Request links') : parent::getTitle();
+    }
+
     protected function getHeaderActions(): array
     {
+        // Since v2.0 (W-207): in the new frame New request link and its form are in the console's language; classic
+        // keeps its English words.
+        $t = fn (string $words): string => ConsoleV2::shell() ? __($words) : $words;
+
         return [
-            Action::make('create')->label('New request link')->icon(Heroicon::OutlinedPlus)
-                ->modalDescription('Anyone with the link can send you files on a page of this server, without an account.')
+            Action::make('create')->label($t('New request link'))->icon(Heroicon::OutlinedPlus)
+                ->modalDescription($t('Anyone with the link can send you files on a page of this server, without an account.'))
                 ->schema([
-                    TextInput::make('title')->label('What you ask for')->placeholder(RequestLinks::DEFAULT_TITLE)->maxLength(200),
-                    Select::make('client_id')->label('Project')->placeholder('Inbox (sound and video only)')->searchable()
+                    TextInput::make('title')->label($t('What you ask for'))->placeholder(RequestLinks::DEFAULT_TITLE)->maxLength(200),
+                    Select::make('client_id')->label($t('Project'))->placeholder($t('Inbox (sound and video only)'))->searchable()
                         ->options(fn (): array => SharingActions::folderOptions())
-                        ->helperText('With a project, PDF, Word, text and image files go to its Files too.'),
-                    Select::make('expires')->label('Open for')->default('604800')->selectablePlaceholder(false)
-                        ->options(['86400' => '1 day', '604800' => '7 days', '2592000' => '30 days', 'never' => 'Until I revoke it']),
-                    TextInput::make('max_files')->label('Files at most')->numeric()->integer()->default(20)->minValue(1)->maxValue(RequestLinks::MAX_FILES)->required(),
-                    TextInput::make('max_mb')->label('Each file at most (MB)')->numeric()->integer()->default(100)->minValue(1)->maxValue(RequestLinks::maxMegabytes())->required(),
+                        ->helperText($t('With a project, PDF, Word, text and image files go to its Files too.')),
+                    Select::make('expires')->label($t('Open for'))->default('604800')->selectablePlaceholder(false)
+                        ->options(['86400' => $t('1 day'), '604800' => $t('7 days'), '2592000' => $t('30 days'), 'never' => $t('Until I revoke it')]),
+                    TextInput::make('max_files')->label($t('Files at most'))->numeric()->integer()->default(20)->minValue(1)->maxValue(RequestLinks::MAX_FILES)->required(),
+                    TextInput::make('max_mb')->label($t('Each file at most (MB)'))->numeric()->integer()->default(100)->minValue(1)->maxValue(RequestLinks::maxMegabytes())->required(),
                 ])
-                ->modalSubmitActionLabel('Make the link')
-                ->action(function (array $data): void {
+                ->modalSubmitActionLabel($t('Make the link'))
+                ->action(function (array $data) use ($t): void {
                     $user = auth()->user();
                     $workspace = (int) CurrentWorkspace::id();
                     $project = filled($data['client_id'] ?? null) ? Client::query()->where('workspace_id', $workspace)->find($data['client_id']) : null;
@@ -82,7 +93,7 @@ class RequestLinksPage extends Page implements HasTable
                     }
                     ['url' => $url] = app(RequestLinks::class)->create($workspace, $user->id, $project instanceof Client ? $project : null, $data['title'] ?? null,
                         ($data['expires'] ?? 'never') === 'never' ? null : now()->addSeconds((int) $data['expires']), (int) $data['max_files'], (int) $data['max_mb']);
-                    Notification::make()->title('Request link ready. Copy it now: it is shown only once.')->body($url)->persistent()->success()->send();
+                    Notification::make()->title($t('Request link ready. Copy it now: it is shown only once.'))->body($url)->persistent()->success()->send();
                 }),
         ];
     }
