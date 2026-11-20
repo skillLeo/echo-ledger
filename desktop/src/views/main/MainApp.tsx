@@ -66,6 +66,7 @@ const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
 const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
 const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
 const ActivityV2 = lazy(() => v2().then((m) => ({ default: m.ActivityV2 })));
+const SharedV2 = lazy(() => v2().then((m) => ({ default: m.SharedV2 })));
 const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
@@ -486,6 +487,9 @@ export default function MainApp() {
           const place = await placeOfRecording(target.session_id);
           if (!place) {
             await inBrowser("this recording is not in your Library or in Shared with me.");
+          } else if (place.in === "shared" && ui.flags["ui_v2.shell"]) {
+            openShared("with-me");
+            setSharedFocus(place.itemId);
           } else if (place.in === "shared") {
             setTab("library");
             setLibraryFolder("shared");
@@ -505,6 +509,11 @@ export default function MainApp() {
           setProjectId(target.client_id);
           break;
         case "shared":
+          if (ui.flags["ui_v2.shell"]) {
+            openShared("with-me");
+            setSharedFocus(target.shared_id);
+            break;
+          }
           setTab("library");
           setLibraryFolder("shared");
           setLibraryView(null);
@@ -815,7 +824,7 @@ export default function MainApp() {
       {tab === "activity" && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <ActivityV2 status={status} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error)}
+            <ActivityV2 status={status} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, NO_TARGET)}
               onReview={(id) => {
                 openFolder(null);
                 if (ui.flags["ui_v2.library"]) setReviewV2({ seq: ++navigations.current });
@@ -825,9 +834,18 @@ export default function MainApp() {
           </div>
         </Suspense>
       )}
-      {tab === "shared" && (
+      {tab === "shared" && !ui.flags["ui_v2.shell"] && (
         <SharedView tab={sharedTab} onTab={setSharedTab} notify={notify} projects={projects} onOpenShared={(id) => { openFolder("shared"); setSharedFocus(id); }}
           onOpenRecording={(id) => openRecording(id)} onOpenProject={(id) => openProject(id)} />
+      )}
+      {tab === "shared" && ui.flags["ui_v2.shell"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded">
+            <SharedV2 tab={sharedTab} onTab={(t) => { setSharedTab(t); setSharedFocus(null); }} notify={notify} projects={projects} focusId={sharedFocus}
+              onOpenRecording={(id) => openRecording(id)} onOpenProject={(id) => openProject(id)}
+              onSaved={(saved) => { if (saved.client_id) openProject(saved.client_id); else if (saved.session_id) openRecording(saved.session_id); }} />
+          </div>
+        </Suspense>
       )}
       {tab === "settings" && ui.flags["ui_v2.settings"] && (
         <Suspense fallback={null}>
