@@ -644,11 +644,14 @@ thead .fi-ta-selection-cell {
     padding-inline-end: 52px;
 }
 
+/*
+ * No z-index: with one the wrapper became a stacking context at 1, and its open panel (Filament's z-20) was drawn under
+ * the list's sticky day headings (z-index 4), cut into strips. Positioned, it still paints over the search pill it sits in.
+ */
 .el-list .fi-ta-search-field ~ .fi-ta-filters-dropdown {
     position: absolute;
     inset-block: 0;
     inset-inline-end: 14px;
-    z-index: 1;
     display: flex;
     align-items: center;
 }

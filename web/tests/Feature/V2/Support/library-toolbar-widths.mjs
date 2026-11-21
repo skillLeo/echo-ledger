@@ -1,6 +1,7 @@
 // W-202: the classic Library toolbar (Show, Folder, List / Table, Sort by, View) measured in a browser at 768-1280 px,
 // light theme, the classic frame. It fails when the toolbar has to scroll sideways (a control cut at its edge, as
-// "Sort by" was) or when a control breaks inside itself (List / Table stacked onto two lines).
+// "Sort by" was) or when a control breaks inside itself (List / Table stacked onto two lines), and when the open filters
+// panel is drawn under the list's sticky day headings.
 //
 //   A local server with the parity world (tests/Feature/V2/Support/parity_world.php) in a local SQLite file, never
 //   production, the new frame off:
@@ -44,7 +45,24 @@ for (const width of [768, 820, 900, 1024, 1180, 1280]) {
             .map((el) => el.getAttribute('data-menu') ?? el.className.split(' ').slice(0, 2).join('.'));
         return { available: bar.clientWidth, needs: bar.scrollWidth, scrolls: bar.scrollWidth > bar.clientWidth + 1, cut, broken, rows: new Set(controls.map((el) => Math.round(el.getBoundingClientRect().top / 8))).size };
     });
-    const fail = m.missing || m.scrolls || m.cut.length > 0 || m.broken.length > 0;
+    // The filters panel, open: on top of the list's sticky day headings, not under them (its fields were hidden).
+    await page.locator('[data-active-filters]').filter({ visible: true }).first().click({ force: true }).catch(() => {});
+    await page.waitForTimeout(600);
+    m.panelCovered = await page.evaluate(() => {
+        const panel = [...document.querySelectorAll('.fi-ta-filters-dropdown .fi-dropdown-panel')].find((el) => el.offsetParent !== null);
+        if (!panel) return 'panel did not open';
+        const r = panel.getBoundingClientRect();
+        const covered = [];
+        for (const fy of [0.2, 0.4, 0.6, 0.8]) for (const fx of [0.25, 0.75]) {
+            const x = r.left + r.width * fx, y = r.top + r.height * fy;
+            if (y > innerHeight - 2) continue;
+            const top = document.elementFromPoint(x, y);
+            if (top && !panel.contains(top)) covered.push(top.closest('[class]')?.className.toString().split(' ').slice(0, 2).join('.') ?? top.tagName);
+        }
+        return covered.length ? `covered by ${[...new Set(covered)].join(', ')}` : null;
+    });
+    await page.keyboard.press('Escape').catch(() => {});
+    const fail = m.missing || m.scrolls || m.cut.length > 0 || m.broken.length > 0 || !!m.panelCovered;
     if (fail) bad++;
     console.log(JSON.stringify({ width, ...m, ok: !fail }));
 }
