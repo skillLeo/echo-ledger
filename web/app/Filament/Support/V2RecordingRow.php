@@ -14,6 +14,7 @@ use App\Models\CaptureSession;
 use App\Models\SessionLabel;
 use App\Services\RetentionPolicy;
 use App\Services\SettingsRepository;
+use App\Services\Views\TranscriptViews;
 use Illuminate\Support\Carbon;
 
 /**
@@ -40,7 +41,8 @@ final class V2RecordingRow
     /**
      * @return array{id: string, title: string, icon: string, source: string, line: string, device: string|null, pinned: bool,
      *     time: string, full_time: string, iso: string, app: string, device_kind: string|null, source_words: string, length: string, status: array{label: string, tone: string, icon: string}|null,
-     *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, class: string, own: string|null}>, left: array{text: string, days: int, soon: bool}|null}
+     *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, class: string, own: string|null}>, left: array{text: string, days: int, soon: bool}|null,
+     *     converting: array{state: string, view: string, label: string, percent: int|null}|null}
      */
     public static function for(CaptureSession $session): array
     {
@@ -51,6 +53,7 @@ final class V2RecordingRow
         $source = self::source($session->source_app);
         // The device it came from, as the classic row says it ("WhatsApp · Galaxy S25"); a web upload says so.
         $device = $session->device !== null ? $session->device->name : ($session->source_device === SourceDevice::Web ? __('Web upload') : null);
+        $status = self::status($session);
 
         return [
             'id' => (string) $session->id,
@@ -68,7 +71,10 @@ final class V2RecordingRow
             'full_time' => $at->locale(app()->getLocale())->translatedFormat('j F Y, '.Shell::timeFormat()),
             'iso' => $session->started_at->toIso8601ZuluString(),
             'length' => CaptureSessionsTable::duration($session->duration_ms),
-            'status' => self::status($session),
+            'status' => $status,
+            // Since U19: "Converting to Roman Urdu… 60%" with a small spinner while the view it opens in is made (from the
+            // moment the transcript is there), or "Couldn't convert to Roman Urdu"; only when no other status shows.
+            'converting' => $status === null ? RecordingProgress::conversion($session) : null,
             'important' => (bool) $session->important,
             // The unread dot: this person has not opened it yet (only known when the list loaded their opens).
             'unread' => $session->relationLoaded('opens') && $session->opens->isEmpty(),
@@ -83,7 +89,8 @@ final class V2RecordingRow
     {
         $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : null;
 
-        return $final?->status === TranscriptStatus::Completed && filled($final->text) ? $final->preview(140) : null;
+        // Since U19 in the view it opens in once made, where the row has the views (the API's preview_view).
+        return $final?->status === TranscriptStatus::Completed && filled($final->text) ? (TranscriptViews::rowPreview($final, 140)['text'] ?? $final->preview(140)) : null;
     }
 
     /** "Audio · N days left" shows from this many days left (EL-Design: not a badge on every row). */

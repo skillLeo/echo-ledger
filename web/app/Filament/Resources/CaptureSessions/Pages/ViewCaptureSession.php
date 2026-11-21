@@ -107,10 +107,11 @@ class ViewCaptureSession extends ViewRecord
     public bool $viewsMaking = false;
 
     /**
-     * Since v1.5 (Phase 1C): the slim "Improving Roman Urdu… 60 %" bar while the view the page opens in is made; it
-     * stays (as "Roman Urdu is ready") once the view is in, so the transcript below never moves.
+     * Since v1.5 (Phase 1C): the slim bar while the view the page opens in is made ("Converting to Roman Urdu… 60%"
+     * since U19, from the moment the transcript is there); it stays (as "Roman Urdu is ready") once the view is in, so
+     * the transcript below never moves. Since U19 also "Couldn't convert to Roman Urdu" with Try again (`failed`).
      *
-     * @var array{label: string, percent: int}|null
+     * @var array{label: string, percent: int, failed?: bool}|null
      */
     public ?array $viewsBar = null;
 
@@ -133,7 +134,7 @@ class ViewCaptureSession extends ViewRecord
         }
         $transcript = $this->editableTranscript();
         $this->viewsMaking = $transcript !== null && app(TranscriptViews::class)->state($transcript)['status'] === 'making';
-        $this->viewsBar = RecordingProgress::improvingBar($this->session());
+        $this->viewsBar = RecordingProgress::pageBar($this->session());
         // Send to WhatsApp sends the view being read: the one the player opens in, until it says otherwise.
         $this->readingView = WhatsAppMessage::defaultView($this->session()) ?? 'original';
         if (ConsoleV2::library()) {
@@ -204,7 +205,7 @@ class ViewCaptureSession extends ViewRecord
         // The transcript is readable at once; the view it opens in may still be being made (then the bar shows).
         $transcript = $this->editableTranscript();
         $this->viewsMaking = $transcript !== null && app(TranscriptViews::class)->state($transcript)['status'] === 'making';
-        $this->viewsBar = RecordingProgress::improvingBar($session);
+        $this->viewsBar = RecordingProgress::pageBar($session);
         $this->pushPlayer();
         match ($session->finalTranscript?->status) {
             TranscriptStatus::Completed => Notification::make()->title('The transcript is ready')->success()->send(),
@@ -380,13 +381,35 @@ class ViewCaptureSession extends ViewRecord
             $this->viewsMaking = false;
             if ($this->viewsBar !== null) {
                 $view = $transcript !== null ? app(TranscriptViews::class)->state($transcript) : null;
+                // Ready: the bar says so in its place; failed (or went quiet): "Couldn't convert … · Try again".
                 $this->viewsBar = $view !== null && $view['status'] === 'ready'
-                    ? ['label' => (TranscriptViews::VIEWS[$view['default']] ?? 'The view').' is ready', 'percent' => 100] : null;
+                    ? ['label' => __(':view is ready', ['view' => __(TranscriptViews::VIEWS[$view['default']] ?? 'The view')]), 'percent' => 100, 'failed' => false]
+                    : RecordingProgress::pageBar($this->session()->refresh());
             }
             $this->pushPlayer();
         } elseif ($this->viewsMaking) {
-            $this->viewsBar = RecordingProgress::improvingBar($this->session()->refresh()) ?? $this->viewsBar;
+            $this->viewsBar = RecordingProgress::pageBar($this->session()->refresh()) ?? $this->viewsBar;
         }
+    }
+
+    /** Since U19: Try again beside "Couldn't convert to Roman Urdu": the view the page opens in is made again. */
+    public function retryViews(): void
+    {
+        $this->assertCanChange();
+        $transcript = $this->editableTranscript();
+        if ($transcript === null) {
+            return;
+        }
+        try {
+            app(TranscriptViews::class)->request($transcript);
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+
+            return;
+        }
+        $this->viewsMaking = app(TranscriptViews::class)->state($transcript->refresh())['status'] === 'making';
+        $this->viewsBar = RecordingProgress::pageBar($this->session()->refresh());
+        $this->pushPlayer();
     }
 
     /** The upgrade sheet for the Show as views (since v1.6.2), from the player's Roman Urdu · اردو · English. */
@@ -740,8 +763,8 @@ class ViewCaptureSession extends ViewRecord
                 $pack[$view][] = ['label' => 'Meeting pack with audio (.zip)', 'print' => false, 'url' => route('admin.sessions.pack', [...$at, 'format' => 'zip', 'include_audio' => 1])];
             }
         }
-        // Opens in the view the player opens in (Settings → Transcription), when it is made.
-        $default = $transcript !== null ? app(TranscriptViews::class)->state($transcript)['default'] : 'original';
+        // Since U19 the view being read (the player tells the page; it opens in the default view once that is made).
+        $default = $this->readingView;
 
         return [
             'audio' => $recording?->isReady() === true ? [
@@ -887,7 +910,7 @@ class ViewCaptureSession extends ViewRecord
     private function shareAction(): Action
     {
         return SharingActions::share(fn (): CaptureSession => $this->session(), fn (): array => $this->readyViews(),
-            fn (): bool => $this->session()->primaryRecording?->isReady() === true)
+            fn (): bool => $this->session()->primaryRecording?->isReady() === true, fn (): string => $this->readingView)
             ->visible(fn (): bool => ! $this->session()->hasNoAudio());
     }
 

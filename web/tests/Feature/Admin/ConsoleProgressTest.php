@@ -69,8 +69,8 @@ it('shows the three steps with their numbers while a recording uploads, is trans
         ->and($progress['steps'][1]['percent'])->toBe(33);
 
     $improving = improvingRecording($this, 6);
-    expect(RecordingProgress::for($improving))->toMatchArray(['active' => 'improve', 'summary' => 'Improving Roman Urdu… 60%'])
-        ->and(RecordingProgress::improvingBar($improving))->toBe(['label' => 'Improving Roman Urdu… 60%', 'percent' => 60])
+    expect(RecordingProgress::for($improving))->toMatchArray(['active' => 'improve', 'summary' => 'Converting to Roman Urdu… 60%'])
+        ->and(RecordingProgress::improvingBar($improving))->toBe(['label' => 'Converting to Roman Urdu… 60%', 'percent' => 60])
         ->and(array_column(RecordingProgress::for($improving)['steps'], 'label'))->toBe(['Uploaded', 'Transcribed', 'Improving']);
 
     $done = progressRecording($this, SessionStatus::Completed, ['status' => TranscriptStatus::Completed, 'text' => 'x', 'segments' => []]);
@@ -94,7 +94,7 @@ it('puts the moving step in the Library row and keeps the list polling while the
     improvingRecording($this, 3);
 
     $html = $this->panelComponent(ListCaptureSessions::class)->html();
-    expect($html)->toContain('el-steps-compact')->toContain('Improving Roman Urdu… 30%')->toContain('wire:poll.5s');
+    expect($html)->toContain('el-steps-compact')->toContain('Converting to Roman Urdu… 30%')->toContain('wire:poll.5s');
 });
 
 it('shows the steps on the recording page, then the readable transcript with a slim bar that stays in place when the view is in', function () {
@@ -105,7 +105,7 @@ it('shows the steps on the recording page, then the readable transcript with a s
 
     $improving = improvingRecording($this, 6);
     $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $improving->id]);
-    expect($page->html())->toContain('Improving Roman Urdu… 60%')->toContain('wire:poll.5s="refreshWork"')->toContain('aria-valuenow="60"');
+    expect($page->html())->toContain('Converting to Roman Urdu… 60%')->toContain('wire:poll.5s="refreshWork"')->toContain('aria-valuenow="60"');
 
     // The view is made: the bar says so in the same place and the player gets the view.
     $final = $improving->finalTranscript;

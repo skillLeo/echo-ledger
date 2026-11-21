@@ -440,8 +440,10 @@ class ListCaptureSessions extends ListRecords
             ->with(['finalTranscript' => fn ($final) => $final->select(['id', 'capture_session_id', 'kind', 'status', 'updated_at'])])
             ->get(['id', 'status', 'updated_at']);
 
-        return md5((string) json_encode($rows->map(fn (CaptureSession $r): array => [(string) $r->id, $r->status->value, (string) $r->updated_at,
-            $r->finalTranscript?->status?->value, (string) $r->finalTranscript?->updated_at])->all()));
+        // Since U19 also the five minutes it is in: a view that went quiet (or never started) stops "Converting…" by
+        // itself, without anything stored changing.
+        return md5((string) json_encode([intdiv(now()->getTimestamp(), 300), ...$rows->map(fn (CaptureSession $r): array => [(string) $r->id, $r->status->value, (string) $r->updated_at,
+            $r->finalTranscript?->status?->value, (string) $r->finalTranscript?->updated_at])->all()]));
     }
 
     /**

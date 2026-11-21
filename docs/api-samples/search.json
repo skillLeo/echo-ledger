@@ -37,6 +37,7 @@
                     "live_available": false,
                     "live_transcript_id": null,
                     "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
+                    "preview_view": "original",
                     "final_language": "en",
                     "final_provider": "assemblyai",
                     "final_provider_label": "AssemblyAI",

@@ -1,7 +1,8 @@
 {{--
     Clear progress (since v1.5, Phase 1C; the phone's and the desktop's words since v1.6, P5.4): Upload · Transcribe ·
     Improve, each named for its state (Uploading, Uploaded…). `compact` is the Library row's one line ("Transcribing ·
-    part 2 of 3 · about 20 s left"); otherwise the three steps, the same line under them and one bar.
+    part 2 of 3 · about 20 s left"); otherwise the three steps, the same line under them and one bar. Since U19 the
+    compact line's last dot is drawn as a small spinner while the view is converted (theme.css, .el-steps-dots).
 --}}
 @php($compact = $compact ?? false)
 @php($state = fn (array $s): string => __($s['state'] === 'done' ? 'done' : ($s['state'] === 'active' ? 'in progress' : 'waiting')))

@@ -48,9 +48,9 @@ final class RecordingProgress
         }
         $uploading = $session->status === SessionStatus::Uploading;
         $transcribing = ! $uploading && ($final === null || in_array($final->status, [TranscriptStatus::Pending, TranscriptStatus::Submitted, TranscriptStatus::Processing], true));
-        // The views' state only when they are being made (a ready one is not read for every row of the list).
-        $views = $final?->status === TranscriptStatus::Completed && (($final->meta['views']['status'] ?? null) === 'making')
-            ? app(TranscriptViews::class)->state($final) : null;
+        // The views' state from what is stored (no lines are read for a row of the list). Since U19 a view about to be
+        // made counts as being made, so "Converting to Roman Urdu…" shows from the moment the transcript is there.
+        $views = $final?->status === TranscriptStatus::Completed ? TranscriptViews::rowSummary($final) : null;
         $improving = ! $uploading && ! $transcribing && $views !== null && $views['status'] === 'making';
         if (! $uploading && ! $transcribing && ! $improving) {
             return null;
@@ -71,11 +71,14 @@ final class RecordingProgress
             $transcribe['percent'] = $progress !== null && $progress['total'] > 1 ? (int) floor($progress['done'] * 100 / $progress['total']) : null;
         }
         $improveState = $improving ? 'active' : 'waiting';
+        $started = false;
         $improve = ['key' => self::IMPROVE, 'label' => self::word(self::IMPROVE, $improveState), 'state' => $improveState, 'detail' => $view !== null ? __(TranscriptViews::VIEWS[$view]) : null, 'percent' => null];
         if ($improving && $view !== null) {
             $lines = is_array($views['progress']) ? ($views['progress'][$view] ?? null) : null;
             $improve['percent'] = is_array($lines) && $lines['total'] > 0 ? (int) floor($lines['done'] * 100 / $lines['total']) : 0;
             $improve['detail'] = __(TranscriptViews::VIEWS[$view]).'… '.$improve['percent'].'%';
+            // Before the job has counted the lines (or started) there is no share to give yet.
+            $started = is_array($lines) && $lines['total'] > 0;
         }
         $steps = [$upload, $transcribe, $improve];
         $active = $uploading ? self::UPLOAD : ($transcribing ? self::TRANSCRIBE : self::IMPROVE);
@@ -88,9 +91,60 @@ final class RecordingProgress
             'summary' => match ($active) {
                 self::UPLOAD => __('Uploading :percent%', ['percent' => $upload['percent']]),
                 self::TRANSCRIBE => __('Transcribing').($current['detail'] !== null ? ' · '.$current['detail'] : ''),
-                default => $view !== null ? __('Improving :view… :percent%', ['view' => __(TranscriptViews::VIEWS[$view]), 'percent' => $current['percent']]) : __('Improving…'),
+                // Since U19 the words the person asked for: "Converting to Roman Urdu… 60%".
+                default => $view !== null ? self::converting($view, $started ? $current['percent'] : null) : __('Improving…'),
             },
         ];
+    }
+
+    /** "Converting to Roman Urdu… 60%", or without the share before the first lines are done. */
+    public static function converting(string $view, ?int $percent): string
+    {
+        $name = __(TranscriptViews::VIEWS[$view] ?? $view);
+
+        return $percent === null ? __('Converting to :view…', ['view' => $name]) : __('Converting to :view… :percent%', ['view' => $name, 'percent' => $percent]);
+    }
+
+    /**
+     * Since U19: the view [$session] opens in (Roman Urdu for Urdu and mixed calls) while it is converted, from the moment
+     * its transcript is there ("Converting to Roman Urdu… 60%", the share once the job counted the lines), or when it
+     * could not be made ("Couldn't convert to Roman Urdu": it failed, or went quiet for 20 minutes). Null otherwise,
+     * also while the transcript itself is still moving. What the Library rows and the recording page show.
+     *
+     * @return array{state: string, view: string, label: string, percent: int|null}|null
+     */
+    public static function conversion(CaptureSession $session): ?array
+    {
+        $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
+        $views = $final?->status === TranscriptStatus::Completed ? TranscriptViews::rowSummary($final) : null;
+        if ($views === null || ! isset(TranscriptViews::VIEWS[$views['default']]) || ! in_array($views['status'], ['making', 'failed'], true)) {
+            return null;
+        }
+        $view = $views['default'];
+        if ($views['status'] === 'failed') {
+            return ['state' => 'failed', 'view' => $view, 'label' => __('Couldn\'t convert to :view', ['view' => __(TranscriptViews::VIEWS[$view])]), 'percent' => null];
+        }
+        $lines = is_array($views['progress']) ? ($views['progress'][$view] ?? null) : null;
+        $percent = is_array($lines) && $lines['total'] > 0 ? (int) floor($lines['done'] * 100 / $lines['total']) : null;
+
+        return ['state' => 'making', 'view' => $view, 'label' => self::converting($view, $percent), 'percent' => $percent];
+    }
+
+    /**
+     * The recording page's slim bar: "Converting to Roman Urdu… 60%" while the view it opens in is made, "Couldn't
+     * convert to Roman Urdu" (with Try again) when it could not be; null otherwise.
+     *
+     * @return array{label: string, percent: int, failed: bool}|null
+     */
+    public static function pageBar(CaptureSession $session): ?array
+    {
+        $bar = self::improvingBar($session);
+        if ($bar !== null) {
+            return [...$bar, 'failed' => false];
+        }
+        $conversion = self::conversion($session);
+
+        return $conversion !== null && $conversion['state'] === 'failed' ? ['label' => $conversion['label'], 'percent' => 0, 'failed' => true] : null;
     }
 
     /** "Upload", "Uploading" or "Uploaded" (and the same for Transcribe and Improve), as the phone and the desktop say it. */
@@ -119,7 +173,7 @@ final class RecordingProgress
     }
 
     /**
-     * "Improving Roman Urdu… 60%" while the view the recording opens in is made; null otherwise.
+     * "Converting to Roman Urdu… 60%" while the view the recording opens in is made; null otherwise.
      *
      * @return array{label: string, percent: int}|null
      */

@@ -12,6 +12,7 @@ use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
 use App\Services\Views\TranscriptViews;
+use App\Stt\ScriptCheck;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
@@ -21,6 +22,10 @@ use Throwable;
  * is ready and nobody gave it a title, it gets a short one from what was said (Claude Haiku; the first words when no
  * key is set), marked `title_auto`. A title set by a person is never replaced. A call whose person is known (a name,
  * a meeting's name or a number) shows them ("Call with Omar Khan"), so it gets none (docs/API.md "Title from the person").
+ *
+ * Since U19 a recording that opens in Roman Urdu (Urdu and mixed calls by default) gets its title in Roman Urdu: from the
+ * Roman Urdu view when it is made, else the writer is asked for Roman Urdu. An automatic title already in Urdu letters
+ * is written again in Roman Urdu when that view is in (afterViews); a person's own title is never touched.
  */
 final class AutoTitles
 {
@@ -71,20 +76,16 @@ final class AutoTitles
     {
         $final = Transcript::query()->where('capture_session_id', $session->id)->where('kind', TranscriptKind::Final->value)
             ->where('status', TranscriptStatus::Completed->value)->first();
-        $text = $final === null ? '' : self::plainText($final);
-        if ($text === '' || ! self::wanted($session)) {
+        if ($final === null || ! self::wanted($session)) {
             return;
         }
-        $title = null;
-        if ($this->configured()) {
-            try {
-                $answer = $this->writer->title($text, TranscriptViews::sourceLanguage($final));
-                $title = self::clean($answer['title']);
-                $this->bill($session, $answer);
-            } catch (Throwable $e) {
-                Log::info('Automatic title fell back to the first words', ['session' => $session->id, 'error' => mb_substr($e->getMessage(), 0, 200)]);
-            }
+        $roman = self::opensInRoman($final);
+        $romanText = $roman ? self::romanText($final) : '';
+        $text = $romanText !== '' ? $romanText : self::plainText($final);
+        if ($text === '') {
+            return;
         }
+        $title = $this->write($session, $text, TranscriptViews::sourceLanguage($final), $roman);
         $title = $title !== null && $title !== '' ? $title : self::firstWords($text);
         if ($title === '') {
             return;
@@ -103,6 +104,90 @@ final class AutoTitles
             ->update(['title' => $title, 'title_auto' => true, 'updated_at' => now()]);
         if ($saved > 0) {
             $session->forceFill(['title' => $title, 'title_auto' => true]);
+        }
+    }
+
+    /**
+     * Since U19: once the Roman Urdu view of a recording that opens in it is made, an automatic title still in Urdu
+     * letters ("میٹنگ ٹائم اور ٹیکس فارم کی اصلاح") is written again in Roman Urdu from that view. Only an automatic
+     * title (never one a person gave, whatever its words), only while it is still the same. Never throws.
+     */
+    public function afterViews(Transcript $transcript): void
+    {
+        try {
+            if ($transcript->kind !== TranscriptKind::Final || ! self::opensInRoman($transcript)) {
+                return;
+            }
+            $session = CaptureSession::withTrashed()->withoutGlobalScopes()->find($transcript->capture_session_id);
+            if ($session === null || ! self::wantsRoman($session)) {
+                return;
+            }
+            $text = self::romanText($transcript);
+            if ($text === '') {
+                return;
+            }
+            $title = $this->write($session, $text, TranscriptViews::sourceLanguage($transcript), true);
+            // The words from the view when the writer still answered in Urdu letters (or there is no key).
+            if ($title === null || $title === '' || self::hasUrduLetters($title)) {
+                $title = self::firstWords($text);
+            }
+            if ($title === '' || self::hasUrduLetters($title)) {
+                return;
+            }
+            $saved = CaptureSession::withTrashed()->withoutGlobalScopes()->whereKey($session->id)
+                ->where('title_by_person', false)->where('title_auto', true)->where('title', $session->title)
+                ->update(['title' => $title, 'updated_at' => now()]);
+            if ($saved > 0) {
+                $session->forceFill(['title' => $title]);
+            }
+        } catch (Throwable $e) {
+            Log::info('Automatic title not made Roman', ['transcript' => $transcript->id, 'error' => mb_substr($e->getMessage(), 0, 200)]);
+        }
+    }
+
+    /** Whether [$session]'s title is an automatic one in Urdu letters (one a person gave is theirs, in any script). */
+    public static function wantsRoman(CaptureSession $session): bool
+    {
+        return $session->title_auto && ! $session->title_by_person && self::hasUrduLetters((string) $session->title);
+    }
+
+    /** Whether [$final] opens in its Roman Urdu view (Settings → Transcription; Urdu and mixed calls by default). */
+    public static function opensInRoman(Transcript $final): bool
+    {
+        return TranscriptViews::defaultView(TranscriptViews::available($final), TranscriptViews::sourceLanguage($final)) === 'roman';
+    }
+
+    /** The Roman Urdu view's words without speakers or markers (as plainText), or '' while it is not made. */
+    public static function romanText(Transcript $final): string
+    {
+        $lines = app(TranscriptViews::class)->textsFor($final, 'roman');
+        if ($lines === null) {
+            return '';
+        }
+
+        return self::plainText(new Transcript(['segments' => array_map(fn (?string $l): array => ['text' => (string) $l], $lines)]));
+    }
+
+    public static function hasUrduLetters(string $text): bool
+    {
+        return ScriptCheck::counts($text)['arabic'] > 0;
+    }
+
+    /** The writer's title (billed), or null without a key or when it could not answer. */
+    private function write(CaptureSession $session, string $text, string $language, bool $roman): ?string
+    {
+        if (! $this->configured()) {
+            return null;
+        }
+        try {
+            $answer = $this->writer->title($text, $language, $roman);
+            $this->bill($session, $answer);
+
+            return self::clean($answer['title']);
+        } catch (Throwable $e) {
+            Log::info('Automatic title fell back to the first words', ['session' => $session->id, 'error' => mb_substr($e->getMessage(), 0, 200)]);
+
+            return null;
         }
     }
 

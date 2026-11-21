@@ -528,6 +528,7 @@ describe('item contents', function () {
             'live_available' => true,
             'live_transcript_id' => $live->id,
             'preview' => mb_strimwidth(trim($long), 0, 160, '…'),
+            'preview_view' => 'original',
             'final_language' => null,
             'final_provider' => 'assemblyai',
             'final_provider_label' => 'AssemblyAI',

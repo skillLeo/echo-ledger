@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Views;
 
+use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Jobs\MakeTranscriptViewsJob;
 use App\Models\CaptureSession;
@@ -14,6 +15,7 @@ use App\Services\Entitlements\Entitlements;
 use App\Services\FastPath;
 use App\Services\SettingsRepository;
 use App\Services\ShortNoteCheck;
+use App\Services\Titles\AutoTitles;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
@@ -55,8 +57,16 @@ final class TranscriptViews
     /** Source characters per request; a chunk whose answer does not fit is split again. */
     public const CHUNK_CHARS = 6000;
 
-    /** A "making" state older than this is treated as lost and may be started again. */
-    private const STALE_AFTER_MINUTES = 20;
+    /**
+     * A "making" state that moved no line for this long is treated as lost: since U19 it reads as `failed` ("Couldn't
+     * convert … · Try again") and may be started again. Also how long after a transcript is finished (or edited) a
+     * missing view it opens in counts as on its way (`making` with no progress yet), so the apps show "Converting to
+     * Roman Urdu…" from the moment the transcript is there, also before the job has started.
+     */
+    public const STALE_AFTER_MINUTES = 20;
+
+    /** The reason a "making" state that went quiet reads as failed. */
+    public const TOOK_TOO_LONG = 'Converting took too long. Try again.';
 
     /** US$ per million input / output tokens of the models offered (Anthropic list prices, checked 2026-10-28). */
     private const PRICES = [
@@ -196,15 +206,9 @@ final class TranscriptViews
     {
         $available = self::available($transcript);
         $views = $transcript->meta['views'] ?? null;
-        $fresh = is_array($views) && ($views['fingerprint'] ?? null) === self::fingerprint($transcript);
-        $status = match (true) {
-            $available === [] || $transcript->status !== TranscriptStatus::Completed => 'unavailable',
-            ! $fresh => 'none',
-            default => (string) ($views['status'] ?? 'none'),
-        };
-        if ($status === 'making' && isset($views['started_at']) && now()->subMinutes(self::STALE_AFTER_MINUTES)->gt($views['started_at'])) {
-            $status = 'none';
-        }
+        $stored = self::storedStatus($transcript);
+        // Since U19: the view it opens in that is about to be made counts as being made (see onItsWay).
+        $status = $stored === 'none' && self::onItsWay($transcript, $available) ? 'making' : $stored;
         $ready = $status === 'ready';
 
         return [
@@ -217,7 +221,7 @@ final class TranscriptViews
             'model' => $ready ? ($views['model'] ?? null) : null,
             'made_at' => $ready ? ($views['made_at'] ?? null) : null,
             // As people may read it: a reason kept from before v1.8.1 may name the AI's maker.
-            'error' => $status === 'failed' ? ProviderText::forPeople($views['error'] ?? null) : null,
+            'error' => $status === 'failed' ? ProviderText::forPeople(is_array($views) && is_string($views['error'] ?? null) ? $views['error'] : self::TOOK_TOO_LONG) : null,
             // Lines shown with their original words in a view because the view's text failed the checks twice.
             // Always a JSON object (view => line indexes), also when empty, so the apps can read it as a map.
             // Since v1.5 (Phase 1C): lines done of lines per view while the views are being made, {} otherwise.
@@ -244,11 +248,101 @@ final class TranscriptViews
         }
         $views = $transcript->meta['views'] ?? null;
         $status = is_array($views) ? (string) ($views['status'] ?? 'none') : 'none';
-        if ($status === 'making' && isset($views['started_at']) && now()->subMinutes(self::STALE_AFTER_MINUTES)->gt($views['started_at'])) {
-            $status = 'none';
+        if ($status === 'making' && self::isStale($views)) {
+            $status = 'failed';
+        }
+        if ($status === 'none' && self::onItsWay($transcript, $available)) {
+            $status = 'making';
         }
 
         return ['status' => $status, 'default' => self::defaultView($available, self::sourceLanguage($transcript)), 'progress' => self::progressOf($status, $views, $available)];
+    }
+
+    /**
+     * Since 2.0.0-l (U19): a Library row's preview in the view the recording opens in (Roman Urdu for Urdu and mixed
+     * calls) once that view is made, from what is stored (a row loads no lines): the view's lines in order, one a line,
+     * at most [$length] characters. Null while the view is not made, was made before the last edit, or the recording
+     * opens in its original words; the row then shows the transcript's own words.
+     *
+     * @return array{text: string, view: string}|null
+     */
+    public static function rowPreview(?Transcript $transcript, int $length = 160): ?array
+    {
+        if ($transcript === null || $transcript->status !== TranscriptStatus::Completed) {
+            return null;
+        }
+        $views = $transcript->meta['views'] ?? null;
+        $available = self::available($transcript);
+        $default = self::defaultView($available, self::sourceLanguage($transcript));
+        if ($default === 'original' || ! is_array($views) || ($views['status'] ?? null) !== 'ready' || ! is_array($views[$default] ?? null)) {
+            return null;
+        }
+        // Made before the last edit: stale (made again soon), so the edited words show meanwhile.
+        if ($transcript->edited_at !== null && (! is_string($views['made_at'] ?? null) || $transcript->edited_at->gt($views['made_at']))) {
+            return null;
+        }
+        $lines = $views[$default];
+        ksort($lines, SORT_NUMERIC);
+        $text = trim(implode("\n", array_filter(array_map(fn ($l): string => is_string($l) ? trim($l) : '', $lines), fn (string $l): bool => $l !== '')));
+
+        return $text === '' ? null : ['text' => mb_strimwidth($text, 0, $length, '…'), 'view' => $default];
+    }
+
+    /**
+     * The views' state as stored (none | making | ready | failed | unavailable): `none` when they were never made or an
+     * edit made them stale, and since U19 `failed` for a "making" state that went quiet (isStale). What request() goes by.
+     */
+    public static function storedStatus(Transcript $transcript): string
+    {
+        if (self::available($transcript) === [] || $transcript->status !== TranscriptStatus::Completed) {
+            return 'unavailable';
+        }
+        $views = $transcript->meta['views'] ?? null;
+        if (! is_array($views) || ($views['fingerprint'] ?? null) !== self::fingerprint($transcript)) {
+            return 'none';
+        }
+        $status = (string) ($views['status'] ?? 'none');
+
+        return $status === 'making' && self::isStale($views) ? 'failed' : $status;
+    }
+
+    /**
+     * Whether a "making" state moved no line for STALE_AFTER_MINUTES (since it started, or since its last line).
+     *
+     * @param  array<string, mixed>  $views
+     */
+    private static function isStale(array $views): bool
+    {
+        $last = $views['touched_at'] ?? $views['started_at'] ?? null;
+
+        return is_string($last) && now()->subMinutes(self::STALE_AFTER_MINUTES)->gt($last);
+    }
+
+    /**
+     * Since U19: whether the view [$transcript] opens in (Roman Urdu for Urdu and mixed calls) is on its way although no
+     * job has started yet: the final transcript (or a new version) was finished or edited in the last
+     * STALE_AFTER_MINUTES, it opens in a view, a key is set and the plan has views, so autoMake makes it (a short note
+     * first goes through ShortNoteCheckJob). The apps then show "Converting to Roman Urdu…" from the first moment.
+     *
+     * @param  list<string>  $available
+     */
+    public static function onItsWay(Transcript $transcript, array $available): bool
+    {
+        if ($available === [] || $transcript->status !== TranscriptStatus::Completed
+            || ! in_array($transcript->kind, [TranscriptKind::Final, TranscriptKind::Alternate], true)) {
+            return false;
+        }
+        // A Library row reads no meta when views are stored (has_views, CaptureSessionsTable): they are not on their way.
+        if (! is_array($transcript->meta['views'] ?? null) && (int) $transcript->getAttribute('has_views') === 1) {
+            return false;
+        }
+        $at = collect([$transcript->completed_at, $transcript->edited_at])->filter()->max();
+        if ($at === null || now()->subMinutes(self::STALE_AFTER_MINUTES)->gt($at)
+            || self::defaultView($available, self::sourceLanguage($transcript)) === 'original') {
+            return false;
+        }
+
+        return app(self::class)->configured() && self::entitled($transcript);
     }
 
     /**
@@ -280,7 +374,7 @@ final class TranscriptViews
         if ($fresh === null || ! is_array($views) || ($views['status'] ?? null) !== 'making') {
             return;
         }
-        $fresh->forceFill(['meta' => [...($fresh->meta ?? []), 'views' => [...$views, 'lines_done' => $done, 'lines_total' => $total]]])->saveQuietly();
+        $fresh->forceFill(['meta' => [...($fresh->meta ?? []), 'views' => [...$views, 'lines_done' => $done, 'lines_total' => $total, 'touched_at' => now()->toAtomString()]]])->saveQuietly();
     }
 
     /**
@@ -342,12 +436,13 @@ final class TranscriptViews
      */
     public function request(Transcript $transcript): array
     {
-        $state = $this->state($transcript);
-        if ($state['status'] === 'unavailable') {
+        $stored = self::storedStatus($transcript);
+        if ($stored === 'unavailable') {
             throw new RuntimeException('This transcript has no Show as view yet: it is not finished.');
         }
-        if (in_array($state['status'], ['ready', 'making'], true)) {
-            return $state;
+        // As stored: a view about to be made (onItsWay) is started here.
+        if (in_array($stored, ['ready', 'making'], true)) {
+            return $this->state($transcript);
         }
         // Since v1.6 the views are a paid feature (403 feature_not_in_plan with the plan that has them).
         if (! self::entitled($transcript)) {
@@ -453,6 +548,8 @@ final class TranscriptViews
             }
         }
         $this->remember($transcript, $views);
+        // Since U19: an automatic title in Urdu letters is written again in Roman Urdu once the Roman view is in.
+        app(AutoTitles::class)->afterViews($transcript);
         $this->suggestMisheard($transcript, $misheard);
         $this->bill($transcript, $model, $tokens);
     }

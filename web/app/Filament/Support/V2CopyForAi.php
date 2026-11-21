@@ -9,6 +9,7 @@ use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptEditor;
+use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use App\Support\UnsureMarkers;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -20,11 +21,17 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
  * recordings apart by "---"; recordings without a transcript are left out and counted. The lines are the recording
  * player's own (transcript-player.blade.php markedLine and transcriptText: who said what, [m:ss], unsure words as the
  * console marks them); tests/js/v2-copy-ai.test.mjs holds this class to the player's methods.
+ *
+ * Since U19 the lines are in the view the recording opens in when it is made (Roman Urdu for Urdu and mixed calls), as
+ * the player shows them, and the header's language line says so ("Language: Roman Urdu"); the original words otherwise.
  */
 final class V2CopyForAi
 {
     /** At most this many recordings in one copy, as a selection's other actions. */
     public const MAX = 200;
+
+    /** The header's language line for lines in a Show as view (in English, as the header; the apps write the same). */
+    public const VIEW_LANGUAGE = ['roman' => 'Roman Urdu', 'urdu' => 'Urdu', 'english' => 'English'];
 
     /**
      * Copy for AI of several recordings: the text, how many were copied and how many had no transcript.
@@ -52,7 +59,7 @@ final class V2CopyForAi
 
                 continue;
             }
-            $parts[] = self::header($session, self::people($lines))."\n\n".self::body($lines, true, $style);
+            $parts[] = self::header($session, self::people($lines), self::shownView($session, $own))."\n\n".self::body($lines, true, $style);
         }
         $text = $parts === [] ? '' : self::note($unsure, $style)."\n\n".implode("\n\n---\n\n", $parts);
 
@@ -61,11 +68,12 @@ final class V2CopyForAi
 
     /**
      * The header above a recording: "# Title", then "16 November 2026, 4:30 pm · Zoom · 1:00", "People: …" and
-     * "Language: UR+EN" (desktop aiHeader). In English on every platform: it is written for the AI, not shown.
+     * "Language: UR+EN" (desktop aiHeader). In English on every platform: it is written for the AI, not shown. Since
+     * U19, when the lines are in a Show as [$view], the language line names it ("Language: Roman Urdu").
      *
      * @param  list<string>  $people
      */
-    public static function header(CaptureSession $session, array $people): string
+    public static function header(CaptureSession $session, array $people, ?string $view = null): string
     {
         $zone = app(SettingsRepository::class)->displayTimezone();
         $at = $session->started_at->copy()->setTimezone($zone);
@@ -80,7 +88,7 @@ final class V2CopyForAi
                 self::length($session->duration_ms),
             ], fn (?string $part): bool => $part !== null && $part !== '')),
             $people !== [] ? 'People: '.implode(', ', $people) : null,
-            filled($chip) ? 'Language: '.$chip : null,
+            isset(self::VIEW_LANGUAGE[$view ?? '']) ? 'Language: '.self::VIEW_LANGUAGE[$view] : (filled($chip) ? 'Language: '.$chip : null),
         ], fn (?string $line): bool => $line !== null));
     }
 
@@ -104,21 +112,48 @@ final class V2CopyForAi
         if ($shown === null || ! $shown->segments) {
             return [];
         }
+        // Since U19: the view it opens in when it is made (only the final transcript has views), as the player shows it.
+        $view = $shown === $final ? self::readyDefault($final) : null;
+        $texts = $view !== null ? app(TranscriptViews::class)->textsFor($final, $view) : null;
         $names = app(TranscriptEditor::class)->speakerNames($session);
         $lines = [];
-        foreach ($shown->segments as $s) {
+        foreach ($shown->segments as $i => $s) {
             $words = [];
-            foreach (is_array($s['words'] ?? null) ? $s['words'] : [] as $w) {
+            // A line in a view carries its unsure words marked already ([?word], as the player's lineText).
+            foreach ($texts === null && is_array($s['words'] ?? null) ? $s['words'] : [] as $w) {
                 if (is_array($w) && isset($w['start_ms'], $w['text'])) {
                     $words[] = ['t' => (string) $w['text'], 'u' => is_numeric($w['confidence'] ?? null) && (float) $w['confidence'] < $threshold];
                 }
             }
             $speaker = (string) ($s['speaker'] ?? 'Speaker');
             $lines[] = ['name' => filled($names[$speaker] ?? null) ? (string) $names[$speaker] : $speaker, 'start_ms' => (int) ($s['start_ms'] ?? 0),
-                'text' => (string) ($s['text'] ?? ''), 'words' => $words];
+                'text' => $texts !== null ? (string) ($texts[$i] ?? $s['text'] ?? '') : (string) ($s['text'] ?? ''), 'words' => $words];
         }
 
         return $lines;
+    }
+
+    /**
+     * The Show as view the lines are in (U19): the view the recording opens in when it is made and its final transcript
+     * is the one shown; null for the original words.
+     *
+     * @param  iterable<Transcript>|null  $transcripts
+     */
+    public static function shownView(CaptureSession $session, ?iterable $transcripts = null): ?string
+    {
+        $final = $transcripts !== null
+            ? collect($transcripts)->first(fn (Transcript $t): bool => $t->kind === TranscriptKind::Final)
+            : $session->transcripts()->where('kind', TranscriptKind::Final->value)->first();
+
+        return $final !== null && $final->segments ? self::readyDefault($final) : null;
+    }
+
+    /** The view [$final] opens in when it is made, else null. */
+    private static function readyDefault(Transcript $final): ?string
+    {
+        $state = app(TranscriptViews::class)->state($final);
+
+        return $state['status'] === 'ready' && $state['default'] !== 'original' && is_array($state[$state['default']] ?? null) ? $state['default'] : null;
     }
 
     /**

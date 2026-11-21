@@ -109,7 +109,9 @@ final class TitleBackfill
         if ($final === null) {
             return 'no_transcript';
         }
-        $title = AutoTitles::firstWords(AutoTitles::plainText($final));
+        // Since U19: a recording that opens in Roman Urdu takes its first words from that view when it is made.
+        $roman = AutoTitles::opensInRoman($final) ? AutoTitles::romanText($final) : '';
+        $title = AutoTitles::firstWords($roman !== '' ? $roman : AutoTitles::plainText($final));
 
         return $title === '' ? 'no_words' : ['after' => $title, 'action' => 'titled'];
     }

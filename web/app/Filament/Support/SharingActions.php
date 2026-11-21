@@ -48,8 +48,9 @@ final class SharingActions
      *
      * @param  Closure(): (CaptureSession|Client)  $target
      * @param  Closure(): list<string>  $readyViews  the Show as views ready for a recording (none for a project)
+     * @param  Closure(): (string|null)|null  $shownView  since U19: the view being read, the link's view to start with
      */
-    public static function share(Closure $target, Closure $readyViews, ?Closure $hasAudio = null): Action
+    public static function share(Closure $target, Closure $readyViews, ?Closure $hasAudio = null, ?Closure $shownView = null): Action
     {
         return Action::make('share')
             ->label(__('Share'))->labeledFrom('sm')
@@ -82,6 +83,8 @@ final class SharingActions
                     ->visible(fn (): bool => $hasAudio === null || $hasAudio()),
                 Select::make('view')->label(__('Show the transcript as'))->placeholder(__('Original words'))
                     ->options(fn (): array => array_intersect_key(TranscriptViews::VIEWS, array_flip($readyViews())))
+                    // Since U19: the view being read (Roman Urdu once it is made), so the link shows what the person sees.
+                    ->default(fn (): ?string => $shownView !== null && in_array($view = $shownView(), $readyViews(), true) ? $view : null)
                     ->visible(fn (): bool => $readyViews() !== []),
             ])
             ->modalSubmitActionLabel(__('Make the link'))

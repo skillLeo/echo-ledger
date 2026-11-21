@@ -25,6 +25,12 @@
                 <span @class(['v2-status', 'is-'.$row['status']['tone']])>
                     <x-el.v2.icon :name="$row['status']['icon']" />{{ $row['status']['label'] }}
                 </span>
+            @elseif ($row['converting'] !== null)
+                @if ($row['converting']['state'] === 'failed')
+                    <span class="v2-status is-danger" data-convert-failed><x-el.v2.icon name="alert" />{{ $row['converting']['label'] }}</span>
+                @else
+                    <span class="v2-status is-neutral" role="status" data-converting><span class="v2-spinner" aria-hidden="true"></span>{{ $row['converting']['label'] }}</span>
+                @endif
             @endif
             <span class="v2-row-meta"><bdi>{{ $row['line'] }}</bdi></span>
             @foreach ($row['labels'] as $label)
