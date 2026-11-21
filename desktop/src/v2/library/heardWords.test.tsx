@@ -190,6 +190,10 @@ describe("the words as heard", () => {
   it("draws a line's words one by one only when they join back into its text", () => {
     expect(wordsMatch([{ text: "Hello" }, { text: "there" }], " Hello  there ")).toBe(true);
     expect(wordsMatch([{ text: "Hello" }, { text: "there" }], "Hello there, Omar")).toBe(false);
+    // Engines send words without the line's punctuation and in their own capitals.
+    expect(wordsMatch([{ text: "hello" }, { text: "there" }, { text: "omar" }], "Hello there, Omar.")).toBe(true);
+    expect(wordsMatch([{ text: "kya" }, { text: "haal" }, { text: "hai" }], "Kya haal hai?")).toBe(true);
+    expect(wordsMatch([{ text: "ٹھیک" }, { text: "ہے" }], "ٹھیک ہے۔")).toBe(true);
   });
 
   it("suggested fixes are left alone while editing", async () => {
