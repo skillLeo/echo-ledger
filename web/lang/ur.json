@@ -897,5 +897,10 @@
     "Uploading :sent of :size": ":size میں سے :sent اپ لوڈ ہو گیا",
     "Finishing…": "مکمل ہو رہا ہے…",
     "recording": "ریکارڈنگ",
-    "Transcribe (stage)": "ٹرانسکرپشن"
+    "Transcribe (stage)": "ٹرانسکرپشن",
+    "Sound or video files from your computer or phone. Each file becomes its own recording in the Library.": "کمپیوٹر یا فون سے آواز یا ویڈیو فائلیں۔ ہر فائل لائبریری میں اپنی الگ ریکارڈنگ بنتی ہے۔",
+    "Record a voice note": "وائس نوٹ ریکارڈ کریں",
+    "Your phone's recorder opens; the note is uploaded when you stop. Calls are recorded by the :brand app.": "آپ کے فون کا ریکارڈر کھلتا ہے؛ روکنے پر نوٹ اپ لوڈ ہو جاتا ہے۔ کالیں :brand ایپ ریکارڈ کرتی ہے۔",
+    "To record calls and voice notes, use the :brand app on your phone or computer (:link). Here you can upload files.": "کالیں اور وائس نوٹ ریکارڈ کرنے کے لیے اپنے فون یا کمپیوٹر پر :brand ایپ استعمال کریں (:link)۔ یہاں آپ فائلیں اپ لوڈ کر سکتے ہیں۔",
+    "get the apps": "ایپس حاصل کریں"
 }

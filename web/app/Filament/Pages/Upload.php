@@ -30,9 +30,15 @@ class Upload extends Page
 
     protected static ?string $slug = 'upload';
 
+    /** In the console's language (W-217). */
+    public function getTitle(): string
+    {
+        return __('Upload');
+    }
+
     public function getSubheading(): string
     {
-        return 'Sound or video files from your computer or phone. Each file becomes its own recording in the Library.';
+        return __('Sound or video files from your computer or phone. Each file becomes its own recording in the Library.');
     }
 
     public function content(Schema $schema): Schema

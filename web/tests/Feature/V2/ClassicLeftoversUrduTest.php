@@ -211,3 +211,17 @@ it('names the Transcribe stage apart from the Transcribe button in Urdu, and kee
         ->and($steps(false))->toContain('>ٹرانسکرپشن<')
         ->and(__('Transcribe'))->toBe('ٹرانسکرائب کریں');
 });
+
+// W-217: the Upload page's title, intro and the "Record a voice note" box were still English in the Urdu frame.
+it('shows the Upload page\'s intro and record box in Urdu, and keeps them in English', function () {
+    $english = ['Sound or video files from your computer or phone', 'Record a voice note', "Your phone's recorder opens",
+        'To record calls and voice notes, use the', 'get the apps', 'Here you can upload files.'];
+    $urdu = leftoverWords(leftoverPage($this, true, 'ur', 'upload'));
+    foreach ($english as $phrase) {
+        expect($urdu)->not->toContain($phrase);
+    }
+    $words = leftoverWords(leftoverPage($this, true, 'en', 'upload'));
+    foreach ($english as $phrase) {
+        expect($words)->toContain($phrase);
+    }
+});
