@@ -45,6 +45,7 @@ use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
@@ -439,7 +440,7 @@ class ListCaptureSessions extends ListRecords
             ->with(['finalTranscript' => fn ($final) => $final->select(['id', 'capture_session_id', 'kind', 'status', 'updated_at'])])
             ->get(['id', 'status', 'updated_at']);
 
-        return md5((string) json_encode($rows->map(fn (CaptureSession $r): array => [(string) $r->id, $r->status?->value, (string) $r->updated_at,
+        return md5((string) json_encode($rows->map(fn (CaptureSession $r): array => [(string) $r->id, $r->status->value, (string) $r->updated_at,
             $r->finalTranscript?->status?->value, (string) $r->finalTranscript?->updated_at])->all()));
     }
 
@@ -447,6 +448,9 @@ class ListCaptureSessions extends ListRecords
      * Since U9b (WEB-LIB-033, 2,000+ recordings): the new Library is one growing list instead of pages of 5 to 50. Its
      * first v2Shown rows, with the true total, so "Showing 1 to 50 of 2,000" and the counts stay right; Load more grows
      * it. Classic keeps its pages.
+     *
+     * @param  Builder<Model>  $query
+     * @return Paginator<int, Model>|CursorPaginator<int, Model>
      */
     protected function paginateTableQuery(Builder $query): Paginator|CursorPaginator
     {
@@ -455,7 +459,7 @@ class ListCaptureSessions extends ListRecords
         }
         $total = (clone $query)->toBase()->getCountForPagination();
         $items = (clone $query)->limit(max(1, min(self::V2_MAX, $this->v2Shown)))->get();
-        $this->v2Moving = $items->filter(fn (CaptureSession $r): bool => CaptureSessionsTable::isMoving($r))->map(fn (CaptureSession $r): string => (string) $r->getKey())->values()->all();
+        $this->v2Moving = $items->filter(fn (Model $r): bool => $r instanceof CaptureSession && CaptureSessionsTable::isMoving($r))->map(fn (Model $r): string => (string) $r->getKey())->values()->all();
         $this->v2MovingPrint = $this->v2Moving === [] ? '' : $this->v2Print($this->v2Moving);
 
         return new LengthAwarePaginator($items, $total, max(1, $total), 1, ['pageName' => $this->getTablePaginationPageName()]);

@@ -64,6 +64,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Js;
 use Illuminate\Support\Str;
+use Livewire\Component;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -612,7 +613,8 @@ final class CaptureSessionsTable
     public static function copyForAiBulkAction(string $name): BulkAction
     {
         return BulkAction::make($name)->label(__('Copy for AI'))->icon(Heroicon::OutlinedSparkles)
-            ->action(function (Collection $records, HasTable $livewire): void {
+            // The table is always a Livewire component (the page), whose js() runs the copy in the browser.
+            ->action(function (Collection $records, HasTable&Component $livewire): void {
                 $open = self::viewable($records);
                 ['text' => $text, 'copied' => $copied, 'skipped' => $skipped] = V2CopyForAi::forMany($open->take(V2CopyForAi::MAX));
                 if ($copied === 0) {
