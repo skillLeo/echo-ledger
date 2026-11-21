@@ -338,8 +338,8 @@ group), never to a client. Before you start, note what is in Downloads.
    "sent to WhatsApp").
 
 **Windows 10 (build below 20348), WhatsApp installed**
-9. Same click. Pass: the Share window opens, and at once the sheet says "The Share window is open: choose WhatsApp
-   there, then the chat." (no "sent" claim, no waiting). Send through WhatsApp, then Done.
+9. Same click. Pass: the Share window opens, and at once the sheet says "The share is open: finish sending there."
+   (no "sent" claim, no waiting). Send through WhatsApp, then Done.
 10. Repeat, close the Share window, then click "Open WhatsApp with the text instead". Pass: the fallback of step 2
     (Ctrl+V attaches the file).
 
