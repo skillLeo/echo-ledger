@@ -130,8 +130,6 @@ object EchoTokens {
         val listRowHeightCompact = 44.dp
         val listRowHeightMobile = 64.dp
         val listRowHeightMobileTall = 72.dp
-
-        /** The Record button in the middle of the phone's bottom bar. */
         val recordButton = 56.dp
         const val toastDurationMs = 6000
         const val recordingDotPulseMs = 1500
