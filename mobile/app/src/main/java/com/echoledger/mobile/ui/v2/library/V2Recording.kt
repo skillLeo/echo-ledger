@@ -107,7 +107,7 @@ fun transcriptState(item: LibraryItem, loaded: TranscriptDto?, tried: Boolean): 
 
 /**
  * A recording on the v2 components (behind `ui_v2.library`): the title (tap to rename), source and time, the player, the
- * action row Share · Copy ▾ · ⋮, then the transcript with speakers, or its designed empty, loading and error states. The
+ * action row Share · Copy (a split button) · ⋮, then the transcript with speakers, or its designed empty, loading and error states. The
  * ⋮ menu has Rename, Move to project, Labels, Pin, Keep forever, Change language & re-transcribe, Skip silences,
  * Export ▸ and Delete (asked, then Undo). Its logic is classic's recording page's ([RecordingPage]).
  * [startAtMs]: opened from a search match, it plays from there once ready; [backToSource]: a voice note shared from
@@ -150,7 +150,7 @@ fun V2RecordingScreen(
 }
 
 /** The sheet or dialog open above the page. */
-private enum class RecordingSheet { Menu, Copy, Share, Rename, Move, Labels, Retranscribe, Delete }
+private enum class RecordingSheet { Menu, Share, Rename, Move, Labels, Retranscribe, Delete }
 
 @Composable
 private fun V2RecordingPage(
@@ -251,8 +251,6 @@ private fun V2RecordingPage(
             onDismiss = { if (sheet == RecordingSheet.Menu) sheet = null },
             backToSource = backToSource
         )
-
-        RecordingSheet.Copy -> CopyMenuSheet(onCopy = ::copy, onDismiss = { if (sheet == RecordingSheet.Copy) sheet = null })
 
         RecordingSheet.Share -> RecordingShareSheet(
             vm,
@@ -409,7 +407,7 @@ private fun V2RecordingPage(
         modifier = modifier,
         screens = page.screens,
         onOpenScreen = onOpenScreen,
-        onCopy = if (page.canCopy) ({ sheet = RecordingSheet.Copy }) else null,
+        onCopy = if (page.canCopy) ::copy else null,
         onMore = { sheet = RecordingSheet.Menu },
         onRename = { sheet = RecordingSheet.Rename },
         tools = tools,
@@ -584,8 +582,8 @@ fun V2RecordingContent(
     modifier: Modifier = Modifier,
     screens: List<ScreenDto> = emptyList(),
     onOpenScreen: (index: Int) -> Unit = {},
-    /** Copy ▾ (null while there is nothing to copy). */
-    onCopy: (() -> Unit)? = null,
+    /** Copy: the split button's main part copies the text at once, its chevron the other kinds (null while there is nothing to copy). */
+    onCopy: ((CopyKind) -> Unit)? = null,
     /** The ⋮ menu; without it Delete stays in the action row. */
     onMore: (() -> Unit)? = null,
     /** A tap on the title (Rename); null: the title is plain text. */
@@ -691,12 +689,9 @@ fun V2RecordingContent(
                 Row(Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Space.s8, vertical = EchoTokens.Space.s8)) {
                     if (head.showShare) EchoActionItem(EchoIcons.Share, text.share, onClick = onShare, modifier = Modifier.weight(1f))
                     onCopy?.let {
-                        EchoActionItem(
-                            RecordingIcons.Copy,
-                            stringResource(R.string.v2_rec_copy),
-                            onClick = it,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Box(Modifier.weight(1f).align(Alignment.CenterVertically), contentAlignment = Alignment.Center) {
+                            RecordingCopyButton(onCopy = it)
+                        }
                     }
                     if (onMore != null) {
                         EchoActionItem(
