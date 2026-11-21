@@ -369,7 +369,7 @@ class V2LibraryActionsTest : ScreenTest() {
     @Test
     fun nothingMatchesOffersToClearTheFilters() {
         seed()
-        compose.onNodeWithText("Status ▾").performClick()
+        compose.onNodeWithText("Status").performClick()
         compose.onNode(hasText("Waiting for decision") and isToggleable()).performClick()
         click("Apply")
         compose.onNodeWithText("Nothing matches").assertExists()

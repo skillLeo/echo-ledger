@@ -378,7 +378,7 @@ class V2ShellTest : ScreenTest() {
     fun theFilterChipsNarrowTheListAndClearAllBringsItBack() {
         seed()
         shell(v2)
-        compose.onNodeWithText("Views ▾").performClick()
+        compose.onNodeWithText("Views").performClick()
         compose.onNode(hasText("Untranscribed") and isToggleable()).performClick()
         compose.onNodeWithText("Apply").performClick()
         compose.onNodeWithText("Bilal Traders", substring = true).assertDoesNotExist()
