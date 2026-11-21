@@ -1392,3 +1392,8 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-wave__bar--2 { background: var(--el-role-label-amber-dot); }
 .el-wave__bar--played { opacity: 1; }
 .el-wave__mark { position: absolute; inset-block: 0; inset-inline-start: calc(var(--el-space-16) + (100% - var(--el-space-16) * 2) * var(--el-wave-at)); inline-size: var(--el-border-hairline); background: var(--el-role-text-primary); pointer-events: none; }
+
+/* Moving recordings by dragging them (parity DT-LIB-082, 083, DT-PRJ-014): the drop targets in the sidebar. */
+.el-nav-drop { display: none; align-items: center; gap: var(--el-space-8); margin-inline: var(--el-space-8); padding: var(--el-space-8); border: var(--el-border-hairline) dashed var(--el-role-border-strong); border-radius: var(--el-radius-sm); color: var(--el-role-text-secondary); }
+.dragging-recordings .el-nav-drop { display: flex; }
+.el-shell [data-drop-project].drop-over { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
