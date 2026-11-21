@@ -19,7 +19,7 @@ The components and tokens change in my folders; EL-UX switches the screens to th
 - **Height and padding:** 72 px comfortable and 56 px compact (desktop and web). The phone keeps 72 dp. Block padding is 12 px. The mark centres on the two lines.
 - **Separation:** a hairline divider (border.default) between rows, inset to start at the text (16 + 40 + 16 = 72 px from the start edge). There's no divider after a section's last row.
 - **Hover and focus** (desktop and web): the whole row gets bg-subtle on an 8 px radius, with the list inset 8 px on both sides so the radius shows. A selected row gets accent-soft on the same radius.
-- **Line 1, the title:** title.s strong (desktop and web 15/22, phone 16/24), text-primary, one line with an ellipsis, `dir="auto"`. From 150 % text it may take 2 lines (phone).
+- **Line 1, the title:** title.s strong (16/24, weight 600, `--el-text-title-s-*`, the same on desktop, web and phone), text-primary, one line with an ellipsis, `dir="auto"`. From 150 % text it may take 2 lines (phone).
 - **Line 2, the snippet:** body 14/20 in text-secondary, one line with an ellipsis, `dir="auto"`. See "The snippet" below. If there's no snippet, line 2 shows the source and project ("WhatsApp · Acme Holdings"), and a recording that's still being processed shows its state badge there.
 - **The indicator slot:** a fixed area between the text and the end column, always in this order: unread dot, pin, important flag, then up to 3 label dots.
   - Glyphs are 16 px with a 1.75 stroke. Dots are 8 px with a 4 px gap.
