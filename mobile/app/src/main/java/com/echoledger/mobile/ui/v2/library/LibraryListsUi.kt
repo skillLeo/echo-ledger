@@ -9,6 +9,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.LibraryLists
@@ -29,6 +30,9 @@ import com.echoledger.mobile.ui.v2.components.NewListWords
 import com.echoledger.mobile.ui.v2.components.RenameListWords
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import kotlinx.coroutines.launch
+
+/** The chip row's tag: its chips are tabs of the Library's own, apart from the bar's (tests tell the two apart). */
+const val LIST_ROW_TAG = "library-lists"
 
 /** What the chip row asks of the screen: create answers the new list (null when it was refused), rename whether it worked. */
 interface ListActions {
@@ -108,7 +112,11 @@ fun LibraryListRow(
     var deleting by remember { mutableStateOf<ListDto?>(null) }
     val names = lists.map { it.name }
     val reserved = LibraryLists.RESERVED + fixedChipWords()
-    EchoListChipRow(onAdd = { creating = true }, addLabel = stringResource(R.string.v2_lists_add), modifier = modifier) {
+    EchoListChipRow(
+        onAdd = { creating = true },
+        addLabel = stringResource(R.string.v2_lists_add),
+        modifier = modifier.testTag(LIST_ROW_TAG)
+    ) {
         EchoListChip(stringResource(R.string.v2_lists_all), chip == LibraryLists.ALL, { onChip(LibraryLists.ALL) }, fixed = true)
         EchoListChip(
             stringResource(R.string.v2_lists_unread),

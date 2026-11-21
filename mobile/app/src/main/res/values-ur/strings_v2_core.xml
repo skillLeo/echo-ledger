@@ -121,6 +121,9 @@
     <string name="v2_vm_wrong_sign_in_link">یہ سائن ان لنک اس سائن ان کے لیے نہیں۔ دوبارہ شروع کریں۔</string>
     <string name="v2_vm_audio_download_failed">آواز ڈاؤن لوڈ نہیں ہو سکی۔ کنکشن چیک کریں اور دوبارہ کوشش کریں۔</string>
     <string name="v2_vm_change_not_saved">تبدیلی محفوظ نہیں ہو سکی۔</string>
+    <string name="v2_vm_list_not_saved">فہرست محفوظ نہیں ہو سکی۔</string>
+    <string name="v2_vm_list_not_deleted">فہرست حذف نہیں ہو سکی۔</string>
+    <string name="v2_vm_lists_not_moved">فہرستیں منتقل نہیں ہو سکیں۔</string>
     <string name="v2_vm_device_not_revoked">ڈیوائس ہٹائی نہیں جا سکی۔</string>
     <string name="v2_vm_export_failed">ایکسپورٹ ناکام رہا۔</string>
     <string name="v2_vm_file_unreadable">فائل پڑھی نہیں جا سکی۔</string>

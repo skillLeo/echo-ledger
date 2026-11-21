@@ -108,11 +108,15 @@ class V2NavigationTest : ScreenTest() {
         shell()
         // The page is called what its tab is called.
         compose.onNode(hasText("Library") and isHeading()).assertExists()
+        // The bar's tabs (the Library's list chips are tabs of the page's own).
         val tabs = compose.onAllNodes(
             androidx.compose.ui.test.SemanticsMatcher.expectValue(
                 androidx.compose.ui.semantics.SemanticsProperties.Role,
                 androidx.compose.ui.semantics.Role.Tab
-            )
+            ) and
+                !androidx.compose.ui.test.hasAnyAncestor(
+                    androidx.compose.ui.test.hasTestTag(com.echoledger.mobile.ui.v2.library.LIST_ROW_TAG)
+                )
         ).fetchSemanticsNodes().map { com.echoledger.mobile.ui.v2.ParityKit.name(it) }
         assertEquals(listOf("Library", "Projects", "Live", "Ask"), tabs)
         compose.onNodeWithContentDescription("Record").assertExists()
