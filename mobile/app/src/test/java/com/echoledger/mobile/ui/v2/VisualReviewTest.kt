@@ -129,7 +129,7 @@ class VisualReviewTest {
     @Test
     fun noneSelectedPinnedOrKeptOffersPinAndKeepForeverOnly() {
         assertEquals(
-            OrganiseChoices(pin = true, unpin = false, keep = true, unkeep = false),
+            OrganiseChoices(pin = true, unpin = false, keep = true, unkeep = false, important = true, unimportant = false),
             OrganiseChoices.of(listOf(item("a"), item("b")))
         )
     }
@@ -137,17 +137,31 @@ class VisualReviewTest {
     @Test
     fun allSelectedPinnedAndKeptOffersUnpinAndAllowAutoCleanUpOnly() {
         assertEquals(
-            OrganiseChoices(pin = false, unpin = true, keep = false, unkeep = true),
+            OrganiseChoices(pin = false, unpin = true, keep = false, unkeep = true, important = true, unimportant = false),
             OrganiseChoices.of(listOf(item("a", pinned = true, keep = true), item("b", pinned = true, keep = true)))
         )
     }
 
     @Test
     fun aMixedSelectionOffersBoth() {
-        assertEquals(OrganiseChoices.ALL, OrganiseChoices.of(listOf(item("a", pinned = true), item("b", keep = true))))
+        // None of them is important: Mark important only.
+        assertEquals(
+            OrganiseChoices.ALL.copy(unimportant = false),
+            OrganiseChoices.of(listOf(item("a", pinned = true), item("b", keep = true)))
+        )
+        // Important mixed: both.
+        assertEquals(
+            OrganiseChoices.ALL,
+            OrganiseChoices.of(listOf(item("a", pinned = true).copy(important = true), item("b", keep = true)))
+        )
+        // All important: Unmark important only.
+        assertEquals(
+            false,
+            OrganiseChoices.of(listOf(item("a").copy(important = true), item("b").copy(important = true))).important
+        )
         // Pinned all, kept some: Unpin only, and both keep actions.
         assertEquals(
-            OrganiseChoices(pin = false, unpin = true, keep = true, unkeep = true),
+            OrganiseChoices(pin = false, unpin = true, keep = true, unkeep = true, important = true, unimportant = false),
             OrganiseChoices.of(listOf(item("a", pinned = true, keep = true), item("b", pinned = true)))
         )
     }

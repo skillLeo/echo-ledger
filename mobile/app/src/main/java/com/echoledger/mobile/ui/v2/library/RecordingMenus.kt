@@ -149,6 +149,7 @@ interface RecordingMenuActions {
     fun labels()
     fun pin(on: Boolean)
     fun keep(on: Boolean)
+    fun important(on: Boolean)
     fun retranscribe()
     fun skipSilences(on: Boolean)
     fun export(format: ExportFormat)
@@ -228,6 +229,11 @@ fun RecordingMenuContent(
             RecordingIcons.Keep,
             stringResource(if (item.keep) R.string.v2_rec_stop_keeping else R.string.v2_rec_keep),
             { pick { actions.keep(!item.keep) } }
+        )
+        MenuRow(
+            com.echoledger.mobile.ui.v2.components.EchoIcons.Important,
+            stringResource(if (item.important) R.string.v2_lib_unmark_important else R.string.v2_lib_mark_important),
+            { pick { actions.important(!item.important) } }
         )
         if (canRetranscribe || hasAudio) MenuGroup(stringResource(R.string.v2_rec_menu_transcript))
         if (canRetranscribe) MenuRow(RecordingIcons.Language, stringResource(R.string.v2_rec_retranscribe), { pick(actions::retranscribe) })

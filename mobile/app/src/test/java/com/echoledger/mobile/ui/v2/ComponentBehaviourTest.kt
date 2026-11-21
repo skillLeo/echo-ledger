@@ -15,12 +15,15 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -381,5 +384,26 @@ class ComponentBehaviourTest {
         compose.onNodeWithContentDescription("More copy options").performClick()
         compose.onNodeWithText("Copy with timestamps").assertExists()
         assertEquals(1, copied)
+    }
+
+    @Test
+    fun aSplitButtonsMainPartIsReadByItsOwnNameAndItsChevronSaysWhetherTheMenuIsOpen() {
+        show {
+            EchoSplitButton(
+                text = "Copy",
+                onClick = {},
+                menuLabel = "More copy options",
+                mainLabel = "Copy text"
+            ) { close -> EchoActionItem(EchoIcons.Export, "Copy with timestamps", { close() }) }
+        }
+        compose.onNode(hasContentDescription("Copy text") and hasClickAction()).assertExists()
+        val main = compose.onNodeWithContentDescription("Copy text").fetchSemanticsNode()
+        assertEquals(listOf("Copy text"), main.config[SemanticsProperties.ContentDescription])
+        // The word on it is not read again after its name.
+        assertEquals(false, main.config.contains(SemanticsProperties.Text))
+        val chevron = compose.onNodeWithContentDescription("More copy options")
+        chevron.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Collapsed"))
+        chevron.performClick()
+        chevron.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Expanded"))
     }
 }

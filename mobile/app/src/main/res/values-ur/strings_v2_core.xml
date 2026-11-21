@@ -73,6 +73,8 @@
     <string name="v2_loading">لوڈ ہو رہا ہے</string>
     <string name="v2_undo">واپس لیں</string>
     <string name="v2_selected">منتخب</string>
+    <string name="v2_expanded">کھلا ہوا</string>
+    <string name="v2_collapsed">بند</string>
     <string name="v2_not_selected">منتخب نہیں</string>
     <string name="v2_open_menu">انتخاب دکھائیں</string>
     <string name="v2_drag_handle">سائز بدلنے یا بند کرنے کے لیے کھینچیں</string>

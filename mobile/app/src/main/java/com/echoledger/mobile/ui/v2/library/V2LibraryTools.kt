@@ -69,6 +69,7 @@ sealed interface SelectionAction {
     data class Label(val label: String, val add: Boolean) : SelectionAction
     data class Pin(val on: Boolean) : SelectionAction
     data class Keep(val on: Boolean) : SelectionAction
+    data class Important(val on: Boolean) : SelectionAction
     data class Export(val format: String) : SelectionAction
     data class Rename(val title: String) : SelectionAction
     data object Delete : SelectionAction
@@ -91,10 +92,18 @@ fun exportName(format: String): String = stringResource(
  * Which of Pin / Unpin and Keep forever / Allow auto clean-up the selection's ⋮ offers: only the one that applies, both
  * only when the selection is mixed (some pinned and some not).
  */
-data class OrganiseChoices(val pin: Boolean, val unpin: Boolean, val keep: Boolean, val unkeep: Boolean) {
+data class OrganiseChoices(
+    val pin: Boolean,
+    val unpin: Boolean,
+    val keep: Boolean,
+    val unkeep: Boolean,
+    /** Mark important unless all are, Unmark important unless none is (both when mixed). */
+    val important: Boolean = false,
+    val unimportant: Boolean = false
+) {
     companion object {
         /** Every action, for a selection whose recordings are not known. */
-        val ALL = OrganiseChoices(pin = true, unpin = true, keep = true, unkeep = true)
+        val ALL = OrganiseChoices(pin = true, unpin = true, keep = true, unkeep = true, important = true, unimportant = true)
 
         fun of(items: List<com.echoledger.mobile.data.LibraryItem>): OrganiseChoices {
             if (items.isEmpty()) return ALL
@@ -102,7 +111,9 @@ data class OrganiseChoices(val pin: Boolean, val unpin: Boolean, val keep: Boole
                 pin = items.any { !it.pinned },
                 unpin = items.any { it.pinned },
                 keep = items.any { !it.keep },
-                unkeep = items.any { it.keep }
+                unkeep = items.any { it.keep },
+                important = items.any { !it.important },
+                unimportant = items.any { it.important }
             )
         }
     }
@@ -199,6 +210,18 @@ fun SelectionBar(
                         MenuItem(EchoIcons.Unpin, stringResource(R.string.v2_lib_unpin)) {
                             close()
                             onAction(SelectionAction.Pin(false))
+                        }
+                    }
+                    if (choices.important) {
+                        MenuItem(EchoIcons.Important, stringResource(R.string.v2_lib_mark_important)) {
+                            close()
+                            onAction(SelectionAction.Important(true))
+                        }
+                    }
+                    if (choices.unimportant) {
+                        MenuItem(EchoIcons.Important, stringResource(R.string.v2_lib_unmark_important)) {
+                            close()
+                            onAction(SelectionAction.Important(false))
                         }
                     }
                     if (choices.keep) {
@@ -453,7 +476,14 @@ fun LibraryFilterRow(
         chips.forEach { chip ->
             val n = count(chip)
             val name = chipName(chip)
-            EchoChip(if (n > 0) stringResource(R.string.v2_lib_with_count, name, n) + " ▾" else "$name ▾", n > 0, { open = chip })
+            EchoChip(
+                if (n > 0) stringResource(R.string.v2_lib_with_count, name, n) + " ▾" else "$name ▾",
+                n > 0,
+                { open = chip },
+                // An applied chip's ✕ clears only its own choices.
+                onClear = if (n > 0) ({ onChange(clearChip(chip, filters)) }) else null,
+                clearLabel = stringResource(R.string.v2_lib_clear_chip, name)
+            )
         }
         if (filters.count > 0) {
             Text(

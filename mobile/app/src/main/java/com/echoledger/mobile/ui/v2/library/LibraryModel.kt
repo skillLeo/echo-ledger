@@ -85,10 +85,12 @@ object LibraryModel {
 
     fun isToday(item: LibraryItem, now: ZonedDateTime): Boolean = started(item, now.zone)?.toLocalDate() == now.toLocalDate()
 
-    /** One meta line: what was said, else the project, else where it came from. */
-    fun meta(item: LibraryItem, source: String): String = item.transcript?.preview?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim()
-        ?: item.client?.name
-        ?: source
+    /** One meta line: the project, then what was said ("Acme · New rate for…"); else where it came from. */
+    fun meta(item: LibraryItem, source: String): String {
+        val said = item.transcript?.preview?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim()
+        val project = item.client?.name?.takeIf { it.isNotBlank() }
+        return listOfNotNull(project, said).joinToString(" · ").ifEmpty { source }
+    }
 
     fun row(item: LibraryItem, now: ZonedDateTime, text: V2Text, locale: Locale): V2Row {
         val app = SourceApp.from(item.sourceApp)
@@ -127,6 +129,20 @@ object LibraryModel {
             }
             .sortedByDescending { it.item.startedAt ?: it.item.updatedAt }
             .toList()
+    }
+
+    /** A label's stored colour on [item] (its `label_colors`, the label matched ignoring capitals); null without one. */
+    fun labelColour(item: LibraryItem, label: String): String? =
+        item.labelColors[label] ?: item.labelColors.entries.firstOrNull { it.key.equals(label, ignoreCase = true) }?.value
+
+    /**
+     * Days until retention moves it to Trash (docs/API.md 2.0.0-i): the hours left divided by 24, rounded up, never
+     * below 0, from [expiresAt] and the phone's clock; null when it has none (kept forever, still recording).
+     */
+    fun daysLeft(expiresAt: String?, now: java.time.Instant = java.time.Instant.now()): Int? {
+        val at = expiresAt?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() } ?: return null
+        val hours = java.time.Duration.between(now, at).toMinutes() / 60.0
+        return kotlin.math.ceil(hours / 24.0).toInt().coerceAtLeast(0)
     }
 
     /** Arabic-Indic and Eastern Arabic digits to Latin ones: times and durations stay 0-9 in every language. */

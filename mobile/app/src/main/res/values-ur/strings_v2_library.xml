@@ -54,6 +54,8 @@
     <string name="v2_lib_status">حالت</string>
     <string name="v2_lib_bookmark">بک مارک</string>
     <string name="v2_lib_clear_all">سب صاف کریں</string>
+    <string name="v2_lib_recent_searches">حالیہ تلاشیں</string>
+    <string name="v2_lib_clear_chip">%1$s صاف کریں</string>
     <string name="v2_lib_clear">صاف کریں</string>
     <string name="v2_lib_apply">لاگو کریں</string>
     <string name="v2_lib_with_count">%1$s · %2$d</string>
@@ -107,4 +109,14 @@
     <string name="v2_lib_unknown_device">نامعلوم ڈیوائس</string>
     <string name="v2_lib_automatic">خودکار</string>
     <string name="v2_lib_pinned_mark">پن شدہ</string>
+    <string name="v2_lib_mark_important">اہم نشان زد کریں</string>
+    <string name="v2_lib_unmark_important">اہم کا نشان ہٹائیں</string>
+    <string name="v2_lib_important_mark">اہم</string>
+    <plurals name="v2_lib_audio_days_left">
+        <item quantity="one">آڈیو · %d دن باقی</item>
+        <item quantity="other">آڈیو · %d دن باقی</item>
+    </plurals>
+    <string name="v2_lib_row_failed">ٹرانسکرپشن ناکام · دوبارہ کوشش کے لیے ٹیپ کریں</string>
+    <string name="v2_lib_row_no_audio">کوئی آواز نہیں</string>
+    <string name="v2_lib_not_opened">ابھی کھولی نہیں گئی</string>
 </resources>

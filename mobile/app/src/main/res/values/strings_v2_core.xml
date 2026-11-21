@@ -73,6 +73,8 @@
     <string name="v2_loading">Loading</string>
     <string name="v2_undo">Undo</string>
     <string name="v2_selected">Selected</string>
+    <string name="v2_expanded">Expanded</string>
+    <string name="v2_collapsed">Collapsed</string>
     <string name="v2_not_selected">Not selected</string>
     <string name="v2_open_menu">Show choices</string>
     <string name="v2_drag_handle">Drag to resize or close</string>

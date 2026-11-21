@@ -730,10 +730,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         clearClient: Boolean = false,
         labels: List<String>? = null,
         keep: Boolean? = null,
-        title: String? = null
+        title: String? = null,
+        important: Boolean? = null
     ): Boolean {
         val ok = withContext(Dispatchers.IO) {
-            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title) ?: error("Not signed in") }
+            runCatching {
+                graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title, important)
+                    ?: error("Not signed in")
+            }
                 .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.isSuccess
         }
         if (ok) refresh()

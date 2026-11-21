@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -203,6 +204,7 @@ fun EchoSplitButton(
 ) {
     val colors = buttonColors(kind, enabled)
     var open by remember { mutableStateOf(false) }
+    val strings = EchoV2.strings
     Box(modifier) {
         Surface(
             shape = RoundedCornerShape(EchoTokens.Component.buttonRadius),
@@ -215,7 +217,8 @@ fun EchoSplitButton(
                     Modifier
                         .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
                         .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-                        .semantics { if (mainLabel != null) contentDescription = mainLabel }
+                        // Its own name only ("Copy text without timestamps"), not that name and the word on it read together.
+                        .then(if (mainLabel != null) Modifier.clearAndSetSemantics { contentDescription = mainLabel } else Modifier)
                         .padding(start = EchoTokens.Space.s16, end = EchoTokens.Space.s12),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
@@ -233,7 +236,10 @@ fun EchoSplitButton(
                     Modifier
                         .defaultMinSize(minWidth = EchoTokens.Layout.controlTouchMin, minHeight = EchoTokens.Layout.controlTouchMin)
                         .clickable(enabled = enabled, role = Role.DropdownList, onClick = { open = true })
-                        .semantics { contentDescription = menuLabel },
+                        .semantics {
+                            contentDescription = menuLabel
+                            stateDescription = if (open) strings.expanded else strings.collapsed
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(EchoIcons.Expand, contentDescription = null, Modifier.size(EchoTokens.Icon.md))

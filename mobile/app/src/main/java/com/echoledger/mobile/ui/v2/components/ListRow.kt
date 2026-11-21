@@ -61,6 +61,8 @@ fun EchoListRow(
     unread: Boolean = false,
     /** What screen readers hear for [unread] ("Unread"), in the screen's words. */
     unreadLabel: String? = null,
+    /** The title in the regular weight (a Library row its person has opened); semibold otherwise. */
+    plainTitle: Boolean = false,
     onClickLabel: String? = null,
     onLongClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
@@ -104,7 +106,7 @@ fun EchoListRow(
                 // From 150 % text a title takes two lines, so it says more than a few letters beside the time.
                 Text(
                     title,
-                    style = type.content(title, type.bodyStrong),
+                    style = type.content(title, if (plainTitle) type.body else type.bodyStrong),
                     color = c.textPrimary,
                     maxLines = if (largeText()) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
