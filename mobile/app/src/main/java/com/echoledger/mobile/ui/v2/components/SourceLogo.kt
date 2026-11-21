@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -17,8 +18,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.core.graphics.drawable.toBitmap
 import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.SourceApp
@@ -43,29 +46,41 @@ fun EchoSourceLogo(app: SourceApp, modifier: Modifier = Modifier, device: Source
     val px = with(LocalDensity.current) { size.roundToPx() }
     val icon = rememberAppIcon("v2-source:${app.name}:$px") { installedIcon(context, app, px) }
     Box(modifier.size(size).then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)) {
-        Box(Modifier.size(size).clip(CircleShape).background(c.bgSubtle), contentAlignment = Alignment.Center) {
-            if (icon != null) {
-                Image(icon, null, Modifier.size(size))
-            } else {
+        when {
+            // A voice note is EchoLedger's own: its mark is the app's calm accent with the voice glyph (D12).
+            app == SourceApp.VOICE_NOTE -> Box(
+                Modifier.size(size).clip(CircleShape).background(c.accentSoft),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(EchoIcons.SettingsVoice, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
+            }
+
+            icon != null -> Image(icon, null, Modifier.size(size).clip(CircleShape))
+
+            else -> Box(Modifier.size(size).clip(CircleShape).background(c.bgSubtle), contentAlignment = Alignment.Center) {
                 Icon(app.glyph(), null, Modifier.size(EchoTokens.Icon.md), tint = c.textSecondary)
             }
         }
         val badge = when (device) {
+            SourceDevice.PHONE -> EchoIcons.DevicePhone
             SourceDevice.DESKTOP -> EchoIcons.DeviceComputer
             SourceDevice.WEB -> EchoIcons.DeviceWeb
             else -> null
         }
         if (badge != null) {
+            // 16 dp, 2 dp outside the mark's corner, ringed in the row's background so the logo's edge is never cut.
+            val out = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -EchoTokens.Space.s2 else EchoTokens.Space.s2
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .size(EchoTokens.Icon.md)
+                    .offset(x = out, y = EchoTokens.Space.s2)
+                    .size(EchoTokens.Icon.sm)
+                    .border(EchoTokens.Border.strong, c.bgCanvas, CircleShape)
                     .clip(CircleShape)
-                    .background(c.bgSurface)
-                    .border(EchoTokens.Border.hairline, c.borderDefault, CircleShape),
+                    .background(c.bgSurface),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(badge, null, Modifier.size(EchoTokens.Space.s12), tint = c.textSecondary)
+                Icon(badge, null, Modifier.size(EchoTokens.Space.s12 - EchoTokens.Space.s2), tint = c.textSecondary)
             }
         }
     }

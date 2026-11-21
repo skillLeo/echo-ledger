@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.Forum
@@ -68,6 +69,7 @@ import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.Spellcheck
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Stop
@@ -201,4 +203,10 @@ object EchoIcons {
 
     /** A recording made on the web (the source mark's device badge). */
     val DeviceWeb: ImageVector get() = Icons.Outlined.Language
+
+    /** Marked important (a row's mark, in the warning colour). */
+    val Important: ImageVector get() = Icons.Outlined.Flag
+
+    /** A recording made on a phone (the source mark's device badge): the phone itself, not a handset. */
+    val DevicePhone: ImageVector get() = Icons.Outlined.Smartphone
 }

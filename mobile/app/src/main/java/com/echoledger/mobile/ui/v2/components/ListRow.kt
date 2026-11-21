@@ -25,6 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -33,6 +34,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -61,6 +63,10 @@ fun EchoListRow(
     unread: Boolean = false,
     /** What screen readers hear for [unread] ("Unread"), in the screen's words. */
     unreadLabel: String? = null,
+    /** The row's marks in one slot before the time (D12): pin, important, up to three label colours. */
+    marks: EchoRowMarks? = null,
+    /** A hairline under the row, starting at the text (a Library list). */
+    divider: Boolean = false,
     onClickLabel: String? = null,
     onLongClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
@@ -68,70 +74,105 @@ fun EchoListRow(
 ) {
     val c = EchoV2.colors
     val type = EchoV2.type
-    Row(
-        modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = if (tall) EchoTokens.Component.listRowHeightMobileTall else EchoTokens.Layout.rowMobile)
-            .then(
-                when {
-                    onLongClick != null -> Modifier.combinedClickable(
-                        onClickLabel = onClickLabel,
-                        onLongClickLabel = onLongClickLabel,
-                        onLongClick = onLongClick,
-                        onClick = onClick ?: {}
-                    )
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = if (tall) EchoTokens.Component.listRowHeightMobileTall else EchoTokens.Layout.rowMobile)
+                .then(
+                    when {
+                        onLongClick != null -> Modifier.combinedClickable(
+                            onClickLabel = onClickLabel,
+                            onLongClickLabel = onLongClickLabel,
+                            onLongClick = onLongClick,
+                            onClick = onClick ?: {}
+                        )
 
-                    onClick != null -> Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick)
+                        onClick != null -> Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick)
 
-                    else -> Modifier
-                }
-            )
-            .semantics(mergeDescendants = true) { if (unread && unreadLabel != null) stateDescription = unreadLabel }
-            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
-    ) {
-        leading?.invoke()
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
-                if (unread) {
-                    Box(
-                        Modifier
-                            .size(EchoTokens.Component.statusDotSize)
-                            .background(c.accent, CircleShape)
-                    )
-                }
-                // From 150 % text a title takes two lines, so it says more than a few letters beside the time.
-                Text(
-                    title,
-                    style = type.content(title, type.bodyStrong),
-                    color = c.textPrimary,
-                    maxLines = if (largeText()) 2 else 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = startAlign(),
-                    modifier = Modifier.weight(1f)
+                        else -> Modifier
+                    }
                 )
-                titleEnd?.let { Text(it, style = type.mono, color = c.textSecondary, maxLines = 1) }
-            }
-            if (meta != null || metaEnd != null || status != null) {
+                .semantics(mergeDescendants = true) { if (unread && unreadLabel != null) stateDescription = unreadLabel }
+                .padding(
+                    horizontal = EchoTokens.Layout.pagePaddingMobile,
+                    vertical = if (tall) EchoTokens.Space.s12 else EchoTokens.Space.s8
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
+        ) {
+            leading?.invoke()
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
-                    status?.invoke()
+                    if (unread) {
+                        Box(
+                            Modifier
+                                .size(EchoTokens.Component.statusDotSize)
+                                .background(c.accent, CircleShape)
+                        )
+                    }
+                    // From 150 % text a title takes two lines, so it says more than a few letters beside the time.
                     Text(
-                        meta.orEmpty(),
-                        style = type.content(meta.orEmpty(), type.meta),
-                        color = c.textSecondary,
-                        maxLines = 1,
+                        title,
+                        style = type.content(title, type.bodyStrong),
+                        color = c.textPrimary,
+                        maxLines = if (largeText()) 2 else 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = startAlign(),
                         modifier = Modifier.weight(1f)
                     )
-                    metaEnd?.invoke()
+                    marks?.let { EchoRowMarksSlot(it) }
+                    titleEnd?.let { EchoRowTime(it) }
+                }
+                if (meta != null || metaEnd != null || status != null) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                        status?.invoke()
+                        Text(
+                            meta.orEmpty(),
+                            style = type.content(meta.orEmpty(), type.meta),
+                            color = c.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = startAlign(),
+                            modifier = Modifier.weight(1f)
+                        )
+                        metaEnd?.invoke()
+                    }
                 }
             }
+            trailing?.invoke()
         }
-        trailing?.invoke()
+        if (divider) EchoDivider(inset = true)
     }
 }
+
+/** A row's marks (D12): shown in one slot, in this order, never inside the snippet. */
+data class EchoRowMarks(val pinned: Boolean = false, val important: Boolean = false, val labels: List<Color> = emptyList())
+
+@Composable
+private fun EchoRowMarksSlot(marks: EchoRowMarks) {
+    val c = EchoV2.colors
+    if (!marks.pinned && !marks.important && marks.labels.isEmpty()) return
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
+        if (marks.pinned) Icon(EchoIcons.Pin, null, Modifier.size(EchoTokens.Icon.sm), tint = c.textSecondary)
+        if (marks.important) Icon(EchoIcons.Important, null, Modifier.size(EchoTokens.Icon.sm), tint = c.warning)
+        marks.labels.take(3).forEach { colour ->
+            Box(Modifier.size(EchoTokens.Component.statusDotSize).background(colour, CircleShape))
+        }
+    }
+}
+
+/**
+ * A time or a length on a row's end side ("5:09 am", "15 Nov", "1:19"): the caption in the row's own face with
+ * figures that line up (not the mono face), left to right in every language. For [EchoListRow]'s metaEnd too.
+ */
+@Composable
+fun EchoRowTime(text: String) = Text(
+    text,
+    style = EchoV2.type.caption.copy(fontFeatureSettings = "tnum", textDirection = TextDirection.Ltr),
+    color = EchoV2.colors.textSecondary,
+    maxLines = 1
+)
 
 /**
  * A settings row: the title, an optional [subtitle] (use few), and the current [value] on the end side. The value is

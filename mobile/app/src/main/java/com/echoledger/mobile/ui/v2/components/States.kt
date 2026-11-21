@@ -117,7 +117,15 @@ enum class EchoBannerKind { Info, Warning, Error }
  * soft status fill, the icon, the sentence and one quiet action. No coloured edge.
  */
 @Composable
-fun EchoBanner(text: String, kind: EchoBannerKind, modifier: Modifier = Modifier, actionLabel: String? = null, onAction: () -> Unit = {}) {
+fun EchoBanner(
+    text: String,
+    kind: EchoBannerKind,
+    modifier: Modifier = Modifier,
+    actionLabel: String? = null,
+    onAction: () -> Unit = {},
+    /** A close (×) on the end side: the banner goes until its reason changes. */
+    onDismiss: (() -> Unit)? = null
+) {
     val c = EchoV2.colors
     val (fill, ink) = when (kind) {
         EchoBannerKind.Info -> c.bgSubtle to c.textSecondary
@@ -144,6 +152,7 @@ fun EchoBanner(text: String, kind: EchoBannerKind, modifier: Modifier = Modifier
             Icon(EchoIcons.Error, null, Modifier.size(EchoTokens.Icon.md), tint = ink)
             Text(text, style = EchoV2.type.meta, modifier = Modifier.weight(1f).padding(vertical = EchoTokens.Space.s8))
             if (actionLabel != null) EchoButton(actionLabel, onAction, kind = EchoButtonKind.Quiet)
+            if (onDismiss != null) EchoIconButton(EchoIcons.Close, EchoV2.strings.close, onDismiss)
         }
     }
 }
