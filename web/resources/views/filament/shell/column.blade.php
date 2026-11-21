@@ -26,7 +26,7 @@
                         <button type="button" @class(['el-col-item', 'el-on' => $on]) @if ($on) aria-current="true" @endif
                             wire:click="{{ $placeAction }}('{{ $p['key'] }}')" data-place="{{ $p['key'] }}">
                             @svg(($on ? 'heroicon-s-' : 'heroicon-o-').$p['icon'], ['aria-hidden' => 'true'])
-                            <span class="el-col-label">{{ $p['label'] }}</span>
+                            <span class="el-col-label">{{ __($p['label']) }}</span>
                             @if (($p['count'] ?? 0) > 0)
                                 <span class="el-col-count">{{ number_format($p['count']) }}</span>
                             @endif
@@ -34,7 +34,7 @@
                     @else
                         <a href="{{ $p['url'] }}" @class(['el-col-item', 'el-on' => $on]) @if ($on) aria-current="true" @endif data-place="{{ $p['key'] }}">
                             @svg(($on ? 'heroicon-s-' : 'heroicon-o-').$p['icon'], ['aria-hidden' => 'true'])
-                            <span class="el-col-label">{{ $p['label'] }}</span>
+                            <span class="el-col-label">{{ __($p['label']) }}</span>
                             @if (($p['count'] ?? 0) > 0)
                                 <span class="el-col-count">{{ number_format($p['count']) }}</span>
                             @endif

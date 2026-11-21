@@ -459,7 +459,7 @@ final class ClientWorkspace
     public function noteText(CallNote $note): string
     {
         $session = $note->captureSession;
-        $title = ($session?->title ?: 'Call').' · '.($session?->started_at->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y') ?? '');
+        $title = ($session?->displayTitle() ?? 'Call').' · '.($session?->started_at->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y') ?? '');
         $lines = ["### {$title}"];
         foreach ($note->toApi()['sections'] as $section) {
             $lines[] = $section['heading'].':';

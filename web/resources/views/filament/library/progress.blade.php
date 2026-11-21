@@ -4,9 +4,9 @@
     part 2 of 3 · about 20 s left"); otherwise the three steps, the same line under them and one bar.
 --}}
 @php($compact = $compact ?? false)
-@php($state = fn (array $s): string => $s['state'] === 'done' ? 'done' : ($s['state'] === 'active' ? 'in progress' : 'waiting'))
+@php($state = fn (array $s): string => __($s['state'] === 'done' ? 'done' : ($s['state'] === 'active' ? 'in progress' : 'waiting')))
 @if ($compact)
-    <span class="el-steps-compact" role="status" aria-label="{{ collect($progress['steps'])->map(fn ($s) => $s['label'].': '.$state($s))->implode(', ') }}. {{ $progress['summary'] }}">
+    <span class="el-steps-compact" role="status" aria-label="{{ collect($progress['steps'])->map(fn ($s) => \App\Filament\Support\RecordingProgress::stageLabel($s['label']).': '.$state($s))->implode(', ') }}. {{ $progress['summary'] }}">
         <span class="el-steps-dots" aria-hidden="true">
             @foreach ($progress['steps'] as $s)
                 <span class="el-steps-dot" data-state="{{ $s['state'] }}"></span>
@@ -16,7 +16,7 @@
     </span>
 @else
     @php($current = collect($progress['steps'])->firstWhere('key', $progress['active']))
-    <ol class="el-steps" aria-label="Progress">
+    <ol class="el-steps" aria-label="{{ __('Progress') }}">
         @foreach ($progress['steps'] as $s)
             <li class="el-step" data-state="{{ $s['state'] }}" data-step="{{ $s['key'] }}" @if ($s['state'] === 'active') aria-current="step" @endif>
                 <span class="el-step-mark" aria-hidden="true">
@@ -26,7 +26,7 @@
                         {{ $loop->iteration }}
                     @endif
                 </span>
-                <span class="el-step-label">{{ $s['label'] }}</span>
+                <span class="el-step-label">{{ \App\Filament\Support\RecordingProgress::stageLabel($s['label']) }}</span>
                 <span class="el-sr">: {{ $state($s) }}</span>
             </li>
         @endforeach

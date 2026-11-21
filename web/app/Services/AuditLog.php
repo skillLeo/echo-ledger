@@ -216,7 +216,7 @@ final class AuditLog
             }
         });
 
-        CaptureSession::deleted(fn (CaptureSession $s) => $log()->record('session_deleted', $s->user_id, $s, 'Recording deleted: '.$s->displayTitle()));
+        CaptureSession::deleted(fn (CaptureSession $s) => $log()->record('session_deleted', $s->user_id, $s, 'Recording deleted: '.$s->outsideTitle()));
         Device::created(fn (Device $d) => $d->signedInWith === null
             ? $log()->record('device_paired', $d->user_id, $d, "Device signed in with a code: {$d->name}")
             : $log()->record('device_signed_in', $d->user_id, $d, "Signed in on {$d->name} ({$d->platform->getLabel()}) ".($d->signedInWith === 'browser' ? 'through the browser' : 'with a password'), ['via' => $d->signedInWith]));
@@ -225,7 +225,7 @@ final class AuditLog
         // A link opens a recording or (since v1.5) a project: the log names whichever it is.
         $shared = fn (ShareLink $l): array => $l->client_id !== null
             ? [$l->client?->user_id, $l->client, 'project '.$l->client?->name]
-            : [$l->captureSession?->user_id, $l->captureSession, (string) $l->captureSession?->displayTitle()];
+            : [$l->captureSession?->user_id, $l->captureSession, (string) $l->captureSession?->outsideTitle()];
         ShareLink::created(function (ShareLink $l) use ($log, $shared): void {
             [$owner, $subject, $what] = $shared($l);
             $log()->record('share_created', $owner, $subject, 'Share link made for '.$what);

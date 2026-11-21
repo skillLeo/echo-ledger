@@ -63,6 +63,17 @@ final class ConsoleDates
         return self::format($at, $time, $time, $locale);
     }
 
+    /**
+     * A day's heading with its weekday, the year only when it is not [$now]'s: "Sunday, Nov 15" · "اتوار، 15 نومبر",
+     * "Wednesday, Dec 31, 2025" · "بدھ، 31 دسمبر 2025".
+     */
+    public static function dayHeading(CarbonInterface $at, CarbonInterface $now, ?string $locale = null): string
+    {
+        return $at->year === $now->year
+            ? self::format($at, 'l, M j', 'l، j F', $locale)
+            : self::format($at, 'l, M j, Y', 'l، j F Y', $locale);
+    }
+
     /** "November 2026" · "نومبر 2026", from a date or a `Y-m`. */
     public static function month(CarbonInterface|string $month, ?string $locale = null): string
     {
