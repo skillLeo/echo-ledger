@@ -4,4 +4,6 @@
 <paths>
     <cache-path name="exports" path="exports/" />
     <cache-path name="whatsapp" path="whatsapp/" />
+    <!-- A profile photo taken with the camera app, read once and deleted (Settings › Profile). -->
+    <cache-path name="camera" path="camera/" />
 </paths>
