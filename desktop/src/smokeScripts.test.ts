@@ -1,7 +1,7 @@
 // The smoke-test scripts of the CI workflows, run against stand-in apps: passing, failing, hanging and crashing. The Mac
 // script needs PlistBuddy, so this runs on a Mac only; the workflows run the real app with it on every runner.
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -25,8 +25,12 @@ function fakeApp(body: string): { app: string; home: string } {
   return { app, home };
 }
 
-function run(app: string, home: string, limit: string) {
-  return spawnSync("sh", [script, app, limit], { env: { ...process.env, HOME: home }, encoding: "utf8" });
+/** As CI runs it (GITHUB_ACTIONS=true: CI checks the signature in its own step, and branch builds are ad hoc). */
+function run(app: string, home: string, limit: string, ci = true) {
+  const env: NodeJS.ProcessEnv = { ...process.env, HOME: home };
+  if (ci) env.GITHUB_ACTIONS = "true";
+  else delete env.GITHUB_ACTIONS;
+  return spawnSync("sh", [script, app, limit], { env, encoding: "utf8" });
 }
 
 afterEach(() => {
@@ -40,6 +44,17 @@ describe.runIf(process.platform === "darwin")("smoke-mac.sh", () => {
     const result = run(app, home, "20");
     expect(result.stdout).toContain("Smoke test passed");
     expect(result.status).toBe(0);
+  }, 30_000);
+
+  // D-168: 2.0.3 was installed unsigned (ad hoc): macOS gave it silent microphone buffers, since its permissions belong
+  // to the pinned certificate. Before an install (outside CI) the smoke test refuses such an app, without starting it.
+  it("outside CI refuses an app that isn't signed with the pinned certificate, before starting it", () => {
+    const { app, home } = fakeApp(`echo started > "$HOME/started"\necho "[echoledger] smoke test: ok: 5 windows" >&2`);
+    const result = run(app, home, "20", false);
+    expect(result.stdout).toContain("not signed with the pinned EchoLedger certificate");
+    expect(result.stdout).toContain("microphone");
+    expect(result.status).toBe(1);
+    expect(existsSync(join(home, "started"))).toBe(false);
   }, 30_000);
 
   it("fails a non-zero exit", () => {
