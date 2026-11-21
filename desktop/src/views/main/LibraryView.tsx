@@ -35,6 +35,7 @@ import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
 import { defaultViewOf, improvingView, rowViewsLine, shownExportView, stepOf, transcribingLine, viewPercent } from "../../lib/progress";
+import { usePoll } from "../../lib/usePoll";
 import { useRowViews } from "../../lib/rowViews";
 import { LockedChip, NEEDS_KEY_TEXT } from "./Upgrade";
 import { openSettingsSection } from "../../lib/entitlements";
@@ -697,18 +698,21 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (views && current && current.transcript?.final_transcript_id === transcriptId) noteRowViews(current, views);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [views]);
+  // A failed read never stops it (usePoll keeps asking, and waits while the window is hidden), so the converting line
+  // can't spin for ever on one lost answer; the server says "failed" itself after 20 quiet minutes.
+  const pollingViews = !!transcriptId && viewsMaking && !(showAs === "original" && readOnly);
+  const readViews = async () => {
+    const id = transcriptId;
+    if (!id) return;
+    const v = await api.transcriptViews(id);
+    // Only for the transcript still on screen: another recording opened meanwhile drops it.
+    if (shownTranscript.current === id) setViews(v);
+  };
   useEffect(() => {
-    if (!transcriptId || !viewsMaking || (showAs === "original" && readOnly)) return;
-    let alive = true;
-    const timer = window.setTimeout(() => {
-      // Only for the transcript still on screen: another recording opened meanwhile drops it.
-      api.transcriptViews(transcriptId).then((v) => { if (alive && shownTranscript.current === transcriptId) setViews(v); }).catch(() => undefined);
-    }, views ? VIEWS_POLL_MS : 0);
-    return () => {
-      alive = false;
-      window.clearTimeout(timer);
-    };
-  }, [transcriptId, showAs, views, viewsMaking, readOnly]);
+    if (pollingViews && !views) void readViews().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transcriptId, pollingViews]);
+  usePoll(pollingViews, readViews, VIEWS_POLL_MS);
   // Views that become ready swap in where the reader is (C3): the default view, unless the person chose one.
   const anchor = useRef<{ index: number; top: number } | null>(null);
   const keepPlace = () => {

@@ -121,11 +121,29 @@ export function aiHeader(item: LibraryItem, people: readonly string[], view: Tra
  * lines with timestamps, each in its default view once that is written (Roman Urdu for an Urdu call). Recordings
  * without a transcript are left out and counted.
  */
+/** How many recordings Copy for AI reads at once: quicker for many, without a burst of requests. */
+export const COPY_READS_AT_ONCE = 4;
+
+/** `run` over `items`, at most `limit` at a time, the answers in the items' order. */
+export async function mapLimited<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const at = next++;
+      out[at] = await run(items[at]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker));
+  return out;
+}
+
 export async function copyForAi(items: readonly LibraryItem[]): Promise<{ text: string; copied: number; skipped: number }> {
   const parts: string[] = [];
   let skipped = 0;
-  for (const item of items) {
-    const copy = await recordingCopy(item);
+  const copies = await mapLimited(items, COPY_READS_AT_ONCE, recordingCopy);
+  for (const [n, item] of items.entries()) {
+    const copy = copies[n];
     if (!copy?.lines.length) {
       skipped++;
       continue;

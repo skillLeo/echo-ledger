@@ -6,7 +6,7 @@ import type { ItemGroup } from "../../lib/libraryGroups";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { itemState, recordingName } from "../../lib/library";
 import { rowViewsLine, stepOf } from "../../lib/progress";
-import { AppTileIcon, appKind, PinIcon } from "../../components/Icons";
+import { AlertIcon, AppTileIcon, appKind, PinIcon } from "../../components/Icons";
 import { GroupHeader } from "./LibraryGrouping";
 import { dragJustEnded } from "../../lib/dragMove";
 
@@ -52,7 +52,7 @@ function cell(item: LibraryItem, column: TableColumn, views: ViewsSummary | null
       // A ready recording whose default view is still written says so (U19), with the percent once there is one.
       const converting = state === "ready" ? rowViewsLine(views) : null;
       if (converting?.state === "making") return <span className="pill processing"><span className="spinner" aria-hidden="true" />{converting.text}</span>;
-      if (converting?.state === "failed") return <span className="pill ready">{converting.text}</span>;
+      if (converting?.state === "failed") return <span className="pill failed" data-testid="convert-failed-pill"><AlertIcon size={14} aria-hidden="true" />{converting.text}</span>;
       return <span className={`pill ${state}`}>{state === "processing" ? stepOf(item).line ?? STATE_TEXT[state] : STATE_TEXT[state]}</span>;
     }
     case "labels":

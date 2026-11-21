@@ -63,7 +63,8 @@ function cell(item: LibraryItem, column: Column, views: ViewsSummary | null): Re
       // A ready transcript whose default view is still written: "Converting to Roman Urdu… 60%" (U19).
       const converting = itemState(item) === "ready" ? rowViewsLine(views) : null;
       if (converting?.state === "making") return <span className="el-converting"><span className="el-spinner" aria-hidden="true" />{converting.text}</span>;
-      return converting?.text ?? STATUS_WORDS[itemState(item)];
+      if (converting?.state === "failed") return <span className="el-converting el-converting--danger" data-testid="table-convert-failed"><Icon icon={Icons.ErrorIcon} size="sm" />{converting.text}</span>;
+      return STATUS_WORDS[itemState(item)];
     }
     case "labels": return (item.labels ?? []).join(", ");
     case "device": return item.device?.name ?? (item.source_device ? DEVICE_WORDS[item.source_device] : "");

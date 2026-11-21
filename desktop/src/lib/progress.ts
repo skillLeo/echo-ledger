@@ -1,7 +1,7 @@
 // Clear progress (Phase 1C, C): a recording goes through three steps, each with real progress: Upload (% of bytes, from
-// the upload queue), Transcribing (parts done and time left, `progress` / `final_progress`) and Converting (the views'
-// lines done, `views.progress`: an Urdu call opens in Roman Urdu, written after the Urdu transcript). The Library row,
-// the recording page and Activity say it the same way. Pure; tested.
+// the upload queue), Transcribing (parts done and time left, `progress` / `final_progress`) and Improve (the views'
+// lines done, `views.progress`: an Urdu call opens in Roman Urdu, written after the Urdu transcript; the line says
+// "Converting to Roman Urdu… 60%"). The Library row, the recording page and Activity say it the same way. Pure; tested.
 import type { ExportView, LibraryItem, TranscriptProgress, TranscriptView, UploadItem, ViewsSummary } from "./ipc";
 
 export type Step = "upload" | "transcribe" | "improve";
@@ -44,13 +44,13 @@ export function improvingView(
 
 /** "Converting to Roman Urdu… 60%", or without a percent while the server has no lines done yet. */
 export function convertingText(view: TranscriptView | null, percent: number | null): string {
-  const name = view ? VIEW_NAMES[view] : "the views";
-  return percent === null ? `Converting to ${name}…` : `Converting to ${name}… ${percent}%`;
+  const what = view ? `Converting to ${VIEW_NAMES[view]}…` : "Converting…";
+  return percent === null ? what : `${what} ${percent}%`;
 }
 
 /** "Couldn't convert to Roman Urdu": the view stopped, or went quiet and the server gave up on it. */
 export function convertFailedText(view: TranscriptView | null): string {
-  return `Couldn't convert to ${view ? VIEW_NAMES[view] : "the views"}`;
+  return view ? `Couldn't convert to ${VIEW_NAMES[view]}` : "Couldn't convert";
 }
 
 /** The view a transcript opens in when it is not its original words (Roman Urdu for an Urdu call), else null. */

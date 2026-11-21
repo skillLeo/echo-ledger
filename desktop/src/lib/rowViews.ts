@@ -27,8 +27,15 @@ export function summaryOf(state: Pick<TranscriptViewsState, "status" | "default"
 }
 
 /**
+ * Which statuses come after which: a view that failed and is being made again (Try again on another device), one being
+ * made that is now ready, one not asked for yet that has started. What came with the recording wins when it is later.
+ */
+const LATER: Readonly<Record<string, readonly string[]>> = { none: ["making", "ready", "failed"], failed: ["making", "ready"], making: ["ready"] };
+
+/**
  * The row's views as known last: what was read here while the recording stayed as it was, else what came with the
- * recording. A recording that changed on the server since the read (a new title, a run started elsewhere) is trusted again.
+ * recording. A recording that changed on the server since the read (a new title, a run started elsewhere) is trusted
+ * again, and so is what came with it when its status is a later one than the read's (making after failed).
  */
 export function rowSummary(item: LibraryItem, seen: Readonly<Record<string, Seen>>): ViewsSummary | null {
   const own = item.transcript?.views ?? null;
@@ -36,6 +43,7 @@ export function rowSummary(item: LibraryItem, seen: Readonly<Record<string, Seen
   const read = id ? seen[id] : undefined;
   if (!read) return own;
   if (own && item.updated_at !== read.basis) return own;
+  if (own && LATER[read.summary.status]?.includes(own.status)) return own;
   return own?.default && !read.summary.default ? { ...read.summary, default: own.default } : read.summary;
 }
 

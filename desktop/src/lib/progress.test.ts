@@ -26,6 +26,11 @@ describe("clear progress", () => {
     expect(viewPercent({ roman: { done: 0, total: 0 } }, "roman")).toBeNull();
     expect(convertingText("roman", 60)).toBe("Converting to Roman Urdu… 60%");
     expect(convertingText("english", null)).toBe("Converting to English…");
+    // No view name: the words alone.
+    expect(convertingText(null, null)).toBe("Converting…");
+    expect(convertingText(null, 40)).toBe("Converting… 40%");
+    expect(convertFailedText(null)).toBe("Couldn't convert");
+    expect(convertFailedText("roman")).toBe("Couldn't convert to Roman Urdu");
     expect(improvingView({ urdu: { done: 1, total: 2 } }, "original", "roman")).toBe("roman");
     expect(improvingView({ urdu: { done: 1, total: 2 } }, "english", "roman")).toBe("english");
     expect(improvingView({ urdu: { done: 1, total: 2 } }, "original", "original")).toBe("urdu");

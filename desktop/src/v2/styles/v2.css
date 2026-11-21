@@ -618,6 +618,7 @@
    ring that turns, still with reduced motion; "Couldn't convert" with Try again when it could not be written. */
 .el-converting { display: inline-flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
 .el-converting--failed { color: var(--el-role-text-secondary); }
+.el-converting--danger { color: var(--el-role-danger-default); }
 .el-spinner {
   flex: none; inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-full);
   border: var(--el-space-2) solid var(--el-role-border-default); border-block-start-color: var(--el-role-accent-default);

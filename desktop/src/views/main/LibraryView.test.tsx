@@ -1623,7 +1623,7 @@ describe("LibraryView clear progress (Phase 1C)", () => {
     expect(within(detail()).getByTestId("step-upload")).toHaveTextContent("Uploaded");
     expect(within(detail()).getByTestId("step-transcribe")).toHaveTextContent("Transcribing");
     expect(within(detail()).getByText("Transcribing… part 3 of 5 · about 20 s left")).toBeInTheDocument();
-    expect(within(detail()).getByTestId("step-improve")).toHaveTextContent("Convert");
+    expect(within(detail()).getByTestId("step-improve")).toHaveTextContent("Improve");
     fireEvent.click(within(detail()).getByRole("button", { name: "Notify me when ready" }));
     await flushAsync();
     expect(callsOf("notify_when_ready")).toEqual([{ sessionId: "p" }]);
@@ -1641,7 +1641,7 @@ describe("LibraryView clear progress (Phase 1C)", () => {
     await selectItem("Zoom with Acme", "آپ کیسے ہیں");
     expect(within(detail()).getByTestId("improving-bar")).toHaveTextContent("Converting to Roman Urdu… 60%");
     expect(within(detail()).getByRole("progressbar", { name: "Converting to Roman Urdu… 60%" })).toHaveAttribute("aria-valuenow", "60");
-    expect(within(detail()).getByTestId("step-improve")).toHaveTextContent("Converting");
+    expect(within(detail()).getByTestId("step-improve")).toHaveTextContent("Improving");
     await waitFor(() => expect(within(detail()).getByText("aap kaise hain")).toBeInTheDocument(), { timeout: 8000 });
     expect(within(detail()).queryByTestId("improving-bar")).not.toBeInTheDocument();
     expect(within(detail()).queryByTestId("recording-steps")).not.toBeInTheDocument();
@@ -1723,6 +1723,37 @@ describe("LibraryView Roman Urdu by default (U19)", () => {
     expect(callsOf("library_refresh").length).toBeGreaterThan(synced);
     await tick(20_000);
     expect(callsOf("transcript_views")).toHaveLength(2);
+  });
+
+  it("the page keeps asking after a read that failed, so Converting… never spins for ever on one lost answer", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman"], status: "making", default: "roman", progress: {} } });
+    vi.useFakeTimers({ now: NOW });
+    const answers: unknown[] = [making(), "lost", READY];
+    respondWith("transcript_views", () => {
+      const next = answers.shift() ?? READY;
+      return next === "lost" ? Promise.reject("The server could not be reached.") : next;
+    });
+    mockBackend([urduCall({ status: "making" })]);
+    render(<LibraryView notify={vi.fn()} />);
+    await flushAsync();
+    fireEvent.click(itemButton("Zoom with Acme"));
+    await tick(10);
+    expect(within(detail()).getByTestId("improving-bar")).toHaveTextContent("Converting to Roman Urdu…");
+    await tick(5_000);
+    await tick(5_000);
+    expect(answers).toEqual([]);
+    expect(within(detail()).queryByTestId("improving-bar")).toBeNull();
+    expect(within(detail()).getByText("aap kaise hain")).toBeInTheDocument();
+  });
+
+  it("the table's Status says Couldn't convert in the danger colour with the alert icon", async () => {
+    window.localStorage.setItem("echoledger-library-layout", "table");
+    respondWith("transcript_views", () => new Promise(() => undefined));
+    await renderLibrary([urduCall({ status: "failed" })]);
+    const pill = within(screen.getByRole("table", { name: "Recordings" })).getByTestId("convert-failed-pill");
+    expect(pill).toHaveTextContent("Couldn't convert to Roman Urdu");
+    expect(pill).toHaveClass("pill", "failed");
+    expect(pill.querySelector("svg")).not.toBeNull();
   });
 
   it("the page says Converting to Roman Urdu… with no percent until lines are done, from the moment the transcript is done", async () => {
@@ -1894,7 +1925,7 @@ describe("LibraryView Show as", () => {
     await flushAsync();
     expect(callsOf("transcript_views_make")).toEqual([{ id: "tr-a" }]);
     // U19: the converting line says it, once; the old "Writing the … view…" caption is gone.
-    expect(within(detail()).getAllByText(/Converting to Roman Urdu…/).length).toBeGreaterThan(0);
+    expect(within(detail()).getAllByText(/Converting to Roman Urdu…/)).toHaveLength(1);
     expect(within(detail()).queryByTestId("view-status")).toBeNull();
     expect(within(detail()).queryByText(/Writing the Roman Urdu view/)).toBeNull();
     expect(within(detail()).getByText("آپ کیسے ہیں")).toBeInTheDocument();

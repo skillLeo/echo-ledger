@@ -18,6 +18,7 @@ import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerN
 import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName } from "../../lib/player";
 import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
 import { defaultViewOf, improvingView, viewPercent } from "../../lib/progress";
+import { usePoll } from "../../lib/usePoll";
 import { normalizeLanguage, scriptWarning, transcribedIn } from "../../lib/languages";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
@@ -143,18 +144,19 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   // done, so the page asks at once and then every few seconds, and stops once the views are ready or failed.
   const viewsStatus = views?.status ?? viewsInfo?.status ?? null;
   const viewsMaking = viewsStatus === "making" && tDetail?.kind === "final";
-  useEffect(() => {
+  // A failed read never stops it (usePoll keeps asking, and waits while the window is hidden), so the converting line
+  // can't spin for ever on one lost answer; the server says "failed" itself after 20 quiet minutes.
+  const readViews = async () => {
     const id = tDetail?.id;
-    if (!id || !viewsMaking) return;
-    let alive = true;
-    const timer = window.setTimeout(() => {
-      api.transcriptViews(id).then((v) => { if (alive && shownTranscript.current === id) setViews(v); }).catch(() => undefined);
-    }, views ? VIEWS_POLL_MS : 0);
-    return () => {
-      alive = false;
-      window.clearTimeout(timer);
-    };
-  }, [tDetail?.id, views, viewsMaking]);
+    if (!id) return;
+    const v = await api.transcriptViews(id);
+    if (shownTranscript.current === id) setViews(v);
+  };
+  useEffect(() => {
+    if (tDetail?.id && viewsMaking && !views) void readViews().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tDetail?.id, viewsMaking]);
+  usePoll(!!tDetail?.id && viewsMaking, readViews, VIEWS_POLL_MS);
   // Made while the page is open: the default view comes in (unless the person chose one), and the Library syncs, for
   // the title the server may have written in Roman Urdu meanwhile. The row hears of every read.
   const lastStatus = useRef<string | null>(null);

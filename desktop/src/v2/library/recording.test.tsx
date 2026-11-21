@@ -136,7 +136,7 @@ describe("the recording page", () => {
     await act(flushAsync);
     expect(callsOf("transcript_views_make")).toEqual([{ id: "tr-bilal" }]);
     // U19: the converting line says it, once; the old "Writing the … view…" caption is gone.
-    expect(screen.getAllByText(/Converting to Roman Urdu…/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Converting to Roman Urdu…/)).toHaveLength(1);
     expect(screen.queryByText(/Writing the Roman Urdu view/)).toBeNull();
 
     resetTauriMock();

@@ -13,7 +13,8 @@ import { AlertIcon } from "../../components/Icons";
 const STEP_WORDS: Record<Step, { waiting: string; active: string; done: string }> = {
   upload: { waiting: "Upload", active: "Uploading", done: "Uploaded" },
   transcribe: { waiting: "Transcribe", active: "Transcribing", done: "Transcribed" },
-  improve: { waiting: "Convert", active: "Converting", done: "Converted" },
+  // The step keeps its name on every platform (Upload · Transcribe · Improve); only the line under it says "Converting to …".
+  improve: { waiting: "Improve", active: "Improving", done: "Improved" },
 };
 
 /** The three steps while a recording is on its way; nothing once it is ready. */

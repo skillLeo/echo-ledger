@@ -8,7 +8,7 @@ import type { LibraryItem, TranscriptViewsState, ViewsSummary } from "../../lib/
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeTranscript } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
-import { aiHeader, copyForAi } from "./organise";
+import { aiHeader, COPY_READS_AT_ONCE, copyForAi, mapLimited } from "./organise";
 import { rowModel } from "./model";
 import { rowSummary } from "../../lib/rowViews";
 
@@ -204,6 +204,23 @@ describe("Converting to Roman Urdu… (U19)", () => {
     expect(callsOf("transcript_views")).toHaveLength(asked);
   });
 
+  it("keeps asking after a read that failed: one lost answer never leaves it spinning", async () => {
+    const answers: (TranscriptViewsState | "lost")[] = [making(), "lost", READY];
+    respondWith("transcript_views", () => {
+      const next = answers.shift() ?? READY;
+      return next === "lost" ? Promise.reject("The server could not be reached.") : next;
+    });
+    await open(bilal({ status: "making", default: "roman", progress: {} }), urduTranscript({ status: "making" }));
+    await tick(10);
+    await tick(5_000); // this read is lost
+    expect(answers).toEqual([READY]);
+    expect(screen.getByTestId("converting-line")).toHaveTextContent("Converting to Roman Urdu…");
+    await tick(5_000);
+    expect(answers).toEqual([]);
+    expect(screen.queryByTestId("converting-line")).toBeNull();
+    expect(screen.getByText("Hello, yeh Sam hai.")).toBeInTheDocument();
+  });
+
   it("a view that went quiet: Couldn't convert to Roman Urdu, and Try again starts it again", async () => {
     respond("transcript_views", FAILED);
     respond("transcript_views_make", making());
@@ -255,5 +272,33 @@ describe("a row's views (U19)", () => {
     expect(rowSummary(item, seen)?.status).toBe("ready");
     expect(rowSummary({ ...item, updated_at: "2026-11-17T15:00:00Z" }, seen)?.status).toBe("making");
     expect(rowSummary(item, {})?.status).toBe("making");
+  });
+
+  it("trusts what came with the recording when its status is a later one: being made again after it failed", () => {
+    const item = bilal({ status: "making", default: "roman", progress: {} });
+    const failed = { "tr-bilal": { summary: { status: "failed" as const, default: "roman" as const, progress: {} }, at: 0, basis: item.updated_at } };
+    expect(rowSummary(item, failed)?.status).toBe("making");
+    const ready = bilal({ status: "ready", default: "roman", progress: {} });
+    const wasMaking = { "tr-bilal": { summary: { status: "making" as const, default: "roman" as const, progress: {} }, at: 0, basis: ready.updated_at } };
+    expect(rowSummary(ready, wasMaking)?.status).toBe("ready");
+    // An older status with the recording never undoes a later read.
+    const stale = bilal({ status: "making", default: "roman", progress: {} });
+    const done = { "tr-bilal": { summary: { status: "ready" as const, default: "roman" as const, progress: {} }, at: 0, basis: stale.updated_at } };
+    expect(rowSummary(stale, done)?.status).toBe("ready");
+  });
+
+  it("reads the recordings for Copy for AI a few at a time, in order", async () => {
+    let running = 0;
+    let most = 0;
+    const order = await mapLimited([1, 2, 3, 4, 5, 6, 7, 8, 9], COPY_READS_AT_ONCE, async (n) => {
+      running++;
+      most = Math.max(most, running);
+      await new Promise((r) => setTimeout(r, (10 - n) % 3));
+      running--;
+      return n * 10;
+    });
+    expect(order).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90]);
+    expect(most).toBe(COPY_READS_AT_ONCE);
+    expect(await mapLimited([], 4, async (n: number) => n)).toEqual([]);
   });
 });
