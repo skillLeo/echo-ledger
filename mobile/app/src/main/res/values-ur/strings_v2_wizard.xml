@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v2_wiz_step">مرحلہ %1$d از %2$d</string>
+    <string name="v2_wiz_progress">سیٹ اپ کی پیش رفت، %1$s</string>
+    <string name="v2_wiz_skip">سیٹ اپ چھوڑیں</string>
+    <string name="v2_wiz_test_title">10 سیکنڈ کا ٹیسٹ آزمائیں</string>
+    <string name="v2_wiz_test_body">کچھ الفاظ بولیں۔ میٹر دکھاتا ہے کہ مائیکروفون کیا سن رہا ہے۔</string>
+    <string name="v2_wiz_continue">جاری رکھیں</string>
+    <string name="v2_wiz_skip_test">ٹیسٹ چھوڑیں</string>
+    <string name="v2_wiz_recording">10 سیکنڈ ریکارڈنگ ہو رہی ہے…</string>
+    <string name="v2_wiz_test_again">دوبارہ ٹیسٹ کریں</string>
+    <string name="v2_wiz_start_test">ٹیسٹ شروع کریں</string>
+    <string name="v2_wiz_allow_mic">ٹیسٹ کے لیے پچھلے مرحلے پر مائیکروفون کی اجازت دیں۔</string>
+    <string name="v2_wiz_me">میں</string>
+    <string name="v2_wiz_peak">زیادہ سے زیادہ</string>
+    <string name="v2_wiz_heard">آپ کا مائیکروفون کام کر رہا ہے۔ اپنی آواز سننے کے لیے اسے چلا کر دیکھیں۔</string>
+    <string name="v2_wiz_not_heard">ہمیں آپ کا مائیکروفون سنائی نہیں دیا۔ اوپر مائیکروفون اور اس کی اجازت دیکھیں۔</string>
+    <string name="v2_wiz_failed">ٹیسٹ ریکارڈ نہیں کر سکا۔ مائیکروفون کی اجازت دیکھیں اور دوبارہ کوشش کریں۔</string>
+    <string name="v2_wiz_done_title">آپ تیار ہیں</string>
+    <string name="v2_wiz_done_body">ریکارڈنگ کے قوانین ہر ملک میں مختلف ہیں۔ جہاں قانون کہے، اپنی میٹنگ کے لوگوں کو بتائیں کہ آپ ریکارڈ کر رہے ہیں۔ ریکارڈنگ کی اطلاع ہمیشہ دکھائی دیتی ہے۔</string>
+    <string name="v2_wiz_start_using">EchoLedger استعمال کرنا شروع کریں</string>
+    <string name="v2_wiz_consent">میں سمجھتا ہوں اور جہاں ضروری ہو اجازت لوں گا</string>
+</resources>

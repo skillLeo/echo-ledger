@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The first-run wizard's steps after sign-in in the new design (parity.csv PH-OTH-039). values-ur/ has the same keys. -->
+<resources>
+    <string name="v2_wiz_step">Step %1$d of %2$d</string>
+    <string name="v2_wiz_progress">Setup progress, %1$s</string>
+    <string name="v2_wiz_skip">Skip setup</string>
+    <string name="v2_wiz_test_title">Try a 10-second test</string>
+    <string name="v2_wiz_test_body">Say a few words. The meter shows what the microphone hears.</string>
+    <string name="v2_wiz_continue">Continue</string>
+    <string name="v2_wiz_skip_test">Skip the test</string>
+    <string name="v2_wiz_recording">Recording 10 seconds…</string>
+    <string name="v2_wiz_test_again">Test again</string>
+    <string name="v2_wiz_start_test">Start the test</string>
+    <string name="v2_wiz_allow_mic">Allow the microphone on the previous step to run the test.</string>
+    <string name="v2_wiz_me">Me</string>
+    <string name="v2_wiz_peak">Peak</string>
+    <string name="v2_wiz_heard">Your microphone is working. Play it back to check how you sound.</string>
+    <string name="v2_wiz_not_heard">We did not hear your microphone. Check the microphone above and the microphone permission.</string>
+    <string name="v2_wiz_failed">The test could not record. Check the microphone permission and try again.</string>
+    <string name="v2_wiz_done_title">You are set</string>
+    <string name="v2_wiz_done_body">Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it. A recording notification is always shown.</string>
+    <string name="v2_wiz_start_using">Start using EchoLedger</string>
+    <string name="v2_wiz_consent">I understand and will get consent where required</string>
+</resources>
