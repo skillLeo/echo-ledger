@@ -86,6 +86,33 @@ class V2SettingsTest {
     }
 
     @Test
+    fun searchLandsOnEachCaptionAndDictationSettingAndLightsIt() {
+        // Each caption and dictation setting is found by its words and opens its page at that setting.
+        for ((words, id) in listOf(
+            "opacity" to "captions.opacity",
+            "caption position" to "captions.position",
+            "compact" to "captions.compact",
+            "caption colour" to "captions.colours",
+            "hold to talk" to "voice.mic",
+            "snippets" to "voice.snippets",
+            "replacements" to "voice.replacements",
+            "recent dictations" to "voice.history"
+        )) {
+            val hit = SettingsSearch.search(en, words).firstOrNull { it.item.id == id }
+            assertTrue("\"$words\" finds $id", hit != null)
+        }
+        var opened: Pair<String, String?>? = null
+        compose.setContent {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                V2SettingsRoot(AppSettings(), ProfileState.Loading, true, {}, {}, { p, h -> opened = p to h }, {}, {})
+            }
+        }
+        compose.onNodeWithText("Search settings").performTextInput("opacity")
+        compose.onNodeWithText("Background opacity").performClick()
+        assertEquals("captions" to "captions.opacity", opened)
+    }
+
+    @Test
     fun aSearchResultLightsItsSettingOnEveryV2DrawnPage() {
         // Search opens a page with the setting's id (aSearchResultJumpsToItsPageAndSetting); each v2-drawn page must
         // light that id, not an older entry name.

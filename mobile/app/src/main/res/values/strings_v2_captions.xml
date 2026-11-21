@@ -26,4 +26,10 @@
     <string name="v2_cap_colour_amber">Amber</string>
     <string name="v2_cap_colour_rose">Rose</string>
     <string name="v2_cap_colour_white">White</string>
+    <string name="v2_cap_opacity_name">Background opacity</string>
+    <string name="v2_cap_colours_name">Colour for Me and Client</string>
+    <string name="v2_cap_size_name">Caption text size</string>
+    <string name="v2_cap_lines_name">Caption lines</string>
+    <string name="v2_cap_position_name">Caption position</string>
+    <string name="v2_cap_hide_name">Hide captions when nobody speaks</string>
 </resources>

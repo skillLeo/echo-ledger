@@ -155,6 +155,37 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
+    fun `with the v2 card Saved stays six seconds and the upload starts only once they are over`() {
+        overlayAllowed(true)
+        PostCallPrompt.show(
+            app,
+            call(),
+            PostCallPrompt.KEEP,
+            "dark",
+            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
+        )
+        assertTrue(DecisionPopup.showingV2)
+        val waiting = uploadWork("call-1").single()
+        assertEquals(WorkInfo.State.ENQUEUED, waiting.state)
+        assertEquals("the upload waits out the card", DecisionPopup.SAVED_MS, waiting.initialDelayMillis)
+        assertEquals(0, waiting.runAttemptCount)
+        ShadowLooper.idleMainLooper(DecisionPopup.SAVED_MS - 1, TimeUnit.MILLISECONDS)
+        assertTrue("Saved is still up at 5.999 s", DecisionPopup.isShowing)
+        assertEquals(0, uploadWork("call-1").single().runAttemptCount)
+        ShadowLooper.idleMainLooper(2, TimeUnit.MILLISECONDS)
+        assertFalse("gone after 6 s", DecisionPopup.isShowing)
+        // Six seconds on, the upload's delay is over and it runs.
+        val driver = androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!
+        // (The test phone has no network: its constraint is met by hand, as it would be on a phone that has one.)
+        driver.setAllConstraintsMet(waiting.id)
+        assertEquals("still waiting for its delay", 0, uploadWork("call-1").single().runAttemptCount)
+        driver.setInitialDelayMet(waiting.id)
+        pumpUntil("the upload to start") {
+            uploadWork("call-1").single().let { it.runAttemptCount > 0 || it.state != WorkInfo.State.ENQUEUED }
+        }
+    }
+
+    @Test
     fun `the v2 card says Saved with Undo for six seconds when calls are kept automatically, and Undo is the delayed discard`() {
         overlayAllowed(true)
         val rec = call()

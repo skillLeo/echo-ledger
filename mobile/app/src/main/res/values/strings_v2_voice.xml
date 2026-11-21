@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Voice notes & dictation settings page. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_vc_after_share">After sharing a voice note</string>
+    <string name="v2_vc_after_share_help">When you share a voice note or audio file to EchoLedger from WhatsApp or another app</string>
+    <string name="v2_vc_open">Open the voice note (default)</string>
+    <string name="v2_vc_stay">Stay in the app I shared from, and notify me quietly when it is ready</string>
+    <string name="v2_vc_keyboard">Voice keyboard</string>
+    <string name="v2_vc_keyboard_help">Dictate into any app: turn on the EchoLedger voice keyboard, then pick it with the keyboard button. Dictation is never saved as a recording.</string>
+    <string name="v2_vc_keyboard_on">Turn on the voice keyboard</string>
+    <string name="v2_vc_mic">Microphone</string>
+    <string name="v2_vc_cleanup">Clean up the text</string>
+    <string name="v2_vc_cleanup_help">Removes “um”, adds capitals and a full stop.</string>
+    <string name="v2_vc_sounds">Start and stop sounds</string>
+    <string name="v2_vc_new_line">Say “new line” or “new paragraph” to break lines.</string>
+    <string name="v2_vc_replacements">Dictionary and replacements</string>
+    <string name="v2_vc_replacements_help">Fix how names are spelled, or swap a short word for a longer one.</string>
+    <string name="v2_vc_nothing">(nothing)</string>
+    <string name="v2_vc_remove">Remove</string>
+    <string name="v2_vc_remove_named">Remove %1$s</string>
+    <string name="v2_vc_when_i_say">When I say</string>
+    <string name="v2_vc_write">Write</string>
+    <string name="v2_vc_add_replacement">Add replacement</string>
+    <string name="v2_vc_snippets">Voice snippets</string>
+    <string name="v2_vc_snippets_help">Say the phrase and the saved text goes in, for example “insert signature”.</string>
+    <string name="v2_vc_phrase">Phrase</string>
+    <string name="v2_vc_text_to_insert">Text to insert</string>
+    <string name="v2_vc_add_snippet">Add snippet</string>
+    <string name="v2_vc_recent">Recent dictations</string>
+    <string name="v2_vc_recent_help">The last %1$d, kept on this phone only.</string>
+    <string name="v2_vc_recent_none">Nothing dictated yet.</string>
+    <string name="v2_vc_clear_history">Clear history</string>
+    <string name="v2_vc_clear_title">Clear your recent dictations?</string>
+    <string name="v2_vc_clear_body">They are kept only on this phone and can\'t be brought back.</string>
+    <string name="v2_vc_clear">Clear</string>
+    <string name="v2_vc_copy">Copy</string>
+    <string name="v2_vc_copied">Copied</string>
+    <string name="v2_vc_mic_name">Dictation microphone</string>
+</resources>

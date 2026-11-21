@@ -107,7 +107,15 @@ fun pageValue(res: Resources, page: String, s: AppSettings): String? = when (pag
     // The values classic's Settings list shows (SettingsScreens.pageValue), from the same settings, in the screen's language.
     "mic" -> res.getString(if (s.micSource == "mic") R.string.v2_set_value_raw_mic else R.string.v2_set_value_automatic)
 
-    "voice" -> res.getString(if (s.dictationMode == "hold") R.string.v2_set_value_hold_to_talk else R.string.v2_set_value_tap_to_start)
+    "voice" -> res.getString(
+        if (s.dictationMode ==
+            DICTATION_HOLD
+        ) {
+            R.string.v2_set_value_hold_to_talk
+        } else {
+            R.string.v2_set_value_tap_to_start
+        }
+    )
 
     "key" -> res.getString(if (s.plan.transcriptionKey?.set == true) R.string.v2_set_value_added else R.string.v2_set_value_not_added)
 
@@ -186,6 +194,19 @@ fun V2SettingsScreen(
                 "notifications" -> NotificationsPage(settings, vm::updateSettings, r.highlight, back)
 
                 "captions" -> CaptionsPage(settings, vm::updateSettings, r.highlight, back)
+
+                "voice" -> {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    VoicePage(
+                        settings,
+                        vm::updateSettings,
+                        remember {
+                            com.echoledger.mobile.dictation.DictationHistory.of(context)
+                        },
+                        r.highlight,
+                        back
+                    )
+                }
 
                 SettingsTree.SETUP -> setupPage(r.highlight, back)
 
