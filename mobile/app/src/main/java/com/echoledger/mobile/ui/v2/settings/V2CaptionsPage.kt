@@ -33,7 +33,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import com.echoledger.mobile.R
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.CaptionStyle
@@ -99,48 +98,59 @@ fun CaptionsPage(
                         "medium" to stringResource(R.string.v2_cap_medium),
                         "large" to stringResource(R.string.v2_cap_large)
                     ),
-                    style.size
+                    style.size,
+                    Modifier.highlightedIf(highlight == "captions.size")
                 ) { save(style.copy(size = it)) }
                 Choices(
                     stringResource(R.string.v2_cap_lines),
                     CaptionStyle.LINES.map {
                         it to "$it"
                     },
-                    style.lines
+                    style.lines,
+                    Modifier.highlightedIf(highlight == "captions.lines")
                 ) { save(style.copy(lines = it)) }
                 Choices(
                     stringResource(R.string.v2_cap_position),
                     listOf("top" to stringResource(R.string.v2_cap_top), "bottom" to stringResource(R.string.v2_cap_bottom)),
-                    style.position
+                    style.position,
+                    Modifier.highlightedIf(highlight == "captions.position")
                 ) { save(style.copy(position = it)) }
                 Choices(
                     stringResource(R.string.v2_cap_hide),
                     CaptionStyle.AUTO_HIDE.sorted().map { s ->
                         s to if (s == 0) stringResource(R.string.v2_cap_never) else stringResource(R.string.v2_cap_seconds, s)
                     },
-                    style.autoHideSeconds
+                    style.autoHideSeconds,
+                    Modifier.highlightedIf(highlight == "captions.hide")
                 ) { save(style.copy(autoHideSeconds = it)) }
                 val opacityWords = stringResource(R.string.v2_cap_opacity, style.opacity)
-                Text(opacityWords, style = EchoV2.type.label, color = EchoV2.colors.textSecondary, modifier = pad)
-                var opacity by remember(style.opacity) { mutableFloatStateOf(style.opacity.toFloat()) }
-                val c = EchoV2.colors
-                Slider(
-                    value = opacity,
-                    onValueChange = { opacity = it },
-                    onValueChangeFinished = { save(style.copy(opacity = opacity.toInt())) },
-                    valueRange = OPACITY_MIN..OPACITY_MAX,
-                    steps = OPACITY_STEPS,
-                    colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.bgSubtle),
-                    modifier = pad.semantics { contentDescription = opacityWords }
-                )
+                // The slider's own name is the setting's; its value (60 %) is read from the slider itself.
+                val opacityName = stringResource(R.string.v2_cap_opacity_name)
+                Column(Modifier.highlightedIf(highlight == "captions.opacity")) {
+                    Text(opacityWords, style = EchoV2.type.label, color = EchoV2.colors.textSecondary, modifier = pad)
+                    var opacity by remember(style.opacity) { mutableFloatStateOf(style.opacity.toFloat()) }
+                    val c = EchoV2.colors
+                    Slider(
+                        value = opacity,
+                        onValueChange = { opacity = it },
+                        onValueChangeFinished = { save(style.copy(opacity = opacity.toInt())) },
+                        valueRange = OPACITY_MIN..OPACITY_MAX,
+                        steps = OPACITY_STEPS,
+                        colors = SliderDefaults.colors(thumbColor = c.accent, activeTrackColor = c.accent, inactiveTrackColor = c.bgSubtle),
+                        modifier = pad.semantics { contentDescription = opacityName }
+                    )
+                }
                 EchoSwitch(
                     checked = style.compact,
                     onCheckedChange = { save(style.copy(compact = it)) },
                     label = stringResource(R.string.v2_cap_compact),
-                    supporting = stringResource(R.string.v2_cap_compact_help)
+                    supporting = stringResource(R.string.v2_cap_compact_help),
+                    modifier = Modifier.highlightedIf(highlight == "captions.compact")
                 )
-                Swatches(stringResource(R.string.v2_cap_colour_me), style.meColor) { save(style.copy(meColor = it)) }
-                Swatches(stringResource(R.string.v2_cap_colour_client), style.clientColor) { save(style.copy(clientColor = it)) }
+                Column(Modifier.highlightedIf(highlight == "captions.colours")) {
+                    Swatches(stringResource(R.string.v2_cap_colour_me), style.meColor) { save(style.copy(meColor = it)) }
+                    Swatches(stringResource(R.string.v2_cap_colour_client), style.clientColor) { save(style.copy(clientColor = it)) }
+                }
             }
             PageReset("captions", stringResource(R.string.v2_set_page_captions), update)
         }
@@ -150,9 +160,9 @@ fun CaptionsPage(
 /** A label and its choices as chips (one selected). */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun <T> Choices(label: String, options: List<Pair<T, String>>, selected: T, onPick: (T) -> Unit) {
+private fun <T> Choices(label: String, options: List<Pair<T, String>>, selected: T, modifier: Modifier = Modifier, onPick: (T) -> Unit) {
     Column(
-        Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4),
+        modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4),
         verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
     ) {
         Text(label, style = EchoV2.type.label, color = EchoV2.colors.textSecondary)
@@ -166,10 +176,10 @@ private fun <T> Choices(label: String, options: List<Pair<T, String>>, selected:
 
 /** A speaker's colour: the presets as round swatches, the chosen one ticked; each is a radio named by its colour. */
 @Composable
-private fun Swatches(label: String, selected: String?, onSelect: (String?) -> Unit) {
+private fun Swatches(label: String, selected: String?, modifier: Modifier = Modifier, onSelect: (String?) -> Unit) {
     val c = EchoV2.colors
     Column(
-        Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4),
+        modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4),
         verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
     ) {
         Text(label, style = EchoV2.type.label, color = c.textSecondary)
@@ -189,10 +199,8 @@ private fun Swatches(label: String, selected: String?, onSelect: (String?) -> Un
                             CircleShape
                         )
                         .selectable(selected = on, role = Role.RadioButton, onClick = { onSelect(hex) })
-                        .semantics {
-                            contentDescription = "$label: $name"
-                            if (on) stateDescription = name
-                        },
+                        // Selected or not is said by the radio itself.
+                        .semantics { contentDescription = "$label: $name" },
                     contentAlignment = androidx.compose.ui.Alignment.Center
                 ) {
                     if (on) {

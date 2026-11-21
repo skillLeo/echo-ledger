@@ -432,7 +432,8 @@ class VisualReviewTest {
         assertEquals("Automatic", v("mic"))
         assertEquals("Raw microphone", v("mic", base.copy(micSource = "mic")))
         assertEquals("Tap to start", v("voice"))
-        assertEquals("Hold to talk", v("voice", base.copy(dictationMode = "hold")))
+        // The value the voice keyboard and classic's page store (it was "hold" here, a value the app never stores).
+        assertEquals("Hold to talk", v("voice", base.copy(dictationMode = "push_to_talk")))
         assertEquals("Not added", v("key"))
         val withKey = base.copy(plan = base.plan.copy(transcriptionKey = com.echoledger.mobile.data.TranscriptionKeyDto(set = true)))
         assertEquals("Added", v("key", withKey))

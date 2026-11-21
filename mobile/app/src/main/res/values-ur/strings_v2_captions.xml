@@ -14,7 +14,7 @@
     <string name="v2_cap_hide">جب کوئی نہ بولے تو چھپائیں</string>
     <string name="v2_cap_never">کبھی نہیں</string>
     <string name="v2_cap_seconds">%1$d سیکنڈ</string>
-    <string name="v2_cap_opacity">پس منظر کی دھندلاہٹ %1$d%%</string>
+    <string name="v2_cap_opacity">پس منظر کتنا گہرا ہو %1$d%%</string>
     <string name="v2_cap_compact">مختصر کیپشنز</string>
     <string name="v2_cap_compact_help">بولنے والے میں / کلائنٹ کے لیبل کی بجائے رنگ سے دکھائے جاتے ہیں۔</string>
     <string name="v2_cap_colour_me">میرا رنگ</string>
@@ -26,4 +26,10 @@
     <string name="v2_cap_colour_amber">کہربائی</string>
     <string name="v2_cap_colour_rose">گلابی</string>
     <string name="v2_cap_colour_white">سفید</string>
+    <string name="v2_cap_opacity_name">پس منظر کتنا گہرا ہو</string>
+    <string name="v2_cap_colours_name">میرا اور کلائنٹ کا رنگ</string>
+    <string name="v2_cap_size_name">کیپشن کے متن کا سائز</string>
+    <string name="v2_cap_lines_name">کیپشن کی لائنیں</string>
+    <string name="v2_cap_position_name">کیپشن کی جگہ</string>
+    <string name="v2_cap_hide_name">جب کوئی نہ بولے تو کیپشن چھپائیں</string>
 </resources>
