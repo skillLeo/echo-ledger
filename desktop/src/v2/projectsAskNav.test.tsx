@@ -185,6 +185,9 @@ describe("the project page", () => {
     await act(flushAsync);
     expect(screen.getByRole("tab", { name: "Recordings" })).toHaveTextContent("Recordings2");
     expect(screen.getByRole("tab", { name: "Files" })).toHaveTextContent("Files1");
+    // Screen readers hear the count in words with the tab; its name stays the tab's.
+    expect(screen.getByRole("tab", { name: "Recordings" })).toHaveAccessibleDescription("2 recordings");
+    expect(screen.getByRole("tab", { name: "Files" })).toHaveAccessibleDescription("1 file");
     expect(screen.getByRole("tab", { name: "Memory & instructions" }).querySelector(".el-tab__count")).toBeNull();
   });
 
@@ -209,6 +212,33 @@ describe("the project page", () => {
         { category: "enhancement", title: "Brief ready", body: "2026's brief was written again." },
         { category: "enhancement", title: "File read", body: "2026: Proforma.pdf" },
       ]);
+      focus.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("DT-PRJ-023: the same work finishing while the window is in front sends nothing", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "setInterval", "Date"] });
+    try {
+      respond("notification_send", true);
+      const answers = [
+        WS({ brief: { sections: {}, edited: false, status: "working", error: null, generated_at: null, updated_at: null } as never,
+          files: [{ id: "f1", name: "Proforma.pdf", mime: null, size_bytes: 1, pages: 1, status: "extracting", error: null, instructions: false, created_at: null }] }),
+        WS({ brief: { sections: {}, edited: false, status: "ready", error: null, generated_at: null, updated_at: null } as never }),
+      ];
+      respondWith("client_workspace", () => ({ data: answers.length > 1 ? answers.shift()! : answers[0] }));
+      const focus = vi.spyOn(document, "hasFocus").mockReturnValue(true);
+      render(<WorkspaceV2 project={{ id: "c2", name: "2026" }} projects={TREE} onBack={vi.fn()} onOpenRecording={vi.fn()} onLibrary={vi.fn()} />);
+      await act(flushAsync);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(6_000);
+      });
+      await act(flushAsync);
+      // The brief and the file did finish (the page reads them again)…
+      expect(callsOf("client_workspace").length).toBeGreaterThan(1);
+      // …but the person is looking: no notification.
+      expect(callsOf("notification_send")).toEqual([]);
       focus.mockRestore();
     } finally {
       vi.useRealTimers();

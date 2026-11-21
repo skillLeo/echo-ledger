@@ -155,9 +155,9 @@ export function WorkspaceV2({
   // AI notes while they are on for the project and in the plan; a plan without them keeps memory and the brief.
   const aiNotes = aiNotesInPlan && (ws ? ws.client.ai_notes : project.ai_notes !== false);
   // The tabs that list things say how many (classic's): its recordings, its files.
-  const tabs: { value: Tab; label: string; badge?: string | null; count?: number | null }[] = [
-    { value: "recordings", label: "Recordings", count: ownCount },
-    { value: "files", label: "Files", count: ws ? ws.files.length : null },
+  const tabs: { value: Tab; label: string; badge?: string | null; count?: number | null; countLabel?: string }[] = [
+    { value: "recordings", label: "Recordings", count: ownCount, countLabel: ownCount === null ? undefined : ownCount === 1 ? "1 recording" : `${ownCount} recordings` },
+    { value: "files", label: "Files", count: ws ? ws.files.length : null, countLabel: ws ? (ws.files.length === 1 ? "1 file" : `${ws.files.length} files`) : undefined },
     ...(aiNotesInPlan ? [{ value: "ask" as const, label: "Ask" }] : []),
     { value: "memory", label: "Memory & instructions" },
     ...(aiNotes ? [{ value: "notes" as const, label: "Call notes" }] : []),
