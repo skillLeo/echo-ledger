@@ -48,6 +48,7 @@ import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.MicOff
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
@@ -149,6 +150,7 @@ object EchoIcons {
     val Bell: ImageVector get() = Icons.Outlined.Notifications
     val Stop: ImageVector get() = Icons.Outlined.Stop
     val Mic: ImageVector get() = Icons.Outlined.Mic
+    val MicOff: ImageVector get() = Icons.Outlined.MicOff
     val Dictation: ImageVector get() = Icons.Outlined.KeyboardVoice
     val Translate: ImageVector get() = Icons.Outlined.Translate
     val Assist: ImageVector get() = Icons.Outlined.AutoAwesome

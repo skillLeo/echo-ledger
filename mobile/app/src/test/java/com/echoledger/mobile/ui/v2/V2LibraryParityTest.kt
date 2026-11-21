@@ -1,0 +1,223 @@
+package com.echoledger.mobile.ui.v2
+
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import com.echoledger.mobile.testsupport.FakeServer
+import com.echoledger.mobile.testsupport.ScreenTest
+import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.pairLocally
+import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.ui.v2.components.EchoToastHost
+import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
+import com.echoledger.mobile.ui.v2.library.V2LibraryScreen
+import com.echoledger.mobile.ui.v2.library.V2TrashScreen
+import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
+import com.echoledger.mobile.ui.v2.theme.EchoLanguage
+import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * Library rows and tools that classic has and v2 now matches (docs/v2/audit/parity.csv PH-LIB): pull to sync, the
+ * pinned mark, the unopened dot, the project on the meta line, the failed and no-audio lines, each filter chip's ✕,
+ * recent searches, Back leaving search, Trash's restore and erase, and a long library.
+ */
+class V2LibraryParityTest : ScreenTest() {
+    private lateinit var back: OnBackPressedDispatcher
+
+    private fun item(
+        id: String,
+        title: String,
+        extra: String = "",
+        preview: String? = "Thanks for calling about the invoice",
+        finalStatus: String? = "completed",
+        client: String? = "Acme Holdings"
+    ) = ServerFixtures.libraryItem(id, title = title, preview = preview, finalStatus = finalStatus, client = client)
+        .let { if (extra.isEmpty()) it else it.replace("\"updated_at\"", "$extra,\"updated_at\"") }
+
+    private fun seed(rows: List<String>, first: String) {
+        runBlocking { app.pairLocally(server) }
+        server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(rows)))
+        server.on("GET", "/api/search.*", FakeServer.json(200, """{"data":[]}"""))
+        runBlocking { app.graph.library.refresh() }
+        show {
+            back = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                val toasts = rememberEchoToastState()
+                CompositionLocalProvider(LocalEchoToasts provides toasts) {
+                    androidx.compose.foundation.layout.Box {
+                        V2LibraryScreen(vm, initials = "AS", onOpen = {}, onTrash = {}, onAccount = {})
+                        EchoToastHost(toasts)
+                    }
+                }
+            }
+        }
+        pumpUntil("the library") { compose.onAllNodesWithText(first, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    private fun twoRows() = seed(
+        listOf(
+            item("01JA", "Bilal Traders", preview = "New rate for 40 cartons of basmati"),
+            item("01JB", "Rehman and Sons Textiles", finalStatus = null, client = null)
+        ),
+        "Bilal Traders"
+    )
+
+    @Test
+    fun pullingTheListDownSyncsTheLibraryAgain() {
+        twoRows()
+        val before = server.requestsTo("GET", "/api/library").size
+        compose.onNode(hasScrollToIndexAction()).performTouchInput { swipeDown(startY = top + 10f, endY = bottom, durationMillis = 400) }
+        pumpUntil("synced again") { server.requestsTo("GET", "/api/library").size > before }
+    }
+
+    @Test
+    fun aPinnedRowCarriesThePinMarkAndAnUnpinnedOneDoesNot() {
+        seed(listOf(item("01JA", "Bilal Traders", "\"pinned\":true"), item("01JB", "Rehman and Sons Textiles")), "Bilal Traders")
+        compose.onAllNodes(hasContentDescription("Pinned"), useUnmergedTree = true).assertCountEquals(1)
+    }
+
+    @Test
+    fun anUnopenedRowSaysSoUntilItIsOpened() {
+        seed(
+            listOf(item("01JA", "Bilal Traders", "\"opened\":false"), item("01JB", "Rehman and Sons Textiles", "\"opened\":true")),
+            "Bilal Traders"
+        )
+        val notOpened = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Not opened yet")
+        compose.onAllNodes(notOpened).assertCountEquals(1)
+        compose.onNode(notOpened and hasText("Bilal Traders", substring = true)).assertExists()
+        compose.onNodeWithText("Bilal Traders", substring = true).performClick()
+        pumpUntil("marked opened") { server.requestsTo("POST", "/api/sessions/01JA/opened").isNotEmpty() }
+    }
+
+    @Test
+    fun theMetaLineHasTheProjectThenWhatWasSaid() {
+        twoRows()
+        compose.onNodeWithText("Acme Holdings · New rate for 40 cartons of basmati", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun aFailedRowSaysTapToRetryAndARowWithNothingHeardSaysNoAudio() {
+        val noAudio = item("01JB", "Rehman and Sons Textiles", finalStatus = "failed")
+            .replace("\"live_available\"", "\"final_error_code\":\"no_audio\",\"live_available\"")
+        seed(listOf(item("01JA", "Bilal Traders", finalStatus = "failed"), noAudio), "Bilal Traders")
+        compose.onNodeWithText("Transcription failed · Tap to retry", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("No audio", useUnmergedTree = true).assertExists()
+        // The failure line takes the meta line's place.
+        compose.onAllNodesWithText("Thanks for calling about the invoice", substring = true, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun eachAppliedFilterChipHasItsOwnClear() {
+        twoRows()
+        compose.onAllNodes(hasContentDescription("Clear Views")).assertCountEquals(0)
+        compose.onNodeWithText("Views ▾").performClick()
+        compose.onNode(hasText("Untranscribed") and isToggleable()).performClick()
+        compose.onNodeWithText("Apply").performClick()
+        compose.onNodeWithText("Bilal Traders", substring = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Clear Views").performClick()
+        compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
+        compose.onAllNodes(hasContentDescription("Clear Views")).assertCountEquals(0)
+    }
+
+    @Test
+    fun aSearchIsKeptOnThisPhoneAndATapSearchesAgain() {
+        twoRows()
+        val field = compose.onNode(hasSetTextAction())
+        field.performClick()
+        field.performTextInput("basmati")
+        field.performImeAction()
+        pumpUntil("kept") { vm.settings.value.recentSearches == listOf("basmati") }
+        // Back leaves search: the words go, the list comes back, and they wait under Recent searches.
+        compose.runOnIdle { back.onBackPressed() }
+        compose.onNodeWithText("Rehman and Sons Textiles", substring = true).assertExists()
+        field.performClick()
+        compose.onNodeWithText("Recent searches").assertExists()
+        compose.onNode(hasText("basmati") and hasClickAction()).performClick()
+        compose.onNodeWithText("Rehman and Sons Textiles", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
+    }
+
+    @Test
+    fun backLeavesSearchAndKeepsTheWords() {
+        twoRows()
+        val field = compose.onNode(hasSetTextAction())
+        field.performClick()
+        field.performTextInput("Rehman")
+        compose.onNodeWithText("Bilal Traders", substring = true).assertDoesNotExist()
+        compose.runOnIdle { assertTrue("Back is taken by search", back.hasEnabledCallbacks()) }
+        compose.runOnIdle { back.onBackPressed() }
+        compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
+        pumpUntil("kept") { vm.settings.value.recentSearches == listOf("Rehman") }
+        compose.onNode(hasSetTextAction()).assert(hasText("Rehman", substring = true).not())
+    }
+
+    @Test
+    fun aLongLibraryDrawsOnlyTheRowsInView() {
+        val rows = (1..2000).map { n ->
+            val id = "01K" + n.toString().padStart(5, '0')
+            item(id, "Caller ${n.toString().padStart(4, '0')}", preview = "Line $n", client = null)
+        }
+        seed(rows, "Caller")
+        val drawn = compose.onAllNodesWithText("Caller ", substring = true).fetchSemanticsNodes().size
+        assertTrue("drawn $drawn of 2000", drawn in 1..60)
+        assertEquals(2000, vm.library.value.count { !it.deleted })
+    }
+
+    @Test
+    fun trashRestoresAndErasesOnlyAfterAsking() {
+        runBlocking { app.pairLocally(server) }
+        server.on(
+            "GET",
+            "/api/bin",
+            FakeServer.json(
+                200,
+                """{"data":[{"id":"01JT","title":"Old call","started_at":"2026-11-05T10:15:00+00:00","deleted_at":"2026-11-06T18:28:34+00:00","erase_at":"2026-11-08T18:28:34+00:00"}]}"""
+            )
+        )
+        server.on("POST", "/api/sessions/01JT/restore", FakeServer.empty(204))
+        server.on("DELETE", "/api/bin/01JT", FakeServer.empty(204))
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        show { EchoV2Theme(darkTheme = false, language = EchoLanguage.English) { V2TrashScreen(vm, configKeepHours = 48, onBack = {}) } }
+        pumpUntil("trash") { compose.onAllNodesWithText("Old call").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Deleted recordings stay here for 48 hours", substring = true).assertExists()
+        compose.onNodeWithText("Erased on", substring = true, useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Old call").performClick()
+        compose.onNodeWithText("Erase now").performClick()
+        compose.onNodeWithText("Erase this recording now?").assertExists()
+        assertTrue(server.requestsTo("DELETE", "/api/bin/01JT").isEmpty())
+        compose.onNodeWithText("Cancel").performClick()
+        assertTrue(server.requestsTo("DELETE", "/api/bin/01JT").isEmpty())
+        compose.onNodeWithText("Old call").performClick()
+        compose.onNodeWithText("Erase now").performClick()
+        compose.onAllNodes(hasText("Erase now") and hasClickAction()).onFirst().performClick()
+        pumpUntil("erased") { server.requestsTo("DELETE", "/api/bin/01JT").isNotEmpty() }
+        pumpUntil("listed again") { compose.onAllNodesWithText("Old call").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Old call").performClick()
+        compose.onNodeWithText("Restore").performClick()
+        pumpUntil("restored") { server.requestsTo("POST", "/api/sessions/01JT/restore").isNotEmpty() }
+    }
+}

@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -248,6 +249,14 @@ fun V2LibraryScreen(
             vm.updateSettings { it.copy(libraryViews = it.libraryViews + (viewKey to change)) }
         }
     }
+    // The last five searches, kept on this phone across restarts (classic's recentSearches, never in a settings export).
+    fun keepSearch(words: String) {
+        val w = words.trim()
+        if (w.isEmpty()) return
+        vm.updateSettings { s ->
+            s.copy(recentSearches = (listOf(w) + s.recentSearches.filterNot { it.equals(w, ignoreCase = true) }).take(5))
+        }
+    }
     V2LibraryContent(
         state = state,
         query = query,
@@ -259,6 +268,7 @@ fun V2LibraryScreen(
             if (ticked.isNotEmpty()) {
                 pick(listOf(it.id), off = it.id in picked)
             } else {
+                keepSearch(query)
                 vm.markOpened(it.item)
                 onOpen(it.item)
             }
@@ -308,7 +318,12 @@ fun V2LibraryScreen(
             onSelect = { visible.firstOrNull()?.let { picked = setOf(it.id) } },
             onPin = { row -> scope.launch { vm.bulk(listOf(row.id), if (row.item.pinned) "unpin" else "pin") } },
             matches = found,
-            onOpenAt = { m -> onOpenAt(m.row.item, m.atMs) }
+            onOpenAt = { m ->
+                keepSearch(query)
+                onOpenAt(m.row.item, m.atMs)
+            },
+            recent = settings.recentSearches,
+            onKeepSearch = ::keepSearch
         )
     )
 }
@@ -344,7 +359,11 @@ class LibraryTools(
     val onSelect: () -> Unit,
     val onPin: (V2Row) -> Unit,
     val matches: List<TranscriptMatch>,
-    val onOpenAt: (TranscriptMatch) -> Unit
+    val onOpenAt: (TranscriptMatch) -> Unit,
+    /** The last five searches on this phone (classic's), offered while the search field is focused and empty. */
+    val recent: List<String> = emptyList(),
+    /** Keeps a search among [recent]: on the keyboard's Search, on leaving search, on opening what it found. */
+    val onKeepSearch: (String) -> Unit = {}
 )
 
 /** LibraryGrouping's fixed English names in the screen's language. */
@@ -394,6 +413,16 @@ fun V2LibraryContent(
     var actionsFor by remember { mutableStateOf<V2Row?>(null) }
     var menu by remember { mutableStateOf(false) }
     val selecting = tools != null && tools.selected.isNotEmpty()
+    var searchFocused by remember { mutableStateOf(false) }
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+
+    // Leaving search (Back while searching, as classic's back arrow): keeps the words among the recent ones and clears them.
+    fun leaveSearch() {
+        tools?.onKeepSearch?.invoke(query)
+        onQuery("")
+        focus.clearFocus(force = true)
+    }
+    androidx.activity.compose.BackHandler(enabled = !selecting && (searchFocused || query.isNotEmpty())) { leaveSearch() }
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         if (selecting) {
             tools!!.selectionBar()
@@ -457,7 +486,13 @@ fun V2LibraryContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
             ) {
-                EchoSearchField(query, onQuery, text.searchRecordings, Modifier.weight(1f))
+                EchoSearchField(
+                    query,
+                    onQuery,
+                    text.searchRecordings,
+                    Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused },
+                    onSearch = { tools?.onKeepSearch?.invoke(it) }
+                )
                 tools?.let { EchoIconButton(EchoIcons.Sort, stringResource(R.string.v2_lib_sort_group), it.onSortGroup) }
             }
             if (tools != null) {
@@ -488,6 +523,18 @@ fun V2LibraryContent(
             ) {
                 LazyColumn(Modifier.fillMaxSize(), state = listState) {
                     if (extras != null && !selecting) item(key = "extras-top") { extras.top() }
+                    val recent = tools?.recent.orEmpty()
+                    if (searchFocused && query.isEmpty() && recent.isNotEmpty()) {
+                        item(key = "h-recent") { SearchHeader(stringResource(R.string.v2_lib_recent_searches)) }
+                        items(recent, key = { "recent-$it" }) { words ->
+                            EchoListRow(
+                                title = words,
+                                leading = { androidx.compose.material3.Icon(EchoIcons.Search, null, tint = c.textSecondary) },
+                                onClickLabel = text.searchRecordings,
+                                onClick = { onQuery(words) }
+                            )
+                        }
+                    }
                     if (state.offline) {
                         item {
                             EchoBanner(
@@ -611,11 +658,13 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
     val c = EchoV2.colors
     val text = v2Text
     val pinned = stringResource(R.string.v2_lib_pinned_mark)
+    val problem = rowProblem(row)
     EchoListRow(
         title = row.title,
         // A selected row is tinted all across, as classic's is.
         modifier = if (selected == true) Modifier.background(c.accentSoft) else Modifier,
-        meta = row.meta,
+        // A failed transcript or one with nothing heard says so in place of the meta line, as classic's row does.
+        meta = if (problem != null) null else row.meta,
         titleEnd = row.time,
         metaEnd = {
             // The screens icon and count (meeting assets) before the length, when it has any.
@@ -634,7 +683,7 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
                 Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary, maxLines = 1, softWrap = false)
             }
         },
-        status = statusBadge(row.status, text),
+        status = problem ?: statusBadge(row.status, text),
         leading = {
             if (selected != null) {
                 androidx.compose.material3.Checkbox(selected, null)
@@ -643,10 +692,42 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
             }
         },
         tall = !compact,
+        // Not opened yet (opened false; an older server says nothing): the accent dot and a semibold title, as classic.
+        unread = row.item.opened == false,
+        unreadLabel = stringResource(R.string.v2_lib_not_opened),
+        plainTitle = row.item.opened == true,
         onLongClickLabel = stringResource(R.string.v2_lib_select),
         onLongClick = onLongClick,
         onClick = onOpen
     )
+}
+
+/**
+ * A failed row's line, "Transcription failed · Tap to retry" in red with the alert icon (a tap opens the recording,
+ * where Try again is), or "No audio" with the muted microphone when nothing was heard; null for every other row.
+ */
+private fun rowProblem(row: V2Row): (@Composable () -> Unit)? {
+    if (row.status != RowStatus.Failed) return null
+    val noAudio = row.item.transcript?.finalErrorCode == "no_audio"
+    return {
+        val c = EchoV2.colors
+        val tint = if (noAudio) c.textSecondary else c.danger
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
+            androidx.compose.material3.Icon(
+                if (noAudio) EchoIcons.MicOff else EchoIcons.Error,
+                null,
+                Modifier.size(EchoTokens.Icon.sm),
+                tint = tint
+            )
+            Text(
+                stringResource(if (noAudio) R.string.v2_lib_row_no_audio else R.string.v2_lib_row_failed),
+                style = EchoV2.type.meta,
+                color = tint,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+            )
+        }
+    }
 }
 
 /** At most one badge per row: only what needs attention. */

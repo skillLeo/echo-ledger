@@ -85,10 +85,12 @@ object LibraryModel {
 
     fun isToday(item: LibraryItem, now: ZonedDateTime): Boolean = started(item, now.zone)?.toLocalDate() == now.toLocalDate()
 
-    /** One meta line: what was said, else the project, else where it came from. */
-    fun meta(item: LibraryItem, source: String): String = item.transcript?.preview?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim()
-        ?: item.client?.name
-        ?: source
+    /** One meta line: the project, then what was said ("Acme · New rate for…"); else where it came from. */
+    fun meta(item: LibraryItem, source: String): String {
+        val said = item.transcript?.preview?.lineSequence()?.firstOrNull { it.isNotBlank() }?.trim()
+        val project = item.client?.name?.takeIf { it.isNotBlank() }
+        return listOfNotNull(project, said).joinToString(" · ").ifEmpty { source }
+    }
 
     fun row(item: LibraryItem, now: ZonedDateTime, text: V2Text, locale: Locale): V2Row {
         val app = SourceApp.from(item.sourceApp)

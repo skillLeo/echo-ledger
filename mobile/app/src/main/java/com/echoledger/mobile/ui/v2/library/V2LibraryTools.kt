@@ -445,7 +445,14 @@ fun LibraryFilterRow(
         chips.forEach { chip ->
             val n = count(chip)
             val name = chipName(chip)
-            EchoChip(if (n > 0) stringResource(R.string.v2_lib_with_count, name, n) + " ▾" else "$name ▾", n > 0, { open = chip })
+            EchoChip(
+                if (n > 0) stringResource(R.string.v2_lib_with_count, name, n) + " ▾" else "$name ▾",
+                n > 0,
+                { open = chip },
+                // An applied chip's ✕ clears only its own choices.
+                onClear = if (n > 0) ({ onChange(clearChip(chip, filters)) }) else null,
+                clearLabel = stringResource(R.string.v2_lib_clear_chip, name)
+            )
         }
         if (filters.count > 0) {
             Text(
