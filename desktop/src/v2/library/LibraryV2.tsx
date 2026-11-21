@@ -5,7 +5,8 @@
 // Lists (D14, lists.tsx): the chip row under the search shows All, Unread, Important or one of the person's lists.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult } from "../../lib/ipc";
+import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
+import { folderLabel, inFolderHere } from "../../lib/folders";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
@@ -74,13 +75,17 @@ export type LibraryV2Props = {
   reviewRequest?: { seq: number } | null;
   /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
   viewRequest?: { view: SavedView; seq: number } | null;
+  /** A smart folder of the sidebar (classic's: the Inbox, an app, Voice notes, Imported); null for every recording. */
+  folder?: SmartFolder | null;
+  /** The folder's way back to every recording (its chip's ×, Clear all). */
+  onFolder?: (folder: SmartFolder | null) => void;
   /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
   top?: Omit<LibraryTopProps, "items" | "onAction"> & { onActivity: () => void };
   /** Opens a project (the recording page's project name). */
   onOpenProject?: (id: string) => void;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject, folder = null, onFolder }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -247,7 +252,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
    */
   const listOf = (all: readonly LibraryItem[] | null) => {
     if (!all || view === "trash") return { groups: [], rows: [] as LibraryItem[], matching: 0 };
-    const inThis = applyFilters(all.filter((i) => inView(i, view as ListView) && inPlace(i, place, readHere)), filters);
+    const inThis = applyFilters(all.filter((i) => inView(i, view as ListView) && inPlace(i, place, readHere) && inFolder(i)), filters);
     const groups = sections(searchItems(inThis, query), choice.group, choice.sort, opened, view !== "pinned");
     return { groups, rows: groups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.items), matching: groups.reduce((n, g) => n + g.items.length, 0) };
   };
@@ -257,6 +262,24 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       setView(viewRequest.view);
     }
   }, [viewRequest]);
+  // A smart folder: what this computer can tell (the Inbox, an app's calls), else the server's list (Imported).
+  const [folderIds, setFolderIds] = useState<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    setFolderIds(null);
+    if (!folder) return;
+    setOpenId(null);
+    setView("all");
+    let live = true;
+    api.libraryFolder(folder).then((list) => live && setFolderIds(new Set(list.filter((i) => !i.deleted).map((i) => i.id)))).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [folder]);
+  const inFolder = (i: LibraryItem) => {
+    if (!folder) return true;
+    if (folderIds) return folderIds.has(i.id);
+    return inFolderHere(i, folder) ?? false;
+  };
   useEffect(() => {
     if (openRequest) {
       setView("all");
@@ -479,7 +502,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const counts = items ? viewCounts(items) : null;
   const { groups, rows: shown, matching } = useMemo(() => listOf(items),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, view, filters, query, choice, opened, collapsed, place, readHere]);
+    [items, view, filters, query, choice, opened, collapsed, folder, folderIds, place, readHere]);
   // What the filters offer: the recordings of this view before the filters, so a tick never hides its own choice.
   // Worked out once per change, for the chips' menus and their words alike.
   const options = useMemo(() => {
@@ -692,6 +715,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
   const clearAll = () => {
+    onFolder?.(null);
     setFilters({});
     setQuery("");
     setView("all");
@@ -700,6 +724,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   // A list chip with nothing in it (and nothing else narrowing the list) says how to fill it.
   const inList = place.startsWith("list:") && view === "all" && !query && !filtersOn;
   const subtitle = view === "trash" || !counts ? null
+    : folder ? `${recordingsWord(matching)} in ${folderLabel(folder)}`
     : view === "all" && !filtersOn && !query ? `${recordingsWord(counts.all)} from your phone, this computer and the web.`
       : `${recordingsWord(matching)} shown`;
 
@@ -784,7 +809,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                 button={{ variant: "quiet", icon: Icons.SortIcon, title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
             </div>
           )}
-          <FilterBar label="Filter recordings" end={(filtersOn > 0 || (view !== "all" && view !== "trash")) && (
+          <FilterBar label="Filter recordings" end={(filtersOn > 0 || !!folder || (view !== "all" && view !== "trash")) && (
             <Button variant="quiet" size="sm" onClick={clearAll}>Clear all</Button>
           )}>
             {view !== "trash" && found.length > 0 && (
@@ -818,6 +843,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
               <Chip label="All recordings" onToggle={() => setView("all")} />
             ) : (
               <>
+                {folder && <Chip label={folderLabel(folder)} selected onRemove={() => onFolder?.(null)} removeLabel={`Show every recording, not only ${folderLabel(folder)}`} />}
                 <Menu label="Views" items={viewMenu} chip={{ text: view === "all" ? "Views" : VIEW_NAMES[view as ListView], on: view !== "all" }} />
                 {FILTER_KEYS.map((key) => {
                   const menuItems = filterMenu(key);

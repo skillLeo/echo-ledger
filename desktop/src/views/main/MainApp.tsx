@@ -453,7 +453,7 @@ export default function MainApp() {
   const [settingsSection, setSettingsSection] = useState<{ id: string; seq: number } | null>(null);
   /** Counts the times Settings was pressed again while open: the v2 Settings starts again from its list. */
   const [settingsVisit, setSettingsVisit] = useState(0);
-  const [libraryViewV2, setLibraryViewV2] = useState<{ view: "untranscribed"; seq: number } | null>(null);
+  const [libraryViewV2, setLibraryViewV2] = useState<{ view: "untranscribed" | LibraryViewKey | "all"; seq: number } | null>(null);
   /** Activity's Review: the new Library with its waiting recordings open. */
   const [reviewV2, setReviewV2] = useState<{ seq: number } | null>(null);
   useEffect(() => {
@@ -642,6 +642,8 @@ export default function MainApp() {
     setLibraryFolder(null);
     setLibraryView(view);
     setSharedFocus(null);
+    // The new design's Library has these views itself (Views ▾): the sidebar's place opens it there.
+    setLibraryViewV2({ view: view ?? "all", seq: ++navigations.current });
   };
   const openPlace = (place: LibraryPlace) => (place.view ? openLibraryView(place.view) : openFolder(place.folder));
   const openRecording = (id: string, ms = 0) => {
@@ -761,6 +763,7 @@ export default function MainApp() {
       {tab === "library" && ui.flags["ui_v2.library"] && (
         <Suspense fallback={null}>
           <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} reviewRequest={reviewV2}
+            folder={libraryFolder === "shared" ? null : libraryFolder} onFolder={openFolder}
             onOpenProject={(id) => openProject(id)}
             top={ui.flags["ui_v2.shell"] ? {
               status, onRecord: canRecord && !status.recording ? record : undefined, onActivity: () => goTo("activity"),
@@ -909,6 +912,14 @@ export default function MainApp() {
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
             shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
             onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={() => setHelp(true)}
+            places={{
+              // Classic's sidebar form: no All, the places that hold something, the Inbox always (it takes drops). Shared
+              // with me is Shared's own, under Library.
+              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView)))
+                .map((p) => ({ key: p.key, label: p.label, count: p.count, drop: p.drop })),
+              current: libraryFolder ?? libraryView ?? null,
+              open: (key) => { const p = places.find((x) => x.key === key); if (p) openPlace(p); },
+            }}
             onAdmin={account?.super_admin === true ? () => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true)) : undefined}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
             notices={<Suspense fallback={null}><div className="el-root el-embedded">

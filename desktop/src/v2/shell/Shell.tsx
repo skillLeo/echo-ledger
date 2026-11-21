@@ -79,6 +79,11 @@ export type ShellProps = {
   onHelp?: () => void;
   /** The super admin's Admin panel on the website (classic's avatar menu); none for everyone else. */
   onAdmin?: () => void;
+  /**
+   * The Library's places under Library (classic's sidebar): Waiting, Pinned and Failed uploads, then the smart folders
+   * that hold something (the Inbox always: it takes dropped recordings), each with its count.
+   */
+  places?: { places: readonly SidebarPlace[]; current: string | null; open: (key: string) => void };
   /** The sub-lists, as classic's sidebar: pinned projects under Projects, Shared's places under Library. */
   pinnedProjects?: readonly { id: string; name: string }[];
   projectId?: string | null;
@@ -88,7 +93,10 @@ export type ShellProps = {
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, onAdmin, pinnedProjects = [], projectId = null, onProject, shared, children }: ShellProps) {
+/** A place of the Library in the sidebar: its key, words and count; `drop` takes dropped recordings (the Inbox). */
+export type SidebarPlace = { key: string; label: string; count: number; drop?: boolean };
+
+export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, onAdmin, places, pinnedProjects = [], projectId = null, onProject, shared, children }: ShellProps) {
   // One press records or stops: while that is under way (the core answering, then the status saying so) more presses
   // and held-down keys do nothing, so a double click never starts and stops at once.
   const [pressing, setPressing] = useState<{ from: boolean } | null>(null);
@@ -188,6 +196,20 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
           ]} />
         </div>
         {item("library", "Library", Icons.LibraryIcon)}
+        {places && places.places.length > 0 && (
+          <ul className="el-nav-sub" aria-label="Library places">
+            {places.places.map((p) => (
+              <li key={p.key} {...(p.drop ? { [DROP_ATTRIBUTE]: "" } : {})}>
+                <button type="button" className="el-nav-item el-nav-item--sub el-nav-item--place" aria-label={`${p.label}, ${p.count}`}
+                  aria-current={current === "library" && places.current === p.key ? "page" : undefined}
+                  onClick={() => { setOwn(null); places.open(p.key); }}>
+                  <span className="el-nav-item__label" dir="auto">{p.label}</span>
+                  <span className="el-nav-item__count el-caption el-num">{p.count}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {shared && shared.tabs.length > 0 && (
           <ul className="el-nav-sub" aria-label="Shared">
             {shared.tabs.map(([tab, label]) => (
@@ -199,9 +221,9 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
         {item("projects", "Projects", Icons.FolderIcon)}
         {/* While recordings are dragged (lib/dragMove.ts): the Inbox takes them out of their project. Pinned projects
             below take them too. Hidden otherwise; Move to project… is the way for the keyboard. */}
-        <div className="el-nav-drop" aria-hidden="true" {...{ [DROP_ATTRIBUTE]: "" }}>
+        {!places?.places.some((p) => p.drop) && <div className="el-nav-drop" aria-hidden="true" {...{ [DROP_ATTRIBUTE]: "" }}>
           <Icon icon={Icons.InboxIcon} /><span>Inbox (no project)</span>
-        </div>
+        </div>}
         {onProject && pinnedProjects.length > 0 && (
           <ul className="el-nav-sub" aria-label="Pinned projects">
             {pinnedProjects.map((p) => (

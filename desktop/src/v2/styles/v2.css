@@ -1398,3 +1398,7 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-nav-drop { display: none; align-items: center; gap: var(--el-space-8); margin-inline: var(--el-space-8); padding: var(--el-space-8); border: var(--el-border-hairline) dashed var(--el-role-border-strong); border-radius: var(--el-radius-sm); color: var(--el-role-text-secondary); }
 .dragging-recordings .el-nav-drop { display: flex; }
 .el-shell [data-drop-project].drop-over { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+
+/* The Library's places under Library in the sidebar (parity DT-NAV-003, DT-LIB-115..117), each with its count. */
+.el-nav-item--place { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
+.el-nav-item--place .el-nav-item__count { color: var(--el-role-text-secondary); }
