@@ -50,6 +50,16 @@ final class ScriptWords
         return $out === [] ? "''" : implode(' + ', $out);
     }
 
+    /**
+     * A number with its unit ("8.0 MB") as an expression drawn left to right in one piece inside a right-to-left
+     * sentence (LRI … PDI, D4 §5, D11): B8's translator cannot see a value the page script makes. English is the
+     * expression itself, so the script stays the same.
+     */
+    public static function ltr(string $expression): string
+    {
+        return ConsoleV2::rtl() ? "'\u{2066}' + (".$expression.") + '\u{2069}'" : $expression;
+    }
+
     /** A name inside a sentence, as an expression isolated in right to left so the sentence keeps the page's direction (W-209, D4 §4). */
     public static function name(string $expression): string
     {
