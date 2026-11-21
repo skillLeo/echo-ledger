@@ -74,7 +74,7 @@ fun EchoDialogContent(
         shape = RoundedCornerShape(PhoneDialogRadius),
         color = c.bgOverlay,
         contentColor = c.textPrimary,
-        shadowElevation = EchoTokens.Space.s16
+        shadowElevation = EchoTokens.Elevation.modal
     ) {
         Column(
             Modifier.padding(
@@ -138,7 +138,7 @@ fun EchoSheetContent(title: String?, onClose: () -> Unit, modifier: Modifier = M
         shape = RoundedCornerShape(topStart = EchoTokens.Component.sheetRadius, topEnd = EchoTokens.Component.sheetRadius),
         color = c.bgOverlay,
         contentColor = c.textPrimary,
-        shadowElevation = EchoTokens.Space.s16
+        shadowElevation = EchoTokens.Elevation.modal
     ) {
         Column {
             SheetHandle()

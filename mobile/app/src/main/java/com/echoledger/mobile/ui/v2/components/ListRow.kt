@@ -56,6 +56,8 @@ fun EchoListRow(
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     tall: Boolean = false,
+    /** Not read yet (Activity): a dot in the accent just before the title, as classic has it. */
+    unread: Boolean = false,
     onClickLabel: String? = null,
     onLongClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
@@ -89,6 +91,13 @@ fun EchoListRow(
         leading?.invoke()
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                if (unread) {
+                    Box(
+                        Modifier
+                            .size(EchoTokens.Component.statusDotSize)
+                            .background(c.accent, CircleShape)
+                    )
+                }
                 // From 150 % text a title takes two lines, so it says more than a few letters beside the time.
                 Text(
                     title,
@@ -199,6 +208,12 @@ fun EchoAvatar(modifier: Modifier = Modifier, icon: ImageVector? = null, initial
             }
         }
     }
+}
+
+/** A person's avatar: their initials, or the person icon when there is no name (never a "?", which reads as Help). */
+@Composable
+fun EchoPersonAvatar(initials: String, modifier: Modifier = Modifier) {
+    if (initials.isBlank()) EchoAvatar(modifier, icon = EchoIcons.Person) else EchoAvatar(modifier, initials = initials)
 }
 
 /** A group heading in a list (Settings groups, Library days). Marked as a heading for screen readers. */

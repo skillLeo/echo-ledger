@@ -8,11 +8,13 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.automirrored.outlined.PhoneCallback
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AllInclusive
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.AutoDelete
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
@@ -181,4 +183,13 @@ object EchoIcons {
     val SettingsLanguage: ImageVector get() = Icons.Outlined.Translate
     val SettingsProfile: ImageVector get() = Icons.Outlined.ManageAccounts
     val SettingsPlan: ImageVector get() = Icons.Outlined.CreditCard
+
+    /** A person's avatar when there is no name to take initials from (never a "?"). */
+    val Person: ImageVector get() = Icons.Outlined.Person
+
+    /** Allow auto clean-up: the recording may go by the retention rules again. */
+    val AutoClean: ImageVector get() = Icons.Outlined.AutoDelete
+
+    /** Auto-record calls (the Record sheet); mirrors in right to left. */
+    val AutoRecordCalls: ImageVector get() = Icons.AutoMirrored.Outlined.PhoneCallback
 }
