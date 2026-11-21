@@ -122,6 +122,12 @@ describe("the recording page's engine and versions", () => {
     expect(screen.queryByTestId("backup-engine")).toBeNull();
   });
 
+  it("DT-REC-037: a backup engine's transcript being transcribed again has no backup line", async () => {
+    await open(call({ status: "processing" }, { final_status: "processing" }), makeTranscript({ id: "tr-bilal", backup_engine: true }));
+    expect(screen.queryByTestId("backup-engine")).toBeNull();
+    expect(screen.getByRole("list", { name: "Progress" })).toBeInTheDocument();
+  });
+
   it("DT-REC-044: after Re-transcribe as, Current / Previous (Urdu) switches the transcript shown", async () => {
     respondWith("transcript_detail", ({ id }) => (id === "tr-old"
       ? makeTranscript({ id: "tr-old", language: "ur", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 2000, text: "Purana transcript." }] })

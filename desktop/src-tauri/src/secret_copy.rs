@@ -52,44 +52,65 @@ pub fn clear_if_unchanged(board: &mut impl Board, put: u64) -> Outcome {
 /// The counters read after each copy that may still be on the clipboard: what a lock, a sign-out or a quit empties.
 /// Each copy's counter is its own entry, so two copies at once never lose one; the clipboard's counter decides which
 /// one it still holds.
-static PENDING: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+static PENDING: std::sync::Mutex<Pending> = std::sync::Mutex::new(Pending { puts: Vec::new(), clears: 0 });
 
-fn pending() -> std::sync::MutexGuard<'static, Vec<u64>> {
+/// The copies still to empty, and how many times they were all taken to be emptied (a lock, a sign-out, a quit).
+struct Pending {
+    puts: Vec<u64>,
+    clears: u64,
+}
+
+fn pending() -> std::sync::MutexGuard<'static, Pending> {
     PENDING.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 /// Remembers `put` as a copy to empty.
 pub fn remember(put: u64) {
     let mut all = pending();
-    if !all.contains(&put) {
-        all.push(put);
+    if !all.puts.contains(&put) {
+        all.puts.push(put);
     }
 }
 
-/// Writes to the clipboard and remembers the copy under the one lock [`take_all`] takes: a lock, a sign-out or a quit
-/// that comes while the codes are being copied finds them remembered (it waits for the write), never on the clipboard
-/// and forgotten.
-pub fn put_remembered<E>(write: impl FnOnce() -> Result<u64, E>) -> Result<u64, E> {
-    let mut all = pending();
+/// Writes to the clipboard and remembers the copy. The lock is never held while writing: on Windows emptying the
+/// clipboard waits on its last owner, the main window, which may itself be taking the lock to empty the copies (a
+/// quit). Instead the write notes how many clears had happened when it began; when one came while it wrote, that clear
+/// could not see this copy, so the writer empties it itself (`clear`) and keeps it pending only if the clipboard was
+/// busy.
+pub fn put_remembered<E>(write: impl FnOnce() -> Result<u64, E>, clear: impl FnOnce(u64) -> Outcome) -> Result<u64, E> {
+    let began = pending().clears;
     let put = write()?;
-    if !all.contains(&put) {
-        all.push(put);
+    let overtaken = {
+        let mut all = pending();
+        if all.clears == began {
+            if !all.puts.contains(&put) {
+                all.puts.push(put);
+            }
+            false
+        } else {
+            true
+        }
+    };
+    if overtaken {
+        settle(put, clear(put));
     }
     Ok(put)
 }
 
 /// Every copy still to empty, taken all at once (a lock, a sign-out, a quit).
 pub fn take_all() -> Vec<u64> {
-    std::mem::take(&mut *pending())
+    let mut all = pending();
+    all.clears += 1;
+    std::mem::take(&mut all.puts)
 }
 
 /// What happened to one copy: it stays pending only when the clipboard could not be emptied (it was busy), and goes
 /// otherwise (emptied now, or something else was copied since).
 pub fn settle(put: u64, outcome: Outcome) {
     let mut all = pending();
-    all.retain(|&p| p != put);
+    all.puts.retain(|&p| p != put);
     if outcome == Outcome::Failed {
-        all.push(put);
+        all.puts.push(put);
     }
 }
 
@@ -122,7 +143,7 @@ where
         if attempt > 0 {
             tokio::time::sleep(gap).await;
             // A lock or a sign-out meanwhile already settled it: nothing left for the wait to do.
-            if !pending().contains(&put) {
+            if !pending().puts.contains(&put) {
                 return outcome;
             }
         }
@@ -177,7 +198,9 @@ mod platform {
 
     pub async fn put(app: &AppHandle, text: String) -> Result<u64, String> {
         let owner = owner(app);
-        tauri::async_runtime::spawn_blocking(move || super::put_remembered(|| put_now(owner, &text)).map_err(|e| e.to_string()))
+        // The clipboard is opened and filled with the copies' lock released (put_remembered): a quit taking the lock on
+        // the main thread meanwhile is never waited on by this write, nor this write by it.
+        tauri::async_runtime::spawn_blocking(move || super::put_remembered(|| put_now(owner, &text), |put| clear_blocking(owner, put)).map_err(|e| e.to_string()))
             .await
             .map_err(|e| e.to_string())?
     }
@@ -320,7 +343,7 @@ mod platform {
                 let written = pasteboard.setString_forType(&NSString::from_str(&text), string_type)
                     && pasteboard.setString_forType(&NSString::from_str(""), &NSString::from_str(CONCEALED));
                 if written { Ok(pasteboard.changeCount() as u64) } else { Err(()) }
-            });
+            }, |put| super::clear_if_unchanged(&mut Pasteboard(NSPasteboard::generalPasteboard()), put));
             let _ = tx.send(put.ok());
         })
         .map_err(|e| e.to_string())?;
@@ -370,7 +393,10 @@ mod platform {
     }
 
     pub async fn put(app: &AppHandle, text: String) -> Result<u64, String> {
-        super::put_remembered(|| app.clipboard().write_secret(text.clone()).map(|_| digest(&text)).map_err(|e| e.to_string()))
+        super::put_remembered(
+            || app.clipboard().write_secret(text.clone()).map(|_| digest(&text)).map_err(|e| e.to_string()),
+            |put| super::clear_if_unchanged(&mut Clipboard(app), put),
+        )
     }
 
     pub async fn clear_if_unchanged(app: &AppHandle, put: u64) -> super::Outcome {
@@ -528,7 +554,7 @@ mod tests {
 
         /// A copy of the codes, written and remembered the way copy_concealed does it.
         fn copy_codes(&self, text: &str) -> u64 {
-            put_remembered(|| Ok::<u64, ()>(self.board.borrow_mut().copy(text))).unwrap()
+            put_remembered(|| Ok::<u64, ()>(self.board.borrow_mut().copy(text)), |_| Outcome::Changed).unwrap()
         }
 
         async fn clear(&self, put: u64) -> Outcome {
@@ -621,24 +647,54 @@ mod tests {
     }
 
     #[test]
-    fn a_lock_while_the_codes_are_being_copied_finds_them_remembered() {
+    fn a_quit_that_takes_the_lock_during_a_write_never_waits_on_it_and_the_codes_still_go() {
         let _turn = PENDING_TESTS.lock().unwrap_or_else(|p| p.into_inner());
         let _ = take_all();
-        let (writing_tx, writing_rx) = std::sync::mpsc::channel();
+        // The clipboard both threads share, as the system's is.
+        let board = std::sync::Arc::new(std::sync::Mutex::new(Fake { counter: 0, text: Some("before".into()) }));
+        let (writing_tx, writing_rx) = std::sync::mpsc::channel::<()>();
+        let (quit_done_tx, quit_done_rx) = std::sync::mpsc::channel::<Vec<u64>>();
+        let writer_board = board.clone();
+        let clear_board = board.clone();
         let copier = std::thread::spawn(move || {
-            put_remembered(|| {
-                writing_tx.send(()).unwrap();
-                // The clipboard takes a moment (another app held it): the lock comes in now.
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                Ok::<u64, ()>(42)
-            })
+            put_remembered(
+                || {
+                    writing_tx.send(()).unwrap();
+                    // Windows: emptying the clipboard waits on the main window, which is in the quit's clear. The
+                    // write goes on only once that clear has run, as the system's would once the main thread is free.
+                    let quit = quit_done_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("the quit's clear never ran: it waited on the write");
+                    assert_eq!(quit, Vec::<u64>::new(), "the quit could not see a copy not yet written");
+                    Ok::<u64, ()>(writer_board.lock().unwrap().copy("aaaa-bbbb"))
+                },
+                move |put| clear_if_unchanged(&mut *clear_board.lock().unwrap(), put),
+            )
         });
         writing_rx.recv().unwrap();
-        // The lock takes the pending copies while the write is on its way: it waits, and gets this one.
+        // The quit on the main thread takes the lock while the write is on its way: it gets it at once.
+        let (taken_tx, taken_rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || taken_tx.send(take_all()).unwrap());
+        let taken = taken_rx.recv_timeout(std::time::Duration::from_secs(2)).expect("take_all waited on the write: a deadlock");
+        quit_done_tx.send(taken).unwrap();
+        let put = copier.join().unwrap().unwrap();
+        // The writer saw the quit come by and emptied its own copy; nothing is left to do.
+        assert_eq!(board.lock().unwrap().text, None);
+        assert_eq!(take_all(), Vec::<u64>::new());
+        assert!(put > 0);
+    }
+
+    #[test]
+    fn a_write_with_no_clear_meanwhile_is_remembered_and_a_refused_write_is_not() {
+        let _turn = PENDING_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = take_all();
+        let cleared = std::cell::Cell::new(false);
+        assert_eq!(put_remembered(|| Ok::<u64, ()>(42), |_| { cleared.set(true); Outcome::Cleared }), Ok(42));
+        assert!(!cleared.get(), "nothing came by: the writer leaves the emptying to the wait or the next lock");
         assert_eq!(take_all(), vec![42]);
-        assert_eq!(copier.join().unwrap(), Ok(42));
+        // A copy overtaken by a clear while the clipboard is busy stays pending for the next one.
+        assert_eq!(put_remembered(|| { let _ = take_all(); Ok::<u64, ()>(43) }, |_| Outcome::Failed), Ok(43));
+        assert_eq!(take_all(), vec![43]);
         // A write the clipboard refused remembers nothing.
-        assert_eq!(put_remembered(|| Err::<u64, &str>("busy")), Err("busy"));
+        assert_eq!(put_remembered(|| Err::<u64, &str>("busy"), |_| Outcome::Cleared), Err("busy"));
         assert_eq!(take_all(), Vec::<u64>::new());
     }
 

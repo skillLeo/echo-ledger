@@ -68,8 +68,8 @@ export function RecordingStepsV2({ item, improving, say }: {
 /** "Backup engine": the preferred engine was busy, so another one wrote it. Re-transcribe tries the preferred one again. */
 export function BackupEngineLine({ busy, onRetranscribe }: { busy: boolean; onRetranscribe: () => void }) {
   return (
-    <p className="el-caption el-secondary el-recording__note" role="status" data-testid="backup-engine">
-      <span>Transcribed with the backup engine. Re-transcribe?</span>
+    <p className="el-caption el-secondary el-recording__note" data-testid="backup-engine">
+      <span role="status">Transcribed with the backup engine. Re-transcribe?</span>
       <Button size="sm" variant="quiet" loading={busy} loadingLabel="Starting…" title="Tries the preferred engine again, in the same language" onClick={onRetranscribe}>Re-transcribe</Button>
     </p>
   );

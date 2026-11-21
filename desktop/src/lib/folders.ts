@@ -36,15 +36,15 @@ export function folderApp(folder: SmartFolder): string | null {
   return APPS[folder]?.[0] ?? null;
 }
 
-/**
- * Whether a saved recording is in a folder as far as this computer can tell: what the Library shows before the server
- * answers, or while it cannot be reached. Null when only the server knows (Imported, Shared with me).
- */
 /** This computer can tell what is in the folder by itself (the Inbox, an app's calls); else only the server can. */
 export function folderKnownHere(folder: SmartFolder): boolean {
   return folder === "inbox" || !!APPS[folder];
 }
 
+/**
+ * Whether a saved recording is in a folder as far as this computer can tell: what the Library shows before the server
+ * answers, or while it cannot be reached. Null when only the server knows (Imported, Shared with me).
+ */
 export function inFolderHere(item: LibraryItem, folder: SmartFolder): boolean | null {
   if (item.deleted) return false;
   if (folder === "inbox") return !item.client;
