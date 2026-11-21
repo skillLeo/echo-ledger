@@ -1,7 +1,8 @@
 // W-203 / W-209: Usage and a project's pages inside the Urdu (right-to-left) frame, every project tab, at 720 and
 // 1280 px. It finds English text drawn out of its own order (its first character drawn after its last on one line:
 // "B 68.0" for 68.0 B, a sentence's full stop first) and Urdu sentences turned left to right (a sentence that starts
-// with a name, "Qureshi Textiles میں تلاش کریں", drawn with the name at the left end). Fails when any is found.
+// with a name, "Qureshi Textiles میں تلاش کریں", drawn with the name at the left end), and in right to left a select
+// whose arrow is on its value's side. Fails when any is found.
 //
 //   A local server with the parity world (tests/Feature/V2/Support/parity_world.php) in a local SQLite file, never
 //   production, the new frame on and the person's console in Urdu:
@@ -70,6 +71,16 @@ for (const [name, path] of Object.entries(pages)) {
                 if (!ARABIC.test(ph) || !/^[\u2068]?[^\u0600-\u06FF]*[A-Za-z]/.test(ph)) continue;
                 // A placeholder that starts with a name: drawn by its own first letter unless the name is isolated.
                 if (!ph.startsWith('\u2068') && input.getAttribute('dir') !== 'rtl') out.push(`placeholder turned LTR: ${ph.slice(0, 50)}`);
+            }
+            // A select's arrow sits at its end: on the left in right to left, with the room for it on that side.
+            if (document.documentElement.dir === 'rtl') {
+                for (const select of main.querySelectorAll('select')) {
+                    const st = getComputedStyle(select);
+                    if (st.backgroundImage === 'none' || select.getBoundingClientRect().width < 2) continue;
+                    const x = st.backgroundPositionX;
+                    const onRight = /right|100%/.test(x) || (/%$/.test(x) && parseFloat(x) > 50);
+                    if (onRight || parseFloat(st.paddingLeft) < parseFloat(st.paddingRight)) out.push(`select arrow on the value's side: ${(select.selectedOptions[0]?.textContent ?? '').trim().slice(0, 30)}`);
+                }
             }
             return { dir: document.documentElement.dir, root: document.querySelector('.fi-page')?.className ?? '', out: [...new Set(out)] };
         });
