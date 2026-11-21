@@ -34,7 +34,7 @@
         @if ($row['left'] !== null || $row['snippet'] !== null)
             <span class="v2-lib-line">
                 @if ($row['left'] !== null)
-                    <span class="v2-status is-neutral" data-days-left><x-el.v2.icon name="clock" />{{ $row['left'] }}</span>
+                    <span @class(['v2-status', $row['left']['soon'] ? 'is-warning' : 'is-neutral']) data-days-left><x-el.v2.icon name="clock" />{{ $row['left']['text'] }}</span>
                 @endif
                 @if ($row['snippet'] !== null)
                     <span class="v2-row-meta" dir="auto" data-snippet>{{ $row['snippet'] }}</span>
@@ -43,7 +43,7 @@
         @endif
     </span>
     @if ($row['important'])
-        <span class="v2-status is-danger" role="img" aria-label="{{ __('Important') }}" title="{{ __('Important') }}" data-important-flag>
+        <span class="v2-status is-warning" role="img" aria-label="{{ __('Important') }}" title="{{ __('Important') }}" data-important-flag>
             <x-el.v2.icon name="flag" :filled="true" />
         </span>
     @endif

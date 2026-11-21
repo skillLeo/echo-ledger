@@ -59,7 +59,7 @@
                 e.preventDefault();
                 on.forEach((b) => b.click());
             } else if (act.do === 'delete') {
-                const del = document.querySelector('[data-selection-delete]');
+                const del = document.querySelector('.v2-sel-actions [data-selection-delete]') || document.querySelector('[data-selection-delete]');
                 if (del) { e.preventDefault(); del.click(); }
             }
         });
@@ -85,7 +85,7 @@
             if (! lib) return;
             const box = row && boxOf(row);
             const act = core.contextAction({ target: field(e.target) }, { inRow: !! row, rowChecked: !! (box && box.checked), checked: checked(lib).length });
-            const more = act === 'selection-menu' ? document.querySelector('button[data-selection-more], [data-selection-more] button')
+            const more = act === 'selection-menu' ? (document.querySelector('.v2-sel-actions button[data-selection-more], .v2-sel-actions [data-selection-more] button') || document.querySelector('button[data-selection-more], [data-selection-more] button'))
                 : (act === 'row-menu' ? rowOf(row).querySelector('button.fi-ac-icon-btn-group') : null);
             if (! more) return;
             e.preventDefault();

@@ -635,7 +635,7 @@ class ViewCaptureSession extends ViewRecord
     private function downloadAction(): Action
     {
         return Action::make('download')
-            ->label('Download')->labeledFrom('sm')
+            ->label(__('Download'))->labeledFrom('sm')
             ->icon(Heroicon::OutlinedArrowDownTray)
             ->button()
             ->color('gray')
@@ -722,7 +722,7 @@ class ViewCaptureSession extends ViewRecord
             return PlanLock::sheet('show_as', 'views', 'Show as…')->visible($visible);
         }
 
-        return Action::make('show_as')->label('Show as…')->labeledFrom('sm')->icon(Heroicon::OutlinedLanguage)->color('gray')
+        return Action::make('show_as')->label(__('Show as…'))->labeledFrom('sm')->icon(Heroicon::OutlinedLanguage)->color('gray')
             ->visible($visible)
             ->action(function (): void {
                 $transcript = $this->editableTranscript();
@@ -743,7 +743,7 @@ class ViewCaptureSession extends ViewRecord
     private function speakersAction(): Action
     {
         return Action::make('speakers')
-            ->label('Rename speakers')
+            ->label(__('Rename speakers'))
             ->icon(Heroicon::OutlinedUserGroup)
             ->fillForm(function (): array {
                 $names = app(TranscriptEditor::class)->speakerNames($this->session());
@@ -772,7 +772,7 @@ class ViewCaptureSession extends ViewRecord
     private function replaceAction(): Action
     {
         return Action::make('replace')
-            ->label('Find and replace')
+            ->label(__('Find and replace'))
             ->icon(Heroicon::OutlinedMagnifyingGlass)
             ->schema([
                 TextInput::make('find')->label('Find')->required()->maxLength(200),
@@ -796,7 +796,7 @@ class ViewCaptureSession extends ViewRecord
     private function historyAction(): Action
     {
         return Action::make('history')
-            ->label('History')
+            ->label(__('History'))
             ->icon(Heroicon::OutlinedClock)
             ->modalHeading('Transcript history')
             ->modalContent(fn (): View => view('filament.pages.transcript-history', [
@@ -832,7 +832,7 @@ class ViewCaptureSession extends ViewRecord
     private function wrongScriptAction(): Action
     {
         return Action::make('wrong_script')
-            ->label(fn (CaptureSession $record): string => 'Wrong script detected'.($this->nextEngine($record) !== null ? ' · Transcribe with the next engine' : ''))
+            ->label(fn (CaptureSession $record): string => __('Wrong script detected').($this->nextEngine($record) !== null ? ' · '.__('Transcribe with the next engine') : ''))
             ->icon(Heroicon::OutlinedExclamationTriangle)
             ->color('warning')
             ->visible(fn (CaptureSession $record): bool => is_string($record->finalTranscript?->meta['script_warning'] ?? null))
@@ -880,7 +880,7 @@ class ViewCaptureSession extends ViewRecord
     private function compareEnginesAction(): Action
     {
         return Action::make('compare_engines')
-            ->label('Compare engines')
+            ->label(__('Compare engines'))
             ->icon(Heroicon::OutlinedScale)
             ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->primaryRecording?->isReady() === true)
             ->modalHeading('Compare engines')
@@ -921,7 +921,7 @@ class ViewCaptureSession extends ViewRecord
             ->maxSize((int) (ReferenceText::MAX_BYTES / 1024));
 
         return Action::make('accuracy_reference')
-            ->label(fn (): string => $this->session()->hasReference() ? 'Edit the Accuracy Lab reference' : 'Use as Accuracy Lab reference')
+            ->label(fn (): string => $this->session()->hasReference() ? __('Edit the Accuracy Lab reference') : __('Use as Accuracy Lab reference'))
             ->icon(Heroicon::OutlinedBeaker)
             ->visible(fn (): bool => self::isOwner() && $this->editableTranscript() !== null)
             ->modalDescription('The spoken words exactly as said, one line per turn, without speaker names: correct the transcript below, or paste or upload a corrected text (TurboScribe\'s .txt, .srt, .vtt or .docx; time codes and speaker labels are removed). Add the Roman Urdu text too to score the Roman Urdu view on its own. Every "Compare engines" run of this recording is scored against it in the Accuracy Lab.')
@@ -970,7 +970,7 @@ class ViewCaptureSession extends ViewRecord
 
     private function clearReferenceAction(): Action
     {
-        return Action::make('accuracy_reference_clear')->label('Remove the Accuracy Lab reference')->icon(Heroicon::OutlinedXMark)
+        return Action::make('accuracy_reference_clear')->label(__('Remove the Accuracy Lab reference'))->icon(Heroicon::OutlinedXMark)
             ->visible(fn (): bool => self::isOwner() && $this->session()->hasReference())
             ->requiresConfirmation()
             ->action(function (): void {
@@ -991,7 +991,7 @@ class ViewCaptureSession extends ViewRecord
     private function engineResultsAction(): Action
     {
         return Action::make('engine_results')
-            ->label('Engine results')
+            ->label(__('Engine results'))
             ->icon(Heroicon::OutlinedTableCells)
             ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->trials()->exists())
             ->slideOver()
@@ -1046,7 +1046,7 @@ class ViewCaptureSession extends ViewRecord
     private function retryAction(): Action
     {
         return Action::make('retry')
-            ->label('Transcribe again')
+            ->label(__('Transcribe again'))
             ->icon(Heroicon::OutlinedArrowPath)
             ->visible(fn (CaptureSession $record): bool => $record->primaryRecording?->isReady()
                 && in_array($record->finalTranscript?->status, [null, TranscriptStatus::Failed], true))
@@ -1065,7 +1065,7 @@ class ViewCaptureSession extends ViewRecord
     private function retranscribeAsAction(): Action
     {
         return Action::make('retranscribe_as')
-            ->label('Re-transcribe as…')
+            ->label(__('Re-transcribe as…'))
             ->icon(Heroicon::OutlinedLanguage)
             ->visible(fn (CaptureSession $record): bool => $record->primaryRecording?->isReady() === true && ! $record->hasNoAudio())
             ->modalDescription('The current transcript stays until the new one is ready, then the new one is shown and the old one is kept as the other version.')
@@ -1123,7 +1123,7 @@ class ViewCaptureSession extends ViewRecord
     private function secondEngineAction(): Action
     {
         return Action::make('second_engine')
-            ->label('Transcribe with another engine')
+            ->label(__('Transcribe with another engine'))
             ->icon(Heroicon::OutlinedBeaker)
             ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->finalTranscript?->status === TranscriptStatus::Completed
                 && $record->primaryRecording?->isReady() === true)
@@ -1150,7 +1150,7 @@ class ViewCaptureSession extends ViewRecord
     private function compareAction(): Action
     {
         return Action::make('compare')
-            ->label('Compare versions')
+            ->label(__('Compare versions'))
             ->icon(Heroicon::OutlinedArrowsRightLeft)
             ->visible(fn (CaptureSession $record): bool => $this->alternate() !== null)
             ->slideOver()

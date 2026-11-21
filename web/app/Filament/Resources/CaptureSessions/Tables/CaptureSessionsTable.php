@@ -50,11 +50,13 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -349,24 +351,33 @@ final class CaptureSessionsTable
         // The ⋮ menu's own copies (an action is drawn once, and the bar's are icon buttons).
         $menu = collect(self::bulkActions())->keyBy(fn (BulkAction $action): string => (string) $action->getName())
             ->map(fn (BulkAction $action): BulkAction => $action->name($action->getName().'InMenu'));
-        $icon = fn (BulkAction|BulkActionGroup $action, string $label): BulkAction|BulkActionGroup => $action->label(__($label))->tooltip(__($label))->iconButton()->color('gray');
+        // One row of selection actions (U9 round 2): the selection bar's (filament.v2.bulk-bar); the copies Filament also
+        // draws in the table's toolbar are hidden.
+        $inBar = ['x-bind:hidden' => "\$el.closest('.v2-sel-actions') === null"];
+        $icon = fn (BulkAction|BulkActionGroup $action, string $label): BulkAction|BulkActionGroup => $action->label(__($label))->tooltip(__($label))->iconButton()->color('gray')
+            ->extraAttributes($inBar, merge: true);
+        $heading = fn (string $name, string $label): BulkAction => BulkAction::make($name)->label(__($label))->view('filament.v2.menu-heading');
 
         return [
             $icon($actions['move'], 'Move to project'),
             $icon(BulkActionGroup::make([$actions['label'], $actions['unlabel']])->icon(Heroicon::OutlinedTag), 'Label'),
             $icon(BulkActionGroup::make(self::exportFormatActions('export'))->icon(Heroicon::OutlinedArrowDownTray), 'Export'),
-            $icon(self::trashBulkAction('trash'), 'Delete')->color('danger')->extraAttributes(['data-selection-delete' => true]),
+            $icon(self::trashBulkAction('trash'), 'Delete')->color('danger')->extraAttributes(['data-selection-delete' => true], merge: true),
+            // ⋮ as the desktop and the phone: Organise, Export (one Export ▸ sub-menu, then Copy for AI), and Delete last, red.
             BulkActionGroup::make([
-                BulkActionGroup::make([$menu['pin'], $menu['unpin'],
+                BulkActionGroup::make([$heading('organiseHeading', 'Organise'), $menu['pin'], $menu['unpin'],
                     // Mark unless every selected one is important, Unmark unless none is, both when mixed (the apps' rule).
                     $menu['important']->extraAttributes(['x-show' => "window.elV2Selection && window.elV2Selection.shows('important', selectedRecords, isTrackingDeselectedRecords)"]),
                     $menu['unimportant']->extraAttributes(['x-show' => "window.elV2Selection && window.elV2Selection.shows('unimportant', selectedRecords, isTrackingDeselectedRecords)"]),
                     $menu['keep'], $menu['unkeep'], $menu['move'], $menu['label'], $menu['unlabel'], self::transcribeBulkAction('transcribeInMenu')])
-                    ->label(__('Organise'))->dropdown(false),
-                BulkActionGroup::make([...self::exportFormatActions('exportInMenu'), self::copyForAiBulkAction('copyForAiInMenu')])->label(__('Export'))->dropdown(false),
-                BulkActionGroup::make([self::trashBulkAction('trashFromMenu')->label(__('Delete'))->color('danger')])->label(__('Danger'))->dropdown(false),
+                    ->dropdown(false),
+                BulkActionGroup::make([$heading('exportHeading', 'Export'),
+                    BulkActionGroup::make(self::exportFormatActions('exportInMenu'))->label(__('Export'))->icon(Heroicon::OutlinedArrowDownTray)
+                        ->grouped()->dropdownPlacement(ConsoleV2::rtl() ? 'left-start' : 'right-start')->extraAttributes(['data-export-submenu' => true]),
+                    self::copyForAiBulkAction('copyForAiInMenu')])->dropdown(false),
+                BulkActionGroup::make([$heading('dangerHeading', 'Danger'), self::trashBulkAction('trashFromMenu')->label(__('Delete'))->color('danger')])->dropdown(false),
             ])->label(__('More'))->tooltip(__('More'))->icon(Heroicon::OutlinedEllipsisVertical)->iconButton()->color('gray')
-                ->extraAttributes(['data-selection-more' => true]),
+                ->extraAttributes(['data-selection-more' => true, ...$inBar]),
         ];
     }
 
@@ -377,6 +388,20 @@ final class CaptureSessionsTable
     ];
 
     /**
+     * A format's name in the console's language with its extension kept left to right, so Urdu reads "ورڈ (.docx)"
+     * rather than "(docx.)".
+     */
+    public static function formatLabel(string $label): Htmlable|string
+    {
+        $words = __($label);
+        if (preg_match('/^(.*?)\s*(\(\.[a-z0-9]+\))$/u', $words, $m) !== 1) {
+            return $words;
+        }
+
+        return new HtmlString(e($m[1]).' <bdi dir="ltr">'.e($m[2]).'</bdi>');
+    }
+
+    /**
      * One action per format of the v2.0 Export sub-menu: each asks only which view (Show as) and downloads one zip.
      *
      * @return list<BulkAction>
@@ -385,7 +410,7 @@ final class CaptureSessionsTable
     {
         $out = [];
         foreach (self::V2_EXPORT_FORMATS as $format => $label) {
-            $out[] = BulkAction::make($prefix.ucfirst($format))->label(__($label))
+            $out[] = BulkAction::make($prefix.ucfirst($format))->label(self::formatLabel($label))
                 ->modalHeading(__('Export as :format', ['format' => __($label)]))->modalSubmitActionLabel(__('Export'))
                 ->schema([
                     Select::make('view')->label(__('Show as'))->placeholder(__('Original words'))->options(TranscriptViews::VIEWS)
@@ -492,6 +517,8 @@ final class CaptureSessionsTable
         // Only what the person may change starts; the rest is skipped like a transcribed one.
         $ready = self::changeable($records)->filter(fn (CaptureSession $r): bool => $r->primaryRecording?->isReady() === true && ! $r->hasNoAudio()
             && in_array($r->finalTranscript?->status, [null, TranscriptStatus::Failed], true))->values()->all();
+        // Worked out here for now (each recording's length rounded up). Once be/B7 brings POST /api/sessions/transcribe-estimate,
+        // use its shared estimate instead (the billed channels of the engine the routing would pick), as the apps will.
         $minutes = array_sum(array_map(fn (CaptureSession $r): int => max(1, (int) ceil(((int) $r->duration_ms) / 60000)), $ready));
         $workspace = (int) CurrentWorkspace::id();
         $limits = app(PlanLimits::class);
@@ -580,24 +607,24 @@ final class CaptureSessionsTable
         };
 
         return [
-            BulkAction::make('move')->label('Move to project')->icon(Heroicon::OutlinedFolder)->modalHeading('Move to project')
+            BulkAction::make('move')->label(__('Move to project'))->icon(Heroicon::OutlinedFolder)->modalHeading(__('Move to project'))
                 ->schema([Select::make('client_id')->label('Project')->placeholder('No project')
                     ->options(fn (): array => Client::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all())])
                 ->action(fn (Collection $records, array $data) => $run($records, 'move', $data['client_id'] ?? null))
                 ->deselectRecordsAfterCompletion(),
-            BulkAction::make('label')->label('Add label')->icon(Heroicon::OutlinedTag)
+            BulkAction::make('label')->label(__('Add label'))->icon(Heroicon::OutlinedTag)
                 ->schema([TextInput::make('label')->label('Label')->required()->maxLength(LibraryOrganiser::MAX_LABEL_CHARS)
                     ->datalist(fn (): array => array_column(app(LibraryOrganiser::class)->labels((int) CurrentWorkspace::id()), 'label'))])
                 ->action(fn (Collection $records, array $data) => $run($records, 'label', null, $data['label']))
                 ->deselectRecordsAfterCompletion(),
-            BulkAction::make('unlabel')->label('Remove label')->icon(Heroicon::OutlinedXMark)
+            BulkAction::make('unlabel')->label(__('Remove label'))->icon(Heroicon::OutlinedXMark)
                 ->schema([Select::make('label')->label('Label')->required()
                     ->options(fn (): array => collect(app(LibraryOrganiser::class)->labels((int) CurrentWorkspace::id()))->pluck('label', 'label')->all())])
                 ->action(fn (Collection $records, array $data) => $run($records, 'unlabel', null, $data['label']))
                 ->deselectRecordsAfterCompletion(),
-            BulkAction::make('pin')->label('Pin')->icon(Heroicon::OutlinedStar)
+            BulkAction::make('pin')->label(__('Pin'))->icon(Heroicon::OutlinedStar)
                 ->action(fn (Collection $records) => $run($records, 'pin'))->deselectRecordsAfterCompletion(),
-            BulkAction::make('unpin')->label('Unpin')->icon(Heroicon::OutlinedMinusCircle)
+            BulkAction::make('unpin')->label(__('Unpin'))->icon(Heroicon::OutlinedMinusCircle)
                 ->action(fn (Collection $records) => $run($records, 'unpin'))->deselectRecordsAfterCompletion(),
             // Since U9 (contract 2.0.0-i): the flag the apps show, through the same bulk path as POST /api/sessions/bulk.
             // Only the person's own recordings change (the bulk path's scope); never from a read-only console.
@@ -607,9 +634,9 @@ final class CaptureSessionsTable
             BulkAction::make('unimportant')->label(__('Unmark important'))->icon(Heroicon::OutlinedFlag)
                 ->visible(fn (): bool => ! ConsoleAccess::readOnly())
                 ->action(fn (Collection $records) => $run(self::changeable($records), 'unimportant'))->deselectRecordsAfterCompletion(),
-            BulkAction::make('keep')->label('Keep forever')->icon(Heroicon::OutlinedLockClosed)
+            BulkAction::make('keep')->label(__('Keep forever'))->icon(Heroicon::OutlinedLockClosed)
                 ->action(fn (Collection $records) => $run($records, 'keep'))->deselectRecordsAfterCompletion(),
-            BulkAction::make('unkeep')->label('Stop keeping')->icon(Heroicon::OutlinedLockOpen)
+            BulkAction::make('unkeep')->label(__('Stop keeping'))->icon(Heroicon::OutlinedLockOpen)
                 ->action(fn (Collection $records) => $run($records, 'unkeep'))->deselectRecordsAfterCompletion(),
             BulkAction::make('export')->label('Export transcripts')->icon(Heroicon::OutlinedArrowDownTray)->modalHeading('Export transcripts')
                 ->schema([
@@ -651,7 +678,7 @@ final class CaptureSessionsTable
     public static function renameAction(): Action
     {
         return Action::make('rename')
-            ->label('Rename')
+            ->label(__('Rename'))
             ->icon(Heroicon::OutlinedPencilSquare)
             ->color('gray')
             ->modalHeading('Rename recording')

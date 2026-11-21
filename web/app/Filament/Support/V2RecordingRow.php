@@ -40,7 +40,7 @@ final class V2RecordingRow
     /**
      * @return array{id: string, title: string, icon: string, source: string, line: string, device: string|null, pinned: bool,
      *     time: string, full_time: string, iso: string, length: string, status: array{label: string, tone: string, icon: string}|null,
-     *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, style: string}>, left: string|null}
+     *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, style: string}>, left: array{text: string, days: int, soon: bool}|null}
      */
     public static function for(CaptureSession $session): array
     {
@@ -82,19 +82,31 @@ final class V2RecordingRow
         return $final?->status === TranscriptStatus::Completed && filled($final->text) ? $final->preview(140) : null;
     }
 
+    /** "Audio · N days left" shows from this many days left (EL-Design: not a badge on every row). */
+    public const DAYS_LEFT_FROM = 7;
+
+    /** …and in the warning colour from this many days left down. */
+    public const DAYS_LEFT_WARNING = 3;
+
     /**
-     * "Audio · N days left" while retention will move the recording to Trash: N is the hours left divided by 24, rounded
-     * up, never below 0 (contract 2.0.0-i expires_at); null when it is kept forever or still recording.
+     * "Audio · N days left" when retention moves the recording to Trash within a week: N is the hours left divided by
+     * 24, rounded up, never below 0 (contract 2.0.0-i expires_at), in the warning colour from 3 days down; null when it
+     * has longer, is kept forever or still recording. The full date stays in the recording's details.
+     *
+     * @return array{text: string, days: int, soon: bool}|null
      */
-    public static function daysLeft(CaptureSession $session): ?string
+    public static function daysLeft(CaptureSession $session): ?array
     {
         $at = app(RetentionPolicy::class)->expiresAt($session);
         if ($at === null) {
             return null;
         }
         $days = max(0, (int) ceil(Carbon::now()->diffInSeconds($at, false) / 3600 / 24));
+        if ($days > self::DAYS_LEFT_FROM) {
+            return null;
+        }
 
-        return trans_choice('Audio · :count day left|Audio · :count days left', $days, ['count' => $days]);
+        return ['text' => trans_choice('Audio · :count day left|Audio · :count days left', $days, ['count' => $days]), 'days' => $days, 'soon' => $days <= self::DAYS_LEFT_WARNING];
     }
 
     /**

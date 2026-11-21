@@ -14,7 +14,7 @@
         <span class="v2-meta-item"><span aria-hidden="true">·</span> <span class="v2-mono">{{ $row['length'] }}</span></span>
     @endif
     @if ($row['important'])
-        <span class="v2-status is-danger" data-important-flag><x-el.v2.icon name="flag" :filled="true" />{{ __('Important') }}</span>
+        <span class="v2-status is-warning" data-important-flag><x-el.v2.icon name="flag" :filled="true" />{{ __('Important') }}</span>
     @endif
     @if ($row['status'] !== null)
         <span @class(['v2-status', 'is-'.$row['status']['tone']])><x-el.v2.icon :name="$row['status']['icon']" />{{ $row['status']['label'] }}</span>

@@ -59,7 +59,8 @@ it('dots a recording this person has not opened, and takes the dot away once the
 
 it('flags an important recording, and says so on its row for the selection', function () {
     $html = Livewire::test(ListCaptureSessions::class)->html();
-    expect(indicatorRow($html, (string) $this->call->id))->toContain('data-important="1"')->toContain('data-important-flag')->toContain('aria-label="Important"')
+    // In the warning colour (amber): red is for deleting and recording only.
+    expect(indicatorRow($html, (string) $this->call->id))->toContain('data-important="1"')->toContain('<span class="v2-status is-warning" role="img" aria-label="Important"')->toContain('data-important-flag')
         ->and(indicatorRow($html, (string) $this->kept->id))->toContain('data-important="0"')->not->toContain('data-important-flag');
 });
 
@@ -85,18 +86,25 @@ it('draws each label\'s colour dot by the design\'s rules: the eight by their to
     expect($row)->toContain('aria-label="Label: Invoice"');
 });
 
-it('says "Audio · N days left" while retention will move it to Trash, rounded up, and nothing when it is kept forever', function () {
+it('says "Audio · N days left" only within a week of the audio going, amber from 3 days, rounded up, and never when it is kept forever', function () {
     $expires = app(RetentionPolicy::class)->expiresAt($this->call->fresh());
-    $days = (int) ceil(Carbon::now()->diffInSeconds($expires, false) / 86400);
-    $html = Livewire::test(ListCaptureSessions::class)->html();
+    $row = fn (string $id): string => indicatorRow(Livewire::test(ListCaptureSessions::class)->html(), $id);
+    // More than a week left: no badge on the row (the date stays in the recording's details).
+    expect(Carbon::now()->diffInDays($expires))->toBeGreaterThan(7)
+        ->and($row((string) $this->call->id))->not->toContain('data-days-left');
 
-    expect(indicatorRow($html, (string) $this->call->id))->toContain('data-days-left')->toContain('Audio · '.$days.' days left')
-        ->and(indicatorRow($html, (string) $this->kept->id))->not->toContain('data-days-left');
+    Carbon::setTestNow($expires->copy()->subDays(6)->subHours(2));
+    expect($row((string) $this->call->id))->toMatch('~class="v2-status is-neutral" data-days-left>.*Audio · 7 days left~s')
+        ->and($row((string) $this->kept->id))->not->toContain('data-days-left');
+    Carbon::setTestNow($expires->copy()->subDays(3));
+    expect($row((string) $this->call->id))->toMatch('~class="v2-status is-warning" data-days-left>.*Audio · 3 days left~s');
     // On its last hours it says 1 day; past its time, 0 (never below).
     Carbon::setTestNow($expires->copy()->subHours(3));
-    expect(V2RecordingRow::daysLeft($this->call->fresh()))->toBe('Audio · 1 day left');
+    expect(V2RecordingRow::daysLeft($this->call->fresh()))->toBe(['text' => 'Audio · 1 day left', 'days' => 1, 'soon' => true]);
     Carbon::setTestNow($expires->copy()->addHours(3));
-    expect(V2RecordingRow::daysLeft($this->call->fresh()))->toBe('Audio · 0 days left');
+    expect(V2RecordingRow::daysLeft($this->call->fresh())['text'])->toBe('Audio · 0 days left');
+    Carbon::setTestNow($expires->copy()->subDays(8));
+    expect(V2RecordingRow::daysLeft($this->call->fresh()))->toBeNull();
 });
 
 it('shows a snippet of what was said, and none without a transcript', function () {
@@ -113,6 +121,7 @@ it('reads its indicators in Urdu when the console is in Urdu', function () {
     $this->actingAs($this->owner->fresh(), 'web');
     app()->setLocale('ur');
 
+    Carbon::setTestNow(app(RetentionPolicy::class)->expiresAt($this->call->fresh())->subDays(2));
     $row = indicatorRow(Livewire::test(ListCaptureSessions::class)->html(), (string) $this->call->id);
-    expect($row)->toContain('aria-label="اہم"')->toContain('aria-label="ابھی کھولی نہیں گئی"')->toContain('آڈیو · ')->toContain(' دن باقی');
+    expect($row)->toContain('aria-label="اہم"')->toContain('aria-label="ابھی کھولی نہیں گئی"')->toContain('آڈیو · 2 دن باقی');
 });
