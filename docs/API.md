@@ -5,6 +5,7 @@ If implementation and this file disagree, fix one of them in the same change —
 
 **Contract revision: 2.0.0-m (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
 2.0.0-m (proposed 2026-11-21, accepted when merged): lists (B11, see "Lists (since 2.0.0-m)"). A person's lists are their labels with a name, a colour and a place in the apps' row, kept by the server so every device shows the same ones: `GET /api/lists`, `POST /api/lists` (an empty list), `PATCH` and `DELETE /api/lists/{key}` (rename or delete changes every recording of the person in one transaction) and `PUT /api/lists/order`. Labelling a recording makes its list when it is new (never for a label spelt All, Unread or Important, which stays a plain label). `GET /api/library/views` gives the labels in list order. A label's colour is its list's (`PUT /api/labels/color` and `label_colors` answer as before). New codes `name_reserved`, `list_exists`, `list_not_found`. Only additions: older apps ignore them.
+2.0.0-l (proposed 2026-11-21, accepted by the lead and EL-UX 2026-11-21, served when merged, after 2.0.0-m): the person's account and security from the apps — name, profile picture (`avatar_url` and `avatar_version` beside every person shown), email change, password, sign-in methods, browsers and devices of every workspace, two-step setup, phone passkeys, Keep my account through sign-in (`403 deletion_scheduled`, then `"keep": true`), `error_codes` beside `errors`. Additions only, except that an app sign-in during a deletion's grace now answers `deletion_scheduled` instead of `not_allowed`. See "Account and security from the apps (since 2.0.0-l)".
 2.0.0-k (proposed 2026-11-21, accepted when merged): a call's title comes from the person called (see "Title from the person"): a person's own title (any rename wins), then "Call with <name>" or the number, then the automatic title. `title` is that title; the new `title_source` (`own` | `person` | `auto` | `app`) says which, and `title_auto` stays `true` only for `auto`. Outside the account (share links, exports, WhatsApp, the audit log) the title never names the person called.
 2.0.0-j (accepted 2026-11-21): "Audio only and Transcribe later" (1.8.0-e) is served: the three endpoints, `audio_only`, `transcribe_estimate` and projects' `transcribe_calls`. Clarified where the server had to decide: minutes are plan minutes (0 on the person's own key or an on-device engine); the estimate lists only the person's audio-only recordings among the ids (what bulk would start); bulk on Free without an own key is `403 needs_transcription_key` and nothing starts; the open create takes `transcribe` too.
 2.0.0-i (accepted 2026-11-21): the parity plan's row indicators (docs/PLAN_V2_PARITY.md section 3). Library items carry
@@ -1805,6 +1806,243 @@ with the last `notes` (0–20, default 5) call notes, ready to paste into a chat
 `{"language": "roman_urdu"}` (optional, en | roman_urdu): writes the recording's notes again on the queue.
 `202 {"data": <notes with "status": "pending">}`; `409 no_client` when the recording is not filed under a client;
 `403 ai_budget_reached`, `409 ai_unavailable`.
+
+### Account and security from the apps (since 2.0.0-l)
+The person's own account, from the phone and desktop apps, with the same rules as the console's Settings.
+
+#### Rules for every endpoint below
+- The person's own account only. Ids of someone else's browser, passkey or device answer `404`, and the tenant tests
+  cover every route.
+- Reading uses `config:read`. Changing anything uses `sessions:write`. A viewer may change their own account, because
+  the account is theirs and not the workspace's.
+- **Proof** (the same as `DELETE /api/account`): `{"password": "…"}`, or `{"otp": "123456"}` (an authenticator or
+  recovery code). An account with neither a password nor two-step (made with Google) uses `{"email_code": "123456"}`
+  from `POST /api/account/proof-code` → `202`. That sends a 6-digit code to the current address, valid 10 minutes,
+  with at most 5 sent an hour. A wrong proof is `422 wrong_password`, `422 invalid_otp` or `422 invalid_code`. After
+  5 wrong proofs in 15 minutes the answer is `429 too_many_attempts` with `Retry-After`, through the same SignInGuard
+  as sign-in.
+  - No proof at all is `422 proof_required` with `"accepts": ["password", "otp", "email_code"]` (the ones this account
+    can give). `email_code` counts only for an account with neither a password nor two-step; for any other it is
+    `422 invalid_code`, and `POST /api/account/proof-code` answers `409 proof_code_not_needed`.
+  - Every way to add a way in (two-step, a passkey) asks for the proof when its ceremony starts, and the ceremony is
+    the only way to finish, so a device on its own (a stolen token) cannot add one. The account holder gets an email
+    when one was added from an app (see 7 and 8).
+- **Field error codes**: every `422 validation_failed` from these routes keeps `errors` (`{"field":
+  ["message"]}`, as today). Next to it, `error_codes` gives `{"new": [{"code": "too_short", "min": 12},
+  {"code": "needs_numbers"}]}`, so the apps can write their own words (Urdu).
+  - Codes: `required`, `too_short` (`min`), `too_long` (`max`), `needs_letters`, `needs_numbers`, `same_as_current`,
+    `invalid_characters`, `invalid_email`, `same_as_now`, `email_taken`.
+  - For images: `invalid_image` with `reason` = `format` | `broken` | `too_small` (under 128 px) | `ratio` |
+    `too_many_pixels`.
+- Rate limits are per person, not per device. Going over answers `429 rate_limited` with `Retry-After`.
+- Every change is written to the audit log (see the last section). Logs never contain passwords, codes, secrets,
+  otpauth URIs, recovery codes or picture bytes.
+- Every rule comes from the service the console already uses (Password::defaults, Filament's email change,
+  AppAuthentication, Passkeys, WebSessions, AccountDeletion), so the web and the apps never disagree.
+
+#### The endpoints, with their ability and limit
+- `GET /api/account/security` — `config:read`: sign-in methods, browsers, devices, events.
+- `POST /api/account/proof-code` — `sessions:write`: an email code for proof (5 an hour).
+- `PATCH /api/account` — `sessions:write`: the name (10 an hour).
+- `POST /api/account/avatar` — `sessions:write`: a profile picture (10 changes an hour with removing).
+- `DELETE /api/account/avatar` — `sessions:write`: removes it.
+- `GET /api/avatars/{user}/{version}` — signed URL, no token: the picture itself (see "Avatar URLs").
+- `POST /api/account/email` — `sessions:write`: starts an email change (3 an hour).
+- `POST /api/account/email/confirm` — `sessions:write`: the code (5 attempts an hour).
+- `DELETE /api/account/email` — `sessions:write`: cancels it.
+- `PUT /api/account/password` — `sessions:write`: changes or sets the password (5 an hour).
+- `PATCH /api/account/devices/{id}` — `sessions:write`: renames a device of any of the person's workspaces.
+- `DELETE /api/account/devices/{id}` — `sessions:write`: signs one out.
+- `DELETE /api/account/browsers/{id}` — `sessions:write`: signs a console browser out.
+- `DELETE /api/account/google` — `sessions:write`: unlinks Google (proof).
+- `POST /api/account/passkeys/options` — `sessions:write`: starts a phone passkey (proof; 10 an hour).
+- `POST /api/account/passkeys` — `sessions:write`: saves it.
+- `PATCH /api/account/passkeys/{id}` — `sessions:write`: renames one.
+- `DELETE /api/account/passkeys/{id}` — `sessions:write`: removes one (proof).
+- `POST /api/account/two-factor` — `sessions:write`: starts two-step (proof; 10 an hour).
+- `POST /api/account/two-factor/confirm` — `sessions:write`: turns it on, answers the recovery codes.
+- `POST /api/account/two-factor/recovery-codes` — `sessions:write`: new recovery codes (proof).
+- `DELETE /api/account/two-factor` — `sessions:write`: turns it off (an authenticator or recovery code).
+
+#### 1. `GET /api/account` gains these fields
+`"avatar_url": "https://…" | null` and `"avatar_version": 3 | null` (see "Avatar URLs" below; `null` means the apps
+show initials), `"has_password": true`, `"pending_email": "new@example.com" | null`, `"pending_email_expires_at"`,
+`"passkeys_available": true` (false when the server is not set up for phone passkeys).
+`pending_email` is `null` again once the change was confirmed (by code or by link), cancelled, blocked or expired.
+
+#### 2. Name
+`PATCH /api/account {"name": "Hassam"}`: 1 to 120 characters, trimmed at both ends.
+- Allowed: letters, marks and numbers of any script, spaces, `.`, `'`, `-`, `(`, `)`, `,`, and, inside a name, U+200C/U+200D
+  (ZWNJ/ZWJ, which Urdu and Persian need) and U+200E/U+200F (LRM/RLM).
+- Rejected rather than stripped, with `invalid_characters`: other control and format characters, including the bidi
+  embeddings, overrides and isolates U+202A–U+202E and U+2066–U+2069. The answer is
+`200` with the account as in `GET`. Limit: 10 an hour.
+
+#### 3. Profile picture
+- `POST /api/account/avatar` takes multipart `image`: JPEG, PNG or WebP (decided from the bytes, not the name or
+  type), at most 5 MB, at most 25 MP, aspect ratio at most 4 to 1. The phone converts HEIC before upload. The server
+  decodes the picture, crops it to a centred square and saves WebP copies at 512 px and 128 px. EXIF, GPS and every
+  other piece of metadata are dropped. The answer is `200 {"avatar_url": "…", "avatar_version": 1763700000}`. A JPEG
+  is turned upright by its orientation first. The version is a number that only grows (a timestamp), never reused,
+  even after a removal.
+- Errors:
+  - `422 invalid_image` for an unknown format, a broken file or the wrong size;
+  - `413 too_large`;
+  - `503 server_busy` with `Retry-After: 5`, from the same picture limit as screens.
+- **Avatar URLs**:
+  - Every `avatar_url` comes with `avatar_version`, an integer that changes only when the picture changes. The apps
+    cache the picture by person id and `avatar_version`, and keep showing the cached copy offline.
+  - The URL is signed, has the version in it, and is valid for 7 days. A new URL for the same version is the same
+    picture, so there is nothing to download again.
+  - An expired or wrong signature answers `403` and a version that has been replaced or removed answers `404`, both
+    with an empty body. The apps then use their cached copy or the initials quietly, and refresh the URL on their
+    next read.
+  - Sizes: `?size=128` (default) or `512`.
+- `DELETE /api/account/avatar` → `204`, and the stored copies are deleted.
+- Limit: 10 changes an hour, for adding and removing together.
+- `avatar_url` and `avatar_version` appear beside every person the API already shows:
+  - Shared with me `from`;
+  - a sent item's `to[]`;
+  - `GET /api/account` itself (the person's own).
+  `GET /api/account` `workspaces`, activity items and audit entries name no other person today, so they carry none; a
+  person added there later gets the two fields with it. A URL is only given where the person is already shown, and
+  erasing the account deletes the picture.
+
+#### 4. Email change
+1. `POST /api/account/email {"email", …proof}` → `202 {"pending_email", "pending_email_expires_at"}` (expires after
+   60 minutes).
+   - The new address gets a 6-digit code and the console's verification link, and either one confirms.
+   - The old address gets the usual notice with "This wasn't me", which blocks the change.
+   - Errors:
+     - `422 email_taken`;
+     - `422 validation_failed` (the address is not valid, or is the same as now);
+     - the proof errors listed above.
+2. `POST /api/account/email/confirm {"code"}` → `200`, with the account carrying the new `email` and
+   `pending_email: null`.
+   - The change is audited and other browsers are signed out, as on the web.
+   - Errors: `422 invalid_code` (the fifth wrong code ends the change), `422 email_taken` when the address was taken
+     meanwhile, and `410 expired` when the change has expired, ended or was blocked.
+3. `DELETE /api/account/email` → `204` cancels a pending change.
+4. Noticing a confirmation made by link in a browser: there is no push for it. While the "Check your new
+   address" screen is open, the app reads `GET /api/account` every 10 s until `pending_email` is `null` or the change
+   expires, and again on resume.
+5. "This wasn't me" in the old address's email cancels the change (audited as `email_change_blocked`) and
+   signs out every device and browser, because whoever asked knew the password or a code. That email and the page it
+   opens tell the person to change their password. The app's next call gets `401`, and the app goes to sign-in.
+
+Limits: 3 requests an hour; 5 code attempts an hour, after which the change is cancelled.
+
+#### 5. Password
+- `PUT /api/account/password {"current": "…" | null, "new": "…", "sign_out_others": true}` → `204`.
+  - `current` is required when `has_password` is true. An account made with Google sets a first password with proof
+    instead (an `otp` or `email_code`).
+  - `sign_out_others` is true by default. It signs out every other device and every browser. This device's token stays
+    valid: the answer is `204` with nothing to sign in again and no new token.
+  - Errors:
+    - `422 wrong_password` for the current password, counted by SignInGuard like a failed sign-in;
+    - `422 validation_failed` with field errors on `new` (too short, missing letters or numbers, the same as the current one)
+      or on `current` (`required`). The rules on `new` are checked before the proof, so a one-time code is not used up
+      by a password that is too short; `same_as_current` only after it.
+    - for an account without a password: the proof errors listed above.
+  - Limit: 5 an hour, on top of the sign-in throttles.
+- `GET /api/auth/options` gains `"password_rules": {"min": 12, "letters": true, "numbers": true}`, so the apps can check
+  before sending. The server still decides.
+
+#### 6. Sign-in methods, browsers and devices
+- `GET /api/account/security` returns:
+  ```json
+  {"password": true, "google": {"linked": true, "email": null},
+   "passkeys": [{"id", "name", "created_at", "last_used_at"}],
+   "two_factor": {"enabled": true, "recovery_codes_left": 7},
+   "browsers": [{"id", "agent": "Chrome on macOS", "country": "PK", "last_active_at", "current": false}],
+   "devices": [{"id", "name", "platform", "app_version", "last_seen_at", "paired_at", "current", "workspace": {"id", "name"}}]}
+  ```
+  `google.email` is `null`: the server keeps only Google's id of the person, not the Google address. A browser's `id`
+  is opaque (never the session itself) and works only for `DELETE /api/account/browsers/{id}`; `current` is always
+  false for the apps, which are not browsers. `devices` covers every workspace the person belongs to, as on the web. Each device also has
+  `"status": "active" | "signed_out"` and `"signed_out_at"`, and signed-out devices are listed for 30 days.
+  The answer also has `"events"`: the latest 50 audit entries, the same shape as `GET /api/security`, which is the one
+  the apps should use from 2.0.0-l on. `GET /api/security` stays as it is for older apps.
+- `PATCH /api/account/devices/{id} {"name"}` → `200`, and `DELETE /api/account/devices/{id}` → `204`, for a device in
+  any of the person's workspaces. Errors: `404 device_not_found`, and `409 current_device` as for
+  `/api/devices/{id}` (which stays limited to the current workspace).
+- `DELETE /api/account/browsers/{id}` → `204`. Error: `404 browser_not_found`.
+- `DELETE /api/account/google {…proof}` → `204`. Error: `409 last_sign_in_method` when there is no password and no
+  passkey left.
+- `DELETE /api/account/passkeys/{id} {…proof}` → `204`. Errors: `404 passkey_not_found`, and `409 last_sign_in_method`.
+- `PATCH /api/account/passkeys/{id} {"name"}` → `200` renames one.
+
+#### 7. Two-step (authenticator app)
+1. `POST /api/account/two-factor {…proof}` (the password, or an `email_code` for an account made with Google) →
+   `200 {"ceremony": "…", "secret": "BASE32…", "otpauth_uri": "otpauth://totp/…",
+   "issuer": "EchoLedger", "label": "h…@example.com", "digits": 6, "period": 30, "algorithm": "SHA1"}`.
+   - Nothing is saved until it is confirmed, and a ceremony is valid for 10 minutes.
+   - The proof is asked here, and only this ceremony (of this person) can be confirmed, so a device on its own cannot
+     enrol its own authenticator. `409 already_enabled` comes before the proof, so nothing is used up.
+   - Errors: `409 already_enabled`, and the proof errors listed above.
+   - Limit: 10 an hour.
+2. `POST /api/account/two-factor/confirm {"ceremony", "code"}` → `200 {"recovery_codes": ["…" ×8]}`. Recovery codes
+   are shown only here and on regeneration, and are never sent again. Error: `422 invalid_otp` (also for a ceremony
+   that ended, expired or is someone else's; 5 wrong codes end a ceremony). The account holder gets an email "Two-step
+   sign-in is on" naming the device, never the secret.
+3. `POST /api/account/two-factor/recovery-codes {…proof}` → `200 {"recovery_codes": […]}`. The old codes stop working.
+   Error: `409 not_enabled` without two-step.
+4. `DELETE /api/account/two-factor {"otp"}` → `204`. The proof here must be an authenticator or recovery code, never
+   only a password or `email_code`; otherwise anyone who controls the email could turn two-step off. A person who has
+   lost both gets help from support, as on the web. Error: `409 required_for_staff` for platform staff. Without
+   two-step on, the answer is `204` and nothing changes.
+
+#### 8. Passkeys on the phone
+1. `POST /api/account/passkeys/options {…proof}` → `200 {"ceremony": "…", "options": {…WebAuthn PublicKeyCredentialCreationOptions JSON…}}`.
+   - The proof is asked here, and only this ceremony (of this person, used once) can add the passkey.
+   - The rp id is the console host, the same passkeys as the website.
+   - The options are valid for 5 minutes.
+   - Errors: `409 too_many_passkeys` (10), `409 passkeys_unavailable` when `passkeys_available` is false, and the proof
+     errors listed above.
+   - Limit: 10 an hour.
+2. `POST /api/account/passkeys {"ceremony", "name", "credential": {…registration response JSON…}}` → `201
+   {"id", "name", "created_at"}`. Error: `422 invalid_passkey` (also for a ceremony that was used, expired or is
+   someone else's). The account holder gets an email "A passkey was added" naming the passkey and the device.
+3. The Android origin `android:apk-key-hash:<base64url of the signing cert SHA-256>` is accepted next to the console
+   origin, built from `echoledger.android_app.fingerprints`. `/.well-known/assetlinks.json` gains the
+   `delegate_permission/common.get_login_creds` relation, which Credential Manager needs.
+4. The desktop app opens `https://<console>/app/settings/security/passkeys`, a stable link added by B9 that
+   redirects to wherever the console's passkeys section is (classic Profile or the v2 Sign-in & security), after
+   sign-in if needed. WebView2 and WKWebView ceremonies are out of scope.
+5. When `passkeys_available` is false (no Android signing key configured, for example on a self-hosted server), the
+   phone hides "Add a passkey" and shows "Manage passkeys on the website".
+
+#### 9. Keep my account
+Asking for deletion signs the account out everywhere (`AccountDeletion::schedule`), so no app is signed in to cancel
+it. The fix is in sign-in:
+- During the 7-day grace, `POST /api/auth/password` and `POST /api/auth/device/token` answer
+  `403 deletion_scheduled {"deletes_at"}`. Until now they answered `403 not_allowed`; an older app shows the message
+  as before. `POST /api/auth/code/verify` (the email code) does the same, and the email code stays good for the call
+  with `keep`, so an account without a password can keep itself too.
+- The answer comes only once the password (or email code) and the two-step code are right. The two-step code is
+  checked without being used up, so the call with `keep` sends the same one.
+- The app then asks "Keep my account?" and repeats the same call with `"keep": true`. That cancels the deletion
+  (audited as `account_deletion_cancelled`, and the account gets an email) and signs in as usual (`201`).
+- Browser sign-in (desktop, and the phone's browser path) gets the same: `POST /api/auth/device/token` answers
+  `403 deletion_scheduled`, the one-time code stays valid for its 5 minutes, and the same call with `"keep": true`
+  cancels the deletion and signs in.
+- `keep` counts only after the whole sign-in has passed: password, `otp`, SignInGuard and the staff rules.
+- An app that does not know `deletion_scheduled` shows its message as a plain error ("This account is being
+  deleted on <date>. Sign in on the console and choose Keep my account."), tested.
+- The proof is the sign-in itself (password with `otp`, or the browser sign-in), so there is no extra endpoint and no
+  token that is only half valid.
+
+#### Audit events (added to "Security centre")
+These are new: `name_changed`, `email_change_requested`, `email_changed`, `email_change_cancelled`,
+`email_change_blocked`, `avatar_changed`, `avatar_removed`, `recovery_codes_regenerated`, `passkey_renamed`.
+
+`email_changed` is written for every change of address (the console's link, an app's code, staff).
+
+These already exist and are now also written from the apps: `password_changed`, `mfa_enabled`, `mfa_disabled`,
+`passkey_added`, `passkey_removed`, `web_session_revoked`, `google_unlinked`, `account_deletion_cancelled` ("Keep my
+account", the same event as the console's).
+
+Summaries never contain the addresses in full ("Email changed to h…@example.com").
 
 ## Security centre (since v1.1)
 

@@ -7,6 +7,7 @@ use App\Models\AssistSession;
 use App\Models\AssistTurn;
 use App\Models\LabelList;
 use App\Models\MissedRecording;
+use App\Models\Passkey;
 use App\Models\Screen;
 use App\Models\SentItem;
 use App\Models\SessionLabel;
@@ -44,6 +45,7 @@ const ISO_API_BYPASS = [
     'api.auth.sign-up' => 'signing up (v1.6): the new account and its own new workspace',
     'api.webhooks.stt' => 'provider callback: found by transcript id and verified signature',
     'api.recordings.audio' => 'signed, expiring URL issued to a device of the workspace',
+    'api.avatars.show' => 'signed, expiring, versioned URL of a profile picture, given only where the API already shows that person (since 2.0.0-l)',
     // Since v1.9 (L1): the Live Assist relay, HMAC-signed with the server's own secret, never a device token; it finds
     // a session by its id, which only a relay token the server minted for that session carries.
     'api.internal.assist.providers' => 'the relay: provider keys and the model catalog, no workspace data',
@@ -73,6 +75,7 @@ const ISO_WEB_BYPASS = [
     'site.pricing' => 'public pricing page (v2.0): the plans on offer, server-wide, no workspace data',
     'legacy.profile' => 'the account page\'s old address (before v1.7): a redirect to Settings, no data',
     'legacy.security' => 'the security centre\'s old address (before v1.7): a redirect to Settings, no data',
+    'app.passkeys' => 'the desktop app\'s passkeys link (since 2.0.0-l): a redirect to Settings, no data',
     'legacy.console' => 'the app\'s old addresses under /admin (before v1.6): a redirect to the same path under /app, no data',
     'downloads' => 'public downloads page: the apps\' builds, server-wide, no workspace data',
     'downloads.android' => 'public update manifest of the phone app, server-wide',
@@ -171,15 +174,17 @@ function isoWorld(bool $sameWorkspace = false): array
         'token_hash' => hash('sha256', 'bob-invitation'), 'invited_by' => $bob->id, 'expires_at' => now()->addDay()]);
     $bobLink = WorkspaceInviteLink::query()->create(['workspace_id' => $bobTeam->id, 'role' => 'member', 'token_hash' => hash('sha256', 'bob-link'),
         'created_by' => $bob->id, 'expires_at' => now()->addDay()]);
+    // Since 2.0.0-l: a passkey of Bob's (account and security from the apps).
+    $bobPasskey = Passkey::query()->create(['user_id' => $bob->id, 'name' => 'BOB-SECRET-DEVICE passkey', 'credential_id' => 'bob-credential', 'credential' => '{}']);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
+    return compact('bobPasskey', 'alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
 function isoIds(array $b): array
 {
-    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id, $b['upgrade']->id, $b['proof']->id, $b['missed']->id];
+    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id, $b['upgrade']->id, $b['proof']->id, $b['missed']->id, $b['bobPasskey']->id];
 }
 
 /**
@@ -350,6 +355,30 @@ function isoApiCases(array $b): array
         'api.account.destroy' => ['DELETE', '/api/account', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
         'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],
+        // Since 2.0.0-l (account and security from the apps): only the calling device's own person; Bob's device and
+        // passkey are the same 404 as unknown ids, and nothing here signs this device out.
+        'api.account.security' => ['GET', '/api/account/security', [], 'list'],
+        'api.account.update' => ['PATCH', '/api/account', ['name' => 'Alice Renamed'], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('name') === 'Alice Renamed'],
+        'api.account.proof-code' => ['POST', '/api/account/proof-code', [], fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'proof_code_not_needed'],
+        'api.account.avatar.store' => ['POST', '/api/account/avatar', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
+        'api.account.avatar.destroy' => ['DELETE', '/api/account/avatar', [], fn (TestResponse $r): bool => $r->status() === 204],
+        'api.account.email' => ['POST', '/api/account/email', ['email' => 'alice-new@example.test'], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'proof_required'],
+        'api.account.email.confirm' => ['POST', '/api/account/email/confirm', ['code' => '000000'], fn (TestResponse $r): bool => $r->status() === 410 && $r->json('code') === 'expired'],
+        'api.account.email.cancel' => ['DELETE', '/api/account/email', [], fn (TestResponse $r): bool => $r->status() === 204],
+        'api.account.password' => ['PUT', '/api/account/password', ['current' => 'password', 'new' => 'short'], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('error_codes.new.0.code') === 'too_short'],
+        'api.account.devices.rename' => ['PATCH', "/api/account/devices/{$b['device']->id}", ['name' => 'hijacked'], 404],
+        'api.account.devices.revoke' => ['DELETE', "/api/account/devices/{$b['device']->id}", [], 404],
+        'api.account.browsers.revoke' => ['DELETE', '/api/account/browsers/'.str_repeat('b', 32), [], 404],
+        'api.account.google.unlink' => ['DELETE', '/api/account/google', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'proof_required'],
+        // Adding a way in needs proof first (the ceremony it opens is bound to it): nothing of B either way.
+        'api.account.passkeys.options' => ['POST', '/api/account/passkeys/options', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'proof_required'],
+        'api.account.passkeys.store' => ['POST', '/api/account/passkeys', ['ceremony' => 'not-a-ceremony', 'credential' => ['id' => 'x']], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'invalid_passkey'],
+        'api.account.passkeys.rename' => ['PATCH', "/api/account/passkeys/{$b['bobPasskey']->id}", ['name' => 'hijacked'], 404],
+        'api.account.passkeys.remove' => ['DELETE', "/api/account/passkeys/{$b['bobPasskey']->id}", ['password' => 'password'], 404],
+        'api.account.two-factor.begin' => ['POST', '/api/account/two-factor', [], fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'already_enabled'],
+        'api.account.two-factor.confirm' => ['POST', '/api/account/two-factor/confirm', ['ceremony' => 'x', 'code' => '123456'], fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'already_enabled'],
+        'api.account.two-factor.recovery-codes' => ['POST', '/api/account/two-factor/recovery-codes', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'proof_required'],
+        'api.account.two-factor.disable' => ['DELETE', '/api/account/two-factor', [], fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'required_for_staff'],
         'api.account.sign-out-everywhere' => ['POST', '/api/account/sign-out-everywhere', [], fn (TestResponse $r): bool => $r->status() === 204],
         // Since v1.8 P6.3: inviting people; another workspace's invitation and link are the same 404 as unknown ids.
         'api.workspace.invitations' => ['GET', '/api/workspace/invitations', [], 'list'],

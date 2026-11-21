@@ -11,6 +11,7 @@ use App\Models\Device;
 use App\Models\ShareLink;
 use App\Models\User;
 use App\Services\Accounts\SignInGuard;
+use App\Support\Api\AccountRules;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -46,6 +47,16 @@ final class AuditLog
         'mfa_disabled' => 'Two-step sign-in turned off',
         'passkey_added' => 'Passkey added',
         'passkey_removed' => 'Passkey removed',
+        // Since 2.0.0-l (docs/API.md "Account and security from the apps"): changes to the account from the apps and console.
+        'name_changed' => 'Name changed',
+        'email_change_requested' => 'Email change asked for',
+        'email_changed' => 'Email changed',
+        'email_change_cancelled' => 'Email change cancelled',
+        'email_change_blocked' => 'Email change blocked',
+        'avatar_changed' => 'Profile picture changed',
+        'avatar_removed' => 'Profile picture removed',
+        'recovery_codes_regenerated' => 'Recovery codes made again',
+        'passkey_renamed' => 'Passkey renamed',
         'credentials_changed' => 'Provider credentials changed',
         // Since v1.5: accounts, sign-in from the apps, teams and the settings.
         'account_created' => 'Account made',
@@ -243,6 +254,10 @@ final class AuditLog
         User::updated(function (User $u) use ($log): void {
             if ($u->wasChanged('password')) {
                 $log()->record('password_changed', $u->id, $u);
+            }
+            // Since 2.0.0-l: a new address, by the console's link, an app's code or staff; never the address in full.
+            if ($u->wasChanged('email')) {
+                $log()->record('email_changed', $u->id, $u, 'Email changed to '.AccountRules::maskEmail($u->email));
             }
             if ($u->wasChanged('app_authentication_secret')) {
                 $log()->record($u->app_authentication_secret ? 'mfa_enabled' : 'mfa_disabled', $u->id, $u);

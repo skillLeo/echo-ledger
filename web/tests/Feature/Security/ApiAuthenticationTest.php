@@ -130,6 +130,28 @@ function secDeviceGuardedRoutes(): array
         'DELETE account' => ['DELETE', '/api/account', 'sessions:write'],
         'POST account/export' => ['POST', '/api/account/export', 'library:read'],
         'GET account/export/{id}' => ['GET', '/api/account/export/'.Fx::MISSING_ID, 'library:read'],
+        // Since 2.0.0-l: account and security from the apps.
+        'GET account/security' => ['GET', '/api/account/security', 'config:read'],
+        'POST account/proof-code' => ['POST', '/api/account/proof-code', 'sessions:write'],
+        'PATCH account' => ['PATCH', '/api/account', 'sessions:write'],
+        'POST account/avatar' => ['POST', '/api/account/avatar', 'sessions:write'],
+        'DELETE account/avatar' => ['DELETE', '/api/account/avatar', 'sessions:write'],
+        'POST account/email' => ['POST', '/api/account/email', 'sessions:write'],
+        'POST account/email/confirm' => ['POST', '/api/account/email/confirm', 'sessions:write'],
+        'DELETE account/email' => ['DELETE', '/api/account/email', 'sessions:write'],
+        'PUT account/password' => ['PUT', '/api/account/password', 'sessions:write'],
+        'PATCH account/devices/{id}' => ['PATCH', '/api/account/devices/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE account/devices/{id}' => ['DELETE', '/api/account/devices/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE account/browsers/{id}' => ['DELETE', '/api/account/browsers/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE account/google' => ['DELETE', '/api/account/google', 'sessions:write'],
+        'POST account/passkeys/options' => ['POST', '/api/account/passkeys/options', 'sessions:write'],
+        'POST account/passkeys' => ['POST', '/api/account/passkeys', 'sessions:write'],
+        'PATCH account/passkeys/{id}' => ['PATCH', '/api/account/passkeys/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE account/passkeys/{id}' => ['DELETE', '/api/account/passkeys/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST account/two-factor' => ['POST', '/api/account/two-factor', 'sessions:write'],
+        'POST account/two-factor/confirm' => ['POST', '/api/account/two-factor/confirm', 'sessions:write'],
+        'POST account/two-factor/recovery-codes' => ['POST', '/api/account/two-factor/recovery-codes', 'sessions:write'],
+        'DELETE account/two-factor' => ['DELETE', '/api/account/two-factor', 'sessions:write'],
         // Since v1.9 (L1): Live Assist.
         'GET assist/preps' => ['GET', '/api/assist/preps', 'library:read'],
         'GET assist/preps/{id}' => ['GET', '/api/assist/preps/'.Fx::MISSING_ID, 'library:read'],
@@ -210,6 +232,8 @@ it('exposes exactly the documented public API routes and guards every other one'
     expect($public)->toBe([
         // Since v1.5 (Phase 1C): what the sign-in screen offers.
         'GET api/auth/options',
+        // Since 2.0.0-l: a profile picture, by its signed, expiring, versioned URL (AvatarController checks the signature).
+        'GET api/avatars/{user}/{version}',
         // Since v1.9 (L1): the Live Assist relay's internal API, never a device token: HMAC-signed by the relay
         // (VerifyAssistRelay; tests/Feature/Assist/AssistRelayInternalTest.php).
         'GET api/internal/assist/providers',
@@ -230,8 +254,8 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    // 2.0.0-m: the five list routes.
-    expect($guarded)->toBe(145);
+    // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes.
+    expect($guarded)->toBe(166);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

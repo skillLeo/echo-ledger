@@ -6,16 +6,19 @@ namespace App\Services\Accounts;
 
 use App\Exceptions\ApiError;
 use App\Http\Middleware\EnsureNotSuspended;
+use App\Mail\DeletionCancelledMail;
 use App\Models\Device;
 use App\Models\DeviceSignInCode;
 use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\PairingService;
+use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
 use App\Support\DeviceNames;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\NewAccessToken;
 
@@ -48,16 +51,21 @@ final class DeviceSignIn
         private readonly AuditLog $audit,
         private readonly EmailCodes $emailCodes,
         private readonly SignUp $signUp,
+        private readonly AccountDeletion $deletion,
+        private readonly SettingsRepository $settings,
     ) {}
 
     /**
-     * POST /api/auth/password.
+     * POST /api/auth/password. Since 2.0.0-l an account in its deletion grace is `403 deletion_scheduled` once the
+     * password and two-step code are right (the code is not used up), and the same call with `"keep": true` keeps the
+     * account and signs in.
      *
-     * @param  array{email: string, password: string, otp?: string|null, name: string, platform: string, app_version?: string|null, os_version?: string|null}  $data
+     * @param  array{email: string, password: string, otp?: string|null, keep?: bool|null, name: string, platform: string, app_version?: string|null, os_version?: string|null}  $data
      * @return array{0: Device, 1: NewAccessToken}
      */
     public function withPassword(array $data, ?string $ip, ?string $country): array
     {
+        $keep = (bool) ($data['keep'] ?? false);
         $email = Str::lower(trim($data['email']));
         $this->guard->assertNotLocked($email);
 
@@ -74,16 +82,18 @@ final class DeviceSignIn
             if ($otp === '') {
                 throw new ApiError(401, 'otp_required', 'Enter the code from your authenticator app.');
             }
+            $this->assertNotScheduled($user, $keep, fn (): bool => $this->codes->peek($user, $otp), $email);
             if (! $this->codes->verify($user, $otp)) {
                 $this->failed($email, $user);
 
                 throw new ApiError(422, 'invalid_otp', 'That code is wrong or was used already.');
             }
         }
-        $workspaceId = $this->assertCanSignIn($user);
+        $this->assertNotScheduled($user, $keep);
+        $workspaceId = $this->assertCanSignIn($user, $keep);
         $this->guard->clear($email);
 
-        return $this->create($user, $workspaceId, $data, $ip, $country, 'password');
+        return $this->create($user, $workspaceId, $data, $ip, $country, 'password', $keep);
     }
 
     /**
@@ -91,11 +101,15 @@ final class DeviceSignIn
      * one: without it `401 otp_required`, and the same email code stays good); a new address gets the one-time sign-up
      * token for POST /api/auth/sign-up. The code proves the address, so an account not confirmed yet is confirmed.
      *
-     * @param  array{email: string, code: string, otp?: string|null, name: string, platform: string, app_version?: string|null, os_version?: string|null, install_id?: string|null}  $data
+     * Since 2.0.0-l an account in its deletion grace answers `403 deletion_scheduled` (the email code stays good) and
+     * keeps the account with `"keep": true`, as POST /api/auth/password does.
+     *
+     * @param  array{email: string, code: string, otp?: string|null, keep?: bool|null, name: string, platform: string, app_version?: string|null, os_version?: string|null, install_id?: string|null}  $data
      * @return array{0: Device, 1: NewAccessToken}|array{sign_up_token: string}
      */
     public function withEmailCode(array $data, ?string $ip, ?string $country): array
     {
+        $keep = (bool) ($data['keep'] ?? false);
         $email = EmailCodes::normalize($data['email']);
         $row = $this->emailCodes->check($email, $data['code']);
         $user = User::query()->where('email', $email)->first();
@@ -110,20 +124,22 @@ final class DeviceSignIn
             if ($otp === '') {
                 throw new ApiError(401, 'otp_required', 'Enter the code from your authenticator app.');
             }
+            $this->assertNotScheduled($user, $keep, fn (): bool => $this->codes->peek($user, $otp), $email);
             if (! $this->codes->verify($user, $otp)) {
                 $this->failed($email, $user);
 
                 throw new ApiError(422, 'invalid_otp', 'That code is wrong or was used already.');
             }
         }
+        $this->assertNotScheduled($user, $keep);
         $this->emailCodes->useUp($row);
         if (! $user->hasVerifiedEmail()) {
             $user->markEmailAsVerified();
         }
-        $workspaceId = $this->assertCanSignIn($user);
+        $workspaceId = $this->assertCanSignIn($user, $keep);
         $this->guard->clear($email);
 
-        return $this->create($user, $workspaceId, $data, $ip, $country, 'code');
+        return $this->create($user, $workspaceId, $data, $ip, $country, 'code', $keep);
     }
 
     /**
@@ -170,9 +186,10 @@ final class DeviceSignIn
 
     /**
      * The checks shared by both ways in: a confirmed email, not in the deletion grace, a workspace to act in.
-     * Returns that workspace (the person's current one).
+     * Returns that workspace (the person's current one). With [$keep] (since 2.0.0-l, the apps' "Keep my account") the
+     * deletion grace is let through: create() then cancels the deletion with the sign-in.
      */
-    public function assertCanSignIn(User $user): int
+    public function assertCanSignIn(User $user, bool $keep = false): int
     {
         // Since v1.6: the super admin's suspend switch.
         if ($user->isSuspended()) {
@@ -181,7 +198,7 @@ final class DeviceSignIn
         if (! $user->hasVerifiedEmail()) {
             throw new ApiError(403, 'email_not_verified', 'Confirm your email first: open the link in the email the console sent you.');
         }
-        if ($user->isBeingDeleted()) {
+        if ($user->isBeingDeleted() && ! $keep) {
             throw new ApiError(403, 'not_allowed', 'This account is being deleted. Sign in on the console and choose "Keep my account" to use it again.');
         }
         $workspace = $this->workspaces->current($user);
@@ -190,6 +207,30 @@ final class DeviceSignIn
         }
 
         return $workspace->id;
+    }
+
+    /**
+     * The apps' sign-in during the deletion grace (since 2.0.0-l): `403 deletion_scheduled {"deletes_at"}` unless the
+     * call says `"keep": true`. With [$proof] (the two-step code, checked without using it up) the answer comes only for
+     * a right code, so it says nothing to someone who knows only the password; a wrong one counts as a failure.
+     * Nothing is used up, so the same call with `keep` signs in.
+     *
+     * @param  (callable(): bool)|null  $proof
+     */
+    private function assertNotScheduled(User $user, bool $keep, ?callable $proof = null, ?string $email = null): void
+    {
+        if (! $user->isBeingDeleted() || $keep) {
+            return;
+        }
+        if ($proof !== null && ! $proof()) {
+            $this->failed((string) $email, $user);
+
+            throw new ApiError(422, 'invalid_otp', 'That code is wrong or was used already.');
+        }
+        $date = $user->deletes_at?->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y');
+
+        throw new ApiError(403, 'deletion_scheduled', "This account is being deleted on {$date}. Sign in on the console and choose Keep my account.",
+            ['deletes_at' => $user->deletes_at?->toAtomString()]);
     }
 
     /**
@@ -216,37 +257,46 @@ final class DeviceSignIn
 
     /**
      * POST /api/auth/device/token: the code and the verifier whose SHA-256 the browser was given. A wrong verifier uses
-     * the code up, so a code that leaked cannot be tried against many verifiers.
+     * the code up, so a code that leaked cannot be tried against many verifiers. Since 2.0.0-l an account in its
+     * deletion grace is `403 deletion_scheduled` and the code stays good for its 5 minutes; the same call with
+     * `"keep": true` keeps the account and signs in.
      *
-     * @param  array{code: string, code_verifier: string, name: string, platform: string, app_version?: string|null, os_version?: string|null}  $data
+     * @param  array{code: string, code_verifier: string, keep?: bool|null, name: string, platform: string, app_version?: string|null, os_version?: string|null}  $data
      * @return array{0: Device, 1: NewAccessToken}
      */
     public function withCode(array $data, ?string $ip, ?string $country): array
     {
+        $keep = (bool) ($data['keep'] ?? false);
         $invalid = new ApiError(422, 'invalid_code', 'This sign-in code is wrong, used or expired. Start the sign-in again.');
-        $found = DB::transaction(function () use ($data): ?DeviceSignInCode {
+        [$found, $user] = DB::transaction(function () use ($data, $keep): array {
             $row = DeviceSignInCode::query()->where('code_hash', hash('sha256', $data['code']))->lockForUpdate()->first();
             if (! $row instanceof DeviceSignInCode || $row->used_at !== null || $row->expires_at->isPast()) {
-                return null;
+                return [null, null];
             }
-            $row->forceFill(['used_at' => now()])->save();
+            if (! hash_equals($row->code_challenge, self::challengeOf($data['code_verifier']))) {
+                $row->forceFill(['used_at' => now()])->save();
 
-            return hash_equals($row->code_challenge, self::challengeOf($data['code_verifier'])) ? $row : null;
+                return [null, null];
+            }
+            $user = User::query()->find($row->user_id);
+            // The right verifier of an account in its deletion grace: the code stays good for the call with `keep`.
+            if (! ($user instanceof User && $user->isBeingDeleted() && ! $keep)) {
+                $row->forceFill(['used_at' => now()])->save();
+            }
+
+            return [$row, $user];
         });
-        if (! $found instanceof DeviceSignInCode) {
+        if (! $found instanceof DeviceSignInCode || ! $user instanceof User) {
             throw $invalid;
         }
-        $user = User::query()->find($found->user_id);
-        if (! $user instanceof User) {
-            throw $invalid;
-        }
-        $this->assertCanSignIn($user);
+        $this->assertNotScheduled($user, $keep);
+        $this->assertCanSignIn($user, $keep);
         // The workspace it was approved for, while the person still belongs to it.
         if ($this->workspaces->roleOf($user, $found->workspace_id) === null) {
             throw new ApiError(403, 'not_allowed', 'You no longer belong to the workspace this sign-in was for. Sign in again.');
         }
 
-        return $this->create($user, $found->workspace_id, $data, $ip, $country, 'browser');
+        return $this->create($user, $found->workspace_id, $data, $ip, $country, 'browser', $keep);
     }
 
     /** BASE64URL(SHA-256(verifier)) without padding (RFC 7636, S256). */
@@ -259,10 +309,21 @@ final class DeviceSignIn
      * @param  array{name: string, platform: string, app_version?: string|null, os_version?: string|null, install_id?: string|null}  $data
      * @return array{0: Device, 1: NewAccessToken}
      */
-    private function create(User $user, int $workspaceId, array $data, ?string $ip, ?string $country, string $via): array
+    private function create(User $user, int $workspaceId, array $data, ?string $ip, ?string $country, string $via, bool $keep = false): array
     {
         $attributes = ['name' => $data['name'], 'platform' => $data['platform'], 'app_version' => $data['app_version'] ?? null, 'os_version' => $data['os_version'] ?? null, 'install_id' => $data['install_id'] ?? null];
-        [$device, $token] = DB::transaction(fn (): array => $this->pairing->createDevice($workspaceId, $user->id, $attributes, $ip, $country, $via));
+        // "Keep my account" (since 2.0.0-l) counts only with the sign-in: a device that cannot be added keeps nothing.
+        $kept = $keep && $user->isBeingDeleted();
+        [$device, $token] = DB::transaction(function () use ($kept, $user, $workspaceId, $attributes, $ip, $country, $via): array {
+            if ($kept) {
+                $this->deletion->cancel($user);
+            }
+
+            return $this->pairing->createDevice($workspaceId, $user->id, $attributes, $ip, $country, $via);
+        });
+        if ($kept) {
+            Mail::to($user->email)->queue(new DeletionCancelledMail);
+        }
         $this->alerts->deviceSignedIn($device);
 
         return [$device, $token];

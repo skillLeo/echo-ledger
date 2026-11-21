@@ -11,6 +11,7 @@ use App\Services\Accounts\EmailCodes;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\Accounts\SignUp;
 use App\Services\DeviceConfigPayload;
+use App\Support\Api\AccountRules;
 use App\Support\ClientCountry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,6 +43,8 @@ final class AuthController extends Controller
             // Since v1.6: email codes, and the server's own address (the apps keep "Use a different server" under Advanced).
             'code' => true,
             'server' => rtrim((string) config('app.url'), '/'),
+            // Since 2.0.0-l: what a new password needs, so the apps can say so before sending (the server still decides).
+            'password_rules' => AccountRules::passwordRules(),
         ]);
     }
 
@@ -72,6 +75,7 @@ final class AuthController extends Controller
             'email' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:16'],
             'otp' => ['nullable', 'string', 'max:64'],
+            'keep' => ['nullable', 'boolean'],
             ...self::deviceRules(),
         ]);
         $answer = $this->signIn->withEmailCode($data, $request->ip(), ClientCountry::of($request));
@@ -105,6 +109,8 @@ final class AuthController extends Controller
             'email' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string', 'max:4096'],
             'otp' => ['nullable', 'string', 'max:64'],
+            // Since 2.0.0-l: "Keep my account" after `403 deletion_scheduled`.
+            'keep' => ['nullable', 'boolean'],
             ...self::deviceRules(),
         ]);
         [$device, $token] = $this->signIn->withPassword($data, $request->ip(), ClientCountry::of($request));
@@ -119,6 +125,7 @@ final class AuthController extends Controller
             'code' => ['required', 'string', 'max:128'],
             // RFC 7636: 43 to 128 characters of A-Z a-z 0-9 - . _ ~
             'code_verifier' => ['required', 'string', 'regex:/^[A-Za-z0-9\-._~]{43,128}$/'],
+            'keep' => ['nullable', 'boolean'],
             ...self::deviceRules(),
         ]);
         [$device, $token] = $this->signIn->withCode($data, $request->ip(), ClientCountry::of($request));

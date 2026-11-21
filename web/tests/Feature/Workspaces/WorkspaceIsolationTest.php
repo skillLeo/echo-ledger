@@ -9,6 +9,7 @@ use App\Models\AssistTurn;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
+use App\Models\Passkey;
 use App\Models\Screen;
 use App\Models\SessionMarker;
 use App\Models\ShareLink;
@@ -90,6 +91,9 @@ it('never lets workspace A read, change or delete workspace B through the API', 
             ->and(Screen::query()->find($b['screen']->id))->not->toBeNull()
             ->and($b['transcript']->fresh()->text)->toContain('BOBSECRETTRANSCRIPT')
             ->and($b['bob']->fresh()->ui_classic)->toBeFalse()
+            ->and($b['bob']->fresh()->name)->not->toBe('Alice Renamed')
+            ->and(Passkey::query()->find($b['bobPasskey']->id)?->name)->toBe('BOB-SECRET-DEVICE passkey')
+            ->and(Device::query()->find($b['device']->id)?->signed_out_at)->toBeNull()
             ->and(AssistPrep::query()->find($b['assistPrep']->id)?->title)->toBe('BOB-SECRET-TITLE prep')
             ->and(AssistSession::query()->find($b['assistSession']->id)?->status)->toBe('active')
             ->and(AssistTurn::query()->where('assist_session_id', $b['assistSession']->id)->count())->toBe(1)

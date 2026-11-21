@@ -71,6 +71,10 @@ Route::get('/app/profile', function (Request $request) {
     return redirect(EditProfile::settingsUrl($pages[(string) $request->query('tab')] ?? null), 301);
 })->middleware('throttle:site')->name('legacy.profile');
 Route::get('/app/security', fn () => redirect(EditProfile::settingsUrl('security'), 301))->middleware('throttle:site')->name('legacy.security');
+// Since 2.0.0-l: the stable link the desktop app opens to add a passkey, wherever Settings keeps them (the console's
+// sign-in page comes first when the browser is not signed in, then the page itself).
+Route::get('/app/settings/security/passkeys', fn () => redirect(EditProfile::settingsUrl('security', 'security.passkeys')))
+    ->middleware('throttle:site')->name('app.passkeys');
 
 // Android App Links (v1.5): the phone app opens this server's /s/, /p/ and /r/ links itself when it is installed.
 Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app-links');

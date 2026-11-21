@@ -922,7 +922,7 @@ it('M4 lists what you sent, newest first, in the documented shape', function () 
 
     expect(array_column(array_column($data, 'to'), 'email'))->toBe(['carol@corp.test', 'bob@corp.test'])
         ->and(array_keys($data[0]))->toBe(['id', 'kind', 'to', 'title', 'note', 'sent_at', 'saved_at'])
-        ->and($data[0])->toMatchArray(['kind' => 'project', 'to' => ['name' => 'Carol', 'email' => 'carol@corp.test'], 'title' => 'Acme', 'note' => 'For tomorrow', 'saved_at' => null]);
+        ->and($data[0])->toMatchArray(['kind' => 'project', 'to' => ['name' => 'Carol', 'email' => 'carol@corp.test', 'avatar_url' => null, 'avatar_version' => null], 'title' => 'Acme', 'note' => 'For tomorrow', 'saved_at' => null]);
     $this->api($w['anaToken'])->getJson('/api/sent')->assertUnprocessable();
     // What someone else sent, and another recording: nothing.
     expect($this->api($w['bobToken'])->getJson("/api/sent?client_id={$w['project']->id}")->assertOk()->json('data'))->toBe([])
