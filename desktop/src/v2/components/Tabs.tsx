@@ -1,6 +1,7 @@
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 
-export type TabItem<T extends string> = { value: T; label: string };
+/** `badge`: the plan a locked tab's feature is in ("Pro"), shown after its name. */
+export type TabItem<T extends string> = { value: T; label: string; badge?: string | null };
 
 /** Arrow keys in reading order: in right-to-left, ArrowLeft moves forward. Home and End jump to the ends. */
 function nextIndex(e: KeyboardEvent<HTMLElement>, at: number, count: number): number | null {
@@ -39,6 +40,7 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, children 
           <button key={t.value} type="button" role="tab" className="el-tab" id={`${id}-tab-${t.value}`}
             aria-selected={i === at} aria-controls={`${id}-panel`} tabIndex={i === at ? 0 : -1} onClick={() => onChange(t.value)}>
             {t.label}
+            {t.badge && <>{" "}<span className="plan-badge static mark" title={`${t.label} is in ${t.badge}`}>{t.badge}</span></>}
           </button>
         ))}
       </div>

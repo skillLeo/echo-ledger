@@ -1398,3 +1398,19 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-nav-drop { display: none; align-items: center; gap: var(--el-space-8); margin-inline: var(--el-space-8); padding: var(--el-space-8); border: var(--el-border-hairline) dashed var(--el-role-border-strong); border-radius: var(--el-radius-sm); color: var(--el-role-text-secondary); }
 .dragging-recordings .el-nav-drop { display: flex; }
 .el-shell [data-drop-project].drop-over { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+
+/* The Library's places under Library in the sidebar (parity DT-NAV-003, DT-LIB-115..117), each with its count. */
+.el-nav-item--place { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
+.el-nav-item--place .el-nav-item__count { color: var(--el-role-text-secondary); }
+
+/* Every project as a tree under Projects (parity DT-LIB-123, DT-PRJ-004, DT-NAV-016): folds kept on this computer. */
+.el-nav-tree { list-style: none; margin: 0; padding: 0; }
+.el-nav-tree__row { display: flex; align-items: center; padding-inline-start: calc(var(--el-space-16) + var(--el-space-12) * var(--el-tree-depth)); border-radius: var(--el-radius-sm); }
+.el-nav-tree__fold { all: unset; display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-24); block-size: var(--el-space-24); flex: none; cursor: pointer; border-radius: var(--el-radius-sm); color: var(--el-role-text-secondary); }
+.el-nav-tree__fold:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-nav-tree__name.el-nav-item--sub { padding-inline-start: var(--el-space-4); }
+.el-shell .el-nav-tree__row.drop-over { background: var(--el-role-accent-soft); outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+
+/* What the plan leaves out on a recording, with the plan that has it (parity DT-REC-043, 073, 083). */
+.el-recording__locked { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
+.el-recording__locked:empty { display: none; }

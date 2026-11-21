@@ -24,6 +24,7 @@ import { PLAYBACK_EXPIRED } from "../shared/SharedReader";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
 import { PDF_HINT, WAVE_BARS } from "../../views/main/TranscriptTools";
+import { LockedChip } from "../../views/main/Upgrade";
 import { screenMarker } from "../../lib/screens";
 import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
@@ -48,11 +49,17 @@ export function primarySize(detail: Record<string, unknown>): number | null {
 /** Tooltips of what the engine was not sure of (kept as heard), as classic's. */
 export const UNSURE_WORD = "Not sure of this word. Click to hear it.";
 export const UNSURE_LINE = "The engine was not sure of this line. Click to hear it.";
-/** The words with timings join back into the line's text (spaces aside): only then are they drawn one by one. */
+/**
+ * The words with timings join back into the line's text, ignoring spaces, punctuation and capitals (engines send words
+ * without the line's commas and full stops): only then are they drawn one by one.
+ */
 export function wordsMatch(words: readonly { text: string }[], text: string): boolean {
-  const squash = (t: string) => t.replace(/\s+/g, " ").trim();
+  const squash = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
   return squash(words.map((w) => w.text).join(" ")) === squash(text);
 }
+
+/** No speaker names yet: one empty object, so what is worked out from them keeps while the page reads. */
+const NO_NAMES: Record<string, string> = {};
 /** Double-check: what a second transcription heard on a line it disagreed on (never the engine's name, D-132). */
 export const SECOND_HEARD = "A second transcription heard:";
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; value: T };
@@ -247,7 +254,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const viewText = (i: number): string | null => (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] ?? null : null);
   const exportView = showAs !== "original" && views?.status === "ready" ? showAs : null;
 
-  const names = detail.state === "ready" ? detail.value.names : {};
+  const names = detail.state === "ready" ? detail.value.names : NO_NAMES;
   const segments: Segment[] = useMemo(() => (transcript.state === "ready" && transcript.value
     ? transcript.value.segments.map((s, i) => ({ speaker: speakerName(names, s.speaker), start: s.start_ms / 1000, text: viewText(i) ?? s.text }))
     : []),
@@ -711,6 +718,14 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             </ul>
           )}
           {engine && <p className="el-caption el-secondary">Transcribed in {engine}</p>}
+          {/* What the plan leaves out here, each with the plan that has it (classic's locked chips; none when all are in). */}
+          <p className="el-recording__locked el-caption" data-testid="locked-chips">
+            {item.transcript?.final_status && <LockedChip feature="premium_engines" label="Premium engines" />}
+            {tDetail?.kind === "final" && <LockedChip feature="views" label="Roman Urdu · English · اردو" />}
+            {tDetail?.kind === "final" && <LockedChip feature="double_check" label="Double-check" />}
+            {!screens?.length && <LockedChip feature="screen_moments" label="Screens" />}
+            <LockedChip feature="connector" label="Ask an AI assistant" />
+          </p>
           {engineRetry && <p className="el-caption el-secondary" role="status" dir="auto">{engineRetry}</p>}
           {warning && <p className="el-caption el-row__error" role="status">{warning}</p>}
         </div>

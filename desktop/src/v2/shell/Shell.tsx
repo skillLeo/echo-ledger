@@ -79,6 +79,16 @@ export type ShellProps = {
   onHelp?: () => void;
   /** The super admin's Admin panel on the website (classic's avatar menu); none for everyone else. */
   onAdmin?: () => void;
+  /**
+   * The Library's places under Library (classic's sidebar): Waiting, Pinned and Failed uploads, then the smart folders
+   * that hold something (the Inbox always: it takes dropped recordings), each with its count.
+   */
+  places?: { places: readonly SidebarPlace[]; current: string | null; open: (key: string) => void };
+  /**
+   * Every project as a tree under Projects (classic's column): pinned ones first, subfolders under their project, each a
+   * target for dropped recordings. Without it the pinned projects are listed alone.
+   */
+  projectTree?: readonly SidebarProject[];
   /** The sub-lists, as classic's sidebar: pinned projects under Projects, Shared's places under Library. */
   pinnedProjects?: readonly { id: string; name: string }[];
   projectId?: string | null;
@@ -88,7 +98,74 @@ export type ShellProps = {
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, onAdmin, pinnedProjects = [], projectId = null, onProject, shared, children }: ShellProps) {
+/** A project in the sidebar's tree: its folder (`parent_id`, null at the top) and whether it is pinned. */
+export type SidebarProject = { id: string; name: string; parent_id?: string | null; pinned?: boolean };
+
+/** Which projects' subfolders are folded in the sidebar, kept on this computer (classic's: a group stays as left). */
+export const FOLDS_KEY = "echoledger-v2-sidebar-folds";
+function loadFolds(): Set<string> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FOLDS_KEY) ?? "[]");
+    return new Set(Array.isArray(saved) ? saved.filter((v): v is string => typeof v === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+function saveFolds(folds: ReadonlySet<string>) {
+  try {
+    localStorage.setItem(FOLDS_KEY, JSON.stringify([...folds]));
+  } catch {
+    // Kept for this session only.
+  }
+}
+
+/** The projects as a tree: pinned first, then by name, each project's subfolders under it (foldable, remembered). */
+function ProjectTreeNav({ projects, current, onOpen }: { projects: readonly SidebarProject[]; current: string | null; onOpen: (id: string) => void }) {
+  const [folds, setFolds] = useState<Set<string>>(loadFolds);
+  const ids = new Set(projects.map((p) => p.id));
+  const children = (parent: string | null) => projects
+    .filter((p) => (p.parent_id && ids.has(p.parent_id) ? p.parent_id : null) === parent)
+    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || a.name.localeCompare(b.name));
+  const fold = (id: string) => setFolds((now) => {
+    const next = new Set(now);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    saveFolds(next);
+    return next;
+  });
+  const branch = (parent: string | null, depth: number): ReactNode => {
+    const rows = children(parent);
+    if (!rows.length) return null;
+    return (
+      <ul className="el-nav-sub el-nav-tree" aria-label={parent === null ? "Projects" : undefined} role={parent === null ? undefined : "group"}>
+        {rows.map((p) => {
+          const kids = children(p.id).length > 0;
+          const open = kids && !folds.has(p.id);
+          return (
+            <li key={p.id} className="el-nav-tree__item" style={{ ["--el-tree-depth" as string]: String(depth) }}>
+              <div className="el-nav-tree__row" {...{ [DROP_ATTRIBUTE]: p.id }}>
+                {kids ? (
+                  <button type="button" className="el-nav-tree__fold" aria-expanded={open} aria-label={`${open ? "Fold" : "Show"} ${p.name}'s folders`} onClick={() => fold(p.id)}>
+                    <Icon icon={open ? Icons.ChevronDownIcon : Icons.ChevronEndIcon} directional />
+                  </button>
+                ) : <span className="el-nav-tree__fold" aria-hidden="true" />}
+                <button type="button" className="el-nav-item el-nav-item--sub el-nav-tree__name" dir="auto" aria-current={current === p.id ? "page" : undefined}
+                  onClick={() => onOpen(p.id)}>{p.name}</button>
+              </div>
+              {open && branch(p.id, depth + 1)}
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+  return <>{branch(null, 0)}</>;
+}
+
+/** A place of the Library in the sidebar: its key, words and count; `drop` takes dropped recordings (the Inbox). */
+export type SidebarPlace = { key: string; label: string; count: number; drop?: boolean };
+
+export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, onAdmin, places, projectTree, pinnedProjects = [], projectId = null, onProject, shared, children }: ShellProps) {
   // One press records or stops: while that is under way (the core answering, then the status saying so) more presses
   // and held-down keys do nothing, so a double click never starts and stops at once.
   const [pressing, setPressing] = useState<{ from: boolean } | null>(null);
@@ -188,6 +265,20 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
           ]} />
         </div>
         {item("library", "Library", Icons.LibraryIcon)}
+        {places && places.places.length > 0 && (
+          <ul className="el-nav-sub" aria-label="Library places">
+            {places.places.map((p) => (
+              <li key={p.key} {...(p.drop ? { [DROP_ATTRIBUTE]: "" } : {})}>
+                <button type="button" className="el-nav-item el-nav-item--sub el-nav-item--place" aria-label={`${p.label}, ${p.count}`}
+                  aria-current={current === "library" && places.current === p.key ? "page" : undefined}
+                  onClick={() => { setOwn(null); places.open(p.key); }}>
+                  <span className="el-nav-item__label" dir="auto">{p.label}</span>
+                  <span className="el-nav-item__count el-caption el-num">{p.count}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {shared && shared.tabs.length > 0 && (
           <ul className="el-nav-sub" aria-label="Shared">
             {shared.tabs.map(([tab, label]) => (
@@ -199,10 +290,13 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
         {item("projects", "Projects", Icons.FolderIcon)}
         {/* While recordings are dragged (lib/dragMove.ts): the Inbox takes them out of their project. Pinned projects
             below take them too. Hidden otherwise; Move to project… is the way for the keyboard. */}
-        <div className="el-nav-drop" aria-hidden="true" {...{ [DROP_ATTRIBUTE]: "" }}>
+        {!places?.places.some((p) => p.drop) && <div className="el-nav-drop" aria-hidden="true" {...{ [DROP_ATTRIBUTE]: "" }}>
           <Icon icon={Icons.InboxIcon} /><span>Inbox (no project)</span>
-        </div>
-        {onProject && pinnedProjects.length > 0 && (
+        </div>}
+        {onProject && projectTree && projectTree.length > 0 && (
+          <ProjectTreeNav projects={projectTree} current={current === "projects" ? projectId : null} onOpen={(id) => { setOwn(null); onProject(id); }} />
+        )}
+        {onProject && !projectTree && pinnedProjects.length > 0 && (
           <ul className="el-nav-sub" aria-label="Pinned projects">
             {pinnedProjects.map((p) => (
               <li key={p.id} {...{ [DROP_ATTRIBUTE]: p.id }}><button type="button" className="el-nav-item el-nav-item--sub" dir="auto" aria-current={current === "projects" && projectId === p.id ? "page" : undefined}
