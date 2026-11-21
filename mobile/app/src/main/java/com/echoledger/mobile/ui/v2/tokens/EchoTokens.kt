@@ -159,7 +159,17 @@ object EchoTokens {
         val caption = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight(400))
         val mono = TextStyle(fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight(400))
         val urduBody = TextStyle(fontSize = 16.sp, lineHeight = 30.sp, fontWeight = FontWeight(400))
+        val urduTitleL = TextStyle(fontSize = 24.sp, lineHeight = 44.sp, fontWeight = FontWeight(600))
+        val urduTitleM = TextStyle(fontSize = 20.sp, lineHeight = 40.sp, fontWeight = FontWeight(600))
+        val urduTitleS = TextStyle(fontSize = 16.sp, lineHeight = 30.sp, fontWeight = FontWeight(600))
+        val urduCaption = TextStyle(fontSize = 14.sp, lineHeight = 28.sp, fontWeight = FontWeight(400))
+        val urduTranscript = TextStyle(fontSize = 19.sp, lineHeight = 38.sp, fontWeight = FontWeight(400))
         val arabicBody = TextStyle(fontSize = 15.sp, lineHeight = 26.sp, fontWeight = FontWeight(400))
+        val arabicTitleL = TextStyle(fontSize = 24.sp, lineHeight = 36.sp, fontWeight = FontWeight(600))
+        val arabicTitleM = TextStyle(fontSize = 20.sp, lineHeight = 32.sp, fontWeight = FontWeight(600))
+        val arabicTitleS = TextStyle(fontSize = 16.sp, lineHeight = 26.sp, fontWeight = FontWeight(600))
+        val arabicCaption = TextStyle(fontSize = 13.sp, lineHeight = 22.sp, fontWeight = FontWeight(400))
+        val arabicTranscript = TextStyle(fontSize = 18.sp, lineHeight = 30.sp, fontWeight = FontWeight(400))
         val bodyMobile = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight(400))
     }
 }
