@@ -107,8 +107,8 @@ class ApiSamplesTest {
     private val notRead =
         setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
-    /** Answers the phone does not ask for yet: none today (every sample has a model). */
-    private val notUsedYet = emptySet<String>()
+    /** Answers the phone does not ask for yet: Ask about a recording or all of them (2.0.0-o) reaches the phone with its Ask screens. */
+    private val notUsedYet = setOf("session_ask", "ask")
 
     private val everyField = Json {
         encodeDefaults = true
