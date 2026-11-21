@@ -223,8 +223,8 @@ object RequestCopy {
     data class Card(val title: String, val tag: String, val tagTone: String, val body: String)
 
     /** Open requests always; a decline for 14 days and an approval for 7; never a cancelled one. */
-    fun showOnPage(r: UpgradeRequestDto, today: java.time.LocalDate = java.time.LocalDate.now()): Boolean {
-        val decided = PlanFormat.parse(r.decidedAt)?.atZone(java.time.ZoneId.systemDefault())?.toLocalDate()
+    fun showOnPage(r: UpgradeRequestDto, today: java.time.LocalDate = com.echoledger.mobile.util.AppClock.today()): Boolean {
+        val decided = PlanFormat.parse(r.decidedAt)?.atZone(com.echoledger.mobile.util.AppClock.zone())?.toLocalDate()
         val age = decided?.let { java.time.temporal.ChronoUnit.DAYS.between(it, today) } ?: 0
         return when (r.stage) {
             "awaiting_payment", "in_review", "needs_receipt" -> true

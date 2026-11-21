@@ -93,7 +93,7 @@ fun ActivityScreen(
     waiting: List<LocalRecording> = emptyList(),
     onOpenWaiting: () -> Unit = {},
     scrollToTop: Int = 0,
-    today: LocalDate = LocalDate.now(),
+    today: LocalDate = com.echoledger.mobile.util.AppClock.today(),
     skipped: List<LocalRecording> = emptyList(),
     onRestore: (String) -> Unit = {},
     missed: List<MissedItem> = emptyList(),

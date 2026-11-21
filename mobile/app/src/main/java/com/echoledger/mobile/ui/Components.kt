@@ -181,7 +181,7 @@ fun formatDuration(ms: Long?): String {
  */
 fun formatWhen(
     iso: String?,
-    zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+    zone: java.time.ZoneId = com.echoledger.mobile.util.AppClock.zone(),
     locale: java.util.Locale = java.util.Locale.getDefault()
 ): String = runCatching {
     java.time.OffsetDateTime.parse(iso).atZoneSameInstant(zone)

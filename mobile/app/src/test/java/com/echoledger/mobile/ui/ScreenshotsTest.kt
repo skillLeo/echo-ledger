@@ -628,7 +628,13 @@ class ScreenshotsTest : ScreenTest() {
      */
     @Test
     fun activityMissed() {
-        val now = System.currentTimeMillis()
+        // The same day and times on every day it runs (F2): the picture is compared with a saved one.
+        com.echoledger.mobile.util.AppClock.fix(java.time.Instant.parse("2026-11-17T06:42:00Z"), java.time.ZoneId.of("UTC"))
+        try { activityMissedAtFixedTime() } finally { com.echoledger.mobile.util.AppClock.reset() }
+    }
+
+    private fun activityMissedAtFixedTime() {
+        val now = com.echoledger.mobile.util.AppClock.millis()
         val missed = listOf(
             com.echoledger.mobile.calls.MissedItem(
                 "r1",
@@ -649,7 +655,7 @@ class ScreenshotsTest : ScreenTest() {
                 now
             )
         )
-        val today = java.time.LocalDate.now().toString()
+        val today = com.echoledger.mobile.util.AppClock.today().toString()
         val items = listOf(
             ActivityItemDto(
                 "a1",

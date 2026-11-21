@@ -295,6 +295,12 @@ class SettingsV17Test : ScreenTest() {
 
     @Test
     fun `the receipt step takes screenshots, a transaction ID, and sends them`() {
+        // The proof's date is shown against today: the same today on every day it runs (F2).
+        com.echoledger.mobile.util.AppClock.fix(java.time.Instant.parse("2026-11-17T06:42:00Z"), java.time.ZoneId.of("UTC"))
+        try { receiptStep() } finally { com.echoledger.mobile.util.AppClock.reset() }
+    }
+
+    private fun receiptStep() {
         val r =
             request(
                 "awaiting_payment",
