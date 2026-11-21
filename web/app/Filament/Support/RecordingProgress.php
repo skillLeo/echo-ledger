@@ -106,6 +106,19 @@ final class RecordingProgress
     }
 
     /**
+     * A step's name as shown, in the console's language. "Transcribe" as a step (ٹرانسکرپشن) has its own key, apart
+     * from the Transcribe button (ٹرانسکرائب کریں); English reads "Transcribe" either way (W-213 visual).
+     */
+    public static function stageLabel(string $word): string
+    {
+        if ($word === self::WORDS[self::TRANSCRIBE][0]) {
+            return trans()->has('Transcribe (stage)') ? (string) __('Transcribe (stage)') : $word;
+        }
+
+        return (string) __($word);
+    }
+
+    /**
      * "Improving Roman Urdu… 60%" while the view the recording opens in is made; null otherwise.
      *
      * @return array{label: string, percent: int}|null

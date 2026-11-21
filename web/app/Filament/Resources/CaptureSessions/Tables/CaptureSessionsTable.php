@@ -789,9 +789,7 @@ final class CaptureSessionsTable
             ->modalSubmitActionLabel(__('Save'))
             ->action(function (CaptureSession $record, array $data): void {
                 app(LibraryOrganiser::class)->update($record, ['title' => $data['title'] ?? null]);
-                // The title isolated in right to left, so the sentence keeps the page's direction (W-209, D4 §4).
-                $title = ConsoleV2::rtl() ? "\u{2068}".$record->displayTitle()."\u{2069}" : $record->displayTitle();
-                Notification::make()->title(__('Renamed to “:title”', ['title' => $title]))->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
+                Notification::make()->title(__('Renamed to “:title”', ['title' => $record->displayTitle()]))->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
             });
     }
 
