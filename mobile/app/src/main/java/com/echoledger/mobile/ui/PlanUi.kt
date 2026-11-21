@@ -62,6 +62,7 @@ import com.echoledger.mobile.ui.design.OutlinedTextField
 import com.echoledger.mobile.ui.design.PlanTag
 import com.echoledger.mobile.ui.design.RowDivider
 import com.echoledger.mobile.ui.design.SettingsSection
+import com.echoledger.mobile.util.AppClock
 import kotlinx.coroutines.launch
 
 /** Whether this build sells plans by bank transfer (since v1.7: the Google Play build shows plans, never prices). */
@@ -223,8 +224,8 @@ object RequestCopy {
     data class Card(val title: String, val tag: String, val tagTone: String, val body: String)
 
     /** Open requests always; a decline for 14 days and an approval for 7; never a cancelled one. */
-    fun showOnPage(r: UpgradeRequestDto, today: java.time.LocalDate = com.echoledger.mobile.util.AppClock.today()): Boolean {
-        val decided = PlanFormat.parse(r.decidedAt)?.atZone(com.echoledger.mobile.util.AppClock.zone())?.toLocalDate()
+    fun showOnPage(r: UpgradeRequestDto, today: java.time.LocalDate = AppClock.today()): Boolean {
+        val decided = PlanFormat.parse(r.decidedAt)?.atZone(AppClock.zone())?.toLocalDate()
         val age = decided?.let { java.time.temporal.ChronoUnit.DAYS.between(it, today) } ?: 0
         return when (r.stage) {
             "awaiting_payment", "in_review", "needs_receipt" -> true

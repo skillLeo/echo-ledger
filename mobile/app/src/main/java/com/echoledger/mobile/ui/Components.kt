@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
 import com.echoledger.mobile.ui.design.TextButton
+import com.echoledger.mobile.util.AppClock
 
 /** Source device label — always icon + text, as a soft tinted chip. */
 @Composable
@@ -179,14 +180,11 @@ fun formatDuration(ms: Long?): String {
  * "Oct 24 · 9:32 AM" in the viewer's own time zone. The server sends UTC offsets; `toLocalDateTime()` would keep the
  * UTC wall clock, so the instant is converted to [zone] first.
  */
-fun formatWhen(
-    iso: String?,
-    zone: java.time.ZoneId = com.echoledger.mobile.util.AppClock.zone(),
-    locale: java.util.Locale = java.util.Locale.getDefault()
-): String = runCatching {
-    java.time.OffsetDateTime.parse(iso).atZoneSameInstant(zone)
-        .format(java.time.format.DateTimeFormatter.ofPattern("MMM d · h:mm a", locale))
-}.getOrDefault("")
+fun formatWhen(iso: String?, zone: java.time.ZoneId = AppClock.zone(), locale: java.util.Locale = java.util.Locale.getDefault()): String =
+    runCatching {
+        java.time.OffsetDateTime.parse(iso).atZoneSameInstant(zone)
+            .format(java.time.format.DateTimeFormatter.ofPattern("MMM d · h:mm a", locale))
+    }.getOrDefault("")
 
 /** A quiet warning row with one action: offline, or a part of the screen that did not load (C6). */
 @Composable

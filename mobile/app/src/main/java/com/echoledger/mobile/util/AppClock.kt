@@ -10,8 +10,12 @@ import java.time.ZoneId
  * (FixedClockRule) so a picture doesn't change with the day it is taken (F2).
  */
 object AppClock {
+    /** Set by tests only. Otherwise the system's clock in the system's zone, read on every call (a trip or a new
+     * time zone shows at once, without a restart). */
     @Volatile
-    private var clock: Clock = Clock.systemDefaultZone()
+    private var fixed: Clock? = null
+
+    private val clock: Clock get() = fixed ?: Clock.system(ZoneId.systemDefault())
 
     fun now(): Instant = clock.instant()
 
@@ -23,10 +27,10 @@ object AppClock {
 
     /** Tests only: a fixed instant in a fixed zone, until [reset]. */
     fun fix(instant: Instant, zone: ZoneId) {
-        clock = Clock.fixed(instant, zone)
+        fixed = Clock.fixed(instant, zone)
     }
 
     fun reset() {
-        clock = Clock.systemDefaultZone()
+        fixed = null
     }
 }
