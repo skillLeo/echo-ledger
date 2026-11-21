@@ -59,6 +59,29 @@ describe("the words as heard", () => {
     expect(line(1).querySelector(".el-segment__text")).toHaveAttribute("title", UNSURE_LINE);
   });
 
+  it("DT-REC-110: while playing, the word being heard is marked and follows the audio; other lines stay plain", async () => {
+    await open(makeTranscript({ id: "tr-1", segments: SEGMENTS }));
+    const audio = document.querySelector("audio")!;
+    const on = () => [...screen.getByRole("list", { name: "Transcript" }).querySelectorAll(".el-word--on")].map((w) => w.textContent);
+    expect(on()).toEqual([]);
+    audio.currentTime = 1.7;
+    fireEvent.timeUpdate(audio);
+    expect(on()).toEqual(["Omer"]);
+    audio.currentTime = 2.1;
+    fireEvent.timeUpdate(audio);
+    expect(on()).toEqual(["today"]);
+    // An unsure word being heard is marked too, and stays a button that plays it.
+    audio.currentTime = 0.7;
+    fireEvent.timeUpdate(audio);
+    expect(on()).toEqual(["proforma"]);
+    expect(within(line(0)).getByRole("button", { name: /^proforma/ })).toHaveClass("el-word--on");
+    // A line with no word timings (the second) is marked as a whole, never word by word.
+    audio.currentTime = 6;
+    fireEvent.timeUpdate(audio);
+    expect(on()).toEqual([]);
+    expect(line(1)).toHaveAttribute("aria-current", "true");
+  });
+
   it("DT-REC-112: a second transcription's words follow the line, never the engine's name", async () => {
     await open(makeTranscript({ id: "tr-1", segments: SEGMENTS }));
     expect(line(1)).toHaveTextContent(`${SECOND_HEARD} We will pay fourteen percent`);

@@ -15,7 +15,7 @@ import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
 import { copiedTranscript, DEFAULT_UNSURE, fileSize, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
-import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
+import { PLAYER_HINT, activeIndex, activeWord, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
 import { defaultViewOf, improvingView, transcribingLine, viewPercent } from "../../lib/progress";
 import { usePoll } from "../../lib/usePoll";
@@ -332,16 +332,22 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       out.push(raw.text.slice(pos));
       return out;
     }
-    if (!raw.words?.some(uncertainWord)) return undefined;
-    return raw.words.map((w, wi) => (
-      <span key={wi}>
-        {uncertainWord(w) ? (
-          <button type="button" className="el-word el-word--unsure" title={UNSURE_WORD} aria-label={`${w.text}, not sure of this word${canPlay ? ", play it" : ""}`}
-            disabled={!canPlay} onClick={(e) => { e.stopPropagation(); playWord(w.start_ms); }}>{w.text}</button>
-        ) : w.text}
-        {wi < raw.words!.length - 1 ? " " : ""}
-      </span>
-    ));
+    // The line being played shows its words one by one: the word being heard now is marked (classic's).
+    const playingHere = i === active && (raw.words?.length ?? 0) > 0;
+    if (!playingHere && !raw.words?.some(uncertainWord)) return undefined;
+    const on = playingHere ? activeWord(raw.words, position * 1000) : -1;
+    return raw.words!.map((w, wi) => {
+      const cls = ["el-word", uncertainWord(w) && "el-word--unsure", wi === on && "el-word--on"].filter(Boolean).join(" ");
+      return (
+        <span key={wi}>
+          {uncertainWord(w) ? (
+            <button type="button" className={cls} title={UNSURE_WORD} aria-label={`${w.text}, not sure of this word${canPlay ? ", play it" : ""}`}
+              disabled={!canPlay} onClick={(e) => { e.stopPropagation(); playWord(w.start_ms); }}>{w.text}</button>
+          ) : <span className={cls} data-on={wi === on || undefined}>{w.text}</span>}
+          {wi < raw.words!.length - 1 ? " " : ""}
+        </span>
+      );
+    });
   };
   /** A Show as view's "[?word]" marks drawn like the words as heard: underlined, without the brackets. */
   const viewMarks = (text: string): ReactNode | undefined => {

@@ -1381,3 +1381,8 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-suggest[aria-expanded="true"] { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); }
 .el-suggest-pop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block: var(--el-space-8); padding: var(--el-space-8); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); }
 .el-suggestions { display: flex; align-items: center; gap: var(--el-space-8); }
+
+/* The word being heard now, on the line being played (parity DT-REC-110). */
+.el-word--on { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); box-shadow: 0 0 0 var(--el-space-2) var(--el-role-accent-soft); }
+@media (prefers-reduced-motion: no-preference) { .el-word--on { transition: background-color var(--el-motion-fast); } }
+
