@@ -183,6 +183,10 @@ describe.each(["classic", "v2"] as const)("Profile, %s", (design) => {
     answer = refuse(422, "wrong_password");
     await press("Send code");
     expect(dialog()).toHaveTextContent("That password isn't right.");
+    // An address held for a restore window (the final 2.0.0-l) is refused in the app's words.
+    answer = refuse(422, "email_not_allowed");
+    await press("Send code");
+    expect(dialog()).toHaveTextContent("This email address can't be used right now. Choose another one.");
     expect(calls("email").at(-1)?.body).toEqual({ email: "taken@example.com", password: "secret" });
     answer = ok({ pending_email: "taken@example.com" }, 202);
     await press("Send code");

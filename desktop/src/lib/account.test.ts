@@ -13,7 +13,7 @@ describe("the words", () => {
   const FIELD_CODES = ["required", "too_short", "too_long", "needs_letters", "needs_numbers", "same_as_current", "invalid_characters", "invalid_email", "same_as_now", "email_taken"];
   const REFUSALS = ["wrong_password", "invalid_otp", "invalid_code", "proof_required", "email_taken", "expired", "already_enabled", "not_enabled", "required_for_staff",
     "last_sign_in_method", "passkey_not_found", "device_not_found", "browser_not_found", "current_device", "proof_code_not_needed", "too_large", "server_busy",
-    "too_many_attempts", "rate_limited", "email_change_locked"];
+    "too_many_attempts", "rate_limited", "email_change_locked", "email_not_allowed"];
 
   it("has every contract code in English and Urdu", () => {
     for (const lang of ["en", "ur"] as const) {
