@@ -281,9 +281,9 @@ export function knownLabels(items: readonly LibraryItem[]): string[] {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l]) => l);
 }
 
-/** "Voice copied — press ⌘V in the chat" on a Mac, Ctrl+V on Windows (the platform check LibraryV2's keys use). */
-export function voiceCopiedNote(mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)): string {
-  return `Voice copied — press ${mac ? "⌘V" : "Ctrl+V"} in the chat`;
+/** "Voice copied — press ⌘V in the chat" on a Mac, Ctrl+V on Windows: the keys the app said for this system. */
+export function voiceCopiedNote(keys: string): string {
+  return `Voice copied — press ${keys} in the chat`;
 }
 
 /**
@@ -304,6 +304,8 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
   const [hasAudio, setHasAudio] = useState<boolean | undefined>(givenAudio);
   const [working, setWorking] = useState<"text" | "voice" | "link" | null>(null);
   const [saved, setSaved] = useState<Extract<WhatsAppVoiceOutcome, { kind: "fallback" }> | null>(null);
+  // The share was shown and how it ended is not known (Windows 10, or no answer in time): nothing is claimed.
+  const [opened, setOpened] = useState(false);
   useEffect(() => {
     if (given === undefined) recordingLines(item).then((l) => setText(l?.length ? transcriptText(l, false) : null)).catch(() => setText(null));
     if (givenAudio === undefined) api.session(item.id).then((d) => setHasAudio(typeof d.playback_url === "string")).catch(() => setHasAudio(false));
@@ -342,12 +344,15 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
     if (!cut) say("Opening WhatsApp with the text");
     onClose();
   });
-  const sendVoice = () => run("voice", async () => {
+  /** `share` false: straight to WhatsApp with the text and the voice copied (after a share whose end is not known). */
+  const sendVoice = (share = true) => run("voice", async () => {
     if (!text) return;
-    const outcome = await api.whatsappShareVoice(item.id, text);
+    const outcome = await api.whatsappShareVoice(item.id, text, share);
     if (outcome.kind === "shared") {
-      say("Text and voice sent to WhatsApp");
+      say(outcome.toWhatsApp ? "Text and voice sent to WhatsApp" : "Text and voice shared");
       onClose();
+    } else if (outcome.kind === "opened") {
+      setOpened(true);
     } else if (outcome.kind === "fallback") {
       // The clipboard holds the voice when it could be put there; otherwise the text, as before.
       if (!outcome.fileOnClipboard) await copy(text);
@@ -369,11 +374,22 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
   if (saved) {
     return (
       <Dialog open title="Send to WhatsApp" onClose={onClose} actions={<Button variant="primary" onClick={onClose}>Done</Button>}
-        description={saved.fileOnClipboard ? voiceCopiedNote() : `Saved in Downloads: ${fileName(saved.path)}`}>
+        description={saved.fileOnClipboard ? voiceCopiedNote(saved.pasteKeys) : `Saved in Downloads: ${fileName(saved.path)}`}>
         {saved.fileOnClipboard
           ? <p>The text is in the message. The voice is saved in Downloads too: {fileName(saved.path)}</p>
           : <p><b>{ATTACH_NOTE}</b>: in the chat, click <b>+</b> (or the paper clip), then <b>Document</b>, and choose this file. The text is in the message, and copied too.</p>}
         {saved.textCut && <p className="el-caption el-secondary">The message has the start of the text: it was too long to send whole. After attaching the voice, copy the whole text and paste it there.</p>}
+      </Dialog>
+    );
+  }
+  if (opened) {
+    return (
+      <Dialog open title="Send to WhatsApp" onClose={onClose} description="The share is open: finish sending there."
+        actions={<>
+          <Button loading={working === "voice"} loadingLabel="Opening WhatsApp…" onClick={() => void sendVoice(false)}>Open WhatsApp with the text instead</Button>
+          <Button variant="primary" onClick={onClose}>Done</Button>
+        </>}>
+        <p>Closed it without sending, or WhatsApp was not offered? Open WhatsApp with the text, and paste the voice there.</p>
       </Dialog>
     );
   }
@@ -386,8 +402,8 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
         <p className="el-caption el-secondary">The text of the view you are reading.</p>
         {hasAudio && (
           <>
-            <Button disabled={!text} aria-disabled={busy} loading={working === "voice"} loadingLabel="Sharing the voice…" onClick={() => void sendVoice()}>Text and voice</Button>
-            <p className="el-caption el-secondary">The text and the voice, sent through WhatsApp's share (also saved in Downloads).</p>
+            <Button disabled={!text} aria-disabled={busy} loading={working === "voice"} loadingLabel="Sending…" onClick={() => void sendVoice()}>Text and voice</Button>
+            <p className="el-caption el-secondary">The text and the voice, ready for WhatsApp.</p>
           </>
         )}
         <Button disabled={loading} aria-disabled={busy} loading={working === "link"} loadingLabel="Making the link…" onClick={() => void sendLink()}>Link (works for 7 days)</Button>

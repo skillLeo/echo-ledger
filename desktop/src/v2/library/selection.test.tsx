@@ -371,14 +371,45 @@ describe("the row ⋮ and the right-click menu", () => {
     const fallback = { kind: "fallback", path: "/Users/a/Downloads/Bilal Qureshi.ogg", fileOnClipboard: true, textCut: false, pasteKeys: "⌘V" };
 
     it("shared: the dialog closes with the usual notice, and nothing is saved to Downloads by the app any more", async () => {
-      await voice({ kind: "shared" });
-      const [call] = callsOf("whatsapp_share_voice") as { id: string; text: string }[];
+      await voice({ kind: "shared", toWhatsApp: true });
+      const [call] = callsOf("whatsapp_share_voice") as { id: string; text: string; share: boolean }[];
       expect(call.id).toBe("bilal");
       expect(call.text.length).toBeGreaterThan(0);
+      expect(call.share).toBe(true);
       expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).toBeNull();
       expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Text and voice sent to WhatsApp");
       expect(callsOf("save_audio_downloads")).toEqual([]);
       expect(callsOf("whatsapp_open")).toEqual([]);
+    });
+
+    it("shared to another app chosen in the Share window: says shared, not sent to WhatsApp", async () => {
+      await voice({ kind: "shared", toWhatsApp: false });
+      expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).toBeNull();
+      const notice = screen.getByRole("status", { name: "Notifications" });
+      expect(notice).toHaveTextContent("Text and voice shared");
+      expect(notice).not.toHaveTextContent("WhatsApp");
+    });
+
+    it("opened: nothing is claimed, and Open WhatsApp with the text instead runs the fallback", async () => {
+      await voice({ kind: "opened" });
+      const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
+      expect(sheet).toHaveAccessibleDescription("The share is open: finish sending there.");
+      expect(sheet).not.toHaveTextContent(/sent/i);
+      expect(screen.queryByRole("status", { name: "Notifications" })?.textContent ?? "").toBe("");
+      respond("whatsapp_share_voice", { ...fallback, pasteKeys: "Ctrl+V" });
+      fireEvent.click(within(sheet).getByRole("button", { name: "Open WhatsApp with the text instead" }));
+      await act(flushAsync);
+      const calls = callsOf("whatsapp_share_voice") as { id: string; share: boolean }[];
+      expect(calls.map((c) => c.share)).toEqual([true, false]);
+      expect(calls[1].id).toBe("bilal");
+      expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toHaveAccessibleDescription("Voice copied — press Ctrl+V in the chat");
+    });
+
+    it("opened, then Done: the dialog closes without a notice", async () => {
+      await voice({ kind: "opened" });
+      fireEvent.click(within(screen.getByRole("dialog", { name: "Send to WhatsApp" })).getByRole("button", { name: "Done" }));
+      expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).toBeNull();
+      expect(screen.queryByRole("status", { name: "Notifications" })?.textContent ?? "").toBe("");
     });
 
     it("cancelled: quiet, the dialog stays as it was", async () => {
@@ -393,6 +424,7 @@ describe("the row ⋮ and the right-click menu", () => {
       try {
         platform("MacIntel");
         await voice(fallback);
+        expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toHaveTextContent("The voice is saved in Downloads too: Bilal Qureshi.ogg");
         expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toHaveAccessibleDescription("Voice copied — press ⌘V in the chat");
         expect(writeText).not.toHaveBeenCalled();
         cleanup();
@@ -432,8 +464,11 @@ describe("the row ⋮ and the right-click menu", () => {
       const sheet = await open();
       fireEvent.click(within(sheet).getByRole("button", { name: "Text and voice" }));
       await act(flushAsync);
-      const chosen = within(sheet).getByRole("button", { name: "Sharing the voice…" });
+      const chosen = within(sheet).getByRole("button", { name: "Sending…" });
       expect(chosen).toHaveAttribute("aria-busy", "true");
+      expect(within(sheet).getAllByText("Sending…")).toHaveLength(1);
+      expect(within(sheet).queryByText("Opening WhatsApp…")).toBeNull();
+      expect(within(sheet).queryByText("Making the link…")).toBeNull();
       for (const name of ["Text only", "Link (works for 7 days)"]) {
         const other = within(sheet).getByRole("button", { name });
         expect(other).not.toBeDisabled();
