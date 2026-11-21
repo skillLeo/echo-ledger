@@ -162,6 +162,12 @@ object EchoTokens {
         val xl = 40.dp
     }
 
+    /** Shadow depth of the floating layers (DESIGN_SYSTEM: shadows only on floating layers). */
+    object Elevation {
+        val floating = 8.dp
+        val modal = 16.dp
+    }
+
     object Component {
         val buttonRadius = 4.dp
         val buttonHeight = 36.dp
