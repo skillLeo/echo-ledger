@@ -100,9 +100,13 @@ it('counts the Roman Urdu view as being made from the moment the transcript is f
     Queue::assertPushed(MakeTranscriptViewsJob::class, 1);
 });
 
-it('stops counting it after 20 minutes, without a key or when the recording opens in its original words', function () {
+it('says it could not convert once 20 minutes pass with no job, none after a day, and never without a key or a view to open in', function () {
     $transcript = u19Transcript($this);
     $this->travel(21)->minutes();
+    $this->getJson("/api/transcripts/{$transcript->id}/views")->assertOk()->assertJsonPath('status', 'failed')
+        ->assertJsonPath('error', TranscriptViews::TOOK_TOO_LONG)->assertJsonPath('progress', []);
+    expect(TranscriptViews::rowSummary($transcript->refresh())['status'])->toBe('failed');
+    $this->travel(TranscriptViews::RAN_OUT_HOURS)->hours();
     expect(app(TranscriptViews::class)->state($transcript->refresh())['status'])->toBe('none')
         ->and(TranscriptViews::rowSummary($transcript)['status'])->toBe('none');
     $this->travelBack();
@@ -205,8 +209,38 @@ it('writes the titles made in Urdu letters before again with echoledger:roman-ti
 
     $this->artisan('echoledger:roman-titles', ['--dry-run' => true])->expectsOutputToContain('Would write 1 title again in Roman Urdu')->assertSuccessful();
     expect($session->refresh()->title)->toBe('میٹنگ ٹائم');
+    $this->artisan('echoledger:roman-titles', ['--dry-run' => true])->expectsOutputToContain('billed to that person\'s usage')->assertSuccessful();
     $this->artisan('echoledger:roman-titles')->expectsOutputToContain('Wrote 1 of 1 title again in Roman Urdu')->assertSuccessful();
     expect($session->refresh()->title)->toBe('Meeting ka time');
+});
+
+it('writes them from the Roman Urdu view\'s first words with --from-view-only, with no call to the title writer, and skips a known caller', function () {
+    u19Converter();
+    $writer = u19Writer('میٹنگ');
+    $note = u19Transcript($this, ['title' => 'میٹنگ ٹائم', 'title_auto' => true]);
+    $call = u19Transcript($this, ['title' => 'میٹنگ ٹائم', 'title_auto' => true, 'source_app' => 'whatsapp', 'caller_name' => 'Omar Khan']);
+    foreach ([$note, $call] as $t) {
+        app(TranscriptViews::class)->make($t);
+        CaptureSession::query()->whereKey($t->capture_session_id)->update(['title' => 'میٹنگ ٹائم']);
+    }
+    $asked = count($writer->asked);
+
+    $this->artisan('echoledger:roman-titles', ['--from-view-only' => true])->expectsOutputToContain('Wrote 1 of 1 title again in Roman Urdu')
+        ->expectsOutputToContain('nothing is billed')->assertSuccessful();
+    expect(CaptureSession::query()->findOrFail($note->capture_session_id)->title)->toBe('metng ka tam teks farm thek karna he')
+        ->and(CaptureSession::query()->findOrFail($call->capture_session_id)->title)->toBe('میٹنگ ٹائم')
+        ->and(count($writer->asked))->toBe($asked);
+});
+
+it('shows "Couldn\'t convert" only for this transcript\'s own failure: one before the last edit is stale', function () {
+    $transcript = u19Transcript($this, [], ['completed_at' => now()->subDays(4)]);
+    $transcript->forceFill(['meta' => ['views' => ['status' => 'failed', 'fingerprint' => TranscriptViews::fingerprint($transcript), 'failed_at' => now()->subDays(3)->toAtomString(), 'error' => 'x']]])->save();
+    // A Library row reads no lines, so the dates say whether the failure is this text's.
+    $row = fn (): Transcript => Transcript::query()->select(['id', 'capture_session_id', 'kind', 'status', 'language', 'meta', 'completed_at', 'edited_at'])->findOrFail($transcript->id);
+    expect(TranscriptViews::rowSummary($row())['status'])->toBe('failed');
+
+    $transcript->forceFill(['edited_at' => now()->subDays(2)])->save(); // edited after it failed
+    expect(TranscriptViews::rowSummary($row())['status'])->toBe('none');
 });
 
 it('gives a Library row its preview in Roman Urdu once that view is made, and says which view with preview_view', function () {

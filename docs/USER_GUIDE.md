@@ -592,7 +592,7 @@ WebM videos.
 **Improving** (the Roman Urdu and other views). The Library row, the recording page and **Activity → In progress** say it
 the same way. The transcript shows as soon as it is ready, with a small spinner and **Converting to Roman Urdu… 60%**
 (about a minute); the view swaps in where you are reading when it is made (unless you chose Original). If it could not
-be made you see **Couldn't convert to Roman Urdu · Try again**. **Notify me when ready** on the recording page
+be made you see **Couldn't convert to Roman Urdu · Try again**, on the recording and on its Library row. **Notify me when ready** on the recording page
 sends a notification when the transcript is ready, even if Transcription notifications are off.
 
 **In the web console (since v1.6)** the Library row and the recording page say it with the same words: **Uploading

@@ -111,8 +111,9 @@ final class AutoTitles
      * Since U19: once the Roman Urdu view of a recording that opens in it is made, an automatic title still in Urdu
      * letters ("میٹنگ ٹائم اور ٹیکس فارم کی اصلاح") is written again in Roman Urdu from that view. Only an automatic
      * title (never one a person gave, whatever its words), only while it is still the same. Never throws.
+     * Without [$askWriter] the title is the view's first words, with no call to the title writer (nothing billed).
      */
-    public function afterViews(Transcript $transcript): void
+    public function afterViews(Transcript $transcript, bool $askWriter = true): void
     {
         try {
             if ($transcript->kind !== TranscriptKind::Final || ! self::opensInRoman($transcript)) {
@@ -126,7 +127,8 @@ final class AutoTitles
             if ($text === '') {
                 return;
             }
-            $title = $this->write($session, $text, TranscriptViews::sourceLanguage($transcript), true);
+            // [$askWriter] false (echoledger:roman-titles --from-view-only): the view's first words, no model call.
+            $title = $askWriter ? $this->write($session, $text, TranscriptViews::sourceLanguage($transcript), true) : null;
             // The words from the view when the writer still answered in Urdu letters (or there is no key).
             if ($title === null || $title === '' || self::hasUrduLetters($title)) {
                 $title = self::firstWords($text);

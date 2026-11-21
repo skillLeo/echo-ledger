@@ -15,6 +15,7 @@ use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\LibraryView;
 use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\Shell;
 use App\Filament\Support\WhatsAppActions;
@@ -25,6 +26,7 @@ use App\Services\ConsoleUploads;
 use App\Services\LibraryOrganiser;
 use App\Services\RetentionPolicy;
 use App\Services\Sharing\Teammates;
+use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
@@ -53,6 +55,7 @@ use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Livewire;
+use RuntimeException;
 
 class ListCaptureSessions extends ListRecords
 {
@@ -652,6 +655,30 @@ class ListCaptureSessions extends ListRecords
             return;
         }
         app(LibraryOrganiser::class)->update($session, ['pinned' => ! $session->pinned]);
+        $this->flushCachedTableRecords();
+    }
+
+    /**
+     * Since U19: Try again beside a row's "Couldn't convert to Roman Urdu": the view it opens in is made again (the
+     * person's own recording; never from a read-only console).
+     */
+    public function retryViews(string $id): void
+    {
+        if (ConsoleAccess::readOnly()) {
+            return;
+        }
+        $session = CaptureSession::query()->where('workspace_id', (int) CurrentWorkspace::id())->ofPerson()->with('finalTranscript')->find($id);
+        $final = $session instanceof CaptureSession ? $session->finalTranscript : null;
+        if ($final === null) {
+            return;
+        }
+        try {
+            app(TranscriptViews::class)->request($final);
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+
+            return;
+        }
         $this->flushCachedTableRecords();
     }
 

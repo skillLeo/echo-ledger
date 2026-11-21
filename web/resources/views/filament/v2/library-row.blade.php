@@ -28,8 +28,11 @@
             @elseif ($row['converting'] !== null)
                 @if ($row['converting']['state'] === 'failed')
                     <span class="v2-status is-danger" data-convert-failed><x-el.v2.icon name="alert" />{{ $row['converting']['label'] }}</span>
+                    @unless (\App\Services\Workspaces\ConsoleAccess::readOnly())
+                        <button type="button" class="v2-row-retry" x-on:click.stop="$wire.retryViews('{{ $row['id'] }}')" data-retry-views="{{ $row['id'] }}">{{ __('Try again') }}</button>
+                    @endunless
                 @else
-                    <span class="v2-status is-neutral" role="status" data-converting><span class="v2-spinner" aria-hidden="true"></span>{{ $row['converting']['label'] }}</span>
+                    <span class="v2-status is-neutral" data-converting><span class="v2-spinner" aria-hidden="true"></span>{{ $row['converting']['label'] }}</span>
                 @endif
             @endif
             <span class="v2-row-meta"><bdi>{{ $row['line'] }}</bdi></span>

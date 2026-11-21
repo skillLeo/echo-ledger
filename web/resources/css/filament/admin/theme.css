@@ -2880,6 +2880,15 @@ textarea.el-field-input {
     text-underline-offset: 2px;
 }
 
+.el-row-retry {
+    flex: none;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-text);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .el-improving-retry:disabled {
     opacity: 0.6;
 }

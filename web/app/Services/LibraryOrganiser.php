@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Services\Callers\CallerMatcher;
 use App\Services\Lists\LabelLists;
 use App\Services\Titles\AutoTitles;
+use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
 use App\Support\Brand;
@@ -518,7 +519,9 @@ final class LibraryOrganiser
                 if ($transcript === null || $transcript->status !== TranscriptStatus::Completed) {
                     continue;
                 }
-                $file = $this->exporter->export($transcript->setRelation('captureSession', $session), $format, ['view' => $view]);
+                // Since U19 `shown` decides per recording: each in the view it is shown in (Roman Urdu once made).
+                $own = $view === TranscriptViews::SHOWN ? app(TranscriptViews::class)->shownView($transcript) : $view;
+                $file = $this->exporter->export($transcript->setRelation('captureSession', $session), $format, ['view' => $own]);
                 $zip->addFromString(self::uniqueName($file['filename'], $names), $file['body']);
             }
             $count = count($names);

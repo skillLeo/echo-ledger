@@ -151,9 +151,7 @@ final class V2CopyForAi
     /** The view [$final] opens in when it is made, else null. */
     private static function readyDefault(Transcript $final): ?string
     {
-        $state = app(TranscriptViews::class)->state($final);
-
-        return $state['status'] === 'ready' && $state['default'] !== 'original' && is_array($state[$state['default']] ?? null) ? $state['default'] : null;
+        return app(TranscriptViews::class)->shownView($final);
     }
 
     /**

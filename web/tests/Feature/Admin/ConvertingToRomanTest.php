@@ -17,7 +17,7 @@ use App\Models\ShareLink;
 use App\Models\Transcript;
 use App\Services\CredentialVault;
 use App\Services\InterfaceFlags;
-use App\Services\SettingsRepository;
+use App\Services\LibraryOrganiser;
 use App\Services\Views\TranscriptViews;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
@@ -122,6 +122,8 @@ it('shows "Converting to Roman Urdu…" with a spinner in the new Library\'s row
     u19Recording($this, u19Ready(), ['title' => 'Third']);
 
     $html = $this->panelComponent(ListCaptureSessions::class)->html();
+    // No live region on rows: a list of them would talk over each other.
+    expect($html)->not->toMatch('/role="status" data-converting/');
     expect($html)->toContain('v2-spinner')->toContain('Converting to Roman Urdu…<')->toContain('Converting to Roman Urdu… 60%')
         ->and(substr_count($html, 'data-converting'))->toBe(2);
 });
@@ -147,9 +149,23 @@ it('starts the share link, the download and the Library\'s export in the view sh
     $page->callAction('share', data: ['audience' => 'public', 'expires' => '86400'])->assertHasNoActionErrors();
     expect(ShareLink::query()->latest('id')->first()?->view)->toBe('roman');
 
-    expect(CaptureSessionsTable::shownViewDefault())->toBe('roman');
-    app(SettingsRepository::class)->set('views.default_ur', 'original');
-    expect(CaptureSessionsTable::shownViewDefault())->toBeNull();
+    // The Library's export decides per recording: "As shown" by default, each in its own view once made.
+    expect(array_key_first(CaptureSessionsTable::exportViewOptions()))->toBe(TranscriptViews::SHOWN);
+    $waiting = u19Recording($this, null, ['title' => 'Not yet']);
+    $zip = app(LibraryOrganiser::class)->exportZip((int) $session->workspace_id, [$session->id, $waiting->id], 'txt', TranscriptViews::SHOWN);
+    $path = tempnam(sys_get_temp_dir(), 'u19-zip-');
+    file_put_contents($path, $zip['body']);
+    $archive = new ZipArchive;
+    $archive->open($path);
+    $texts = [];
+    for ($i = 0; $i < $archive->numFiles; $i++) {
+        $texts[] = (string) $archive->getFromIndex($i);
+    }
+    $archive->close();
+    @unlink($path);
+    $all = implode("\n", $texts);
+    expect($zip['count'])->toBe(2)->and($all)->toContain('meeting ka time')->toContain('میٹنگ کا ٹائم')
+        ->and(collect($texts)->filter(fn (string $t): bool => str_contains($t, 'meeting ka time') && str_contains($t, 'میٹنگ'))->count())->toBe(0);
 });
 
 it('shows the new Library\'s snippet in Roman Urdu once it is made, without reading the lines', function () {
@@ -169,4 +185,26 @@ it('shows the new Library\'s snippet in Roman Urdu once it is made, without read
     $gap = u19Recording($this, ['roman' => ['1' => 'tax form theek karna hai'], 'urdu' => [], 'english' => []] + u19Ready(), ['title' => 'Gap']);
     $row = Livewire\Livewire::test(ListCaptureSessions::class)->instance()->getTableRecords()->first(fn ($r) => $r->id === $gap->id);
     expect(V2RecordingRow::snippet($row))->toBe('tax form theek karna hai');
+});
+
+it('offers Try again on a Library row that could not convert, classic and new, and it starts the view again', function () {
+    Queue::fake();
+    $failed = u19Recording($this, ['status' => 'failed', 'failed_at' => now()->toAtomString(), 'error' => 'x']);
+
+    $classic = $this->panelComponent(ListCaptureSessions::class);
+    expect($classic->html())->toContain('data-retry-views="'.$failed->id.'"');
+    $classic->call('retryViews', $failed->id);
+    Queue::assertPushed(MakeTranscriptViewsJob::class, 1);
+
+    u19V2();
+    $other = u19Recording($this, ['status' => 'failed', 'failed_at' => now()->toAtomString(), 'error' => 'x'], ['title' => 'Other']);
+    $v2 = $this->panelComponent(ListCaptureSessions::class);
+    expect($v2->html())->toContain('data-retry-views="'.$other->id.'"')->toContain('Converting to Roman Urdu…');
+    $v2->call('retryViews', $other->id);
+    Queue::assertPushed(MakeTranscriptViewsJob::class, 2);
+
+    // Someone else's recording: nothing starts.
+    $stranger = CaptureSession::factory()->create();
+    $v2->call('retryViews', $stranger->id);
+    Queue::assertPushed(MakeTranscriptViewsJob::class, 2);
 });
