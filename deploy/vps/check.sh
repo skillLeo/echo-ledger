@@ -33,13 +33,14 @@ rules=$(ufw show added 2>/dev/null)
 grep -Eq '(^| )8787(/(tcp|udp))?( |$)|port 8787( |$)' <<<"$rules" && fail "a firewall rule opens the relay's port 8787" || pass "8787 closed in the firewall"
 sshd_conf=$(sshd -T 2>/dev/null)
 ssh_ports=$(awk '$1 == "port" { print $2 }' <<<"$sshd_conf")
-for port in ${ssh_ports:-22}; do
+[ -n "$ssh_ports" ] || fail "sshd -T names no port (sshd missing or its settings invalid): SSH not checked"
+for port in $ssh_ports; do
   grep -Eq "^${port}/tcp +LIMIT" <<<"$status" && pass "SSH ($port) rate limited" || fail "SSH ($port) not rate limited"
   # An ALLOW for the same port comes before the LIMIT and lets every attempt through (DEPLOY.md's `ufw allow OpenSSH`).
   # Read from the rules as added: the same whether the firewall is on or off, and without status's display names.
   grep -Eq "^ufw allow (OpenSSH|${port}|${port}/tcp)( comment .*)?$" <<<"$rules" && fail "an ALLOW rule for SSH ($port) skips the rate limit" || pass "no ALLOW rule skips the SSH rate limit ($port)"
 done
-public=$(ss -H -tln 2>/dev/null | awk -v ports=" ${ssh_ports:-22} " '{ split($4, a, ":"); port = a[length(a)]; addr = substr($4, 1, length($4) - length(port) - 1)
+public=$(ss -H -tln 2>/dev/null | awk -v ports=" $ssh_ports " '{ split($4, a, ":"); port = a[length(a)]; addr = substr($4, 1, length($4) - length(port) - 1)
   if (addr !~ /^(127\.|\[::1\]|::1)/ && index(ports, " " port " ") == 0 && port != 80 && port != 443) print $4 }' | tr '\n' ' ')
 [ -z "$public" ] && pass "only SSH, 80 and 443 listen publicly" || fail "also listening publicly: $public"
 ss -H -tln | awk '{print $4}' | grep -Eq '^(0\.0\.0\.0|\*|\[::\]):8787$' && fail "relay listens on every address" || pass "relay on loopback only"

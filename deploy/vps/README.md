@@ -53,13 +53,15 @@ left in their folders).
 - **fail2ban** on SSH: 5 failed sign-ins in 10 minutes ban the address for an hour. No address is let past it for
   good: home and mobile addresses in Pakistan change and are shared through carrier NAT, so an address let through
   today could be anyone's tomorrow. `ssh-lockdown.sh` lets the tester's address through only while the key sign-in is
-  tested, in fail2ban's running state (a restart forgets it), and takes it back at the end of step 2. Running
+  tested, in fail2ban's running state (a restart forgets it), and takes it back when step 2 ends however it ends, or
+  after two hours, whichever comes first. Running
   `harden.sh` with `sudo` (which drops `SSH_CONNECTION`) changes nothing about this.
 - **Clock in sync** (systemd-timesyncd): assist tokens are checked against it.
 - **Journal capped** at 1 GB and 14 days (services/assist-relay/DEPLOY.md, "Logs").
 - **Relay watchdog**, every minute: systemd already restarts the relay when it exits. The watchdog catches a relay that
-  runs but no longer answers `/healthz`: after 3 misses in a row it restarts it once and alerts, then waits for health to
-  come back (one more restart every 30 minutes while it stays down). A relay stopped on purpose is left alone.
+  runs but no longer answers `/healthz`: after 3 misses in a row it restarts it and alerts (one alert), then waits for
+  health to come back; while it stays down it restarts it again every 30 minutes, without a new alert. A relay stopped
+  on purpose is left alone.
 - **Resources**, every 5 minutes: CPU (the 5-minute load against the cores), memory (what the kernel says is available)
   and disk at **80 %**, a waiting reboot, and the relay or nginx waiting for a restart after an update. Each alert is
   sent once when it starts and once when it clears (5 points under its limit, so a value at the limit does not flap).

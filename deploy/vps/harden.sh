@@ -107,12 +107,17 @@ say "Firewall: SSH (rate limited), HTTP, HTTPS; everything else closed, the rela
 # Every port sshd listens on, and the one this session came in on, whatever sshd -T says.
 sshd_conf=$(sshd -T 2>/dev/null || true)
 ssh_ports=$(awk '$1 == "port" { print $2 }' <<<"$sshd_conf" | sort -un | tr '\n' ' ')
+# Never guess: a firewall built on the wrong SSH port shuts everyone out.
+if [ -z "$(echo "$ssh_ports" | xargs)" ]; then
+  echo "  Stopped: sshd -T names no port (is sshd installed, and does 'sshd -t' pass?). The firewall is unchanged." >&2
+  exit 4
+fi
 conn=${SSH_CONNECTION:-}
 here_port=${conn##* }
 if [[ "$conn" != "" && "$here_port" =~ ^[0-9]+$ && " $ssh_ports " != *" $here_port "* ]]; then
   ssh_ports="$ssh_ports$here_port"
 fi
-ssh_ports=$(echo "${ssh_ports:-22}" | xargs)
+ssh_ports=$(echo "$ssh_ports" | xargs)
 echo "  SSH on: $ssh_ports"
 # What listens on a public address besides SSH, 80 and 443: the firewall would close it, so stop and say so.
 listening=$(ss -H -tlnp 2>/dev/null || true)

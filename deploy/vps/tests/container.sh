@@ -46,6 +46,14 @@ inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/harden.s
 [ "$code" = 0 ] && ok "second run exit 0" || no "second run exit $code"
 grep -q "  wrote " /tmp/el-harden-2.log && { no "second run rewrote files:"; grep "  wrote " /tmp/el-harden-2.log; } || ok "second run changes no file"
 
+echo "== settings sshd cannot read stop it"
+inside 'ufw show added > /tmp/rules-before; echo "NotAnOption yes" > /etc/ssh/sshd_config.d/zz-bad.conf'
+inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/harden.sh' >/tmp/el-harden-bad.log 2>&1; code=$?
+[ "$code" = 4 ] && grep -q "names no port" /tmp/el-harden-bad.log && ok "stops (exit 4) instead of assuming port 22" || no "went on without sshd's port (exit $code)"
+expect "and leaves the firewall as it was" 'ufw show added | diff -q - /tmp/rules-before'
+expect "check.sh fails it too" 'bash /root/vps/check.sh | grep -q "FAIL  sshd -T names no port"'
+inside 'rm -f /etc/ssh/sshd_config.d/zz-bad.conf'
+
 echo "== a public listener stops it"
 inside 'nohup python3 -m http.server 8080 --bind 0.0.0.0 >/dev/null 2>&1 &' ; sleep 1
 inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/harden.sh' >/tmp/el-harden-3.log 2>&1; code=$?
@@ -128,10 +136,11 @@ inside 'rm -f /etc/ssh/sshd_config.d/00-aaa.conf; cp /etc/ssh/sshd_config /tmp/s
 inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp/el-lock-4.log 2>&1; code=$?
 [ "$code" = 4 ] && grep -q "Match block" /tmp/el-lock-4.log && ok "a Match block that lets root in is found (exit 4)" || no "a Match block for root went unnoticed (exit $code)"
 inside 'cp /tmp/sshd_config.orig /etc/ssh/sshd_config'
-inside 'rm -f /etc/ssh/sshd_config.d/00-echoledger.conf; printf "#!/bin/sh\n[ \"\$1\" = reload ] && exit 1\nexec /usr/bin/systemctl \"\$@\"\n" > /usr/local/sbin/systemctl; chmod +x /usr/local/sbin/systemctl'
+inside 'rm -f /etc/ssh/sshd_config.d/00-echoledger.conf /tmp/reloads; printf "#!/bin/sh\n[ \"\$1\" = reload ] && { echo reload >> /tmp/reloads; exit 1; }\nexec /usr/bin/systemctl \"\$@\"\n" > /usr/local/sbin/systemctl; chmod +x /usr/local/sbin/systemctl'
 inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp/el-lock-5.log 2>&1; code=$?
 [ "$code" = 4 ] && grep -q "did not reload" /tmp/el-lock-5.log && ok "a failed reload is reported (exit 4)" || no "a failed reload went unreported (exit $code)"
 expect "and its file is taken back" '[ ! -f /etc/ssh/sshd_config.d/00-echoledger.conf ]'
+expect "and SSH is asked to reload again on the settings put back" '[ "$(wc -l < /tmp/reloads)" -eq 4 ]'
 inside 'rm -f /usr/local/sbin/systemctl'
 
 echo "== a token followed by more than 64 KiB of the relay's journal"
