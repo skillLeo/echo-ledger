@@ -348,8 +348,8 @@ it('runs its migration up, down and up again', function () {
     // the missed recordings', then the v1.8.1 audit's index on the Share Check results and the plain words in the Pro
     // plan's description (D-129), in the "Transcription failed" notifications (D-131) and in the AI's stored reasons,
     // then 2.0.0-a's interface flags, Live Assist's tables, its reports' columns, its settings and its claims, the invite
-    // links, (v2.0) Live Assist's limits on the plans, (1.9.0-q) its sessions' transport, (2.0.0-g) the design switch's two, (2.0.0-i) the row indicators, (B4) the relay's checks, and (2.0.0-j) audio only.
-    $run('migrate:rollback', ['--step' => 22]);
+    // links, (v2.0) Live Assist's limits on the plans, (1.9.0-q) its sessions' transport, (2.0.0-g) the design switch's two, (2.0.0-i) the row indicators, (B4) the relay's checks, (2.0.0-j) audio only, (2.0.0-k) the title from the person called, and (2.0.0-l) the profile picture's version.
+    $run('migrate:rollback', ['--step' => 23]);
     expect(Schema::connection('promo_cycle')->hasTable('promo_codes'))->toBeFalse()->and(Schema::connection('promo_cycle')->hasTable('promo_code_uses'))->toBeFalse()
         ->and(Schema::connection('promo_cycle')->hasColumn('upgrade_requests', 'promo_code'))->toBeFalse()
         ->and(Schema::connection('promo_cycle')->hasColumn('upgrade_requests', 'plan'))->toBeTrue();

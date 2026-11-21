@@ -39,7 +39,7 @@ use Illuminate\Support\Facades\DB;
  * workspace with their audio, transcripts and screens (CaptureSession::purgeMedia(), so the encrypted files go too),
  * its projects with their files (ProjectTree::delete(), which moves anyone else's recordings in them to the Inbox),
  * the files it added to teammates' projects, its request links, exports, devices and tokens, its console sessions,
- * its Live Assist (since v1.9: settings, preps, sessions with every word, reports and usage, in every workspace);
+ * its profile picture (since 2.0.0-l), its Live Assist (since v1.9: settings, preps, sessions with every word, reports and usage, in every workspace);
  * every workspace only it belongs to with everything still in it; then the account. Workspace rows are deleted only once they are empty, never to let foreign
  * keys cascade over encrypted files. Provider copies were erased when the recordings were transcribed or deleted; a
  * live recording is deleted first so ProviderCopyEraser runs for it too. Safe to run again after a failure.
@@ -107,6 +107,8 @@ final class AccountEraser
         // Payment receipts (v1.7): their rows go with the account by its foreign key; the encrypted files go first.
         $proofs = app(PaymentProofs::class);
         $proofs->eraseFilesOf(userId: $user->id);
+        // Since 2.0.0-l: the profile picture's stored copies.
+        app(Avatars::class)->eraseFilesOf($user);
         foreach ($solo as $workspaceId) {
             $proofs->eraseFilesOf(workspaceId: $workspaceId);
         }

@@ -61,6 +61,9 @@ describe('GET /api/account', function () {
             // Since v1.6.
             'super_admin' => false,
             'workspaces' => [['id' => $device->workspace_id, 'name' => 'Personal', 'role' => 'owner', 'current' => true]],
+            // Since 2.0.0-l.
+            'avatar_url' => null, 'avatar_version' => null, 'has_password' => true, 'pending_email' => null, 'pending_email_expires_at' => null,
+            'passkeys_available' => true,
         ]);
     });
 });

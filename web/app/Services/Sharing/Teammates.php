@@ -19,6 +19,7 @@ use App\Models\SentItem;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Services\Accounts\Avatars;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
@@ -145,7 +146,8 @@ final class Teammates
         return [
             'id' => $item->id,
             'kind' => $item->kind,
-            'to' => ['name' => $item->recipient->name, 'email' => $item->recipient->email],
+            // Since 2.0.0-l with the person's picture (null = initials).
+            'to' => ['name' => $item->recipient->name, 'email' => $item->recipient->email, ...Avatars::of($item->recipient)],
             'title' => $item->title,
             'note' => $item->note,
             'sent_at' => $item->sent_at->toAtomString(),
@@ -424,7 +426,7 @@ final class Teammates
             return [
                 'id' => $item->id,
                 'kind' => $item->kind,
-                'from' => ['name' => $item->sender->name, 'email' => $item->sender->email],
+                'from' => ['name' => $item->sender->name, 'email' => $item->sender->email, ...Avatars::of($item->sender)],
                 'note' => $item->note,
                 'title' => $item->title,
                 'sent_at' => $item->sent_at->toAtomString(),
