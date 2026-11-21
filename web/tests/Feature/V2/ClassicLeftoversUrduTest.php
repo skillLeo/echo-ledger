@@ -123,3 +123,10 @@ it('keeps a project form\'s errors in English in English', function () {
         ->set('ruleValue', '')->call('addRule')->assertHasErrors(['ruleValue' => 'required']);
     expect($page->errors()->first('ruleValue'))->toBe('The value field is required.');
 });
+
+// W-212 visual: the Projects page's title was "پروجیکٹs" (an English "s" on the translated singular).
+it('titles the Projects page with its own Urdu plural, and keeps "Projects" in English', function () {
+    $urdu = leftoverWords(leftoverPage($this, true, 'ur', 'projects'));
+    expect($urdu)->toContain('پروجیکٹس')->not->toContain('پروجیکٹs');
+    expect(leftoverWords(leftoverPage($this, true, 'en', 'projects')))->toContain('Projects');
+});

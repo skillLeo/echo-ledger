@@ -79,6 +79,15 @@ class ClientResource extends Resource
         return __('project');
     }
 
+    /**
+     * Its own plural, not Filament's English "s" on the translated singular ("پروجیکٹs", W-212 visual). Lowercase, as
+     * Filament's own plural is: title case makes the same "Projects" page title as before.
+     */
+    public static function getPluralModelLabel(): string
+    {
+        return __('projects');
+    }
+
     public static function getNavigationLabel(): string
     {
         return __('Projects');
