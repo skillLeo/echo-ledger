@@ -26,6 +26,8 @@ Schedule::command('queue:work assist-reports --queue=assist-reports --stop-when-
 
 // Since v1.9: Live Assist's reservations left behind and reports that never came (AssistBudget, MakeAssistReportJob).
 Schedule::command('assist:sweep')->everyFiveMinutes()->withoutOverlapping(10);
+// Since B4: the relay's health once every 5 minutes, for the admin's up/down and uptime (7 days kept).
+Schedule::command('assist:relay-check')->everyFiveMinutes()->withoutOverlapping(5);
 
 Schedule::command('stt:reconcile')->everyFiveMinutes()->withoutOverlapping(10);
 
