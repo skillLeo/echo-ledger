@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { Button } from "./Button";
 import { BackIcon, ForwardIcon, PauseIcon, PlayIcon } from "./icons";
 
@@ -84,5 +84,41 @@ export function Transcript({ label, segments, activeIndex, lang, after, onPlayLi
         </li>
       ))}
     </ol>
+  );
+}
+
+/** One bar of a waveform: its height (0 to 1) and the side that talks most in it (1 me, 2 the other side). */
+export type WaveBar = { level: number; channel: 1 | 2 };
+/** A mark on the waveform (a bookmark): where, and its name for the tooltip. */
+export type WaveMark = { id: string | number; atMs: number; title: string };
+
+/**
+ * Who speaks when (bars coloured by side), the marks (bookmarks) and how far it has played, as classic's player. A press
+ * seeks there. It draws for the pointer only: the Player's Position slider is the control for the keyboard and screen
+ * readers, so the waveform itself is hidden from them.
+ */
+export function Waveform({ bars, marks = [], durationMs, nowMs, onSeek }: {
+  bars: readonly WaveBar[];
+  marks?: readonly WaveMark[];
+  durationMs: number;
+  nowMs: number;
+  onSeek: (ms: number) => void;
+}) {
+  if (!(durationMs > 0) || (bars.length === 0 && marks.length === 0)) return null;
+  const share = (ms: number) => Math.min(100, Math.max(0, (ms / durationMs) * 100));
+  const played = share(nowMs);
+  const seekAt = (e: MouseEvent<HTMLDivElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    if (box.width > 0) onSeek(Math.max(0, Math.min(durationMs, ((e.clientX - box.left) / box.width) * durationMs)));
+  };
+  const at = (name: string, value: string) => ({ [name]: value }) as CSSProperties;
+  return (
+    <div className="el-wave" dir="ltr" aria-hidden="true" data-testid="waveform" onClick={seekAt}>
+      {bars.map((b, i) => (
+        <span key={i} className={`el-wave__bar el-wave__bar--${b.channel}${((i + 0.5) / bars.length) * 100 <= played ? " el-wave__bar--played" : ""}`}
+          style={at("--el-wave-level", `${Math.round(b.level * 100)}%`)} />
+      ))}
+      {marks.map((m) => <span key={m.id} className="el-wave__mark" title={m.title} data-mark={m.id} style={at("--el-wave-at", String(share(m.atMs) / 100))} />)}
+    </div>
   );
 }

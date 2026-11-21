@@ -15,7 +15,7 @@ import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
 import { copiedTranscript, DEFAULT_UNSURE, fileSize, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
-import { PLAYER_HINT, activeIndex, activeWord, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
+import { PLAYER_HINT, activeIndex, activeWord, waveformBars, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
 import { defaultViewOf, improvingView, transcribingLine, viewPercent } from "../../lib/progress";
 import { usePoll } from "../../lib/usePoll";
@@ -23,9 +23,9 @@ import { canTryAgain, failureLine, languageLabel, normalizeLanguage, partsText, 
 import { PLAYBACK_EXPIRED } from "../shared/SharedReader";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
-import { PDF_HINT } from "../../views/main/TranscriptTools";
+import { PDF_HINT, WAVE_BARS } from "../../views/main/TranscriptTools";
 import { screenMarker } from "../../lib/screens";
-import { Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
+import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
 import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
@@ -375,6 +375,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   // The player's length: the server's, else the audio file's own (on loadedmetadata), else the last line's end.
   const durationS = Math.max(1, Math.round(playerLength(item.duration_ms, rawSegments, mediaSeconds) / 1000));
   const screensAfter = useMemo(() => screensByLine(rawSegments ?? [], screens ?? []), [rawSegments, screens]);
+  // The waveform is drawn from the transcript (who speaks when), as classic's: decoding a long recording here would be slow.
+  const waveBars = useMemo(() => waveformBars(rawSegments ?? [], durationS * 1000, WAVE_BARS), [rawSegments, durationS]);
   const lines = useMemo(() => (rawSegments ?? []).map((s) => ({ ...s, speaker: speakerName(names, s.speaker) })), [rawSegments, names]);
   const openScreen = (screen: ScreenMoment) => setScreenOpen(Math.max(0, (screens ?? []).findIndex((s) => s.id === screen.id)));
   const deleteScreen = async (screen: ScreenMoment) => {
@@ -655,6 +657,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
                 onEnded={() => setPlaying(false)} onTimeUpdate={(e) => timeUpdate(e.currentTarget)} onError={audioError} />
             )}
             {playbackError && <Banner tone="warning" icon={Icons.WarningIcon}>{playbackError}</Banner>}
+            <Waveform bars={waveBars} marks={bookmarks.map((b) => ({ id: b.id, atMs: b.at_ms, title: `${timestamp(b.at_ms)}${b.tag ? ` ${b.tag}` : ""}${b.note ? ` · ${b.note}` : ""}` }))}
+              durationMs={durationS * 1000} nowMs={position * 1000} onSeek={(ms) => seek(ms / 1000)} />
             <Player playing={playing} position={Math.round(position)} duration={durationS} onToggle={toggle} onSeek={seek}
               onSkip={(s) => seek(position + s)}
               end={<Select label="Playback speed" hideLabel value={speed} onChange={setSpeed} className="el-page__speed"
