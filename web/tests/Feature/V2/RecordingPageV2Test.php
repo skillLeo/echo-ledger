@@ -59,6 +59,18 @@ it('WEB-REC-007: goes to the previous and the next recording in the Library\'s d
     expect(recordingNavHref($html, 'Previous recording'))->toEndWith('/app/sessions/'.$newest->id)
         ->and(recordingNavHref($html, 'Next recording'))->toEndWith('/app/sessions/'.$third->id);
 
+    // On the "‹ Library" line above the title, as two 44 px icon buttons (‹ ›), not among the actions.
+    $doc = new DOMDocument;
+    @$doc->loadHTML('<?xml encoding="utf-8"?>'.$html);
+    $xp = new DOMXPath($doc);
+    $line = $xp->query('//*[@data-recording-nav]')->item(0);
+    expect($line)->not->toBeNull()
+        ->and($xp->query('.//a[contains(@class, "v2-back")]', $line)->length)->toBe(1)
+        ->and($xp->query('.//*[@data-recording-nav-link][contains(@class, "fi-size-xl")][@aria-label]', $line)->length)->toBe(2)
+        ->and($xp->query('.//*[@data-recording-nav-link="previous"]//svg', $line)->length)->toBe(1)
+        ->and($xp->query('//*[contains(@class, "fi-header")]//*[contains(@class, "fi-ac")]//*[@aria-label="Previous recording"]')->length)->toBe(0);
+    expect($html)->toMatch('~data-recording-nav-link="previous"[^>]*>|aria-label="Previous recording"~');
+
     // The ends: no Previous above the newest, no Next below the oldest (the buttons stay, turned off).
     $top = recordingPageHtml($this, $newest);
     expect(recordingNavHref($top, 'Previous recording'))->toBeNull()->and(recordingNavHref($top, 'Next recording'))->toEndWith('/app/sessions/'.$second->id)
@@ -75,6 +87,26 @@ it('WEB-REC-007: goes to the previous and the next recording in the Library\'s d
     expect(recordingNavHref(recordingPageHtml($this, $newest), 'Previous recording'))->toBeNull();
     // Classic has no Previous / Next.
     expect(recordingNavHref(recordingPageHtml($this, $second, false), 'Previous recording'))->toBeNull();
+});
+
+it('WEB-REC-007: mirrors ‹ › right to left, in Urdu', function () {
+    [, $second] = $this->recs->values()->all();
+    $prefs = is_array($this->owner->console_preferences) ? $this->owner->console_preferences : [];
+    $prefs['shell'] = array_merge(is_array($prefs['shell'] ?? null) ? $prefs['shell'] : [], ['app_language' => 'ur']);
+    $this->owner->forceFill(['console_preferences' => $prefs])->save();
+    $ur = recordingPageHtml($this, $second);
+    $en = (function () use ($second) {
+        $this->owner->forceFill(['console_preferences' => []])->save();
+
+        return recordingPageHtml($this, $second);
+    })();
+    $glyph = fn (string $html, string $key): string => (string) preg_replace('/\s+/', ' ', (string) ((new DOMXPath((function () use ($html) { $d = new DOMDocument; @$d->loadHTML('<?xml encoding="utf-8"?>'.$html); return $d; })()))
+        ->query('//*[@data-recording-nav-link="'.$key.'"]//svg')->item(0)?->C14N()));
+    expect($ur)->toContain('aria-label="پچھلی ریکارڈنگ"')->toContain('aria-label="اگلی ریکارڈنگ"')
+        // Previous points to the line's start: left in English, right in Urdu.
+        ->and($glyph($ur, 'previous'))->toBe($glyph($en, 'next'))
+        ->and($glyph($ur, 'next'))->toBe($glyph($en, 'previous'))
+        ->and($glyph($en, 'previous'))->not->toBe($glyph($en, 'next'));
 });
 
 it('WEB-REC-007: gives a read-only console Previous / Next too (they only open pages)', function () {

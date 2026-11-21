@@ -531,8 +531,7 @@ class ViewCaptureSession extends ViewRecord
     protected function getHeaderActions(): array
     {
         if (ConsoleAccess::readOnly()) {
-            // Since U9b part 2: a read-only console still goes from one recording to the next (it only opens pages).
-            return ConsoleV2::library() ? $this->v2NeighbourActions() : [];
+            return [];
         }
         // Since v2.0 (ui_v2.library): Share, Move and Delete, as the apps; everything else in More.
         if (ConsoleV2::library()) {
@@ -571,7 +570,6 @@ class ViewCaptureSession extends ViewRecord
                         $this->clearReferenceAction(),
                     ])->dropdown(false),
                 ])->label(__('More'))->icon(Heroicon::OutlinedEllipsisHorizontal)->color('gray'),
-                ...$this->v2NeighbourActions(),
             ];
         }
 
@@ -617,23 +615,20 @@ class ViewCaptureSession extends ViewRecord
     }
 
     /**
-     * Previous / Next recording on the new page (U9b part 2, WEB-REC-007): the recordings above and below this one in
-     * the Library's default order (pinned first, then newest first), among the person's own. The Library keeps its
-     * filters and order in the page itself, so the recording page can't know them: it always walks the default order.
+     * Previous / Next recording on the new page (U9b part 2, WEB-REC-007), at the end of the "‹ Library" line above the
+     * title (filament.v2.back-link): the recordings above and below this one in the Library's default order (pinned
+     * first, then newest first), among the person's own; a read-only console has them too, as they only open pages.
+     * The Library keeps its filters and order in the page itself, so the recording page can't know them: it always
+     * walks the default order.
      *
-     * @return list<Action>
+     * @return array{previous: string|null, next: string|null}
      */
-    private function v2NeighbourActions(): array
+    private function v2NeighbourUrls(): array
     {
         [$previous, $next] = $this->v2Neighbours();
-        $link = fn (string $name, string $label, Heroicon $icon, ?string $id): Action => Action::make($name)->label(__($label))->icon($icon)
-            ->iconButton()->color('gray')->tooltip(__($label))
-            ->url($id !== null ? CaptureSessionResource::getUrl('view', ['record' => $id]) : null)->disabled($id === null);
+        $url = fn (?string $id): ?string => $id !== null ? CaptureSessionResource::getUrl('view', ['record' => $id]) : null;
 
-        return [
-            $link('previousRecording', 'Previous recording', Heroicon::OutlinedChevronUp, $previous),
-            $link('nextRecording', 'Next recording', Heroicon::OutlinedChevronDown, $next),
-        ];
+        return ['previous' => $url($previous), 'next' => $url($next)];
     }
 
     /** @return array{0: string|null, 1: string|null} the ids of the recordings before and after this one */
@@ -1296,13 +1291,14 @@ class ViewCaptureSession extends ViewRecord
     }
 
     /**
-     * Since v2.0 (ui_v2.library): back to the Library, above the title, as the apps.
+     * Since v2.0 (ui_v2.library): back to the Library, above the title, as the apps; since U9b part 2 with Previous /
+     * Next recording at the end of the same line.
      *
-     * @return array{label: string, url: string}|null
+     * @return array{label: string, url: string, neighbours: array{previous: string|null, next: string|null}}|null
      */
     public function v2BackLink(): ?array
     {
-        return ConsoleV2::library() ? ['label' => __('Library'), 'url' => CaptureSessionResource::getUrl('index')] : null;
+        return ConsoleV2::library() ? ['label' => __('Library'), 'url' => CaptureSessionResource::getUrl('index'), 'neighbours' => $this->v2NeighbourUrls()] : null;
     }
 
     /** "Sessions > Title", without a trailing "View" (C3). */
