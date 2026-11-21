@@ -241,7 +241,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [skipSilence, setSkipSilence] = useState(false);
   const [follow, setFollow] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [panel, setPanel] = useState<"replace" | "speakers" | "history" | "share" | null>(null);
+  // The open panel and the recording it was opened for (D-166): see `panel` below.
+  const [panelState, setPanelState] = useState<{ name: "replace" | "speakers" | "history" | "share" | null; recording: string | null }>({ name: null, recording: null });
   const [vocabTerms, setVocabTerms] = useState<string[]>([]);
   // "Always write X as Y for Acme?" offers from the last edit (since v1.4), asked one at a time.
   const [learn, setLearn] = useState<LearnOffer[]>([]);
@@ -397,6 +398,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     : filtered.find((i) => i.id === selected) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? null;
   // A recording a teammate sent can be played and read, not changed.
   const readOnly = !!current && current === sharedSession;
+  // A panel belongs to the recording it was opened for (D-166): another recording opens without it, and re-reading the
+  // same recording's transcript closes only the panels that work on that transcript (below), never Share.
+  const panel = panelState.recording !== null && panelState.recording === (current?.id ?? null) ? panelState.name : null;
+  const setPanel = (name: typeof panelState.name) => setPanelState({ name, recording: name ? current?.id ?? null : null });
   // The recording page opening from its row (since v1.5): the row clicked last, until the page shows it.
   const detailRef = useRef<HTMLDivElement>(null);
   const opening = useRef<RowSnapshot | null>(null);
@@ -499,7 +504,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     setNowMs(0);
     setPlaying(false);
     setEditing(false);
-    setPanel(null);
+    // Replace, Speakers and History work on the transcript being (re)read; Share is the recording's and stays open.
+    setPanelState((open) => (open.name === "share" ? open : { name: null, recording: null }));
     setVocabTerms([]);
     setLearn([]);
     setOpenSuggestion(null);

@@ -9,7 +9,7 @@ import { RequestLinksSheet } from "./RequestLinks";
 import { ProjectsView } from "./ProjectsView";
 import { LibraryView } from "./LibraryView";
 import type { ClientFolder, ShareLink } from "../../lib/ipc";
-import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeTranscript, anyTarget } from "../../test/fixtures";
 import { ConfirmHost } from "./ConfirmHost";
 import { SharedView } from "./SharedView";
@@ -296,11 +296,47 @@ describe("sharing from the pages", () => {
     respond("shares_of", { data: [] });
     render(<LibraryView notify={vi.fn()} initialSelected="s1" />);
     // Under a full parallel run (and on the slow Intel Mac runner) the page and then the dialog can each take longer
-    // than the default second to appear.
+    // than the default second to appear. (It also failed when the click came before the page had read the recording:
+    // that read closed every panel, the dialog too. D-166, tested below.)
     fireEvent.click(await screen.findByRole("button", { name: "Share" }, { timeout: 5000 }));
     expect(await screen.findByRole("dialog", { name: "Share Kick-off" }, { timeout: 5000 })).toBeInTheDocument();
     expect(callsOf("shares_of")).toEqual([{ sessionId: "s1", clientId: null }]);
   }, 15_000); // The whole main window renders: under a full parallel run it can pass 5 s.
+});
+
+describe("the Share dialog belongs to its recording (D-166)", () => {
+  // The recording page reset every panel each time it (re)read the recording's transcript. A Share dialog opened while
+  // that ran (a slow computer, or the transcript finishing on the server) closed by itself.
+  const opening = (finalStatus: string, finalId: string | null) => makeItem("s1", { title: "Kick-off", transcript: { final_status: finalStatus, final_transcript_id: finalId, live_available: false, preview: null } });
+
+  async function openShare(item: ReturnType<typeof makeItem>) {
+    for (const [name, value] of [["library_list", [item]], ["library_refresh", [item]], ["pending_list", []], ["upload_list", []], ["unsure_markers", null],
+      ["list_clients", { data: [] }], ["transcript_detail", makeTranscript({ id: "tr-s1" })], ["session_detail", { playback_url: null, markers: [], speaker_names: {} }],
+      ["shares_of", { data: [] }]] as const) respond(name, value);
+    render(<LibraryView notify={vi.fn()} initialSelected="s1" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Share" }));
+    return screen.findByRole("dialog", { name: "Share Kick-off" });
+  }
+
+  it("stays open when the transcript finishes on the server while it is open", async () => {
+    await openShare(opening("processing", null));
+    respond("library_list", [opening("completed", "tr-s1")]);
+    await emitEvent("library:updated", 1);
+    await waitFor(() => expect(callsOf("transcript_detail").length).toBeGreaterThan(0));
+    await flushAsync();
+    expect(screen.getByRole("dialog", { name: "Share Kick-off" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Share" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("still closes with its recording: another recording opens without it", async () => {
+    const other = makeItem("s2", { title: "Budget review" });
+    await openShare(opening("completed", "tr-s1"));
+    respond("library_list", [opening("completed", "tr-s1"), other]);
+    await emitEvent("library:updated", 1);
+    fireEvent.click(await screen.findByText("Budget review"));
+    await flushAsync();
+    expect(screen.queryByRole("dialog", { name: /^Share/ })).toBeNull();
+  });
 });
 
 describe("Revoke asks first (D-072): a link stops working for everyone who has it", () => {
