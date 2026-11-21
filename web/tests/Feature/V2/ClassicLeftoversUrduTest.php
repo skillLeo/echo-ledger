@@ -40,10 +40,12 @@ function leftoverPage(object $test, bool $v2, string $language, string $page, bo
     return (string) $test->actingAs($test->owner->fresh(), 'web')->get($test->pages[$page])->assertOk()->getContent();
 }
 
-/** What the page says, without its markup. */
+/** What the page says, without its markup and without the invisible direction marks around names and numbers (B8). */
 function leftoverWords(string $html): string
 {
-    return preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags(preg_replace('#<(script|style)\b.*?</\1>#is', '', $html) ?? ''))) ?? '';
+    $words = preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags(preg_replace('#<(script|style)\b.*?</\1>#is', '', $html) ?? ''))) ?? '';
+
+    return preg_replace('/[\x{2066}-\x{2069}]/u', '', $words) ?? $words;
 }
 
 /** Whether the English is on the page: in its words, or in an attribute for an `=`. */
