@@ -236,3 +236,74 @@ Gate 3: approved 2026-11-17, no images pending.
 3. Record 1 minute from the microphone, stop, and check it transcribes.
 4. Live Captions on a YouTube video: words within about 1 second.
 5. Share the screen in Meet in Chrome. The main window shows; Live Assist card and captions don't. Hide the main window for 15 minutes from the tray.
+
+The phone and Windows parts above were not run; they are carried into the next section.
+
+## Next free slots (from 2026-11-21) — Mac 2.0.3, phone 2.0.2, Windows 2.0.2, about 75 minutes
+
+Each part stands alone: run whichever device is free. Write "pass" or what you saw next to each step; a photo helps
+for anything that looks wrong. The lead installs the builds; you only use the apps.
+
+Builds:
+- **Mac 2.0.3** (the half-screen fixes): built from release/v2.0.3, start-up check passed
+  (`sh desktop/scripts/smoke-mac.sh <app> 180`), installed over 2.0.2 in /Applications.
+- **Phone 2.0.2** (code 22, release/v2.0.2): installed over Wi-Fi with `adb install -r` (data kept). Turn on
+  Settings › Developer options › Wireless debugging first. Not on a call.
+- **Windows 2.0.2**: the `EchoLedger-windows-x64` artifact of the Desktop (Windows) run on release/v2.0.2
+  (Actions → Desktop (Windows) → release/v2.0.2 → Artifacts).
+
+### 1. Mac 2.0.3 — the half-screen window, 25 min
+Before: Settings › Appearance in light mode, the app in English. At least 10 recordings in the Library, one with an
+Urdu title (rename one to "ادائیگی کا منصوبہ اور قرض کی واپسی" if none has).
+
+**A. Half screen (720–756 px wide), 10 min**
+1. Put the EchoLedger window on the left half of the screen: menu bar › Window › Move & Resize › Left (or drag it to
+   the left edge until the half outline shows). The sidebar becomes a column of icons.
+2. Drag the window's right edge to the left as far as it goes. Pass: it stops (about half of a 13-inch screen) and the
+   top bar still shows the team name, search, "Calls: Ready", +, the bell, ? and your picture, none of them cut.
+3. Library: open a recording. Pass: it fills the page with **Back** at the top left; the list is gone.
+4. Scroll the recording to its end with the trackpad. Pass: the transcript's last line, and the Speakers, History and
+   Review tabs above it, can all be seen above the player bar; nothing shows through the player.
+5. Press Esc. Pass: the list is back, with the recording you had open highlighted. Open it again and press Back:
+   same result.
+6. In the list, press J five times, then K twice. Pass: the highlighted row is always fully in sight, never under the
+   "Today" / "Yesterday" / "This week" heading.
+7. Scroll the list to its end. Pass: the last recording sits fully above the player bar (play any recording first so
+   the bar shows).
+8. Open a recording again. Pass: "Project" and "Language" sit beside their values ("Inbox", "Auto (English / Urdu /
+   Arabic)" or shorter), never on top of them, and Re-transcribe fits on the same row or the next.
+9. The Urdu-titled recording in the list. Pass: if the title is cut, the "…" is on its left (its end), not its right.
+
+**B. Other pages at half screen, 8 min**
+1. Projects, then open a project. Pass: its name, Share, Copy for AI, the filing rules and Edit rules are all visible,
+   nothing on top of anything.
+2. Shared (the sidebar's share icon) › With me › Open. Pass: the recording opens with Back; Esc returns to the cards.
+3. Settings › Calls & meetings, then Microphone & audio, Captions, Voice notes & dictation, Custom words. Pass: every
+   drop-down shows its whole value or a clean "…", nothing written over it.
+4. Library › the table icon above the list (its tooltip says "Table"), open a recording, press Esc. Pass: the
+   recording closes and the row you opened stays highlighted.
+
+**C. Full screen and dark, 7 min**
+1. Window › Fill (full screen width). Pass: the list and the recording sit side by side, as in 2.0.2.
+2. Settings › Appearance › Dark, then repeat A3–A7 at half screen. Pass: as in light; the player bar is solid.
+3. Back to your usual appearance. Note anything else that looks off, with a photo.
+
+### 2. Phone S25 (2.0.2), 20 min
+1. Turn on Wireless debugging; the lead installs 2.0.2 (2 min, no data cleared).
+2. Open the app: classic, recordings all there; record a 20 s voice note and check it transcribes.
+3. Settings › Appearance › Try the new design. Pass: the text uses the app's font, not the Samsung handwriting font.
+4. Library: long-press a row for selection mode, then Move, Label, Delete with Undo; filter chips; Sort and group.
+5. Open a recording: Show as Roman Urdu / اردو / English, Copy ▾, ⋮ › Export, player speed and skip silence.
+6. Settings › Appearance › Switch back to classic. Pass: classic is back, nothing lost.
+
+### 3. Windows laptop (2.0.2), 25 min
+1. Download the artifact and run the installer over the existing install.
+2. It starts once with no crash; a second launch while it starts doesn't crash. Sign-in is kept.
+3. Record 1 minute from the microphone, stop, and check it transcribes.
+4. Live Captions on a YouTube video: words within about 1 second of speech.
+5. Share the screen in Meet in Chrome. Pass: the main window shows; the Live Assist card and captions don't. Then
+   tray › Hide from screen shares › 15 minutes: the main window leaves the share.
+6. Half the screen (Win + ←): open a recording and scroll it to the end. Note whether the transcript can be reached
+   (2.0.2 is before the half-screen fix; this is the baseline for 2.0.3 on Windows).
+
+After each part, the lead turns every "fail" into a bug with an ID (EL-Fix triages within the hour).
