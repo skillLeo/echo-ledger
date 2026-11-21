@@ -178,6 +178,7 @@ object EchoTokens {
         val listRowHeightCompact = 44.dp
         val listRowHeightMobile = 64.dp
         val listRowHeightMobileTall = 72.dp
+        val recordButton = 56.dp
         const val toastDurationMs = 6000
         const val recordingDotPulseMs = 1500
         val avatarSize = 40.dp
