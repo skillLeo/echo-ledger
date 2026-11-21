@@ -29,6 +29,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\HtmlString;
 use UnitEnum;
 
 /**
@@ -90,7 +91,10 @@ class DeviceResource extends Resource
                 TextColumn::make('source_device')->label(__('Type'))->badge()
                     ->state(fn (Device $record) => $record->sourceDevice())
                     ->formatStateUsing(fn (SourceDevice $state): string => __((string) $state->getLabel())),
-                TextColumn::make('platform')->label(__('Platform')),
+                // Classic shows App only from 1280 px (xl): below that the version is the platform's second line (W-201).
+                TextColumn::make('platform')->label(__('Platform'))
+                    ->when(! $v2, fn (TextColumn $column): TextColumn => $column->description(fn (Device $record): ?HtmlString => $record->app_version
+                        ? new HtmlString('<span class="xl:hidden">'.e('App '.$record->app_version).'</span>') : null)),
                 TextColumn::make('app_version')->label(__('App'))->placeholder('—')->tap($wide),
                 TextColumn::make('capture_sessions_count')->label(__('Recordings'))->badge()->color('gray'),
                 TextColumn::make('last_seen_at')->label(__('Last seen'))->since()->placeholder(__('never')),

@@ -24,8 +24,9 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
  * W-201, the tables' shape: in the new frame the four wide tables (a recording's Share links, My links, Devices,
  * Request links) have the row's actions in one ⋮ menu under Filament's own "Actions" label (the same actions, labels,
  * colours, confirmations and order as classic, the red ones last), and the columns that made them too wide are hidden
- * at first but stay under Columns; their words and dates are in the console's language, English or Urdu. Classic keeps
- * its buttons and every column shown (ClassicTablesGoldenTest holds its HTML byte for byte). The widths themselves are
+ * at first but stay under Columns; their words and dates are in the console's language, English or Urdu. Since W-201
+ * classic has the same ⋮ menu and shows those columns from 1280 px only, with no Columns menu (ClassicTablesGoldenTest
+ * holds its HTML byte for byte). The widths themselves are
  * measured in a browser by Support/table-widths.mjs (docs/v2/design-review/W201/widths.md).
  */
 
