@@ -119,7 +119,7 @@
     <string name="v2_vm_stop_recording_first">Stop the recording first, then run the test.</string>
     <string name="v2_vm_stopped_sharing">Stopped sharing</string>
     <string name="v2_vm_wrong_sign_in_link">That sign-in link is not for this sign-in. Start again.</string>
-    <string name="v2_vm_audio_download_failed">The audio could not be downloaded. Check the connection and try again.</string>
+    <string name="v2_vm_audio_download_failed">The voice could not be downloaded. Check the connection and try again.</string>
     <string name="v2_vm_change_not_saved">The change could not be saved.</string>
     <string name="v2_vm_device_not_revoked">The device could not be revoked.</string>
     <string name="v2_vm_export_failed">The export failed.</string>
@@ -135,7 +135,7 @@
     <string name="v2_vm_term_not_added">The term could not be added.</string>
     <string name="v2_vm_views_not_started">The views could not be started.</string>
     <string name="v2_vm_signed_out">This phone was signed out on the server. Sign in again.</string>
-    <string name="v2_vm_no_audio_on_server">This recording has no audio on the server.</string>
+    <string name="v2_vm_no_audio_on_server">This recording has no voice on the server.</string>
     <string name="v2_vm_one_updated">1 recording updated</string>
     <string name="v2_vm_welcome">Welcome to EchoLedger</string>
     <string name="v2_vm_ws_it_could_not_be_removed">It could not be removed.</string>

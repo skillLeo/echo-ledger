@@ -36,6 +36,8 @@ import com.echoledger.mobile.update.UpdatePrefs
 import com.echoledger.mobile.update.UpdateStatus
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.io.File
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,7 +50,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** The stored settings, or the fact that they have not been read yet (a cold start reads DataStore after the first frame). */
 sealed interface SettingsState {
@@ -646,30 +650,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The recording's audio (since v1.6, Send to WhatsApp) in the app's private `exports/` cache, from its temporary
-     * signed address (or into [dir]: Send to WhatsApp's share folder); null with a message when it could not be fetched,
-     * and no half-written file left.
+     * The recording's voice (since v1.6, Send to WhatsApp) in the app's private `exports/` cache, or in [dir] (Send to
+     * WhatsApp's share folder), from its temporary signed address, named after [title] with the extension its type
+     * gives (.m4a, .ogg, .mp3, .wav). Null with a message when it could not be fetched, and no half-written file left.
+     * Cancelling (the share closed) stops the download at once.
      */
     suspend fun downloadAudio(sessionId: String, title: String, dir: File? = null): File? = withContext(Dispatchers.IO) {
         var file: File? = null
         try {
             val api = graph.api() ?: return@withContext null
             val url = sessionDetail(sessionId)?.playbackUrl ?: run {
-                _message.value = "This recording has no audio on the server."
+                _message.value = "This recording has no voice on the server."
                 return@withContext null
             }
             val folder = (dir ?: File(getApplication<Application>().cacheDir, "exports")).apply { mkdirs() }
-            val name = title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().ifBlank { "Recording" }.take(60) + ".ogg"
-            val out = File(folder, name).also { file = it }
-            api.http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { resp ->
-                if (!resp.isSuccessful) throw java.io.IOException("The audio could not be downloaded (${resp.code}).")
-                out.outputStream().use { o -> resp.body.byteStream().copyTo(o) }
+            val base = title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().ifBlank { "Recording" }.take(60)
+            val known = url.toHttpUrlOrNull()?.pathSegments?.lastOrNull()?.substringAfterLast('.', "")
+            val call = api.http.newCall(okhttp3.Request.Builder().url(url).build())
+            suspendCancellableCoroutine { cont ->
+                cont.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) = cont.resumeWithException(e)
+
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        try {
+                            response.use { resp ->
+                                if (!resp.isSuccessful) throw java.io.IOException("The voice could not be downloaded (${resp.code}).")
+                                val ext = com.echoledger.mobile.share.WhatsAppShare.voiceExtension(resp.header("Content-Type"), known)
+                                val out = File(folder, "$base.$ext").also { file = it }
+                                if (!cont.isActive) return
+                                out.outputStream().use { o -> resp.body.byteStream().copyTo(o) }
+                            }
+                            cont.resume(Unit)
+                        } catch (e: Exception) {
+                            if (!cont.isActive) file?.delete()
+                            cont.resumeWithException(e)
+                        }
+                    }
+                })
             }
-            out
+            file
         } catch (e: Exception) {
             file?.delete()
             if (e is kotlinx.coroutines.CancellationException) throw e
-            _message.value = "The audio could not be downloaded. Check the connection and try again."
+            _message.value = "The voice could not be downloaded. Check the connection and try again."
             null
         }
     }

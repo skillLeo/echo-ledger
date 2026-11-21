@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.echoledger.mobile.R
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.data.SearchItemDto
 import com.echoledger.mobile.share.WhatsAppShare
@@ -267,7 +269,7 @@ fun TranscriptionSection(vm: MainViewModel, settings: com.echoledger.mobile.data
 /**
  * Send to WhatsApp (since v1.6, P5.5): the transcript (in the view being read) as text, with the voice too (attached to
  * the message), or a link that works for 7 days. While one is being prepared only that choice shows it ("Saving the
- * voice…"); the others look as before but wait for it.
+ * voice…"); the others keep their look but are disabled (a tap says to wait). Closing the sheet first sends nothing.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -276,16 +278,26 @@ fun WhatsAppSheet(vm: MainViewModel, sessionId: String, transcriptId: String, ha
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf<String?>(null) }
     val target = remember { WhatsAppShare.target(WhatsAppShare.installed(context)) }
+    val say: (String) -> Unit = vm::showMessage
     suspend fun transcriptText(): String? = vm.export(transcriptId, "txt", view)?.readText()
     fun run(kind: String, block: suspend () -> Unit) {
-        if (working != null) return
+        if (working != null) {
+            if (working == "voice") say(context.getString(R.string.v2_rec_wa_wait))
+            return
+        }
         working = kind
         scope.launch {
-            block()
-            working = null
+            try {
+                WhatsAppShare.attempt(context, say, block)
+            } finally {
+                working = null
+            }
             onDismiss()
         }
     }
+
+    /** The choices not being prepared: their usual look, disabled for TalkBack while another one works. */
+    fun waiting(kind: String) = Modifier.fillMaxWidth().semantics { if (working != null && working != kind) disabled() }
     androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Surface) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = Space.screen).padding(bottom = Space.s5),
@@ -297,25 +309,24 @@ fun WhatsAppSheet(vm: MainViewModel, sessionId: String, transcriptId: String, ha
                 color = Brand.Text
             )
             com.echoledger.mobile.ui.design.EchoButton("Text only", {
-                run("text") { transcriptText()?.let { WhatsAppShare.start(context, WhatsAppShare.textIntent(it, target)) } }
-            }, Modifier.fillMaxWidth(), loading = working == "text")
+                run("text") { transcriptText()?.let { WhatsAppShare.send(context, WhatsAppShare.textIntent(it, target), say) } }
+            }, waiting("text"), loading = working == "text")
             if (hasAudio) {
                 com.echoledger.mobile.ui.design.EchoButton(
-                    if (working == "voice") WhatsAppShare.SAVING_VOICE else "Text and voice",
+                    if (working == "voice") context.getString(R.string.v2_rec_wa_saving) else "Text and voice",
                     {
                         run("voice") {
                             val text = transcriptText() ?: return@run
-                            val sent = WhatsAppShare.sendTextAndVoice(
+                            WhatsAppShare.sendTextAndVoice(
                                 context,
                                 text,
                                 target,
                                 save = { dir -> vm.downloadAudio(sessionId, "EchoLedger recording", dir) },
-                                notSaved = { vm.showMessage(WhatsAppShare.VOICE_NOT_SAVED) }
+                                say = say
                             )
-                            if (sent) vm.showMessage(WhatsAppShare.TEXT_COPIED)
                         }
                     },
-                    Modifier.fillMaxWidth(),
+                    waiting("voice"),
                     kind = com.echoledger.mobile.ui.design.ButtonKind.Secondary,
                     loading = working == "voice"
                 )
@@ -325,10 +336,10 @@ fun WhatsAppSheet(vm: MainViewModel, sessionId: String, transcriptId: String, ha
                 {
                     run("link") {
                         val link = vm.createShare(sessionId, 7L * 24 * 3600, null, includeAudio = hasAudio)?.url ?: return@run
-                        WhatsAppShare.start(context, WhatsAppShare.textIntent(link, target))
+                        WhatsAppShare.send(context, WhatsAppShare.textIntent(link, target), say)
                     }
                 },
-                Modifier.fillMaxWidth(),
+                waiting("link"),
                 kind = com.echoledger.mobile.ui.design.ButtonKind.Secondary,
                 loading = working == "link"
             )

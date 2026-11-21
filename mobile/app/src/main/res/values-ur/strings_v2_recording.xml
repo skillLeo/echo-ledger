@@ -75,6 +75,11 @@
     <string name="v2_rec_wa_text_copied">ٹرانسکرپٹ کلپ بورڈ پر بھی ہے، اگر واٹس ایپ اسے چھوڑ دے۔</string>
     <string name="v2_rec_wa_saving">آواز محفوظ ہو رہی ہے…</string>
     <string name="v2_rec_wa_voice_failed">آواز محفوظ نہیں ہو سکی، اس لیے کچھ نہیں بھیجا گیا۔ دوبارہ کوشش کریں۔</string>
+    <string name="v2_rec_wa_wait">انتظار کریں: آواز ابھی محفوظ ہو رہی ہے۔</string>
+    <string name="v2_rec_wa_closed">نہیں بھیجا گیا: تیار ہونے سے پہلے شیئر بند کر دیا گیا۔</string>
+    <string name="v2_rec_wa_failed">نہیں بھیجا گیا: کچھ غلط ہو گیا۔ دوبارہ کوشش کریں۔</string>
+    <string name="v2_rec_wa_not_opened">واٹس ایپ نہیں کھل سکا، اس لیے کچھ نہیں بھیجا گیا۔</string>
+    <string name="v2_rec_wa_chooser">بھیجیں</string>
     <string name="v2_rec_view_original">اصل</string>
     <string name="v2_rec_view_roman">رومن اردو</string>
     <string name="v2_rec_view_urdu">اردو</string>
