@@ -54,6 +54,7 @@ import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneMissed
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.RadioButtonChecked
@@ -183,6 +184,7 @@ object EchoIcons {
     val SettingsLanguage: ImageVector get() = Icons.Outlined.Translate
     val SettingsProfile: ImageVector get() = Icons.Outlined.ManageAccounts
     val SettingsPlan: ImageVector get() = Icons.Outlined.CreditCard
+    val SettingsPolicy: ImageVector get() = Icons.Outlined.Policy
 
     /** A person's avatar when there is no name to take initials from (never a "?"). */
     val Person: ImageVector get() = Icons.Outlined.Person
