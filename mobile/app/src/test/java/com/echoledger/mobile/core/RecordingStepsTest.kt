@@ -77,7 +77,7 @@ class RecordingStepsTest {
         val steps = RecordingSteps.of(item(views = views))!!
         assertEquals(State.DONE, steps.states[Step.TRANSCRIBE])
         assertTrue(steps.onlyImproving)
-        assertEquals("Improving Roman Urdu… 60%", steps.line)
+        assertEquals("Converting to Roman Urdu… 60%", steps.line)
         assertEquals(60, steps.percent)
     }
 

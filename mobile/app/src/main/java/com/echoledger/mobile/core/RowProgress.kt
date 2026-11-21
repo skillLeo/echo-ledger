@@ -7,11 +7,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 
 /**
- * Where a recording is (since v1.5, Phase 1C): Uploading %, then Transcribing % with the time left, then Improving % while
- * its views are made. The same words in the Library row, on a shared note's page and in Activity. Pure; unit-tested.
+ * Where a recording is (since v1.5, Phase 1C): Uploading %, then Transcribing % with the time left, then "Converting to
+ * Roman Urdu… 60%" while its default view is made (U19: from the moment the transcript is finished, so a view not
+ * started yet counts too), or "Couldn't convert to Roman Urdu · Try again" when making it failed. The same words in the
+ * Library row, on a shared note's page and in Activity. Pure; unit-tested.
  */
 object RowProgress {
-    enum class Step { UPLOADING, TRANSCRIBING, IMPROVING }
+    enum class Step { UPLOADING, TRANSCRIBING, IMPROVING, VIEW_FAILED }
 
     /** [percent] 0-100, or null when the server has no measure yet. [text]: "Transcribing · part 2 of 3 · about 20 s left". */
     data class Stage(val step: Step, val percent: Int?, val text: String)
@@ -29,11 +31,34 @@ object RowProgress {
         if (status == "failed" || item.status == "failed") return null
         if (status != "completed") return transcribing(transcript.finalProgress)
         val views = transcript.views ?: return null
-        if (views.status != "making") return null
-        val progress = views.progress[views.default] ?: views.progress.values.firstOrNull()
-        val percent = progress?.takeIf { it.total > 0 }?.let { (it.done * 100 / it.total).coerceIn(0, 100) }
         val name = viewName(views.default)
-        return Stage(Step.IMPROVING, percent, "Improving $name" + (percent?.let { "… $it%" } ?: "…"))
+        return when (converting(views)) {
+            true -> {
+                val percent = viewPercent(views)
+                Stage(Step.IMPROVING, percent, "Converting to $name" + (percent?.let { "… $it%" } ?: "…"))
+            }
+
+            false -> Stage(Step.VIEW_FAILED, null, "Couldn't convert to $name · Try again")
+
+            null -> null
+        }
+    }
+
+    /**
+     * Whether the default view of a finished transcript is on its way: true while it is made or not started yet (the
+     * server makes it by itself), false when making it failed, null when there is none to make or it is ready.
+     */
+    fun converting(views: com.echoledger.mobile.data.RowViewsDto): Boolean? = when {
+        views.default == "original" || views.default.isBlank() -> null
+        views.status == "making" || views.status == "none" -> true
+        views.status == "failed" -> false
+        else -> null
+    }
+
+    /** The default view's lines done of lines, 0-100, or null before the server has a measure. */
+    fun viewPercent(views: com.echoledger.mobile.data.RowViewsDto): Int? {
+        val progress = views.progress[views.default] ?: views.progress.values.firstOrNull()
+        return progress?.takeIf { it.total > 0 }?.let { (it.done * 100 / it.total).coerceIn(0, 100) }
     }
 
     fun transcribing(progress: ProgressDto?): Stage {

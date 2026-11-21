@@ -123,7 +123,10 @@ fun V2LibraryScreen(
     extras: LibraryExtras? = null
 ) {
     val text = v2Text
-    val library by vm.library.collectAsState()
+    val synced by vm.library.collectAsState()
+    val previews by vm.viewPreviews.collectAsState()
+    // U19: each row's snippet in its default view (Roman Urdu) once that view is ready and read.
+    val library = remember(synced, previews) { com.echoledger.mobile.core.ViewPreviews.apply(synced, previews) }
     val pending by vm.pending.collectAsState()
     val syncing by vm.syncing.collectAsState()
     val offline by vm.offline.collectAsState()
@@ -308,7 +311,8 @@ fun V2LibraryScreen(
             onSelect = { visible.firstOrNull()?.let { picked = setOf(it.id) } },
             onPin = { row -> scope.launch { vm.bulk(listOf(row.id), if (row.item.pinned) "unpin" else "pin") } },
             matches = found,
-            onOpenAt = { m -> onOpenAt(m.row.item, m.atMs) }
+            onOpenAt = { m -> onOpenAt(m.row.item, m.atMs) },
+            onRowShown = vm::wantViewPreview
         )
     )
 }
@@ -344,7 +348,9 @@ class LibraryTools(
     val onSelect: () -> Unit,
     val onPin: (V2Row) -> Unit,
     val matches: List<TranscriptMatch>,
-    val onOpenAt: (TranscriptMatch) -> Unit
+    val onOpenAt: (TranscriptMatch) -> Unit,
+    /** A row came on screen (U19: its snippet in its default view is read once that view is ready). */
+    val onRowShown: (LibraryItem) -> Unit = {}
 )
 
 /** LibraryGrouping's fixed English names in the screen's language. */
@@ -557,6 +563,7 @@ fun V2LibraryContent(
                             }
                             if (!showHeader || g.key !in tools.folded) {
                                 items(g.rows, key = { it.id }) { row ->
+                                    LaunchedEffect(row.id, row.item.transcript?.views?.status) { tools.onRowShown(row.item) }
                                     SwipeRow(row.item.pinned, enabled = !selecting, onPin = {
                                         tools.onPin(row)
                                     }, onDelete = { onDelete(row) }) {
@@ -611,11 +618,16 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
     val c = EchoV2.colors
     val text = v2Text
     val pinned = stringResource(R.string.v2_lib_pinned_mark)
+    val res = androidx.compose.ui.platform.LocalContext.current.resources
+    // U19: "Converting to Roman Urdu… 60%" (with its progress ring) or "Couldn't convert…" in place of the snippet.
+    val stage = if (row.status == RowStatus.Done) com.echoledger.mobile.core.RowProgress.of(row.item) else null
+    val converting = stage?.step == com.echoledger.mobile.core.RowProgress.Step.IMPROVING
+    val conversion = stage?.let { conversionWords(res, row.item) }
     EchoListRow(
         title = row.title,
         // A selected row is tinted all across, as classic's is.
         modifier = if (selected == true) Modifier.background(c.accentSoft) else Modifier,
-        meta = row.meta,
+        meta = conversion ?: row.meta,
         titleEnd = row.time,
         metaEnd = {
             // The screens icon and count (meeting assets) before the length, when it has any.
@@ -634,7 +646,15 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
                 Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary, maxLines = 1, softWrap = false)
             }
         },
-        status = statusBadge(row.status, text),
+        status = if (converting) {
+            (
+                {
+                    com.echoledger.mobile.ui.v2.components.EchoProgressRing(stage?.percent)
+                }
+                )
+        } else {
+            statusBadge(row.status, text)
+        },
         leading = {
             if (selected != null) {
                 androidx.compose.material3.Checkbox(selected, null)
