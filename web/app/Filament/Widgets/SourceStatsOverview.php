@@ -72,14 +72,17 @@ class SourceStatsOverview extends StatsOverviewWidget
             $limits[] = '$'.number_format((float) $usage['limit_usd'], 2);
         }
 
-        $value = __(':n min', ['n' => number_format($minutes, 1)]).' · $'.number_format($cost, 2);
+        // W-204: each "·" is tied to what follows it (a no-break space), so a narrow card breaks before the dot, never
+        // after it.
+        $dot = " ·\u{00A0}";
+        $value = __(':n min', ['n' => number_format($minutes, 1)]).$dot.'$'.number_format($cost, 2);
         // Since v2.0, right to left: the amount keeps its sign before it (one isolated run).
         if (ConsoleV2::rtl()) {
-            $value = new HtmlString(e(__(':n min', ['n' => number_format($minutes, 1)])).' · <bdi>'.e('$'.number_format($cost, 2)).'</bdi>');
+            $value = new HtmlString(e(__(':n min', ['n' => number_format($minutes, 1)])).$dot.'<bdi>'.e('$'.number_format($cost, 2)).'</bdi>');
         }
 
         return Stat::make(__('This month'), $value)
-            ->description($limits === [] ? __('No monthly limit') : __('of :limits', ['limits' => implode(' · ', $limits)]))
+            ->description($limits === [] ? __('No monthly limit') : __('of :limits', ['limits' => implode($dot, $limits)]))
             ->icon(Heroicon::OutlinedBanknotes)
             ->color(match (true) {
                 (bool) ($usage['limit_reached'] ?? false) => 'danger',
