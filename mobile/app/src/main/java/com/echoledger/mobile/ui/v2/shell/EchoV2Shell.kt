@@ -420,7 +420,16 @@ private fun ShellBody(
                             }
                             val badge = activityBadge(serverUnread, missed, pending)
                             val failedIds = remember(pending) { pending.filter { it.state == "failed" }.map { it.id } }
-                            val extras = remember(home, readiness.chip, badge, settings.setupCardHidden, failedIds, reselected) {
+                            val extras = remember(
+                                home,
+                                readiness,
+                                badge,
+                                settings.setupCardHidden,
+                                failedIds,
+                                reselected,
+                                settings.serverNotices,
+                                settings.closedAnnouncements
+                            ) {
                                 LibraryExtras(
                                     actions = { ActivityBell(badge) { route = V2Route.Activity } },
                                     status = { CallsChip(readiness.chip, { onReadyCheck(false) }) },
@@ -431,7 +440,8 @@ private fun ShellBody(
                                             LibraryTop.banner(
                                                 readiness.chip,
                                                 home.needsAction,
-                                                setupShowsCapture(home.checklist, settings.setupCardHidden)
+                                                setupShowsCapture(home.checklist, settings.setupCardHidden),
+                                                readiness.problems.firstOrNull { it.blocking }?.key
                                             ),
                                             LibraryTopActions(
                                                 onSetup = { route = V2Route.Setup },
@@ -442,7 +452,13 @@ private fun ShellBody(
                                                 onFix = { onReadyCheck(false) },
                                                 onReview = { route = V2Route.Activity },
                                                 // Classic's Retry: each upload that failed, sent again.
-                                                onRetryUploads = { failedIds.forEach(vm::retryUpload) }
+                                                onRetryUploads = { failedIds.forEach(vm::retryUpload) },
+                                                onUpdate = { openUpdate(context, vm, settings.serverNotices.appUpdate?.url) },
+                                                onCloseAnnouncement = { vm.closeAnnouncement(it) }
+                                            ),
+                                            server = com.echoledger.mobile.core.ServerBanners.of(
+                                                settings.serverNotices,
+                                                settings.closedAnnouncements
                                             )
                                         )
                                     },
@@ -557,5 +573,22 @@ private fun SetupPage(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
         classic.setup { if (flags.isOn(UiFlags.SETUP_HEALTH)) classicSetup = false else onBack() }
     } else {
         V2SetupHealthScreen(vm, highlight, onClassicSetup = { classicSetup = true }, onBack = onBack)
+    }
+}
+
+/**
+ * A server banner's Update, as classic does it: the website build updates itself from the server; the store build opens
+ * the page the server names.
+ */
+internal fun openUpdate(context: android.content.Context, vm: com.echoledger.mobile.ui.MainViewModel, url: String?) {
+    if (com.echoledger.mobile.BuildConfig.CAPTURE_HELPER || url.isNullOrBlank()) {
+        vm.checkForUpdates()
+    } else {
+        runCatching {
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
     }
 }

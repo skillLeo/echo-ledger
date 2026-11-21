@@ -327,7 +327,7 @@ private fun RecordingsTab(
                 meta = row.meta,
                 titleEnd = row.time,
                 metaEnd = { Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary) },
-                leading = { EchoAvatar(icon = row.icon, contentDescription = row.source) },
+                leading = { com.echoledger.mobile.ui.v2.library.RowSourceLogo(row) },
                 tall = true,
                 onClick = { onOpenRecording(item) }
             )
@@ -973,10 +973,11 @@ private fun ScreensTab(vm: MainViewModel, project: ClientDto, nested: Boolean, o
 
 /** A project row on the Projects list: its avatar, name, recordings and folders. */
 @Composable
-fun ProjectRow(project: ClientDto, recordings: Int, folders: Int, onOpen: () -> Unit) {
+fun ProjectRow(project: ClientDto, recordings: Int, folders: Int, onOpen: () -> Unit, lastCall: String? = null) {
+    val last = lastCall?.let { stringResource(R.string.v2_ws_last_call, it) }
     EchoListRow(
         title = project.name,
-        meta = listOfNotNull(recordingsCount(recordings), folders.takeIf { it > 0 }?.let { foldersCount(it) }).joinToString(", "),
+        meta = listOfNotNull(recordingsCount(recordings), folders.takeIf { it > 0 }?.let { foldersCount(it) }, last).joinToString(", "),
         leading = { EchoAvatar(icon = EchoIcons.Folder) },
         onClick = onOpen
     )
