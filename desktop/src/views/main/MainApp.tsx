@@ -42,7 +42,7 @@ import { isLocked, lowestPlan, planName, OPEN_SECTION_EVENT, forgetEntitlements,
 import { UpgradeSheet } from "./Upgrade";
 import { isHoldMessage, ServerBanners } from "./ServerBanners";
 import { ShareNotice } from "./PrivacySettings";
-import { Notice } from "../../components/Notice";
+import { Notice, NoticeLook } from "../../components/Notice";
 import { StateBanner } from "../../components/StateBanner";
 import { BannerSlot, useBannerTurn } from "../../components/BannerSlot";
 import { LearnMore } from "../../components/LearnMore";
@@ -75,6 +75,7 @@ const DropHintV2 = lazy(() => v2().then((m) => ({ default: m.DropHintV2 })));
 const ProjectsListV2 = lazy(() => v2().then((m) => ({ default: m.ProjectsListV2 })));
 const NameDialogV2 = lazy(() => v2().then((m) => ({ default: m.NameDialogV2 })));
 const AppToastV2 = lazy(() => v2().then((m) => ({ default: m.AppToastV2 })));
+const OnboardingV2 = lazy(() => v2().then((m) => ({ default: m.OnboardingV2 })));
 const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
@@ -112,7 +113,7 @@ export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
   // Interface flags: read at start and on each page change, never while recording (v2/flags.ts).
-  const [ui, setUi] = useUiFlags(!!status?.paired, tab, !!status?.recording);
+  const [ui, setUi, flagsReadFor] = useUiFlags(!!status?.paired, tab, !!status?.recording);
   // The sidebar (v1.6, P4.1): 200–320 px wide or a 64 px icon rail, kept on this computer like the theme.
   const [chosenCollapsed, setCollapsed] = useState(loadCollapsed);
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
@@ -190,6 +191,9 @@ export default function MainApp() {
   const [openRequest, setOpenRequest] = useState<{ id: string; ms: number; seq: number } | null>(null);
   const [lock, setLock] = useState<LockStatus | null>(null);
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
+  // The first-run wizard's design is chosen once, when it first shows (signed in: once the flags are read), so a
+  // late answer never swaps it under the person halfway through.
+  const [wizardDesign, setWizardDesign] = useState<"v2" | "classic" | null>(null);
   // C9: a new main window opens where the last one was closed (page, open recording, scroll).
   const [restored, setRestored] = useState(false);
   const [restoredRecording, setRestoredRecording] = useState<string | null>(null);
@@ -223,6 +227,17 @@ export default function MainApp() {
       un.then((f) => f()).catch(() => undefined);
     };
   }, []);
+
+  useEffect(() => {
+    if (setupDone !== false || wizardDesign !== null || !status) return;
+    // Signed out, the flags can't be read: classic's wizard (it signs in on its own step).
+    if (status.paired && flagsReadFor === null) return;
+    setWizardDesign(status.paired && ui.flags["ui_v2.shell"] ? "v2" : "classic");
+  }, [setupDone, wizardDesign, status, flagsReadFor, ui.flags]);
+  // A new start of the wizard (Settings can show it again) chooses again.
+  useEffect(() => {
+    if (setupDone === true) setWizardDesign(null);
+  }, [setupDone]);
 
   // First-run wizard (B19): shown until it is finished or skipped.
   useEffect(() => {
@@ -637,7 +652,12 @@ export default function MainApp() {
   if (status && setupDone === false) {
     return (
       <>
-        <OnboardingView status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} />
+        {/* The new design's wizard when its flag is on (known once signed in); classic's otherwise. */}
+        {wizardDesign === null ? null : wizardDesign === "v2" ? (
+          <Suspense fallback={null}>
+            <div className="el-root el-embedded"><OnboardingV2 status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} /></div>
+          </Suspense>
+        ) : <OnboardingView status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} />}
         {toastView}
       </>
     );
@@ -1016,7 +1036,7 @@ export default function MainApp() {
                   onCaptions={() => void run(api.toggleCaptions)} onSettings={openAccount} run={run} />
               </div></Suspense>
             ) : undefined}
-            banners={<div className="shell-banners">{banners}</div>}>
+            banners={<NoticeLook.Provider value="v2"><div className="el-root el-embedded el-app-banners">{banners}</div></NoticeLook.Provider>}>
             <section ref={contentRef} className={`content page-${tab}`}>{page}</section>
           </ShellV2>
         </Suspense>

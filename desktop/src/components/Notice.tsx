@@ -2,7 +2,7 @@
 // closes it; a message hides by itself with a thin bar showing the time left, paused while the pointer, a finger or the
 // keyboard is on it; a swipe left or right (finger, mouse drag or trackpad) closes it, following the drag and springing
 // back when it was not far or quick enough; a drag is never a click; Esc on it closes it. Toasts and banners both use it.
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Countdown, dragOpacity, SwipeTracker, WHEEL_END_MS, type SwipeEnd } from "../lib/notice";
 import { reducedMotion } from "../lib/motion";
 import { CloseIcon } from "./Icons";
@@ -50,7 +50,43 @@ function useNoticeTimer(ms: number | null, onEnd: () => void): { paused: boolean
   return { paused, pause, resume };
 }
 
-export function Notice({ kind, tone = "neutral", icon, children, onOpen, openLabel, onDismiss, timeoutMs = null, actions, details, role, className = "", testId, timerKey }: {
+/**
+ * How the main window's banners are drawn: classic's, or the new design's (inside its shell). Only the look changes:
+ * the words, Open, the buttons, ×, Esc and the one-at-a-time slot (BannerSlot) are the same.
+ */
+export const NoticeLook = createContext<"classic" | "v2">("classic");
+
+const V2_TONE: Record<string, "info" | "warning" | "danger"> = { warn: "warning", danger: "danger", error: "danger" };
+
+/** A banner in the new design's look (its .el-banner, with the classic banner's parts). */
+function BannerV2({ tone, icon, children, onOpen, openLabel, onDismiss, actions, details, role, testId }: {
+  tone: string; icon?: ReactNode; children: ReactNode; onOpen?: () => void; openLabel?: string; onDismiss: () => void;
+  actions?: ReactNode; details?: ReactNode; role?: "status" | "alert"; testId?: string;
+}) {
+  const v2Tone = V2_TONE[tone] ?? "info";
+  return (
+    <div className={`el-banner el-banner--${v2Tone} el-banner--app`} role={role ?? (v2Tone === "danger" ? "alert" : "status")} data-testid={testId}
+      onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onDismiss(); } }}>
+      {icon && <span className="el-banner__icon" aria-hidden="true">{icon}</span>}
+      <span className="el-banner__text" dir="auto">
+        {onOpen ? <button type="button" className="el-banner__open" aria-label={openLabel} onClick={() => { onOpen(); onDismiss(); }}>{children}</button> : children}
+        {details && <span className="el-banner__details">{details}</span>}
+      </span>
+      {actions && <span className="el-banner__actions">{actions}</span>}
+      <button type="button" className="el-button el-button--quiet el-button--sm el-button--icon" aria-label="Dismiss" title="Dismiss (Esc)" onClick={onDismiss}>
+        <CloseIcon size={14} />
+      </button>
+    </div>
+  );
+}
+
+export function Notice(props: Parameters<typeof NoticeClassic>[0]) {
+  const look = useContext(NoticeLook);
+  if (look === "v2" && props.kind === "banner") return <BannerV2 {...props} tone={props.tone ?? "neutral"} />;
+  return <NoticeClassic {...props} />;
+}
+
+function NoticeClassic({ kind, tone = "neutral", icon, children, onOpen, openLabel, onDismiss, timeoutMs = null, actions, details, role, className = "", testId, timerKey }: {
   kind: "toast" | "banner";
   tone?: "neutral" | "error" | "warn" | "danger" | "info" | "quiet" | "accent";
   icon?: ReactNode;

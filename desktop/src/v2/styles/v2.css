@@ -1556,3 +1556,41 @@ span.el-projects__fold { cursor: default; }
 .el-app-toast--error .el-toast { border-color: var(--el-role-danger-default); }
 .el-toast__open { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
 .el-toast__open:hover { text-decoration: underline; }
+
+/* The main window's banners in the new design's look (components/Notice.tsx's BannerV2): one at a time above every
+   page; a banner about something is itself the button that goes there; its own buttons look like the new design's. */
+.el-app-banners .el-banner { margin-inline: var(--el-space-16); }
+.el-banner__open { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.el-banner__open:hover { text-decoration: underline; }
+.el-banner__details { color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); }
+.el-banner__actions { display: inline-flex; flex-wrap: wrap; gap: var(--el-space-8); }
+.el-banner--app .btn {
+  display: inline-flex; align-items: center; gap: var(--el-space-4); min-block-size: calc(var(--el-space-24) + var(--el-space-4));
+  padding-inline: var(--el-space-8); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-component-button-radius);
+  background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font: inherit; font-size: var(--el-text-caption-size); font-weight: var(--el-text-body-strong-weight); cursor: pointer;
+}
+.el-banner--app .btn.primary { background: var(--el-role-accent-default); border-color: transparent; color: var(--el-role-text-on-accent); }
+.el-banner--app .btn:hover:not(:disabled) { background: var(--el-role-bg-subtle); }
+.el-banner--app .btn.primary:hover:not(:disabled) { background: var(--el-role-accent-hover, var(--el-role-accent-default)); }
+
+/* The first-run wizard (OnboardingV2): one card in the middle of the window, the steps across its top. */
+.el-wizard { min-block-size: 100%; display: flex; align-items: center; justify-content: center; padding: var(--el-space-32) var(--el-space-16); background: var(--el-role-bg-canvas); }
+.el-wizard__card { inline-size: 100%; max-inline-size: calc(var(--el-space-64) * 9); display: flex; flex-direction: column; gap: var(--el-space-16); }
+.el-wizard__brand { margin: 0; font-weight: var(--el-text-body-strong-weight); color: var(--el-role-accent-text); }
+.el-wizard__steps { display: flex; flex-wrap: wrap; gap: var(--el-space-8) var(--el-space-16); margin: 0; padding: 0; list-style: none; }
+.el-wizard__step { display: inline-flex; align-items: center; gap: var(--el-space-8); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); }
+.el-wizard__step--current { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); }
+.el-wizard__step--done { color: var(--el-role-success-default); }
+.el-wizard__dot { inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); border: var(--el-border-hairline) solid var(--el-role-border-strong); }
+.el-wizard__step--current .el-wizard__dot { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
+.el-wizard__body { display: flex; flex-direction: column; gap: var(--el-space-12); align-items: flex-start; }
+.el-wizard__body > .el-title-l:focus { outline: none; }
+.el-wizard__body > .el-title-l:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+.el-wizard__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-12); }
+.el-wizard__consent { padding: var(--el-space-12); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); align-self: stretch; }
+.el-wizard__consent > p { margin: 0; }
+.el-wizard__consent > .el-wizard__legal { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block-start: var(--el-space-8); }
+.el-wizard__group { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; align-self: stretch; }
+.el-wizard__verdict { margin: 0; padding-inline-start: var(--el-space-20); }
+.el-wizard__actions { display: flex; justify-content: space-between; align-items: center; gap: var(--el-space-12); align-self: stretch; margin-block-start: var(--el-space-8); }
+.el-wizard__actions--end { justify-content: flex-end; }

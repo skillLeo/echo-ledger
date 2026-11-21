@@ -18,3 +18,4 @@ export { RequestLinkSheet } from "./shared/RequestLinkSheet";
 export { ImportSheetV2, DropHintV2 } from "./library/ImportSheetV2";
 export { ProjectsListV2, NameDialogV2 } from "./workspace/ProjectsListV2";
 export { AppToastV2 } from "./shell/AppToast";
+export { OnboardingV2 } from "./setup/OnboardingV2";
