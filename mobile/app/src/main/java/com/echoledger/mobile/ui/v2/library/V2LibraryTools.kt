@@ -56,6 +56,8 @@ import com.echoledger.mobile.ui.v2.components.EchoIconButton
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
+import com.echoledger.mobile.ui.v2.components.EchoSubMenuHeader
+import com.echoledger.mobile.ui.v2.components.EchoSubMenuItem
 import com.echoledger.mobile.ui.v2.components.EchoTextField
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.ProvidePageLook
@@ -159,8 +161,8 @@ fun SelectionBar(
             DropdownMenu(expanded = menu, onDismissRequest = ::close) {
                 ProvidePageLook(look) {
                     if (exportOpen) {
-                        // TODO-DS: a sub-menu in the shared menu component; until then Export ▸ swaps the menu for its formats.
-                        SubMenuHeader(stringResource(R.string.v2_lib_export_header)) { exportOpen = false }
+                        // Export ▸ swaps the menu for its formats.
+                        EchoSubMenuHeader(stringResource(R.string.v2_lib_export_header)) { exportOpen = false }
                         Organise.EXPORT_FORMATS.forEach { (format, _) ->
                             MenuItem(EchoIcons.Export, exportName(format)) {
                                 close()
@@ -200,7 +202,7 @@ fun SelectionBar(
                         }
                     }
                     if (choices.unkeep) {
-                        MenuItem(com.echoledger.mobile.ui.v2.shell.PendingIcons.AutoDelete, stringResource(R.string.v2_lib_unkeep)) {
+                        MenuItem(EchoIcons.AutoClean, stringResource(R.string.v2_lib_unkeep)) {
                             close()
                             onAction(SelectionAction.Keep(false))
                         }
@@ -211,7 +213,7 @@ fun SelectionBar(
                             sheet = "rename"
                         }
                     }
-                    SubMenuItem(EchoIcons.Export, stringResource(R.string.v2_lib_export_header)) { exportOpen = true }
+                    EchoSubMenuItem(EchoIcons.Export, stringResource(R.string.v2_lib_export_header)) { exportOpen = true }
                     MenuItem(EchoIcons.Delete, stringResource(R.string.v2_lib_delete), danger = true) {
                         close()
                         sheet = "delete"
@@ -284,32 +286,6 @@ private fun MenuItem(icon: ImageVector, words: String, danger: Boolean = false, 
         text = { Text(words, style = EchoV2.type.body, color = tint) },
         leadingIcon = { Icon(icon, null, tint = tint) },
         onClick = onClick
-    )
-}
-
-/** A menu row that opens a sub-menu: its icon, its words and ▸ (mirrored in right-to-left). */
-// TODO-DS: belongs with the shared menu component.
-@Composable
-private fun SubMenuItem(icon: ImageVector, words: String, onClick: () -> Unit) {
-    val tint = EchoV2.colors.textPrimary
-    DropdownMenuItem(
-        text = { Text(words, style = EchoV2.type.body, color = tint) },
-        leadingIcon = { Icon(icon, null, tint = tint) },
-        trailingIcon = { Icon(EchoIcons.Next, null, tint = EchoV2.colors.textSecondary) },
-        onClick = onClick
-    )
-}
-
-/** A sub-menu's first row: back (‹, mirrored in right-to-left) and the sub-menu's name; it goes back to the menu. */
-// TODO-DS: belongs with the shared menu component.
-@Composable
-private fun SubMenuHeader(words: String, onBack: () -> Unit) {
-    val back = stringResource(R.string.v2_back)
-    DropdownMenuItem(
-        text = { Text(words, style = EchoV2.type.captionStrong, color = EchoV2.colors.textSecondary) },
-        leadingIcon = { Icon(EchoIcons.Previous, null, tint = EchoV2.colors.textSecondary) },
-        onClick = onBack,
-        modifier = Modifier.semantics { contentDescription = "$back, $words" }
     )
 }
 

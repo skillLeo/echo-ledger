@@ -443,7 +443,7 @@ fun V2LibraryContent(
                         .clickable(onClickLabel = text.accountAndSettings, onClick = onAccount)
                         .semantics { contentDescription = text.accountAndSettings },
                     contentAlignment = Alignment.Center
-                ) { com.echoledger.mobile.ui.v2.shell.PersonAvatar(initials) }
+                ) { com.echoledger.mobile.ui.v2.components.EchoPersonAvatar(initials) }
             }
         }
         if (!selecting && extras != null) {

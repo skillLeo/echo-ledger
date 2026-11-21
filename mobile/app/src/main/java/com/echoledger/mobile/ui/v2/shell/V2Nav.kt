@@ -232,23 +232,14 @@ fun V2RecordSheetBody(state: RecordSheetState, actions: RecordSheetActions, onDi
             AppCallCapture.BOTH_SIDES -> if (state.armed) R.string.v2_rs_calls_armed else R.string.v2_rs_calls_ready
         }
     )
-    // TODO-DS: an EchoSwitch with a leading icon; until then the icon sits in the same column as the rows' icons.
-    Row(Modifier.fillMaxWidth().padding(start = EchoTokens.Layout.pagePaddingMobile), verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            PendingIcons.PhoneCallback,
-            null,
-            Modifier.size(EchoTokens.Icon.lg),
-            tint = if (state.canArm) EchoV2.colors.textSecondary else EchoV2.colors.textDisabled
-        )
-        EchoSwitch(
-            checked = state.armed,
-            onCheckedChange = actions.onArm,
-            label = stringResource(R.string.v2_rs_calls),
-            modifier = Modifier.weight(1f),
-            supporting = calls,
-            enabled = state.canArm
-        )
-    }
+    EchoSwitch(
+        checked = state.armed,
+        onCheckedChange = actions.onArm,
+        label = stringResource(R.string.v2_rs_calls),
+        supporting = calls,
+        enabled = state.canArm,
+        icon = EchoIcons.AutoRecordCalls
+    )
     EchoSettingRow(stringResource(R.string.v2_rs_calls_open), icon = EchoIcons.PhoneCall, onClick = go(actions.onCalls))
     if (state.liveAssist) {
         EchoSettingRow(
@@ -318,5 +309,5 @@ fun AccountButton() {
             .combinedClickable(role = Role.Button, onClickLabel = words, onClick = entry.onOpen)
             .semantics { contentDescription = words },
         contentAlignment = Alignment.Center
-    ) { PersonAvatar(entry.initials) }
+    ) { com.echoledger.mobile.ui.v2.components.EchoPersonAvatar(entry.initials) }
 }

@@ -94,7 +94,7 @@ fun V2AfterCallCard(
             color = c.bgOverlay,
             contentColor = c.textPrimary,
             border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault),
-            shadowElevation = EchoTokens.Space.s8,
+            shadowElevation = EchoTokens.Elevation.floating,
             modifier = modifier.widthIn(max = EchoTokens.Space.s64 * 7).fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }
         ) {
             Column {

@@ -41,6 +41,7 @@ import com.echoledger.mobile.privilege.AppCallCapture
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.ui.v2.activity.ActivityWords
 import com.echoledger.mobile.ui.v2.components.EchoIcons
+import com.echoledger.mobile.ui.v2.components.EchoPersonAvatar
 import com.echoledger.mobile.ui.v2.home.ChecklistItem
 import com.echoledger.mobile.ui.v2.home.LibraryTop
 import com.echoledger.mobile.ui.v2.home.NeedsAction
@@ -54,7 +55,6 @@ import com.echoledger.mobile.ui.v2.library.RowGroup
 import com.echoledger.mobile.ui.v2.library.SelectionBar
 import com.echoledger.mobile.ui.v2.library.SortGroupSheet
 import com.echoledger.mobile.ui.v2.library.V2LibraryContent
-import com.echoledger.mobile.ui.v2.shell.PersonAvatar
 import com.echoledger.mobile.ui.v2.shell.RecordSheetActions
 import com.echoledger.mobile.ui.v2.shell.RecordSheetState
 import com.echoledger.mobile.ui.v2.shell.V2RecordSheetBody
@@ -305,8 +305,8 @@ class VisualReviewTest {
         assertEquals("AS", initialsOf("Asad Shah"))
         show {
             Column {
-                PersonAvatar("")
-                PersonAvatar("AS")
+                EchoPersonAvatar("")
+                EchoPersonAvatar("AS")
             }
         }
         compose.onNodeWithText("?").assertDoesNotExist()

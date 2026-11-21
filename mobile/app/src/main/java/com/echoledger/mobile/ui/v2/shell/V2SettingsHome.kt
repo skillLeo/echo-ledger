@@ -60,7 +60,7 @@ sealed interface ProfileState {
 
 /**
  * Two initials for a Latin name, the first letter for an Urdu or Arabic one; empty when there is no name, and
- * [PersonAvatar] then shows the person icon.
+ * EchoPersonAvatar then shows the person icon.
  */
 fun initialsOf(name: String?): String {
     val words = name.orEmpty().split(' ').filter { it.isNotBlank() }
@@ -187,7 +187,7 @@ private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modif
     val text = v2Text
     EchoCard(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
-            PersonAvatar(initialsOf(profile.name ?: profile.email))
+            com.echoledger.mobile.ui.v2.components.EchoPersonAvatar(initialsOf(profile.name ?: profile.email))
             Column(Modifier.weight(1f)) {
                 Text(
                     profile.name ?: profile.email ?: text.notSignedIn,

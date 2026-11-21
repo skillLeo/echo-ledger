@@ -225,7 +225,7 @@ fun V2HomeContent(
                     .clickable(onClickLabel = text.accountAndSettings, onClick = actions.onAccount)
                     .semantics { contentDescription = text.accountAndSettings },
                 contentAlignment = Alignment.Center
-            ) { com.echoledger.mobile.ui.v2.shell.PersonAvatar(initials) }
+            ) { com.echoledger.mobile.ui.v2.components.EchoPersonAvatar(initials) }
         }
         LazyColumn(Modifier.weight(1f)) {
             item { StatusStrip(state.status, actions) }

@@ -388,12 +388,13 @@ private fun time(at: String?, today: LocalDate, locale: java.util.Locale): Strin
 @Composable
 private fun ActivityRow(item: com.echoledger.mobile.data.ActivityItemDto, today: LocalDate, locale: java.util.Locale, onClick: () -> Unit) {
     val res = LocalContext.current.resources
-    UnreadListRow(
+    EchoListRow(
         title = ActivityWords.title(res, item, locale),
         meta = item.body.ifBlank { null },
         titleEnd = time(item.at, today, locale),
         leading = { EchoAvatar(icon = ActivityWords.icon(item)) },
         unread = !item.read,
+        tall = true,
         onClick = onClick
     )
 }
@@ -430,69 +431,6 @@ object ActivityWords {
     }
 }
 
-/**
- * A row as [EchoListRow] lays it out (72 dp, the avatar, the title and time, one meta line), with the unread dot just
- * before the title, as classic has it.
- */
-// TODO-DS: an unread mark on EchoListRow's title; until then this row copies its layout.
-@Composable
-private fun UnreadListRow(
-    title: String,
-    meta: String?,
-    titleEnd: String,
-    leading: @Composable () -> Unit,
-    unread: Boolean,
-    onClick: (() -> Unit)?
-) {
-    val c = EchoV2.colors
-    val type = EchoV2.type
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = EchoTokens.Component.listRowHeightMobileTall)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .semantics(mergeDescendants = true) {}
-            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
-    ) {
-        leading()
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
-                if (unread) UnreadDot()
-                Text(
-                    title,
-                    style = type.content(title, type.bodyStrong),
-                    color = c.textPrimary,
-                    maxLines = if (com.echoledger.mobile.ui.v2.theme.largeText()) 2 else 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = com.echoledger.mobile.ui.v2.components.startAlign(),
-                    modifier = Modifier.weight(1f)
-                )
-                Text(titleEnd, style = type.mono, color = c.textSecondary, maxLines = 1)
-            }
-            meta?.let {
-                Text(
-                    it,
-                    style = type.content(it, type.meta),
-                    color = c.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = com.echoledger.mobile.ui.v2.components.startAlign(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun UnreadDot() = Box(
-    Modifier
-        .size(EchoTokens.Component.statusDotSize)
-        .background(EchoV2.colors.accent, androidx.compose.foundation.shape.CircleShape)
-)
-
 /** A missed recording: "Missed recording", the call and its length, why in plain words, and the fix. */
 @Composable
 private fun MissedRow(item: MissedItem, today: LocalDate, locale: java.util.Locale, onClick: (() -> Unit)?, onFix: () -> Unit) {
@@ -507,12 +445,13 @@ private fun MissedRow(item: MissedItem, today: LocalDate, locale: java.util.Loca
         item.durationS?.let { formatClock(it * 1000) }
     ).joinToString(" · ")
     Column {
-        UnreadListRow(
+        EchoListRow(
             title = stringResource(R.string.v2_act_missed),
             meta = call,
             titleEnd = time(java.time.Instant.ofEpochMilli(item.startedAtMs).toString(), today, locale),
             leading = { EchoAvatar(icon = EchoIcons.Missed) },
             unread = !item.read,
+            tall = true,
             onClick = onClick
         )
         // Why and the fix start under the row's text, after the avatar column.

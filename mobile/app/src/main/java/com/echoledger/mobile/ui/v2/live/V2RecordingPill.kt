@@ -70,7 +70,7 @@ private fun PillDot(state: PillState, onEvent: (PillEvent) -> Unit, modifier: Mo
         shape = CircleShape,
         color = c.bgOverlay,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault),
-        shadowElevation = EchoTokens.Space.s8,
+        shadowElevation = EchoTokens.Elevation.floating,
         modifier = modifier.size(EchoTokens.Layout.controlTouchMin).semantics { contentDescription = label }
     ) {
         Box(contentAlignment = Alignment.Center) { EchoRecordingDot(live = !state.paused && !state.held) }
@@ -88,7 +88,7 @@ private fun PillBar(state: PillState, nowMs: Long, title: String?, onEvent: (Pil
         color = c.bgOverlay,
         contentColor = c.textPrimary,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault),
-        shadowElevation = EchoTokens.Space.s8,
+        shadowElevation = EchoTokens.Elevation.floating,
         modifier = modifier
             .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
             .widthIn(max = EchoTokens.Space.s64 * 5)
@@ -136,7 +136,7 @@ private fun PillMenu(state: PillState, onEvent: (PillEvent) -> Unit) {
         color = c.bgOverlay,
         contentColor = c.textPrimary,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault),
-        shadowElevation = EchoTokens.Space.s8,
+        shadowElevation = EchoTokens.Elevation.floating,
         modifier = Modifier.widthIn(max = EchoTokens.Space.s64 * 5)
     ) {
         Column(Modifier.padding(vertical = EchoTokens.Space.s4)) {

@@ -158,7 +158,7 @@ private fun AssistDot(state: CardState, onExpand: (Boolean) -> Unit, modifier: M
         shape = CircleShape,
         color = c.bgOverlay,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault),
-        shadowElevation = EchoTokens.Space.s8,
+        shadowElevation = EchoTokens.Elevation.floating,
         modifier = modifier.size(EchoTokens.Layout.controlTouchMin).semantics { contentDescription = label }
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -189,7 +189,7 @@ private fun AssistExpanded(
         color = c.bgOverlay,
         contentColor = c.textPrimary,
         border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault),
-        shadowElevation = EchoTokens.Space.s8,
+        shadowElevation = EchoTokens.Elevation.floating,
         modifier = modifier.widthIn(max = EchoTokens.Space.s64 * 6).fillMaxWidth()
     ) {
         Column(Modifier.padding(bottom = EchoTokens.Space.s8)) {
