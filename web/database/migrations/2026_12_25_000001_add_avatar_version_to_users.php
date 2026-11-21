@@ -16,7 +16,9 @@ use Illuminate\Support\Facades\Schema;
  * the address before the first change, when, until when, the link's key, and after a restore its lock). The address
  * is reserved meanwhile in users.email_restore_address (indexed, with the same collation as users.email, so the
  * database compares it as it compares addresses: an accented or upper-case lookalike is the same address) until
- * users.email_restore_until. Each column is added on its own, so a half-run migration finishes. Down drops them all
+ * users.email_restore_until. users.recovery_codes_generated_at: when the two-step recovery codes were last made (any
+ * path: the console, the apps, staff), as a change proven with two-step counts only with codes older than 7 days.
+ * Each column is added on its own, so a half-run migration finishes. Down drops them all
  * (the release before has none of this; the files of the pictures stay until their accounts are erased).
  */
 return new class extends Migration
@@ -41,6 +43,9 @@ return new class extends Migration
         if (! Schema::hasColumn('users', 'email_restore_until')) {
             Schema::table('users', fn (Blueprint $table) => $table->timestamp('email_restore_until')->nullable());
         }
+        if (! Schema::hasColumn('users', 'recovery_codes_generated_at')) {
+            Schema::table('users', fn (Blueprint $table) => $table->timestamp('recovery_codes_generated_at')->nullable());
+        }
     }
 
     public function down(): void
@@ -51,7 +56,7 @@ return new class extends Migration
                 $table->dropColumn('email_restore_address');
             });
         }
-        foreach (['email_restore_until', 'email_restore', 'avatar_version'] as $column) {
+        foreach (['recovery_codes_generated_at', 'email_restore_until', 'email_restore', 'avatar_version'] as $column) {
             if (Schema::hasColumn('users', $column)) {
                 Schema::table('users', fn (Blueprint $table) => $table->dropColumn($column));
             }

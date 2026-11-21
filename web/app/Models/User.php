@@ -65,6 +65,7 @@ use Laravel\Passport\HasApiTokens;
  * @property int|null $staff_role_id since v1.6 (P2.5): the person's staff role on the admin panel; null = not staff (the super admin needs none)
  * @property string|null $email_restore_address the reserved address of the open window (users.email's collation)
  * @property Carbon|null $email_restore_until until when it is reserved
+ * @property Carbon|null $recovery_codes_generated_at since 2.0.0-l: when the two-step recovery codes were last made (any path)
  * @property array<string, mixed>|null $email_restore since 2.0.0-l: the open "Put my address back" window (EmailChange), encrypted
  * @property int|null $avatar_version since 2.0.0-l: the profile picture's version (App\Services\Accounts\Avatars); null = initials
  * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
@@ -92,6 +93,11 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         static::updating(function (User $user): void {
             if ($user->isDirty('email') && ! $user->isDirty('email_verified_at')) {
                 $user->email_verified_at = null;
+            }
+            // Since 2.0.0-l: when the recovery codes were last made, whichever path made them (the console's Filament
+            // actions, the apps, staff); EmailChange::twoStepIsOld() reads it.
+            if ($user->isDirty('app_authentication_recovery_codes') && ! $user->isDirty('recovery_codes_generated_at')) {
+                $user->recovery_codes_generated_at = $user->app_authentication_recovery_codes === null ? null : now();
             }
             // Since v1.6: a password set later (the reset link, the profile) is one the owner knows.
             if ($user->isDirty('password') && ! $user->isDirty('has_password')) {
@@ -196,6 +202,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'avatar_version' => 'integer',
             'email_restore' => 'encrypted:array',
             'email_restore_until' => 'datetime',
+            'recovery_codes_generated_at' => 'datetime',
             'entitlement_overrides' => 'array',
             'transcription_key' => 'encrypted',
             'transcription_key_checked_at' => 'datetime',

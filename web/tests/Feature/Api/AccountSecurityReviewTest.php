@@ -21,6 +21,7 @@ use App\Services\Accounts\SignInGuard;
 use App\Services\Accounts\SignUp;
 use App\Services\Accounts\TwoFactorCodes;
 use App\Services\SettingsRepository;
+use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Facades\Filament;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Support\Facades\DB;
@@ -231,6 +232,37 @@ describe('the old address can undo an email change (major 1, and the reviews of 
         $again->fresh()->forceFill(['app_authentication_secret' => null])->save();
         accountsEnrolTotp($again->fresh());
         expect(EmailChange::twoStepIsOld($again->fresh()))->toBeFalse();
+    });
+
+    it('counts recovery codes made in the console too: the timestamp is the model\'s, whatever path made them', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        accountsEnrolTotp($user);
+        expect($user->fresh()->recovery_codes_generated_at)->not->toBeNull();
+        $this->travel(10)->days();
+        expect(EmailChange::twoStepIsOld($user->fresh()))->toBeTrue();
+
+        // What Settings › Sign-in & security's "Regenerate recovery codes" does (Filament's action saves them so).
+        $provider = AppAuthentication::make();
+        $provider->saveRecoveryCodes($user->fresh(), $provider->generateRecoveryCodes());
+        expect($user->fresh()->recovery_codes_generated_at->isToday())->toBeTrue()
+            ->and(EmailChange::twoStepIsOld($user->fresh()))->toBeFalse()
+            ->and(AuditEvent::query()->where('event', 'recovery_codes_regenerated')->exists())->toBeFalse();
+        $this->travel(8)->days();
+        expect(EmailChange::twoStepIsOld($user->fresh()))->toBeTrue();
+        // Two-step off: no codes, no time.
+        $user->fresh()->forceFill(['app_authentication_secret' => null, 'app_authentication_recovery_codes' => null])->save();
+        expect($user->fresh()->recovery_codes_generated_at)->toBeNull();
+    });
+
+    it('reserves a mixed-case original address as the probe normalises it', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        DB::table('users')->where('id', $user->id)->update(['email' => 'Farah.Khan@Example.TEST']);
+        [, $token] = $this->enroll($user->fresh());
+        reviewChangeEmail($this, $token);
+
+        expect($user->fresh()->email_restore_address)->toBe('farah.khan@example.test')
+            ->and(EmailChange::isReserved('farah.khan@example.test'))->toBeTrue()
+            ->and(EmailChange::isReserved('  FARAH.KHAN@example.test '))->toBeTrue();
     });
 
     it('reserves an accented or upper-case lookalike too: the database compares it as it compares addresses', function () {

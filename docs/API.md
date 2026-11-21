@@ -1940,7 +1940,7 @@ show initials), `"has_password": true`, `"pending_email": "new@example.com" | nu
      collation), so another case or an accented lookalike is the same address. At the restore only an account with A
      made before the change can block it.
    - **A change proven with the account's two-step code**, when two-step has been on for at least 7 days and its recovery
-     codes were not made again since, opens no window and sends no link: A is told of the change and to contact
+     codes were last made at least 7 days ago (on any path, the console's too), opens no window and sends no link: A is told of the change and to contact
      support, so a mailbox someone else reads cannot take the account back. Any other change gets the link.
    - While the window is open, and after a restore until the new password is chosen (or the owner signs in again) or
      24 hours have passed, whichever is later, `POST /api/account/email` answers `409 email_change_locked {"until"}` before any proof, so a chain of

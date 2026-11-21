@@ -202,7 +202,7 @@ final class EmailChange
         }
         if ($window === null) {
             $window = ['to' => $old, 'changed_at' => now()->getTimestamp(), 'until' => now()->addDays(self::RESTORE_DAYS)->getTimestamp(), 'nonce' => Str::random(40)];
-            $user->forceFill(['email_restore' => $window, 'email_restore_address' => $old,
+            $user->forceFill(['email_restore' => $window, 'email_restore_address' => Str::lower(trim($old)),
                 'email_restore_until' => Carbon::createFromTimestamp($window['until'])])->saveQuietly();
         }
         $until = Carbon::createFromTimestamp($window['until']);
@@ -246,8 +246,9 @@ final class EmailChange
 
     /**
      * Whether a change proven with [$user]'s two-step code may skip the restore link: two-step has been on for at least
-     * RESTORE_DAYS (since its last mfa_enabled) and its recovery codes were not made again since, so a code is not one
-     * whoever changed the address could have set up.
+     * RESTORE_DAYS (since its last mfa_enabled, which every path writes: AuditLog's listener) and its recovery codes
+     * were last made at least RESTORE_DAYS ago (users.recovery_codes_generated_at, set on every path by the model), so
+     * a code is not one whoever changed the address could have set up.
      */
     public static function twoStepIsOld(User $user): bool
     {
@@ -259,7 +260,9 @@ final class EmailChange
             return false;
         }
 
-        return ! AuditEvent::query()->where('user_id', $user->id)->where('event', 'recovery_codes_regenerated')->where('id', '>', $enabled->id)->exists();
+        $codes = $user->recovery_codes_generated_at;
+
+        return $codes === null || $codes->lte(now()->subDays(self::RESTORE_DAYS));
     }
 
     /**
