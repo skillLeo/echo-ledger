@@ -259,7 +259,7 @@ final class TranscriptViews
     }
 
     /**
-     * Since 2.0.0-l (U19): a Library row's preview in the view the recording opens in (Roman Urdu for Urdu and mixed
+     * Since 2.0.0-n (U19): a Library row's preview in the view the recording opens in (Roman Urdu for Urdu and mixed
      * calls) once that view is made, from what is stored (a row loads no lines): the view's lines in order, one a line,
      * at most [$length] characters. Null while the view is not made, was made before the last edit, or the recording
      * opens in its original words; the row then shows the transcript's own words.
@@ -274,6 +274,10 @@ final class TranscriptViews
         $views = $transcript->meta['views'] ?? null;
         $available = self::available($transcript);
         $default = self::defaultView($available, self::sourceLanguage($transcript));
+        // The console's Library loads no meta, only the start of each view (CaptureSessionsTable::rowTranscriptColumns).
+        if (! is_array($views) && $default !== 'original' && $transcript->getAttribute('views_status_head') !== null) {
+            $views = self::fromHeads($transcript, $default);
+        }
         if ($default === 'original' || ! is_array($views) || ($views['status'] ?? null) !== 'ready' || ! is_array($views[$default] ?? null)) {
             return null;
         }
@@ -286,6 +290,33 @@ final class TranscriptViews
         $text = trim(implode("\n", array_filter(array_map(fn ($l): string => is_string($l) ? trim($l) : '', $lines), fn (string $l): bool => $l !== '')));
 
         return $text === '' ? null : ['text' => mb_strimwidth($text, 0, $length, '…'), 'view' => $default];
+    }
+
+    /** How much of each view a console Library row reads for its snippet (characters of the stored JSON). */
+    public const ROW_HEAD_CHARS = 1200;
+
+    /**
+     * The views' state, when made and the first lines of [$view] from a row's heads (JSON_EXTRACT of the stored meta,
+     * the view's list or object cut after ROW_HEAD_CHARS): the lines that arrived whole.
+     *
+     * @return array<string, mixed>
+     */
+    private static function fromHeads(Transcript $transcript, string $view): array
+    {
+        $unquote = fn (mixed $v): ?string => is_string($v) ? (string) (json_decode($v) ?? trim($v, '"')) : null;
+        $lines = [];
+        $head = ltrim((string) $transcript->getAttribute("views_{$view}_head"));
+        // Stored as a list when every line has words ("0", "1", … in order), else as an object of line => text.
+        $pattern = str_starts_with($head, '[') ? '/()("(?:[^"\\\\]|\\\\.)*")/u' : '/"(\d+)"\s*:\s*("(?:[^"\\\\]|\\\\.)*")/u';
+        preg_match_all($pattern, $head, $m, PREG_SET_ORDER);
+        foreach ($m as $n => [, $key, $text]) {
+            $decoded = json_decode($text);
+            if (is_string($decoded)) {
+                $lines[$key === '' ? $n : (int) $key] = $decoded;
+            }
+        }
+
+        return ['status' => $unquote($transcript->getAttribute('views_status_head')), 'made_at' => $unquote($transcript->getAttribute('views_made_at_head')), $view => $lines];
     }
 
     /**

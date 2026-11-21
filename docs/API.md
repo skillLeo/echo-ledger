@@ -1655,7 +1655,7 @@ other languages; as made since v1.3);
 when ready, each available view is a list aligned with the segments (`null` for an empty line); `default` is the view
 the apps open it in (console setting, `original` unless that view is available). An edit to the transcript makes the
 views stale (`none`) until they are made again. Every transcript carries `views: {"available", "status", "default"}`.
-Since 2.0.0-l (U19): `making` also while the default view is about to be made: for 20 minutes after the transcript is
+Since 2.0.0-n (U19): `making` also while the default view is about to be made: for 20 minutes after the transcript is
 finished or edited, when it opens in a view, a key is set and the plan has views (a short note is checked by a second
 engine first, so its job starts a little later); `progress` stays `{}` until the job has counted the lines. A `making`
 that moved no line for 20 minutes reads `failed` with `error` "Converting took too long. Try again.", and `POST` starts
@@ -2184,7 +2184,7 @@ the usage ledger:
   transcript is finished, then `{"status": "none" | "making" | "ready" | "failed", "default": "roman", "progress":
   {"roman": {"done": 12, "total": 20}}}` from what the server stored (no lines are read), so a row can say "Improving
   Roman Urdu… 60%".
-- **Preview in the view shown** (since 2.0.0-l). A library item's `transcript.preview` is the default view's words (at
+- **Preview in the view shown** (since 2.0.0-n). A library item's `transcript.preview` is the default view's words (at
   most 160 characters, one line of the view per line, no speaker names) once that view is `ready` and was made after the
   last edit, else the transcript's own words as before. `transcript.preview_view` says which: `"roman"`, `"urdu"`,
   `"english"` or `"original"` (always present; `"original"` also when there is no transcript yet).
@@ -2197,7 +2197,7 @@ the usage ledger:
   Numbers, units, prices, dates and times are written as digits in every view ("16 GB", "M6 Pro", "Rs 2,500", "3:30").
 - **Automatic titles.** When a recording's final transcript is ready and nobody has given it a title, the server gives it
   a short one from what was said (at most 60 characters, digits for numbers, for example "Laptop — 16 vs 32 GB"). Since
-  2.0.0-l a recording that opens in Roman Urdu (Urdu and mixed calls by default) gets it in Roman Urdu ("Meeting ka time
+  2.0.0-n a recording that opens in Roman Urdu (Urdu and mixed calls by default) gets it in Roman Urdu ("Meeting ka time
   aur tax form"), from the Roman Urdu view once it is made; an automatic title still in Urdu letters is written again in
   Roman Urdu when that view is made (never a title a person gave). English and Arabic titles stay in their language. Library
   items and `GET /api/sessions/{id}` carry `title_auto: true` for such a title, and only for such a title (since 2.0.0-k

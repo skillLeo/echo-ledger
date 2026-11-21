@@ -629,10 +629,19 @@ final class CaptureSessionsTable
      */
     private static function rowTranscriptColumns(mixed $final): mixed
     {
-        return $final->select(['id', 'capture_session_id', 'kind', 'status', 'language', 'provider', 'completed_at', 'edited_at', 'updated_at'])
+        $final->select(['id', 'capture_session_id', 'kind', 'status', 'language', 'provider', 'completed_at', 'edited_at', 'updated_at'])
             ->selectRaw('SUBSTR(text, 1, 600) AS text')
             ->selectRaw("CASE WHEN meta LIKE '%\"making\"%' OR meta LIKE '%\"failed\"%' THEN meta ELSE NULL END AS meta")
-            ->selectRaw("CASE WHEN meta LIKE '%\"views\":%' THEN 1 ELSE 0 END AS has_views");
+            ->selectRaw("CASE WHEN meta LIKE '%\"views\":%' THEN 1 ELSE 0 END AS has_views")
+            // Since U19 the snippet is in the view the recording opens in once made: the views' state and the start of
+            // each view (a few hundred characters, never every line), read by TranscriptViews::rowPreview.
+            ->selectRaw("CASE WHEN JSON_VALID(meta) THEN JSON_EXTRACT(meta, '$.views.status') END AS views_status_head")
+            ->selectRaw("CASE WHEN JSON_VALID(meta) THEN JSON_EXTRACT(meta, '$.views.made_at') END AS views_made_at_head");
+        foreach (array_keys(TranscriptViews::VIEWS) as $view) {
+            $final->selectRaw("CASE WHEN JSON_VALID(meta) THEN SUBSTR(JSON_EXTRACT(meta, '$.views.{$view}'), 1, ".TranscriptViews::ROW_HEAD_CHARS.") END AS views_{$view}_head");
+        }
+
+        return $final;
     }
 
     /**

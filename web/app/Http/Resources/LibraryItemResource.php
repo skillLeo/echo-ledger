@@ -92,7 +92,7 @@ final class LibraryItemResource extends JsonResource
                 'final_transcript_id' => $final?->id,
                 'live_available' => $live !== null,
                 'live_transcript_id' => $live?->id,
-                // Since 2.0.0-l (U19): in the view the recording opens in once it is made (Roman Urdu for Urdu calls), and
+                // Since 2.0.0-n (U19): in the view the recording opens in once it is made (Roman Urdu for Urdu calls), and
                 // `preview_view` says which ("roman", "urdu", "english" or "original"), so rows need not read the views.
                 'preview' => ($rowPreview = TranscriptViews::rowPreview($final))['text'] ?? (($final?->text ? $final->preview() : $live?->preview()) ?: null),
                 'preview_view' => $rowPreview['view'] ?? 'original',

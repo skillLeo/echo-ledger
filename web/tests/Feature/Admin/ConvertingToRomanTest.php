@@ -10,6 +10,7 @@ use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Support\RecordingProgress;
 use App\Filament\Support\V2CopyForAi;
+use App\Filament\Support\V2RecordingRow;
 use App\Jobs\MakeTranscriptViewsJob;
 use App\Models\CaptureSession;
 use App\Models\ShareLink;
@@ -149,4 +150,23 @@ it('starts the share link, the download and the Library\'s export in the view sh
     expect(CaptureSessionsTable::shownViewDefault())->toBe('roman');
     app(SettingsRepository::class)->set('views.default_ur', 'original');
     expect(CaptureSessionsTable::shownViewDefault())->toBeNull();
+});
+
+it('shows the new Library\'s snippet in Roman Urdu once it is made, without reading the lines', function () {
+    u19V2();
+    $ready = u19Recording($this, u19Ready());
+    $waiting = u19Recording($this, null, ['title' => 'Not yet']);
+
+    $page = $this->panelComponent(ListCaptureSessions::class);
+    $row = $page->instance()->getTableRecords()->first(fn ($r) => $r->id === $ready->id);
+    expect($row->finalTranscript->meta)->toBeNull()->and($row->finalTranscript->getAttributes())->not->toHaveKey('segments');
+    $html = $page->html();
+    expect($html)->toMatch('/data-snippet>meeting ka time\s+tax form theek karna hai</')
+        ->and(V2RecordingRow::snippet($row))->toBe("meeting ka time\ntax form theek karna hai");
+    $other = $page->instance()->getTableRecords()->first(fn ($r) => $r->id === $waiting->id);
+    expect(V2RecordingRow::snippet($other))->toBe('x');
+    // A view whose first line had no words is stored as an object of line => text.
+    $gap = u19Recording($this, ['roman' => ['1' => 'tax form theek karna hai'], 'urdu' => [], 'english' => []] + u19Ready(), ['title' => 'Gap']);
+    $row = Livewire\Livewire::test(ListCaptureSessions::class)->instance()->getTableRecords()->first(fn ($r) => $r->id === $gap->id);
+    expect(V2RecordingRow::snippet($row))->toBe('tax form theek karna hai');
 });
