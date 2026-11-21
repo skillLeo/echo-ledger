@@ -76,6 +76,8 @@ const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNot
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
 const TABS: readonly Tab[] = ["record", "library", "projects", "activity", "shared", "settings"];
+/** The pages in words, for a Back link that returns to one ("Library"). */
+const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Library", projects: "Projects", activity: "Activity", shared: "Shared", settings: "Settings" };
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
 const RELOAD_AFTER_CHANGE_MS = 800;
 
@@ -142,7 +144,8 @@ export default function MainApp() {
   }, []);
   const [help, setHelp] = useState(false);
   // Help & shortcuts in the new design: Settings › Help on its Shortcuts tab ("?", the sidebar, the palette).
-  const [helpStart, setHelpStart] = useState<{ tab: HelpTab; seq: number } | null>(null);
+  // `from`: the page "?" was pressed on; Help's Back goes there (Settings when it was opened from Settings).
+  const [helpStart, setHelpStart] = useState<{ tab: HelpTab; seq: number; from: Tab | null } | null>(null);
   const openHelpRef = useRef<() => void>(() => setHelp(true));
   const [requestSheet, setRequestSheet] = useState(false);
   // "+ New project" from the top bar or the Projects column: the Projects page opens its dialog.
@@ -697,8 +700,10 @@ export default function MainApp() {
   const helpInV2 = ui.flags["ui_v2.shell"] && ui.flags["ui_v2.settings"] && helpV2Reachable(ui.flags);
   const openHelp = () => {
     if (!helpInV2) return setHelp(true);
-    setHelpStart({ tab: "shortcuts", seq: ++navigations.current });
-    openAccount("help");
+    const seq = ++navigations.current;
+    setHelpStart({ tab: "shortcuts", seq, from: tab === "settings" ? null : tab });
+    setTab("settings");
+    setSettingsSection({ id: "help", seq });
   };
   openHelpRef.current = openHelp;
   const newProject = () => {
@@ -873,8 +878,11 @@ export default function MainApp() {
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
                 ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
-                  ? <HelpV2 platform={status.platform} onBack={onHome} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
-                    start={helpStart} onSettings={openAccount} />
+                  ? <HelpV2 platform={status.platform} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
+                    start={helpStart} onSettings={openAccount}
+                    {...(helpStart?.from && settingsSection?.seq === helpStart.seq
+                      ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
+                      : { onBack: onHome })} />
                   : hasV2Page(section.id)
                     ? <SettingsPagesV2 section={section} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />

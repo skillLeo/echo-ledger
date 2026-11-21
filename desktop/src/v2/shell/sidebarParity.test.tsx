@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import MainApp from "../../views/main/MainApp";
 import type { RecordingInfo } from "../../lib/ipc";
-import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeEntitlements, makeItem, makeSettings, makeStatus, makeTranscript } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { restartForTests } from "../../components/StateBanner";
@@ -146,25 +146,59 @@ describe("the sidebar", () => {
     expect(screen.queryByRole("separator", { name: "Resize the sidebar" })).toBeNull();
   });
 
-  it("DT-NAV-015: dragging the edge follows the pointer within 200 to 320 px and keeps the width once let go", () => {
+  it("DT-NAV-015: dragging the edge captures the pointer, follows it within 200 to 320 px without redrawing the app, and keeps the width once let go", () => {
     const onWidth = vi.fn();
     render(<Shell tab="library" onGo={() => undefined} status={ready} width={240} onWidth={onWidth} rail={false}><p /></Shell>);
     const edge = screen.getByRole("separator", { name: "Resize the sidebar" });
-    fireEvent.pointerDown(edge, { button: 0, clientX: 240 });
-    fireEvent.pointerMove(window, { clientX: 280 });
-    fireEvent.pointerMove(window, { clientX: 900 });
-    fireEvent.pointerUp(window, { clientX: 900 });
-    expect(onWidth.mock.calls).toEqual([[280, false], [320, false], [320, true]]);
+    const capture = vi.fn();
+    Object.assign(edge, { setPointerCapture: capture });
+    const shell = document.querySelector<HTMLElement>(".el-shell")!;
+    fireEvent.pointerDown(edge, { button: 0, clientX: 240, pointerId: 7 });
+    expect(capture).toHaveBeenCalledWith(7);
+    expect(document.body).toHaveClass("resizing-sidebar");
+    fireEvent.pointerMove(edge, { clientX: 280 });
+    expect(shell.style.getPropertyValue("--el-sidebar-width")).toBe("280px");
+    expect(edge).toHaveAttribute("aria-valuenow", "280");
+    fireEvent.pointerMove(edge, { clientX: 900 });
+    expect(shell.style.getPropertyValue("--el-sidebar-width")).toBe("320px");
+    // Nothing is told to the app while dragging: the width is set on the shell itself.
+    expect(onWidth).not.toHaveBeenCalled();
+    fireEvent.pointerUp(edge, { clientX: 900 });
+    expect(onWidth.mock.calls).toEqual([[320, true]]);
     expect(document.body).not.toHaveClass("resizing-sidebar");
   });
 
+  it("DT-NAV-015: a cancelled drag puts the width back and keeps nothing", () => {
+    const onWidth = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={ready} width={240} onWidth={onWidth} rail={false}><p /></Shell>);
+    const edge = screen.getByRole("separator", { name: "Resize the sidebar" });
+    const shell = document.querySelector<HTMLElement>(".el-shell")!;
+    fireEvent.pointerDown(edge, { button: 0, clientX: 240 });
+    fireEvent.pointerMove(edge, { clientX: 300 });
+    expect(shell.style.getPropertyValue("--el-sidebar-width")).toBe("300px");
+    fireEvent.pointerCancel(edge);
+    expect(shell.style.getPropertyValue("--el-sidebar-width")).toBe("240px");
+    expect(edge).toHaveAttribute("aria-valuenow", "240");
+    expect(onWidth).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveClass("resizing-sidebar");
+    // Later moves do nothing.
+    fireEvent.pointerMove(edge, { clientX: 320 });
+    expect(shell.style.getPropertyValue("--el-sidebar-width")).toBe("240px");
+  });
+
   it("DT-NAV-025: while recording, the status chip says what, paused or not, and for how long; a press opens the Record page", () => {
-    expect(shellChip(makeStatus({ recording: CALL, elapsedMs: 134_000 }), sourceAppLabel)).toEqual({ kind: "recording", text: "Recording · Zoom · 02:14" });
-    expect(shellChip(makeStatus({ recording: { ...CALL, mode: "mic_note" }, paused: true, elapsedMs: 5_000 }), sourceAppLabel).text).toBe("Paused · voice note · 00:05");
+    expect(shellChip(makeStatus({ recording: CALL, elapsedMs: 134_000 }), sourceAppLabel)).toEqual({ kind: "recording", text: "Recording · Zoom", time: "02:14" });
+    expect(shellChip(makeStatus({ recording: { ...CALL, mode: "mic_note" }, paused: true, elapsedMs: 5_000 }), sourceAppLabel)).toMatchObject({ text: "Paused · voice note", time: "00:05" });
     expect(shellChip(makeStatus(), sourceAppLabel)).toEqual(ready);
     const onGo = vi.fn();
-    render(<Shell tab="library" onGo={onGo} status={{ kind: "recording", text: "Paused · Zoom · 02:14" }} recording><p /></Shell>);
-    const chip = within(nav()).getByRole("button", { name: /^Paused · Zoom · 02:14/ });
+    const { rerender } = render(<Shell tab="library" onGo={onGo} status={{ kind: "recording", text: "Paused · Zoom", time: "02:14" }} recording><p /></Shell>);
+    const chip = within(nav()).getByRole("button", { name: /^Paused · Zoom\s*· 02:14/ });
+    // Only Recording / Paused and what is in the live region; the ticking time is outside it.
+    const live = within(chip).getByRole("status");
+    expect(live).toHaveTextContent(/^Paused · Zoom$/);
+    rerender(<Shell tab="library" onGo={onGo} status={{ kind: "recording", text: "Paused · Zoom", time: "02:15" }} recording><p /></Shell>);
+    expect(within(nav()).getByRole("button", { name: /· 02:15/ })).toBeInTheDocument();
+    expect(within(nav()).getByRole("status")).toHaveTextContent(/^Paused · Zoom$/);
     expect(chip).toHaveAccessibleDescription("Opens the Record page");
     fireEvent.click(chip);
     expect(onGo).toHaveBeenCalledWith("record");
@@ -191,6 +225,34 @@ describe("Help & shortcuts in the new design", () => {
     const record = within(anywhere).getByText("Record now").closest("div")!;
     expect(record.querySelector("kbd")!.textContent).not.toBe("Not set");
     expect(within(anywhere).getByText("Bookmark this moment")).toBeInTheDocument();
+  });
+
+  it("DT-HLP-001: shortcuts that couldn't be read are said so, never shown as Not set", async () => {
+    backend({ "ui_v2.shell": true, "ui_v2.settings": true });
+    await app();
+    respondWith("get_settings", () => Promise.reject("The settings couldn't be read."));
+    fireEvent.keyDown(document.body, { key: "?" });
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(await screen.findByTestId("shortcuts-unread")).toHaveTextContent("Your shortcuts couldn't be read.");
+    expect(within(screen.getByLabelText("Anywhere on this computer")).queryByText("Not set")).toBeNull();
+  });
+
+  it("DT-NAV-019: Back from Help opened with ? returns to the page it was opened on", async () => {
+    backend({ "ui_v2.shell": true, "ui_v2.settings": true });
+    await app();
+    fireEvent.click(within(nav()).getByRole("button", { name: "Projects" }));
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "?" });
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("heading", { level: 1, name: "Help" });
+    const back = within(screen.getByRole("main")).getByRole("button", { name: "Projects" });
+    expect(back).toHaveClass("el-page__back");
+    fireEvent.click(back);
+    await act(flushAsync);
+    expect(within(nav()).getByRole("button", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+    expect(screen.queryByRole("heading", { level: 1, name: "Help" })).toBeNull();
   });
 
   it("DT-NAV-019: Help & shortcuts at the sidebar's foot opens the same tab", async () => {
@@ -244,14 +306,34 @@ describe("Home's needs you", () => {
     expect(list().getByRole("button", { name: "3 calls wait for your decision" })).toBeInTheDocument();
   });
 
-  it("DT-HOME-004: N notifications need you opens Activity; its line says what they are", async () => {
+  it("DT-HOME-004: N notifications need you opens Activity; its line says what they are; × hides it until the count changes", async () => {
     const p = props();
-    render(<HomeV2 status={makeStatus({ platform: "macos" })} {...p} notifications={2} />);
+    const { rerender } = render(<HomeV2 status={makeStatus({ platform: "macos" })} {...p} notifications={2} />);
     await act(flushAsync);
     const row = list().getByRole("button", { name: "2 notifications need you" });
     expect(row).toHaveAccessibleDescription("A transcript that failed, the monthly limit, or an answer to your upgrade request.");
     fireEvent.click(row);
     expect(p.onAction).toHaveBeenCalledWith("notifications");
+    fireEvent.click(list().getByRole("button", { name: "Dismiss: 2 notifications need you" }));
+    expect(screen.queryByRole("button", { name: "2 notifications need you" })).toBeNull();
+    rerender(<HomeV2 status={makeStatus({ platform: "macos" })} {...p} notifications={2} />);
+    expect(screen.queryByRole("button", { name: "2 notifications need you" })).toBeNull();
+    rerender(<HomeV2 status={makeStatus({ platform: "macos" })} {...p} notifications={3} />);
+    expect(list().getByRole("button", { name: "3 notifications need you" })).toBeInTheDocument();
+  });
+
+  it("DT-HOME-003 in the app: the uploads that need you open the Library's Failed uploads", async () => {
+    backend({ "ui_v2.shell": true, "ui_v2.home": true, "ui_v2.library": true }, makeStatus({ platform: "macos", failedUploads: 2 }));
+    respond("pending_list", []);
+    await app();
+    fireEvent.click(within(nav()).getByRole("button", { name: "More ways to record" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
+    await act(flushAsync);
+    await act(flushAsync);
+    fireEvent.click(await screen.findByRole("button", { name: "2 recordings didn't upload" }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(within(screen.getByRole("group", { name: "Filter recordings" })).getByRole("button", { name: /^Failed/ })).toBeInTheDocument();
   });
 
   it("DT-HOME-002 to DT-HOME-004 in the app: Review opens the Library's Waiting view, and the notifications open Activity", async () => {
@@ -292,6 +374,20 @@ describe("the Library after the main window opens again", () => {
     const saved = callsOf("main_view_set").map((c) => JSON.parse((c as { view: string }).view));
     expect(saved.at(-1)).toMatchObject({ recordingId: null });
     cleanup();
+  });
+
+  it("DT-LIB-061: a kept recording that was deleted since doesn't open, and isn't kept any more", async () => {
+    backend({ "ui_v2.shell": true, "ui_v2.library": true });
+    respond("main_view_get", JSON.stringify({ tab: "library", recordingId: "gone", scroll: {} }));
+    respond("main_view_set", undefined);
+    await app();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
+    const saved = callsOf("main_view_set").map((c) => JSON.parse((c as { view: string }).view));
+    expect(saved.at(-1)).toMatchObject({ recordingId: null });
   });
 
   it("DT-LIB-061: opening another recording is kept for the next window", async () => {

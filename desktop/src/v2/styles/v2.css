@@ -1501,3 +1501,5 @@ body.resizing-sidebar { cursor: col-resize; user-select: none; }
 .el-keys__row { display: grid; grid-template-columns: minmax(calc(var(--el-space-64) * 2), max-content) 1fr; gap: var(--el-space-12); align-items: baseline; }
 .el-keys__row > dd { margin: 0; }
 .el-help-keys__tip { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; inline-size: 100%; }
+.el-sidebar[data-rail="on"] .el-shell__time { display: none; }
+@media (width < 780px) { .el-sidebar:not([data-rail="off"]) .el-shell__time { display: none; } }

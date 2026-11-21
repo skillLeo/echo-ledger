@@ -115,25 +115,44 @@ export type ShellProps = {
 function ResizeEdge({ width, onWidth }: { width: number; onWidth: (width: number, done: boolean) => void }) {
   // Right to left the sidebar is on the right: dragging left widens it, and so does the left arrow.
   const rtl = () => document.documentElement.dir === "rtl" || getComputedStyle(document.documentElement).direction === "rtl";
-  const start = (e: ReactPointerEvent) => {
+  // While dragging, the width is set on the shell directly (no redraw of the app on every move); it is kept once let go.
+  // The pointer is captured, so the edge hears the moves and the end even off the window; a cancelled drag puts the
+  // width back.
+  const start = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
+    const edge = e.currentTarget;
+    const shell = edge.closest<HTMLElement>(".el-shell");
     const from = e.clientX;
     const sign = rtl() ? -1 : 1;
     let last = width;
+    const show = (w: number) => {
+      shell?.style.setProperty("--el-sidebar-width", `${w}px`);
+      edge.setAttribute("aria-valuenow", String(w));
+    };
+    try {
+      edge.setPointerCapture?.(e.pointerId);
+    } catch {
+      // A pointer that is gone already can't be captured.
+    }
     const move = (m: PointerEvent) => {
       last = clampSidebar(width + sign * (m.clientX - from));
-      onWidth(last, false);
+      show(last);
     };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
+    const end = (keep: boolean) => {
+      edge.removeEventListener("pointermove", move);
+      edge.removeEventListener("pointerup", up);
+      edge.removeEventListener("pointercancel", cancel);
       document.body.classList.remove("resizing-sidebar");
-      onWidth(last, true);
+      if (keep) onWidth(last, true);
+      else show(width);
     };
+    const up = () => end(true);
+    const cancel = () => end(false);
     document.body.classList.add("resizing-sidebar");
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    edge.addEventListener("pointermove", move);
+    edge.addEventListener("pointerup", up);
+    edge.addEventListener("pointercancel", cancel);
   };
   const key = (e: ReactKeyboardEvent) => {
     const step = e.shiftKey ? 40 : 16;
@@ -311,7 +330,9 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
               {status.kind === "recording" ? (
                 // The recording chip: what is recorded, paused or not, and for how long; a press opens the Record page.
                 <button type="button" className="el-shell__status-fix" onClick={() => go("record")} aria-describedby="el-shell-chip-hint">
+                  {/* Only Recording / Paused and what is said aloud when it changes; the time ticks outside the live region. */}
                   <Status kind={status.kind} live>{status.text}</Status>
+                  {status.time && <span className="el-shell__time el-num" dir="ltr">{` · ${status.time}`}</span>}
                   <span className="el-visually-hidden" id="el-shell-chip-hint">Opens the Record page</span>
                 </button>
               ) : status.kind === "setup" && onSetup ? (

@@ -300,11 +300,20 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
   // The recording open when the main window closed opens again (classic's), once; what is opened after is kept.
   const restored = useRef(false);
+  const restoredId = useRef<string | null>(null);
   useEffect(() => {
     if (!initialOpen || restored.current) return;
     restored.current = true;
+    restoredId.current = initialOpen;
     setOpenIdNow((now) => now ?? initialOpen);
   }, [initialOpen]);
+  // The kept recording was deleted (or is gone) since: once the list has loaded it isn't open, and isn't kept either.
+  useEffect(() => {
+    const id = restoredId.current;
+    if (!id || !items) return;
+    restoredId.current = null;
+    if (!items.some((i) => i.id === id && !i.deleted)) setOpenIdNow((now) => (now === id ? null : now));
+  }, [items, initialOpen]);
   const reported = useRef<string | null | undefined>(undefined);
   const onOpenChangeRef = useRef(onOpenChange);
   onOpenChangeRef.current = onOpenChange;

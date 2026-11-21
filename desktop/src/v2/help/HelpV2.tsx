@@ -31,16 +31,18 @@ export type HelpV2Props = {
   start?: { tab: HelpTab; seq: number } | null;
   /** A Settings page (Keyboard shortcuts, Screen-share privacy). */
   onSettings?: (page: string) => void;
+  /** Where Back goes, in words ("Library" when "?" was pressed there); Settings by default. */
+  backLabel?: string;
 };
 
-export function HelpV2({ platform, onBack, onMacCheck, start = null, onSettings }: HelpV2Props) {
+export function HelpV2({ platform, onBack, onMacCheck, start = null, onSettings, backLabel = "Settings" }: HelpV2Props) {
   const [tab, setTab] = useState<Tab>(start?.tab ?? "guides");
   useEffect(() => {
     if (start) setTab(start.tab);
   }, [start?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="el-page el-page--narrow" data-v2="help">
-      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>Settings</Button>
+      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>{backLabel}</Button>
       <header className="el-page__head"><h1 className="el-title-l">Help</h1></header>
       <Tabs label="Help" value={tab} onChange={setTab}
         tabs={[{ value: "guides", label: "Guides" }, { value: "shortcuts", label: "Shortcuts" }, { value: "whats_new", label: "What's new" }, { value: "contact", label: "Contact support" }]}>
@@ -58,8 +60,9 @@ export function HelpV2({ platform, onBack, onMacCheck, start = null, onSettings 
  */
 function Shortcuts({ platform, onSettings }: { platform: string; onSettings?: (page: string) => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [unread, setUnread] = useState(false);
   useEffect(() => {
-    api.settings().then(setSettings).catch(() => undefined);
+    api.settings().then(setSettings, () => setUnread(true));
   }, []);
   const keyList = (label: string, rows: readonly (readonly [string, string])[]) => (
     <dl className="el-keys" aria-label={label}>
@@ -77,8 +80,10 @@ function Shortcuts({ platform, onSettings }: { platform: string; onSettings?: (p
       <p className="el-caption el-secondary">They work while EchoLedger is in front, never while you type in a field.</p>
       {keyList("In this window", windowKeys(platform))}
       <h2 className="el-title-s">Anywhere on this computer</h2>
+      {/* Shortcuts that couldn't be read are said to be so, never shown as "Not set". */}
+      {unread && <p className="el-caption el-row__error" role="status" data-testid="shortcuts-unread">Your shortcuts couldn't be read. See them in Keyboard shortcuts.</p>}
       {keyList("Anywhere on this computer", GLOBAL_SHORTCUTS.map(([action, what]) => [
-        settings?.shortcuts[action] ? prettyShortcut(settings.shortcuts[action], platform) : "Not set", what,
+        unread || !settings ? "…" : settings.shortcuts[action] ? prettyShortcut(settings.shortcuts[action], platform) : "Not set", what,
       ] as const))}
       {onSettings && <Button size="sm" variant="quiet" onClick={() => onSettings("shortcuts")}>Change them in Keyboard shortcuts</Button>}
       <Card className="el-help-keys__tip">
