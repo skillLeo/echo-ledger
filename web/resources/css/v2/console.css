@@ -1797,3 +1797,38 @@ html[dir='rtl'] .v2-row-title {
 .fi-ta-filter-indicators-badges-ctn .fi-badge .fi-badge-delete-btn {
     color: var(--el-role-accent-text);
 }
+
+/* A split button (Copy): the main part acts, the chevron part opens the other choices; one shape, a hairline between. */
+.v2-split {
+    display: inline-flex;
+    align-items: stretch;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-split > button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-height: var(--el-layout-control-touch-min);
+    padding-inline: var(--el-space-16) var(--el-space-12);
+    border: 0;
+    background: transparent;
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-split > button + button {
+    padding-inline: var(--el-space-12);
+    border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-split > button:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(-1 * var(--el-focus-width));
+}
+
+.v2-split > button:hover {
+    background-color: var(--el-role-bg-canvas);
+}
