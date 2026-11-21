@@ -48,11 +48,11 @@ export function RecordingStepsV2({ item, improving, say }: {
     }
   };
   return (
-    <div className="el-steps-row" data-testid="recording-steps">
-      <ol className="el-steps" aria-label="Progress">
+    <div className="el-rec-steps-row" data-testid="recording-steps">
+      <ol className="el-rec-steps" aria-label="Progress">
         {STEPS.map((s) => (
-          <li key={s} className={`el-step el-step--${states[s]}`} data-step={s} aria-current={states[s] === "active" ? "step" : undefined}>
-            <span className="el-step__dot" aria-hidden="true" />
+          <li key={s} className={`el-rec-step el-rec-step--${states[s]}`} data-step={s} aria-current={states[s] === "active" ? "step" : undefined}>
+            <span className="el-rec-step__dot" aria-hidden="true" />
             <span className="el-caption">{words(s)}</span>
             {states[s] === "done" && <span className="el-visually-hidden"> (done)</span>}
           </li>

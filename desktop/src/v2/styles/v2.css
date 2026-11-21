@@ -1417,17 +1417,17 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-recording__locked:empty { display: none; }
 
 /* The recording page's progress steps (Upload · Transcribe · Improve) and Notify me when ready. */
-.el-steps-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-16); margin-block: var(--el-space-8); }
-.el-steps { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-16); margin: 0; padding: 0; list-style: none; }
-.el-step { display: inline-flex; align-items: center; gap: var(--el-space-8); color: var(--el-role-text-secondary); }
-.el-step__dot { inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); border: var(--el-border-hairline) solid var(--el-role-border-strong); }
-.el-step--done .el-step__dot { background: var(--el-role-success-default); border-color: var(--el-role-success-default); }
-.el-step--active { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); }
-.el-step--active .el-step__dot { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
-.el-step--failed { color: var(--el-role-danger-default); }
-.el-step--failed .el-step__dot { border-color: var(--el-role-danger-default); }
+.el-rec-steps-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-16); margin-block: var(--el-space-8); }
+.el-rec-steps { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-16); margin: 0; padding: 0; list-style: none; }
+.el-rec-step { display: inline-flex; align-items: center; gap: var(--el-space-8); color: var(--el-role-text-secondary); }
+.el-rec-step__dot { inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); border: var(--el-border-hairline) solid var(--el-role-border-strong); }
+.el-rec-step--done .el-rec-step__dot { background: var(--el-role-success-default); border-color: var(--el-role-success-default); }
+.el-rec-step--active { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); }
+.el-rec-step--active .el-rec-step__dot { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
+.el-rec-step--failed { color: var(--el-role-danger-default); }
+.el-rec-step--failed .el-rec-step__dot { border-color: var(--el-role-danger-default); }
 @media (prefers-reduced-motion: no-preference) {
-  .el-step--active .el-step__dot { animation: el-pulse var(--el-motion-pulse) ease-in-out infinite; }
+  .el-rec-step--active .el-rec-step__dot { animation: el-pulse var(--el-motion-pulse) ease-in-out infinite; }
 }
 
 /* The backup engine's line, and the offers after an edit (always write it this way, add to the vocabulary). */

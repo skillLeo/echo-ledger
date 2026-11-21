@@ -9,6 +9,9 @@ import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from 
 import { makeItem, makeTranscript } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { NOTIFY_ASKED } from "./recordingExtras";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -49,7 +52,15 @@ describe("the recording page's progress", () => {
     const steps = within(screen.getByRole("list", { name: "Progress" }));
     expect(steps.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Uploaded (done)", "Transcribing", "Improve"]);
     expect(steps.getByText("Transcribing").closest("li")).toHaveAttribute("aria-current", "step");
-    expect(steps.getByText("Uploaded").closest("li")).toHaveClass("el-step--done");
+    expect(steps.getByText("Uploaded").closest("li")).toHaveClass("el-rec-step--done");
+  });
+
+  it("DT-REC-033: the steps have their own classes, never the Home checklist's", () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    // .el-steps / .el-step belong to the get-started checklist and Setup: one rule each, none from the recording page.
+    expect(css.match(/^\.el-steps \{/gm)).toHaveLength(1);
+    expect(css.match(/^\.el-step \{/gm)).toHaveLength(1);
+    expect(css).toMatch(/^\.el-rec-steps \{/m);
   });
 
   it("DT-REC-033: no steps on a recording that is ready", async () => {
