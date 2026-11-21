@@ -682,6 +682,38 @@ pub struct LibraryItem {
     pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
+/// One of the person's lists (contract 2.0.0-m): a label with a name, a colour and its place in the Library's row.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ListDto {
+    /// The name in lower case: the list's key in the paths and in every label it matches.
+    pub key: String,
+    pub name: String,
+    /// "#rrggbb", or none (drawn in the neutral colour).
+    pub color: Option<String>,
+    pub position: u32,
+    /// The person's recordings in it, not in Trash.
+    pub count: u64,
+}
+
+/// `GET /api/lists`, `PUT /api/lists/order`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListsResponse {
+    pub data: Vec<ListDto>,
+}
+
+/// `POST /api/lists`, `PATCH /api/lists/{key}`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListResponse {
+    pub data: ListDto,
+}
+
+/// `DELETE /api/lists/{key}`: the recordings that lost the label.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ListDeleted {
+    pub key: String,
+    pub changed: u64,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct LibraryResponse {
     pub data: Vec<LibraryItem>,

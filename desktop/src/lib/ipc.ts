@@ -764,6 +764,18 @@ export interface NotRecordedMic {
   at: string;
 }
 
+/** One of the person's lists (contract 2.0.0-m): a label with its colour and place in the Library's row. */
+export interface ListItem {
+  /** The name in lower case. */
+  key: string;
+  name: string;
+  /** "#rrggbb", or null (the neutral colour). */
+  color: string | null;
+  position: number;
+  /** The person's recordings in it, not in Trash. */
+  count: number;
+}
+
 export interface LibraryItem {
   id: string;
   deleted: boolean;
@@ -788,6 +800,12 @@ export interface LibraryItem {
   /** Pinned to the top and recording labels (since v1.1, B15). */
   pinned?: boolean;
   labels?: string[];
+  /** The person's colour of each label that has one, label as spelt here => "#rrggbb" (since 2.0.0-i). */
+  label_colors?: Record<string, string>;
+  /** The person flagged it (since 2.0.0-i). */
+  important?: boolean;
+  /** The person has opened it (since v1.3): false is unread. */
+  opened?: boolean;
   /** Never deleted by retention (B17). */
   keep?: boolean;
   /** The recording's language (null = automatic) and its chip, "UR+EN" (since v1.1.2). */
@@ -1820,6 +1838,16 @@ export const api = {
   /** Its recordings go to the Inbox and its subfolders up a level. */
   deleteClient: (id: string) => invoke<{ moved_sessions?: number; moved_projects?: number }>("client_delete", { id }),
   libraryViews: (tz: string | null = null) => invoke<LibraryViews>("library_views", { tz }),
+  /** The person's lists in their order (since 2.0.0-m); null on a server without lists. */
+  lists: () => invoke<ListItem[] | null>("lists_get"),
+  /** "+": a new, empty list; without a colour the server picks the one fewest lists have. */
+  createList: (name: string, color: string | null = null) => invoke<ListItem>("list_create", { name, color }),
+  /** Rename (every recording in it with it) and/or recolour. */
+  updateList: (key: string, change: { name?: string; color?: string }) => invoke<ListItem>("list_update", { key, name: change.name ?? null, color: change.color ?? null }),
+  /** The label comes off its recordings (they stay); how many changed. */
+  deleteList: (key: string) => invoke<number>("list_delete", { key }),
+  /** Every list's key once, in the new order. */
+  orderLists: (keys: string[]) => invoke<ListItem[]>("lists_order", { keys }),
   libraryFolder: (folder: SmartFolder) => invoke<LibraryItem[]>("library_folder", { folder }),
   /** null: the server has no filing rules yet. */
   clientRules: (id: string) => invoke<{ data: FilingRule[] } | null>("client_rules", { id }),
