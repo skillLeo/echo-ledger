@@ -8,7 +8,6 @@ import { Menu } from "../components/Menu";
 import { initials } from "../settings/initials";
 import type { MainTab } from "../../lib/mainView";
 import { isConfirmOpen } from "../../lib/confirm";
-import { AUTO_RAIL_BELOW } from "../../lib/shell";
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
 const PRESS_HOLD_MS = 3000;
@@ -120,13 +119,6 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
     return () => window.removeEventListener("keydown", onKey);
   }, []);
   const hint = searchHint(searchKeys);
-  // Under the rail breakpoint the sidebar hides its name (v2.css): Search then stands alone at the top of the rail.
-  const [rail, setRail] = useState(() => window.innerWidth < AUTO_RAIL_BELOW);
-  useEffect(() => {
-    const onResize = () => setRail(window.innerWidth < AUTO_RAIL_BELOW);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
   const search = onSearch && <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label="Search" title={hint.title} aria-keyshortcuts={hint.keys} onClick={onSearch} />;
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
@@ -151,8 +143,8 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
   );
   return (
     <div className="el-root el-shell" data-shell="v2">
-      {/* The name, and Search at its end (the start in RTL). */}
-      <Sidebar label="Main" brand={rail ? undefined : <><span className="el-menu__label">EchoLedger</span>{search}</>}
+      {/* The name, and Search at its end (the start in RTL); in the rail Search stays at the top, the name goes. */}
+      <Sidebar label="Main" brand={<>EchoLedger</>} brandEnd={search}
         footer={
           <div className="el-shell__foot">
             {item("activity", "Activity", Icons.BellIcon, activity ? activity : undefined)}
@@ -178,7 +170,6 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
             </div>
           </div>
         }>
-        {rail && search}
         {/* ● Record: one press records (or stops); its menu has a voice note and the Record page (calls ready, Live
             Assist), the sheet the phone opens on a long press. */}
         <div className="el-shell__record" role="group" aria-label="Record" aria-current={current === "record" ? "page" : undefined}>

@@ -83,7 +83,7 @@ describe("the shell", () => {
     const brand = nav.querySelector(".el-sidebar__brand")!;
     expect(brand).toHaveTextContent("EchoLedger");
     const search = within(nav).getByRole("button", { name: "Search" });
-    expect(brand.lastElementChild).toBe(search);
+    expect(brand.lastElementChild?.firstElementChild).toBe(search);
     expect(search).toHaveAttribute("title", "Search · ⌘F");
     expect(search).toHaveAttribute("aria-keyshortcuts", "Meta+F Meta+K");
     fireEvent.click(search);
@@ -120,19 +120,14 @@ describe("the shell", () => {
     expect(onSearch).toHaveBeenCalledTimes(1);
   });
 
-  it("in the collapsed rail the Search icon stays", () => {
-    const width = window.innerWidth;
-    try {
-      Object.defineProperty(window, "innerWidth", { configurable: true, value: 700 });
-      const onSearch = vi.fn();
-      render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K"><p /></Shell>);
-      const nav = screen.getByRole("navigation", { name: "Main" });
-      expect(nav.querySelector(".el-sidebar__brand")).toBeNull();
-      fireEvent.click(within(nav).getByRole("button", { name: "Search" }));
-      expect(onSearch).toHaveBeenCalled();
-    } finally {
-      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
-    }
+  it("in the collapsed rail the Search icon stays: it is the brand's end, which the rail keeps at its top", () => {
+    const onSearch = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K"><p /></Shell>);
+    const nav = screen.getByRole("navigation", { name: "Main" });
+    const end = nav.querySelector(".el-sidebar__brand > .el-sidebar__brand-end")!;
+    expect(nav.querySelector(".el-sidebar__brand-name")).toHaveTextContent("EchoLedger");
+    fireEvent.click(within(end as HTMLElement).getByRole("button", { name: "Search" }));
+    expect(onSearch).toHaveBeenCalled();
   });
 
   it("on an open recording Cmd+F stays Find in this transcript; the icon still opens app search", async () => {
