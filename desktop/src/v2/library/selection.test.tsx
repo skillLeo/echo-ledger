@@ -259,7 +259,7 @@ describe("the row ⋮ and the right-click menu", () => {
     await act(flushAsync);
   };
 
-  it("a row's ⋮: Open, Rename, Move, Label, Pin or Unpin, Keep, Export, Copy for AI, WhatsApp, then Delete last and red", async () => {
+  it("a row's ⋮: Open, Select, Rename, Move, Label, Pin or Unpin, Keep, Export, Copy for AI, WhatsApp, then Delete last and red", async () => {
     const pinned = ITEMS.map((i) => (i.id === "usman" ? { ...i, pinned: true } : i));
     respond("library_list", pinned);
     respond("library_refresh", pinned);
@@ -267,8 +267,9 @@ describe("the row ⋮ and the right-click menu", () => {
     fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
     const menu = screen.getByRole("menu", { name: "More for Usman Chaudhry" });
     expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([
-      "Open", "Rename…", "Move to project…", "Label…", "Unpin", "Keep forever", "Export", "Copy for AI", "Send to WhatsApp…", "DeleteDel",
+      "Open", "SelectX", "Rename…", "Move to project…", "Label…", "Unpin", "Keep forever", "Export", "Copy for AI", "Send to WhatsApp…", "DeleteDel",
     ]);
+    expect(menuItem("Select")).toHaveAttribute("aria-keyshortcuts", "X");
     expect([...menu.querySelectorAll(".el-menu__group")].map((g) => g.textContent)).toEqual(["Organise", "Export", "Danger"]);
     expect(menuItem("Delete")).toHaveClass("el-menu__option--danger");
     expect(menuItem("Delete")).toHaveAttribute("aria-keyshortcuts", "Delete");
@@ -279,6 +280,30 @@ describe("the row ⋮ and the right-click menu", () => {
     // An untranscribed recording offers Transcribe; a transcribed one doesn't.
     fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
     expect(menuItem("Transcribe…")).toBeInTheDocument();
+  });
+
+  it("Select, from the ⋮ or a right-click, starts selection mode with exactly that row ticked", async () => {
+    await show();
+    const ticked = () => rows().filter((r) => r.getAttribute("aria-pressed") === "true").map((r) => r.textContent);
+    fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
+    fireEvent.click(menuItem("Select"));
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
+    expect(row("Voice note")).toHaveAttribute("aria-pressed", "true");
+    expect(ticked()).toHaveLength(1);
+    // While selecting, the menu no longer offers it; × ends selection as when Select or X started it.
+    fireEvent.contextMenu(row("Bilal Qureshi"), { clientX: 10, clientY: 10 });
+    expect(screen.queryByRole("menuitem", { name: "Select" })).toBeNull();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    fireEvent.click(within(bar()).getByRole("button", { name: "Cancel selection" }));
+    expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
+
+    fireEvent.contextMenu(row("Habib & Co."), { clientX: 120, clientY: 300 });
+    const menu = screen.getByRole("menu", { name: "Recording actions" });
+    expect(within(menu).getByRole("menuitem", { name: "Select" })).toHaveTextContent("SelectX");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Select" }));
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
+    expect(row("Habib & Co.")).toHaveAttribute("aria-pressed", "true");
+    expect(ticked()).toHaveLength(1);
   });
 
   it("Rename: a new title, or empty for the automatic one", async () => {

@@ -338,6 +338,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const list: (MenuItem & { key: string })[] = [];
     const add = (key: string, item: MenuItem) => { if (!without.has(key)) list.push({ key, ...item }); };
     if (one) add("open", { label: "Open", onPick: () => setOpenId(one.id) });
+    // The same selection mode X and Select start, with this recording ticked.
+    if (one && !selecting) add("select", { label: "Select", shortcut: "X", onPick: () => startSelecting(one.id) });
     if (one) add("rename", { label: "Rename…", icon: Icons.RenameIcon, group: "Organise", onPick: () => setOrganise({ kind: "rename", item: one }) });
     add("move", { label: "Move to project…", icon: Icons.MoveIcon, group: "Organise",
       onPick: () => setOrganise({ kind: "move", ids: [...ids], title: one?.title, current: one ? one.client?.id ?? null : undefined }) });
@@ -413,6 +415,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       else next.add(id);
       return next;
     });
+  };
+  const startSelecting = (id: string) => {
+    setSelecting(true);
+    anchor.current = id;
+    setPicked(new Set([id]));
   };
   const pickAll = () => {
     setSelecting(true);
@@ -528,7 +535,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
-      menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
+      menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} />
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
   // the scrim closes it. The list opens it as its own page.
@@ -600,7 +607,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                 onClick={() => deleteOrAsk(pickedIds)} />
               {pickedIds.length > 0 && !tooMany && (
                 <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon }}
-                  items={menuFor(pickedIds, new Set(["open", "move", "label", "ai", "delete"]))} />
+                  items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "ai", "delete"]))} />
               )}
             </div>
           </header>
