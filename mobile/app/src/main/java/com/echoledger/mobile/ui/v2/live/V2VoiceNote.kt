@@ -47,8 +47,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import com.echoledger.mobile.R
@@ -102,6 +104,23 @@ fun V2VoiceNoteScreen(
     val toasts = LocalEchoToasts.current
     var picked by remember { mutableStateOf<List<FileImport.Picked>>(emptyList()) }
     LaunchedEffect(Unit) { vm.reloadLocal() }
+    // Checked again while the page is open: when the phone comes back to it, and when a headset comes or goes.
+    var headset by remember { mutableStateOf(headsetConnected(context)) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { headset = headsetConnected(context) }
+    androidx.compose.runtime.DisposableEffect(context) {
+        val audio = context.getSystemService(android.media.AudioManager::class.java)
+        val callback = object : android.media.AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(added: Array<out android.media.AudioDeviceInfo>?) {
+                headset = headsetConnected(context)
+            }
+
+            override fun onAudioDevicesRemoved(removed: Array<out android.media.AudioDeviceInfo>?) {
+                headset = headsetConnected(context)
+            }
+        }
+        audio?.registerAudioDeviceCallback(callback, null)
+        onDispose { audio?.unregisterAudioDeviceCallback(callback) }
+    }
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch { picked = vm.describeFiles(uris) }
     }
@@ -137,7 +156,7 @@ fun V2VoiceNoteScreen(
             }
             if (!live.active) {
                 // A connected headset records through its narrow-band microphone: said before the note, not after.
-                if (remember { headsetConnected(context) }) {
+                if (headset) {
                     EchoBanner(stringResource(R.string.v2_vn_bluetooth), EchoBannerKind.Warning, pad)
                 }
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -197,6 +216,8 @@ internal fun VoiceStage(live: LiveRecording, discarding: Boolean, onAction: (Str
                 }
             ),
             style = EchoV2.type.label,
+            // Recording, Paused, Not recording: said by TalkBack as it changes.
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
             color = when {
                 !live.active -> c.textSecondary
                 live.paused -> c.warning
@@ -315,6 +336,7 @@ fun V2ImportSheet(
     var clientId by remember { mutableStateOf<String?>(null) }
     var language by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
     EchoBottomSheet(onDismiss = {
         if (!busy) onDone(null)
     }, title = pluralStringResource(R.plurals.v2_imp_heading, files.size, files.size)) {
@@ -349,14 +371,24 @@ fun V2ImportSheet(
                 }
             }
             Text(stringResource(R.string.v2_imp_help), style = EchoV2.type.caption, color = c.textSecondary)
+            if (failed) EchoBanner(stringResource(R.string.v2_imp_failed), EchoBannerKind.Error)
             EchoButton(
                 pluralStringResource(R.plurals.v2_imp_heading, files.size, files.size),
                 onClick = {
                     busy = true
+                    failed = false
                     scope.launch {
-                        val summary = onImport(clientId, language)
-                        busy = false
-                        onDone(importWords(res, summary))
+                        // A failure (a file the phone can't read or store) says so; the sheet stays to try again.
+                        val summary = try {
+                            onImport(clientId, language)
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            null
+                        } finally {
+                            busy = false
+                        }
+                        if (summary == null) failed = true else onDone(importWords(res, summary))
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

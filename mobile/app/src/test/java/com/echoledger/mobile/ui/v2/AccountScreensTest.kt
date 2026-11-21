@@ -53,6 +53,7 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import java.io.File
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import mockwebserver3.MockResponse
@@ -408,6 +409,45 @@ class AccountScreensTest : ScreenTest() {
         click("Done")
         waitFor("Turn on two-step sign-in")
         assertFalse(covered())
+    }
+
+    @Test
+    fun aSignOutForgetsTheKeyAndTheCodesSoTheSameEmailSigningInAgainStartsAtTheOverview() {
+        server.on("POST", "/api/account/two-factor", answer(200, sample("account_two_factor").replace("sample-secret", "JBSWY3DPEHPK3PXP")))
+        server.on(
+            "POST",
+            "/api/account/two-factor/confirm",
+            answer(
+                200,
+                """{"recovery_codes":["aaaa-1111","bbbb-2222","cccc-3333","dddd-4444","eeee-5555","ffff-6666","gggg-7777","hhhh-8888"]}"""
+            )
+        )
+        // The page as it is opened again after signing in: its composition new, the ViewModel the same (keyed by email).
+        var generation by mutableStateOf(0)
+        page { androidx.compose.runtime.key(generation) { TwoStepPage(account, null, onChanged = {}, onBack = {}) } }
+        click("Turn on two-step sign-in")
+        type("Password", "my password 2026")
+        click("Continue")
+        waitFor("Open in authenticator app")
+        type("6-digit code", "123456")
+        click("Turn on")
+        waitFor("Save your recovery codes")
+        assertTrue(seen("aaaa-1111"))
+        // Signed out (the pairing cleared), then the same email back on this phone.
+        runBlocking { app.graph.settings.clearPairing() }
+        generation++
+        compose.waitForIdle()
+        waitFor("Turn on two-step sign-in")
+        assertFalse("the codes are gone", seen("aaaa-1111"))
+        assertFalse(seen("JBSW Y3DP EHPK 3PXP"))
+        // While still signed in, a new page (a rotation) keeps them, as before.
+        click("Turn on two-step sign-in")
+        type("Password", "my password 2026")
+        click("Continue")
+        waitFor("Open in authenticator app")
+        generation++
+        compose.waitForIdle()
+        assertTrue("the key outlives a rotation", seen("JBSW Y3DP EHPK 3PXP"))
     }
 
     @Test

@@ -39,8 +39,20 @@ object SettingsTree {
     )
 
     /** Pages drawn with the v2 components; the rest open their classic page with the same settings and actions. */
-    val nativePages =
-        setOf("appearance", "notifications", SETUP, "calls", "language", "words", "key", "lock", "privacy", "storage", "account")
+    val nativePages = setOf(
+        "appearance",
+        "notifications",
+        SETUP,
+        "calls",
+        "captions",
+        "language",
+        "words",
+        "key",
+        "lock",
+        "privacy",
+        "storage",
+        "account"
+    )
 
     /** Settings v2 leaves out nothing of classic's (wallpaper colours came back, docs/PLAN_V2_PARITY.md section 5). */
     val hiddenItems = emptySet<String>()

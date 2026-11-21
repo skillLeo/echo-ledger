@@ -43,7 +43,8 @@ fun EchoDialog(
     text: String,
     confirmLabel: String,
     onConfirm: () -> Unit,
-    dismissLabel: String,
+    /** Null: only the confirm button (a notice with OK); Back and a tap outside still close it. */
+    dismissLabel: String?,
     onDismiss: () -> Unit,
     destructive: Boolean = false
 ) {
@@ -63,7 +64,7 @@ fun EchoDialogContent(
     text: String,
     confirmLabel: String,
     onConfirm: () -> Unit,
-    dismissLabel: String,
+    dismissLabel: String?,
     onDismiss: () -> Unit,
     destructive: Boolean = false,
     modifier: Modifier = Modifier
@@ -92,7 +93,7 @@ fun EchoDialogContent(
                 horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.End),
                 verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
             ) {
-                EchoButton(dismissLabel, onDismiss, kind = EchoButtonKind.Quiet)
+                if (dismissLabel != null) EchoButton(dismissLabel, onDismiss, kind = EchoButtonKind.Quiet)
                 EchoButton(confirmLabel, onConfirm, kind = if (destructive) EchoButtonKind.Danger else EchoButtonKind.Primary)
             }
         }

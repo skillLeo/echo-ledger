@@ -44,4 +44,6 @@
         <item quantity="other">%1$d فائلیں پڑھی نہیں جا سکیں۔</item>
     </plurals>
     <string name="v2_vn_this_workspace">اس ورک اسپیس</string>
+    <string name="v2_act_project_named">پروجیکٹ: %1$s</string>
+    <string name="v2_imp_failed">فائلیں امپورٹ نہیں ہو سکیں۔ دوبارہ کوشش کریں۔</string>
 </resources>

@@ -185,6 +185,8 @@ fun V2SettingsScreen(
 
                 "notifications" -> NotificationsPage(settings, vm::updateSettings, r.highlight, back)
 
+                "captions" -> CaptionsPage(settings, vm::updateSettings, r.highlight, back)
+
                 SettingsTree.SETUP -> setupPage(r.highlight, back)
 
                 "calls" -> CallsPage(settings, vm::updateSettings, r.highlight, back, onSetup = {

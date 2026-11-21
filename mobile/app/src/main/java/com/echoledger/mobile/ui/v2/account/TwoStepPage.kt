@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.echoledger.mobile.R
 import com.echoledger.mobile.account.AccountFormat
@@ -74,6 +75,20 @@ fun copySecret(context: Context, label: String, text: String) = SecretClip.copy(
  */
 class TwoStepModel : ViewModel() {
     var step by mutableStateOf<TwoStepStep>(TwoStepStep.Overview)
+
+    /** The sign-outs seen when [step] was last good: after another one, the key and the codes are forgotten. */
+    private var seen = com.echoledger.mobile.account.SignOuts.signOuts.value
+
+    init {
+        viewModelScope.launch {
+            com.echoledger.mobile.account.SignOuts.signOuts.collect { now ->
+                if (now != seen) {
+                    seen = now
+                    step = TwoStepStep.Overview
+                }
+            }
+        }
+    }
 }
 
 /**
