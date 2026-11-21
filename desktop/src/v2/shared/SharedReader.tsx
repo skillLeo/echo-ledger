@@ -199,9 +199,11 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
   // Space plays or pauses, the arrows jump 5 s and Shift with an arrow 10 s; Cmd/Ctrl+F opens Find. Never while typing.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keys.current = (e: KeyboardEvent) => {
+    // Nothing to find (no transcript): Cmd/Ctrl+F is left to app search, as on the recording page.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f" && !e.altKey && !inField(e.target)) {
+      if (!segments.length) return;
       e.preventDefault();
-      if (segments.length) setFindOpen(true);
+      setFindOpen(true);
       return;
     }
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || inField(e.target)) return;
