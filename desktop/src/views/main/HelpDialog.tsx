@@ -22,7 +22,7 @@ export function windowKeys(platform: string): readonly (readonly [string, string
     [PLAYER_KEYS.toggle, "Play or pause the open recording"],
     [`${PLAYER_KEYS.back5} / ${PLAYER_KEYS.forward5}`, "Back or forward 5 seconds"],
     [`${PLAYER_KEYS.back10} / ${PLAYER_KEYS.forward10}`, "Back or forward 10 seconds"],
-    [`${mod}F`, "Find in the open transcript"],
+    [`${mod}F`, "Find in the open transcript (in the new design, search when no recording is open)"],
     ["[", "Collapse or expand the sidebar"],
     ["?", "This list"],
   ];
