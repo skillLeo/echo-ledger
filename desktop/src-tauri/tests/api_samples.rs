@@ -4,8 +4,8 @@
 use std::path::PathBuf;
 
 use desktop_lib::net::models::{
-    AccountDto, AccountExport, CompleteResponse, CreateSessionResponse, Entitlements, LibraryResponse, RecordingUpload, RegisterResponse,
-    ServerConfig, SttTokenResponse,
+    AccountDto, AccountExport, CompleteResponse, CreateSessionResponse, Entitlements, LibraryResponse, ListDeleted, ListResponse, ListsResponse,
+    RecordingUpload, RegisterResponse, ServerConfig, SttTokenResponse,
 };
 use desktop_lib::translate::protocol::LiveTranslateToken;
 use serde::de::DeserializeOwned;
@@ -38,6 +38,12 @@ fn the_desktop_reads_every_real_answer_it_has_a_model_for() {
     reads::<LibraryResponse>("library", &mut failures);
     reads::<LibraryResponse>("library_folder", &mut failures);
     reads::<Entitlements>("entitlements", &mut failures);
+    // Since 2.0.0-m: lists.
+    reads::<ListsResponse>("lists", &mut failures);
+    reads::<ListsResponse>("list_order", &mut failures);
+    reads::<ListResponse>("list_create", &mut failures);
+    reads::<ListResponse>("list_update", &mut failures);
+    reads::<ListDeleted>("list_delete", &mut failures);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
