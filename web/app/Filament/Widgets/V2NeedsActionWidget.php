@@ -6,7 +6,7 @@ namespace App\Filament\Widgets;
 
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Support\ConsoleV2;
-use App\Filament\Support\DismissedBanners;
+use App\Filament\Support\V2DismissedBanners;
 use App\Models\User;
 use App\Services\LibraryOrganiser;
 use App\Services\Workspaces\CurrentWorkspace;
@@ -16,7 +16,7 @@ use Filament\Widgets\Widget;
  * Since v2.0 (docs/PLAN_V2_PARITY.md section 2, WEB-HOM-005): what needs the person, as one quiet line on Home, only in
  * the new design and only when something does: recordings waiting for a decision, failed uploads and recordings not
  * transcribed yet, each a link to its Library view. The counts are the Library's own (LibraryOrganiser). × closes it
- * until one of them rises or a new one appears (DismissedBanners, the desktop's rule).
+ * until one of them rises or a new one appears (V2DismissedBanners, the desktop's rule).
  */
 class V2NeedsActionWidget extends Widget
 {
@@ -49,7 +49,7 @@ class V2NeedsActionWidget extends Widget
     {
         $user = auth()->user();
         if ($user instanceof User) {
-            DismissedBanners::dismiss($user, 'home', $seen, self::counts());
+            V2DismissedBanners::dismiss($user, 'home', $seen, self::counts());
         }
     }
 
@@ -58,7 +58,7 @@ class V2NeedsActionWidget extends Widget
     {
         $user = auth()->user();
 
-        return DismissedBanners::hidden($user instanceof User ? $user : null, 'home', self::counts());
+        return V2DismissedBanners::hidden($user instanceof User ? $user : null, 'home', self::counts());
     }
 
     /**
