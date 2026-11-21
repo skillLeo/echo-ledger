@@ -103,7 +103,8 @@ class Activity extends Page
         $groups = ['needs' => [], 'today' => [], 'earlier' => []];
         $notifications = $this->user()?->notifications()->latest()->limit(self::LIMIT)->get() ?? collect();
         foreach ($notifications as $notification) {
-            $item = ActivityFeed::payload($notification);
+            // In the reader's language (W-218); notifications made before keep their stored words.
+            $item = [...ActivityFeed::payload($notification), ...ActivityFeed::localized($notification)];
             $at = $notification->created_at?->copy()->setTimezone($zone);
             // In the console's language (W-213: "17 نومبر 2026 · 11:42 صبح"; English reads exactly as before).
             $item += [

@@ -279,7 +279,7 @@ final class PaymentProofs
         $user = $request->user;
         $this->audit->record('upgrade_receipt_requested', $staff->id, $request, "New receipt asked for {$request->reference_code} of ".$user->email);
         Mail::to($user->email)->queue(new UpgradeReceiptRequestedMail($plan, (string) $request->reference_code, $note, UpgradeRequests::accountUrl()));
-        app(ActivityFeed::class)->post($user, 'upgrade_receipt_requested', "We need another receipt for {$plan}", $note, null, 'heroicon-o-document-magnifying-glass');
+        app(ActivityFeed::class)->post($user, 'upgrade_receipt_requested', ActivityFeed::line('We need another receipt for :plan', ['plan' => $plan]), $note, null, 'heroicon-o-document-magnifying-glass');
 
         return $request;
     }
