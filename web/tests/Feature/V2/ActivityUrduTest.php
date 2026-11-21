@@ -51,7 +51,7 @@ function w218Post(object $test): void
     $feed->post($test->owner, 'upload_failed', ActivityFeed::line('Upload failed — retry'),
         ActivityFeed::line(':title did not finish uploading. The device that recorded it can send it again.', ['title' => 'Weekly sync']), null, 'heroicon-o-arrow-up-tray');
     $feed->post($test->owner, 'budget_warn', ActivityFeed::line('Transcription at :percent% of the monthly limit', ['percent' => 80]),
-        ActivityFeed::line(':minutes minutes used this month.', ['minutes' => 412]), null, 'heroicon-o-chart-bar');
+        ActivityFeed::plural(':minutes minute used this month.|:minutes minutes used this month.', 412, ['minutes' => 412]), null, 'heroicon-o-chart-bar');
 }
 
 it('shows the notifications in Urdu, with the names isolated and the full stop at the end of the sentence', function () {
@@ -124,16 +124,36 @@ it('says a missed recording in Urdu, and in English as before', function () {
     expect(preg_replace('/[\x{2066}-\x{2069}]/u', '', ActivityFeed::text($browser->activityLine())))->toBe('براؤزر میں کال · وجہ معلوم نہیں');
 });
 
-it('has Urdu for every line the feed writes', function () {
-    $lines = [
-        'It can now record, sync and see the library.', 'Transcript ready', 'Transcription failed', 'Missed recording', 'Upload failed — retry',
-        ':title did not finish uploading. The device that recorded it can send it again.', 'Monthly transcription limit reached',
-        'New transcripts wait until the limit is raised in Settings or the month ends.', 'Transcription at :percent% of the monthly limit',
-        ':minutes minutes used this month.', 'Storage of your plan used up', 'AI credits of your plan used up',
+it('says one minute and many minutes, in English and in Urdu', function () {
+    $one = ActivityFeed::plural(':minutes minute used this month.|:minutes minutes used this month.', 1, ['minutes' => 1]);
+    $many = ActivityFeed::plural(':minutes minute used this month.|:minutes minutes used this month.', 412, ['minutes' => 412]);
+    expect(ActivityFeed::text($one, 'en'))->toBe('1 minute used this month.')->and(ActivityFeed::text($many, 'en'))->toBe('412 minutes used this month.');
+
+    app()->setLocale('ur');
+    $bare = fn (string $t): string => (string) preg_replace('/[\x{2066}-\x{2069}]/u', '', $t);
+    expect($bare(ActivityFeed::text($one)))->toBe('اس مہینے 1 منٹ استعمال ہوا۔')->and($bare(ActivityFeed::text($many)))->toBe('اس مہینے 412 منٹ استعمال ہوئے۔')
+        // A notification stored before the plural still reads (its key stays in lang/ur.json).
+        ->and($bare(ActivityFeed::text(ActivityFeed::line(':minutes minutes used this month.', ['minutes' => 5]))))->toBe('اس مہینے 5 منٹ استعمال ہوئے۔')
+        ->and($bare(ActivityFeed::text(ActivityFeed::line(':name sent you :title', ['name' => 'Ana', 'title' => 'Call']))))->toBe('Ana نے آپ کو Call بھیجا');
+});
+
+it('has Urdu for every line the feed writes, read from the code itself', function () {
+    // Every literal line in app/ (ActivityFeed::line, ::plural and self::line), so a new one cannot be missed.
+    $code = '';
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(app_path())) as $file) {
+        if ($file->isFile() && $file->getExtension() === 'php') {
+            $code .= (string) file_get_contents($file->getPathname());
+        }
+    }
+    preg_match_all("/(?:ActivityFeed|self)::(?:line|plural)\\('((?:[^'\\\\]|\\\\.)+)'/", $code, $m);
+    $lines = array_values(array_unique(array_map('stripslashes', $m[1])));
+    expect($lines)->toContain(':title: :reason')->toContain(':call · :length · :reason')->toContain('Call')->toContain(':name signed in');
+
+    $lines = [...$lines,
+        // Chosen at run time.
+        'Storage of your plan used up', 'AI credits of your plan used up', 'Storage at :percent% of your plan', 'AI credits at :percent% of your plan',
         'New recordings stay on the device until there is room or the plan is bigger.', 'Project notes and Ask wait until next month or a bigger plan.',
-        'Storage at :percent% of your plan', 'AI credits at :percent% of your plan', ':size used.', ':amount used this month.', ':name sent you :title',
-        'Open it in Shared with me.', 'You are on :plan now', 'Until :date. Thank you!', 'Thank you! Everything in it is on.',
-        'Your request for :plan was declined', 'Write to us if you have a question.', 'We need another receipt for :plan', 'Call in a browser', ':app call',
+        'Phone call', 'Voice note',
         ...array_values(MissedRecording::REASONS),
         ...array_map(fn (TranscriptErrorCode $c): string => TranscriptErrorCode::plainWords($c), TranscriptErrorCode::cases()),
     ];
@@ -141,6 +161,8 @@ it('has Urdu for every line the feed writes', function () {
     expect(array_values(array_filter($lines, fn (string $line): bool => ! isset($urdu[$line]))))->toBe([]);
     foreach ($lines as $line) {
         // Urdu ends a sentence with ۔, never with a Latin full stop.
-        expect(str_ends_with($urdu[$line], '.'))->toBeFalse("{$line} ends with a Latin full stop in Urdu");
+        foreach (explode('|', (string) $urdu[$line]) as $form) {
+            expect(str_ends_with($form, '.'))->toBeFalse("{$line} ends with a Latin full stop in Urdu");
+        }
     }
 });
