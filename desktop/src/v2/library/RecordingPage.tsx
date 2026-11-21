@@ -6,7 +6,7 @@
 // transcript: Show as (Roman Urdu · اردو · English · Original), as classic.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  api, errorMessage, type ExportFormat, type LibraryItem, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
+  api, errorMessage, type ExportFormat, type LibraryItem, type TranscriptionLanguage, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
   type TranscriptViewsState,
 } from "../../lib/ipc";
 import { confirmAction } from "../../lib/confirm";
@@ -19,7 +19,7 @@ import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKe
 import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
 import { defaultViewOf, improvingView, transcribingLine, viewPercent } from "../../lib/progress";
 import { usePoll } from "../../lib/usePoll";
-import { failureLine, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn } from "../../lib/languages";
+import { canTryAgain, failureLine, languageLabel, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn } from "../../lib/languages";
 import { PLAYBACK_EXPIRED } from "../shared/SharedReader";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
@@ -59,6 +59,8 @@ export type RecordingPageProps = {
   menu: (own: RecordingMenuParts) => MenuItem[];
   /** What the page read about the transcript's views, for the recording's row in the Library. */
   onViews?: (views: TranscriptViewsState) => void;
+  /** The recording was renamed here (its title clicked): the Library shows the new title at once. */
+  onRenamed?: (item: Partial<LibraryItem> & { id: string }) => void;
 };
 
 const SPEEDS = ["0.5", "0.75", "1", "1.25", "1.5", "1.75", "2"];
@@ -72,8 +74,11 @@ type ShowAs = "original" | TranscriptView;
 const inField = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"]:not(.el-drawer), [role="alertdialog"], [role="menu"], [role="listbox"]'));
 
-export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject, onViews }: RecordingPageProps) {
+export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject, onViews, onRenamed }: RecordingPageProps) {
   const [sharing, setSharing] = useState(false);
+  // Rename by clicking the title (classic's): Enter or leaving the field saves, Esc cancels.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const renameDone = useRef(false);
   const [tab, setTab] = useState<Tab>("transcript");
   const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string>; bookmarks: Bookmark[]; sizeBytes: number | null }>>({ state: "loading" });
   // An expired playback link is asked for again once (classic's); a second failure says so.
@@ -298,6 +303,37 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const failureCode = tDetail?.status === "failed" ? tDetail.error_code ?? null : item.transcript?.final_error_code ?? null;
   const liveLine = tDetail?.kind === "live"
     ? `Live captions (final transcript pending${partsText(item.transcript?.final_progress) ? ` · ${partsText(item.transcript?.final_progress)}` : ""})` : null;
+  const saveTitle = async () => {
+    if (renaming === null || renameDone.current) return;
+    renameDone.current = true;
+    const next = renaming.trim();
+    setRenaming(null);
+    if (next === (item.title?.trim() ?? "")) return;
+    try {
+      const saved = await api.organiseSession(item.id, { title: next || null });
+      onRenamed?.({ id: item.id, title: saved?.data?.title ?? next, title_auto: saved?.data?.title_auto ?? false });
+      onMessage("Renamed");
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
+  const startRename = () => {
+    renameDone.current = false;
+    setRenaming(item.title?.trim() ?? "");
+  };
+  /** Try again after a failed transcription: the same language as before (classic's). */
+  const tryAgain = async () => {
+    const language = (item.language ?? null) as TranscriptionLanguage | null;
+    setBusy(true);
+    try {
+      await api.retranscribe(item.id, language);
+      onMessage(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   /** A label's × on the page: the recording keeps its other labels ("Label removed"). */
   const removeLabel = async (label: string) => {
     try {
@@ -470,7 +506,21 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack} aria-keyshortcuts="Escape">Library</Button>
       <header className="el-page__head el-page__head--top">
         <div className="el-page__titles">
-          <h1 className="el-title-l" dir="auto">{item.title?.trim() || "Recording"}</h1>
+          <span className="el-visually-hidden" id="el-recording-rename-hint">Press the title to rename the recording</span>
+          {renaming !== null ? (
+            <input className="el-title-l el-recording__title-field" aria-label="Recording title" dir="auto" value={renaming} autoFocus maxLength={200}
+              onChange={(e) => setRenaming(e.target.value)} onBlur={() => void saveTitle()} onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); void saveTitle(); }
+                if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); renameDone.current = true; setRenaming(null); }
+              }} />
+          ) : (
+            <h1 className="el-title-l" dir="auto">
+              <button type="button" className="el-recording__title" title="Click to rename" aria-describedby="el-recording-rename-hint" onClick={startRename}>
+                {item.title?.trim() || "Recording"}
+              </button>
+            </h1>
+          )}
           <p className="el-page__meta el-secondary">
             <SourceAvatar item={item} size="sm" />
             <span dir="auto">{meta}</span>
@@ -602,8 +652,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : "Not transcribed yet"}
               body={state === "failed" ? `${failureLine(failureCode)} Transcribe it again to read, search and share what was said.`
                 : `Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
-              action={<Button variant="primary" loading={busy} loadingLabel="Starting…"
-                onClick={() => setTranscribeOpen(true)}>Transcribe</Button>} />
+              action={state === "failed" && canTryAgain(failureCode)
+                ? <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => void tryAgain()}>Try again</Button>
+                : <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => setTranscribeOpen(true)}>Transcribe</Button>} />
           )
         ) : (
           <dl className="el-details">

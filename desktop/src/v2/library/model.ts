@@ -6,6 +6,7 @@ import { TRASH_KEEP_HOURS_FALLBACK, hoursWords } from "../../lib/trash";
 import { inSmartView } from "../../lib/organise";
 import { dayGroup, itemState, recordingName, searchItems, sortItems, type ItemState } from "../../lib/library";
 import { formatDuration, formatTime, rowDate, sourceAppLabel } from "../../lib/format";
+import { partsText } from "../../lib/languages";
 
 /** The saved views (classic's smart views and the new design's Untranscribed), and Trash. */
 export type SavedView = "all" | "today" | "this_week" | "untranscribed" | "waiting" | "pinned" | "bookmarked" | "failed" | "trash";
@@ -89,9 +90,12 @@ export function rowModel(item: LibraryItem, now: Date = new Date(), views: Views
   // A ready transcript whose default view is still written says "Converting to Roman Urdu… 60%" in place of its first
   // words (they come in Urdu script until then); one that could not be written says so before them.
   const converting = state === "ready" ? rowViewsLine(views) : null;
+  // Transcribing says which part it is on (classic's step line).
+  const parts = state === "processing" ? partsText(item.transcript?.final_progress) : null;
+  const words = parts ? `Transcribing… ${parts}` : STATE_WORDS[state as Exclude<ItemState, "ready">];
   const base = converting?.state === "making" ? converting.text
     : state === "ready" ? [converting?.text, preview ?? source ?? ""].filter(Boolean).join(" · ")
-      : waiting ? (source ?? "") : [source, STATE_WORDS[state]].filter(Boolean).join(" · ");
+      : waiting ? (source ?? "") : [source, words].filter(Boolean).join(" · ");
   // Classic's sub-line after it: the project and how many bookmarks (the length is at the row's end).
   const marks = item.marker_count ?? 0;
   const meta = [base, item.client?.name, marks > 0 ? (marks === 1 ? "1 bookmark" : `${marks} bookmarks`) : null].filter(Boolean).join(" · ");

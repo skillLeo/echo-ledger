@@ -909,6 +909,7 @@ export default function MainApp() {
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
             shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
             onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={() => setHelp(true)}
+            onAdmin={account?.super_admin === true ? () => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true)) : undefined}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
             notices={<Suspense fallback={null}><div className="el-root el-embedded">
               <AfterCallNoticeV2 text={status.afterCallNotice} onStatus={setStatus} />

@@ -76,6 +76,8 @@ export type ShellProps = {
   onSearch?: () => void;
   searchKeys?: string;
   onHelp?: () => void;
+  /** The super admin's Admin panel on the website (classic's avatar menu); none for everyone else. */
+  onAdmin?: () => void;
   /** The sub-lists, as classic's sidebar: pinned projects under Projects, Shared's places under Library. */
   pinnedProjects?: readonly { id: string; name: string }[];
   projectId?: string | null;
@@ -85,7 +87,7 @@ export type ShellProps = {
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, pinnedProjects = [], projectId = null, onProject, shared, children }: ShellProps) {
+export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, onAdmin, pinnedProjects = [], projectId = null, onProject, shared, children }: ShellProps) {
   // One press records or stops: while that is under way (the core answering, then the status saying so) more presses
   // and held-down keys do nothing, so a double click never starts and stops at once.
   const [pressing, setPressing] = useState<{ from: boolean } | null>(null);
@@ -150,6 +152,7 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
             {item("activity", "Activity", Icons.BellIcon, activity ? activity : undefined)}
             {item("settings", "Settings", Icons.SettingsIcon)}
             {onHelp && <NavItem icon={Icons.HelpIcon} label="Help & shortcuts" onClick={onHelp} />}
+            {onAdmin && <NavItem icon={Icons.LinkIcon} label="Admin panel" onClick={onAdmin} />}
             {me && (
               <button type="button" className="el-shell__me" onClick={() => go("settings")} title={me.email} aria-describedby="el-shell-me-hint">
                 <Avatar initials={initials(me.name, me.email)} size="sm" />
