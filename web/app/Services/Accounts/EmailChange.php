@@ -21,6 +21,7 @@ use Filament\Facades\Filament;
 use Filament\Panel;
 use Illuminate\Auth\Passwords\PasswordBroker;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,15 @@ final class EmailChange
     public const MINUTES = 60;
 
     public const CODE_TRIES = 5;
+
+    /** Whether users.email_restore_address was found in this process (isReserved()). */
+    private static ?bool $hasReservationColumn = null;
+
+    /** Forgets that the column was found (a test that drops it, a schema changed in a long-running process). */
+    public static function forgetSchema(): void
+    {
+        self::$hasReservationColumn = null;
+    }
 
     /** Days the old address's "put it back" link works. */
     public const RESTORE_DAYS = 7;
@@ -235,9 +245,13 @@ final class EmailChange
      */
     public static function isReserved(string $email, ?int $exceptUserId = null): bool
     {
-        // SQLite would read an unknown column's quoted name as a string and answer "not reserved": ask first.
-        if (! Schema::hasColumn('users', 'email_restore_address')) {
-            throw new RuntimeException('users.email_restore_address is missing: run the migrations of 2.0.0-l.');
+        // SQLite would read an unknown column's quoted name as a string and answer "not reserved": ask first, once a
+        // process when the column is there (a missing one is asked every time, and errors every time).
+        if (self::$hasReservationColumn !== true) {
+            if (! Schema::hasColumn('users', 'email_restore_address')) {
+                throw new RuntimeException('users.email_restore_address is missing: run the migrations of 2.0.0-l.');
+            }
+            self::$hasReservationColumn = true;
         }
 
         return User::query()->where('email_restore_address', Str::lower(trim($email)))->where('email_restore_until', '>', now())
@@ -307,27 +321,12 @@ final class EmailChange
      */
     public function restore(User $user, string $nonce): bool
     {
-        $done = DB::transaction(function () use ($user, $nonce): ?array {
-            $fresh = User::query()->whereKey($user->id)->lockForUpdate()->first();
-            $window = $fresh instanceof User ? self::window($fresh) : null;
-            // An account with the address made before the change blocks it (it was not reserved then); one made after it
-            // can only be a lookalike that slipped past the reservation, and does not.
-            if (! $fresh instanceof User || $window === null || ! hash_equals($window['nonce'], $nonce)
-                || User::query()->whereKeyNot($user->id)->where('email', $window['to'])->where('created_at', '<=', Carbon::createFromTimestamp($window['changed_at']))->exists()) {
-                return null;
-            }
-            $was = $fresh->email;
-            $fresh->forceFill([
-                'email' => $window['to'], 'password' => Str::password(64), 'has_password' => false, 'google_id' => null,
-                'app_authentication_secret' => null, 'app_authentication_recovery_codes' => null,
-                'email_restore' => ['to' => $window['to'], 'restored_at' => now()->getTimestamp(), 'lock_until' => now()->addDay()->getTimestamp(), 'awaiting_reset' => true],
-                'email_restore_address' => null, 'email_restore_until' => null,
-            ])->save();
-            $fresh->markEmailAsVerified();
-            Passkey::query()->where('user_id', $fresh->id)->delete();
-
-            return [$fresh, $window, $was];
-        });
+        try {
+            $done = $this->putBack($user, $nonce);
+        } catch (UniqueConstraintViolationException) {
+            // The database still takes the address for another account's: the link cannot work, as for any other reason.
+            return false;
+        }
         if ($done === null) {
             return false;
         }
@@ -343,6 +342,38 @@ final class EmailChange
         $user->setRawAttributes($fresh->getAttributes(), true);
 
         return true;
+    }
+
+    /**
+     * The restore's own writes, in one transaction under a lock of the account's row.
+     *
+     * @return array{0: User, 1: array{to: string, changed_at: int, until: int, nonce: string}, 2: string}|null
+     */
+    private function putBack(User $user, string $nonce): ?array
+    {
+        return DB::transaction(function () use ($user, $nonce): ?array {
+            $fresh = User::query()->whereKey($user->id)->lockForUpdate()->first();
+            $window = $fresh instanceof User ? self::window($fresh) : null;
+            // An account with the address made before the change blocks it (it was not reserved then); one made after it
+            // can only be a lookalike that slipped past the reservation, and does not.
+            if (! $fresh instanceof User || $window === null || ! hash_equals($window['nonce'], $nonce)
+                || User::query()->whereKeyNot($user->id)->where('email', $window['to'])->where('created_at', '<=', Carbon::createFromTimestamp($window['changed_at']))->exists()) {
+                return null;
+            }
+            $was = $fresh->email;
+            $fresh->forceFill([
+                'email' => $window['to'], 'password' => Str::password(64), 'has_password' => false, 'google_id' => null,
+                'app_authentication_secret' => null, 'app_authentication_recovery_codes' => null,
+                'email_restore' => ['to' => $window['to'], 'restored_at' => now()->getTimestamp(), 'lock_until' => now()->addDay()->getTimestamp(), 'awaiting_reset' => true],
+                'email_restore_address' => null, 'email_restore_until' => null,
+            ])->save();
+            // The model marks a new password as one the owner knows; this one nobody knows, whatever the account had.
+            $fresh->forceFill(['has_password' => false])->saveQuietly();
+            $fresh->markEmailAsVerified();
+            Passkey::query()->where('user_id', $fresh->id)->delete();
+
+            return [$fresh, $window, $was];
+        });
     }
 
     /** DELETE /api/account/email: ends a change waiting for its confirmation; nothing to do is not an error. */

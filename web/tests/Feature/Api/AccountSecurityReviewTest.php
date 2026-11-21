@@ -275,6 +275,7 @@ describe('the old address can undo an email change (major 1, and the reviews of 
             $table->dropColumn('email_restore_address');
         });
         DB::statement('ALTER TABLE users ADD COLUMN email_restore_address varchar(255) COLLATE el_unicode_ci');
+        EmailChange::forgetSchema();
 
         $user = Fx::user(['email' => 'john@example.test']);
         [, $token] = $this->enroll($user);
@@ -309,6 +310,7 @@ describe('the old address can undo an email change (major 1, and the reviews of 
     });
 
     it('errors, never allows, when the reservation column is missing', function () {
+        EmailChange::forgetSchema();
         Schema::table('users', function ($table): void {
             $table->dropIndex(['email_restore_address']);
             $table->dropColumn('email_restore_address');
@@ -544,5 +546,51 @@ describe('the minor findings', function () {
         $this->postJson('/api/auth/password', ['email' => 'farah@example.test', 'password' => 'a-good-password-42', 'otp' => $code, 'name' => 'S25', 'platform' => 'android'])
             ->assertStatus(422)->assertJsonPath('code', 'invalid_otp');
         expect(DB::table('devices')->where('user_id', $user->id)->count())->toBe(0)->and(Device::query()->count())->toBe(0);
+    });
+});
+
+describe('the final review of the restore (minors)', function () {
+    it('keeps an account with no password of its own at has_password false after the restore', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        $user->forceFill(['has_password' => false])->save();
+        $user->forceFill(['email' => 'new@example.test'])->save();
+        app(EmailChange::class)->tellOldAddress($user->fresh(), 'farah@example.test');
+
+        expect(app(EmailChange::class)->restore($user->fresh(), (string) EmailChange::window($user->fresh())['nonce']))->toBeTrue()
+            ->and($user->fresh()->has_password)->toBeFalse()->and($user->fresh()->email)->toBe('farah@example.test');
+    });
+
+    it('answers the link no longer works (410), not a server error, when the database still refuses the address', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        [, $token] = $this->enroll($user);
+        $url = reviewChangeEmail($this, $token);
+        // Another account holds the address in a way the checks before cannot see (straight into the table, dated
+        // after the change, so the lookalike rule lets it pass): the unique index refuses the restore.
+        DB::table('users')->insert(['name' => 'Squatter', 'email' => 'farah@example.test', 'password' => 'x', 'created_at' => now()->addMinute(), 'updated_at' => now()]);
+        app('auth')->forgetGuards();
+
+        $this->post($url)->assertStatus(410)->assertSee('This link no longer works');
+        expect($user->fresh()->email)->toBe('new@example.test');
+    });
+
+    it('asks the schema for the column once a process, and hides the reserved address', function () {
+        EmailChange::forgetSchema();
+        $asked = 0;
+        DB::listen(function ($query) use (&$asked): void {
+            $sql = strtolower($query->sql);
+            if (str_contains($sql, 'pragma') || str_contains($sql, 'information_schema') || str_contains($sql, 'sqlite_master')) {
+                $asked++;
+            }
+        });
+        EmailChange::isReserved('someone@example.test');
+        $first = $asked;
+        foreach (range(1, 3) as $_) {
+            EmailChange::isReserved('someone@example.test');
+        }
+        expect($first)->toBeGreaterThan(0)->and($asked)->toBe($first)
+            ->and((new User)->getHidden())->toContain('email_restore_address');
+        $user = Fx::user(['email' => 'farah@example.test']);
+        $user->forceFill(['email_restore_address' => 'x@example.test'])->save();
+        expect($user->fresh()->toArray())->not->toHaveKey('email_restore_address');
     });
 });
