@@ -12,6 +12,8 @@ use App\Models\User;
 use App\Services\SettingsRepository;
 use App\Stt\LanguageChoice;
 use Closure;
+use DateTimeImmutable;
+use DateTimeZone;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Grouping\Group;
 use Illuminate\Database\Eloquent\Builder;
@@ -191,21 +193,49 @@ final class LibraryView
             return self::$buckets[$id];
         }
         $key = self::keyOf($id);
+        $raw = self::rawKeyOf($id);
         $query = $livewire->getFilteredTableQuery();
         $buckets = [];
         if ($query !== null && $key !== null) {
             $columns = array_map(fn (string $c): string => 'capture_sessions.'.$c, ['id', ...self::COUNT_COLUMNS[$id]]);
             foreach ((clone $query)->withoutEagerLoads()->reorder()->toBase()->select($columns)->get() as $row) {
                 $values = (array) $row;
-                $buckets[$key((new CaptureSession)->setRawAttributes($values))][] = (string) $values['id'];
+                // Since U9b (2,000+ recordings): the key straight from the row, as the group itself works it out, rather
+                // than a model and Filament's evaluation for each one (seconds on a large library).
+                $buckets[$raw !== null ? $raw($values) : $key((new CaptureSession)->setRawAttributes($values))][] = (string) $values['id'];
             }
         }
 
         return self::$buckets[$id] = $buckets;
     }
 
+    /**
+     * A group's key from a row's raw columns (COUNT_COLUMNS), the same as the group's own key (keyOf) without a model:
+     * the day in the console's time zone, or Pinned first in the new Library; the app; the project or none; the
+     * language or auto; the status; the device or none:<kind>. LibraryViewTest holds the two to the same keys.
+     *
+     * @return (Closure(array<string, mixed>): string)|null
+     */
+    public static function rawKeyOf(string $id): ?Closure
+    {
+        $stored = new DateTimeZone((string) config('app.timezone', 'UTC'));
+        $zone = new DateTimeZone(app(SettingsRepository::class)->displayTimezone());
+        $pinnedFirst = ConsoleV2::library();
+
+        return match ($id) {
+            'date' => fn (array $v): string => $pinnedFirst && (bool) $v['pinned'] ? self::PINNED
+                : (new DateTimeImmutable((string) $v['started_at'], $stored))->setTimezone($zone)->format('Y-m-d'),
+            'app' => fn (array $v): string => (string) $v['source_app'],
+            'project' => fn (array $v): string => $v['client_id'] !== null ? (string) $v['client_id'] : 'none',
+            'language' => fn (array $v): string => LanguageChoice::normalize(is_string($v['language']) ? $v['language'] : null) ?? 'auto',
+            'status' => fn (array $v): string => (string) $v['status'],
+            'device' => fn (array $v): string => $v['device_id'] !== null ? (string) $v['device_id'] : 'none:'.$v['source_device'],
+            default => null,
+        };
+    }
+
     /** @return (Closure(CaptureSession): string)|null */
-    private static function keyOf(string $id): ?Closure
+    public static function keyOf(string $id): ?Closure
     {
         foreach (self::groups() as $group) {
             if ($group->getId() === $id) {
@@ -235,7 +265,8 @@ final class LibraryView
             'opened' => $query->orderByRaw('CASE WHEN (SELECT MAX(opened_at) FROM session_opens WHERE session_opens.capture_session_id = capture_sessions.id AND session_opens.user_id = ?) IS NULL THEN 1 ELSE 0 END', [(int) $userId])
                 ->orderByRaw('(SELECT MAX(opened_at) FROM session_opens WHERE session_opens.capture_session_id = capture_sessions.id AND session_opens.user_id = ?) DESC', [(int) $userId])
                 ->orderByDesc($started),
-            default => $query->orderByDesc($started),
+            // The new Library breaks a tie by id, as the recording page's Previous / Next walk it.
+            default => ConsoleV2::library() ? $query->orderByDesc($started)->orderByDesc($query->qualifyColumn('id')) : $query->orderByDesc($started),
         };
     }
 

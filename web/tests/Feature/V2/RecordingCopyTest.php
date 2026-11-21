@@ -9,7 +9,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * The new recording page's Copy menu (docs/PLAN_V2_PARITY.md section 4): Copy text (without timestamps), with timestamps,
- * and Copy for AI with a header; the player writes the text exactly as classic's buttons do (filament.v2.copy, held to
+ * and Copy for AI with the apps' header (V2CopyForAi::header); the player writes the text exactly as classic's buttons do (filament.v2.copy, held to
  * classic by tests/js/v2-copy.test.mjs). Classic keeps its player buttons only.
  */
 
@@ -31,7 +31,8 @@ it('offers Copy ▾ beside Share with the three copies, and the header for AI', 
     expect($html)->toContain('window.elV2Copy = ')
         ->toContain('Copy with timestamps')->toContain('Copy for AI')->not->toContain('Copy without timestamps')
         ->toContain("window.elV2Copy('text'")->toContain("window.elV2Copy('ai'")
-        ->toContain('Recording: Payment terms')->toContain('People: Ahmed');
+        // The apps' header (desktop aiHeader, V2CopyForAi): "# Title", the date line, the people who speak, the language.
+        ->toContain('# Payment terms\\n')->toContain('People: Me')->not->toContain('Recording: Payment terms');
     expect(strpos($html, '>Share<'))->toBeLessThan(strpos($html, "window.elV2Copy('text'"));
 });
 
