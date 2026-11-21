@@ -6,6 +6,7 @@ namespace App\Filament\Support;
 
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
+use App\Enums\SourceDevice;
 use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
@@ -21,8 +22,8 @@ use Illuminate\Support\Carbon;
 final class V2RecordingRow
 {
     /**
-     * @return array{id: string, title: string, icon: string, source: string, line: string, time: string, full_time: string,
-     *     iso: string, length: string, status: array{label: string, tone: string, icon: string}|null}
+     * @return array{id: string, title: string, icon: string, source: string, line: string, device: string|null, pinned: bool,
+     *     time: string, full_time: string, iso: string, length: string, status: array{label: string, tone: string, icon: string}|null}
      */
     public static function for(CaptureSession $session): array
     {
@@ -31,13 +32,17 @@ final class V2RecordingRow
         $labels = $session->relationLoaded('labels') ? $session->labels->map(fn (SessionLabel $l): string => $l->label)->all() : [];
         $with = $session->client->name ?? (filled($session->caller_name) ? $session->caller_name : null);
         $source = self::source($session->source_app);
+        // The device it came from, as the classic row says it ("WhatsApp · Galaxy S25"); a web upload says so.
+        $device = $session->device !== null ? $session->device->name : ($session->source_device === SourceDevice::Web ? __('Web upload') : null);
 
         return [
             'id' => (string) $session->id,
             'title' => $session->displayTitle(),
             'icon' => self::glyph($session->source_app),
             'source' => $source,
-            'line' => implode(' · ', array_filter([$source, $with, $labels[0] ?? null])),
+            'line' => implode(' · ', array_filter([$source, $device, $with, $labels[0] ?? null])),
+            'device' => $device,
+            'pinned' => (bool) $session->pinned,
             'time' => self::time($at, $zone),
             'full_time' => $at->locale(app()->getLocale())->translatedFormat('j F Y, '.Shell::timeFormat()),
             'iso' => $session->started_at->toIso8601ZuluString(),

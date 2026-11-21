@@ -218,7 +218,7 @@ describe("the Live tab", () => {
     respond("translate_status", null);
     render(<LiveV2 status={makeStatus({ plan: { ...makeStatus().plan, liveTranslate: true } })} assistOn projects={[]} {...p} />);
     await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "Record now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record" }));
     fireEvent.click(screen.getByRole("button", { name: "Voice note" }));
     expect(p.onRecord).toHaveBeenCalled();
     expect(p.onVoiceNote).toHaveBeenCalled();

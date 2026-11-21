@@ -77,6 +77,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\HtmlString;
+use Illuminate\Support\Js;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use RuntimeException;
 
@@ -519,6 +520,8 @@ class ViewCaptureSession extends ViewRecord
         if (ConsoleV2::library()) {
             return [
                 $this->shareAction()->label(__('Share'))->icon(null)->labeledFrom(null)->outlined(),
+                // Since the parity plan (4): Copy ▾ beside Share.
+                $this->copyMenu(),
                 $this->fileUnderAction()->label(__('Move'))->color('gray')->outlined(),
                 DeleteAction::make()->label(__('Delete'))->icon(null)->color('danger')->outlined()
                     ->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
@@ -580,6 +583,37 @@ class ViewCaptureSession extends ViewRecord
                 DeleteAction::make()->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
             ])->icon(Heroicon::OutlinedEllipsisVertical)->color('gray'),
         ];
+    }
+
+    /**
+     * Copy ▾ of the new recording page (parity plan 4): the words, who said what, with timestamps, and Copy for AI with a
+     * short header (title, date, people, language). The player on the page writes the text (filament.v2.copy).
+     */
+    private function copyMenu(): ActionGroup
+    {
+        $copy = fn (string $name, string $label, string $mode): Action => Action::make($name)->label(__($label))
+            ->alpineClickHandler(fn (): string => 'window.elV2Copy('.Js::from($mode).', '.Js::from($mode === 'ai' ? $this->copyHeader() : '').')');
+
+        return ActionGroup::make([
+            $copy('copyText', 'Copy text', 'text'),
+            $copy('copyWithTimes', 'Copy with timestamps', 'times'),
+            $copy('copyForAi', 'Copy for AI', 'ai'),
+        ])->label(__('Copy'))->icon(Heroicon::OutlinedClipboardDocument)->button()->color('gray')->outlined()
+            ->visible(fn (): bool => $this->session()->finalTranscript?->status === TranscriptStatus::Completed);
+    }
+
+    /** Copy for AI's first lines: what the transcript is, so an AI reads it in context. */
+    private function copyHeader(): string
+    {
+        $session = $this->session();
+        $people = array_values(array_unique(array_filter([...array_values((array) ($session->speaker_names ?? [])), $session->caller_name])));
+
+        return implode("\n", array_filter([
+            __('Recording: :title', ['title' => $session->displayTitle()]),
+            __('Date: :date', ['date' => $session->started_at->copy()->timezone(app(SettingsRepository::class)->displayTimezone())->format('j M Y, H:i')]),
+            $people !== [] ? __('People: :people', ['people' => implode(', ', $people)]) : null,
+            __('Language: :language', ['language' => LanguageChoice::label($session->finalTranscript->language ?? $session->language)]),
+        ]));
     }
 
     /** Download: the audio, and the transcript as a file in the chosen Show as view (unsure words keep their marks). */

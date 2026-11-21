@@ -25,7 +25,7 @@ final class OrganiseController extends Controller
 {
     public function __construct(private readonly LibraryOrganiser $organiser, private readonly ProjectTree $projects) {}
 
-    /** PATCH /api/sessions/{id}: title, client folder, pin and labels; only the fields sent change. */
+    /** PATCH /api/sessions/{id}: title, client folder, pin, keep, important and labels; only the fields sent change. */
     public function update(Request $request, string $id): JsonResponse
     {
         $data = $request->validate([
@@ -33,6 +33,8 @@ final class OrganiseController extends Controller
             'client_id' => ['sometimes', 'nullable', 'string', 'size:26'],
             'pinned' => ['sometimes', 'boolean'],
             'keep' => ['sometimes', 'boolean'],
+            // Since 2.0.0-i: the person's flag.
+            'important' => ['sometimes', 'boolean'],
             'labels' => ['sometimes', 'array', 'max:50'],
             'labels.*' => ['nullable', 'string', 'max:200'],
             // Since v1.1.2: the recording's language (null / auto = automatic); used by its next final transcript.
@@ -42,13 +44,15 @@ final class OrganiseController extends Controller
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
-        /** @var array{title?: string|null, client_id?: string|null, pinned?: bool, keep?: bool, labels?: list<mixed>, language?: string|null} $data */
+        /** @var array{title?: string|null, client_id?: string|null, pinned?: bool, keep?: bool, important?: bool, labels?: list<mixed>, language?: string|null} $data */
         if (array_key_exists('language', $data)) {
             $session->update(['language' => LanguageChoice::normalize($data['language'])]);
             unset($data['language']);
         }
         $session = $this->organiser->update($session, $data);
-        $session->load(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels']);
+        $session->load(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels',
+            // Since 2.0.0-i the answer carries `opened` too, as the library lists it for this person.
+            'opens' => fn ($q) => $q->where('user_id', $this->device($request)->user_id)]);
 
         return response()->json(['data' => (new LibraryItemResource($session))->resolve($request)]);
     }
@@ -94,6 +98,18 @@ final class OrganiseController extends Controller
             'X-Content-Type-Options' => 'nosniff',
             'X-Export-Count' => (string) $file['count'],
         ]);
+    }
+
+    /** PUT /api/labels/color (since 2.0.0-i): the colour of one of the person's labels, or none. */
+    public function labelColor(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'label' => ['required', 'string', 'max:200'],
+            'color' => ['present', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ]);
+        $device = $this->device($request);
+
+        return response()->json($this->organiser->setLabelColor($device->workspace_id, $device->user_id, $data['label'], $data['color'] ?? null));
     }
 
     /** GET /api/library/views: how many recordings each smart view holds, and the labels in use. */

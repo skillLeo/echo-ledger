@@ -140,11 +140,14 @@ describe("the workspace switcher (v1.6, P4.3)", () => {
 });
 
 describe("the sidebar in a window too narrow for it", () => {
-  it("shows the rail under 640 px unless opened there, and the choice otherwise", async () => {
+  it("shows the rail under 780 px (a half screen) unless opened there, and the choice otherwise", async () => {
     const { AUTO_RAIL_BELOW, sidebarFolded } = await import("./shell");
-    expect(AUTO_RAIL_BELOW).toBe(640);
+    expect(AUTO_RAIL_BELOW).toBe(780);
     expect(sidebarFolded(false, 430, false)).toBe(true);
     expect(sidebarFolded(false, 430, true)).toBe(false);
+    // Half of a 1440 or 1512 pt screen: the rail, so the page keeps its width.
+    expect(sidebarFolded(false, 720, false)).toBe(true);
+    expect(sidebarFolded(false, 756, false)).toBe(true);
     expect(sidebarFolded(true, 860, false)).toBe(true);
     expect(sidebarFolded(false, 860, true)).toBe(false);
   });

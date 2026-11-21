@@ -63,6 +63,7 @@ use Illuminate\Support\Carbon;
  * @property SessionStatus $status
  * @property bool $pinned kept at the top of the library (B15)
  * @property bool $keep_forever never deleted by the retention rules (B17)
+ * @property bool $important flagged by the person (contract 2.0.0-i); changes nothing else
  * @property Carbon|null $media_erased_at when a deleted recording's audio and text were erased (end of the undo bin)
  * @property-read Collection<int, SessionLabel> $labels
  * @property-read Collection<int, Screen> $screens
@@ -95,7 +96,7 @@ class CaptureSession extends Model
 
     protected $fillable = [
         'workspace_id', 'user_id', 'device_id', 'client_id', 'filed_by', 'origin', 'client_ref', 'source_device', 'source_app', 'title', 'title_auto', 'language',
-        'started_at', 'ended_at', 'duration_ms', 'pauses', 'language_marks', 'speaker_names', 'status', 'pinned', 'keep_forever', 'final_provider',
+        'started_at', 'ended_at', 'duration_ms', 'pauses', 'language_marks', 'speaker_names', 'status', 'pinned', 'keep_forever', 'important', 'final_provider',
     ];
 
     /** @return BelongsTo<User, $this> */
@@ -383,6 +384,7 @@ class CaptureSession extends Model
             'pinned' => 'boolean',
             'title_auto' => 'boolean',
             'keep_forever' => 'boolean',
+            'important' => 'boolean',
             'media_erased_at' => 'datetime',
         ];
     }

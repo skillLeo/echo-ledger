@@ -55,6 +55,16 @@
         'inbox' => '<path d="M3.5 13.5 6.2 5.5h11.6l2.7 8M3.5 13.5V18a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5v-4.5M3.5 13.5h4.8l1.4 2.3h4.6l1.4-2.3h4.8"/>',
         'transcript' => '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z"/><path d="M9 9h2M9 13h6M9 17h6"/>',
         'move' => '<path d="M3.5 7a2 2 0 0 1 2-2h3.8l2 2.2h7.2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V7z"/><path d="M10 13h5M13 11l2 2-2 2"/>',
+        'star' => '<path d="m12 3.8 2.5 5.1 5.6.8-4 3.9.9 5.6-5-2.6-5 2.6.9-5.6-4-3.9 5.6-.8z" fill="'.$fill.'"/>',
+        'flag' => '<path d="M5.5 20.5V4.5M5.5 4.5h11l-2.2 4 2.2 4h-11" fill="'.$fill.'"/>',
+        'list' => '<path d="M9 6.5h11M9 12h11M9 17.5h11"/>'.$dot(4.8, 6.5).$dot(4.8, 12).$dot(4.8, 17.5),
+        'table' => '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/>',
+        'columns' => '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9.2 4.5v15M14.8 4.5v15"/>',
+        'group' => '<path d="M4 5.5h16M4 12.5h16"/><path d="M7 8.5h10M7 15.5h10M7 18.5h7"/>',
+        'plus' => '<path d="M12 5v14M5 12h14"/>',
+        'record' => '<circle cx="12" cy="12" r="8"/>'.$dot(12, 12, 4),
+        'activity' => '<path d="M3.5 12h3.8l2.4-6.5 4.6 13 2.4-6.5h3.8"/>',
+        'copy' => '<rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/>',
     ];
     $directional = in_array($name, ['chevron-end', 'chevron-start'], true);
 @endphp

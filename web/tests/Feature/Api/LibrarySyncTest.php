@@ -9,6 +9,7 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\LabelColor;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -173,15 +174,19 @@ describe('paging', function () {
         foreach (range(1, 30) as $i) {
             $session = sessionAged($this->owner, $i, ['client_id' => Client::factory()->create(['user_id' => $this->owner->id])->id]);
             $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'text' => "text {$i}"]);
+            // Since 2.0.0-i labels with a colour too, so the colours are counted.
+            $session->labels()->create(['label' => "Label {$i}"]);
         }
+        LabelColor::query()->create(['workspace_id' => $this->owner->current_workspace_id, 'user_id' => $this->owner->id, 'label_key' => 'label 1', 'color' => '#16a34a']);
         $this->app['auth']->forgetGuards();
         DB::flushQueryLog();
         DB::enableQueryLog();
 
         $this->asToken($this->token)->getJson('/api/library?limit=30')->assertOk();
 
-        // Since v1.6 one more, whatever the size: the suspend switch reads the device's person.
-        expect(count(DB::getQueryLog()))->toBeLessThan(13);
+        // Since v1.6 one more, whatever the size: the suspend switch reads the device's person. Since 2.0.0-i two more,
+        // whatever the size: the person's label colours and the workspace's retention (one query each, once a page).
+        expect(count(DB::getQueryLog()))->toBeLessThan(15);
     });
 });
 

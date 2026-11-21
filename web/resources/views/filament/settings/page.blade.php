@@ -4,6 +4,7 @@
 --}}
 @php
     use App\Filament\Auth\EditProfile;
+    use Illuminate\Support\Js;
 
     $context = $this->context();
     $searching = $this->isSearching();
@@ -13,29 +14,29 @@
 <x-filament-panels::page class="el-settings-page">
     <div class="el-settings-wrap">
         <div class="el-settings" data-mode="{{ $mode }}" data-page="{{ $this->subpage ?: 'overview' }}">
-            <nav class="el-settings-nav" aria-label="Settings">
+            <nav class="el-settings-nav" aria-label="{{ __('Settings') }}">
                 <div class="el-set-search" role="search" x-data
                     x-on:keydown.escape.prevent="$wire.clearSettingsSearch(); $refs.q.blur()"
                     x-on:keydown.down.prevent="window.elSettings?.move(1)" x-on:keydown.up.prevent="window.elSettings?.move(-1)"
                     x-on:keydown.enter.prevent="window.elSettings?.open()">
                     @svg('heroicon-o-magnifying-glass', ['aria-hidden' => 'true'])
-                    <input type="search" x-ref="q" wire:model.live.debounce.120ms="settingsQuery" placeholder="Search settings" aria-label="Search settings"
+                    <input type="search" x-ref="q" wire:model.live.debounce.120ms="settingsQuery" placeholder="{{ __('Search settings') }}" aria-label="{{ __('Search settings') }}"
                         autocomplete="off" spellcheck="false" aria-controls="el-set-results" data-settings-search>
                     @if ($this->settingsQuery !== '')
-                        <button type="button" class="el-set-clear" wire:click="clearSettingsSearch" aria-label="Clear">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
+                        <button type="button" class="el-set-clear" wire:click="clearSettingsSearch" aria-label="{{ __('Clear') }}">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
                     @endif
                 </div>
 
                 @foreach ($sections as $section)
-                    <x-el.section :title="$section['title']">
+                    <x-el.section :title="__($section['title'])">
                         @foreach ($section['rows'] as $row)
                             <a href="{{ $row['url'] }}" @class(['el-set-row', 'has-icon', 'el-set-nav-row']) @if ($row['current']) aria-current="page" @endif data-nav="{{ $row['page'] }}">
                                 @svg($row['icon'], ['class' => 'el-set-icon', 'aria-hidden' => 'true'])
-                                <span class="el-set-text"><span class="el-set-title">{{ $row['title'] }}</span></span>
+                                <span class="el-set-text"><span class="el-set-title">{{ __($row['title']) }}</span></span>
                                 @if ($searching && $row['count'] > 0)
                                     <span class="el-set-count" aria-label="{{ $row['count'] === 1 ? '1 result' : $row['count'].' results' }}">{{ $row['count'] }}</span>
                                 @elseif ($row['page'] === 'appearance')
-                                    <span class="el-set-value" x-data x-text="({ light: 'Light', dark: 'Dark' })[localStorage.getItem('filament:theme:mode')] ?? 'System'">System</span>
+                                    <span class="el-set-value" x-data x-text="({ light: {{ Js::from(__('Light')) }}, dark: {{ Js::from(__('Dark')) }} })[localStorage.getItem('filament:theme:mode')] ?? {{ Js::from(__('System')) }}">{{ __('System') }}</span>
                                 @elseif (filled($row['value']))
                                     <span class="el-set-value">{{ $row['value'] }}</span>
                                 @endif
@@ -49,7 +50,7 @@
                     <section class="el-set-section">
                         <div class="el-set-box">
                             <button type="button" id="setting-signout" tabindex="-1" class="el-set-row" wire:click="mountAction('signOut')">
-                                <span class="el-set-text"><span class="el-set-title">Sign out</span></span>
+                                <span class="el-set-text"><span class="el-set-title">{{ __('Sign out') }}</span></span>
                             </button>
                         </div>
                     </section>
@@ -65,7 +66,7 @@
                     @include('filament.settings.state-row')
                     @include('filament.settings.this-month')
                 @else
-                    <a href="{{ EditProfile::settingsUrl() }}" class="el-set-back el-set-only-narrow">@svg('heroicon-o-chevron-left', ['aria-hidden' => 'true']) Settings</a>
+                    <a href="{{ EditProfile::settingsUrl() }}" class="el-set-back el-set-only-narrow">@svg('heroicon-o-chevron-left', ['aria-hidden' => 'true']) {{ __('Settings') }}</a>
                     <h1 class="el-set-h1">{{ $this->getTitle() }}</h1>
                     {{ $this->content }}
                 @endif

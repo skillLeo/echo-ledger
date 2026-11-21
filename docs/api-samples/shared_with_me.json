@@ -1,7 +1,7 @@
 {
     "data": [
         {
-            "id": "01m6ye2pzngtxhnxm4hxnkn8kq",
+            "id": "01m7xfba7dwj2762ywctt8yzvd",
             "kind": "session",
             "from": {
                 "name": "Sample Owner",
@@ -9,11 +9,11 @@
             },
             "note": "Please look.",
             "title": "Retainer check-in, renamed",
-            "sent_at": "2026-11-08T20:37:28+00:00",
+            "sent_at": "2026-11-20T21:56:05+00:00",
             "saved_at": null,
             "session": {
-                "id": "01m6ye2p5g4pzdswx5zk8k6mqd",
-                "client_ref": "7f821531-fecc-4421-b541-6def5e83e13a",
+                "id": "01m7xfb6jh5gn4c9razwyqb7v3",
+                "client_ref": "d30342ed-ddb5-4ebb-9c5e-6e5fb2063166",
                 "deleted": false,
                 "source_device": "phone",
                 "source_device_label": "Phone",
@@ -26,15 +26,15 @@
                 "title": "Retainer check-in, renamed",
                 "title_auto": false,
                 "caller": null,
-                "started_at": "2026-11-07T10:15:00+00:00",
-                "ended_at": "2026-11-07T10:15:19+00:00",
+                "started_at": "2026-11-19T10:15:00+00:00",
+                "ended_at": "2026-11-19T10:15:19+00:00",
                 "duration_ms": 19375,
                 "status": "completed",
                 "language": null,
                 "language_chip": "EN",
                 "transcript": {
                     "final_status": "completed",
-                    "final_transcript_id": "01m6ye2pa0hrvg3cmb68rrfrfs",
+                    "final_transcript_id": "01m7xfb7qtmzgj5n5ngnmpcs1k",
                     "live_available": false,
                     "live_transcript_id": null,
                     "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
@@ -65,7 +65,10 @@
                 "labels": [
                     "Sample"
                 ],
-                "updated_at": "2026-11-08T20:37:28+00:00"
+                "important": false,
+                "label_colors": {},
+                "expires_at": "2026-12-20T21:56:02+00:00",
+                "updated_at": "2026-11-20T21:56:05+00:00"
             },
             "client": null
         }

@@ -9,6 +9,8 @@ use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Api\SessionController;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Services\LibraryOrganiser;
+use App\Services\RetentionPolicy;
 use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
@@ -21,6 +23,15 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 final class LibraryItemResource extends JsonResource
 {
+    /**
+     * The transcript columns a row reads (plan B6): every one but the lines (`segments`) and the folded copy search
+     * reads (`search_text`), the two largest, which no row uses. `GET /api/library` loads only these, about 40 % fewer
+     * bytes a page with real calls. A new transcript column must be added here (a test compares it with the table).
+     */
+    public const TRANSCRIPT_COLUMNS = ['id', 'capture_session_id', 'kind', 'provider', 'status', 'provider_job_id', 'provider_transcript_id',
+        'provider_deleted_at', 'language', 'text', 'meta', 'error', 'error_code', 'attempts', 'submitted_at', 'completed_at', 'edited_at',
+        'created_at', 'updated_at'];
+
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
@@ -103,7 +114,34 @@ final class LibraryItemResource extends JsonResource
             'labels' => $session->labelList(),
             // Since v1.3: whether the asking user has opened it (the apps show a dot until then); left out where unknown.
             'opened' => $this->when($session->relationLoaded('opens'), fn (): bool => $session->opens->isNotEmpty()),
+            // Since 2.0.0-i: the person's flag, the colours of its labels that have one, and when retention moves it to Trash.
+            'important' => (bool) $session->important,
+            'label_colors' => (object) self::labelColors($session),
+            'expires_at' => app(RetentionPolicy::class)->expiresAt($session)?->toAtomString(),
             'updated_at' => $session->updated_at->toAtomString(),
         ];
+    }
+
+    /**
+     * The colours of [$session]'s labels that have one, label as the recording spells it => "#rrggbb" (2.0.0-i).
+     *
+     * @return array<string, string>
+     */
+    public static function labelColors(CaptureSession $session): array
+    {
+        $labels = $session->labelList();
+        if ($labels === []) {
+            return [];
+        }
+        // A label belongs to the person who made the recording, so its colour is theirs (a sent recording keeps its sender's).
+        $colors = app(LibraryOrganiser::class)->labelColors((int) $session->workspace_id, (int) $session->user_id);
+        $out = [];
+        foreach ($labels as $label) {
+            if (isset($colors[mb_strtolower($label)])) {
+                $out[$label] = $colors[mb_strtolower($label)];
+            }
+        }
+
+        return $out;
     }
 }

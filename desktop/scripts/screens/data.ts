@@ -40,7 +40,8 @@ export const ITEMS: LibraryItem[] = [
     started_at: at(1, 18, 2), duration_ms: 402_000, status: "failed", transcript: { final_status: "failed", final_transcript_id: "t-r4", live_available: false, preview: null } }),
   makeItem("r5", { title: "Kick-off: Contoso website", source_app: "microsoft_teams", source_app_label: "Microsoft Teams", source_device: "desktop", source_device_label: "Desktop",
     client: client("c-acme", "Acme Holdings"), started_at: at(3, 15, 30), duration_ms: 135_000, status: "completed", language: "en", language_chip: "EN", marker_count: 1, tags: ["Budget"],
-    labels: ["Kick-off"], filed_by: "rule", transcript: ready("r5", "Welcome everyone, thanks for joining the kick-off.") }),
+    labels: ["Kick-off"], filed_by: "rule", title_auto: true,
+    transcript: { ...ready("r5", "Welcome everyone, thanks for joining the kick-off."), script_warning: "latin" } }),
   // v1.5: recordings in Acme's folders.
   makeItem("r8", { title: "March invoice follow-up", source_app: "whatsapp_business", source_app_label: "WhatsApp Business", source_device: "phone", source_device_label: "Phone",
     client: client("c-acme-inv", "Invoices"), started_at: at(2, 10, 20), duration_ms: 318_000, status: "completed", transcript: ready("r8", "The March invoice is still open.") }),
@@ -50,6 +51,11 @@ export const ITEMS: LibraryItem[] = [
     client: client("c-acme", "Acme Holdings"), started_at: at(5, 11, 0), duration_ms: 1_085_000, status: "completed", labels: ["Invoice"], transcript: ready("r6", "The budget for phase one is fixed.") }),
   makeItem("r7", { title: "Voice note", source_app: "voice_note", source_app_label: "Voice note", source_device: "desktop", source_device_label: "Desktop",
     started_at: at(8, 17, 40), duration_ms: 12_000, status: "completed", transcript: { final_status: "failed", final_transcript_id: null, live_available: false, preview: null, final_error_code: "no_audio" } }),
+  // Titles in Urdu and in Urdu with English words, long enough to be cut: each is cut at its own end.
+  makeItem("r10", { title: "ادائیگی کا منصوبہ، قرض کی واپسی اور اگلے مہینے کی قسطوں پر تفصیلی بات چیت", source_app: "whatsapp", source_app_label: "WhatsApp",
+    source_device: "phone", source_device_label: "Phone", started_at: at(12, 16, 5), duration_ms: 742_000, status: "completed", transcript: ready("r10", "السلام علیکم، قسطوں کے بارے میں بات کرتے ہیں۔") }),
+  makeItem("r11", { title: "Payment plan میں loan کی واپسی اور next month ki installments", source_app: "phone_call", source_app_label: "Phone call",
+    source_device: "phone", source_device_label: "Phone", started_at: at(13, 11, 20), duration_ms: 318_000, status: "completed", transcript: ready("r11", "Payment plan ke baare mein baat karte hain.") }),
 ];
 
 const seg = (channel: number, speaker: string, startS: number, endS: number, text: string, extra: Partial<Segment> = {}): Segment =>

@@ -1,0 +1,1164 @@
+{
+ "WEB-NAV-001": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|home"
+ },
+ "WEB-NAV-002": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|all recordings"
+ },
+ "WEB-NAV-003": {
+  "type": "controls",
+  "page": "library",
+  "scope": "sidebar",
+  "keys": [
+   "a|projects",
+   "a|qureshi textiles"
+  ]
+ },
+ "WEB-NAV-004": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|recently deleted"
+ },
+ "WEB-NAV-005": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|shared"
+ },
+ "WEB-NAV-007": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|live"
+ },
+ "WEB-NAV-008": {
+  "type": "html",
+  "page": "live",
+  "contains": [
+   "/app/live-assist/preps"
+  ]
+ },
+ "WEB-NAV-009": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|settings"
+ },
+ "WEB-NAV-011": {
+  "type": "controls",
+  "page": "library",
+  "scope": "sidebar",
+  "keys": [
+   "a|upload recording"
+  ]
+ },
+ "WEB-NAV-012": {
+  "type": "controlmatch",
+  "page": "library",
+  "scope": "sidebar",
+  "pattern": "^a\\|activity , needs you:$"
+ },
+ "WEB-NAV-013": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "menuitem|views › all recordings",
+   "menuitem|views › today",
+   "menuitem|views › this week",
+   "menuitem|views › waiting for decision",
+   "menuitem|views › pinned",
+   "menuitem|views › failed uploads",
+   "button|voice notes"
+  ]
+ },
+ "WEB-NAV-014": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "menuitem|source › any source"
+ },
+ "WEB-NAV-015": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "button|collapse"
+ },
+ "WEB-NAV-017": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "button|help and shortcuts"
+ },
+ "WEB-NAV-018": {
+  "type": "control",
+  "page": "library",
+  "scope": "topbar",
+  "key": "input|search and commands"
+ },
+ "WEB-NAV-020": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "wire:name=\"App\\Livewire\\ActivityBell\""
+  ]
+ },
+ "WEB-NAV-022": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "data-bottom=\"library\"",
+   "data-bottom=\"projects\"",
+   "data-bottom=\"record\"",
+   "data-bottom=\"live\"",
+   "data-bottom=\"ask\""
+  ]
+ },
+ "WEB-NAV-023": {
+  "type": "control",
+  "page": "library",
+  "scope": "switcher",
+  "key": "menuitem|p personal owner › personal · owner"
+ },
+ "WEB-NAV-024": {
+  "type": "control",
+  "page": "library",
+  "scope": "switcher",
+  "key": "menuitem|p personal owner › qureshi textiles team · owner"
+ },
+ "WEB-NAV-025": {
+  "type": "control",
+  "page": "library",
+  "scope": "switcher",
+  "key": "menuitem|p personal owner › manage workspace"
+ },
+ "WEB-NAV-026": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|bq › bq bilal qureshi bilal@qureshi-textiles.example personal"
+ },
+ "WEB-NAV-027": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|bq › upgrade"
+ },
+ "WEB-NAV-028": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|bq › settings"
+ },
+ "WEB-NAV-029": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|bq › system"
+ },
+ "WEB-NAV-030": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|bq › light"
+ },
+ "WEB-NAV-031": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|bq › dark"
+ },
+ "WEB-NAV-032": {
+  "type": "control",
+  "page": "library",
+  "scope": "usermenu",
+  "key": "menuitem|bq › sign out"
+ },
+ "WEB-KEY-001": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "e.key === '/'",
+   "fi-ta-search-field"
+  ]
+ },
+ "WEB-KEY-002": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "e.key === '?'"
+  ]
+ },
+ "WEB-KEY-003": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "e.key === '['"
+  ]
+ },
+ "WEB-KEY-004": {
+  "type": "control",
+  "page": "library",
+  "scope": "topbar",
+  "key": "input|search and commands"
+ },
+ "WEB-KEY-012": {
+  "type": "html",
+  "page": "recording",
+  "contains": [
+   "el-dock",
+   "el-back",
+   "el-fwd"
+  ]
+ },
+ "WEB-LIB-001": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|upload recording"
+ },
+ "WEB-LIB-002": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|views",
+   "menuitem|views › all recordings",
+   "menuitem|views › today",
+   "menuitem|views › this week",
+   "menuitem|views › waiting for decision",
+   "menuitem|views › bookmarked",
+   "menuitem|views › failed uploads",
+   "menuitem|views › pinned"
+  ]
+ },
+ "WEB-LIB-003": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|source",
+   "menuitem|source › any source",
+   "menuitem|source › inbox",
+   "menuitem|source › whatsapp",
+   "menuitem|source › zoom",
+   "menuitem|source › phone",
+   "button|voice notes"
+  ]
+ },
+ "WEB-LIB-007": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|newest",
+   "button|newest",
+   "menuitem|newest › oldest",
+   "menuitem|newest › longest",
+   "menuitem|newest › shortest",
+   "menuitem|newest › name a–z",
+   "menuitem|newest › recently opened"
+  ]
+ },
+ "WEB-LIB-008": {
+  "type": "controlmatch",
+  "page": "library",
+  "scope": "main",
+  "pattern": "^input\\|select/deselect group "
+ },
+ "WEB-LIB-009": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|yesterday"
+  ]
+ },
+ "WEB-LIB-010": {
+  "type": "controlmatch",
+  "page": "library",
+  "scope": "main",
+  "pattern": "^input\\|select/deselect item "
+ },
+ "WEB-LIB-012": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|more",
+   "menuitem|more › open",
+   "menuitem|more › rename",
+   "menuitem|more › send to whatsapp…",
+   "menuitem|more › delete"
+  ]
+ },
+ "WEB-LIB-013": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "menuitem|menu › reset",
+   "menuitem|menu › status",
+   "menuitem|menu › bookmark tag",
+   "menuitem|menu › label",
+   "menuitem|menu › has bookmarks",
+   "menuitem|menu › from",
+   "menuitem|menu › until",
+   "menuitem|menu › apply filters"
+  ]
+ },
+ "WEB-LIB-014": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "input|search",
+   "input|select/deselect all items for bulk actions."
+  ]
+ },
+ "WEB-REC-001": {
+  "type": "controls",
+  "page": "recording",
+  "scope": "main",
+  "keys": [
+   "button|more",
+   "menuitem|more › rename speakers",
+   "menuitem|more › find and replace",
+   "menuitem|more › history"
+  ]
+ },
+ "WEB-REC-002": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "menuitem|more › download"
+ },
+ "WEB-REC-003": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "menuitem|more › show as…"
+ },
+ "WEB-REC-004": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "menuitem|more › whatsapp"
+ },
+ "WEB-REC-005": {
+  "type": "controls",
+  "page": "recording",
+  "scope": "main",
+  "keys": [
+   "button|more",
+   "menuitem|more › rename",
+   "menuitem|more › send to a teammate",
+   "menuitem|more › sent to",
+   "menuitem|more › re-transcribe as…",
+   "button|delete"
+  ]
+ },
+ "WEB-REC-006": {
+  "type": "controls",
+  "page": "recording",
+  "scope": "main",
+  "keys": [
+   "button|rename this recording",
+   "button|share",
+   "button|qureshi textiles",
+   "button|english",
+   "button|labels",
+   "button|pin",
+   "button|keep forever",
+   "button|−",
+   "button|+",
+   "select|playback speed",
+   "button|player options",
+   "button|roman urdu",
+   "button|write notes",
+   "menuitem|actions › access log",
+   "menuitem|actions › revoke"
+  ]
+ },
+ "WEB-PRJ-001": {
+  "type": "controls",
+  "page": "projects",
+  "scope": "main",
+  "keys": [
+   "button|more",
+   "menuitem|more › open",
+   "menuitem|more › settings",
+   "menuitem|more › rename",
+   "menuitem|more › move",
+   "menuitem|more › delete"
+  ]
+ },
+ "WEB-PRJ-002": {
+  "type": "controls",
+  "page": "projects",
+  "scope": "main",
+  "keys": [
+   "a|new project",
+   "input|search",
+   "a|qt qureshi textiles recordings · last call nov automatic pin to the top",
+   "button|pin to the top"
+  ]
+ },
+ "WEB-PRJ-003": {
+  "type": "controls",
+  "page": "project-overview",
+  "scope": "main",
+  "keys": [
+   "button|actions",
+   "menuitem|actions › new subfolder",
+   "menuitem|actions › send to a teammate",
+   "menuitem|actions › sent to",
+   "menuitem|actions › rename",
+   "menuitem|actions › move",
+   "menuitem|actions › settings",
+   "menuitem|actions › delete"
+  ]
+ },
+ "WEB-PRJ-004": {
+  "type": "controls",
+  "page": "project-overview",
+  "scope": "main",
+  "keys": [
+   "button|share",
+   "button|copy for ai",
+   "button|edit",
+   "button|make again",
+   "select|kind",
+   "input|line to remember",
+   "button|add"
+  ]
+ },
+ "WEB-PRJ-005": {
+  "type": "controls",
+  "page": "project-recordings",
+  "scope": "main",
+  "keys": [
+   "button|actions",
+   "menuitem|actions › new subfolder",
+   "menuitem|actions › send to a teammate",
+   "menuitem|actions › sent to",
+   "menuitem|actions › rename",
+   "menuitem|actions › move",
+   "menuitem|actions › settings",
+   "menuitem|actions › delete"
+  ]
+ },
+ "WEB-PRJ-006": {
+  "type": "controls",
+  "page": "project-recordings",
+  "scope": "main",
+  "keys": [
+   "button|share",
+   "input|search in this project",
+   "select|sort",
+   "a|umrah group booking nov zoom · galaxy s · : · qureshi textiles"
+  ]
+ },
+ "WEB-PRJ-007": {
+  "type": "controls",
+  "page": "project-screens",
+  "scope": "main",
+  "keys": [
+   "button|actions",
+   "menuitem|actions › new subfolder",
+   "menuitem|actions › send to a teammate",
+   "menuitem|actions › sent to",
+   "menuitem|actions › rename",
+   "menuitem|actions › move",
+   "menuitem|actions › settings",
+   "menuitem|actions › delete"
+  ]
+ },
+ "WEB-PRJ-008": {
+  "type": "controls",
+  "page": "project-screens",
+  "scope": "main",
+  "keys": [
+   "button|share"
+  ]
+ },
+ "WEB-PRJ-009": {
+  "type": "controls",
+  "page": "project-files",
+  "scope": "main",
+  "keys": [
+   "button|actions",
+   "menuitem|actions › new subfolder",
+   "menuitem|actions › send to a teammate",
+   "menuitem|actions › sent to",
+   "menuitem|actions › rename",
+   "menuitem|actions › move",
+   "menuitem|actions › settings",
+   "menuitem|actions › delete"
+  ]
+ },
+ "WEB-PRJ-010": {
+  "type": "controls",
+  "page": "project-files",
+  "scope": "main",
+  "keys": [
+   "button|share",
+   "input|add a document",
+   "input|name",
+   "input|instructions",
+   "button|add instructions"
+  ]
+ },
+ "WEB-PRJ-011": {
+  "type": "controls",
+  "page": "project-ask",
+  "scope": "main",
+  "keys": [
+   "button|actions",
+   "menuitem|actions › new subfolder",
+   "menuitem|actions › send to a teammate",
+   "menuitem|actions › sent to",
+   "menuitem|actions › rename",
+   "menuitem|actions › move",
+   "menuitem|actions › settings",
+   "menuitem|actions › delete"
+  ]
+ },
+ "WEB-PRJ-012": {
+  "type": "controls",
+  "page": "project-ask",
+  "scope": "main",
+  "keys": [
+   "button|share",
+   "input|ask about qureshi textiles",
+   "button|english",
+   "button|roman urdu",
+   "button|ask asking…"
+  ]
+ },
+ "WEB-PRJ-013": {
+  "type": "controls",
+  "page": "project-rules",
+  "scope": "main",
+  "keys": [
+   "button|actions",
+   "menuitem|actions › new subfolder",
+   "menuitem|actions › send to a teammate",
+   "menuitem|actions › sent to",
+   "menuitem|actions › rename",
+   "menuitem|actions › move",
+   "menuitem|actions › settings",
+   "menuitem|actions › delete"
+  ]
+ },
+ "WEB-PRJ-014": {
+  "type": "controls",
+  "page": "project-rules",
+  "scope": "main",
+  "keys": [
+   "button|share",
+   "select|kind",
+   "input|value",
+   "button|add",
+   "button|remove"
+  ]
+ },
+ "WEB-SRC-001": {
+  "type": "controls",
+  "page": "search",
+  "scope": "main",
+  "keys": [
+   "input|q",
+   "select|project",
+   "select|app",
+   "select|device",
+   "select|status",
+   "input|from",
+   "input|to",
+   "select|bookmark tag",
+   "switch|bookmarked only",
+   "a|payment terms for the march shipment"
+  ]
+ },
+ "WEB-UPL-001": {
+  "type": "controls",
+  "page": "upload",
+  "scope": "main",
+  "keys": [
+   "button|record a voice note",
+   "a|get the apps"
+  ]
+ },
+ "WEB-ACT-001": {
+  "type": "controls",
+  "page": "activity",
+  "scope": "main",
+  "keys": [
+   "button|mark all as read",
+   "button|unread: transcript ready : am payment terms for the march shipment"
+  ]
+ },
+ "WEB-SHR-001": {
+  "type": "controls",
+  "page": "shares",
+  "scope": "main",
+  "keys": [
+   "menuitem|menu › reset",
+   "menuitem|menu › status",
+   "menuitem|menu › apply filters"
+  ]
+ },
+ "WEB-SHR-002": {
+  "type": "controls",
+  "page": "shares",
+  "scope": "main",
+  "keys": [
+   "button|column manager",
+   "button|views",
+   "a|payment terms for the march shipment recording",
+   "menuitem|actions › access log",
+   "menuitem|actions › revoke"
+  ]
+ },
+ "WEB-SHR-003": {
+  "type": "controls",
+  "page": "shared-with-me",
+  "scope": "main",
+  "keys": [
+   "input|search",
+   "button|sent"
+  ]
+ },
+ "WEB-SHR-004": {
+  "type": "controls",
+  "page": "request-links",
+  "scope": "main",
+  "keys": [
+   "button|new request link",
+   "input|search",
+   "button|column manager",
+   "menuitem|actions › revoke"
+  ]
+ },
+ "WEB-TRS-001": {
+  "type": "controls",
+  "page": "recently-deleted",
+  "scope": "main",
+  "keys": [
+   "button|restore",
+   "button|delete now"
+  ]
+ },
+ "WEB-DEV-001": {
+  "type": "controls",
+  "page": "devices",
+  "scope": "main",
+  "keys": [
+   "menuitem|menu › reset",
+   "menuitem|menu › show",
+   "menuitem|menu › apply filters"
+  ]
+ },
+ "WEB-DEV-002": {
+  "type": "controls",
+  "page": "devices",
+  "scope": "main",
+  "keys": [
+   "button|sign in a device",
+   "input|search",
+   "button|remove filter",
+   "button|remove all filters",
+   "menuitem|actions › rename",
+   "menuitem|actions › sign out",
+   "menuitem|actions › remove from list"
+  ]
+ },
+ "WEB-USG-001": {
+  "type": "controls",
+  "page": "usage",
+  "scope": "main",
+  "keys": [
+   "button|download csv",
+   "select|month"
+  ]
+ },
+ "WEB-WSP-001": {
+  "type": "controls",
+  "page": "workspace",
+  "scope": "main",
+  "keys": [
+   "button|switch workspace",
+   "button|invite",
+   "button|invite link",
+   "button|rename",
+   "button|hand over",
+   "button|delete workspace",
+   "button|change role",
+   "button|remove",
+   "button|resend",
+   "button|cancel",
+   "button|expand section",
+   "input|record, upload, import: yes",
+   "input|record, upload, import: no",
+   "input|sign in their own phones and computers: yes",
+   "input|their own recordings and projects: open, edit, share, delete: yes",
+   "input|shared with me: open, save to my library: yes",
+   "input|invite and remove people, change roles: yes",
+   "input|invite and remove people, change roles: no",
+   "input|workspace usage: minutes and costs per person (never content): yes",
+   "input|workspace usage: minutes and costs per person (never content): no",
+   "input|revoke another person's device: yes",
+   "input|revoke another person's device: no",
+   "input|plan, workspace name, hand over, delete the workspace: yes",
+   "input|plan, workspace name, hand over, delete the workspace: no"
+  ]
+ },
+ "WEB-HLP-001": {
+  "type": "controls",
+  "page": "help",
+  "scope": "main",
+  "keys": [
+   "button|contact support",
+   "input|search the guide",
+   "button|install the windows app",
+   "button|install the mac app",
+   "button|install the phone app",
+   "button|what works where",
+   "button|sign in on your devices",
+   "button|plans and your own transcription key (since v.)",
+   "button|find your way in the computer app (since v.)",
+   "button|find your way in the web console (since v.)",
+   "button|record automatically",
+   "button|live captions",
+   "button|after a call",
+   "button|bookmarks",
+   "button|dictation",
+   "button|search",
+   "button|import, rename, export and share",
+   "button|projects and vocabulary",
+   "button|languages",
+   "button|app lock",
+   "button|notifications (since v.)",
+   "button|keep recordings for a set time (retention)",
+   "button|usage and budget",
+   "button|plans, paid features and your own transcription key (computer, since v.)",
+   "button|screen moments: what was on the screen (since v.)",
+   "button|ask an ai assistant about your recordings (since v.)",
+   "button|live translate: games and videos",
+   "button|something is wrong?"
+  ]
+ },
+ "WEB-GTA-001": {
+  "type": "controls",
+  "page": "get-the-apps",
+  "scope": "main",
+  "keys": [
+   "a|downloads page",
+   "a|continue to echoledger"
+  ]
+ },
+ "WEB-LAS-001": {
+  "type": "controls",
+  "page": "assist-preps",
+  "scope": "main",
+  "keys": [
+   "menuitem|menu › reset",
+   "menuitem|menu › show",
+   "menuitem|menu › apply filters"
+  ]
+ },
+ "WEB-LAS-002": {
+  "type": "controls",
+  "page": "assist-preps",
+  "scope": "main",
+  "keys": [
+   "button|new prep",
+   "button|remove filter",
+   "button|remove all filters",
+   "button|when"
+  ]
+ },
+ "WEB-LAS-003": {
+  "type": "controls",
+  "page": "assist-sessions",
+  "scope": "main",
+  "keys": [
+   "menuitem|menu › reset",
+   "menuitem|menu › show",
+   "menuitem|menu › apply filters"
+  ]
+ },
+ "WEB-LAS-004": {
+  "type": "controls",
+  "page": "assist-sessions",
+  "scope": "main",
+  "keys": [
+   "button|started"
+  ]
+ },
+ "WEB-LAS-005": {
+  "type": "controls",
+  "page": "assist-settings",
+  "scope": "main",
+  "keys": [
+   "select|mode*",
+   "select|hints*",
+   "select|language help*",
+   "button|save"
+  ]
+ },
+ "WEB-SET-001": {
+  "type": "controls",
+  "page": "settings",
+  "scope": "main",
+  "keys": [
+   "a|bilal qureshi bilal@qureshi-textiles.example personal personal, owner",
+   "a|upgrade",
+   "a|plan & usage personal"
+  ]
+ },
+ "WEB-SET-002": {
+  "type": "controls",
+  "page": "settings-language",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "select|language",
+   "button|reset to defaults"
+  ]
+ },
+ "WEB-SET-004": {
+  "type": "controls",
+  "page": "settings-appearance",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "button|system",
+   "button|light",
+   "button|dark",
+   "button|comfortable",
+   "button|compact",
+   "button|-hour",
+   "button|list",
+   "button|table",
+   "button|reset to defaults"
+  ]
+ },
+ "WEB-SET-005": {
+  "type": "controls",
+  "page": "settings-notifications",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "switch|transcription",
+   "switch|enhancement",
+   "switch|sharing",
+   "switch|usage & limits",
+   "switch|app updates",
+   "switch|other",
+   "button|reset to defaults"
+  ]
+ },
+ "WEB-SET-006": {
+  "type": "controls",
+  "page": "settings-storage",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "a|bin hours"
+  ]
+ },
+ "WEB-SET-007": {
+  "type": "controls",
+  "page": "settings-shortcuts",
+  "scope": "main",
+  "keys": [
+   "a|settings"
+  ]
+ },
+ "WEB-SET-008": {
+  "type": "controls",
+  "page": "settings-profile",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "input|name",
+   "input|email"
+  ]
+ },
+ "WEB-SET-009": {
+  "type": "controls",
+  "page": "settings-plan",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "a|upgrade to pro",
+   "a|usage details",
+   "a|choose pro",
+   "a|choose business",
+   "button|promo code add"
+  ]
+ },
+ "WEB-SET-010": {
+  "type": "controls",
+  "page": "settings-security",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "button|password",
+   "button|two-step sign-in off",
+   "a|sign-in activity",
+   "button|sign out everywhere"
+  ]
+ },
+ "WEB-SET-011": {
+  "type": "controls",
+  "page": "settings-devices",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "button|galaxy s active s ago",
+   "button|sign in a device"
+  ]
+ },
+ "WEB-SET-012": {
+  "type": "controls",
+  "page": "settings-privacy",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "button|recording consent acknowledged on nov",
+   "button|export my data",
+   "button|support access off",
+   "a|delete my account"
+  ]
+ },
+ "WEB-SET-013": {
+  "type": "controls",
+  "page": "settings-help",
+  "scope": "main",
+  "keys": [
+   "a|settings",
+   "a|open upgrade",
+   "a|open upgrade request",
+   "a|open payment receipt",
+   "a|open transcription minutes",
+   "a|open theme",
+   "a|open delete my account",
+   "a|get the apps",
+   "a|keyboard shortcuts"
+  ]
+ },
+ "WEB-LIB-025": {
+  "type": "selected",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|leave the selection",
+   "button|select all",
+   "button|move to project",
+   "button|label",
+   "button|export",
+   "button|delete",
+   "button|more"
+  ],
+  "contains": [
+   "1 selected|:count selected",
+   "data-selection-more"
+  ]
+ },
+ "WEB-LIB-027": {
+  "type": "exportformats",
+  "formats": [
+   "docx",
+   "txt",
+   "md",
+   "srt",
+   "vtt",
+   "json",
+   "html"
+  ]
+ },
+ "WEB-LIB-033": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "input|select/deselect all items for bulk actions."
+ },
+ "WEB-REC-011": {
+  "type": "control",
+  "page": "recording",
+  "scope": "rectabs",
+  "key": "tab|transcript"
+ },
+ "WEB-REC-012": {
+  "type": "control",
+  "page": "recording",
+  "scope": "rectabs",
+  "key": "tab|moments"
+ },
+ "WEB-REC-013": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "menuitem|actions › revoke"
+ },
+ "WEB-REC-014": {
+  "type": "html",
+  "page": "recording",
+  "contains": [
+   "decide(s.id, true)",
+   "decide(s.id, false)"
+  ]
+ },
+ "WEB-REC-015": {
+  "type": "control",
+  "page": "recording",
+  "scope": "main",
+  "key": "menuitem|more › find and replace"
+ },
+ "WEB-HOM-001": {
+  "type": "html",
+  "page": "home",
+  "contains": [
+   "wire:name=\"App\\Filament\\Widgets\\SourceStatsOverview\""
+  ]
+ },
+ "WEB-HOM-002": {
+  "type": "html",
+  "page": "home",
+  "contains": [
+   "wire:name=\"App\\Filament\\Widgets\\SessionsChart\""
+  ]
+ },
+ "WEB-HOM-003": {
+  "type": "html",
+  "page": "home",
+  "contains": [
+   "wire:name=\"App\\Filament\\Widgets\\StorageOverview\""
+  ]
+ },
+ "WEB-SET-014": {
+  "type": "html",
+  "page": "settings-appearance",
+  "contains": [
+   "Search settings"
+  ]
+ },
+ "WEB-SET-016": {
+  "type": "html",
+  "page": "settings-appearance",
+  "contains": [
+   "el-settings-nav"
+  ]
+ },
+ "WEB-APP-005": {
+  "type": "control",
+  "page": "settings-appearance",
+  "scope": "main",
+  "key": "button|switch back to classic"
+ },
+ "WEB-LIB-016": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "menuitem|views › this week",
+   "menuitem|views › waiting for decision",
+   "menuitem|views › bookmarked"
+  ]
+ },
+ "WEB-LIB-004": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|list"
+ },
+ "WEB-LIB-005": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|table"
+ },
+ "WEB-LIB-006": {
+  "type": "controls",
+  "page": "library",
+  "scope": "main",
+  "keys": [
+   "button|group by: date",
+   "menuitem|group by: date › date",
+   "menuitem|group by: date › source",
+   "menuitem|group by: date › project",
+   "menuitem|group by: date › language",
+   "menuitem|group by: date › status",
+   "menuitem|group by: date › device",
+   "menuitem|group by: date › none"
+  ]
+ },
+ "WEB-LIB-011": {
+  "type": "control",
+  "page": "library",
+  "scope": "main",
+  "key": "button|pin to the top"
+ },
+ "WEB-NAV-006": {
+  "type": "controls",
+  "page": "library",
+  "scope": "sidebar",
+  "keys": [
+   "a|my links",
+   "a|request links"
+  ]
+ },
+ "WEB-NAV-010": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|upload recording"
+ },
+ "WEB-NAV-016": {
+  "type": "html",
+  "page": "library",
+  "contains": [
+   "class=\"v2-sb-resize\" role=\"separator\"",
+   "x-on:pointerdown=\"startResize($event)\"",
+   "x-on:keydown=\"resizeKey($event)\""
+  ]
+ },
+ "WEB-NAV-019": {
+  "type": "controls",
+  "page": "library",
+  "scope": "topbar",
+  "keys": [
+   "button|create",
+   "menuitem|create › upload recording",
+   "menuitem|create › new project",
+   "menuitem|create › request link"
+  ]
+ },
+ "WEB-NAV-021": {
+  "type": "html",
+  "page": "search",
+  "contains": [
+   "<nav class=\"v2-crumbs\" aria-label=\"Breadcrumbs\">",
+   "class=\"v2-crumbs-link\">Library</a>"
+  ]
+ },
+ "WEB-SET-003": {
+  "type": "controls",
+  "page": "settings-appearance",
+  "scope": "main",
+  "keys": [
+   "button|light",
+   "button|dark",
+   "button|soft grey"
+  ]
+ }
+}

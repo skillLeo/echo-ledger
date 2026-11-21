@@ -11,12 +11,15 @@ use App\Enums\UploadStatus;
 use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\LabelColor;
 use App\Models\SessionLabel;
 use App\Models\User;
 use App\Services\Callers\CallerMatcher;
 use App\Services\Titles\AutoTitles;
+use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
 use App\Support\Brand;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -50,9 +53,10 @@ final class LibraryOrganiser
     /** Files that came in as files rather than being recorded. */
     public const FILE_ORIGINS = [CaptureSession::ORIGIN_IMPORTED, CaptureSession::ORIGIN_REQUESTED];
 
-    public const BULK_ACTIONS = ['move', 'label', 'unlabel', 'pin', 'unpin', 'keep', 'unkeep', 'delete'];
+    public const BULK_ACTIONS = ['move', 'label', 'unlabel', 'pin', 'unpin', 'keep', 'unkeep', 'important', 'unimportant', 'delete'];
 
-    public const EXPORT_FORMATS = ['txt', 'md', 'srt', 'vtt', 'json', 'docx'];
+    /** Since 2.0.0-h (parity plan 3) also html, as one recording's export already has. */
+    public const EXPORT_FORMATS = ['txt', 'md', 'srt', 'vtt', 'json', 'docx', 'html'];
 
     public const MAX_LABELS = 20;
 
@@ -117,16 +121,36 @@ final class LibraryOrganiser
      */
     public function counts(int $workspaceId, ?string $zone = null): array
     {
-        $counts = [];
+        $conditions = [];
         foreach (self::VIEWS as $view) {
-            $query = CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson();
-            if ($view !== 'waiting') {
-                $query->where('status', '!=', SessionStatus::Recording->value);
-            }
-            $counts[$view] = $this->applyView($query, $view, $zone)->count();
+            $conditions[$view] = fn (Builder $q): Builder => $this->applyView(
+                $view === 'waiting' ? $q : $q->where($q->qualifyColumn('status'), '!=', SessionStatus::Recording->value), $view, $zone);
         }
 
-        return $counts;
+        return $this->tally($workspaceId, $conditions);
+    }
+
+    /**
+     * Counts the person's recordings in the workspace that meet each condition, in one pass over them (plan B6: one
+     * query instead of one a condition). Each condition is the very filter the library lists with, compiled into a
+     * `SUM(CASE WHEN …)`, so a count always matches its list.
+     *
+     * @param  array<string, Closure(Builder<CaptureSession>): Builder<CaptureSession>>  $conditions
+     * @return array<string, int>
+     */
+    private function tally(int $workspaceId, array $conditions): array
+    {
+        $query = CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson();
+        $grammar = $query->getQuery()->getGrammar();
+        foreach ($conditions as $name => $condition) {
+            $only = $condition(CaptureSession::query()->withoutGlobalScopes())->getQuery();
+            // A condition that filters nothing (a view or folder with no rule) counts every recording.
+            $where = trim((string) preg_replace('/^where /', '', $grammar->compileWheres($only))) ?: '1 = 1';
+            $query->selectRaw('COALESCE(SUM(CASE WHEN '.$where.' THEN 1 ELSE 0 END), 0) as '.$grammar->wrap($name), $only->getBindings());
+        }
+        $row = (array) $query->toBase()->first();
+
+        return array_map(fn ($n): int => (int) $n, array_intersect_key($row, $conditions));
     }
 
     /**
@@ -162,14 +186,16 @@ final class LibraryOrganiser
      */
     public function folderCounts(int $workspaceId): array
     {
-        $counts = [];
+        $conditions = [];
         foreach (self::FOLDERS as $folder) {
-            $counts[$folder] = $folder === 'shared' ? 0
-                : $this->applyFolder(CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson()
-                    ->where('status', '!=', SessionStatus::Recording->value), $folder)->count();
+            if ($folder !== 'shared') {
+                $conditions[$folder] = fn (Builder $q): Builder => $this->applyFolder($q->where($q->qualifyColumn('status'), '!=', SessionStatus::Recording->value), $folder);
+            }
         }
+        $counts = $this->tally($workspaceId, $conditions);
 
-        return $counts;
+        // In the order of FOLDERS, `shared` (others' recordings) counted by Teammates.
+        return array_map(fn (string $folder): int => $counts[$folder] ?? 0, array_combine(self::FOLDERS, self::FOLDERS));
     }
 
     /** How many of the workspace's recordings wait for Keep or Discard (the Library's chip, since v1.5). */
@@ -203,23 +229,101 @@ final class LibraryOrganiser
     }
 
     /**
-     * Every label the workspace uses, with how many recordings carry it.
+     * Every label the person uses in the workspace (all of the workspace's when no person is known), with how many
+     * recordings carry it and, since 2.0.0-i, its colour (null until one is chosen).
      *
-     * @return list<array{label: string, count: int}>
+     * @return list<array{label: string, count: int, color: string|null}>
      */
     public function labels(int $workspaceId): array
     {
+        $userId = CurrentWorkspace::userId();
+        $colors = $userId !== null ? $this->labelColors($workspaceId, $userId) : [];
+
         return SessionLabel::query()
             ->whereHas('captureSession', fn (Builder $q) => $q->where('workspace_id', $workspaceId)->ofPerson())
             ->selectRaw('label, COUNT(*) as aggregate')->groupBy('label')->orderBy('label')->get()
-            ->map(fn (SessionLabel $l): array => ['label' => $l->label, 'count' => (int) $l->getAttribute('aggregate')])
+            ->map(fn (SessionLabel $l): array => ['label' => $l->label, 'count' => (int) $l->getAttribute('aggregate'),
+                'color' => $colors[mb_strtolower($l->label)] ?? null])
             ->values()->all();
+    }
+
+    /**
+     * One person's label colours in a workspace (since 2.0.0-i), label in lower case => "#rrggbb", read once a request.
+     *
+     * @return array<string, string>
+     */
+    public function labelColors(int $workspaceId, int $userId): array
+    {
+        $key = self::colorsKey($workspaceId, $userId);
+        $cached = request()->attributes->get($key);
+        if (is_array($cached)) {
+            /** @var array<string, string> $cached */
+            return $cached;
+        }
+        $colors = LabelColor::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)
+            // Lower case on read too, so the apps' palette matches whatever wrote the row.
+            ->pluck('color', 'label_key')->map(fn ($c): string => strtolower((string) $c))->all();
+        request()->attributes->set($key, $colors);
+
+        return $colors;
+    }
+
+    /**
+     * Sets or clears the colour of one of the person's labels (PUT /api/labels/color, since 2.0.0-i). Their recordings
+     * that carry it get a new updated_at so the other devices sync the colour. Returns the label as the recordings spell
+     * it and the colour; a label none of their recordings carries is 404 label_not_found.
+     *
+     * @return array{label: string, color: string|null}
+     */
+    public function setLabelColor(int $workspaceId, int $userId, mixed $label, ?string $color): array
+    {
+        $clean = self::cleanLabel($label);
+        if ($clean === null) {
+            throw new ApiError(422, 'validation_failed', 'The label is required.', ['errors' => ['label' => ['The label is required.']]]);
+        }
+        $key = mb_strtolower($clean);
+        // The person's labels, compared in PHP: SQL's LOWER() and the column's collation disagree on non-English letters
+        // ("Été", accents, Arabic marks) from one database to the next.
+        $carriers = SessionLabel::query()
+            ->join('capture_sessions', 'capture_sessions.id', '=', 'session_labels.capture_session_id')
+            ->where('capture_sessions.workspace_id', $workspaceId)->where('capture_sessions.user_id', $userId)
+            ->whereNull('capture_sessions.deleted_at')
+            ->orderBy('session_labels.id')
+            ->get(['session_labels.capture_session_id', 'session_labels.label'])
+            ->filter(fn (SessionLabel $l): bool => mb_strtolower((string) $l->label) === $key);
+        if ($carriers->isEmpty()) {
+            throw new ApiError(404, 'label_not_found', 'No recording has this label.');
+        }
+        $spelt = (string) $carriers->firstOrFail()->label;
+        $color = $color !== null ? strtolower($color) : null;
+        DB::transaction(function () use ($workspaceId, $userId, $key, $color, $carriers): void {
+            $row = ['workspace_id' => $workspaceId, 'user_id' => $userId, 'label_key' => $key];
+            if ($color === null) {
+                LabelColor::query()->where($row)->delete();
+            } else {
+                // One statement, so two devices setting it at once never trip the unique index.
+                LabelColor::query()->upsert([[...$row, 'color' => $color, 'created_at' => now(), 'updated_at' => now()]],
+                    ['workspace_id', 'user_id', 'label_key'], ['color', 'updated_at']);
+            }
+            // A plain list of ids: MySQL refuses an UPDATE that reads its own table in a subquery (error 1093).
+            foreach ($carriers->pluck('capture_session_id')->unique()->chunk(500) as $ids) {
+                CaptureSession::query()->whereIn('id', $ids->values()->all())->update(['updated_at' => now()]);
+            }
+        });
+        request()->attributes->remove(self::colorsKey($workspaceId, $userId));
+
+        return ['label' => $spelt, 'color' => $color];
+    }
+
+    private static function colorsKey(int $workspaceId, int $userId): string
+    {
+        return 'el.label-colors.'.$workspaceId.'.'.$userId;
     }
 
     /**
      * Applies a single-recording change: title, client folder, pin and the full list of labels.
      *
-     * @param  array{title?: string|null, client_id?: string|null, pinned?: bool, keep?: bool, labels?: list<mixed>}  $data
+     * @param  array{title?: string|null, client_id?: string|null, pinned?: bool, keep?: bool, important?: bool, labels?: list<mixed>}  $data
      */
     public function update(CaptureSession $session, array $data): CaptureSession
     {
@@ -243,6 +347,9 @@ final class LibraryOrganiser
             }
             if (array_key_exists('keep', $data)) {
                 $session->keep_forever = (bool) $data['keep'];
+            }
+            if (array_key_exists('important', $data)) {
+                $session->important = (bool) $data['important'];
             }
             if (array_key_exists('labels', $data)) {
                 $this->replaceLabels($session, $data['labels']);
@@ -310,6 +417,8 @@ final class LibraryOrganiser
                     'unpin' => $session->pinned = false,
                     'keep' => $session->keep_forever = true,
                     'unkeep' => $session->keep_forever = false,
+                    'important' => $session->important = true,
+                    'unimportant' => $session->important = false,
                     'label' => $this->addLabel($session, (string) $label),
                     'unlabel' => $session->labels()->whereRaw('LOWER(label) = ?', [mb_strtolower((string) $label)])->delete(),
                     default => null,

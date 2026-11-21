@@ -50,4 +50,9 @@
     <string name="v2_assist_ended">لائیو اسسٹ ختم ہو گیا۔</string>
     <string name="v2_assist_start">لائیو اسسٹ شروع کریں</string>
     <string name="v2_assist_start_help">بات چیت کے دوران اسکرین پر تجاویز، کال پِل میں</string>
+    <string name="v2_assist_not_started">لائیو اسسٹ شروع نہیں ہو سکا۔ ریکارڈنگ جاری ہے۔</string>
+    <string name="v2_assist_offline">سرور تک رسائی نہیں ہو رہی۔ کنکشن چیک کر کے دوبارہ کوشش کریں۔</string>
+    <string name="v2_assist_server">سرور میں مسئلہ آیا۔ ایک منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_assist_certificate">سرور کا سرٹیفکیٹ وہ نہیں جو یہ فون توقع کرتا ہے۔ سرور کا پتہ چیک کریں۔</string>
+    <string name="v2_assist_busy_retrying">لائیو اسسٹ ابھی مصروف ہے۔ تھوڑی دیر میں دوبارہ کوشش کریں۔</string>
 </resources>

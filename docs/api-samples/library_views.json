@@ -10,7 +10,8 @@
     "labels": [
         {
             "label": "Sample",
-            "count": 1
+            "count": 1,
+            "color": null
         }
     ],
     "folders": {

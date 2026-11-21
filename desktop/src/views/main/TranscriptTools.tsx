@@ -1,6 +1,7 @@
 // Tools around a recording's transcript in the library (plan B6, B7, B10, B11): player controls, the activity
 // timeline, find and replace, speaker names, history, export, share links and "Add to vocabulary".
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useStickyHeight } from "../../lib/stickyHeight";
 import { api, errorMessage, type ExportFormat, type LearnOffer, type MeetingPackFormat, type Segment, type ShareLink, type TranscriptRevision, type TranscriptSuggestion } from "../../lib/ipc";
 import { formatWhen, timestamp } from "../../lib/format";
 import { SPEEDS, timelinePercent, waveformBars, PLAYER_HINT, PLAYER_KEYS } from "../../lib/player";
@@ -79,8 +80,12 @@ export function PlayerDock({ playing, nowMs, durationMs, onToggle, onSkip, child
   /** The speed and follow controls, under it. */
   below?: React.ReactNode;
 }) {
+  const dock = useRef<HTMLDivElement>(null);
+  // Its height is the scroll padding of what scrolls behind it (styles.css --player-dock-h): the line Follow brings
+  // into view, a find match or a focused line is never under it.
+  useStickyHeight(dock, "--player-dock-h");
   return (
-    <div className="player-dock" role="region" aria-label="Player">
+    <div ref={dock} className="player-dock" role="region" aria-label="Player">
       <div className="player-row">
         <button type="button" className="skip-btn" aria-label="Back 10 seconds" title={`Back 10 s (${PLAYER_KEYS.back10})`} onClick={() => onSkip(-10)}><SkipIcon back size={22} /></button>
         <button type="button" className="play-btn" aria-label={playing ? "Pause" : "Play"} title={`${playing ? "Pause" : "Play"} (${PLAYER_KEYS.toggle})`} onClick={onToggle}>

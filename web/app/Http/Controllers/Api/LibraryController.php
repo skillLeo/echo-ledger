@@ -46,6 +46,8 @@ final class LibraryController extends Controller
             'tz' => ['nullable', 'timezone:all'],
             'label' => ['nullable', 'string', 'max:40'],
             'pinned' => ['nullable', 'boolean'],
+            // Since 2.0.0-i: the person's flag.
+            'important' => ['nullable', 'boolean'],
             // Since v1.5: a smart folder, and a project's subfolders with `client_id`.
             'folder' => ['nullable', Rule::in(LibraryOrganiser::FOLDERS)],
             'include_subfolders' => ['nullable', 'boolean'],
@@ -56,7 +58,9 @@ final class LibraryController extends Controller
         // The `shared` folder (since v1.5) is what others sent this person, from their workspaces, read-only.
         $shared = ($data['folder'] ?? null) === 'shared';
         $query = ($shared ? $teammates->sharedSessions($device->user) : CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id))->with([
-            'device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels',
+            'device', 'client', 'markers:id,capture_session_id,tag,at_ms', 'labels',
+            // Since B6 without the transcripts' lines and search copy, which a row never reads.
+            'transcripts' => fn ($q) => $q->select(LibraryItemResource::TRANSCRIPT_COLUMNS),
             // Only this user's own "opened" row: whether to show the unopened dot (since v1.3).
             'opens' => fn ($q) => $q->where('user_id', $device->user_id),
         ])->withCount('screens');
@@ -107,6 +111,9 @@ final class LibraryController extends Controller
         }
         if ($request->has('pinned') && $data['pinned'] !== null) {
             $query->where('pinned', $request->boolean('pinned'));
+        }
+        if ($request->has('important') && $data['important'] !== null) {
+            $query->where('important', $request->boolean('important'));
         }
 
         $page = $query->orderByDesc('updated_at')->orderByDesc('id')

@@ -51,6 +51,22 @@ reconciler and the 30-day retention cleanup.
 10. In **Admin → API Credentials** paste the AssemblyAI API key and press **Generate** for the webhook secret.
    In **Admin → Settings** pick providers per use-case and add the certificate pins (see below).
 
+## Row indicators (contract 2.0.0-i)
+- **Migration `2026_12_21_000001`:** recordings get `important` (false for every one, with an index next to
+  `pinned`'s) and the new table `label_colors` (one row per coloured label of a person in a workspace; it goes with the
+  person or the workspace by its foreign keys). Nothing existing is rewritten, so the migration is quick at any size.
+- **Before:** the usual database dump. **Rehearsal** on a copy, on the Mac, with the dump and this release's `web/`:
+  `deploy/rehearse-migrations.sh --dump <backup>/db.sql.gz --web <release>/web --expect <new migrations> --checks
+  deploy/checks/2.0.0-i.sql`. It imports the dump into a throwaway MariaDB and runs `migrate --pretend`, `migrate`, the
+  checks, `migrate:rollback`, the checks, and `migrate` again, with the row counts compared at each step; it ends with
+  "REHEARSAL PASSED" or stops at the first failure. It never connects to the server and needs none of its keys.
+  (On 50,000 recordings: about two minutes; the migration itself 0.4 s up, 0.15 s down.)
+- **Rollback** (`migrate:rollback --step=1`) drops the column and the table: the important flags and label colours
+  people set since the deploy are lost; recordings, labels and everything else stay. To keep them, restore the dump
+  instead and accept that anything else written since is lost.
+- **Check after:** `GET /api/library?limit=1` with a device token carries `important`, `label_colors` and `expires_at`;
+  older apps ignore them.
+
 ## Cron (the only background process)
 ```
 * * * * * cd /home/USER/echoledger/web && php artisan schedule:run >> /dev/null 2>&1

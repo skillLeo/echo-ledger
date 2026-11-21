@@ -254,7 +254,7 @@ final class SettingsContext
             'security.two_step' => $this->flag('two_step') ? 'On' : 'Off',
             'devices' => ($n = $limits->devicesUsed($workspace, $this->user->id)).' signed in',
             'workspace' => ($n = $limits->seatsUsed($workspace)) === 1 ? '1 person' : $n.' people',
-            'appearance.sidebar' => Shell::STYLES[Shell::preferences($this->user)['style']],
+            'appearance.sidebar' => ConsoleV2::shell() ? __(Shell::STYLES[ConsoleV2Nav::style($this->user)]) : Shell::STYLES[Shell::preferences($this->user)['style']],
             'appearance.density' => Shell::DENSITIES[Shell::preferences($this->user)['density']],
             'appearance.clock' => Shell::preferences($this->user)['clock'] === '24h' ? '24-hour' : '12-hour',
             'appearance.library_view' => Shell::LAYOUTS[Shell::preferences($this->user)['layout']],
