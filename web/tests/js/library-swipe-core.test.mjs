@@ -33,3 +33,38 @@ test('a mostly vertical move is the page scrolling, not a swipe', () => {
     assert.equal(core.intent(60, 20), 'swipe');
     assert.equal(core.action(-150, 120, 360, false), null);
 });
+
+/** A record element as the browser has it, for the attributes only. */
+function fakeRecord() {
+    const attrs = new Map();
+    return { attrs, setAttribute: (k, v) => attrs.set(k, String(v)), removeAttribute: (k) => attrs.delete(k) };
+}
+const words = { delete: 'Delete', pin: 'Pin', unpin: 'Unpin' };
+
+test('while a row is dragged its record says which side shows, with the word; letting go clears both', () => {
+    const record = fakeRecord();
+    for (const dx of [-12, -40, -130]) core.paint(record, core.reveal(dx, false), false, words);
+    assert.equal(record.attrs.get('data-swipe'), 'delete');
+    assert.equal(record.attrs.get('data-swipe-label'), 'Delete');
+    // Back the other way in the same drag: the Pin side.
+    core.paint(record, core.reveal(60, false), false, words);
+    assert.equal(record.attrs.get('data-swipe'), 'pin');
+    assert.equal(record.attrs.get('data-swipe-label'), 'Pin');
+    core.paint(record, core.reveal(60, false), true, words);
+    assert.equal(record.attrs.get('data-swipe-label'), 'Unpin', 'a pinned row offers Unpin');
+    // reset(): nothing left on the record.
+    core.paint(record, null);
+    assert.equal(record.attrs.has('data-swipe'), false);
+    assert.equal(record.attrs.has('data-swipe-label'), false);
+});
+
+test('the revealed side is mirrored right to left, like the gesture', () => {
+    assert.equal(core.reveal(-50, true), 'pin');
+    assert.equal(core.reveal(50, true), 'delete');
+    assert.equal(core.reveal(0, false), null);
+    const record = fakeRecord();
+    core.paint(record, core.reveal(50, true), false, { delete: 'حذف کریں', pin: 'پن کریں', unpin: 'پن ہٹائیں' });
+    assert.equal(record.attrs.get('data-swipe'), 'delete');
+    assert.equal(record.attrs.get('data-swipe-label'), 'حذف کریں');
+    core.paint(null, 'pin', false, words); // no record: nothing to mark, no error
+});

@@ -41,5 +41,27 @@
         return towardStart ? 'delete' : 'pin';
     }
 
-    return { PHONE_MAX, enabled, threshold, intent, action };
+    /** Which side a row being dragged shows under it: 'delete' toward the end side's start (mirrored in RTL), 'pin' the other way. */
+    function reveal(dx, rtl) {
+        if (dx === 0) return null;
+        const towardStart = rtl ? dx > 0 : dx < 0;
+        return towardStart ? 'delete' : 'pin';
+    }
+
+    /**
+     * Marks the row's record while it is dragged, for the layer drawn under it: data-swipe ("delete" or "pin") and
+     * data-swipe-label (Delete, Pin, or Unpin when it is pinned, in the console's language). No side clears both.
+     */
+    function paint(record, side, pinned, words) {
+        if (! record) return;
+        if (! side) {
+            record.removeAttribute('data-swipe');
+            record.removeAttribute('data-swipe-label');
+            return;
+        }
+        record.setAttribute('data-swipe', side);
+        record.setAttribute('data-swipe-label', side === 'delete' ? words.delete : (pinned ? words.unpin : words.pin));
+    }
+
+    return { PHONE_MAX, enabled, threshold, intent, action, reveal, paint };
 });
