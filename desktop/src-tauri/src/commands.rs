@@ -201,6 +201,8 @@ async fn adopt_registration(app: &AppHandle, api: &ApiClient, registered: crate:
     }
     state.token_store.save(&registered.token).map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = Some(registered.token);
+    // Another account may be signing in: the last one's WhatsApp share copies go.
+    forget_whatsapp_shares(app);
     state.update_settings(|s| {
         s.server_url = Some(api.base_url().to_string());
         s.pins = final_pins.clone();
@@ -443,6 +445,8 @@ pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callb
 #[tauri::command]
 pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     let state = app.state::<AppState>();
+    // First, so the share copies go even when a later step (the keychain) fails.
+    forget_whatsapp_shares(&app);
     state.token_store.forget().map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = None;
     state.api_cache.clear();
@@ -1496,17 +1500,43 @@ pub async fn save_audio(app: AppHandle, id: String) -> AppResult<Option<String>>
 /// a dialog, so the person can attach it in WhatsApp; returns its path.
 #[tauri::command]
 pub async fn save_audio_downloads(app: AppHandle, id: String) -> AppResult<String> {
+    audio_to_downloads(&app, &id).await
+}
+
+async fn audio_to_downloads(app: &AppHandle, id: &str) -> AppResult<String> {
+    let state = app.state::<AppState>();
+    let audio = audio_source(app, id).await?;
+    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+    let path = export_target(&dir, &audio.name);
+    state.api()?.download_audio(&audio.url, &path).await?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// The recording's audio as the server has it now.
+struct AudioSource {
+    url: String,
+    name: String,
+    /// The audio's version and size (`share_sheet::audio_version`).
+    version: String,
+    size: Option<u64>,
+}
+
+/// The recording's audio link, file name and version; an error when the audio is not on the server.
+async fn audio_source(app: &AppHandle, id: &str) -> AppResult<AudioSource> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    let api = state.api()?;
-    let detail = api.session(&id).await?;
+    let detail = state.api()?.session(id).await?;
     let Some(url) = detail.get("playback_url").and_then(serde_json::Value::as_str).filter(|u| !u.is_empty()).map(str::to_string) else {
         return Err(AppError::msg("The audio of this recording is not on the server, so there is nothing to save yet."));
     };
-    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
-    let path = export_target(&dir, &crate::files::audio_file_name(&detail));
-    api.download_audio(&url, &path).await?;
-    Ok(path.to_string_lossy().into_owned())
+    let (version, size) = crate::share_sheet::audio_version(&detail);
+    Ok(AudioSource { url, name: crate::files::audio_file_name(&detail), version, size })
+}
+
+/// Send to WhatsApp's share copies (F6) are this account's: removed on sign-out and when an account signs in.
+fn forget_whatsapp_shares(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    crate::share_sheet::clear_all(&crate::share_sheet::share_root(app.path().app_cache_dir().ok(), &state.data_dir));
 }
 
 /// Send to WhatsApp (v1.6, P5.5): opens `wa.me` with the text (WhatsApp, else WhatsApp Web). True when the text was
@@ -1520,6 +1550,46 @@ pub fn whatsapp_open(app: AppHandle, text: String) -> AppResult<bool> {
     let (url, cut) = crate::whatsapp::whatsapp_url(&text);
     app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))?;
     Ok(cut)
+}
+
+/// Send to WhatsApp → Text and voice (F6): the audio kept in the app's cache (one copy per recording and audio version,
+/// used again on a retry; the others removed once this share has settled, and all of them on sign-out), then the text and the file handed to the system's share (WhatsApp's share on the Mac, the Share window on
+/// Windows). When that cannot be used, or `share` is false (the window's "Open WhatsApp with the text instead"): the
+/// voice in Downloads (one copy per recording), wa.me with the text as before, and the file on the clipboard to paste
+/// into the chat (`share_sheet`).
+#[tauri::command]
+pub async fn whatsapp_share_voice(app: AppHandle, id: String, text: String, share: Option<bool>) -> AppResult<crate::share_sheet::ShareOutcome> {
+    use crate::share_sheet::{self, ShareOutcome};
+    if text.trim().is_empty() {
+        return Err(AppError::msg("There is nothing to send yet."));
+    }
+    let audio = audio_source(&app, &id).await?;
+    let state = app.state::<AppState>();
+    let root = share_sheet::share_root(app.path().app_cache_dir().ok(), &state.data_dir);
+    let key = share_sheet::cache_key(&id, &audio.version);
+    let cached = root.join(&key).join(&audio.name);
+    if !share_sheet::is_cached(&cached, audio.size) {
+        // The folder is this audio version's own; whatever is in it is a copy that did not finish.
+        let _ = std::fs::remove_dir_all(root.join(&key));
+        std::fs::create_dir_all(root.join(&key))?;
+        state.api()?.download_audio(&audio.url, &cached).await?;
+    }
+    let outcome = async {
+        if share.unwrap_or(true)
+            && let Some(outcome) = share_sheet::settled(&share_sheet::share(&app, text.trim(), &cached.to_string_lossy()).await)
+        {
+            return Ok(outcome);
+        }
+        let downloads = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+        let path = share_sheet::downloads_copy(&downloads, &audio.name, &cached)?.to_string_lossy().into_owned();
+        let file_on_clipboard = share_sheet::file_to_clipboard(&app, &path).await;
+        let text_cut = whatsapp_open(app.clone(), text)?;
+        AppResult::Ok(ShareOutcome::Fallback { path, file_on_clipboard, text_cut, paste_keys: share_sheet::paste_keys(std::env::consts::OS).into() })
+    }
+    .await;
+    // Settled: the copies of earlier shares go (one still open until now could have been reading its copy).
+    share_sheet::clear_other_shares(&root, &key);
+    outcome
 }
 
 // ---- Settings export / import (B19) -----------------------------------------------------------------------------

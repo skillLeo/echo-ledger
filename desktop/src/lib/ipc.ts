@@ -1497,6 +1497,15 @@ export type CheckOutcome = "pass" | "fail" | "error";
 /** Why a Share Check ran. */
 export type CheckWhy = "asked" | "onboarding" | "first" | "app_update" | "system_update" | "weekly" | "before_call" | "retry";
 export type MeetingApp = "zoom" | "teams" | "meet" | "slack" | "whatsapp";
+
+/** How Send to WhatsApp → Text and voice ended (F6): the share took it (`toWhatsApp`: WhatsApp was the target), the
+ *  share is open and its end not known (`opened`: nothing is claimed), the person closed the share, or wa.me opened with
+ *  the text and the voice saved at `path` (on the clipboard, to paste with `pasteKeys`, when `fileOnClipboard`). */
+export type WhatsAppVoiceOutcome =
+  | { kind: "shared"; toWhatsApp: boolean }
+  | { kind: "opened" }
+  | { kind: "cancelled" }
+  | { kind: "fallback"; path: string; fileOnClipboard: boolean; textCut: boolean; pasteKeys: string };
 /** What the guided test says of a meeting app on this Mac. */
 export type MeetingAppState = "hidden" | "visible" | "not_checked" | "share_tab";
 
@@ -1995,6 +2004,9 @@ export const api = {
   saveAudioToDownloads: (id: string) => invoke<string>("save_audio_downloads", { id }),
   /** Send to WhatsApp (v1.6): opens wa.me with the text; true when it was too long and was cut (the core builds the address). */
   whatsappOpen: (text: string) => invoke<boolean>("whatsapp_open", { text }),
+  /** Send to WhatsApp → Text and voice (F6): the audio handed with the text to the system's share (WhatsApp's); without
+   *  it, or with `share` false, the audio in Downloads, wa.me with the text and the file on the clipboard. */
+  whatsappShareVoice: (id: string, text: string, share = true) => invoke<WhatsAppVoiceOutcome>("whatsapp_share_voice", { id, text, share }),
   /** Show as (since v1.2): the Roman Urdu and English views and their state; `makeTranscriptViews` starts them. */
   transcriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views", { id }),
   makeTranscriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views_make", { id }),
