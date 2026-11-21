@@ -3,8 +3,9 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-j (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
-2.0.0-j (proposed 2026-11-21, accepted when merged): "Audio only and Transcribe later" (1.8.0-e) is served: the three endpoints, `audio_only`, `transcribe_estimate` and projects' `transcribe_calls`. Clarified where the server had to decide: minutes are plan minutes (0 on the person's own key or an on-device engine); the estimate lists only the person's audio-only recordings among the ids (what bulk would start); bulk on Free without an own key is `403 needs_transcription_key` and nothing starts; the open create takes `transcribe` too.
+**Contract revision: 2.0.0-k (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-k (proposed 2026-11-21, accepted when merged): a call's title comes from the person called (see "Title from the person"): a person's own title, then "Call with <name>" or the number, then the automatic title. No field changes: `title` is that title, `title_auto` as before.
+2.0.0-j (accepted 2026-11-21): "Audio only and Transcribe later" (1.8.0-e) is served: the three endpoints, `audio_only`, `transcribe_estimate` and projects' `transcribe_calls`. Clarified where the server had to decide: minutes are plan minutes (0 on the person's own key or an on-device engine); the estimate lists only the person's audio-only recordings among the ids (what bulk would start); bulk on Free without an own key is `403 needs_transcription_key` and nothing starts; the open create takes `transcribe` too.
 2.0.0-i (accepted 2026-11-21): the parity plan's row indicators (docs/PLAN_V2_PARITY.md section 3). Library items carry
 `important`, `label_colors` and `expires_at`; `PATCH /api/sessions/{id}` takes `important` and answers with `opened`;
 `POST /api/sessions/bulk` takes `important` and `unimportant`; `GET /api/library` takes `important=1|0`; `GET
@@ -1847,6 +1848,17 @@ the usage ledger:
   items and `GET /api/sessions/{id}` carry `title_auto: true` for such a title. A title set by a person (`PATCH` with
   `title`, or at upload) is `title_auto: false` and is never replaced. Setting `title` to `null` asks for the automatic
   one again.
+- **Title from the person** (since 2.0.0-k). Every `title` the API gives (Library items, `GET /api/sessions/{id}`, search,
+  Shared with me, activity, share pages and exports) follows one order:
+  1. a title a person chose (`PATCH` with `title`, or at upload) that is not one of an app's generic names ("WhatsApp
+     call", "Voice note", a file name such as "PTT-20261108-WA0012"): it always wins, and a transcript never changes it;
+  2. the person called, unless it is a voice note: "Call with <name>" from `caller.name` (a `window_title` or `calendar`
+     name as it is), or, without a name, "Call with <number>" from `caller.number`, for every call app. A name that is
+     only an app's label ("WhatsApp", "WhatsApp call", "Unknown", "Private number") counts as no name;
+  3. the automatic title (`title_auto: true`), made only when no person is known;
+  4. the app's own name for an untitled recording ("WhatsApp call", "Voice note").
+  An automatic title made before the caller was known gives way to the person as soon as `caller` is known; nothing
+  stored changes, so a title once set by a person is never lost.
 - **Two engines on every short note** (Settings → Recording → Double-check short notes, on by default). A recording of
   up to 3 minutes is heard by a second engine, the cheapest other one with a key; the words are lined up. A segment word
   the engines disagree on keeps the first engine's `text` and gains `alt` (the other engine's word, `""` when it heard

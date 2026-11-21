@@ -17,6 +17,7 @@ use App\Models\Scopes\WorkspaceScope;
 use App\Services\ProviderCopyEraser;
 use App\Services\Screens\ScreenStore;
 use App\Services\SettingsRepository;
+use App\Services\Titles\GenericTitles;
 use Database\Factories\CaptureSessionFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -231,19 +232,33 @@ class CaptureSession extends Model
      */
     public function displayTitle(): string
     {
-        if ($this->title !== null && $this->title !== '') {
-            return $this->title;
-        }
-        // Caller names (since v1.2): "Call with Omar Khan"; a meeting's window or calendar title is used as it is.
-        if ($this->caller_name !== null && $this->caller_name !== '' && $this->source_app !== SourceApp::VoiceNote) {
-            return in_array($this->caller_source, ['window_title', 'calendar'], true) ? $this->caller_name : 'Call with '.$this->caller_name;
-        }
-        // A phone call from a number that is not a contact: "Call with +92 300 1234567".
-        if ($this->source_app === SourceApp::PhoneCall && $this->caller_number !== null && $this->caller_number !== '') {
-            return 'Call with '.$this->caller_number;
+        // docs/API.md "Title from the person" (since 2.0.0-k): a person's own title, then the person called, then the
+        // automatic title, then the app's name for an untitled recording.
+        $title = trim((string) $this->title);
+        if ($title !== '' && ! $this->title_auto && ! GenericTitles::is($title)) {
+            return (string) $this->title;
         }
 
-        return self::fallbackTitleFor($this->source_app);
+        return $this->personTitle() ?? ($title !== '' ? (string) $this->title : self::fallbackTitleFor($this->source_app));
+    }
+
+    /**
+     * The title the person called gives (since v1.2, the rule since 2.0.0-k): "Call with Omar Khan" (a meeting's window or
+     * calendar title as it is), else "Call with +92 300 1234567". Null for a voice note, or when nobody is known: a name
+     * that is only an app's label ("WhatsApp") or what apps write for an unknown caller names nobody.
+     */
+    public function personTitle(): ?string
+    {
+        if ($this->source_app === SourceApp::VoiceNote) {
+            return null;
+        }
+        $name = trim((string) $this->caller_name);
+        if (! GenericTitles::namesNobody($name)) {
+            return in_array($this->caller_source, ['window_title', 'calendar'], true) ? $name : 'Call with '.$name;
+        }
+        $number = trim((string) $this->caller_number);
+
+        return $number !== '' ? 'Call with '.$number : null;
     }
 
     /**

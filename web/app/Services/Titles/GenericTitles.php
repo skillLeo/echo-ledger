@@ -15,6 +15,10 @@ use App\Models\CaptureSession;
  */
 final class GenericTitles
 {
+    /** What apps put where a caller's name goes when they do not know it (since 2.0.0-k): no name at all. */
+    private const NO_NAMES = ['unknown', 'unknown caller', 'unknown number', 'private', 'private number', 'no caller id',
+        'caller', 'contact', 'user', 'whatsapp user', 'call', 'incoming call', 'outgoing call', 'missed call'];
+
     /** Names that say nothing about the recording, besides each app's fallback title. */
     private const NAMES = ['imported file', 'recovered recording', 'untitled', 'untitled recording', 'new recording', 'audio', 'voice message', 'voice recording'];
 
@@ -24,6 +28,26 @@ final class GenericTitles
         '/^whatsapp (audio|ptt|voice note|voice message) \d{4}-\d{2}-\d{2} at \d{1,2}[.:]\d{2}[.:]\d{2}( ?[ap]\.?m\.?)?( \(\d+\))?$/',
         '/^(voice|recording|new recording|audio|voice note|call recording) ?\d{1,4}$/',
     ];
+
+    /**
+     * Whether a caller "name" names nobody (since 2.0.0-k, docs/API.md "Title from the person"): empty, an app's label
+     * ("WhatsApp", "WhatsApp Business call"), a generic title, or what apps write for an unknown caller.
+     */
+    public static function namesNobody(?string $name): bool
+    {
+        $name = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', (string) $name)));
+        if ($name === '' || in_array($name, self::NO_NAMES, true) || self::is($name)) {
+            return true;
+        }
+        foreach (SourceApp::cases() as $app) {
+            $label = mb_strtolower($app->getLabel());
+            if ($name === $label || $name === $label.' call' || $name === $label.' audio call' || $name === $label.' video call') {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public static function is(?string $title): bool
     {
