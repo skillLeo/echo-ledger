@@ -14,7 +14,6 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Support\ConsoleDates;
-use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
@@ -218,7 +217,7 @@ class ViewClient extends ViewRecord
         }
         $client = $this->client();
         $client->update(['ai_notes' => ! $client->ai_notes]);
-        Notification::make()->title($client->ai_notes ? __('AI notes are on for :name', ['name' => self::iso($client->name)]) : __('AI notes are off for :name', ['name' => self::iso($client->name)]))->success()->send();
+        Notification::make()->title($client->ai_notes ? __('AI notes are on for :name', ['name' => $client->name]) : __('AI notes are off for :name', ['name' => $client->name]))->success()->send();
     }
 
     /** The edit form of the brief: the goal on one line, every other section one line per item. */
@@ -331,7 +330,7 @@ class ViewClient extends ViewRecord
         }
         try {
             $file = app(ClientWorkspace::class)->addFile($this->client(), $upload, (int) auth()->id());
-            Notification::make()->title(__('Added :name', ['name' => self::iso($file->name)]))->body(__('Its text is being read for the brief and Ask.'))->success()->send();
+            Notification::make()->title(__('Added :name', ['name' => $file->name]))->body(__('Its text is being read for the brief and Ask.'))->success()->send();
         } catch (ApiError $e) {
             $this->addError('upload', $e->getMessage());
         } finally {
@@ -364,7 +363,7 @@ class ViewClient extends ViewRecord
                 $file = ClientFile::query()->where('client_id', $this->client()->id)->find($arguments['file'] ?? null);
                 if ($file instanceof ClientFile) {
                     app(ClientWorkspace::class)->deleteFile($file);
-                    Notification::make()->title(__('Removed :name', ['name' => self::iso($file->name)]))->success()->send();
+                    Notification::make()->title(__('Removed :name', ['name' => $file->name]))->success()->send();
                 }
             });
     }
@@ -595,11 +594,5 @@ class ViewClient extends ViewRecord
         }
 
         return [...$crumbs, $client->name];
-    }
-
-    /** A name inside a translated sentence, isolated in right to left so the sentence keeps the page's direction (W-209, D4 §4). */
-    private static function iso(string $value): string
-    {
-        return ConsoleV2::rtl() ? "\u{2068}{$value}\u{2069}" : $value;
     }
 }
