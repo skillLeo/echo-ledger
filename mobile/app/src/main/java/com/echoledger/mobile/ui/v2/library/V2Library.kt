@@ -136,9 +136,15 @@ fun V2LibraryScreen(
     // Live status (classic's rule): while something is uploading, being transcribed or converted to its default view,
     // the list asks again every 5 s, so "Converting to Roman Urdu… 60%" moves and goes; it stops once all is done.
     // A view still `making` 20 minutes after the recording last changed has stopped on the server (it says failed,
-    // which no sync brings): it no longer keeps the list asking, and its views are read once instead.
+    // which no sync brings): it no longer keeps the list asking; its views are read as the Library opens, then about
+    // 5 and 15 minutes on, instead.
     val stale = remember(library) { library.filter { LibraryModel.viewsStale(it) } }
-    LaunchedEffect(stale.map { it.id }) { stale.forEach(vm::recheckViews) }
+    LaunchedEffect(stale.map { it.id }) {
+        for (wait in LibraryModel.VIEWS_RECHECKS) {
+            kotlinx.coroutines.delay(wait)
+            stale.forEach(vm::recheckViews)
+        }
+    }
     val busy = pending.any { it.state == "uploading" || it.state == "queued" } ||
         library.any {
             com.echoledger.mobile.core.ItemStatus.of(it) == com.echoledger.mobile.core.ItemStatus.PROCESSING ||

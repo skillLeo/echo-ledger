@@ -75,6 +75,26 @@ class V2ProfileCardParityTest {
         assertNull(upgradeLook(plan("free"), signedIn = true, manual = false))
     }
 
+    @Test
+    fun freeWithoutThePlanOffersStillOffersUpgradeFilled() {
+        // The server sent no offers (an older server, or entitlements not read yet): Free still has a plan above it.
+        val free = PlanState(name = "Free", key = "free", role = "owner")
+        assertEquals(UpgradeLook.Filled, upgradeLook(free, signedIn = true, manual = true))
+        assertEquals(UpgradeLook.Filled, upgradeLook(PlanState(name = "Free", role = "owner"), signedIn = true, manual = true))
+        // A paid plan without offers cannot tell whether one is above it: no Upgrade.
+        assertNull(upgradeLook(PlanState(name = "Pro", key = "pro", role = "owner"), signedIn = true, manual = true))
+        var upgraded = 0
+        compose.setContent {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                ProfileCardSlot(ProfileState.Ready(profile), {
+                    upgraded++
+                }, {}, upgrade = upgradeLook(free, signedIn = true, manual = true))
+            }
+        }
+        compose.onNode(hasText("Upgrade") and hasClickAction()).performClick()
+        assertEquals(1, upgraded)
+    }
+
     private val profile = Profile("Ayesha Siddiqui", "ayesha@bilaltraders.pk", "Free", 42, 120, 2_100_000_000, 31)
 
     private fun card(upgrade: UpgradeLook?, onOpenPlan: () -> Unit = {}) = compose.setContent {
@@ -119,5 +139,30 @@ class V2ProfileCardParityTest {
             }
         }
         compose.onNodeWithText("Audio kept: 2.1 GB in 31 recordings · cleaned up automatically after 30 days").assertExists()
+    }
+
+    @Test
+    fun inSettingsATapOnTheCardOpensPlanAndUsageAndUpgradeStartsTheUpgrade() {
+        val opened = mutableListOf<String>()
+        var upgraded = 0
+        compose.setContent {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                com.echoledger.mobile.ui.v2.settings.V2SettingsRoot(
+                    settings = com.echoledger.mobile.data.AppSettings(plan = plan("free")),
+                    profile = ProfileState.Ready(profile),
+                    signedIn = true,
+                    onUpgrade = { upgraded++ },
+                    onRetryProfile = {},
+                    onOpen = { page, _ -> opened += page },
+                    onSignOut = {},
+                    onBack = {}
+                )
+            }
+        }
+        compose.onNodeWithText("Ayesha Siddiqui", substring = true).performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(listOf("plan"), opened)
+        compose.onNode(hasText("Upgrade") and hasClickAction()).performClick()
+        assertEquals(1, upgraded)
+        assertEquals("Upgrade is its own button", listOf("plan"), opened)
     }
 }

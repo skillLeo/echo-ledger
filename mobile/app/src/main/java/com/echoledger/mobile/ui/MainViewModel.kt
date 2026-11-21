@@ -610,19 +610,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { graph.api()?.transcriptViews(transcriptId) }.getOrNull()
     }
 
-    private val viewsRechecked = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val viewsRechecking = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     /**
-     * A row still `making` long after its transcript finished: its views are read once, and the row takes what they
-     * say (failed after 20 minutes with nothing done, or ready), since that change does not reach a sync.
+     * A row still `making` long after its transcript finished: its views are read (when the Library opens, then about
+     * 5 and 15 minutes on: [com.echoledger.mobile.ui.v2.library.LibraryModel.VIEWS_RECHECKS]), and the row takes what
+     * they say (failed after 20 minutes with nothing done, or ready), since that change does not reach a sync. One read
+     * at a time per row.
      */
     fun recheckViews(item: LibraryItem) {
         val id = item.transcript?.finalTranscriptId ?: return
-        if (!viewsRechecked.add(item.id)) return
+        if (!viewsRechecking.add(item.id)) return
         viewModelScope.launch(Dispatchers.IO) {
-            val now = runCatching { graph.api()?.transcriptViews(id) }.getOrNull() ?: return@launch
-            val was = item.transcript?.views ?: return@launch
-            if (now.status != was.status) graph.library.setViewsLocally(item.id, was.copy(status = now.status, progress = now.progress))
+            try {
+                val now = runCatching { graph.api()?.transcriptViews(id) }.getOrNull() ?: return@launch
+                val was = item.transcript?.views ?: return@launch
+                if (now.status != was.status) graph.library.setViewsLocally(item.id, was.copy(status = now.status, progress = now.progress))
+            } finally {
+                viewsRechecking.remove(item.id)
+            }
         }
     }
 

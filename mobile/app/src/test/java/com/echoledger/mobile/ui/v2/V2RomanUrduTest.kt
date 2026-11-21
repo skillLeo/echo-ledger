@@ -191,7 +191,9 @@ class V2RomanUrduTest : ScreenTest() {
         rowViews: String,
         preview: String = "Hello there.",
         previewView: String = "original",
-        updatedAt: String = java.time.OffsetDateTime.now().toString()
+        updatedAt: String = java.time.OffsetDateTime.now().toString(),
+        /** False: the Library is left (another tab), true: it opens again. */
+        open: androidx.compose.runtime.State<Boolean>? = null
     ) {
         val row = ServerFixtures.libraryItem(
             ServerFixtures.SESSION_ID,
@@ -207,7 +209,7 @@ class V2RomanUrduTest : ScreenTest() {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
                 val toasts = rememberEchoToastState()
                 CompositionLocalProvider(LocalEchoToasts provides toasts) {
-                    V2LibraryScreen(vm, initials = "AS", onOpen = {}, onTrash = {}, onAccount = {})
+                    if (open?.value != false) V2LibraryScreen(vm, initials = "AS", onOpen = {}, onTrash = {}, onAccount = {})
                 }
             }
         }
@@ -297,5 +299,35 @@ class V2RomanUrduTest : ScreenTest() {
                 now
             )
         )
+    }
+
+    @Test
+    fun aStoppedViewIsReadAgainAboutFiveAndFifteenMinutesOnAndWhenTheLibraryOpens() {
+        // The server still says making (its clean-up has not run yet), so the row stays stale.
+        views("making", """{"status":"making","available":["roman","english"],"default":"roman","progress":{}}""")
+        val old = java.time.OffsetDateTime.now().minusMinutes(30).toString()
+        val open = androidx.compose.runtime.mutableStateOf(true)
+        library("""{"status":"making","default":"roman","progress":{}}""", updatedAt = old, open = open)
+        val reads = { server.requestsTo("GET", "/api/transcripts/.+/views").size }
+        pumpUntil("read as the Library opens") { reads() == 1 }
+        fun after(minutes: Long) {
+            compose.mainClock.advanceTimeBy(minutes * 60_000, ignoreFrameDuration = true)
+            compose.waitForIdle()
+        }
+        after(4)
+        assertEquals("not before 5 minutes", 1, reads())
+        after(1)
+        pumpUntil("read again at about 5 minutes") { reads() == 2 }
+        after(9)
+        assertEquals(2, reads())
+        after(1)
+        pumpUntil("read again at about 15 minutes") { reads() == 3 }
+        after(60)
+        assertEquals("no more while the Library stays open", 3, reads())
+        // Leaving the Library and opening it again reads them once more.
+        open.value = false
+        compose.waitForIdle()
+        open.value = true
+        pumpUntil("read as the Library opens again") { reads() == 4 }
     }
 }

@@ -9,6 +9,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.percentOffset
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
@@ -39,7 +41,7 @@ import org.junit.Test
  * the file's size in Details, and the scrubber's tap and drag (left to right in every language, as media never mirrors).
  */
 class V2RecordingPageParityTest : ScreenTest() {
-    private fun pair() {
+    private fun pair(audio: Boolean = false) {
         runBlocking { app.pairLocally(server) }
         server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
         val many = (0 until 40).joinToString(",") { i ->
@@ -49,7 +51,7 @@ class V2RecordingPageParityTest : ScreenTest() {
         server.on(
             "GET",
             "/api/sessions/${ServerFixtures.SESSION_ID}",
-            FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null))
+            FakeServer.json(200, if (audio) ServerFixtures.sessionDetail() else ServerFixtures.sessionDetail(playbackUrl = null))
         )
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
     }
@@ -67,8 +69,8 @@ class V2RecordingPageParityTest : ScreenTest() {
         updatedAt = "2026-10-20T10:05:00+00:00"
     )
 
-    private fun open() {
-        pair()
+    private fun open(audio: Boolean = false) {
+        pair(audio)
         show {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
                 val toasts = rememberEchoToastState()
@@ -147,5 +149,28 @@ class V2RecordingPageParityTest : ScreenTest() {
         compose.onNode(hasContentDescription("Position")).performTouchInput { click(percentOffset(0.75f, 0.5f)) }
         assertTrue("seeks to $at", at in 70_000L..80_000L)
         assertEquals(true, at > 50_000L)
+    }
+
+    /** The page's player: "position / length" (its Position's state), in milliseconds. */
+    private fun clock(): Pair<Long, Long> {
+        val words = compose.onNode(hasContentDescription("Position")).fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription]
+        fun ms(t: String) = t.trim().split(":").map { it.toLong() }.fold(0L) { acc, n -> acc * 60 + n } * 1000
+        val (at, of) = words.split("/")
+        return ms(at) to ms(of)
+    }
+
+    @Test
+    fun onTheRecordingPageTheScrubbersTapMovesThePlayerAndALinePlaysFromItsStart() {
+        open(audio = true)
+        pumpUntil("the player") { compose.onAllNodes(hasContentDescription("Position")).fetchSemanticsNodes().isNotEmpty() }
+        pumpUntil("its length") { clock().second > 0 }
+        compose.onNode(hasContentDescription("Position")).performTouchInput { click(percentOffset(0.75f, 0.5f)) }
+        pumpUntil("moved") { clock().first > 0 }
+        val (at, of) = clock()
+        assertTrue("the page's player moved to $at of $of", at.toDouble() / of in 0.7..0.8)
+        // A line plays from where it starts: line 10 starts at 0:50.
+        compose.onNodeWithText("Line number 10 of the call.").performClick()
+        pumpUntil("at the line") { clock().first == 50_000L }
     }
 }

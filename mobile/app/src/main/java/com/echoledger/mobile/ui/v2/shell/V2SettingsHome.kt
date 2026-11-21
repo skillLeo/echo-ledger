@@ -68,8 +68,10 @@ fun upgradeLook(
     manual: Boolean = com.echoledger.mobile.ui.manualPayments
 ): UpgradeLook? {
     val member = plan.role == "member" || plan.role == "viewer"
-    if (!manual || member || !signedIn || plan.upgrade?.open == true || plan.higherPlans.isEmpty()) return null
-    return if (plan.isFree) UpgradeLook.Filled else UpgradeLook.Outlined
+    if (!manual || member || !signedIn || plan.upgrade?.open == true) return null
+    // Free always has a plan above it, also before (or without) the server's offers.
+    if (plan.isFree) return UpgradeLook.Filled
+    return if (plan.higherPlans.isEmpty()) null else UpgradeLook.Outlined
 }
 
 /** What the profile card shows. */

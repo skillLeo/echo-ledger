@@ -5,9 +5,10 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.data.WordDto
@@ -23,6 +24,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Transcript lines against classic's (docs/v2/audit/parity.csv PH-REC-037, 038): the line being played is the active
@@ -30,6 +32,8 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w411dp-h2400dp-mdpi", application = Application::class)
+// Real text measuring, so a tap lands on the word where the text laid it out.
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class V2TranscriptLineParityTest {
     @get:Rule
     val compose = createComposeRule()
@@ -90,8 +94,13 @@ class V2TranscriptLineParityTest {
         assertEquals(words.text, shownWords)
         assertEquals(6_000L, com.echoledger.mobile.core.Uncertain.playFrom(segments[1], ranges, shownWords.indexOf("forty") + 2))
         assertEquals(5_000L, com.echoledger.mobile.core.Uncertain.playFrom(segments[1], ranges, shownWords.indexOf("Rate") + 1))
-        // A tap elsewhere on the line plays from the line.
-        compose.onNodeWithText("forty", substring = true).performClick()
-        assertEquals(listOf(5_000L), played)
+        // A real tap on the unsure word, where the text laid it out, plays from that word (6.0 s).
+        val box = layout.getBoundingBox(forty + 2)
+        compose.onNodeWithText("forty", substring = true, useUnmergedTree = true).performTouchInput { click(box.center) }
+        assertEquals(listOf(6_000L), played)
+        // A tap on a sure word ("Rate") plays from the line.
+        val rate = layout.getBoundingBox(words.text.indexOf("Rate") + 1)
+        compose.onNodeWithText("forty", substring = true, useUnmergedTree = true).performTouchInput { click(rate.center) }
+        assertEquals(listOf(6_000L, 5_000L), played)
     }
 }

@@ -148,6 +148,12 @@ object LibraryModel {
     /** How long a view may be `making` with the recording unchanged before the server calls it failed (2.0.0-n). */
     val VIEWS_STALE: java.time.Duration = java.time.Duration.ofMinutes(20)
 
+    /**
+     * When the Library reads a stale row's views again: as it opens, then about 5 and 15 minutes on (each wait after
+     * the one before).
+     */
+    val VIEWS_RECHECKS: List<Long> = listOf(0L, 5 * 60_000L, 10 * 60_000L)
+
     /** A row whose view is still `making` [VIEWS_STALE] after the recording last changed (its transcript finishing). */
     fun viewsStale(item: LibraryItem, now: java.time.Instant = java.time.Instant.now()): Boolean {
         if (item.transcript?.views?.status != "making") return false
