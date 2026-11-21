@@ -75,6 +75,8 @@ final class RecordingRow
 
         return match (true) {
             $session->status === SessionStatus::Recording => ['label' => 'Waiting', 'tone' => 'brand', 'icon' => 'heroicon-o-clock', 'spin' => false],
+            // Since v1.8 (contract 1.8.0-e): kept as audio, transcribed when the person asks.
+            $session->status === SessionStatus::AudioOnly => ['label' => 'Audio only', 'tone' => 'neutral', 'icon' => 'heroicon-o-speaker-wave', 'spin' => false],
             $session->status === SessionStatus::Uploading => ['label' => 'Uploading', 'tone' => 'brand', 'icon' => 'heroicon-o-arrow-path', 'spin' => CaptureSessionsTable::isPending($session)],
             $session->status === SessionStatus::Failed, $final?->status === TranscriptStatus::Failed => ['label' => 'Failed', 'tone' => 'danger', 'icon' => 'heroicon-o-exclamation-circle', 'spin' => false],
             $session->status === SessionStatus::Processing,

@@ -180,7 +180,7 @@ fun EchoToast(message: String, actionLabel: String?, onAction: () -> Unit, modif
         shape = RoundedCornerShape(EchoTokens.Component.menuRadius),
         color = c.textPrimary,
         contentColor = c.bgSurface,
-        shadowElevation = EchoTokens.Space.s8
+        shadowElevation = EchoTokens.Elevation.floating
     ) {
         Row(
             Modifier

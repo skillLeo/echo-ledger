@@ -101,7 +101,8 @@ final class LibraryOrganiser
                 ->orWhereHas('recordings', fn (Builder $r) => $r->where('upload_status', UploadStatus::Failed->value))),
             'pinned' => $query->where($query->qualifyColumn('pinned'), true),
             // Since v2.0 (the v2.0 Library's saved view): recordings kept with audio but no finished transcript yet.
-            'untranscribed' => $query->where($query->qualifyColumn('status'), SessionStatus::Completed->value)
+            // Since v1.8 audio-only recordings too (kept as audio, transcribed when the person asks).
+            'untranscribed' => $query->whereIn($query->qualifyColumn('status'), [SessionStatus::Completed->value, SessionStatus::AudioOnly->value])
                 ->whereDoesntHave('finalTranscript', fn (Builder $t): Builder => $t->where('status', TranscriptStatus::Completed->value)),
             default => $query,
         };

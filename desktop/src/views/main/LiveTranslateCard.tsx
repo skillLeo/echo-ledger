@@ -94,27 +94,27 @@ function LiveTranslateForm({ run }: { run: <T>(fn: () => Promise<T>, ok?: string
       <div className="translate-form">
         <label className="small">App
           <select aria-label="App to translate" value={pid ?? ""} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : null)} disabled={running || ended}>
-            <option value="">{appsPrompt(apps.length, appsError !== null)}</option>
-            {apps.map((a) => <option key={a.pid} value={a.pid}>{a.name}</option>)}
+            <option dir="auto" value="">{appsPrompt(apps.length, appsError !== null)}</option>
+            {apps.map((a) => <option dir="auto" key={a.pid} value={a.pid}>{a.name}</option>)}
           </select>
         </label>
         <button type="button" className="btn ghost compact" onClick={refresh} disabled={running || ended}>Refresh</button>
         <label className="small">Mode
           <select aria-label="Mode" value={mode} onChange={(e) => setMode(e.target.value as TranslateMode)} disabled={running || ended}>
-            <option value="game">Game (box at the top)</option>
-            <option value="watch">Watch (subtitles)</option>
+            <option dir="auto" value="game">Game (box at the top)</option>
+            <option dir="auto" value="watch">Watch (subtitles)</option>
           </select>
         </label>
         <label className="small">Translate to
           <select aria-label="Translate to" value={target} onChange={(e) => setTarget(e.target.value)} disabled={running || ended}>
-            {TRANSLATE_TARGETS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+            {TRANSLATE_TARGETS.map(([code, name]) => <option dir="auto" key={code} value={code}>{name}</option>)}
           </select>
         </label>
         <label className="small">Speed
           <select aria-label="Speed" value={speed} onChange={(e) => setSpeed(e.target.value as TranslateSpeed)} disabled={running || ended}>
-            <option value="fastest">Fastest</option>
-            <option value="balanced">Balanced</option>
-            <option value="accurate">Accurate</option>
+            <option dir="auto" value="fastest">Fastest</option>
+            <option dir="auto" value="balanced">Balanced</option>
+            <option dir="auto" value="accurate">Accurate</option>
           </select>
         </label>
       </div>

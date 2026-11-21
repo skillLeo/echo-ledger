@@ -222,6 +222,15 @@ function isoApiCases(array $b): array
         'api.sessions.destroy' => ['DELETE', "/api/sessions/{$s}", [], 404],
         'api.sessions.update' => ['PATCH', "/api/sessions/{$s}", ['title' => 'hijacked'], 404],
         'api.sessions.bulk' => ['POST', '/api/sessions/bulk', ['ids' => [$s], 'action' => 'delete'], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('changed') === 0],
+        // Since 2.0.0-j: the other side's recording is none of this person's to transcribe or count.
+        'api.sessions.transcribe' => ['POST', "/api/sessions/{$s}/transcribe", [], 404],
+        // The answer names the ids it skipped, as the contract says: the caller's own input, with the same not_found an
+        // unknown id gets. That echo (and nothing else of the other side) is allowed: the fifth item.
+        'api.sessions.transcribe.many' => ['POST', '/api/sessions/transcribe', ['ids' => [$s]],
+            fn (TestResponse $r): bool => $r->status() === 202 && $r->json('started') === [] && $r->json('skipped') === [['id' => $s, 'code' => 'not_found']],
+            ['{"id":"'.$s.'","code":"not_found"}']],
+        'api.sessions.transcribe.estimate' => ['POST', '/api/sessions/transcribe-estimate', ['ids' => [$s]],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('items') === [] && $r->json('minutes') === 0],
         // Since 2.0.0-i: the other side's label is no label of this person's, so nothing is coloured or re-synced.
         'api.labels.color' => ['PUT', '/api/labels/color', ['label' => 'bobsecretlabel', 'color' => '#000000'], 404],
         'api.clients.store' => ['POST', '/api/clients', ['name' => 'Alice new client'], fn (TestResponse $r): bool => $r->status() === 201],
@@ -365,6 +374,17 @@ function isoApiCases(array $b): array
         'api.assist.sessions.ask' => ['POST', "/api/assist/sessions/{$b['assistSession']->id}/ask", ['question' => 'What did they say?'], 404],
         'api.assist.sessions.live' => ['POST', "/api/assist/sessions/{$b['assistSession']->id}/live", ['type' => 'turn_final', 'turn_id' => 'x', 'channel' => 'other', 'text' => 'HIJACK'], 404],
     ];
+}
+
+/**
+ * What of the other side [$body] shows, after taking out exactly the echoes a case allows (the fifth item of its row in
+ * isoApiCases: answers that name the caller's own input back, as a bulk call's `skipped`).
+ *
+ * @param  list<string>  $echoes
+ */
+function isoLeaksBut(string $body, array $b, array $echoes): array
+{
+    return isoLeaks(str_replace($echoes, '', $body), $b);
 }
 
 function isoLeaks(string $body, array $b): array

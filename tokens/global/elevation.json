@@ -33,5 +33,17 @@
       },
       "$description": "Floating overlays"
     }
+  },
+  "elevation": {
+    "floating": {
+      "$type": "dimension",
+      "$value": "8px",
+      "$description": "Phone: a layer over the content (toast, recording pill, after-call card, assist card)"
+    },
+    "modal": {
+      "$type": "dimension",
+      "$value": "16px",
+      "$description": "Phone: a dialog or a sheet"
+    }
   }
 }

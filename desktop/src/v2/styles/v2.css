@@ -201,7 +201,9 @@
 /* Grouped menus with icons, shortcuts and sub-menus (a recording's ⋮, Export ▸), and the same menu at the pointer. */
 .el-menu__item { position: relative; list-style: none; }
 .el-menu__group { padding: var(--el-space-8) var(--el-space-8) var(--el-space-4); color: var(--el-role-text-secondary); }
-.el-menu__group:first-child { padding-block-start: var(--el-space-4); }
+.el-menu__section { display: contents; }
+.el-menu__section > ul { margin: 0; padding: 0; }
+.el-menu__section:first-child .el-menu__group { padding-block-start: var(--el-space-4); }
 .el-menu__label { flex: 1; }
 .el-menu__icon-space { inline-size: var(--el-space-16); flex: none; }
 .el-menu__shortcut { font-family: inherit; color: var(--el-role-text-secondary); padding-inline-start: var(--el-space-16); }
@@ -1142,11 +1144,93 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-row__label { padding-inline: var(--el-space-4); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); white-space: nowrap; }
 .el-drawer .el-page__head { padding-inline-end: var(--el-space-40); }
 
+/* ---- SelectionBar, StickyItemBar, SortGroupMenu, BellButton, labels (desktop v2 shared bars) ----------------- */
+/* Selection mode's top bar: × · "3 selected" · Select all, then the actions and ⋮ on the end side. Solid surface with a
+   hairline under it, on the sticky layer under the top bar, like every sticky layer (D5 4). */
+.el-selection-bar {
+  position: sticky; inset-block-start: var(--topbar-h, var(--el-space-0)); z-index: var(--el-layer-sticky);
+  display: flex; align-items: center; gap: var(--el-space-4);
+  min-inline-size: 0;
+  padding-block: var(--el-space-4);
+  background: var(--el-role-bg-surface);
+  border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+.el-selection-bar__title { flex: 0 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-selection-bar__all { flex: none; margin-inline-end: auto; }
+.el-selection-bar__actions { display: flex; flex: none; align-items: center; gap: var(--el-space-4); }
+.el-selection-bar__danger:not(:disabled) { color: var(--el-role-danger-default); }
+.el-selection-bar__danger:hover:not(:disabled) { background: var(--el-role-danger-soft); }
+
+/* An item page's compact bar (D5 3.3). The outer box sticks and takes no room, so nothing below moves when the bar
+   appears; the bar is drawn over the top of the page, under the top bar. */
+.el-itembar {
+  position: sticky; inset-block-start: var(--item-bar-top, var(--topbar-h, var(--el-space-0))); z-index: var(--el-layer-sticky);
+  block-size: var(--el-space-0);
+}
+.el-itembar__bar {
+  position: absolute; inset-block-start: var(--el-space-0); inset-inline: var(--el-space-0);
+  display: flex; align-items: center; gap: var(--el-space-4);
+  min-block-size: var(--el-space-40);
+  padding-inline: var(--el-space-4);
+  background: var(--el-role-bg-surface);
+  border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+.el-itembar__bar[hidden] { display: none; }
+.el-itembar__title { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: match-parent; text-align: -webkit-match-parent; }
+
+/* The bell: the unread count in a small badge that starts at the middle of the icon and runs to its end side, ringed
+   in the surface colour so it stands off the glyph; in the accent (red is only for recording and destructive actions). */
+.el-bell { position: relative; }
+.el-bell__badge {
+  position: absolute; inset-block-start: var(--el-space-2); inset-inline-start: calc(50% + var(--el-space-2));
+  outline: var(--el-border-strong) solid var(--el-role-bg-surface);
+  min-inline-size: var(--el-icon-sm); padding-inline: var(--el-space-2);
+  border-radius: var(--el-radius-full);
+  background: var(--el-role-accent-default); color: var(--el-role-text-on-accent);
+  font-size: var(--el-text-caption-size); line-height: var(--el-icon-sm); font-weight: var(--el-text-body-strong-weight);
+  text-align: center;
+}
+.el-bell:disabled .el-bell__badge { background: var(--el-role-text-disabled); color: var(--el-role-bg-surface); }
+
+/* Labels: one of the eight draws with its role tokens; any other stored colour is a dot on the neutral chip. */
+.el-label--grey { --label-fill: var(--el-role-label-grey-fill); --label-text: var(--el-role-label-grey-text); --label-dot: var(--el-role-label-grey-dot); }
+.el-label--red { --label-fill: var(--el-role-label-red-fill); --label-text: var(--el-role-label-red-text); --label-dot: var(--el-role-label-red-dot); }
+.el-label--orange { --label-fill: var(--el-role-label-orange-fill); --label-text: var(--el-role-label-orange-text); --label-dot: var(--el-role-label-orange-dot); }
+.el-label--amber { --label-fill: var(--el-role-label-amber-fill); --label-text: var(--el-role-label-amber-text); --label-dot: var(--el-role-label-amber-dot); }
+.el-label--green { --label-fill: var(--el-role-label-green-fill); --label-text: var(--el-role-label-green-text); --label-dot: var(--el-role-label-green-dot); }
+.el-label--teal { --label-fill: var(--el-role-label-teal-fill); --label-text: var(--el-role-label-teal-text); --label-dot: var(--el-role-label-teal-dot); }
+.el-label--blue { --label-fill: var(--el-role-label-blue-fill); --label-text: var(--el-role-label-blue-text); --label-dot: var(--el-role-label-blue-dot); }
+.el-label--pink { --label-fill: var(--el-role-label-pink-fill); --label-text: var(--el-role-label-pink-text); --label-dot: var(--el-role-label-pink-dot); }
+.el-label--other { --label-fill: var(--el-role-bg-subtle); --label-text: var(--el-role-text-primary); --label-dot: var(--label-own, var(--el-role-border-strong)); }
+.el-label-dot {
+  display: inline-block; flex: none;
+  inline-size: var(--el-component-status-dot-size); block-size: var(--el-component-status-dot-size);
+  border-radius: var(--el-radius-full);
+  background: var(--label-dot);
+}
+.el-label-chip {
+  display: inline-flex; align-items: center; gap: var(--el-space-4);
+  max-inline-size: 100%;
+  min-block-size: var(--el-space-24);
+  padding-inline: var(--el-space-8);
+  border-radius: var(--el-component-chip-radius);
+  background: var(--label-fill); color: var(--label-text);
+  font-size: var(--el-text-caption-size); font-weight: var(--el-text-body-strong-weight);
+  white-space: nowrap;
+}
+.el-label-chip--removable { padding-inline-end: var(--el-space-2); }
+/* On its own chip the dot takes the label's text colour: the dot colour is 3:1 on the backgrounds, not on its fill. */
+.el-label-chip .el-label-dot { background: var(--label-text); }
+/* A colour outside the eight can be anything (an older app, the API): a hairline ring keeps its dot visible. */
+.el-label--other.el-label-dot, .el-label--other .el-label-dot { background: var(--label-dot); border: var(--el-border-hairline) solid var(--el-role-border-strong); }
+.el-label-chip__name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.el-label-chip > .el-chip__remove { color: inherit; }
+.el-label-chip > .el-chip__remove:hover { background: color-mix(in srgb, currentColor 12%, transparent); color: inherit; }
 /* Urdu never goes below urdu.caption (14/28): Nastaliq at the 12 px caption size cannot be read (D4 §2). Numbers,
    times and code inside keep their own LTR face and size (.el-num, .el-code). */
 :lang(ur) :is(.el-button--sm, .el-field__hint, .el-field__error, .el-badge, .el-segment__note, .el-markdown table,
   .el-swatch--auto, .el-palette .palette-group-head, .el-palette .palette-detail, .el-palette .palette-empty,
-  .el-palette .palette-foot, .el-table thead th, .el-table__group th, .el-nav-item--sub, .el-row__label) {
+  .el-palette .palette-foot, .el-table thead th, .el-table__group th, .el-nav-item--sub, .el-row__label, .el-label-chip) {
   font-size: var(--el-text-urdu-caption-size);
   line-height: var(--el-text-urdu-caption-line);
 }

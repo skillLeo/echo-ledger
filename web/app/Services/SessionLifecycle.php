@@ -118,6 +118,11 @@ final class SessionLifecycle
             if (array_key_exists('client_id', $data)) {
                 $attributes['client_id'] = $this->resolveClientId($device, $data['client_id']);
             }
+            // Since v1.8 (contract 1.8.0-e): Transcribe or Save audio on the after-call card. A finish repeated after
+            // this one returns above, so the stored choice never changes.
+            if (array_key_exists('transcribe', $data)) {
+                $attributes['transcribe'] = (bool) $data['transcribe'];
+            }
             // The language on the Keep card (since v1.1.2): it decides the final transcript's language and engine.
             if (array_key_exists('language', $data)) {
                 $attributes['language'] = LanguageChoice::normalize($data['language']);
@@ -237,6 +242,8 @@ final class SessionLifecycle
             'ended_at' => self::utc($data['ended_at'] ?? null),
             'duration_ms' => $data['duration_ms'] ?? null,
             'status' => $status,
+            // Since v1.8 (contract 1.8.0-e): false keeps the recording as audio until the person asks; absent = true.
+            'transcribe' => (bool) ($data['transcribe'] ?? true),
             'final_provider' => $router->final($language, $useCase)->provider->value,
         ]);
         // Caller names (since v1.2): who the recording is with, matched to a client contact.

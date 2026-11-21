@@ -358,6 +358,26 @@ export const LucideCircleDashedIcon = L([
 export const LucideSquareFilledIcon = (p: IconProps) => (
   <Svg {...p}><rect width="18" height="18" x="3" y="3" rx="2" /><rect width="10" height="10" x="7" y="7" rx="1" fill="currentColor" stroke="none" /></Svg>
 );
+/** Live & overlays (the settings group): a signal in the air. */
+export const LucideRadioIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" /><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" /><circle cx="12" cy="12" r="2" /><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" /><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" /></Svg>
+);
+/** Shortcuts & start-up (the settings group): the command key, apart from its Shortcuts page's keyboard. */
+export const LucideCommandIcon = L(["M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"]);
+/** About & help (the settings group): a life buoy, so it differs from Help's question mark and About's "i". */
+export const LucideLifeBuoyIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="m4.93 4.93 4.24 4.24" /><path d="m14.83 9.17 4.24-4.24" /><path d="m14.83 14.83 4.24 4.24" /><path d="m9.17 14.83-4.24 4.24" /><circle cx="12" cy="12" r="4" /></Svg>
+);
+/** Your profile (a settings page): a person with a pen, apart from the Account & plan group's person. */
+export const LucideUserRoundPenIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M2 21a8 8 0 0 1 10.821-7.487" /><path d="M21.378 16.626a1 1 0 0 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z" /><circle cx="10" cy="8" r="5" /></Svg>
+);
+/** Sign-in security (a settings page): a fingerprint, apart from the Privacy & data group's shield. */
+export const LucideFingerprintIcon = L([
+  "M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4", "M14 13.12c0 2.38 0 6.38-1 8.88", "M17.29 21.02c.12-.6.43-2.3.5-3.02",
+  "M2 12a10 10 0 0 1 18-6", "M2 16h.01", "M21.8 16c.2-2 .131-5.354 0-6", "M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2",
+  "M8.65 22c.21-.66.45-1.32.57-2", "M9 6.8a6 6 0 0 1 9 5.2v2",
+]);
 export const LucideCircleHelpIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></Svg>
 );
@@ -435,6 +455,6 @@ export const ROOT_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   calls: LucidePhoneIcon, mic: LucideMicIcon, captions: LucideCaptionsIcon, screen: LucideMonitorIcon, voice: LucideAudioLinesIcon,
   "transcription.language": LucideLanguagesIcon, words: LucideBookAIcon, key: LucideKeyRoundIcon,
   share_privacy: LucideEyeOffIcon, appearance: LucidePaletteIcon, notifications: LucideBellIcon, lock: LucideLockIcon, storage: LucideHardDriveIcon, shortcuts: LucideKeyboardIcon, "app.autostart": LucidePowerIcon,
-  profile: LucideUserIcon, plan: LucideCreditCardIcon, security: LucideShieldIcon, devices: LucideMonitorSmartphoneIcon, privacy: LucideDatabaseIcon,
+  profile: LucideUserRoundPenIcon, plan: LucideCreditCardIcon, security: LucideFingerprintIcon, devices: LucideMonitorSmartphoneIcon, privacy: LucideDatabaseIcon,
   help: LucideCircleHelpIcon, about: LucideInfoIcon,
 };

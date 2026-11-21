@@ -255,6 +255,13 @@ it('keeps the shape of every answer the apps read', function () {
     $record('session_update', $api()->patchJson("/api/sessions/{$session->id}", ['title' => 'Retainer check-in, renamed', 'tags' => ['follow-up']]));
     $record('sessions_bulk', $api()->postJson('/api/sessions/bulk', ['ids' => [$session->id], 'action' => 'label', 'label' => 'Sample']));
     $record('library_views', $api()->getJson('/api/library/views'));
+    // Since 2.0.0-j: audio only and "Transcribe later", on two of the demo recordings kept as audio.
+    $audio = unscoped(fn () => CaptureSession::query()->whereKeyNot($session->id)->whereHas('recordings')->orderBy('id')->limit(2)->pluck('id')->all());
+    unscoped(fn () => CaptureSession::query()->whereKey($audio)->update(['status' => 'audio_only', 'transcribe' => false]));
+    unscoped(fn () => Transcript::query()->whereIn('capture_session_id', $audio)->where('kind', 'final')->delete());
+    $record('sessions_transcribe_estimate', $api()->postJson('/api/sessions/transcribe-estimate', ['ids' => $audio]));
+    $record('session_transcribe', $api()->postJson("/api/sessions/{$audio[0]}/transcribe"));
+    $record('sessions_transcribe', $api()->postJson('/api/sessions/transcribe', ['ids' => [$audio[1], $session->id]]));
     $record('session_marker', $api()->postJson("/api/sessions/{$session->id}/markers", ['at_ms' => 1000, 'tag' => 'Decision', 'note' => 'They agreed.']));
     $record('session_speakers', $api()->putJson("/api/sessions/{$session->id}/speakers", ['names' => ['Me' => 'Ali']]));
     $api()->postJson("/api/sessions/{$session->id}/opened")->assertSuccessful();

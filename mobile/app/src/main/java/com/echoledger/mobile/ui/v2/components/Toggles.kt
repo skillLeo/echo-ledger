@@ -6,10 +6,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
@@ -18,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
@@ -46,7 +49,9 @@ fun EchoSwitch(
     label: String,
     modifier: Modifier = Modifier,
     supporting: String? = null,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    /** A leading icon in the same column as the list rows' icons (Auto-record calls in the Record sheet). */
+    icon: ImageVector? = null
 ) {
     val c = EchoV2.colors
     Row(
@@ -57,6 +62,7 @@ fun EchoSwitch(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
     ) {
+        if (icon != null) Icon(icon, null, Modifier.size(EchoTokens.Icon.lg), tint = if (enabled) c.textSecondary else c.textDisabled)
         ToggleLabel(label, supporting, enabled, Modifier.weight(1f))
         Switch(
             checked = checked,

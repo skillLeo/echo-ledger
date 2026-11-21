@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useStickyHeight } from "../../lib/stickyHeight";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type MeetingPackFormat, type ScreenMoment, type LibraryItem, type SearchResult, type SharedItem, type SmartFolder, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
@@ -241,7 +242,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [skipSilence, setSkipSilence] = useState(false);
   const [follow, setFollow] = useState(true);
   const [editing, setEditing] = useState(false);
-  const [panel, setPanel] = useState<"replace" | "speakers" | "history" | "share" | null>(null);
+  // The open panel and the recording it was opened for (D-166): see `panel` below.
+  const [panelState, setPanelState] = useState<{ name: "replace" | "speakers" | "history" | "share" | null; recording: string | null }>({ name: null, recording: null });
   const [vocabTerms, setVocabTerms] = useState<string[]>([]);
   // "Always write X as Y for Acme?" offers from the last edit (since v1.4), asked one at a time.
   const [learn, setLearn] = useState<LearnOffer[]>([]);
@@ -397,6 +399,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     : filtered.find((i) => i.id === selected) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? null;
   // A recording a teammate sent can be played and read, not changed.
   const readOnly = !!current && current === sharedSession;
+  // A panel belongs to the recording it was opened for (D-166): another recording opens without it, and re-reading the
+  // same recording's transcript closes only the panels that work on that transcript (below), never Share.
+  const panel = panelState.recording !== null && panelState.recording === (current?.id ?? null) ? panelState.name : null;
+  const setPanel = (name: typeof panelState.name) => setPanelState({ name, recording: name ? current?.id ?? null : null });
   // The recording page opening from its row (since v1.5): the row clicked last, until the page shows it.
   const detailRef = useRef<HTMLDivElement>(null);
   const opening = useRef<RowSnapshot | null>(null);
@@ -499,7 +505,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     setNowMs(0);
     setPlaying(false);
     setEditing(false);
-    setPanel(null);
+    // Replace, Speakers and History work on the transcript being (re)read; Share is the recording's and stays open.
+    setPanelState((open) => (open.name === "share" ? open : { name: null, recording: null }));
     setVocabTerms([]);
     setLearn([]);
     setOpenSuggestion(null);
@@ -1226,15 +1233,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         <LibraryFilters state={filters} onChange={setFilters} counts={viewCounts} tags={tags} showBookmarks={anyBookmarks || filters.tags.size > 0} />
         {(folders.length > 0 || folder !== null) && (
           <select className={`chip ${folder !== null ? "active" : ""}`} value={folder ?? "*"} onChange={(e) => setFolder(e.target.value === "*" ? null : e.target.value)} aria-label="Filter by project">
-            <option value="*">All projects</option>
-            <option value="">No project</option>
-            {folders.map((cl) => <option key={cl.id} value={cl.id}>{`${folderBadge(cl)} · ${cl.name}`}</option>)}
+            <option dir="auto" value="*">All projects</option>
+            <option dir="auto" value="">No project</option>
+            {folders.map((cl) => <option dir="auto" key={cl.id} value={cl.id}>{`${folderBadge(cl)} · ${cl.name}`}</option>)}
           </select>
         )}
         {(labels.length > 0 || label !== null) && (
           <select className={`chip ${label !== null ? "active" : ""}`} value={label ?? ""} onChange={(e) => setLabel(e.target.value || null)} aria-label="Label">
-            <option value="">Any label</option>
-            {labels.map((l) => <option key={l} value={l}>{l}</option>)}
+            <option dir="auto" value="">Any label</option>
+            {labels.map((l) => <option dir="auto" key={l} value={l}>{l}</option>)}
           </select>
         )}
         <ViewMenu sections={[
@@ -1432,11 +1439,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             <>
               <div className="detail-body">
                 {/* A narrow window shows the recording in place of the list (styles.css .app.narrow .library.has-open); Back returns to it. */}
-                {!tableView && (
-                  <button type="button" className="btn ghost compact detail-back" onClick={backToList}>
-                    <span className="detail-back-icon" aria-hidden="true"><LucideChevronLeftIcon size={16} /></span>Back
-                  </button>
-                )}
+                {!tableView && <ItemBar title={recordingName(current.title)} onBack={backToList} />}
                 {findOpen && transcript && (
                   <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, currentMatch)} onStep={stepFind}
                     onClose={() => { setFindOpen(false); setFindQuery(""); }} />
@@ -1496,8 +1499,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
                       <span className="head-chip retranscribe-row">
                         <LanguageChipSelect value={retranscribeLanguage} onChange={setRetranscribeLanguage}>
-                          {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
-                          <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}</optgroup>
+                          {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
+                          <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}</optgroup>
                         </LanguageChipSelect>
                         <button type="button" className="btn ghost compact" onClick={() => void retranscribe()}>
                           {englishRisk && englishWarned ? "Re-transcribe anyway" : "Re-transcribe"}
@@ -1627,7 +1630,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       {openSuggestions.length > 0 && showAs === "original" && !editing && !readOnly && (
                         <div className="suggestions-note" role="status">
                           <SparkleIcon size={15} />
-                          <span>{openSuggestions.length === 1 ? "1 suggested fix" : `${openSuggestions.length} suggested fixes`}: words that may have been misheard are underlined.</span>
+                          <span dir="auto">{openSuggestions.length === 1 ? "1 suggested fix" : `${openSuggestions.length} suggested fixes`}: words that may have been misheard are underlined.</span>
                           <button type="button" className="btn text compact" onClick={() => setOpenSuggestion(openSuggestions[0].id)}>Review</button>
                         </div>
                       )}
@@ -1733,5 +1736,35 @@ function LanguageChipSelect({ value, onChange, children }: { value: string; onCh
       <span className="chip-key" aria-hidden="true">Language</span>
       <select aria-label="Language to re-transcribe in" value={value} onChange={(e) => onChange(e.target.value)}>{children}</select>
     </label>
+  );
+}
+
+/**
+ * The recording's bar on a narrow page (D5 §3.3, D-165): Back, and once the header's title has scrolled under the bar the
+ * title too, cut at its own end. It sticks under the top bar and gives its height to the page's scroll padding
+ * (--item-bar-h), so the find bar and what the keyboard brings into view stop under it. Hidden on a wide page.
+ */
+function ItemBar({ title, onBack }: { title: string; onBack: () => void }) {
+  const bar = useRef<HTMLDivElement>(null);
+  const [titled, setTitled] = useState(false);
+  useStickyHeight(bar, "--item-bar-h");
+  useEffect(() => {
+    const check = () => {
+      const el = bar.current;
+      const head = el?.closest(".detail-body")?.querySelector(".detail-title");
+      if (!el || !head) return;
+      setTitled(head.getBoundingClientRect().bottom <= el.getBoundingClientRect().bottom);
+    };
+    // The page scrolls (.content), not the window: scroll events don't bubble, so listen while they come down.
+    document.addEventListener("scroll", check, true);
+    return () => document.removeEventListener("scroll", check, true);
+  }, []);
+  return (
+    <div ref={bar} className={`item-bar ${titled ? "titled" : ""}`.trim()}>
+      <button type="button" className="btn ghost compact detail-back" onClick={onBack}>
+        <span className="detail-back-icon" aria-hidden="true"><LucideChevronLeftIcon size={16} /></span>Back
+      </button>
+      <span className="item-bar-title" dir="auto" aria-hidden={!titled}>{title}</span>
+    </div>
   );
 }

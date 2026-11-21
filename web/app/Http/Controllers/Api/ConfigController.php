@@ -53,6 +53,8 @@ final class ConfigController extends Controller
             'ai_notes' => (bool) ($client->ai_notes ?? true),
             // Since v1.5: false = the desktop keeps no screen moments of meetings filed under it.
             'screens' => (bool) ($client->screens ?? true),
+            // Since v1.8 (contract 1.8.0-e): `always` = "Always transcribe calls in this project"; `ask` by default.
+            'transcribe_calls' => $client->transcribe_calls === 'always' ? 'always' : 'ask',
             'keyterm_count' => (int) $client->getAttribute('keyterms_count'),
             'session_count' => (int) $client->getAttribute('capture_sessions_count'),
             'updated_at' => $client->updated_at?->toAtomString(),
