@@ -23,6 +23,15 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 final class LibraryItemResource extends JsonResource
 {
+    /**
+     * The transcript columns a row reads (plan B6): every one but the lines (`segments`) and the folded copy search
+     * reads (`search_text`), the two largest, which no row uses. `GET /api/library` loads only these, about 40 % fewer
+     * bytes a page with real calls. A new transcript column must be added here (a test compares it with the table).
+     */
+    public const TRANSCRIPT_COLUMNS = ['id', 'capture_session_id', 'kind', 'provider', 'status', 'provider_job_id', 'provider_transcript_id',
+        'provider_deleted_at', 'language', 'text', 'meta', 'error', 'error_code', 'attempts', 'submitted_at', 'completed_at', 'edited_at',
+        'created_at', 'updated_at'];
+
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {

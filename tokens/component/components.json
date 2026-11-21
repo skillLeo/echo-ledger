@@ -76,6 +76,11 @@
         "$value": "72px"
       }
     },
+    "record-button": {
+      "$type": "dimension",
+      "$value": "56px",
+      "$description": "The Record button in the middle of the phone's bottom bar"
+    },
     "toast": {
       "duration": {
         "$type": "duration",

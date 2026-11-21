@@ -133,7 +133,7 @@
     <string name="v2_ws_screens_none_body">Screens kept during this project\'s meetings appear here.</string>
     <string name="v2_ws_screens_failed">The screens didn\'t load.</string>
     <string name="v2_ws_show_more">Show more</string>
-    <string name="v2_ws_failed_title">The project\'s workspace didn\'t load</string>
+    <string name="v2_ws_failed_title">The project didn\'t load</string>
     <string name="v2_ws_failed_body">Check the internet connection and try again.</string>
     <string name="v2_ws_try_again">Try again</string>
 </resources>

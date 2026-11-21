@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -22,7 +25,16 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.echoledger.mobile.R
+import com.echoledger.mobile.calls.MissedFix
+import com.echoledger.mobile.core.Readiness
+import com.echoledger.mobile.recording.RecordingService
+import com.echoledger.mobile.ui.ActivityBadge
 import com.echoledger.mobile.ui.MainViewModel
+import com.echoledger.mobile.ui.v2.activity.ActivityActions
+import com.echoledger.mobile.ui.v2.activity.V2ActivityScreen
+import com.echoledger.mobile.ui.v2.activity.activityBadge
 import com.echoledger.mobile.ui.v2.ask.V2AskScreen
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoDestination
@@ -30,8 +42,13 @@ import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoToastHost
 import com.echoledger.mobile.ui.v2.components.EchoToastState
 import com.echoledger.mobile.ui.v2.help.HelpSource
-import com.echoledger.mobile.ui.v2.home.HomeActions
-import com.echoledger.mobile.ui.v2.home.V2HomeScreen
+import com.echoledger.mobile.ui.v2.home.HomeFacts
+import com.echoledger.mobile.ui.v2.home.HomeModel
+import com.echoledger.mobile.ui.v2.home.LibraryTop
+import com.echoledger.mobile.ui.v2.home.LibraryTopActions
+import com.echoledger.mobile.ui.v2.home.V2LibraryTop
+import com.echoledger.mobile.ui.v2.home.setupShowsCapture
+import com.echoledger.mobile.ui.v2.library.LibraryExtras
 import com.echoledger.mobile.ui.v2.library.SavedView
 import com.echoledger.mobile.ui.v2.library.V2LibraryScreen
 import com.echoledger.mobile.ui.v2.library.V2RecordingScreen
@@ -40,32 +57,39 @@ import com.echoledger.mobile.ui.v2.live.LiveEntry
 import com.echoledger.mobile.ui.v2.live.V2LiveTab
 import com.echoledger.mobile.ui.v2.settings.V2SettingsScreen
 import com.echoledger.mobile.ui.v2.setup.V2SetupHealthScreen
+import com.echoledger.mobile.ui.v2.setup.rememberSetupFacts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import com.echoledger.mobile.ui.v2.theme.systemEchoLanguage
 import com.echoledger.mobile.ui.v2.workspace.V2WorkspaceScreen
 import com.echoledger.mobile.ui.v2.workspace.V2WorkspacesScreen
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /** The one feedback system of the v2 screens: every message and Undo goes through this toast host. */
 val LocalEchoToasts = staticCompositionLocalOf<EchoToastState> { error("No EchoToastState: draw v2 screens inside EchoV2Shell") }
 
-/** The four destinations of the bottom bar (docs/v2/IA.md "Navigation per platform": Android). */
-enum class V2Tab { Home, Library, Live, Ask }
+/** The destinations of the bottom bar (docs/PLAN_V2_PARITY.md section 2): Library · Projects · [Record] · Live · Ask. */
+enum class V2Tab { Library, Projects, Live, Ask }
 
 /** Where the shell is: a tab, or a page opened above the tabs. */
 sealed interface V2Route {
     data object Tabs : V2Route
     data object Settings : V2Route
+
+    /** Settings opened at one page (a recording's "Check your key"). */
+    data class SettingsPage(val page: String) : V2Route
     data object ClassicSettings : V2Route
     data object Trash : V2Route
     data object Setup : V2Route
+    data object Activity : V2Route
     data class ClassicPage(val id: String) : V2Route
     data class Live(val entry: LiveEntry) : V2Route
 
-    /** A recording; Back goes to [from] (the tabs, or the project page it was opened from). */
-    data class Recording(val id: String, val from: V2Route = Tabs) : V2Route
+    /** A recording; Back goes to [from] (the tabs, or the project page it was opened from); [atMs] plays from there. */
+    data class Recording(val id: String, val from: V2Route = Tabs, val atMs: Long? = null) : V2Route
     data object Projects : V2Route
     data class Project(val id: String) : V2Route
     data object ClassicProjects : V2Route
@@ -94,9 +118,13 @@ class ClassicScreens(
 )
 
 /**
- * The v2 shell (behind `ui_v2.shell`): Home, Library, Live and Ask in the bottom bar, Settings from the avatar, and one
- * toast host for every message (the view model's messages included). Library and the recording page are the v2 ones
- * when `ui_v2.library` is on; every other area shows its classic screen until its own flag is on.
+ * The v2 shell (behind `ui_v2.shell`): Library · Projects · [● Record] · Live · Ask in the bottom bar (Library first,
+ * docs/PLAN_V2_PARITY.md section 2), Settings from the avatar of every main screen, Activity from the bell in Library's
+ * header, and one toast host for every message (the view model's messages included). Library and the recording page
+ * are the v2 ones when `ui_v2.library` is on; every other area shows its classic screen until its own flag is on.
+ * Record: a tap records a voice note now ([onRecordNow]; false when the microphone isn't allowed, and the voice page
+ * then asks), a long press opens the Record sheet. [onReadyCheck] opens the Ready check (true: turn auto-record on).
+ * Settings › Appearance's text size and app language apply here.
  */
 @Composable
 fun EchoV2Shell(
@@ -110,15 +138,47 @@ fun EchoV2Shell(
     /** The wall clock toast deadlines and delayed discards are on (tests give their own). */
     clock: () -> Long = System::currentTimeMillis,
     /** Help v2's guides, notes and support messages (the phone core's); without it Help stays the classic page. */
-    help: HelpSource? = null
+    help: HelpSource? = null,
+    onRecordNow: () -> Boolean = { false },
+    onReadyCheck: (turnOn: Boolean) -> Unit = {}
 ) {
-    EchoV2Theme(darkTheme = darkTheme, language = language) {
-        val toasts = remember { EchoToastState(clock) }
-        CompositionLocalProvider(LocalEchoToasts provides toasts) {
-            MessagesToToasts(vm, toasts)
-            Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
-                ShellBody(vm, flags, classic, onSwitchToClassic, help)
-                EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
+    val settings by vm.settings.collectAsState()
+    val shown = AppLook.language(settings.appLanguage, language)
+    EchoV2Theme(darkTheme = darkTheme, language = shown, phoneFont = settings.phoneFont, wallpaperColours = settings.dynamicColour) {
+        AppLook.TextSize(settings.textSize) {
+            val toasts = remember { EchoToastState(clock) }
+            CompositionLocalProvider(LocalEchoToasts provides toasts) {
+                MessagesToToasts(vm, toasts)
+                Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
+                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock)
+                    EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A v2 page shown outside the shell (a voice note shared from another app): the theme, the person's text size and
+ * language, and the toast host, as the shell gives its pages.
+ */
+@Composable
+fun EchoV2Frame(vm: MainViewModel, darkTheme: Boolean, language: EchoLanguage = systemEchoLanguage(), content: @Composable () -> Unit) {
+    val settings by vm.settings.collectAsState()
+    EchoV2Theme(
+        darkTheme = darkTheme,
+        language = AppLook.language(settings.appLanguage, language),
+        phoneFont = settings.phoneFont,
+        wallpaperColours = settings.dynamicColour
+    ) {
+        AppLook.TextSize(settings.textSize) {
+            val toasts = remember { EchoToastState(System::currentTimeMillis) }
+            CompositionLocalProvider(LocalEchoToasts provides toasts) {
+                MessagesToToasts(vm, toasts)
+                Box(Modifier.fillMaxSize().background(EchoV2.colors.bgCanvas).statusBarsPadding()) {
+                    content()
+                    EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
+                }
             }
         }
     }
@@ -139,161 +199,349 @@ private fun MessagesToToasts(vm: MainViewModel, toasts: EchoToastState) {
 }
 
 @Composable
-private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens, onSwitchToClassic: (Boolean) -> Unit, help: HelpSource?) {
+private fun ShellBody(
+    vm: MainViewModel,
+    flags: UiFlags,
+    classic: ClassicScreens,
+    onSwitchToClassic: (Boolean) -> Unit,
+    help: HelpSource?,
+    onRecordNow: () -> Boolean,
+    onReadyCheck: (Boolean) -> Unit,
+    clock: () -> Long
+) {
     val text = v2Text
+    val context = LocalContext.current
     var tab by rememberSaveable { mutableStateOf(V2Tab.Library) }
     var route by remember { mutableStateOf<V2Route>(V2Route.Tabs) }
     var libraryViews by remember { mutableStateOf(emptySet<SavedView>()) }
+    var reselected by remember { mutableIntStateOf(0) }
+    var recordSheet by remember { mutableStateOf(false) }
+    var serverUnread by remember { mutableIntStateOf(0) }
     val library by vm.library.collectAsState()
     val settings by vm.settings.collectAsState()
+    val pending by vm.pending.collectAsState()
+    val missed by vm.missed.collectAsState()
+    // Only whether a recording runs: the elapsed time ticks every second, and only the strip above the bar reads it.
+    val recording by remember { RecordingService.live.map { it.active }.distinctUntilChanged() }
+        .collectAsState(RecordingService.live.value.active)
+    val translating by com.echoledger.mobile.translate.LiveTranslateService.state.collectAsState()
+    val setup = rememberSetupFacts(vm, 0)
+    val readiness = remember(setup) { Readiness.evaluate(setup.ready) }
+    // The bell's server part: unread problems as the last Activity answer had them.
+    LaunchedEffect(Unit) { vm.activity()?.let { serverUnread = ActivityBadge.server(it.data, vm.missed.value) } }
     BackHandler(enabled = route != V2Route.Tabs) {
         route = when (val r = route) {
             V2Route.ClassicSettings -> V2Route.Settings
             is V2Route.Recording -> r.from
             is V2Route.Project -> V2Route.Projects
-            V2Route.ClassicProjects -> V2Route.Projects
+            V2Route.ClassicProjects -> if (flags.isOn(UiFlags.ASK)) V2Route.Tabs else V2Route.Projects
             else -> V2Route.Tabs
         }
     }
     val accountName by produceState<String?>(null) { value = vm.accountQuietly()?.name }
     val initials = initialsOf(accountName ?: settings.plan.workspace)
+    fun open(entry: LiveEntry) {
+        route = V2Route.Live(entry)
+    }
+    val guard = remember { RecordTapGuard(clock) }
+
+    /**
+     * The centre button, as classic's: idle, it starts a voice note now (the voice page asks for the microphone when
+     * it isn't allowed); recording, it stops. A second tap soon after one that acted is ignored, whatever the recording
+     * did in between, so a double tap never starts and stops at once.
+     */
+    fun recordNow() {
+        if (!guard.tap()) return
+        if (!onRecordNow()) open(LiveEntry.VoiceNote)
+    }
+    fun arm(on: Boolean) {
+        runCatching {
+            context.startForegroundService(
+                RecordingService.intent(context, if (on) RecordingService.ACTION_ARM else RecordingService.ACTION_DISARM)
+            )
+        }
+    }
+    if (recordSheet) {
+        val lock = settings.plan.lockFor("live_translate")
+        V2RecordSheet(
+            RecordSheetState(
+                calls = setup.ready.capabilities.appCalls,
+                armed = settings.autoRecordArmed,
+                canArm = setup.ready.capabilities.canCaptureCalls,
+                liveAssist = flags.isOn(UiFlags.LIVE_ASSIST),
+                liveTranslate = settings.plan.liveTranslate,
+                translateLocked = lock?.badge?.takeIf { !settings.plan.liveTranslate },
+                game = translating == com.echoledger.mobile.translate.TranslateMode.GAME,
+                watch = translating == com.echoledger.mobile.translate.TranslateMode.WATCH,
+                blocked = com.echoledger.mobile.translate.TranslateStatus.blocked(context)
+            ),
+            RecordSheetActions(
+                onRecordNow = ::recordNow,
+                onVoiceAndFiles = { open(LiveEntry.VoiceNote) },
+                onCalls = { open(LiveEntry.Record) },
+                onArm = ::arm,
+                onLiveAssist = { open(LiveEntry.LiveAssist) },
+                onDictation = { open(LiveEntry.Dictation) },
+                onLiveTranslate = { open(LiveEntry.LiveTranslate) },
+                onWatchTranslate = { open(LiveEntry.WatchTranslate) },
+                onLocked = classic.upgrade
+            ),
+            onDismiss = { recordSheet = false }
+        )
+    }
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            when (val r = route) {
-                V2Route.Settings -> if (flags.settings) {
-                    V2SettingsScreen(
-                        vm = vm,
-                        flags = flags,
-                        onSwitchToClassic = onSwitchToClassic,
-                        onUpgrade = classic.upgrade,
-                        openClassicPage = classic.settingsPage,
-                        setupPage = { highlight, back -> SetupPage(vm, flags, classic, highlight, back) },
-                        onBack = { route = V2Route.Tabs },
-                        help = help
+            CompositionLocalProvider(LocalAccountEntry provides AccountEntry(initials) { route = V2Route.Settings }) {
+                when (val r = route) {
+                    V2Route.Settings, is V2Route.SettingsPage -> {
+                        val page = (r as? V2Route.SettingsPage)?.page
+                        if (flags.settings) {
+                            V2SettingsScreen(
+                                vm = vm,
+                                flags = flags,
+                                onSwitchToClassic = onSwitchToClassic,
+                                onUpgrade = classic.upgrade,
+                                openClassicPage = classic.settingsPage,
+                                setupPage = { highlight, back -> SetupPage(vm, flags, classic, highlight, back) },
+                                onBack = { route = V2Route.Tabs },
+                                help = help,
+                                initialPage = page
+                            )
+                        } else if (page != null) {
+                            classic.settingsPage(page) { route = V2Route.Tabs }
+                        } else {
+                            V2SettingsHome(
+                                vm = vm,
+                                flags = flags,
+                                onSwitchToClassic = onSwitchToClassic,
+                                onUpgrade = classic.upgrade,
+                                onAllSettings = { route = V2Route.ClassicSettings },
+                                onBack = { route = V2Route.Tabs }
+                            )
+                        }
+                    }
+
+                    V2Route.ClassicSettings -> classic.settings { route = V2Route.Settings }
+
+                    V2Route.Setup -> SetupPage(vm, flags, classic, null) { route = V2Route.Tabs }
+
+                    V2Route.Activity -> V2ActivityScreen(
+                        vm,
+                        ActivityActions(
+                            onOpenRecording = { id -> if (flags.library) route = V2Route.Recording(id, from = V2Route.Activity) },
+                            onFix = { fix ->
+                                when (fix) {
+                                    MissedFix.TEST -> route = V2Route.Setup
+                                    MissedFix.PLANS -> classic.upgrade()
+                                    MissedFix.TURN_ON -> onReadyCheck(true)
+                                    else -> onReadyCheck(false)
+                                }
+                            },
+                            onOpenUntranscribed = {
+                                libraryViews = setOf(SavedView.Untranscribed)
+                                tab = V2Tab.Library
+                                route = V2Route.Tabs
+                            },
+                            onUnread = { serverUnread = it },
+                            onBack = { route = V2Route.Tabs }
+                        )
                     )
-                } else {
-                    V2SettingsHome(
-                        vm = vm,
-                        flags = flags,
-                        onSwitchToClassic = onSwitchToClassic,
-                        onUpgrade = classic.upgrade,
-                        onAllSettings = { route = V2Route.ClassicSettings },
+
+                    is V2Route.ClassicPage -> classic.settingsPage(r.id) { route = V2Route.Tabs }
+
+                    is V2Route.Live -> classic.liveEntry(r.entry) { route = V2Route.Tabs }
+
+                    V2Route.Projects -> V2WorkspacesScreen(
+                        vm,
+                        onOpen = { route = V2Route.Project(it) },
+                        onSharedAndImported = { route = V2Route.ClassicProjects },
                         onBack = { route = V2Route.Tabs }
                     )
-                }
 
-                V2Route.ClassicSettings -> classic.settings { route = V2Route.Settings }
+                    // Shared with me, imported and requests stay on today's Projects page.
+                    V2Route.ClassicProjects -> classic.ask()
 
-                V2Route.Setup -> SetupPage(vm, flags, classic, null) { route = V2Route.Tabs }
+                    is V2Route.Project -> V2WorkspaceScreen(
+                        vm,
+                        r.id,
+                        onBack = {
+                            val parent = vm.clients.value.firstOrNull { it.id == r.id }?.parentId
+                            route = parent?.let { V2Route.Project(it) } ?: V2Route.Tabs
+                        },
+                        onOpenProject = { id -> route = id?.let { V2Route.Project(it) } ?: V2Route.Tabs },
+                        onOpenRecording = { route = V2Route.Recording(it.id, from = r) },
+                        onOpenAt = { id, at -> route = V2Route.Recording(id, from = r, atMs = at) }
+                    )
 
-                is V2Route.ClassicPage -> classic.settingsPage(r.id) { route = V2Route.Tabs }
+                    V2Route.Trash -> V2TrashScreen(vm, configKeepHours = settings.trashKeepHours, onBack = { route = V2Route.Tabs })
 
-                is V2Route.Live -> classic.liveEntry(r.entry) { route = V2Route.Tabs }
-
-                // The server's Trash time (contract 2.0.0-b, trash.keep_hours; 48 on an older server).
-                V2Route.Projects -> V2WorkspacesScreen(
-                    vm,
-                    onOpen = { route = V2Route.Project(it) },
-                    onSharedAndImported = { route = V2Route.ClassicProjects },
-                    onBack = { route = V2Route.Tabs }
-                )
-
-                // Shared with me, imported and requests stay on today's Projects page.
-                V2Route.ClassicProjects -> classic.ask()
-
-                is V2Route.Project -> V2WorkspaceScreen(
-                    vm,
-                    r.id,
-                    onBack = {
-                        val parent = vm.clients.value.firstOrNull { it.id == r.id }?.parentId
-                        route = parent?.let { V2Route.Project(it) } ?: V2Route.Projects
-                    },
-                    onOpenProject = { id -> route = id?.let { V2Route.Project(it) } ?: V2Route.Projects },
-                    onOpenRecording = { route = V2Route.Recording(it.id, from = r) },
-                    onOpenAt = { id, _ -> route = V2Route.Recording(id, from = r) }
-                )
-
-                V2Route.Trash -> V2TrashScreen(vm, configKeepHours = settings.trashKeepHours, onBack = { route = V2Route.Tabs })
-
-                is V2Route.Recording -> {
-                    val item = library.firstOrNull { it.id == r.id }
-                    if (item == null) {
-                        LaunchedEffect(r.id) { route = V2Route.Tabs }
-                    } else {
-                        V2RecordingScreen(vm, item, onBack = { route = r.from })
-                    }
-                }
-
-                V2Route.Tabs -> when (tab) {
-                    V2Tab.Home -> if (flags.isOn(UiFlags.HOME)) {
-                        V2HomeScreen(
-                            vm = vm,
-                            initials = initials,
-                            actions = HomeActions(
-                                onSetup = { route = V2Route.Setup },
-                                onAllow = { route = V2Route.Setup },
-                                onRecord = { tab = V2Tab.Live },
-                                onChooseLanguage = { route = V2Route.ClassicPage("language") },
-                                onOpenRecording = { id -> if (flags.library) route = V2Route.Recording(id) else tab = V2Tab.Library },
-                                onOpenUntranscribed = {
-                                    libraryViews = setOf(SavedView.Untranscribed)
-                                    tab = V2Tab.Library
-                                },
-                                onSeeAll = {
-                                    libraryViews = emptySet()
-                                    tab = V2Tab.Library
-                                },
-                                onPlan = { route = V2Route.ClassicPage("plan") },
-                                onAccount = { route = V2Route.Settings }
+                    is V2Route.Recording -> {
+                        val item = library.firstOrNull { it.id == r.id }
+                        if (item == null) {
+                            LaunchedEffect(r.id) { route = V2Route.Tabs }
+                        } else {
+                            V2RecordingScreen(
+                                vm,
+                                item,
+                                onBack = { route = r.from },
+                                startAtMs = r.atMs,
+                                onCaptureTest = { route = V2Route.Setup },
+                                onOpenSettings = { page -> route = V2Route.SettingsPage(page) }
                             )
-                        )
-                    } else {
-                        classic.home()
+                        }
                     }
 
-                    V2Tab.Library -> if (flags.library) {
-                        V2LibraryScreen(
-                            vm = vm,
-                            initials = initials,
-                            onOpen = { route = V2Route.Recording(it.id) },
-                            onTrash = { route = V2Route.Trash },
-                            onAccount = { route = V2Route.Settings },
-                            initialViews = libraryViews,
-                            onProjects = if (flags.isOn(UiFlags.ASK)) ({ route = V2Route.Projects }) else null
-                        )
-                    } else {
-                        classic.library()
-                    }
+                    V2Route.Tabs -> when (tab) {
+                        V2Tab.Library -> if (flags.library) {
+                            // Worked out again only when what it reads changes (not each second of a recording).
+                            val home = remember(readiness, setup, recording, library, pending, settings.transcriptionLanguage) {
+                                HomeModel.state(
+                                    HomeFacts(
+                                        chip = readiness.chip,
+                                        callsPossible = setup.callsPossible,
+                                        captureReady = setup.helperReady,
+                                        micAllowed = setup.ready.capabilities.micPermission,
+                                        notificationsAllowed = setup.ready.capabilities.notificationPermission,
+                                        live = com.echoledger.mobile.recording.LiveRecording(active = recording),
+                                        library = library,
+                                        pending = pending,
+                                        transcriptionLanguage = settings.transcriptionLanguage,
+                                        syncing = false,
+                                        hasSynced = true,
+                                        offline = false,
+                                        usedMinutes = null,
+                                        monthlyMinutes = null
+                                    )
+                                )
+                            }
+                            val badge = activityBadge(serverUnread, missed, pending)
+                            val failedIds = remember(pending) { pending.filter { it.state == "failed" }.map { it.id } }
+                            val extras = remember(home, readiness.chip, badge, settings.setupCardHidden, failedIds, reselected) {
+                                LibraryExtras(
+                                    actions = { ActivityBell(badge) { route = V2Route.Activity } },
+                                    status = { CallsChip(readiness.chip, { onReadyCheck(false) }) },
+                                    top = {
+                                        V2LibraryTop(
+                                            home.checklist,
+                                            settings.setupCardHidden,
+                                            LibraryTop.banner(
+                                                readiness.chip,
+                                                home.needsAction,
+                                                setupShowsCapture(home.checklist, settings.setupCardHidden)
+                                            ),
+                                            LibraryTopActions(
+                                                onSetup = { route = V2Route.Setup },
+                                                onAllow = { route = V2Route.Setup },
+                                                onRecord = ::recordNow,
+                                                onChooseLanguage = { route = V2Route.SettingsPage("language") },
+                                                onHideSetup = { vm.updateSettings { it.copy(setupCardHidden = true) } },
+                                                onFix = { onReadyCheck(false) },
+                                                onReview = { route = V2Route.Activity },
+                                                // Classic's Retry: each upload that failed, sent again.
+                                                onRetryUploads = { failedIds.forEach(vm::retryUpload) }
+                                            )
+                                        )
+                                    },
+                                    scrollToTop = reselected
+                                )
+                            }
+                            SideEffect { ShellStats.libraryCompositions++ }
+                            V2LibraryScreen(
+                                vm = vm,
+                                initials = initials,
+                                onOpen = { route = V2Route.Recording(it.id) },
+                                onTrash = { route = V2Route.Trash },
+                                onAccount = { route = V2Route.Settings },
+                                initialViews = libraryViews,
+                                onOpenAt = { item, at -> route = V2Route.Recording(item.id, atMs = at) },
+                                extras = extras
+                            )
+                        } else {
+                            Column(Modifier.fillMaxSize()) {
+                                // Without v2 Library the bell and the avatar still lead to Activity and to Settings
+                                // (where Switch back to classic is).
+                                androidx.compose.foundation.layout.Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = com.echoledger.mobile.ui.v2.tokens.EchoTokens.Space.s4),
+                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    ActivityBell(activityBadge(serverUnread, missed, pending)) { route = V2Route.Activity }
+                                    AccountButton()
+                                }
+                                Box(Modifier.weight(1f).fillMaxWidth()) { classic.library() }
+                            }
+                        }
 
-                    V2Tab.Live -> if (flags.isOn(UiFlags.LIVE)) {
-                        // Live Assist only for this person's flag, and only for sessions on this phone (no viewer role).
-                        V2LiveTab(liveAssist = flags.isOn(UiFlags.LIVE_ASSIST), liveTranslate = true, onOpen = { route = V2Route.Live(it) })
-                    } else {
-                        classic.live()
-                    }
+                        V2Tab.Projects -> if (flags.isOn(UiFlags.ASK)) {
+                            V2WorkspacesScreen(
+                                vm,
+                                onOpen = { route = V2Route.Project(it) },
+                                onSharedAndImported = { route = V2Route.ClassicProjects },
+                                onBack = null
+                            )
+                        } else {
+                            classic.ask()
+                        }
 
-                    V2Tab.Ask -> if (flags.isOn(UiFlags.ASK)) {
-                        // A citation opens its recording (the v2 page with ui_v2.library, else the Library tab).
-                        V2AskScreen(vm, onOpenAt = { id, _ -> if (flags.library) route = V2Route.Recording(id) else tab = V2Tab.Library })
-                    } else {
-                        classic.ask()
+                        V2Tab.Live -> if (flags.isOn(UiFlags.LIVE)) {
+                            // Live Assist only for this person's flag, and only for sessions on this phone (no viewer role).
+                            V2LiveTab(liveAssist = flags.isOn(UiFlags.LIVE_ASSIST), liveTranslate = true, onOpen = ::open)
+                        } else {
+                            classic.live()
+                        }
+
+                        V2Tab.Ask -> if (flags.isOn(UiFlags.ASK)) {
+                            // A citation opens its recording at that moment (the v2 page with ui_v2.library, else Library).
+                            V2AskScreen(vm, onOpenAt = { id, at ->
+                                if (flags.library) route = V2Route.Recording(id, atMs = at) else tab = V2Tab.Library
+                            })
+                        } else {
+                            classic.ask()
+                        }
                     }
                 }
             }
         }
         if (route == V2Route.Tabs) {
+            // While recording: the time and Stop above the bar, as classic's strip; a tap opens the voice page.
+            if (recording) RecordingStrip(onStop = ::recordNow, onOpen = { open(LiveEntry.VoiceNote) })
             EchoBottomBar(
                 destinations = listOf(
-                    EchoDestination(V2Tab.Home.name, text.home, EchoIcons.Home),
                     EchoDestination(V2Tab.Library.name, text.library, EchoIcons.Library),
+                    EchoDestination(V2Tab.Projects.name, stringResource(R.string.v2_nav_projects), EchoIcons.Projects),
                     EchoDestination(V2Tab.Live.name, text.live, EchoIcons.Live),
                     EchoDestination(V2Tab.Ask.name, text.ask, EchoIcons.Ask)
                 ),
                 selectedKey = tab.name,
-                onSelect = { tab = V2Tab.valueOf(it) }
+                onSelect = { tab = V2Tab.valueOf(it) },
+                onReselect = { reselected++ },
+                centre = { EchoRecordButton(recording, onTap = ::recordNow, onLongPress = { recordSheet = true }) }
             )
         }
     }
+}
+
+/**
+ * Keeps the centre button from acting twice: after a tap that acted, further taps are ignored for [holdMs], whatever
+ * the recording does meanwhile (the service shows a start within a few hundred milliseconds), so a double tap never
+ * starts and stops at once.
+ */
+class RecordTapGuard(private val clock: () -> Long, private val holdMs: Long = 600) {
+    private var actedAt: Long? = null
+
+    /** Whether this tap may act. */
+    fun tap(): Boolean {
+        val now = clock()
+        actedAt?.let { if (now - it < holdMs) return false }
+        actedAt = now
+        return true
+    }
+}
+
+/** How often the shell drew Library (tests: a recording's ticking clock must not redraw it). */
+@androidx.annotation.VisibleForTesting
+internal object ShellStats {
+    var libraryCompositions = 0
 }
 
 /** Settings › Setup & health: the v2 wizard and checks with `ui_v2.setup_health`, else the classic setup. */

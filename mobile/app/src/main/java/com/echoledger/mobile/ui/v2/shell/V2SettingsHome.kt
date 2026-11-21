@@ -23,10 +23,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.data.AccountDto
 import com.echoledger.mobile.data.StorageDto
 import com.echoledger.mobile.ui.MainViewModel
-import com.echoledger.mobile.ui.v2.components.EchoAvatar
 import com.echoledger.mobile.ui.v2.components.EchoBanner
 import com.echoledger.mobile.ui.v2.components.EchoBannerKind
 import com.echoledger.mobile.ui.v2.components.EchoButton
+import com.echoledger.mobile.ui.v2.components.EchoButtonKind
 import com.echoledger.mobile.ui.v2.components.EchoCard
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
@@ -34,7 +34,6 @@ import com.echoledger.mobile.ui.v2.components.EchoSkeletonBlock
 import com.echoledger.mobile.ui.v2.components.EchoSkeletonCircle
 import com.echoledger.mobile.ui.v2.components.EchoStatus
 import com.echoledger.mobile.ui.v2.components.EchoStatusKind
-import com.echoledger.mobile.ui.v2.components.EchoSwitch
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.library.LibraryModel
 import com.echoledger.mobile.ui.v2.theme.EchoV2
@@ -59,10 +58,13 @@ sealed interface ProfileState {
     data class Ready(val profile: Profile) : ProfileState
 }
 
-/** Two initials for a Latin name, the first letter for an Urdu or Arabic one; "?" when there is no name. */
+/**
+ * Two initials for a Latin name, the first letter for an Urdu or Arabic one; empty when there is no name, and
+ * [PersonAvatar] then shows the person icon.
+ */
 fun initialsOf(name: String?): String {
     val words = name.orEmpty().split(' ').filter { it.isNotBlank() }
-    if (words.isEmpty()) return "?"
+    if (words.isEmpty()) return ""
     val latin = words.first().first().let { it in 'A'..'Z' || it in 'a'..'z' }
     return (if (latin) words.take(2) else words.take(1)).joinToString("") { it.take(1) }.uppercase()
 }
@@ -132,14 +134,7 @@ fun V2SettingsHomeContent(
         LazyColumn(Modifier.weight(1f)) {
             item { ProfileCardSlot(state, onUpgrade, onRetry) }
             if (flags.offersClassicSwitch) {
-                item {
-                    EchoSwitch(
-                        checked = flags.classic,
-                        onCheckedChange = onSwitchToClassic,
-                        label = text.classicLook,
-                        supporting = text.classicLookHelp
-                    )
-                }
+                item { SwitchBackToClassic { onSwitchToClassic(true) } }
             }
             item { EchoSettingRow(text.allSettings, icon = EchoIcons.Settings, onClick = onAllSettings) }
         }
@@ -148,7 +143,13 @@ fun V2SettingsHomeContent(
 
 /** The profile card in its three states: loading (static skeleton), the account didn't load (banner), or ready. */
 @Composable
-fun ProfileCardSlot(state: ProfileState, onUpgrade: () -> Unit, onRetry: () -> Unit) {
+fun ProfileCardSlot(
+    state: ProfileState,
+    onUpgrade: () -> Unit,
+    onRetry: () -> Unit,
+    /** False where this month's minutes have their own bar (Settings v2's Account & plan), so they show once. */
+    showMinutes: Boolean = true
+) {
     val text = v2Text
     val cardPadding = Modifier.padding(
         start = EchoTokens.Layout.pagePaddingMobile,
@@ -176,17 +177,17 @@ fun ProfileCardSlot(state: ProfileState, onUpgrade: () -> Unit, onRetry: () -> U
             onAction = onRetry
         )
 
-        is ProfileState.Ready -> ProfileCard(state.profile, onUpgrade, cardPadding)
+        is ProfileState.Ready -> ProfileCard(state.profile, onUpgrade, cardPadding, showMinutes)
     }
 }
 
 @Composable
-private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modifier) {
+private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modifier, showMinutes: Boolean) {
     val c = EchoV2.colors
     val text = v2Text
     EchoCard(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
-            EchoAvatar(initials = initialsOf(profile.name ?: profile.email))
+            PersonAvatar(initialsOf(profile.name ?: profile.email))
             Column(Modifier.weight(1f)) {
                 Text(
                     profile.name ?: profile.email ?: text.notSignedIn,
@@ -203,7 +204,7 @@ private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modif
         val usage: @Composable (Modifier) -> Unit = { m ->
             Column(m, verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
                 profile.plan?.let { EchoStatus(text.plan(it), EchoStatusKind.Accent) }
-                if (profile.usedMinutes != null && profile.monthlyMinutes != null) {
+                if (showMinutes && profile.usedMinutes != null && profile.monthlyMinutes != null) {
                     Text(text.minutesUsed(profile.usedMinutes, profile.monthlyMinutes), style = EchoV2.type.meta, color = c.textSecondary)
                 }
                 if (profile.storageBytes != null && profile.recordings != null) {
@@ -225,5 +226,21 @@ private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modif
                 EchoButton(text.upgrade, onClick = onUpgrade)
             }
         }
+    }
+}
+
+/**
+ * "Switch back to classic" (Settings and Settings › Appearance): the classic screens again on this phone; classic's
+ * Settings › Appearance offers "Try the new design" back.
+ */
+@Composable
+fun SwitchBackToClassic(onClick: () -> Unit) {
+    val text = v2Text
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+        verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+    ) {
+        Text(text.classicLookHelp, style = EchoV2.type.meta, color = EchoV2.colors.textSecondary)
+        EchoButton(text.classicLook, onClick, kind = EchoButtonKind.Secondary)
     }
 }

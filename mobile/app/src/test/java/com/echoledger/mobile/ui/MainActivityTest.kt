@@ -150,12 +150,15 @@ class MainActivityTest : AppTest() {
     fun `with ui_v2 shell on the phone opens the v2 shell`() {
         runBlocking { app.graph.settings.update { it.copy(uiFlags = mapOf("ui_v2.shell" to true)) } }
         launch(preload = true)
-        pumpUntil("the v2 shell") { present("Home") && present("Ask") && present("Live") }
+        // The v2 bar: Library · Projects · Record · Live · Ask, with no Home tab.
+        pumpUntil("the v2 shell") { listOf("Library", "Projects", "Ask", "Live").all { present(it) } }
 
-        compose.onAllNodesWithContentDescription("Projects").assertCountEquals(0)
-        // "Switch back to classic": the classic screens again.
+        assertFalse("no Home tab in the v2 bar", present("Home"))
+        // "Switch back to classic": the classic screens again, and the v2 tabs gone.
         runBlocking { app.graph.settings.update { it.copy(uiClassic = true) } }
-        pumpUntil("the classic tabs") { compose.onAllNodesWithContentDescription("Projects").fetchSemanticsNodes().isNotEmpty() }
+        pumpUntil("the classic tabs") {
+            compose.onAllNodesWithContentDescription("Projects").fetchSemanticsNodes().isNotEmpty() && !present("Ask")
+        }
     }
 
     @Test

@@ -60,9 +60,16 @@ class V2SettingsTest {
     }
 
     @Test
-    fun wallpaperColoursAreNotOfferedInV2() {
-        assertFalse(SettingsSearch.items().any { it.id == "appearance.wallpaper" })
-        assertFalse(SettingsSearch.search(en, "wallpaper").any { it.item.id == "appearance.wallpaper" })
+    fun wallpaperColoursTextSizeAndAppLanguageAreInAppearanceAndFound() {
+        // Wallpaper colours came back (docs/PLAN_V2_PARITY.md section 5), with Text size and App language beside it.
+        for ((id, words) in listOf(
+            "appearance.wallpaper" to "wallpaper",
+            "appearance.textsize" to "text size",
+            "appearance.language" to "language"
+        )) {
+            assertTrue(id, SettingsSearch.items().any { it.id == id && it.page == "appearance" })
+            assertTrue(id, SettingsSearch.search(en, words).any { it.item.id == id })
+        }
     }
 
     @Test
