@@ -1889,3 +1889,52 @@ html[dir='rtl'] .v2-row-title {
 .v2-library .fi-ta-selection-indicator-actions-ctn .fi-link.fi-color-danger {
     display: none;
 }
+
+/* "Show 50 more" at the end of the Library list: centred, with room around it. */
+.v2-lib-more {
+    display: flex;
+    justify-content: center;
+    padding-block: var(--el-space-16);
+}
+
+/* A row being swiped at phone width (U9b): what lets go will do shows under it. Delete on the end side in the danger
+   colour, Pin on the start side in the accent's tint. The swipe script sets data-swipe ("delete" | "pin") and
+   data-swipe-label (the word, in the console's language) on the record while the finger moves, and clears them after. */
+.v2-library .fi-ta-record[data-swipe] {
+    position: relative;
+    overflow: hidden;
+}
+
+.v2-library .fi-ta-record[data-swipe]::after {
+    content: attr(data-swipe-label);
+    position: absolute;
+    inset-block: 0;
+    display: flex;
+    align-items: center;
+    padding-inline: var(--el-space-16);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-library .fi-ta-record[data-swipe='delete'] {
+    background-color: var(--el-role-danger-default);
+    color: var(--el-role-text-on-accent);
+}
+
+.v2-library .fi-ta-record[data-swipe='delete']::after {
+    inset-inline-end: 0;
+}
+
+.v2-library .fi-ta-record[data-swipe='pin'] {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-library .fi-ta-record[data-swipe='pin']::after {
+    inset-inline-start: 0;
+}
+
+.v2-library .fi-ta-record[data-swipe] .v2-lib-row {
+    position: relative;
+    z-index: 1;
+    background-color: var(--el-role-bg-canvas);
+}

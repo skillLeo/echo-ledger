@@ -27,8 +27,9 @@
     ];
     $app = $app ?? null;
     $mark = is_string($app) && array_key_exists($app, $marks) ? $marks[$app] : null;
+    // A phone recording's badge is the device (a handset would read as a phone call, next to the Phone call mark).
     $deviceIcon = match ($device ?? null) {
-        'phone' => 'phone',
+        'phone' => 'smartphone',
         'computer', 'desktop', 'laptop' => 'device',
         'web' => 'globe',
         default => null,
@@ -41,6 +42,12 @@
         <span class="v2-source-fallback"><x-el.v2.icon :name="$fallback ?? 'mic'" /></span>
     @endif
     @if ($deviceIcon)
-        <span class="v2-source-device"><x-el.v2.icon :name="$deviceIcon" /></span>
+        <span class="v2-source-device">
+            @if ($deviceIcon === 'smartphone')
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="7" y="2.5" width="10" height="19" rx="2.2" /><path d="M11 18.5h2" /></svg>
+            @else
+                <x-el.v2.icon :name="$deviceIcon" />
+            @endif
+        </span>
     @endif
 </span>
