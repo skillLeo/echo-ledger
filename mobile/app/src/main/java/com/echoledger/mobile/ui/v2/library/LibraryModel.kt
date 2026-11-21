@@ -131,6 +131,10 @@ object LibraryModel {
             .toList()
     }
 
+    /** A label's stored colour on [item] (its `label_colors`, the label matched ignoring capitals); null without one. */
+    fun labelColour(item: LibraryItem, label: String): String? =
+        item.labelColors[label] ?: item.labelColors.entries.firstOrNull { it.key.equals(label, ignoreCase = true) }?.value
+
     /**
      * Days until retention moves it to Trash (docs/API.md 2.0.0-i): the hours left divided by 24, rounded up, never
      * below 0, from [expiresAt] and the phone's clock; null when it has none (kept forever, still recording).

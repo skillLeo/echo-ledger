@@ -681,10 +681,10 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
                 // Its lists as their colour dots, up to three, each named for screen readers (D14 §3).
                 row.item.labels.take(3).forEach { label ->
-                    val stored =
-                        row.item.labelColors[label]
-                            ?: row.item.labelColors.entries.firstOrNull { it.key.equals(label, ignoreCase = true) }?.value
-                    com.echoledger.mobile.ui.v2.components.EchoLabelDot(stored, Modifier.semantics { contentDescription = label })
+                    com.echoledger.mobile.ui.v2.components.EchoLabelDot(
+                        LibraryModel.labelColour(row.item, label),
+                        Modifier.semantics { contentDescription = label }
+                    )
                 }
                 if (row.item.important) {
                     androidx.compose.material3.Icon(EchoIcons.Important, important, Modifier.size(EchoTokens.Icon.sm), tint = c.danger)

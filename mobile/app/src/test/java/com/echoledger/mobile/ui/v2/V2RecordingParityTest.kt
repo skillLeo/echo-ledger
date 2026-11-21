@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
@@ -25,9 +26,11 @@ import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -140,24 +143,73 @@ class V2RecordingParityTest : ScreenTest() {
         awaitText("Upgrade")
     }
 
+    private fun bodyOf(method: String, path: String) =
+        Json.parseToJsonElement(server.requestsTo(method, path).last().body!!.utf8()).jsonObject
+
     @Test
-    fun shareLinkAsksWhoMayOpenIt() {
+    fun shareLinkMakesALinkThatWorksForSevenDays() {
         server.on("GET", "/api/sessions/.+/shares", FakeServer.json(200, """{"data":[]}"""))
+        server.on("GET", "/api/sent.*", FakeServer.json(200, """{"data":[]}"""))
+        server.on("POST", "/api/sessions/.+/shares", FakeServer.json(201, SHARE_MADE))
         open(item(important = false))
         awaitText("Hi, thanks for calling.")
         press("Share")
         press("Share link")
         awaitText("Anyone with the link")
         awaitText("Only people I choose")
+        awaitText("7 days")
+        val before = java.time.Instant.now()
+        press("Make link")
+        val path = "/api/sessions/${ServerFixtures.SESSION_ID}/shares"
+        pumpUntil("made") { server.requestsTo("POST", path).isNotEmpty() }
+        val sent = bodyOf("POST", path)
+        assertEquals("public", sent["audience"]?.jsonPrimitive?.content)
+        assertEquals("true", sent["allow_download"]?.jsonPrimitive?.content)
+        // "Link works for" starts at 7 days.
+        val ends = java.time.Instant.parse(sent["expires_at"]!!.jsonPrimitive.content)
+        val days = java.time.Duration.between(before, ends).toMinutes() / (60.0 * 24)
+        assertTrue("expires in $days days", days in 6.99..7.01)
     }
 
     @Test
-    fun sendToATeammateAsksForTheirEmailsAndANote() {
+    fun sendToATeammateSendsTheirEmailsAndTheNote() {
+        server.on("POST", "/api/sessions/.+/send", FakeServer.json(200, """{"sent": 2}"""))
         open(item(important = false))
         awaitText("Hi, thanks for calling.")
         press("Share")
         press("Send to a teammate")
         awaitText("Their emails")
         awaitText("Note (optional)")
+        val fields = compose.onAllNodes(androidx.compose.ui.test.hasSetTextAction())
+        fields[0].performTextInput("ali@bilaltraders.pk, sara@bilaltraders.pk")
+        fields[1].performTextInput("The rate we agreed")
+        press("Send")
+        val path = "/api/sessions/${ServerFixtures.SESSION_ID}/send"
+        pumpUntil("sent") { server.requestsTo("POST", path).isNotEmpty() }
+        val sent = bodyOf("POST", path)
+        assertEquals(listOf("ali@bilaltraders.pk", "sara@bilaltraders.pk"), sent["to"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals("The rate we agreed", sent["note"]?.jsonPrimitive?.content)
+    }
+    private companion object {
+        val SHARE_MADE = """{
+    "id": "01m6s1x89fzbnywymymcct9ady",
+    "kind": "session",
+    "session_id": "01m6s1x6v38xtqnqa6exvtgtmn",
+    "client_id": null,
+    "audience": "public",
+    "people": null,
+    "allow_download": false,
+    "has_password": false,
+    "include_audio": false,
+    "view": null,
+    "expires_at": null,
+    "revoked_at": null,
+    "active": true,
+    "view_count": 0,
+    "last_viewed_at": null,
+    "created_by": "Sample phone",
+    "created_at": "2026-11-06T18:28:34+00:00",
+    "url": "https://echoledger.test/s/zlFKflQlb0bEH3wea2oj_KpxXAWHwqYkwxU-3AG6CYE"
+}"""
     }
 }

@@ -22,6 +22,8 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -394,6 +396,7 @@ class ComponentBehaviourTest {
                 mainLabel = "Copy text"
             ) { close -> EchoActionItem(EchoIcons.Export, "Copy with timestamps", { close() }) }
         }
+        compose.onNode(hasContentDescription("Copy text") and hasClickAction()).assertExists()
         val main = compose.onNodeWithContentDescription("Copy text").fetchSemanticsNode()
         assertEquals(listOf("Copy text"), main.config[SemanticsProperties.ContentDescription])
         // The word on it is not read again after its name.

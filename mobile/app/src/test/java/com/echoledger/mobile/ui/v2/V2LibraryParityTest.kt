@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import com.echoledger.mobile.testsupport.FakeServer
@@ -111,8 +112,20 @@ class V2LibraryParityTest : ScreenTest() {
         val notOpened = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Not opened yet")
         compose.onAllNodes(notOpened).assertCountEquals(1)
         compose.onNode(notOpened and hasText("Bilal Traders", substring = true)).assertExists()
+        // Semibold until opened; an opened row's title is in the regular weight.
+        assertTrue(weightOf("Bilal Traders") > weightOf("Rehman and Sons Textiles"))
         compose.onNodeWithText("Bilal Traders", substring = true).performClick()
         pumpUntil("marked opened") { server.requestsTo("POST", "/api/sessions/01JA/opened").isNotEmpty() }
+        pumpUntil("the dot went") { compose.onAllNodes(notOpened).fetchSemanticsNodes().isEmpty() }
+        assertEquals(weightOf("Rehman and Sons Textiles"), weightOf("Bilal Traders"))
+    }
+
+    /** The weight a title is drawn in (its text layout's style). */
+    private fun weightOf(title: String): Int {
+        val node = compose.onNode(hasText(title), useUnmergedTree = true).fetchSemanticsNode()
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        return (layouts.single().layoutInput.style.fontWeight ?: androidx.compose.ui.text.font.FontWeight.Normal).weight
     }
 
     @Test
@@ -161,6 +174,20 @@ class V2LibraryParityTest : ScreenTest() {
         compose.onNode(hasText("basmati") and hasClickAction()).performClick()
         compose.onNodeWithText("Rehman and Sons Textiles", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
+    }
+
+    @Test
+    fun onlyTheLastFiveSearchesAreKeptAndNeverInASettingsExport() {
+        twoRows()
+        val field = compose.onNode(hasSetTextAction())
+        listOf("one", "two", "three", "four", "five", "six", "Four").forEach { words ->
+            field.performTextReplacement(words)
+            field.performImeAction()
+        }
+        // Newest first, five at most, the same words once (capitals ignored).
+        pumpUntil("kept") { vm.settings.value.recentSearches == listOf("Four", "six", "five", "three", "two") }
+        val exported = com.echoledger.mobile.core.SettingsTransfer.export(vm.settings.value)
+        assertTrue(exported, !exported.contains("three") && !exported.contains("recentSearches"))
     }
 
     @Test
@@ -249,6 +276,11 @@ class V2LibraryParityTest : ScreenTest() {
         }
         // Up to three.
         compose.onAllNodes(hasContentDescription("Extra"), useUnmergedTree = true).assertCountEquals(0)
+        // Each dot's colour is the label's in label_colors (capitals ignored); a label without one has none.
+        val row = vm.library.value.single()
+        assertEquals("#16a34a", com.echoledger.mobile.ui.v2.library.LibraryModel.labelColour(row, "Clients"))
+        assertEquals("#16a34a", com.echoledger.mobile.ui.v2.library.LibraryModel.labelColour(row, "clients"))
+        assertEquals(null, com.echoledger.mobile.ui.v2.library.LibraryModel.labelColour(row, "Home"))
     }
 
     @Test
