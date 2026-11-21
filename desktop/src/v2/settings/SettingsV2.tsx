@@ -20,14 +20,14 @@ import { AccountCard } from "./AccountCard";
 export const GOAL_GROUPS: readonly { title: string; icon: IconType; description: string; ids: readonly string[] }[] = [
   { title: "Recording", icon: Icons.RecordIcon, description: "Which calls are recorded, and the microphone, screen and voice used.", ids: ["calls", "mic", "screen", "voice"] },
   { title: "Transcription & language", icon: Icons.TranscriptIcon, description: "The languages your calls are in, your own words, and your transcription key.", ids: ["transcription.language", "words", "key"] },
-  { title: "Live & overlays", icon: Icons.CaptionsIcon, description: "Captions during calls, and what others see when you share your screen.", ids: ["captions", "share_privacy"] },
+  { title: "Live & overlays", icon: Icons.RadioIcon, description: "Captions during calls, and what others see when you share your screen.", ids: ["captions", "share_privacy"] },
   { title: "Privacy & data", icon: Icons.PrivacyIcon, description: "What is kept, for how long, and the app lock.", ids: ["privacy", "storage", "lock"] },
   { title: "Notifications", icon: Icons.BellIcon, description: "What EchoLedger tells you, and when.", ids: ["notifications"] },
   { title: "Appearance", icon: Icons.AppearanceIcon, description: "Theme, sidebar, density, times and the design.", ids: ["appearance"] },
   { title: "Account & plan", icon: Icons.UserIcon, description: "Your profile, plan, sign-in security and devices.", ids: ["profile", "plan", "security", "devices"] },
   { title: "Setup & health", icon: Icons.ReadyIcon, description: "Check that recording works on this computer.", ids: ["setup_health"] },
-  { title: "Shortcuts & start-up", icon: Icons.KeyboardIcon, description: "Keys that start things, and opening EchoLedger when you sign in.", ids: ["shortcuts", "app.autostart"] },
-  { title: "About & help", icon: Icons.HelpIcon, description: "Help and shortcuts, what's new, and the version.", ids: ["help", "about"] },
+  { title: "Shortcuts & start-up", icon: Icons.CommandIcon, description: "Keys that start things, and opening EchoLedger when you sign in.", ids: ["shortcuts", "app.autostart"] },
+  { title: "About & help", icon: Icons.LifeBuoyIcon, description: "Help and shortcuts, what's new, and the version.", ids: ["help", "about"] },
 ];
 
 /** Every root entry of the registry sits in exactly one goal group (sign out has its own row). */
