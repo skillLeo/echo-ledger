@@ -17,6 +17,7 @@ use App\Filament\Support\LibraryView;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\Shell;
+use App\Filament\Support\V2DismissedBanners;
 use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -337,6 +338,23 @@ class ListCaptureSessions extends ListRecords
         $tabs = $this->getCachedTabs();
 
         return isset($tabs['waiting']) && is_numeric($tabs['waiting']->getBadge()) ? (int) $tabs['waiting']->getBadge() : 0;
+    }
+
+    /** Whether the person closed the quiet line and nothing has risen since (V2DismissedBanners); also for a read-only console. */
+    public function v2WaitingDismissed(int $waiting): bool
+    {
+        $user = auth()->user();
+
+        return V2DismissedBanners::hidden($user instanceof User ? $user : null, (int) CurrentWorkspace::id(), 'library', ['waiting' => $waiting]);
+    }
+
+    /** The quiet line's ×: hidden until more calls wait than now (the server's count, never the page's). */
+    public function dismissV2Waiting(): void
+    {
+        $user = auth()->user();
+        if ($user instanceof User) {
+            V2DismissedBanners::dismiss($user, (int) CurrentWorkspace::id(), 'library', ['waiting' => $this->v2Waiting()]);
+        }
     }
 
     /** The empty state's "Show all recordings": no smart view and no folder. */
