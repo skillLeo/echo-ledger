@@ -9,12 +9,14 @@
 //   node src/v2/gallery/shoot.mjs --app               every v2 screen of the app itself (fixture mode, cases.mjs GATE3),
 //                                                      light English, light right to left and dark English, into
 //                                                      docs/v2/gate3/desktop/app/, and docs/v2/gate3/desktop/index.md
+//   node src/v2/gallery/shoot.mjs --review=D12        a design review's pictures (cases.mjs REVIEWS), light and dark,
+//                                                      English and Urdu, into docs/v2/design-review/D12/
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CASES, GATE3 } from "./cases.mjs";
+import { CASES, GATE3, REVIEWS } from "./cases.mjs";
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
@@ -24,6 +26,7 @@ const only = arg("screen");
 const statesMode = process.argv.includes("--states");
 const states = statesMode ? ["loading", "empty", "error"] : ["ready"];
 const appMode = process.argv.includes("--app");
+const review = arg("review");
 const dir = statesMode ? join(out, "states") : appMode ? join(out, "app") : out;
 process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 /** The app's captures: light English, light right to left, dark English. */
@@ -114,8 +117,27 @@ try {
     }
     if (!only) await writeIndex(results);
   }
+  if (review) {
+    const reviewDir = join(desktop, "..", "docs", "v2", "design-review", review);
+    await mkdir(reviewDir, { recursive: true });
+    for (const [stem, caseName, widths] of REVIEWS[review] ?? []) {
+      const [, , path, langs, step] = CASES.find(([name]) => name === caseName);
+      for (const width of widths) for (const theme of ["light", "dark"]) for (const lang of langs) {
+        const page = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
+        await page.goto(`${base}${path}&theme=${theme}&lang=${lang}`);
+        await page.waitForSelector("[data-gallery-ready]");
+        await page.evaluate(() => document.fonts.ready);
+        if (step) await step(page);
+        await page.waitForTimeout(150);
+        const name = widths.length > 1 ? `${stem}-${width}-${theme}-${lang}` : `${stem}-${theme}-${lang}`;
+        await page.screenshot({ path: join(reviewDir, `${name}.png`) });
+        await page.close();
+      }
+    }
+    console.log(`review pictures in ${reviewDir}`);
+  }
   // Plan & usage is in the gallery for its right-to-left meters; it has no loading, empty or error state of its own.
-  for (const screen of appMode ? [] : statesMode ? ["library", "recording", "settings"] : ["library", "recording", "settings", "plan"]) {
+  for (const screen of appMode || review ? [] : statesMode ? ["library", "recording", "settings"] : ["library", "recording", "settings", "plan"]) {
     if (only && screen !== only) continue;
     for (const state of states) for (const theme of ["light", "dark"]) {
       for (const lang of ["en", "ur"]) {

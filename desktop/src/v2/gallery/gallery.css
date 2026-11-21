@@ -63,3 +63,7 @@ html:has(.g-body), .g-body { margin: 0; block-size: 100%; background: var(--el-r
 }
 .g-kit-scroller__head { padding: var(--el-space-16); }
 .g-kit-scroller__line { padding: var(--el-space-8) var(--el-space-16); }
+
+/* The D12 pages (screen=rows, screen=split). */
+.g-kit-card.g-split-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--el-space-16) var(--el-space-24); }
+.g-split-case[data-case="open"] { grid-column: 2; grid-row: 1 / span 4; }

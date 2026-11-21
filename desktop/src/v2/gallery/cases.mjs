@@ -19,6 +19,17 @@ export const CASES = [
   ["g-kit", "gallery", "?v2gallery&screen=kit", ["en", "ur"]],
   ["g-kit-menus", "gallery", "?v2gallery&screen=kit", ["en", "ur"], async (page) => { await page.locator(".el-sortgroup").first().click(); await page.waitForTimeout(300); }],
   ["g-kit-scrolled", "gallery", "?v2gallery&screen=kit", ["en", "ur"], async (page) => { await page.locator(".g-kit-scroller").evaluate((el) => { el.scrollTop = el.scrollHeight; }); await page.waitForTimeout(300); }],
+  ["g-rows", "gallery", "?v2gallery&screen=rows", ["en", "ur"], async (page) => { await page.locator(".el-row--library").nth(3).hover(); await page.waitForTimeout(200); }],
+  ["g-split", "gallery", "?v2gallery&screen=split", ["en", "ur"], async (page) => {
+    // Open: the chevron by keyboard, so the menu's first item shows its focus. Focus: the chevron of its own case (the
+    // last input was a key, so the ring shows). Hover: the pointer over the main part of its case.
+    await page.locator('[data-case="open"] .el-split__more').focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(150);
+    await page.locator('[data-case="focus"] .el-split__more').evaluate((el) => el.focus());
+    await page.locator('[data-case="hover"] .el-split__main').hover();
+    await page.waitForTimeout(200);
+  }],
   ["a-library", "app", app("library"), ["en"]],
   ["a-recording", "app", app("library"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
   ["a-recording-screens", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); }],
@@ -151,3 +162,15 @@ export const GATE3 = [
   ["set-about", "a-set-about", "Settings › About"],
   ["set-technical", "a-set-technical", "Settings › About › Technical details"],
 ];
+
+/**
+ * Design reviews' pictures (shoot.mjs --review=D12): [file stem, case above, window widths]. Each is taken light and
+ * dark in English and Urdu into docs/v2/design-review/<review>/: <stem>-<width>-<theme>-<lang>.png, or
+ * <stem>-<theme>-<lang>.png when the case has one width.
+ */
+export const REVIEWS = {
+  D12: [
+    ["desktop-rows", "g-rows", [1280, 800]],
+    ["splitbutton", "g-split", [1280]],
+  ],
+};
