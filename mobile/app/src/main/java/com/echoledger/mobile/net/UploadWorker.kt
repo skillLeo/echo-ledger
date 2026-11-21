@@ -304,7 +304,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                         markers = rec.markers,
                         pauses = rec.pauses,
                         languageMarks = rec.languageMarks,
-                        caller = callerOf(rec)
+                        caller = callerOf(rec),
+                        transcribe = rec.transcribe
                     )
                 )
             } catch (e: ApiException) {
@@ -330,7 +331,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         pauses = rec.pauses,
         languageMarks = rec.languageMarks,
         caller = callerOf(rec),
-        skipDuplicate = rec.skipDuplicate
+        skipDuplicate = rec.skipDuplicate,
+        transcribe = rec.transcribe
     )
 
     /** Caller names (since v1.2): who the call was with, when the phone saw it. */

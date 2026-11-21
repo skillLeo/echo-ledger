@@ -140,7 +140,9 @@ fun EchoV2Shell(
     /** Help v2's guides, notes and support messages (the phone core's); without it Help stays the classic page. */
     help: HelpSource? = null,
     onRecordNow: () -> Boolean = { false },
-    onReadyCheck: (turnOn: Boolean) -> Unit = {}
+    onReadyCheck: (turnOn: Boolean) -> Unit = {},
+    /** Goes up by one each time Activity should open (the after-call card's title: rename it or pick a project there). */
+    openActivity: Int = 0
 ) {
     val settings by vm.settings.collectAsState()
     val shown = AppLook.language(settings.appLanguage, language)
@@ -150,7 +152,7 @@ fun EchoV2Shell(
             CompositionLocalProvider(LocalEchoToasts provides toasts) {
                 MessagesToToasts(vm, toasts)
                 Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
-                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock)
+                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock, openActivity)
                     EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
                 }
             }
@@ -207,12 +209,14 @@ private fun ShellBody(
     help: HelpSource?,
     onRecordNow: () -> Boolean,
     onReadyCheck: (Boolean) -> Unit,
-    clock: () -> Long
+    clock: () -> Long,
+    openActivity: Int = 0
 ) {
     val text = v2Text
     val context = LocalContext.current
     var tab by rememberSaveable { mutableStateOf(V2Tab.Library) }
     var route by remember { mutableStateOf<V2Route>(V2Route.Tabs) }
+    LaunchedEffect(openActivity) { if (openActivity > 0) route = V2Route.Activity }
     var libraryViews by remember { mutableStateOf(emptySet<SavedView>()) }
     var reselected by remember { mutableIntStateOf(0) }
     var recordSheet by remember { mutableStateOf(false) }

@@ -82,7 +82,10 @@ class ApiException(
     /** The session a `409 session_active` names (Live Assist, 1.9.0-k). */
     val sessionId: String? = null,
     /** The name an answer gives (`409 list_exists`: the person's list of that name, contract 2.0.0-m). */
-    val name: String? = null
+    val name: String? = null,
+    /** A `403 budget_exceeded` (2.0.0-j): the minutes the transcripts need and the minutes left this month. */
+    val minutesNeeded: Long? = null,
+    val minutesLeft: Long? = null
 ) : IOException(message)
 
 /**
@@ -143,7 +146,9 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         val plan = json?.get("plan")?.let { (it as? JsonPrimitive)?.contentOrNull }
         val session = json?.get("session_id")?.let { (it as? JsonPrimitive)?.contentOrNull }
         val name = json?.get("name")?.let { (it as? JsonPrimitive)?.contentOrNull }
-        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter, plan, session, name)
+        val needed = json?.get("minutes_needed")?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() }
+        val left = json?.get("minutes_left")?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() }
+        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter, plan, session, name, needed, left)
     }
 
     private val jsonType = "application/json".toMediaType()
@@ -735,6 +740,26 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         }.toString().toRequestBody(jsonType)
         return call(request("sessions/bulk").post(body).build(), BulkAnswer.serializer())!!.changed
     }
+
+    /** `POST /api/sessions/{id}/transcribe` (2.0.0-j): starts the first transcript of an audio-only recording. */
+    suspend fun transcribeSession(sessionId: String): com.echoledger.mobile.data.SessionTranscribeAnswer = call(
+        request("sessions/$sessionId/transcribe").post("{}".toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.SessionTranscribeAnswer.serializer()
+    )!!
+
+    private fun idsBody(ids: List<String>) = buildJsonObject {
+        put("ids", buildJsonArray { ids.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+    }.toString().toRequestBody(jsonType)
+
+    /** `POST /api/sessions/transcribe-estimate` (2.0.0-j): the plan minutes transcribing [ids] would use; no side effects. */
+    suspend fun transcribeEstimate(ids: List<String>): com.echoledger.mobile.data.TranscribeEstimateAnswer = call(
+        request("sessions/transcribe-estimate").post(idsBody(ids)).build(),
+        com.echoledger.mobile.data.TranscribeEstimateAnswer.serializer()
+    )!!
+
+    /** `POST /api/sessions/transcribe` (2.0.0-j): "Transcribe selected", all or nothing for the month's minutes. */
+    suspend fun transcribeSessions(ids: List<String>): com.echoledger.mobile.data.TranscribeManyAnswer =
+        call(request("sessions/transcribe").post(idsBody(ids)).build(), com.echoledger.mobile.data.TranscribeManyAnswer.serializer())!!
 
     /** `POST /api/sessions/export` (since v1.1): the finished transcripts of many recordings in one zip file. */
     suspend fun exportSessions(ids: List<String>, format: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {

@@ -874,6 +874,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      */
     data class Deleted(val went: List<String>, val changed: Int)
 
+    /** What a Transcribe (one recording, or the selection) came to (2.0.0-j); the screen says it in its own words. */
+    sealed interface TranscribeOutcome {
+        /** Started: [started] ids, [skipped] ones with why, [minutes] of the plan they use. */
+        data class Started(val started: List<String>, val skipped: List<com.echoledger.mobile.data.TranscribeSkipped>, val minutes: Long) :
+            TranscribeOutcome
+
+        /** The month's minutes can't cover it; nothing started. */
+        data class Budget(val needed: Long?, val left: Long?) : TranscribeOutcome
+
+        /** Free without an own key: nothing started. */
+        data object NeedsKey : TranscribeOutcome
+
+        /** Already transcribed, or still uploading. */
+        data object NotAudioOnly : TranscribeOutcome
+
+        /** Any other refusal, in the server's or the app's words (null: the screen's own "could not be transcribed"). */
+        data class Failed(val words: String?) : TranscribeOutcome
+    }
+
+    private fun transcribeRefused(e: Throwable): TranscribeOutcome = when ((e as? com.echoledger.mobile.net.ApiException)?.code) {
+        "budget_exceeded" -> TranscribeOutcome.Budget(e.minutesNeeded, e.minutesLeft)
+        "needs_transcription_key" -> TranscribeOutcome.NeedsKey
+        "not_audio_only" -> TranscribeOutcome.NotAudioOnly
+        else -> TranscribeOutcome.Failed(com.echoledger.mobile.core.Problems.text(e, "").ifBlank { null })
+    }
+
+    /** `POST /api/sessions/transcribe-estimate`: the minutes transcribing [ids] would use, null when it can't be asked. */
+    suspend fun transcribeEstimate(ids: List<String>): com.echoledger.mobile.data.TranscribeEstimateAnswer? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.transcribeEstimate(ids) }.getOrNull()
+    }
+
+    /** "Transcribe selected": starts every audio-only one among [ids] (all or nothing for the minutes), then syncs. */
+    suspend fun transcribeMany(ids: List<String>): TranscribeOutcome = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.transcribeSessions(ids) ?: error("Not signed in") }.fold(
+            onSuccess = {
+                refreshQuietly()
+                TranscribeOutcome.Started(it.started, it.skipped, it.minutes)
+            },
+            onFailure = ::transcribeRefused
+        )
+    }
+
+    /** Transcribe on an audio-only recording: its first transcript starts; the Library takes the answer at once. */
+    suspend fun transcribeOne(id: String): TranscribeOutcome = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.transcribeSession(id) ?: error("Not signed in") }.fold(
+            onSuccess = { answer ->
+                graph.library.upsertLocally(answer.session)
+                refreshQuietly()
+                TranscribeOutcome.Started(listOf(id), emptyList(), answer.session.transcribeEstimate?.minutes ?: 0)
+            },
+            onFailure = ::transcribeRefused
+        )
+    }
+
     /**
      * Library v2's Delete (one or many), on classic's path (`POST /api/sessions/bulk` with "delete", at most
      * [Organise.MAX_BULK]): the ids that went, worked out once the library has synced again (an id the server did not
@@ -1328,11 +1382,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun importFiles(
         files: List<com.echoledger.mobile.share.FileImport.Picked>,
         clientId: String?,
-        language: String?
+        language: String?,
+        /** False: the screen says the outcome in its own words (the v2 import sheet). */
+        say: Boolean = true
     ): com.echoledger.mobile.share.FileImport.Summary = withContext(Dispatchers.IO) {
         com.echoledger.mobile.share.FileImport.import(getApplication(), graph, files, clientId, language).also {
             reloadLocal()
-            _message.value = it.message()
+            if (say) _message.value = it.message()
         }
     }
 

@@ -55,4 +55,5 @@
         <item quantity="one">%2$d میں سے %1$d AI کے لیے کاپی ہوئیں: باقی کی ٹرانسکرپٹ ابھی نہیں بنی۔</item>
         <item quantity="other">%2$d میں سے %1$d AI کے لیے کاپی ہوئیں: باقی کی ٹرانسکرپٹ ابھی نہیں بنی۔</item>
     </plurals>
+    <string name="v2_lib_copying">کاپی ہو رہا ہے…</string>
 </resources>

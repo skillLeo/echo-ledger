@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Audio only and Transcribe later on the v2 screens (contract 2.0.0-j). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_lib_audio_only">صرف آڈیو</string>
+    <string name="v2_tx_menu">ٹرانسکرائب کریں…</string>
+    <string name="v2_tx_go">ٹرانسکرائب کریں</string>
+    <string name="v2_tx_ok">ٹھیک ہے</string>
+    <string name="v2_tx_none">ان میں سے کوئی ٹرانسکرائب ہونے کے انتظار میں نہیں۔</string>
+    <string name="v2_tx_uses_none">آپ کے پلان کے منٹ استعمال نہیں ہوں گے۔</string>
+    <string name="v2_tx_budget">اس مہینے منٹ کافی نہیں: %1$d چاہییں، %2$d باقی۔ کچھ شروع نہیں ہوا۔</string>
+    <string name="v2_tx_budget_short">اس مہینے منٹ کافی نہیں۔ کچھ شروع نہیں ہوا۔</string>
+    <string name="v2_tx_needs_key">فری پلان پر ٹرانسکرائب کرنے کے لیے سیٹنگز › ٹرانسکرپشن کی میں اپنی ٹرانسکرپشن کی شامل کریں۔</string>
+    <string name="v2_tx_not_audio_only">یہ پہلے ہی ٹرانسکرائب ہو چکی ہے یا ابھی اپ لوڈ ہو رہی ہے۔</string>
+    <string name="v2_tx_failed">ٹرانسکرائب نہیں ہو سکی۔ دوبارہ کوشش کریں۔</string>
+    <string name="v2_tx_not_enough_title">منٹ کافی نہیں</string>
+    <string name="v2_tx_audio_only_title">صرف آڈیو</string>
+    <string name="v2_tx_audio_only_body">آڈیو محفوظ ہے، ابھی ٹرانسکرائب نہیں ہوئی۔</string>
+    <plurals name="v2_tx_uses">
+        <item quantity="one">آپ کے پلان کا %1$d منٹ استعمال ہو گا۔</item>
+        <item quantity="other">آپ کے پلان کے %1$d منٹ استعمال ہوں گے۔</item>
+    </plurals>
+    <plurals name="v2_tx_uses_left">
+        <item quantity="one">آپ کے پلان کا %1$d منٹ استعمال ہو گا · اس مہینے %2$d باقی۔</item>
+        <item quantity="other">آپ کے پلان کے %1$d منٹ استعمال ہوں گے · اس مہینے %2$d باقی۔</item>
+    </plurals>
+    <plurals name="v2_tx_started">
+        <item quantity="one">%1$d ریکارڈنگ ٹرانسکرائب ہو رہی ہے۔</item>
+        <item quantity="other">%1$d ریکارڈنگز ٹرانسکرائب ہو رہی ہیں۔</item>
+    </plurals>
+    <plurals name="v2_tx_skipped">
+        <item quantity="one">%1$d چھوڑ دی گئی: پہلے سے ٹرانسکرائب یا ابھی اپ لوڈ ہو رہی ہے۔</item>
+        <item quantity="other">%1$d چھوڑ دی گئیں: پہلے سے ٹرانسکرائب یا ابھی اپ لوڈ ہو رہی ہیں۔</item>
+    </plurals>
+    <plurals name="v2_tx_ask_title">
+        <item quantity="one">%1$d ریکارڈنگ ٹرانسکرائب کریں؟</item>
+        <item quantity="other">%1$d ریکارڈنگز ٹرانسکرائب کریں؟</item>
+    </plurals>
+</resources>

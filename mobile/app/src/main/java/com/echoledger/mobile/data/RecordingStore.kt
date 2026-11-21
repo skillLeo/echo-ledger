@@ -70,7 +70,9 @@ data class LocalRecording(
     val serverCopy: String? = null,
     val restoreServerCopy: Boolean = false,
     /** Since v1.8.1: the reference a fresh upload uses when its first server copy could no longer be restored. */
-    val clientRef: String? = null
+    val clientRef: String? = null,
+    /** 2.0.0-j: false after "Save audio" (kept as audio, transcribed later); true after "Transcribe"; null: as before. */
+    val transcribe: Boolean? = null
 )
 
 /**

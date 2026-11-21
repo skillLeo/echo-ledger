@@ -73,6 +73,14 @@ class SettingsTransferTest {
     }
 
     @Test
+    fun `swipes turned off survive an export and an import on another phone`() {
+        val text = SettingsTransfer.export(AppSettings(librarySwipes = false))
+        assertTrue(text, text.contains("\"librarySwipes\": false"))
+        assertFalse(applied(text, AppSettings(librarySwipes = true)).librarySwipes)
+        assertTrue(applied(SettingsTransfer.export(AppSettings(librarySwipes = true)), AppSettings(librarySwipes = false)).librarySwipes)
+    }
+
+    @Test
     fun `a file cannot smuggle in a pairing or turn the lock on`() {
         val text = """
             {"format":"echoledger-settings","version":1,"settings":{

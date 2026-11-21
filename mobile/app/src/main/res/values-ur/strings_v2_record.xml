@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 voice note screen and import. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_vn_title">وائس نوٹ</string>
+    <string name="v2_vn_not_recording">ریکارڈنگ نہیں ہو رہی</string>
+    <string name="v2_vn_recording">ریکارڈنگ ہو رہی ہے</string>
+    <string name="v2_vn_paused">رکی ہوئی</string>
+    <string name="v2_vn_record">ریکارڈ</string>
+    <string name="v2_vn_stop">روکیں</string>
+    <string name="v2_vn_pause">وقفہ</string>
+    <string name="v2_vn_resume">جاری رکھیں</string>
+    <string name="v2_vn_discard">ضائع کریں</string>
+    <string name="v2_vn_undo">واپس</string>
+    <string name="v2_vn_level">آواز کی سطح</string>
+    <string name="v2_vn_import">فائلیں امپورٹ کریں</string>
+    <string name="v2_vn_bluetooth">بلوٹوتھ ہیڈسیٹ جڑا ہوا ہے۔ بلوٹوتھ مائیک سے درستگی کم ہوتی ہے۔</string>
+    <string name="v2_vn_never_auto">وائس نوٹس خود بخود ریکارڈ نہیں ہوتے — انہیں واٹس ایپ سے EchoLedger پر شیئر کریں۔</string>
+    <string name="v2_vn_retry_now">ابھی دوبارہ کوشش کریں</string>
+    <string name="v2_vn_will_retry">دوبارہ کوشش ہو گی: %1$s</string>
+    <string name="v2_vn_viewer">آپ %1$s میں ناظر ہیں: آپ اپنے ساتھ شیئر کی گئی چیزیں کھول سکتے ہیں، ریکارڈ نہیں کر سکتے۔</string>
+    <string name="v2_imp_for_all">سب کے لیے</string>
+    <string name="v2_imp_no_project">کوئی پروجیکٹ نہیں</string>
+    <string name="v2_imp_help">ہر فائل اپنی الگ ریکارڈنگ بنتی ہے، فائل کے نام سے۔ جو فائلیں پہلے سے لائبریری میں ہیں وہ چھوڑ دی جاتی ہیں۔</string>
+    <string name="v2_imp_importing">امپورٹ ہو رہی ہیں…</string>
+    <string name="v2_imp_nothing">امپورٹ کے لیے کچھ نہیں۔</string>
+    <plurals name="v2_vn_uploading">
+        <item quantity="one">%1$d ریکارڈنگ اپ لوڈ ہو رہی ہے…</item>
+        <item quantity="other">%1$d ریکارڈنگز اپ لوڈ ہو رہی ہیں…</item>
+    </plurals>
+    <plurals name="v2_imp_heading">
+        <item quantity="one">%1$d فائل امپورٹ کریں</item>
+        <item quantity="other">%1$d فائلیں امپورٹ کریں</item>
+    </plurals>
+    <plurals name="v2_imp_done">
+        <item quantity="one">%1$d فائل امپورٹ ہو رہی ہے۔</item>
+        <item quantity="other">%1$d فائلیں امپورٹ ہو رہی ہیں۔</item>
+    </plurals>
+    <plurals name="v2_imp_dupes">
+        <item quantity="one">%1$d فائل پہلے سے آپ کی لائبریری میں ہے۔</item>
+        <item quantity="other">%1$d فائلیں پہلے سے آپ کی لائبریری میں ہیں۔</item>
+    </plurals>
+    <plurals name="v2_imp_unreadable">
+        <item quantity="one">%1$d فائل پڑھی نہیں جا سکی۔</item>
+        <item quantity="other">%1$d فائلیں پڑھی نہیں جا سکیں۔</item>
+    </plurals>
+    <string name="v2_vn_this_workspace">اس ورک اسپیس</string>
+</resources>

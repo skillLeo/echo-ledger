@@ -55,4 +55,5 @@
         <item quantity="one">Copied %1$d of %2$d for AI: the others have no transcript yet.</item>
         <item quantity="other">Copied %1$d of %2$d for AI: the others have no transcript yet.</item>
     </plurals>
+    <string name="v2_lib_copying">Copying…</string>
 </resources>

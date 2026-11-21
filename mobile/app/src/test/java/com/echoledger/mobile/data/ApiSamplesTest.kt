@@ -66,6 +66,10 @@ class ApiSamplesTest {
         "session_open" to CreateSessionResponse.serializer(),
         "session_screens" to ScreensResponse.serializer(),
         "sessions_bulk" to BulkAnswer.serializer(),
+        // Audio only and Transcribe later (contract 2.0.0-j).
+        "session_transcribe" to SessionTranscribeAnswer.serializer(),
+        "sessions_transcribe" to TranscribeManyAnswer.serializer(),
+        "sessions_transcribe_estimate" to TranscribeEstimateAnswer.serializer(),
         // Lists (contract 2.0.0-m).
         "lists" to ListsResponse.serializer(),
         "list_create" to ListResponse.serializer(),
@@ -93,12 +97,9 @@ class ApiSamplesTest {
     private val notRead =
         setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
-    /** Answers the phone does not ask for yet: Transcribe later (2.0.0-j) reaches the phone with its Audio only screen; account (2.0.0-l) with its account screens. */
+    /** Answers the phone does not ask for yet: account (2.0.0-l) reaches the phone with its account screens. */
     private val notUsedYet =
         setOf(
-            "session_transcribe",
-            "sessions_transcribe",
-            "sessions_transcribe_estimate",
             "account_avatar",
             "account_email",
             "account_email_confirm",
@@ -208,6 +209,8 @@ class ApiSamplesTest {
         "session_finish.session.device.avatar",
         "session_open.session.device.color",
         "session_open.session.device.avatar",
+        "session_transcribe.session.device.color",
+        "session_transcribe.session.device.avatar",
         // Only the page of one recording says who opened it.
         "search.data[0].session.opened",
         "session_create.session.opened",

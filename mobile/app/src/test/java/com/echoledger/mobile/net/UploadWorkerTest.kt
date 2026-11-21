@@ -767,6 +767,21 @@ class UploadWorkerTest : AppTest() {
     }
 
     @Test
+    fun `Save audio sends transcribe false, Transcribe sends true, and a recording without a choice leaves it out`() {
+        // 2.0.0-j: absent means transcribe, as before.
+        for ((choice, sent) in listOf(false to "\"transcribe\":false", true to "\"transcribe\":true", null to null)) {
+            server.requests.clear()
+            app.graph.recordings.delete(id)
+            app.storeRecording(bytes = payload)
+            app.graph.recordings.update(id) { it.copy(transcribe = choice) }
+            server.on("POST", "/api/sessions", FakeServer.json(422, """{"message":"x"}"""))
+            run()
+            val body = server.requestsTo("POST", "/api/sessions").single().bodyText()
+            if (sent == null) assertFalse(body, body.contains("transcribe")) else assertTrue(body, body.contains(sent))
+        }
+    }
+
+    @Test
     fun `a recording that is not an import never asks to skip duplicates`() {
         app.storeRecording(bytes = payload)
         server.on("POST", "/api/sessions", FakeServer.json(422, """{"message":"x"}"""))
