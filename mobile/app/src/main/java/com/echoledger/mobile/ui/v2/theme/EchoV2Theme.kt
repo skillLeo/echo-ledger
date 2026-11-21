@@ -30,13 +30,16 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
 import androidx.core.os.ConfigurationCompat
 import com.echoledger.mobile.R
+import com.echoledger.mobile.ui.design.ArabicNaskh
+import com.echoledger.mobile.ui.design.Inter
 import com.echoledger.mobile.ui.design.UrduNastaliq
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.util.Locale
 
 /**
  * The colour roles of the v2 design system (docs/v2/DESIGN_SYSTEM.md) for one theme. Components read these, never the
- * raw palette. v2 takes no wallpaper colours: the accent stays teal and the surfaces stay neutral.
+ * raw palette. With Wallpaper colours on (Settings › Appearance) only the accent follows the wallpaper ([withWallpaper]);
+ * the surfaces stay neutral and Record, success, warning and danger keep their fixed colours.
  */
 @Immutable
 data class EchoV2Colors(
@@ -178,17 +181,16 @@ enum class EchoLanguage(val rtl: Boolean) {
 
 /**
  * Text styles of the v2 design system on the phone. On mobile the default body text is 16 sp ([body], Material
- * bodyLarge), not the desktop's 14 sp. Durations and clocks use [mono]: tabular digits in the system face, also in
+ * bodyLarge), not the desktop's 14 sp. Durations and clocks use [mono]: tabular digits in the Latin face, also in
  * Urdu, so numbers stay left to right and line up.
+ *
+ * The faces are the app's own, as on the classic screens (ui/design/Type.kt): [latin] is Inter, bundled, so a phone
+ * with a custom system font (Samsung's) still shows the app's letters; Urdu is Noto Nastaliq Urdu and Arabic Noto
+ * Naskh Arabic. "Use the phone's font" (off by default) makes [latin] the phone's own ([Phone], [PhoneUrdu]).
  */
 @Immutable
-class EchoV2Type(private val family: FontFamily, private val urdu: Boolean) {
-    private fun TextStyle.face(): TextStyle {
-        if (!urdu) return copy(fontFamily = family)
-        // Nastaliq needs the taller line of urdu.body (16/30) at every size.
-        val ratio = EchoTokens.Type.urduBody.lineHeight.value / EchoTokens.Type.urduBody.fontSize.value
-        return copy(fontFamily = family, lineHeight = TextUnit(fontSize.value * ratio, fontSize.type))
-    }
+class EchoV2Type(private val family: FontFamily, val latin: FontFamily, private val urdu: Boolean) {
+    private fun TextStyle.face(): TextStyle = if (urdu) copy(fontFamily = family).nastaliqLine() else copy(fontFamily = family)
 
     val titleL = EchoTokens.Type.titleL.face()
     val titleM = EchoTokens.Type.titleM.face()
@@ -208,44 +210,53 @@ class EchoV2Type(private val family: FontFamily, private val urdu: Boolean) {
     val caption = EchoTokens.Type.caption.face()
     val captionStrong = EchoTokens.Type.caption.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight).face()
 
-    /** Durations and clocks; always the system face with tabular digits. */
-    val mono = EchoTokens.Type.mono.copy(fontFamily = FontFamily.Default, fontFeatureSettings = "tnum")
+    /** Durations and clocks; always the Latin face with tabular digits. */
+    val mono = EchoTokens.Type.mono.copy(fontFamily = latin, fontFeatureSettings = "tnum")
 
-    /** Email addresses, links and codes inside any language: the system face, 14 sp. */
-    val metaLatin = EchoTokens.Type.body.copy(fontFamily = FontFamily.Default)
+    /** Email addresses, links and codes inside any language: the Latin face, 14 sp. */
+    val metaLatin = EchoTokens.Type.body.copy(fontFamily = latin)
 
-    /** Content written in English whatever the screen's language (Live Assist's suggestions): the system face. */
-    val contentStrong = EchoTokens.Type.bodyMobile.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight, fontFamily = FontFamily.Default)
-    val contentCaption = EchoTokens.Type.caption.copy(fontFamily = FontFamily.Default)
+    /** Content written in English whatever the screen's language (Live Assist's suggestions): the Latin face. */
+    val contentStrong = EchoTokens.Type.bodyMobile.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight, fontFamily = latin)
+    val contentCaption = EchoTokens.Type.caption.copy(fontFamily = latin)
 
     /**
      * People's own words (a recording's title and preview, an answer, a quote) in [style] ([body], [bodyStrong] or
      * [meta]): the line takes its direction from its words, so an English sentence keeps its full stop at the end in
-     * the Urdu screens, and Latin words keep the system face there rather than the Nastaliq font's Latin letters.
+     * the Urdu screens, and Latin words keep the Latin face there rather than the Nastaliq font's Latin letters. Words
+     * in Urdu's script take Noto Nastaliq Urdu (Noto Naskh Arabic when they are Arabic) on the English screens too.
      */
     fun content(text: String, style: TextStyle): TextStyle {
-        val latinInUrdu = urdu && text.none { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.ARABIC }
-        val base = if (latinInUrdu) {
-            when (style) {
+        val script = scriptOf(text)
+        val latinInUrdu = urdu && script == Script.Latin
+        val base = when {
+            latinInUrdu -> when (style) {
                 bodyStrong -> contentStrong
 
                 meta -> metaLatin
 
                 caption -> contentCaption
 
-                body -> EchoTokens.Type.bodyMobile.copy(fontFamily = FontFamily.Default)
+                body -> EchoTokens.Type.bodyMobile.copy(fontFamily = latin)
 
-                // Titles keep their size and weight in the system face.
-                else -> style.copy(fontFamily = FontFamily.Default)
+                // Titles keep their size and weight in the Latin face.
+                else -> style.copy(fontFamily = latin)
             }
-        } else {
-            style
+
+            script == Script.Urdu && !urdu -> style.copy(fontFamily = UrduNastaliq).nastaliqLine()
+
+            script == Script.Arabic -> style.copy(fontFamily = ArabicNaskh)
+
+            else -> style
         }
         return base.copy(textDirection = TextDirection.Content)
     }
 
     /** Transcript text in Urdu (urdu.body). */
     val urduBody = EchoTokens.Type.urduBody.copy(fontFamily = UrduNastaliq)
+
+    /** Transcript text in Arabic (arabic.body). */
+    val arabicBody = EchoTokens.Type.arabicBody.copy(fontFamily = ArabicNaskh)
 
     fun material(): Typography = Typography(
         displaySmall = EchoTokens.Type.display.face(),
@@ -262,8 +273,18 @@ class EchoV2Type(private val family: FontFamily, private val urdu: Boolean) {
     )
 
     companion object {
-        val System = EchoV2Type(FontFamily.Default, urdu = false)
-        val Urdu = EchoV2Type(UrduNastaliq, urdu = true)
+        /** The app's own faces (the default): Inter, Noto Nastaliq Urdu. */
+        val System = EchoV2Type(Inter, Inter, urdu = false)
+        val Urdu = EchoV2Type(UrduNastaliq, Inter, urdu = true)
+
+        /** "Use the phone's font": the phone's own Latin face; Urdu stays in Noto Nastaliq Urdu. */
+        val Phone = EchoV2Type(FontFamily.Default, FontFamily.Default, urdu = false)
+        val PhoneUrdu = EchoV2Type(UrduNastaliq, FontFamily.Default, urdu = true)
+
+        fun of(language: EchoLanguage, phoneFont: Boolean): EchoV2Type = when {
+            language == EchoLanguage.Urdu -> if (phoneFont) PhoneUrdu else Urdu
+            else -> if (phoneFont) Phone else System
+        }
     }
 }
 
@@ -323,17 +344,27 @@ fun systemEchoLanguage(): EchoLanguage =
 
 /**
  * The v2 theme: EchoTokens mapped onto Material 3. Light or dark follows the system unless [darkTheme] says otherwise.
- * There is no wallpaper (dynamic) colour: the accent stays teal and the surfaces stay neutral.
+ * [wallpaperColours] (Settings › Appearance, Android 12 and later; off by default) takes the wallpaper's accent; the
+ * surfaces stay neutral and Record, success, warning and danger keep their fixed colours.
  * [language] sets the text face, the components' own words and the layout direction (Urdu is right to left).
  */
 @Composable
 fun EchoV2Theme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     language: EchoLanguage = systemEchoLanguage(),
+    /** "Use the phone's font" (Settings › Appearance; off by default): the phone's own Latin face, not Inter. */
+    phoneFont: Boolean = false,
+    wallpaperColours: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colors = if (darkTheme) EchoV2Colors.Dark else EchoV2Colors.Light
-    val type = if (language == EchoLanguage.Urdu) EchoV2Type.Urdu else EchoV2Type.System
+    val base = if (darkTheme) EchoV2Colors.Dark else EchoV2Colors.Light
+    val context = LocalContext.current
+    val colors = if (wallpaperColours && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+        remember(base, context) { base.withWallpaper(context) }
+    } else {
+        base
+    }
+    val type = EchoV2Type.of(language, phoneFont)
     val direction = if (language.rtl) LayoutDirection.Rtl else LayoutDirection.Ltr
     ProvideLanguage(language) {
         val res = LocalContext.current.resources
@@ -349,37 +380,94 @@ fun EchoV2Theme(
     }
 }
 
+/** The wallpaper's accent (Android 12 and later) in place of the teal one; everything else stays. */
+@androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.S)
+fun EchoV2Colors.withWallpaper(context: android.content.Context): EchoV2Colors {
+    val m = if (isDark) {
+        androidx.compose.material3.dynamicDarkColorScheme(context)
+    } else {
+        androidx.compose.material3.dynamicLightColorScheme(context)
+    }
+    return copy(
+        accent = m.primary,
+        accentSoft = m.primaryContainer,
+        accentText = m.primary,
+        accentFocus = m.primary,
+        textOnAccent = m.onPrimary,
+        inverseAccent = m.inversePrimary
+    )
+}
+
 /** The locale whose values-* folder holds [this] language's words. */
 val EchoLanguage.locale: Locale get() = if (this == EchoLanguage.Urdu) Locale.forLanguageTag("ur-PK") else Locale.UK
 
 /**
  * Draws [content] with the resources of [language] when the phone's own language is another one (a preview, a test,
  * or an app language chosen in Settings). The activity stays the context's base, so starting activities still works.
+ * The locals are always provided (the phone's own when they match), so changing the language keeps [content] where
+ * it is instead of building it again.
  */
 @Composable
 fun ProvideLanguage(language: EchoLanguage, content: @Composable () -> Unit) {
     val config = LocalConfiguration.current
     val current = config.locales[0]?.language
     val matches = if (language == EchoLanguage.Urdu) current == "ur" else current != "ur"
-    if (matches) {
-        content()
-        return
-    }
     val context = LocalContext.current
-    val localized = remember(context, config, language) {
-        val wanted = Configuration(config).apply { setLocale(language.locale) }
-        val res = context.createConfigurationContext(wanted).resources
-        object : ContextWrapper(context) {
-            override fun getResources(): Resources = res
+    val localized = remember(context, config, language, matches) {
+        if (matches) {
+            context
+        } else {
+            val wanted = Configuration(config).apply { setLocale(language.locale) }
+            val res = context.createConfigurationContext(wanted).resources
+            object : ContextWrapper(context) {
+                override fun getResources(): Resources = res
+            }
         }
     }
     CompositionLocalProvider(
         LocalContext provides localized,
-        LocalConfiguration provides localized.resources.configuration,
+        LocalConfiguration provides if (matches) config else localized.resources.configuration,
         LocalResources provides localized.resources,
         content = content
     )
 }
+
+/**
+ * The page's look as the shell set it (its language's context and resources, its text size, its direction), for
+ * what draws in a window of its own (a dialog, a sheet, a menu): such a window starts again from the activity's, so
+ * without this an app language or text size chosen in Settings would not reach it.
+ */
+class PageLook(
+    val context: android.content.Context,
+    val configuration: Configuration,
+    val resources: Resources,
+    val density: androidx.compose.ui.unit.Density,
+    val direction: LayoutDirection
+)
+
+/** The look of the page this is drawn in. */
+@Composable
+fun rememberPageLook(): PageLook {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val resources = LocalResources.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    return remember(context, configuration, resources, density, direction) {
+        PageLook(context, configuration, resources, density, direction)
+    }
+}
+
+/** Draws [content] (inside a dialog, sheet or menu window) with the page's [look]. */
+@Composable
+fun ProvidePageLook(look: PageLook, content: @Composable () -> Unit) = CompositionLocalProvider(
+    LocalContext provides look.context,
+    LocalConfiguration provides look.configuration,
+    LocalResources provides look.resources,
+    androidx.compose.ui.platform.LocalDensity provides look.density,
+    LocalLayoutDirection provides look.direction,
+    content = content
+)
 
 /** Dialogs on the phone share the sheet radius (16), so the phone uses three radii. */
 val PhoneDialogRadius = EchoTokens.Component.sheetRadius
@@ -403,3 +491,20 @@ fun screenLocale(): Locale = ConfigurationCompat.getLocales(LocalConfiguration.c
 /** Android's text size is 150 % or more: components drop decoration and give text more lines to keep words whole. */
 @Composable
 fun largeText(): Boolean = LocalDensity.current.fontScale >= 1.5f
+
+/** The script a line is written in, by its letters: Urdu's own letters, else Arabic, else Latin. */
+internal enum class Script { Latin, Urdu, Arabic }
+
+/** Letters only Urdu uses (ٹ ڈ ڑ ں ے ہ ھ گ چ پ ژ ک ی): with any of them the words are Urdu, else Arabic. */
+private const val URDU_LETTERS = "\u0679\u0688\u0691\u06BA\u06D2\u06C1\u06BE\u06AF\u0686\u067E\u0698\u06A9\u06CC"
+
+internal fun scriptOf(text: String): Script {
+    if (text.none { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.ARABIC }) return Script.Latin
+    return if (text.any { it in URDU_LETTERS }) Script.Urdu else Script.Arabic
+}
+
+/** Nastaliq needs the taller line of urdu.body (16/30) at every size. */
+private fun TextStyle.nastaliqLine(): TextStyle {
+    val ratio = EchoTokens.Type.urduBody.lineHeight.value / EchoTokens.Type.urduBody.fontSize.value
+    return copy(lineHeight = TextUnit(fontSize.value * ratio, fontSize.type))
+}

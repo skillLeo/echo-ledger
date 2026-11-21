@@ -47,28 +47,19 @@ const meta = (sourceApp: string, startedAt: string, durationMs: number, extra?: 
  * list. A recording whose chip still counts down is not listed. Since v1.5 recordings made while another account was
  * signed in here wait for that account, with Discard.
  */
-export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
+/**
+ * The waiting recordings and the uploads of the top of the Library, with every command they take: one source for the
+ * classic list below and the v2 Library's (v2/library/QueueV2.tsx). The lists come from the core and follow its
+ * `pending:changed` / `uploads:changed` events.
+ */
+export function useLibraryQueue(notify: Notify) {
   const [all, setPending] = useState<PendingItem[]>([]);
   const pending = useMemo(() => waitingItems(all), [all]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
-  const [open, setOpen] = useState(false);
-  const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
-  const [assigning, setAssigning] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [highlight, setHighlight] = useState<{ id: string; seq: number } | null>(null);
   const [learn, setLearn] = useState<{ itemId: string; clientId: string; question: string; language: LanguageChoice } | null>(null);
-  const rows = useRef(new Map<string, HTMLElement>());
-  // The row a focus request asked for; scrolled to once the opened list has rendered it.
-  const scrollTo = useRef<string | null>(null);
-  const appliedFocus = useRef(0);
-  // Mirrors `renaming` so Enter followed by the input's blur saves once.
-  const renameRef = useRef<{ id: string; text: string } | null>(null);
-  const setRename = (value: { id: string; text: string } | null) => {
-    renameRef.current = value;
-    setRenaming(value);
-  };
 
   const pendingLoads = useRef(0);
   const reloadPending = useCallback(() => {
@@ -96,47 +87,6 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     ];
     return () => subs.forEach((p) => p.then((f) => f()).catch(() => undefined));
   }, [reloadPending, reloadUploads]);
-
-  // Applied once the requested item is in the list (the list may still be loading when the request arrives, or the
-  // item may be newer than the last `pending:changed`, so an unknown id asks the core once).
-  const refetchedFor = useRef(0);
-  useEffect(() => {
-    if (!focus || focus.seq === appliedFocus.current) return;
-    const item = pending.find((p) => p.id === focus.id);
-    if (!item) {
-      if (refetchedFor.current !== focus.seq && pendingLoads.current === 0) {
-        refetchedFor.current = focus.seq;
-        reloadPending();
-      }
-      return;
-    }
-    appliedFocus.current = focus.seq;
-    setOpen(true);
-    scrollTo.current = item.id;
-    setHighlight({ id: item.id, seq: focus.seq });
-    if (focus.rename) setRename({ id: item.id, text: item.title ?? "" });
-    // Handled: coming back to the Library later must not highlight or open the title again.
-    onFocusHandled?.();
-  }, [focus, pending]);
-
-  useEffect(() => {
-    const id = scrollTo.current;
-    const el = id ? rows.current.get(id) : undefined;
-    if (!el) return;
-    scrollTo.current = null;
-    el.scrollIntoView?.({ block: "center" });
-  }, [open, highlight, pending]);
-
-  useEffect(() => {
-    if (!highlight) return;
-    const timer = window.setTimeout(() => setHighlight(null), HIGHLIGHT_MS);
-    return () => window.clearTimeout(timer);
-  }, [highlight]);
-
-  // Once nothing waits the card goes away; the next recording to arrive starts with the summary again.
-  useEffect(() => {
-    if (pending.length === 0) setOpen(false);
-  }, [pending.length]);
 
   /** Runs one command for an item; on failure reports the core's message and re-reads both lists. */
   const perform = async (id: string, fn: () => Promise<unknown>, ok?: string): Promise<boolean> => {
@@ -195,20 +145,18 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     return decideAll("Discarded", (id) => api.pendingDiscard(id));
   };
 
-  const saveRename = async () => {
-    const current = renameRef.current;
-    if (!current) return;
-    setRename(null);
-    const item = pending.find((i) => i.id === current.id);
-    const text = current.text.trim();
+  /** A new title for a waiting recording; an unchanged one sends nothing, an empty one clears it. */
+  const rename = async (id: string, given: string) => {
+    const item = pending.find((i) => i.id === id);
+    const text = given.trim();
     if (!item || text === (item.title ?? "").trim()) return;
     let updated: PendingItem | undefined;
     await perform(item.id, async () => (updated = await api.pendingRename(item.id, text)));
     replace(updated);
   };
 
-  const toggleAssign = (item: PendingItem) => {
-    setAssigning((current) => (current === item.id ? null : item.id));
+  /** The projects to choose from, loaded once. */
+  const loadClients = () => {
     if (clients) return;
     api
       .clients()
@@ -220,7 +168,6 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
   };
 
   const assign = async (item: PendingItem, value: string) => {
-    setAssigning(null);
     const clientId = value || null;
     if (clientId === item.clientId) return;
     let updated: PendingItem | undefined;
@@ -285,6 +232,90 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
   const verifying = verifyingUploads(uploads);
   const importing = importingUploads(uploads);
   const held = heldUploads(uploads);
+  return {
+    pending, uploads, failed, verifying, importing, held, clients, busy, bulkBusy, learn, pendingLoads, reloadPending,
+    keep, discard, keepAll, discardAll, rename, loadClients, assign, setLanguage, answerLearn, retry, discardUpload, discardHeld, cancelImport,
+  };
+}
+
+export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
+  const q = useLibraryQueue(notify);
+  const { pending, clients, busy, bulkBusy, learn, pendingLoads, reloadPending, failed, verifying, importing, held } = q;
+  const [open, setOpen] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
+  const [assigning, setAssigning] = useState<string | null>(null);
+  const [highlight, setHighlight] = useState<{ id: string; seq: number } | null>(null);
+  const rows = useRef(new Map<string, HTMLElement>());
+  // The row a focus request asked for; scrolled to once the opened list has rendered it.
+  const scrollTo = useRef<string | null>(null);
+  const appliedFocus = useRef(0);
+  // Mirrors `renaming` so Enter followed by the input's blur saves once.
+  const renameRef = useRef<{ id: string; text: string } | null>(null);
+  const setRename = (value: { id: string; text: string } | null) => {
+    renameRef.current = value;
+    setRenaming(value);
+  };
+
+  // Applied once the requested item is in the list (the list may still be loading when the request arrives, or the
+  // item may be newer than the last `pending:changed`, so an unknown id asks the core once).
+  const refetchedFor = useRef(0);
+  useEffect(() => {
+    if (!focus || focus.seq === appliedFocus.current) return;
+    const item = pending.find((p) => p.id === focus.id);
+    if (!item) {
+      if (refetchedFor.current !== focus.seq && pendingLoads.current === 0) {
+        refetchedFor.current = focus.seq;
+        reloadPending();
+      }
+      return;
+    }
+    appliedFocus.current = focus.seq;
+    setOpen(true);
+    scrollTo.current = item.id;
+    setHighlight({ id: item.id, seq: focus.seq });
+    if (focus.rename) setRename({ id: item.id, text: item.title ?? "" });
+    // Handled: coming back to the Library later must not highlight or open the title again.
+    onFocusHandled?.();
+  }, [focus, pending]);
+
+  useEffect(() => {
+    const id = scrollTo.current;
+    const el = id ? rows.current.get(id) : undefined;
+    if (!el) return;
+    scrollTo.current = null;
+    el.scrollIntoView?.({ block: "center" });
+  }, [open, highlight, pending]);
+
+  useEffect(() => {
+    if (!highlight) return;
+    const timer = window.setTimeout(() => setHighlight(null), HIGHLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [highlight]);
+
+  // Once nothing waits the card goes away; the next recording to arrive starts with the summary again.
+  useEffect(() => {
+    if (pending.length === 0) setOpen(false);
+  }, [pending.length]);
+
+  const { keep, discard, keepAll, discardAll, answerLearn, retry, discardUpload, discardHeld, cancelImport } = q;
+  const saveRename = async () => {
+    const current = renameRef.current;
+    if (!current) return;
+    setRename(null);
+    await q.rename(current.id, current.text);
+  };
+
+  const toggleAssign = (item: PendingItem) => {
+    setAssigning((current) => (current === item.id ? null : item.id));
+    q.loadClients();
+  };
+
+  const assign = (item: PendingItem, value: string) => {
+    setAssigning(null);
+    return q.assign(item, value);
+  };
+  const setLanguage = q.setLanguage;
+
   if (pending.length === 0 && failed.length === 0 && verifying.length === 0 && importing.length === 0 && held.length === 0) return null;
 
   return (
@@ -347,7 +378,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                             onBlur={() => void saveRename()}
                           />
                         ) : (
-                          <div className="queue-title">{title}</div>
+                          <div className="queue-title" dir="auto">{title}</div>
                         )}
                         <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName)}</div>
                       </div>
@@ -441,7 +472,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                 <div className="row">
                   <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
                   <div className="item-main">
-                    <div className="queue-title">{title}</div>
+                    <div className="queue-title" dir="auto">{title}</div>
                     <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
                   </div>
                 </div>
@@ -470,7 +501,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                 <div className="row">
                   <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
                   <div className="item-main">
-                    <div className="queue-title">{title}</div>
+                    <div className="queue-title" dir="auto">{title}</div>
                     <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
                   </div>
                   <button type="button" className="btn ghost compact" disabled={bulkBusy || busy === item.id} onClick={() => void discardUpload(item)}>Discard</button>
@@ -490,7 +521,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
           <div className="row">
             <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
             <div className="item-main">
-              <div className="queue-title">{uploadTitle(item)}</div>
+              <div className="queue-title" dir="auto">{uploadTitle(item)}</div>
               <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
             </div>
             <span className="queue-status"><span className="spinner" aria-hidden="true" />Checking upload…</span>

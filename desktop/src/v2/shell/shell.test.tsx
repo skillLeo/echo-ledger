@@ -3,8 +3,8 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { Suspense, lazy, useState } from "react";
 import MainApp from "../../views/main/MainApp";
 import type { MainTab } from "../../lib/mainView";
-import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeEntitlements, makeItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { callsOf, emitEvent, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { makeEntitlements, makeItem, makeNavigate, makePendingItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { Shell, moduleOf } from "./Shell";
 import { shellStatus } from "./status";
@@ -326,6 +326,71 @@ describe("the app with the flags", () => {
     expect(document.querySelector(".sidebar")).toBeNull();
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
   });
+
+  it("in the app, Activity opens the new design's Activity page, and its Review opens the Library with the waiting calls", async () => {
+    backend({ "ui_v2.shell": true, "ui_v2.library": true });
+    respond("activity_list", { data: [], unread_count: 0 });
+    respond("pending_list", [makePendingItem("p1", { title: "Board call" })]);
+    respond("upload_list", []);
+    respond("skipped_list", []);
+    respond("bin_list", { data: [] });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.click(within(nav).getByRole("button", { name: /^Activity/ }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(document.querySelector("[data-v2=activity]")).not.toBeNull();
+    expect(document.querySelector(".activity-page")).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+    expect(await screen.findByRole("list", { name: "Waiting recordings" })).toHaveTextContent("Board call");
+  });
+
+  it("in the app, Shared opens the new design's Shared page, and classic's stays away", async () => {
+    backend({ "ui_v2.shell": true });
+    respond("shared_with_me", { data: [] });
+    respond("shares_of", { data: [] });
+    respond("request_links", { data: [] });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.click(within(nav).getByRole("button", { name: "Shared with me" }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(document.querySelector("[data-v2=shared]")).not.toBeNull();
+    expect(document.querySelector(".shared-page")).toBeNull();
+  });
+
+  for (const [what, resolved] of [
+    ["a recording a teammate sent", { kind: "session", session_id: "other-1" }],
+    ["an item of Shared with me", { kind: "shared", shared_id: "01JDSHARE1" }],
+  ] as const) {
+    it(`in the app, a link to ${what} opens it read-only in the new Shared page, not the classic Library folder`, async () => {
+      backend({ "ui_v2.shell": true });
+      respond("links_resolve", resolved);
+      respond("shared_with_me", { data: [{ id: "01JDSHARE1", kind: "session", from: { name: "Imran" }, note: null, title: "Call with Omar", sent_at: null, saved_at: null, client: null,
+        session: makeItem("other-1", { title: "Call with Omar" }) }] });
+      respond("shares_of", { data: [] });
+      respond("request_links", { data: [] });
+      render(<MainApp />);
+      await act(flushAsync);
+      await act(flushAsync);
+      await screen.findByRole("navigation", { name: "Main" });
+      await act(async () => emitEvent("main:navigate", makeNavigate({ link: "https://ledger.example.test/s/AbC123" })));
+      await act(flushAsync);
+      await act(flushAsync);
+      await act(flushAsync);
+      expect(document.querySelector("[data-v2=shared-reader]")).not.toBeNull();
+      expect(screen.getByRole("heading", { level: 1, name: "Call with Omar" })).toBeInTheDocument();
+      expect(document.querySelector("[data-testid=shared-banner]")).toBeNull();
+      expect(callsOf("link_open")).toHaveLength(0);
+    });
+  }
 
   it("in the app, two quick presses on the sidebar's Record send one record_now", async () => {
     backend({ "ui_v2.shell": true });

@@ -65,6 +65,9 @@ const SettingsPagesV2 = lazy(() => v2().then((m) => ({ default: m.SettingsPagesV
 const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
 const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
 const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
+const ActivityV2 = lazy(() => v2().then((m) => ({ default: m.ActivityV2 })));
+const SharedV2 = lazy(() => v2().then((m) => ({ default: m.SharedV2 })));
+const RequestLinkSheetV2 = lazy(() => v2().then((m) => ({ default: m.RequestLinkSheet })));
 const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
@@ -451,6 +454,8 @@ export default function MainApp() {
   /** Counts the times Settings was pressed again while open: the v2 Settings starts again from its list. */
   const [settingsVisit, setSettingsVisit] = useState(0);
   const [libraryViewV2, setLibraryViewV2] = useState<{ view: "untranscribed"; seq: number } | null>(null);
+  /** Activity's Review: the new Library with its waiting recordings open. */
+  const [reviewV2, setReviewV2] = useState<{ seq: number } | null>(null);
   useEffect(() => {
     const open = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
@@ -483,6 +488,9 @@ export default function MainApp() {
           const place = await placeOfRecording(target.session_id);
           if (!place) {
             await inBrowser("this recording is not in your Library or in Shared with me.");
+          } else if (place.in === "shared" && ui.flags["ui_v2.shell"]) {
+            openShared("with-me");
+            setSharedFocus(place.itemId);
           } else if (place.in === "shared") {
             setTab("library");
             setLibraryFolder("shared");
@@ -502,6 +510,11 @@ export default function MainApp() {
           setProjectId(target.client_id);
           break;
         case "shared":
+          if (ui.flags["ui_v2.shell"]) {
+            openShared("with-me");
+            setSharedFocus(target.shared_id);
+            break;
+          }
           setTab("library");
           setLibraryFolder("shared");
           setLibraryView(null);
@@ -747,7 +760,7 @@ export default function MainApp() {
     <>
       {tab === "library" && ui.flags["ui_v2.library"] && (
         <Suspense fallback={null}>
-          <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2}
+          <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} reviewRequest={reviewV2}
             onOpenProject={(id) => openProject(id)}
             top={ui.flags["ui_v2.shell"] ? {
               status, onRecord: canRecord && !status.recording ? record : undefined, onActivity: () => goTo("activity"),
@@ -805,13 +818,35 @@ export default function MainApp() {
           onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)}
           assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} />
       )}
-      {tab === "activity" && (
+      {tab === "activity" && !ui.flags["ui_v2.shell"] && (
         <ActivityView status={status} notify={notify} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)}
           onReview={(id) => { openFolder(null); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
       )}
-      {tab === "shared" && (
+      {tab === "activity" && ui.flags["ui_v2.shell"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded">
+            <ActivityV2 status={status} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)} say={(text, error) => notify(text, error, error ? NO_TARGET : { kind: "library", view: null })}
+              onReview={(id) => {
+                openFolder(null);
+                if (ui.flags["ui_v2.library"]) setReviewV2({ seq: ++navigations.current });
+                else if (id) setFocus({ id, rename: false, seq: ++navigations.current });
+              }}
+              onFailed={() => (ui.flags["ui_v2.library"] ? openFolder(null) : openLibraryView("failed"))} />
+          </div>
+        </Suspense>
+      )}
+      {tab === "shared" && !ui.flags["ui_v2.shell"] && (
         <SharedView tab={sharedTab} onTab={setSharedTab} notify={notify} projects={projects} onOpenShared={(id) => { openFolder("shared"); setSharedFocus(id); }}
           onOpenRecording={(id) => openRecording(id)} onOpenProject={(id) => openProject(id)} />
+      )}
+      {tab === "shared" && ui.flags["ui_v2.shell"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded">
+            <SharedV2 tab={sharedTab} onTab={(t) => { setSharedTab(t); setSharedFocus(null); }} notify={notify} projects={projects} focusId={sharedFocus} onFocusHandled={() => setSharedFocus(null)}
+              onOpenRecording={(id) => openRecording(id)} onOpenProject={(id) => openProject(id)}
+              onSaved={(saved) => { if (saved.client_id) openProject(saved.client_id); else if (saved.session_id) openRecording(saved.session_id); }} />
+          </div>
+        </Suspense>
       )}
       {tab === "settings" && ui.flags["ui_v2.settings"] && (
         <Suspense fallback={null}>
@@ -849,7 +884,14 @@ export default function MainApp() {
       )}
       {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
       {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onSettings={openAccount} />}
-      {requestSheet && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
+      {requestSheet && !ui.flags["ui_v2.shell"] && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
+      {requestSheet && ui.flags["ui_v2.shell"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded">
+            <RequestLinkSheetV2 projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} onShowLinks={() => openShared("requests")} />
+          </div>
+        </Suspense>
+      )}
       <UpgradeSheet />
       <ConfirmHost />
       {toastView}

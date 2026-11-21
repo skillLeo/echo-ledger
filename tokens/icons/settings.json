@@ -1,0 +1,43 @@
+{
+  "$description": "Settings icons: one map for every platform (D3). Each group and page has one meaning and one glyph. A group's glyph differs from its pages' glyphs, except where the group has a single page. lucide = desktop and web (outline, 1.5 px stroke); material = the phone (androidx.compose.material.icons Outlined, or AutoMirrored.Outlined where marked); web = the console's <x-el.v2.icon> name where one exists. directional: flips in right to left.",
+  "groups": {
+    "recording":     { "lucide": "circle-dot",   "material": "RadioButtonChecked", "web": "record" },
+    "transcription": { "lucide": "file-text",    "material": "Description",        "web": "transcript" },
+    "live":          { "lucide": "radio",        "material": "Sensors",            "web": "live" },
+    "privacy":       { "lucide": "shield",       "material": "Shield",             "web": null },
+    "notifications": { "lucide": "bell",         "material": "Notifications",      "web": "bell" },
+    "appearance":    { "lucide": "palette",      "material": "Palette",            "web": null },
+    "account":       { "lucide": "user",         "material": "Person",             "web": "user" },
+    "setup":         { "lucide": "circle-check", "material": "CheckCircle",        "web": "check" },
+    "shortcuts":     { "lucide": "command",      "material": "KeyboardCommandKey", "web": null, "platforms": ["desktop"] },
+    "about":         { "lucide": "life-buoy",    "material": "Support",            "web": "help" }
+  },
+  "pages": {
+    "calls":                  { "group": "recording",     "lucide": "phone",              "material": "Call",            "web": "phone" },
+    "mic":                    { "group": "recording",     "lucide": "mic",                "material": "Mic",             "web": "mic" },
+    "voice":                  { "group": "recording",     "lucide": "audio-lines",        "material": "GraphicEq",       "web": null },
+    "screen":                 { "group": "recording",     "lucide": "monitor",            "material": "DesktopWindows",  "web": "device", "platforms": ["desktop"] },
+    "transcription.language": { "group": "transcription", "lucide": "languages",          "material": "Translate",       "web": "globe" },
+    "words":                  { "group": "transcription", "lucide": "book-a",             "material": "Spellcheck",      "web": null },
+    "key":                    { "group": "transcription", "lucide": "key-round",          "material": "Key",             "web": null },
+    "captions":               { "group": "live",          "lucide": "captions",           "material": "ClosedCaption",   "web": "captions" },
+    "games":                  { "group": "live",          "lucide": "gamepad-2",          "material": "SportsEsports",   "web": null, "platforms": ["phone"] },
+    "videos":                 { "group": "live",          "lucide": "tv",                 "material": "Tv",              "web": "video", "platforms": ["phone"] },
+    "share_privacy":          { "group": "live",          "lucide": "eye-off",            "material": "VisibilityOff",   "web": null, "platforms": ["desktop"] },
+    "privacy":                { "group": "privacy",       "lucide": "database",           "material": "Policy",          "web": null },
+    "storage":                { "group": "privacy",       "lucide": "hard-drive",         "material": "Storage",         "web": null },
+    "lock":                   { "group": "privacy",       "lucide": "lock",               "material": "Lock",            "web": null },
+    "notifications":          { "group": "notifications", "lucide": "bell",               "material": "Notifications",   "web": "bell" },
+    "appearance":             { "group": "appearance",    "lucide": "palette",            "material": "Palette",         "web": null },
+    "profile":                { "group": "account",       "lucide": "user-round-pen",     "material": "ManageAccounts",  "web": "user" },
+    "plan":                   { "group": "account",       "lucide": "credit-card",        "material": "CreditCard",      "web": null },
+    "security":               { "group": "account",       "lucide": "fingerprint",        "material": "Fingerprint",     "web": null },
+    "devices":                { "group": "account",       "lucide": "monitor-smartphone", "material": "Devices",         "web": "device" },
+    "setup_health":           { "group": "setup",         "lucide": "circle-check",       "material": "CheckCircle",     "web": "check" },
+    "shortcuts":              { "group": "shortcuts",     "lucide": "keyboard",           "material": "Keyboard",        "web": null, "platforms": ["desktop"] },
+    "app.autostart":          { "group": "shortcuts",     "lucide": "power",              "material": "PowerSettingsNew", "web": null, "platforms": ["desktop"] },
+    "help":                   { "group": "about",         "lucide": "circle-help",        "material": "HelpOutline",     "web": "help", "directional": true, "mirrored": "AutoMirrored" },
+    "about":                  { "group": "about",         "lucide": "info",               "material": "Info",            "web": null },
+    "signout":                { "group": null,            "lucide": "log-out",            "material": "Logout",          "web": null, "directional": true, "mirrored": "AutoMirrored" }
+  }
+}

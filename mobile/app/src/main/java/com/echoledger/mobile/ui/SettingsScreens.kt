@@ -76,6 +76,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -105,6 +106,7 @@ import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.ui.design.OutlinedTextField
 import com.echoledger.mobile.ui.design.TextButton
 import java.time.LocalDate
+import kotlinx.coroutines.launch
 
 private fun pageIcon(id: String): ImageVector = when (id) {
     "calls" -> Icons.Outlined.Call
@@ -639,7 +641,27 @@ private fun SettingsSearchScreen(settings: AppSettings, onBack: () -> Unit, onOp
 @Composable
 private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settings: AppSettings, onSetup: () -> Unit) {
     when (entry.id) {
-        "appearance" -> AppearanceSection(settings) { vm.updateSettings(it) }
+        "appearance" -> {
+            val context = LocalContext.current
+            val scope = rememberCoroutineScope()
+            val design by com.echoledger.mobile.ui.v2.shell.DesignChoice.choice.collectAsState()
+            val offered = design != com.echoledger.mobile.ui.v2.shell.Design.V2 && (settings.uiDesign?.canTry ?: true)
+            AppearanceSection(
+                settings,
+                update = { vm.updateSettings(it) },
+                onTryNewDesign = fun() {
+                    scope.launch {
+                        val v2 = com.echoledger.mobile.ui.v2.shell.Design.V2
+                        val answer = com.echoledger.mobile.ui.v2.shell.DesignChoice.choose(context, vm, v2)
+                        if (answer == MainViewModel.DesignAnswer.NotAvailable) {
+                            vm.showMessage("The new design isn't open for your account yet.")
+                        } else if (answer == MainViewModel.DesignAnswer.Failed) {
+                            vm.designFailed()
+                        }
+                    }
+                }.takeIf { offered }
+            )
+        }
 
         "transcription" -> TranscriptionSection(vm, settings)
 
@@ -945,7 +967,12 @@ private fun AboutSection(vm: MainViewModel, settings: AppSettings) {
 
 /** Settings → Appearance (C4): light, dark or the phone's theme, and the wallpaper's colours on Android 12+. */
 @Composable
-fun AppearanceSection(settings: AppSettings, update: ((AppSettings) -> AppSettings) -> Unit) {
+fun AppearanceSection(
+    settings: AppSettings,
+    /** "Try the new design", while there is one to try (null: not offered). */
+    onTryNewDesign: (() -> Unit)? = null,
+    update: ((AppSettings) -> AppSettings) -> Unit
+) {
     val modes = listOf("system" to "System", "light" to "Light", "dark" to "Dark")
     SectionCard {
         Text("Appearance", fontWeight = FontWeight.SemiBold)
@@ -988,6 +1015,21 @@ fun AppearanceSection(settings: AppSettings, update: ((AppSettings) -> AppSettin
                 modifier = Modifier.semantics { contentDescription = "Use phone font" }
             )
         }
+        // The new design is opt-in: the person tries it here and switches back from its own Settings › Appearance.
+        if (onTryNewDesign == null) return@SectionCard
+        Column {
+            Text("New design")
+            Text(
+                "The redesigned screens on this phone. You can switch back to classic any time in Settings › Appearance.",
+                color = Brand.Muted,
+                fontSize = 12.sp
+            )
+        }
+        com.echoledger.mobile.ui.design.EchoButton(
+            "Try the new design",
+            onTryNewDesign,
+            kind = com.echoledger.mobile.ui.design.ButtonKind.Secondary
+        )
     }
 }
 

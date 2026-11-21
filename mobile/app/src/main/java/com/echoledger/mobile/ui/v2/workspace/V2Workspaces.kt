@@ -44,7 +44,7 @@ fun V2WorkspacesScreen(
     vm: MainViewModel,
     onOpen: (String) -> Unit,
     onSharedAndImported: () -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     val all by vm.clients.collectAsState()
@@ -68,12 +68,13 @@ fun V2WorkspacesContent(
     onOpen: (String) -> Unit,
     onSharedAndImported: () -> Unit,
     onNew: () -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     Column(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
-        EchoTopBar(stringResource(R.string.v2_ws_projects), onBack = onBack) {
+        EchoTopBar(stringResource(R.string.v2_ws_projects), onBack = onBack, large = onBack == null) {
             EchoIconButton(EchoIcons.Add, stringResource(R.string.v2_ws_new_project), onNew)
+            if (onBack == null) com.echoledger.mobile.ui.v2.shell.AccountButton()
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             val roots = ProjectTree.roots(all)

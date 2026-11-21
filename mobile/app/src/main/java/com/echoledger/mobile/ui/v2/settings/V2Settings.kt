@@ -4,7 +4,10 @@ import android.content.res.Resources
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -19,6 +22,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.SettingsIndex
@@ -28,7 +35,6 @@ import com.echoledger.mobile.ui.v2.components.EchoDialog
 import com.echoledger.mobile.ui.v2.components.EchoEmptyState
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSearchField
-import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.help.HelpSource
@@ -98,6 +104,24 @@ fun pageValue(res: Resources, page: String, s: AppSettings): String? = when (pag
 
     "lock" -> res.getString(if (s.appLockEnabled) R.string.v2_set_value_on else R.string.v2_set_value_off)
 
+    // The values classic's Settings list shows (SettingsScreens.pageValue), from the same settings, in the screen's language.
+    "mic" -> res.getString(if (s.micSource == "mic") R.string.v2_set_value_raw_mic else R.string.v2_set_value_automatic)
+
+    "voice" -> res.getString(if (s.dictationMode == "hold") R.string.v2_set_value_hold_to_talk else R.string.v2_set_value_tap_to_start)
+
+    "key" -> res.getString(if (s.plan.transcriptionKey?.set == true) R.string.v2_set_value_added else R.string.v2_set_value_not_added)
+
+    // Not in the plan: the plan's badge, as classic's tag.
+    "games" -> s.plan.lockFor("live_translate")?.badge
+        ?: s.liveTranslate.game.games.size.takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.v2_set_value_games, it, it) }
+        ?: res.getString(R.string.v2_set_value_not_set_up)
+
+    "videos" -> s.plan.lockFor("live_translate")?.badge
+        ?: s.liveTranslate.watch.apps.size.takeIf { it > 0 }?.let { res.getQuantityString(R.plurals.v2_set_value_apps, it, it) }
+        ?: res.getString(R.string.v2_set_value_not_set_up)
+
+    "plan" -> s.plan.displayName.takeIf { s.plan.name != null || s.plan.key != null }
+
     "captions" -> res.getString(if (s.captionsEnabled) R.string.v2_set_value_on else R.string.v2_set_value_off)
 
     "language" -> if (s.transcriptionLanguage ==
@@ -136,10 +160,12 @@ fun V2SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     /** Help v2's source (the phone core's); without one, Help opens its classic page. */
-    help: HelpSource? = null
+    help: HelpSource? = null,
+    /** A page to open at once (a recording's "Check your key" opens the key page). */
+    initialPage: String? = null
 ) {
     val settings by vm.settings.collectAsState()
-    var route by remember { mutableStateOf<SettingsRoute>(SettingsRoute.Root) }
+    var route by remember(initialPage) { mutableStateOf<SettingsRoute>(initialPage?.let { SettingsRoute.Page(it) } ?: SettingsRoute.Root) }
     var profile by remember { mutableStateOf<ProfileState>(ProfileState.Loading) }
     var attempt by remember { mutableIntStateOf(0) }
     var confirmSignOut by remember { mutableStateOf(false) }
@@ -263,13 +289,21 @@ fun V2SettingsRoot(
                 }
                 return@LazyColumn
             }
-            item { ProfileCardSlot(profile, onUpgrade, onRetryProfile) }
+            // This month's minutes show once: as the bar in Account & plan when the plan has them, else on the card.
+            item { ProfileCardSlot(profile, onUpgrade, onRetryProfile, showMinutes = settings.plan.usedMinutes == null) }
             SettingsTree.goals.forEach { (goal, pages) ->
-                item(key = goal.name) { EchoSectionHeader(stringResource(goal.title)) }
+                item(key = goal.name) { GoalHeader(goal) }
+                // Account & plan: this month's minutes first (Home's usage meter, docs/PLAN_V2_PARITY.md section 2).
+                if (goal == SettingsGoal.Account) {
+                    settings.plan.usedMinutes?.let { used ->
+                        item(key = "usage") { UsageMeter(used, settings.plan.monthlyMinutes) { onOpen("plan", "plan.usage") } }
+                    }
+                }
                 items(pages, key = { it }) { page ->
                     EchoSettingRow(
                         SettingsSearch.pageTitle(res, page),
                         value = pageValue(res, page, settings),
+                        icon = SettingsTree.pageIcons[page],
                         onClick = { onOpen(page, null) }
                     )
                 }
@@ -277,6 +311,75 @@ fun V2SettingsRoot(
             if (signedIn) {
                 item { EchoSettingRow(stringResource(R.string.v2_set_sign_out), icon = EchoIcons.SignOut, onClick = onSignOut) }
             }
+        }
+    }
+}
+
+/** A group's header: its icon, its name and its one line (docs/PLAN_V2_PARITY.md section 5). */
+@Composable
+private fun GoalHeader(goal: SettingsGoal) {
+    val c = EchoV2.colors
+    androidx.compose.foundation.layout.Row(
+        Modifier.padding(
+            start = EchoTokens.Layout.pagePaddingMobile,
+            end = EchoTokens.Layout.pagePaddingMobile,
+            top = EchoTokens.Space.s24,
+            bottom = EchoTokens.Space.s4
+        ),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        androidx.compose.material3.Icon(goal.icon, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
+        Column(Modifier.padding(start = EchoTokens.Space.s12).semantics(mergeDescendants = true) { heading() }) {
+            androidx.compose.material3.Text(stringResource(goal.title), style = EchoV2.type.label, color = c.textPrimary)
+            androidx.compose.material3.Text(stringResource(goal.description), style = EchoV2.type.caption, color = c.textSecondary)
+        }
+    }
+}
+
+/** This month's minutes as a bar ("120 of 300 minutes used"); it opens Plan & usage. */
+@Composable
+fun UsageMeter(used: Long, monthly: Long?, onClick: () -> Unit) {
+    val c = EchoV2.colors
+    val words = monthly?.let { stringResource(R.string.v2_set_usage_of, used.toInt(), it.toInt()) }
+        ?: stringResource(R.string.v2_set_usage_unlimited, used.toInt())
+    EchoSettingRow(
+        stringResource(R.string.v2_set_usage_title),
+        subtitle = words,
+        icon = EchoIcons.Plan,
+        onClick = onClick
+    )
+    monthly?.takeIf { it > 0 }?.let { limit ->
+        val share = (used.toFloat() / limit).coerceIn(0f, 1f)
+        androidx.compose.foundation.layout.Box(
+            Modifier
+                .padding(
+                    start = EchoTokens.Layout.pagePaddingMobile + EchoTokens.Icon.lg + EchoTokens.Space.s16,
+                    end = EchoTokens.Layout.pagePaddingMobile
+                )
+                .fillMaxWidth()
+                .height(EchoTokens.Space.s4)
+                .background(c.bgSubtle, androidx.compose.foundation.shape.RoundedCornerShape(EchoTokens.Radius.full))
+                // Read as a progress bar ("70 percent"), with the words on the row above.
+                .semantics {
+                    progressBarRangeInfo = androidx.compose.ui.semantics.ProgressBarRangeInfo(share, 0f..1f)
+                    contentDescription = words
+                }
+        ) {
+            androidx.compose.foundation.layout.Box(
+                Modifier
+                    .fillMaxWidth(share)
+                    .height(EchoTokens.Space.s4)
+                    .background(
+                        if (share >=
+                            0.9f
+                        ) {
+                            c.warning
+                        } else {
+                            c.accent
+                        },
+                        androidx.compose.foundation.shape.RoundedCornerShape(EchoTokens.Radius.full)
+                    )
+            )
         }
     }
 }

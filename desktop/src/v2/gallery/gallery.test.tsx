@@ -168,3 +168,25 @@ describe("the designed states (template rule 12)", () => {
     expect(text).not.toMatch(/Loading|didn't|No recordings/);
   });
 });
+
+describe("the shared bars page (screen=kit)", () => {
+  it("opens from the guard and shows every shared bar in its states", () => {
+    expect(galleryParams("?v2gallery&screen=kit").screen).toBe("kit");
+    render(<Gallery screen="kit" lang="en" />);
+    expect(screen.getByRole("heading", { name: "Shared bars", level: 1 })).toBeInTheDocument();
+    expect(screen.getAllByRole("toolbar", { name: "Selected recordings" })).toHaveLength(3);
+    expect(screen.getByRole("toolbar", { name: "منتخب ریکارڈنگز" }).closest("[dir]")).toHaveAttribute("dir", "rtl");
+    expect(screen.getByRole("heading", { name: "Select items" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Sort and group" }).some((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+    expect(screen.getByText("ادائیگی کا منصوبہ، قرض کی واپسی")).toHaveAttribute("dir", "auto");
+    for (const name of ["Activity", "Activity, 3 unread", "Activity, 120 unread"]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    expect(document.querySelectorAll(".el-label-chip.el-label--other").length).toBeGreaterThan(0);
+  });
+
+  it("is in Urdu, right to left", () => {
+    render(<Gallery screen="kit" lang="ur" />);
+    expect(document.querySelector(".el-root")).toHaveAttribute("dir", "rtl");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/[؀-ۿ]/);
+    expect(screen.getAllByRole("button", { name: "ترتیب اور گروپ" }).length).toBeGreaterThan(0);
+  });
+});

@@ -104,7 +104,9 @@ class LargeTextTest {
         V2HomeContent(HomeModel.state(facts), "AS", noTaps, {}, {}, {}, {}, now = now)
     }
 
+    /** Library with the shell's bar (Library · Projects · [Record] · Live · Ask), on the narrowest phone. */
     @Test
+    @Config(qualifiers = "w360dp-h780dp-420dpi")
     fun libraryWithTheBar() = bash("library") { ur ->
         val text = v2Text
         Column(Modifier.fillMaxSize()) {
@@ -131,13 +133,18 @@ class LargeTextTest {
             }
             EchoBottomBar(
                 listOf(
-                    EchoDestination("home", text.home, EchoIcons.Home),
                     EchoDestination("library", text.library, EchoIcons.Library),
+                    EchoDestination(
+                        "projects",
+                        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.v2_nav_projects),
+                        EchoIcons.Projects
+                    ),
                     EchoDestination("live", text.live, EchoIcons.Live),
                     EchoDestination("ask", text.ask, EchoIcons.Ask)
                 ),
                 "library",
-                {}
+                {},
+                centre = { com.echoledger.mobile.ui.v2.shell.EchoRecordButton(recording = false, onTap = {}, onLongPress = {}) }
             )
         }
     }

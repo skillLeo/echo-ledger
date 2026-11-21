@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Settings: each group's line, the usage meter and Appearance's text size and language. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_set_desc_recording">Calls, microphone and voice notes</string>
+    <string name="v2_set_desc_transcription">Language, words and your own key</string>
+    <string name="v2_set_desc_live">Captions, games and videos on screen</string>
+    <string name="v2_set_desc_privacy">App lock, sharing and storage</string>
+    <string name="v2_set_desc_notifications">What tells you, and quiet hours</string>
+    <string name="v2_set_desc_appearance">Theme, colours, font, text size and language</string>
+    <string name="v2_set_desc_account">Your plan, usage, sign-in and devices</string>
+    <string name="v2_set_desc_setup">Call recording setup and checks</string>
+    <string name="v2_set_desc_about">Help, phone check and version</string>
+    <string name="v2_set_usage_title">This month</string>
+    <string name="v2_set_usage_of">%1$d of %2$d minutes used</string>
+    <string name="v2_set_usage_unlimited">%1$d minutes used, no limit</string>
+    <string name="v2_set_wallpaper_help">Changes the classic screens only: they take your wallpaper\'s colours. The new design keeps EchoLedger\'s own colours.</string>
+    <string name="v2_set_item_appearance_textsize">Text size</string>
+    <string name="v2_set_textsize_help">On top of your phone\'s own text size.</string>
+    <string name="v2_set_textsize_smaller">Smaller</string>
+    <string name="v2_set_textsize_system">As on the phone</string>
+    <string name="v2_set_textsize_larger">Larger</string>
+    <string name="v2_set_textsize_largest">Largest</string>
+    <string name="v2_set_item_appearance_language">App language</string>
+    <string name="v2_set_language_system">As on the phone</string>
+    <string name="v2_set_language_en">English</string>
+    <string name="v2_set_language_ur">اردو</string>
+</resources>

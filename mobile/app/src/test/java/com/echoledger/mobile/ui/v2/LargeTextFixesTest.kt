@@ -116,7 +116,8 @@ class LargeTextFixesTest {
         val lines = listOf(
             com.echoledger.mobile.R.string.v2_livetab_record_help,
             com.echoledger.mobile.R.string.v2_livetab_voice_note_help,
-            com.echoledger.mobile.R.string.v2_livetab_translate_help,
+            com.echoledger.mobile.R.string.v2_livetab_game_help,
+            com.echoledger.mobile.R.string.v2_livetab_watch_help,
             com.echoledger.mobile.R.string.v2_livetab_dictation_help,
             com.echoledger.mobile.R.string.v2_livetab_captions_help,
             com.echoledger.mobile.R.string.v2_assist_start_help

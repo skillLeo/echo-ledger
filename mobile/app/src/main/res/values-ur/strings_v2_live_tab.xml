@@ -6,8 +6,8 @@
     <string name="v2_livetab_record_help">واٹس ایپ اور فون کالز، ساتھ ساتھ ریکارڈ</string>
     <string name="v2_livetab_voice_note">وائس نوٹ</string>
     <string name="v2_livetab_voice_note_help">ابھی اپنی آواز ریکارڈ کریں</string>
-    <string name="v2_livetab_translate">لائیو ترجمہ</string>
-    <string name="v2_livetab_translate_help">گیمز اور ویڈیوز کا اسکرین پر ترجمہ</string>
+    <string name="v2_livetab_game_help">گیم کا اسکرین پر ترجمہ</string>
+    <string name="v2_livetab_watch_help">ویڈیو کا اسکرین پر ترجمہ</string>
     <string name="v2_livetab_dictation">ڈکٹیشن</string>
     <string name="v2_livetab_dictation_help">کسی بھی ایپ میں ٹائپ کی جگہ بولیں</string>
     <string name="v2_livetab_captions">کیپشنز</string>

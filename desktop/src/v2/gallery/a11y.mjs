@@ -37,6 +37,8 @@ const SCREENS = [
   ["g-recording-empty", "?v2gallery&screen=recording&state=empty&lang=en"],
   ["g-assist", "?v2gallery&screen=assist&lang=en"],
   ["g-plan-ur", "?v2gallery&screen=plan&lang=ur"],
+  ["g-kit", "?v2gallery&screen=kit&lang=en"],
+  ["g-kit-ur", "?v2gallery&screen=kit&lang=ur"],
   ["a-library", app("library")],
   ["a-recording", app("library"), async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
   ["a-recording-screens", app("library"), async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); }],

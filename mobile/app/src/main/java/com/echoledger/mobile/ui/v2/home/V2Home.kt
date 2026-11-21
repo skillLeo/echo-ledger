@@ -134,7 +134,8 @@ fun V2HomeScreen(vm: MainViewModel, initials: String, actions: HomeActions, modi
         actions = actions,
         onKeep = { vm.decide(it.id, keep = true) },
         onDiscard = { rec -> batch.discard(rec.id) },
-        onRetryUploads = { vm.retryPending() },
+        // Classic's Retry: each upload that failed, sent again.
+        onRetryUploads = { pending.filter { it.state == "failed" }.forEach { vm.retryUpload(it.id) } },
         onRetryLibrary = { vm.refresh() },
         modifier = modifier
     )
@@ -224,7 +225,7 @@ fun V2HomeContent(
                     .clickable(onClickLabel = text.accountAndSettings, onClick = actions.onAccount)
                     .semantics { contentDescription = text.accountAndSettings },
                 contentAlignment = Alignment.Center
-            ) { EchoAvatar(initials = initials) }
+            ) { com.echoledger.mobile.ui.v2.shell.PersonAvatar(initials) }
         }
         LazyColumn(Modifier.weight(1f)) {
             item { StatusStrip(state.status, actions) }

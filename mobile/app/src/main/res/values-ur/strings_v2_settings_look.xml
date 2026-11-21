@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Settings: each group's line, the usage meter and Appearance's text size and language. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_set_desc_recording">کالز، مائیکروفون اور وائس نوٹس</string>
+    <string name="v2_set_desc_transcription">زبان، الفاظ اور آپ کی اپنی کی</string>
+    <string name="v2_set_desc_live">اسکرین پر کیپشنز، گیمز اور ویڈیوز</string>
+    <string name="v2_set_desc_privacy">ایپ لاک، شیئرنگ اور اسٹوریج</string>
+    <string name="v2_set_desc_notifications">کیا اطلاع دے، اور خاموش اوقات</string>
+    <string name="v2_set_desc_appearance">تھیم، رنگ، فونٹ، متن کا سائز اور زبان</string>
+    <string name="v2_set_desc_account">آپ کا پلان، استعمال، سائن ان اور ڈیوائسز</string>
+    <string name="v2_set_desc_setup">کال ریکارڈنگ کا سیٹ اپ اور جانچ</string>
+    <string name="v2_set_desc_about">مدد، فون کی جانچ اور ورژن</string>
+    <string name="v2_set_usage_title">اس مہینے</string>
+    <string name="v2_set_usage_of">%2$d میں سے %1$d منٹ استعمال ہوئے</string>
+    <string name="v2_set_usage_unlimited">%1$d منٹ استعمال ہوئے، کوئی حد نہیں</string>
+    <string name="v2_set_wallpaper_help">صرف کلاسک ڈیزائن کی اسکرینیں بدلتی ہیں: وہ آپ کے وال پیپر کے رنگ لیتی ہیں۔ نیا ڈیزائن EchoLedger کے اپنے رنگ رکھتا ہے۔</string>
+    <string name="v2_set_item_appearance_textsize">متن کا سائز</string>
+    <string name="v2_set_textsize_help">آپ کے فون کے اپنے متن کے سائز کے اوپر۔</string>
+    <string name="v2_set_textsize_smaller">چھوٹا</string>
+    <string name="v2_set_textsize_system">فون جیسا</string>
+    <string name="v2_set_textsize_larger">بڑا</string>
+    <string name="v2_set_textsize_largest">سب سے بڑا</string>
+    <string name="v2_set_item_appearance_language">ایپ کی زبان</string>
+    <string name="v2_set_language_system">فون جیسی</string>
+    <string name="v2_set_language_en">English</string>
+    <string name="v2_set_language_ur">اردو</string>
+</resources>

@@ -34,6 +34,7 @@ import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.ui.v2.components.EchoButton
 import com.echoledger.mobile.ui.v2.components.EchoButtonKind
+import com.echoledger.mobile.ui.v2.components.EchoRadio
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSegmented
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
@@ -52,7 +53,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun Modifier.highlightedIf(on: Boolean): Modifier = if (on) background(EchoV2.colors.accentSoft) else this
 
-/** Appearance: the theme (System, Light, Dark), the phone's font, and Classic look while v2 is on. */
+/**
+ * Appearance: the theme (System, Light, Dark), Wallpaper colours, the phone's font, Text size and App language (both
+ * applied across the v2 screens, their sheets, dialogs and menus included), and Switch back to classic while v2 is on.
+ */
 @Composable
 fun AppearancePage(
     settings: AppSettings,
@@ -80,6 +84,16 @@ fun AppearancePage(
                     modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
                 )
             }
+            // Wallpaper colours, as classic (Android 12 and later): the wallpaper's accent; Record keeps its colour.
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                EchoSwitch(
+                    checked = settings.dynamicColour,
+                    onCheckedChange = { on -> update { it.copy(dynamicColour = on) } },
+                    label = stringResource(R.string.v2_set_item_appearance_wallpaper),
+                    supporting = stringResource(R.string.v2_set_wallpaper_help),
+                    modifier = Modifier.highlightedIf(highlight == "appearance.wallpaper")
+                )
+            }
             EchoSwitch(
                 checked = settings.phoneFont,
                 onCheckedChange = { on -> update { it.copy(phoneFont = on) } },
@@ -87,8 +101,39 @@ fun AppearancePage(
                 supporting = stringResource(R.string.v2_set_phone_font_help),
                 modifier = Modifier.highlightedIf(highlight == "appearance.font")
             )
+            Column(Modifier.highlightedIf(highlight == "appearance.textsize")) {
+                EchoSectionHeader(stringResource(R.string.v2_set_item_appearance_textsize))
+                Text(
+                    stringResource(R.string.v2_set_textsize_help),
+                    style = EchoV2.type.caption,
+                    color = EchoV2.colors.textSecondary,
+                    modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
+                )
+                listOf(
+                    "smaller" to R.string.v2_set_textsize_smaller,
+                    "system" to R.string.v2_set_textsize_system,
+                    "larger" to R.string.v2_set_textsize_larger,
+                    "largest" to R.string.v2_set_textsize_largest
+                ).forEach { (key, words) ->
+                    EchoRadio(selected = settings.textSize == key, onClick = {
+                        update { it.copy(textSize = key) }
+                    }, label = stringResource(words))
+                }
+            }
+            Column(Modifier.highlightedIf(highlight == "appearance.language")) {
+                EchoSectionHeader(stringResource(R.string.v2_set_item_appearance_language))
+                listOf(
+                    "system" to R.string.v2_set_language_system,
+                    "en" to R.string.v2_set_language_en,
+                    "ur" to R.string.v2_set_language_ur
+                ).forEach { (key, words) ->
+                    EchoRadio(selected = settings.appLanguage == key, onClick = {
+                        update { it.copy(appLanguage = key) }
+                    }, label = stringResource(words))
+                }
+            }
             if (flags.offersClassicSwitch) {
-                EchoSwitch(flags.classic, onSwitchToClassic, v2Text.classicLook, supporting = v2Text.classicLookHelp)
+                com.echoledger.mobile.ui.v2.shell.SwitchBackToClassic { onSwitchToClassic(true) }
             }
             PageReset("appearance", stringResource(R.string.v2_set_page_appearance), update)
         }

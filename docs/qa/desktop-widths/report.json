@@ -1,0 +1,4034 @@
+[
+ {
+  "screen": "library",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-720-light-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-720-light-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-720-dark-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-720-dark-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-756-light-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-756-light-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-756-dark-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-756-dark-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-780-light-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-780-light-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-780-dark-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-780-dark-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-800-light-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-800-light-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-800-dark-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-800-dark-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-1024-light-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-1024-light-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-1024-dark-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-1024-dark-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-1280-light-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-1280-light-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-1280-dark-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-1280-dark-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-1728-light-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-1728-light-ur.png"
+ },
+ {
+  "screen": "library",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "library-1728-dark-en.png"
+ },
+ {
+  "screen": "library",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "library-1728-dark-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-720-light-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-720-light-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-720-dark-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-720-dark-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-756-light-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-756-light-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-756-dark-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-756-dark-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-780-light-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-780-light-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-780-dark-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-780-dark-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-800-light-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-800-light-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-800-dark-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-800-dark-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1024-light-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1024-light-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1024-dark-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1024-dark-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1280-light-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1280-light-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1280-dark-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1280-dark-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1728-light-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1728-light-ur.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1728-dark-en.png"
+ },
+ {
+  "screen": "recording",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-1728-dark-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-720-light-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-720-light-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-720-dark-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-720-dark-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-756-light-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-756-light-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-756-dark-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-756-dark-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-780-light-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-780-light-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-780-dark-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-780-dark-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-800-light-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-800-light-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-800-dark-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-800-dark-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1024-light-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1024-light-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1024-dark-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1024-dark-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1280-light-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1280-light-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1280-dark-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1280-dark-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1728-light-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1728-light-ur.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1728-dark-en.png"
+ },
+ {
+  "screen": "recording-scrolled",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "recording-scrolled-1728-dark-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-720-light-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-720-light-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-720-dark-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-720-dark-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-756-light-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-756-light-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-756-dark-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-756-dark-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-780-light-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-780-light-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-780-dark-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-780-dark-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-800-light-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-800-light-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-800-dark-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-800-dark-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1024-light-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1024-light-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1024-dark-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1024-dark-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1280-light-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1280-light-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1280-dark-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1280-dark-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1728-light-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1728-light-ur.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1728-dark-en.png"
+ },
+ {
+  "screen": "projects",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "projects-1728-dark-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-720-light-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-720-light-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-720-dark-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-720-dark-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-756-light-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-756-light-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-756-dark-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-756-dark-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-780-light-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-780-light-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-780-dark-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-780-dark-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-800-light-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-800-light-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-800-dark-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-800-dark-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-1024-light-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-1024-light-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-1024-dark-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-1024-dark-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-1280-light-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-1280-light-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-1280-dark-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-1280-dark-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-1728-light-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-1728-light-ur.png"
+ },
+ {
+  "screen": "project",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "project-1728-dark-en.png"
+ },
+ {
+  "screen": "project",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "project-1728-dark-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-720-light-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-720-light-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-720-dark-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-720-dark-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-756-light-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-756-light-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-756-dark-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-756-dark-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-780-light-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-780-light-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-780-dark-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-780-dark-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-800-light-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-800-light-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-800-dark-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-800-dark-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1024-light-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1024-light-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1024-dark-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1024-dark-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1280-light-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1280-light-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1280-dark-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1280-dark-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1728-light-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1728-light-ur.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1728-dark-en.png"
+ },
+ {
+  "screen": "activity",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "activity-1728-dark-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-720-light-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-720-light-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-720-dark-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-720-dark-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-756-light-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-756-light-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-756-dark-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-756-dark-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-780-light-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-780-light-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-780-dark-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-780-dark-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-800-light-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-800-light-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-800-dark-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-800-dark-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1024-light-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1024-light-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1024-dark-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1024-dark-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1280-light-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1280-light-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1280-dark-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1280-dark-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1728-light-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1728-light-ur.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1728-dark-en.png"
+ },
+ {
+  "screen": "shared",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-1728-dark-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-720-light-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-720-light-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-720-dark-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-720-dark-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-756-light-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-756-light-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-756-dark-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-756-dark-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-780-light-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-780-light-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-780-dark-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-780-dark-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-800-light-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-800-light-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-800-dark-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-800-dark-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1024-light-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1024-light-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1024-dark-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1024-dark-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1280-light-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1280-light-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1280-dark-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1280-dark-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1728-light-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1728-light-ur.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1728-dark-en.png"
+ },
+ {
+  "screen": "shared-with-me",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "shared-with-me-1728-dark-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-720-light-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-720-light-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-720-dark-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-720-dark-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-756-light-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-756-light-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-756-dark-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-756-dark-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-780-light-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-780-light-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-780-dark-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-780-dark-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-800-light-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-800-light-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-800-dark-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-800-dark-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-1024-light-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-1024-light-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-1024-dark-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-1024-dark-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-1280-light-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-1280-light-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-1280-dark-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-1280-dark-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-1728-light-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-1728-light-ur.png"
+ },
+ {
+  "screen": "record",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "record-1728-dark-en.png"
+ },
+ {
+  "screen": "record",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "record-1728-dark-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-720-light-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-720-light-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-720-dark-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-720-dark-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-756-light-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-756-light-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-756-dark-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-756-dark-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-780-light-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-780-light-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-780-dark-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-780-dark-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-800-light-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-800-light-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-800-dark-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-800-dark-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1024-light-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1024-light-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1024-dark-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1024-dark-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1280-light-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1280-light-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1280-dark-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1280-dark-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1728-light-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1728-light-ur.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1728-dark-en.png"
+ },
+ {
+  "screen": "settings",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-1728-dark-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-720-light-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-720-light-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-720-dark-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-720-dark-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-756-light-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-756-light-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-756-dark-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-756-dark-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-780-light-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-780-light-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-780-dark-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-780-dark-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-800-light-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-800-light-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-800-dark-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-800-dark-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1024-light-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1024-light-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1024-dark-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1024-dark-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1280-light-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1280-light-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1280-dark-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1280-dark-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1728-light-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1728-light-ur.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1728-dark-en.png"
+ },
+ {
+  "screen": "settings-profile",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-profile-1728-dark-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-720-light-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-720-light-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-720-dark-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-720-dark-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-756-light-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-756-light-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-756-dark-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-756-dark-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-780-light-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-780-light-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-780-dark-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-780-dark-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-800-light-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-800-light-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-800-dark-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-800-dark-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1024-light-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1024-light-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1024-dark-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1024-dark-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1280-light-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1280-light-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1280-dark-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1280-dark-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1728-light-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1728-light-ur.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1728-dark-en.png"
+ },
+ {
+  "screen": "settings-calls",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-calls-1728-dark-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-720-light-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-720-light-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-720-dark-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-720-dark-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-756-light-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-756-light-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-756-dark-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-756-dark-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-780-light-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-780-light-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-780-dark-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-780-dark-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-800-light-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-800-light-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-800-dark-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-800-dark-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1024-light-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1024-light-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1024-dark-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1024-dark-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1280-light-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1280-light-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1280-dark-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1280-dark-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1728-light-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1728-light-ur.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1728-dark-en.png"
+ },
+ {
+  "screen": "settings-microphone",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-microphone-1728-dark-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-720-light-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-720-light-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-720-dark-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-720-dark-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-756-light-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-756-light-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-756-dark-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-756-dark-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-780-light-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-780-light-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-780-dark-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-780-dark-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-800-light-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-800-light-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-800-dark-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-800-dark-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1024-light-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1024-light-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1024-dark-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1024-dark-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1280-light-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1280-light-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1280-dark-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1280-dark-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1728-light-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1728-light-ur.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1728-dark-en.png"
+ },
+ {
+  "screen": "settings-captions",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-captions-1728-dark-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-720-light-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-720-light-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-720-dark-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-720-dark-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-756-light-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-756-light-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-756-dark-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-756-dark-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-780-light-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-780-light-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-780-dark-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-780-dark-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-800-light-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-800-light-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-800-dark-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-800-dark-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1024-light-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1024-light-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1024-dark-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1024-dark-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1280-light-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1280-light-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1280-dark-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1280-dark-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1728-light-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1728-light-ur.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1728-dark-en.png"
+ },
+ {
+  "screen": "settings-voice",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-voice-1728-dark-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 720,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-720-light-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 720,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-720-light-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 720,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-720-dark-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 720,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-720-dark-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 756,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-756-light-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 756,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-756-light-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 756,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-756-dark-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 756,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-756-dark-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 780,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-780-light-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 780,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-780-light-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 780,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-780-dark-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 780,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-780-dark-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 800,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-800-light-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 800,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-800-light-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 800,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-800-dark-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 800,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-800-dark-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1024,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1024-light-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1024,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1024-light-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1024-dark-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1024,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1024-dark-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1280,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1280-light-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1280,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1280-light-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1280-dark-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1280,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1280-dark-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1728,
+  "theme": "light",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1728-light-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1728,
+  "theme": "light",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1728-light-ur.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "en",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1728-dark-en.png"
+ },
+ {
+  "screen": "settings-custom",
+  "width": 1728,
+  "theme": "dark",
+  "lang": "ur",
+  "problems": [],
+  "errors": [],
+  "file": "settings-custom-1728-dark-ur.png"
+ }
+]
