@@ -87,6 +87,9 @@ class ApiSamplesTest {
     private val notRead =
         setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
+    /** Answers the phone does not ask for yet: Transcribe later (2.0.0-j) reaches the phone with its Audio only screen. */
+    private val notUsedYet = setOf("session_transcribe", "sessions_transcribe", "sessions_transcribe_estimate")
+
     private val everyField = Json {
         encodeDefaults = true
         explicitNulls = true
@@ -97,7 +100,8 @@ class ApiSamplesTest {
     @Test
     fun `every sample has a model or is known not to be read`() {
         val files = dir.listFiles { f -> f.extension == "json" }!!.map { it.nameWithoutExtension }.toSet()
-        assertEquals(emptySet<String>(), files - readBy.keys - notRead)
+        assertEquals(emptySet<String>(), files - readBy.keys - notRead - notUsedYet)
+        assertEquals(emptySet<String>(), notUsedYet - files)
         assertEquals(emptySet<String>(), readBy.keys - files)
     }
 
