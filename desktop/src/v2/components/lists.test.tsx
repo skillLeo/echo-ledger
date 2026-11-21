@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { useState } from "react";
 import { LIST_ROW_WRAP_FROM, ListChip, ListChipRow } from "./ListChip";
 import { COLOUR_NAMES, COLOUR_ORDER, ColourPicker } from "./ColourPicker";
-import { NewListDialog, nextListColour } from "./NewListDialog";
+import { NewListDialog, RenameListDialog, listNameTaken, nextListColour } from "./NewListDialog";
 import { addToListItems, deleteListWords, listChipMenuItems, listDotIcon } from "./listMenus";
 import { ContextMenu, Menu } from "./Menu";
 import { LABEL_COLOURS, type LabelColour } from "./Label";
@@ -22,23 +22,24 @@ afterEach(() => {
 });
 
 describe("ListChip", () => {
-  it("is a toggle button with the list's dot and name; selected, it shows a check", () => {
+  it("is a button with the list's dot and name; the chosen one is aria-current and shows a check", () => {
     const { rerender } = render(<ListChip name="Clients" colour={LABEL_COLOURS.teal} selected={false} onClick={() => undefined} />);
     const chip = screen.getByRole("button", { name: "Clients" });
-    expect(chip).toHaveAttribute("aria-pressed", "false");
+    expect(chip).not.toHaveAttribute("aria-current");
+    expect(chip).not.toHaveAttribute("aria-pressed");
     expect(chip).toHaveClass("el-chip", "el-listchip");
     const dot = chip.querySelector(".el-label-dot");
     expect(dot).toHaveClass("el-label--teal");
     expect(dot).toHaveAttribute("aria-hidden", "true");
     expect(chip.querySelector(".el-icon")).toBeNull();
     rerender(<ListChip name="Clients" colour={LABEL_COLOURS.teal} selected onClick={() => undefined} />);
-    expect(chip).toHaveAttribute("aria-pressed", "true");
+    expect(chip).toHaveAttribute("aria-current", "true");
     expect(chip.querySelector(".el-icon")).not.toBeNull();
     expect(chip.querySelector(".el-label-dot")).not.toBeNull();
   });
 
-  it("the pressed look is the filter chip's: accent-soft fill and accent text", () => {
-    expect(css).toMatch(/\.el-chip\[aria-pressed="true"\] \{\s*background: var\(--el-role-accent-soft\);[^}]*color: var\(--el-role-accent-text\);/);
+  it("the chosen look is the pressed filter chip's: accent-soft fill and accent text", () => {
+    expect(css).toMatch(/\.el-chip\[aria-pressed="true"\], \.el-listchip\[aria-current="true"\] \{\s*background: var\(--el-role-accent-soft\);[^}]*color: var\(--el-role-accent-text\);/);
   });
 
   it("a fixed chip has no dot and no menu; only it shows a count, and only above 0", () => {
@@ -114,8 +115,8 @@ describe("ListChipRow", () => {
   it("one chip is selected at a time", () => {
     render(<Row />);
     fireEvent.click(screen.getByRole("button", { name: "Home" }));
-    const pressed = screen.getAllByRole("button", { pressed: true });
-    expect(pressed.map((b) => b.textContent)).toEqual(["Home"]);
+    const current = screen.getAllByRole("button", { current: true });
+    expect(current.map((b) => b.textContent)).toEqual(["Home"]);
   });
 
   it("scrolls below 1280 px and wraps from 1280 px, following the window", () => {
@@ -393,7 +394,7 @@ describe("a list chip's menu", () => {
   it("Rename…, Change colour…, the moves there is room for, then Delete list… in red, set apart and last", () => {
     const on = handlers();
     const items = listChipMenuItems({ name: "Home", canMoveEarlier: true, canMoveLater: true, ...on });
-    expect(items.map((i) => i.label)).toEqual(["Rename…", "Change colour…", "Move earlier", "Move later", "Delete list…"]);
+    expect(items.map((i) => i.label)).toEqual(["Rename…", "Change colour…", "Move left", "Move right", "Delete list…"]);
     const last = items.at(-1)!;
     expect(last).toMatchObject({ danger: true, separator: true, icon: TrashIcon });
     expect(items.slice(0, -1).some((i) => i.danger || i.separator)).toBe(false);
@@ -402,9 +403,9 @@ describe("a list chip's menu", () => {
       expect(fn).toHaveBeenCalledTimes(1);
     }
     expect(listChipMenuItems({ name: "Clients", canMoveEarlier: false, canMoveLater: true, ...handlers() }).map((i) => i.label))
-      .toEqual(["Rename…", "Change colour…", "Move later", "Delete list…"]);
+      .toEqual(["Rename…", "Change colour…", "Move right", "Delete list…"]);
     expect(listChipMenuItems({ name: "Family", canMoveEarlier: true, canMoveLater: false, ...handlers() }).map((i) => i.label))
-      .toEqual(["Rename…", "Change colour…", "Move earlier", "Delete list…"]);
+      .toEqual(["Rename…", "Change colour…", "Move left", "Delete list…"]);
     expect(listChipMenuItems({ name: "Only", canMoveEarlier: false, canMoveLater: false, ...handlers() }).map((i) => i.label))
       .toEqual(["Rename…", "Change colour…", "Delete list…"]);
   });
@@ -423,15 +424,15 @@ describe("a list chip's menu", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: "Home" }), { clientX: 200, clientY: 90 });
     const menu = screen.getByRole("menu", { name: "Home" });
     const items = within(menu).getAllByRole("menuitem");
-    expect(items.map((i) => i.textContent)).toEqual(["Rename…", "Change colour…", "Move earlier", "Move later", "Delete list…"]);
+    expect(items.map((i) => i.textContent)).toEqual(["Rename…", "Change colour…", "Move left", "Move right", "Delete list…"]);
     expect(items.at(-1)).toHaveClass("el-menu__option--danger");
     const separator = menu.querySelector('[role="separator"]')!;
     expect(separator.nextElementSibling).toContainElement(items.at(-1)!);
   });
 
   it("takes its words, and gives the delete confirmation's", () => {
-    expect(listChipMenuItems({ name: "گھر", canMoveEarlier: true, canMoveLater: true, ...handlers(), words: { moveEarlier: "پہلے لے جائیں", moveLater: "بعد میں لے جائیں" } })
-      .map((i) => i.label)).toEqual(["Rename…", "Change colour…", "پہلے لے جائیں", "بعد میں لے جائیں", "Delete list…"]);
+    expect(listChipMenuItems({ name: "گھر", canMoveEarlier: true, canMoveLater: true, ...handlers(), words: { moveLeft: "بائیں لے جائیں", moveRight: "دائیں لے جائیں" } })
+      .map((i) => i.label)).toEqual(["Rename…", "Change colour…", "بائیں لے جائیں", "دائیں لے جائیں", "Delete list…"]);
     expect(deleteListWords("Clients")).toEqual({
       title: "Delete Clients?", body: "Its recordings stay in your Library; only the list goes.", confirm: "Delete", cancel: "Cancel",
     });
@@ -439,9 +440,106 @@ describe("a list chip's menu", () => {
   });
 });
 
+describe("Move left and Move right follow the screen", () => {
+  const handlers = () => ({ onRename: vi.fn(), onRecolour: vi.fn(), onMoveEarlier: vi.fn(), onMoveLater: vi.fn(), onDelete: vi.fn() });
+
+  it("left to right, left is earlier and right is later", () => {
+    const on = handlers();
+    const items = listChipMenuItems({ name: "Home", canMoveEarlier: true, canMoveLater: true, ...on });
+    items.find((i) => i.label === "Move left")!.onPick?.();
+    expect(on.onMoveEarlier).toHaveBeenCalledTimes(1);
+    items.find((i) => i.label === "Move right")!.onPick?.();
+    expect(on.onMoveLater).toHaveBeenCalledTimes(1);
+  });
+
+  it("right to left, the handlers swap, and so does which move is offered at an end", () => {
+    const on = handlers();
+    const items = listChipMenuItems({ name: "گھر", canMoveEarlier: true, canMoveLater: true, rtl: true, ...on });
+    items.find((i) => i.label === "Move left")!.onPick?.();
+    expect(on.onMoveLater).toHaveBeenCalledTimes(1);
+    expect(on.onMoveEarlier).not.toHaveBeenCalled();
+    items.find((i) => i.label === "Move right")!.onPick?.();
+    expect(on.onMoveEarlier).toHaveBeenCalledTimes(1);
+    // The first list sits at the right end in Urdu: it can only go left.
+    expect(listChipMenuItems({ name: "کلائنٹس", canMoveEarlier: false, canMoveLater: true, rtl: true, ...handlers() }).map((i) => i.label))
+      .toEqual(["Rename…", "Change colour…", "Move left", "Delete list…"]);
+  });
+});
+
+describe("list names", () => {
+  it("the fixed chips' words are taken, in any letter case; toLowerCase, not the locale's", () => {
+    expect(listNameTaken(" important ", [])).toBe("Important");
+    expect(listNameTaken("ALL", ["Clients"])).toBe("All");
+    expect(listNameTaken("سب", [], ["سب", "نہ پڑھی گئی", "اہم"])).toBe("سب");
+    expect(listNameTaken("Unread", [], [])).toBeUndefined();
+    expect(listNameTaken("   ", ["Clients"])).toBeUndefined();
+    const spy = vi.spyOn(String.prototype, "toLocaleLowerCase");
+    listNameTaken("Clients", ["clients"]);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("New list refuses a fixed chip's word", () => {
+    render(<NewListDialog open onClose={() => undefined} onCreate={() => undefined} existing={["Clients"]} />);
+    const field = screen.getByRole("textbox", { name: "List name" });
+    fireEvent.change(field, { target: { value: "unread" } });
+    expect(field).toHaveAccessibleDescription("You already have a list called Unread.");
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+  });
+
+  it("Rename starts with the name, blocks another list's name or a fixed word, and allows a change of case", () => {
+    const rename = vi.fn();
+    render(<RenameListDialog open name="Home" existing={["Clients", "Home", "Family"]} onClose={() => undefined} onRename={rename} />);
+    const field = screen.getByRole("textbox", { name: "List name" });
+    expect(field).toHaveValue("Home");
+    expect(document.activeElement).toBe(field);
+    const save = screen.getByRole("button", { name: "Save" });
+    fireEvent.change(field, { target: { value: "family " } });
+    expect(field).toHaveAccessibleDescription("You already have a list called Family.");
+    expect(save).toBeDisabled();
+    fireEvent.submit(field.closest("form")!);
+    expect(rename).not.toHaveBeenCalled();
+    fireEvent.change(field, { target: { value: "Important" } });
+    expect(save).toBeDisabled();
+    fireEvent.change(field, { target: { value: "" } });
+    expect(save).toBeDisabled();
+    fireEvent.change(field, { target: { value: " HOME " } });
+    expect(field).not.toHaveAttribute("aria-invalid");
+    fireEvent.click(save);
+    expect(rename).toHaveBeenCalledWith("HOME");
+  });
+
+  it("Enter in the field saves", () => {
+    const rename = vi.fn();
+    render(<RenameListDialog open name="Home" existing={["Home"]} onClose={() => undefined} onRename={rename} />);
+    const field = screen.getByRole("textbox", { name: "List name" });
+    fireEvent.change(field, { target: { value: "House" } });
+    fireEvent.submit(field.closest("form")!);
+    expect(rename).toHaveBeenCalledWith("House");
+  });
+});
+
+describe("Add to list's New list… lines up with the ticked lists", () => {
+  it("keeps an empty tick column", () => {
+    render(<ContextMenu label="Add to list" at={{ x: 10, y: 10 }} onClose={() => undefined} items={addToListItems({ lists: [{ name: "Clients", colour: LABEL_COLOURS.teal }], checked: new Set(["Clients"]), onToggle: () => undefined, onNew: () => undefined })} />);
+    const options = screen.getAllByRole("menuitem").concat(screen.getAllByRole("menuitemcheckbox"));
+    for (const o of options) expect(o.querySelector(".el-menu__check")).not.toBeNull();
+  });
+
+  it("a menu with no ticks draws no tick column", () => {
+    render(<ContextMenu label="Home" at={{ x: 10, y: 10 }} onClose={() => undefined} items={listChipMenuItems({ name: "Home", canMoveEarlier: true, canMoveLater: true, onRename: vi.fn(), onRecolour: vi.fn(), onMoveEarlier: vi.fn(), onMoveLater: vi.fn(), onDelete: vi.fn() })} />);
+    expect(document.querySelector(".el-menu__check")).toBeNull();
+  });
+});
+
+describe("the Urdu \"+\"", () => {
+  it("is as wide as the taller Urdu chip", () => {
+    expect(css).toMatch(/:lang\(ur\) \.el-listchips__add \{ inline-size: calc\(var\(--el-text-urdu-caption-line\) \+ var\(--el-space-8\)\); \}/);
+  });
+});
+
 describe("the lists parts are exported", () => {
   it("from components/index.ts", () => {
-    for (const name of ["ListChip", "ListChipRow", "ColourPicker", "NewListDialog", "addToListItems", "listChipMenuItems", "deleteListWords", "listDotIcon", "nextListColour", "COLOUR_NAMES"]) {
+    for (const name of ["ListChip", "ListChipRow", "ColourPicker", "NewListDialog", "addToListItems", "listChipMenuItems", "deleteListWords", "listDotIcon", "nextListColour", "COLOUR_NAMES", "RenameListDialog", "listNameTaken", "FIXED_LIST_NAMES"]) {
       expect(Components, name).toHaveProperty(name);
     }
   });

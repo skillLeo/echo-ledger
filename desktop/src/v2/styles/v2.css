@@ -316,7 +316,7 @@
   cursor: pointer;
 }
 .el-chip:hover { background: var(--el-role-bg-subtle); }
-.el-chip[aria-pressed="true"] {
+.el-chip[aria-pressed="true"], .el-listchip[aria-current="true"] {
   background: var(--el-role-accent-soft);
   border-color: var(--el-role-accent-default);
   color: var(--el-role-accent-text);
@@ -1267,6 +1267,8 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
   color: var(--el-role-text-secondary);
 }
 .el-listchips__add:hover { color: var(--el-role-text-primary); }
+/* In Urdu the chips are taller (D4); "+" stays square at their height. */
+:lang(ur) .el-listchips__add { inline-size: calc(var(--el-text-urdu-caption-line) + var(--el-space-8)); }
 
 .el-colour-picker { display: flex; flex-direction: column; gap: var(--el-space-4); }
 /* 44 px targets around 32 px dots: the first dot lines up with the label's start. */

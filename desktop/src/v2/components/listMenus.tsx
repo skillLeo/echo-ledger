@@ -46,21 +46,20 @@ export function addToListItems({ lists, checked, onToggle, onNew, words }: {
   ];
 }
 
-export type ListChipMenuWords = { rename: string; recolour: string; moveEarlier: string; moveLater: string; remove: string };
+export type ListChipMenuWords = { rename: string; recolour: string; moveLeft: string; moveRight: string; remove: string };
 
-/**
- * "Move earlier" and "Move later" rather than left and right: a list's place is its order, which reads right to left
- * in Urdu, so the same words are right in both directions.
- */
+/** The owner's words: "Move left" and "Move right", on every platform, as the chips are seen. */
 export const LIST_CHIP_MENU_WORDS: ListChipMenuWords = {
-  rename: "Rename…", recolour: "Change colour…", moveEarlier: "Move earlier", moveLater: "Move later", remove: "Delete list…",
+  rename: "Rename…", recolour: "Change colour…", moveLeft: "Move left", moveRight: "Move right", remove: "Delete list…",
 };
 
 /**
- * A list chip's menu (D14 §4): Rename…, Change colour…, Move earlier and Move later (each only when there is somewhere
- * to move), then, set apart and last, Delete list… in red. The fixed chips (All, Unread, Important) have no menu.
+ * A list chip's menu (D14 §4): Rename…, Change colour…, Move left and Move right (each only when there is somewhere to
+ * move), then, set apart and last, Delete list… in red. The fixed chips (All, Unread, Important) have no menu.
+ * Left and right are where the chip goes on screen: left to right, left is earlier in the order; right to left (`rtl`),
+ * left is later, so the handlers swap.
  */
-export function listChipMenuItems({ canMoveEarlier, canMoveLater, onRename, onRecolour, onMoveEarlier, onMoveLater, onDelete, words }: {
+export function listChipMenuItems({ canMoveEarlier, canMoveLater, onRename, onRecolour, onMoveEarlier, onMoveLater, onDelete, rtl = false, words }: {
   name: string;
   canMoveEarlier: boolean;
   canMoveLater: boolean;
@@ -69,15 +68,20 @@ export function listChipMenuItems({ canMoveEarlier, canMoveLater, onRename, onRe
   onMoveEarlier: () => void;
   onMoveLater: () => void;
   onDelete: () => void;
+  /** The page reads right to left. */
+  rtl?: boolean;
   words?: Partial<ListChipMenuWords>;
 }): MenuItem[] {
   const w = { ...LIST_CHIP_MENU_WORDS, ...words };
+  const [canLeft, onLeft, canRight, onRight] = rtl
+    ? [canMoveLater, onMoveLater, canMoveEarlier, onMoveEarlier]
+    : [canMoveEarlier, onMoveEarlier, canMoveLater, onMoveLater];
   const items: MenuItem[] = [
     { label: w.rename, icon: RenameIcon, onPick: onRename },
     { label: w.recolour, icon: AppearanceIcon, onPick: onRecolour },
   ];
-  if (canMoveEarlier) items.push({ label: w.moveEarlier, onPick: onMoveEarlier });
-  if (canMoveLater) items.push({ label: w.moveLater, onPick: onMoveLater });
+  if (canLeft) items.push({ label: w.moveLeft, onPick: onLeft });
+  if (canRight) items.push({ label: w.moveRight, onPick: onRight });
   items.push({ label: w.remove, icon: TrashIcon, danger: true, separator: true, onPick: onDelete });
   return items;
 }

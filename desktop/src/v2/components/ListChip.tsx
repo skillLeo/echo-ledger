@@ -25,8 +25,8 @@ export type ListChipProps = {
 
 /**
  * One chip of the Library's list row: the label's colour dot and its name, or a fixed chip's word alone. Selected, it
- * takes the accent-soft fill and accent text with a check, as a pressed filter chip does. It is a toggle button
- * (aria-pressed); its menu opens on a right-click or from the keyboard.
+ * takes the accent-soft fill and accent text with a check, as a pressed filter chip does. The row shows one list at a
+ * time, so the chosen chip is marked aria-current, not pressed; its menu opens on a right-click or from the keyboard.
  */
 export function ListChip({ name, colour = null, selected, onClick, onMenu, fixed = false, count }: ListChipProps) {
   const menu = fixed ? undefined : onMenu;
@@ -39,7 +39,7 @@ export function ListChip({ name, colour = null, selected, onClick, onMenu, fixed
     }
   } : undefined;
   return (
-    <button type="button" className={`el-chip el-listchip${fixed ? " el-listchip--fixed" : ""}`} aria-pressed={selected} onClick={onClick}
+    <button type="button" className={`el-chip el-listchip${fixed ? " el-listchip--fixed" : ""}`} aria-current={selected || undefined} onClick={onClick}
       onContextMenu={context} onKeyDown={key} aria-keyshortcuts={menu ? "Shift+F10" : undefined}>
       {selected && <Icon icon={CheckIcon} />}
       {!fixed && <LabelDot name={name} colour={colour} decorative />}
@@ -102,7 +102,7 @@ export function ListChipRow({ label, children, onAdd, addLabel }: ListChipRowPro
   // never the page).
   useEffect(() => {
     const row = scroller.current;
-    const chip = row?.querySelector('[aria-pressed="true"]') ?? null;
+    const chip = row?.querySelector('[aria-current="true"]') ?? null;
     if (!row || !chip || chip === shown.current) return;
     shown.current = chip;
     if (wrap) return;

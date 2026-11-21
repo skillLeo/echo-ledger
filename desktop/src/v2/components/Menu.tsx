@@ -137,6 +137,8 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
     else if (e.key === "Tab") onLeave();
   };
 
+  // When some items carry a tick, the others keep its column empty so every label starts in the same place.
+  const ticks = items.some((it) => it.checked !== undefined);
   const row = (item: MenuItem, i: number) => {
     const subOpen = sub === i;
     return (
@@ -150,7 +152,8 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           data-active={i === active || undefined}
           onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
           onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
-          {item.checked !== undefined && <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>}
+          {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
+            : ticks && <span className="el-menu__check" aria-hidden="true" />}
           {item.icon ? <Icon icon={item.icon} /> : item.checked === undefined && <span className="el-menu__icon-space" aria-hidden="true" />}
           <span className="el-menu__label">{item.label}</span>
           {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}

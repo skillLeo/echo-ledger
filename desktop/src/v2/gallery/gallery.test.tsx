@@ -198,7 +198,7 @@ describe("the lists page (screen=lists, D14)", () => {
     const row = screen.getByRole("group", { name: "Lists" });
     expect(within(row).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent))
       .toEqual(["All", "Unread 2", "Important", "Clients", "Home", "Family", "New list"]);
-    expect(within(row).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(row).getByRole("button", { name: "All" })).toHaveAttribute("aria-current", "true");
     fireEvent.click(within(row).getByRole("button", { name: "Clients" }));
     const list = screen.getByRole("list", { name: "Recordings: Clients" });
     expect(within(list).getAllByRole("button")).toHaveLength(4);
@@ -211,7 +211,7 @@ describe("the lists page (screen=lists, D14)", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "List name" }), { target: { value: "Suppliers" } });
     fireEvent.click(screen.getByRole("radio", { name: "Blue" }));
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
-    expect(screen.getByRole("button", { name: "Suppliers", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Suppliers", current: true })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Nothing in Suppliers yet" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "All" }));
     fireEvent.contextMenu(document.querySelector('[data-row-id="r6"]')!.closest("li")!, { clientX: 300, clientY: 300 });
@@ -226,11 +226,11 @@ describe("the lists page (screen=lists, D14)", () => {
     render(<Gallery screen="lists" lang="en" />);
     const home = () => within(screen.getByRole("group", { name: "Lists" })).getByRole("button", { name: "Home" });
     fireEvent.contextMenu(home(), { clientX: 200, clientY: 100 });
-    fireEvent.click(within(screen.getByRole("menu", { name: "Home" })).getByRole("menuitem", { name: "Move later" }));
+    fireEvent.click(within(screen.getByRole("menu", { name: "Home" })).getByRole("menuitem", { name: "Move right" }));
     const names = () => within(screen.getByRole("group", { name: "Lists" })).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent);
     expect(names().slice(3, 6)).toEqual(["Clients", "Family", "Home"]);
     fireEvent.contextMenu(home(), { clientX: 200, clientY: 100 });
-    expect(within(screen.getByRole("menu", { name: "Home" })).queryByRole("menuitem", { name: "Move later" })).toBeNull();
+    expect(within(screen.getByRole("menu", { name: "Home" })).queryByRole("menuitem", { name: "Move right" })).toBeNull();
     fireEvent.click(within(screen.getByRole("menu", { name: "Home" })).getByRole("menuitem", { name: "Delete list…" }));
     const ask = screen.getByRole("alertdialog", { name: "Delete Home?" });
     expect(ask).toHaveAccessibleDescription("Its recordings stay in your Library; only the list goes.");

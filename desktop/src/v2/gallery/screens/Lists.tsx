@@ -1,8 +1,8 @@
 import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import {
   Button, ColourPicker, ContextMenu, Dialog, EmptyState, Icons, LABEL_COLOURS, LabelDot, List, ListChip, ListChipRow, ListRow, ListSection,
-  NewListDialog, SearchField, TextField, Toast, ToastRegion, addToListItems, deleteListWords, labelColourName, listChipMenuItems,
-  menuPointFor, type LabelColour, type NewListWords,
+  NewListDialog, RenameListDialog, SearchField, Toast, ToastRegion, addToListItems, deleteListWords, labelColourName, listChipMenuItems,
+  menuPointFor, type LabelColour, type NewListWords, type RenameListWords,
 } from "../../components";
 import { COPY, type Lang } from "../content";
 
@@ -18,6 +18,7 @@ const WORDS = {
     added: (n: string) => `Added to ${n}`, removed: (n: string) => `Removed from ${n}`, undo: "Undo", dismiss: "Dismiss",
     rename: "Rename list", recolour: "Change colour", save: "Save",
     dialog: {} as Partial<NewListWords>,
+    renameWords: {} as Partial<RenameListWords>,
     menu: {}, addWords: {}, del: {},
     cancel: "Cancel", close: "Close", colour: "Colour", name: "List name",
   },
@@ -32,7 +33,11 @@ const WORDS = {
       duplicate: (n: string) => `آپ کی ${n} نام کی فہرست پہلے سے موجود ہے۔`,
       colourNames: { grey: "سرمئی", red: "سرخ", orange: "نارنجی", amber: "کہربائی", green: "سبز", teal: "فیروزی", blue: "نیلا", pink: "گلابی" },
     } as Partial<NewListWords>,
-    menu: { rename: "نام بدلیں…", recolour: "رنگ بدلیں…", moveEarlier: "پہلے لے جائیں", moveLater: "بعد میں لے جائیں", remove: "فہرست حذف کریں…" },
+    renameWords: {
+      title: "فہرست کا نام بدلیں", name: "فہرست کا نام", save: "محفوظ کریں", cancel: "منسوخ کریں", close: "بند کریں",
+      duplicate: (n: string) => `آپ کی ${n} نام کی فہرست پہلے سے موجود ہے۔`,
+    } as Partial<RenameListWords>,
+    menu: { rename: "نام بدلیں…", recolour: "رنگ بدلیں…", moveLeft: "بائیں لے جائیں", moveRight: "دائیں لے جائیں", remove: "فہرست حذف کریں…" },
     addWords: { newList: "نئی فہرست…" },
     del: { title: (n: string) => `${n} حذف کریں؟`, body: "اس کی ریکارڈنگز آپ کی لائبریری میں رہیں گی؛ صرف فہرست ہٹے گی۔", confirm: "حذف کریں", cancel: "منسوخ کریں" },
     cancel: "منسوخ کریں", close: "بند کریں", colour: "رنگ", name: "فہرست کا نام",
@@ -104,12 +109,12 @@ export function ListsScreen({ lang }: { lang: Lang }) {
       setLists(lists.filter((l) => l.id !== editing.id));
       if (place === editing.id) setPlace("all");
     } else {
-      setLists(lists.map((l) => (l.id !== editing.id ? l : editing.kind === "rename"
-        ? { ...l, name: draft.name.trim() || l.name } : { ...l, colour: LABEL_COLOURS[draft.colour] })));
+      setLists(lists.map((l) => (l.id !== editing.id ? l : { ...l, colour: LABEL_COLOURS[draft.colour] })));
     }
     setEditing(null);
   };
 
+  const fixedNames = [w.all, w.unread, w.important];
   const placeName = place === "all" ? w.all : place === "unread" ? w.unread : place === "important" ? w.important : byId(place)?.name ?? "";
   const editingList = editing ? byId(editing.id) : undefined;
   const removal = editingList ? deleteListWords(editingList.name, lang === "ur" ? w.del : undefined) : null;
@@ -170,14 +175,14 @@ export function ListsScreen({ lang }: { lang: Lang }) {
         return (
           <ContextMenu label={list.name} at={chipMenu.at} onClose={() => setChipMenu(null)}
             items={listChipMenuItems({
-              name: list.name, canMoveEarlier: i > 0, canMoveLater: i < lists.length - 1, words: lang === "ur" ? w.menu : undefined,
+              name: list.name, canMoveEarlier: i > 0, canMoveLater: i < lists.length - 1, rtl: lang === "ur", words: lang === "ur" ? w.menu : undefined,
               onRename: () => open("rename", list.id), onRecolour: () => open("recolour", list.id),
               onMoveEarlier: () => move(list.id, -1), onMoveLater: () => move(list.id, 1), onDelete: () => open("delete", list.id),
             })} />
         );
       })()}
 
-      <NewListDialog open={!!creating} onClose={() => setCreating(null)} existing={lists.map((l) => l.name)} usedColours={lists.map((l) => l.colour)}
+      <NewListDialog open={!!creating} onClose={() => setCreating(null)} existing={lists.map((l) => l.name)} reserved={fixedNames} usedColours={lists.map((l) => l.colour)}
         words={lang === "ur" ? w.dialog : undefined}
         onCreate={(name, colour) => {
           const id = `l${Date.now()}`;
@@ -187,11 +192,9 @@ export function ListsScreen({ lang }: { lang: Lang }) {
           setCreating(null);
         }} />
 
-      <Dialog open={editing?.kind === "rename"} title={w.rename} closeLabel={w.close} onClose={() => setEditing(null)}
-        actions={<><Button onClick={() => setEditing(null)}>{w.cancel}</Button><Button variant="primary" onClick={save} disabled={!draft.name.trim()}>{w.save}</Button></>}>
-        <TextField label={w.name} value={draft.name} maxLength={40} onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) save(); }} />
-      </Dialog>
+      <RenameListDialog open={editing?.kind === "rename"} name={editingList?.name ?? ""} existing={lists.map((l) => l.name)} reserved={fixedNames}
+        words={lang === "ur" ? w.renameWords : undefined} onClose={() => setEditing(null)}
+        onRename={(name) => { setLists(lists.map((l) => (l.id === editing?.id ? { ...l, name } : l))); setEditing(null); }} />
       <Dialog open={editing?.kind === "recolour"} title={w.recolour} closeLabel={w.close} onClose={() => setEditing(null)}
         actions={<><Button onClick={() => setEditing(null)}>{w.cancel}</Button><Button variant="primary" onClick={save}>{w.save}</Button></>}>
         <ColourPicker label={w.colour} hideLabel value={draft.colour} onChange={(colour) => setDraft({ ...draft, colour })}
