@@ -74,6 +74,18 @@ describe("dragging recordings onto the sidebar", () => {
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("2 recordings moved to the Inbox");
   });
 
+  it("DT-LIB-082 in the Table layout: a table row drags onto a pinned project the same way", async () => {
+    app();
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("radio", { name: "Table" }));
+    await act(flushAsync);
+    const tableRow = screen.getByRole("button", { name: "Follow-up" });
+    expect(tableRow.closest("table, [role=grid], [role=table]")).not.toBeNull();
+    await drag(tableRow, project());
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["b"], action: "move", clientId: "p1", label: null }]);
+    fireEvent.click(screen.getByRole("radio", { name: "List" }));
+  });
+
   it("Escape, or letting go away from a target, moves nothing", async () => {
     app();
     await act(flushAsync);

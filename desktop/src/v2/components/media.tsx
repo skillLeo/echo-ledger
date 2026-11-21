@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import { memo, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Button } from "./Button";
 import { BackIcon, ForwardIcon, PauseIcon, PlayIcon } from "./icons";
 
@@ -48,8 +48,44 @@ export function Player({
 
 export type Segment = { speaker: string; start: number; text: string };
 
-/** A transcript: who spoke, when, and what; the line being played is marked. */
-export function Transcript({ label, segments, activeIndex, lang, after, onPlayLine, playLabel = (s) => `Play from ${clock(s.start)}`, note, renderText, lineTitle }: {
+const defaultPlayLabel = (s: Segment) => `Play from ${clock(s.start)}`;
+
+/** One line of a transcript, drawn again only when its own parts change (a long transcript plays without redrawing). */
+const TranscriptLine = memo(function TranscriptLine({ segment: s, index: i, active, text, note, after, title, onPlayLine, playLabel }: {
+  segment: Segment;
+  index: number;
+  active: boolean;
+  text: ReactNode | undefined;
+  note: ReactNode;
+  after: ReactNode;
+  title: string | undefined;
+  onPlayLine?: (index: number) => void;
+  playLabel: (segment: Segment) => string;
+}) {
+  return (
+    <li className={`el-segment${active ? " el-segment--active" : ""}`} aria-current={active || undefined}>
+      <span className="el-segment__who">
+        <span className="el-segment__speaker" dir="auto">{s.speaker}</span>
+        {onPlayLine ? (
+          <button type="button" className="el-segment__time el-segment__play el-num" aria-label={`${playLabel(s)} · ${s.speaker}`} onClick={() => onPlayLine(i)}>{clock(s.start)}</button>
+        ) : <span className="el-segment__time el-num">{clock(s.start)}</span>}
+      </span>
+      <p className={`el-segment__text${title ? " el-segment__text--unsure" : ""}`} dir="auto" title={title}
+        onClick={onPlayLine ? () => { if (!window.getSelection()?.toString()) onPlayLine(i); } : undefined}>
+        {text ?? s.text}{note}
+        {/* The tooltip's words for screen readers, which don't read a title. */}
+        {title && <span className="el-visually-hidden"> ({title})</span>}
+      </p>
+      {after}
+    </li>
+  );
+});
+
+/**
+ * A transcript: who spoke, when, and what; the line being played is marked. Each line is drawn again only when what it
+ * shows changes, so `renderText`, `note`, `after` and `lineTitle` should hand back the same values for lines that did not.
+ */
+export function Transcript({ label, segments, activeIndex, lang, after, onPlayLine, playLabel = defaultPlayLabel, note, renderText, lineTitle }: {
   label: string;
   segments: Segment[];
   activeIndex?: number;
@@ -69,19 +105,8 @@ export function Transcript({ label, segments, activeIndex, lang, after, onPlayLi
   return (
     <ol className={`el-transcript${onPlayLine ? " el-transcript--play" : ""}`} aria-label={label} lang={lang}>
       {segments.map((s, i) => (
-        <li key={`${s.start}-${i}`} className={`el-segment${i === activeIndex ? " el-segment--active" : ""}`} aria-current={i === activeIndex || undefined}>
-          <span className="el-segment__who">
-            <span className="el-segment__speaker" dir="auto">{s.speaker}</span>
-            {onPlayLine ? (
-              <button type="button" className="el-segment__time el-segment__play el-num" aria-label={`${playLabel(s)} · ${s.speaker}`} onClick={() => onPlayLine(i)}>{clock(s.start)}</button>
-            ) : <span className="el-segment__time el-num">{clock(s.start)}</span>}
-          </span>
-          <p className={`el-segment__text${lineTitle?.(i) ? " el-segment__text--unsure" : ""}`} dir="auto" title={lineTitle?.(i)}
-            onClick={onPlayLine ? () => { if (!window.getSelection()?.toString()) onPlayLine(i); } : undefined}>
-            {renderText?.(i) ?? s.text}{note?.(i)}
-          </p>
-          {after?.(i)}
-        </li>
+        <TranscriptLine key={`${s.start}-${i}`} segment={s} index={i} active={i === activeIndex} text={renderText?.(i)} note={note?.(i) ?? null}
+          after={after?.(i) ?? null} title={lineTitle?.(i)} onPlayLine={onPlayLine} playLabel={playLabel} />
       ))}
     </ol>
   );

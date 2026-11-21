@@ -17,15 +17,6 @@ import { NO_AI_NOTES } from "../../lib/plan";
 import { BRIEF_FIELDS, budgetLine, workspaceBusy } from "../../views/main/ClientWorkspace";
 import { NotesSections } from "../../views/main/CallNotes";
 import { clientSummary } from "../../views/main/ClientAvatar";
-
-/** When the latest of these was recorded, by the instant itself (offsets differ from one device to another). */
-export function latestStart(items: readonly Pick<LibraryItem, "started_at">[]): string | undefined {
-  let best: string | undefined;
-  for (const { started_at: at } of items) {
-    if (at && !Number.isNaN(Date.parse(at)) && (best === undefined || Date.parse(at) > Date.parse(best))) best = at;
-  }
-  return best;
-}
 import { LockedChip, PlanBadge, useLocked } from "../../views/main/Upgrade";
 import { ProjectScreens } from "../../views/main/ScreenMoments";
 import type { Notify } from "../../lib/notice";
@@ -37,6 +28,15 @@ import { AskV2 } from "../ask/AskV2";
 import { RulesV2 } from "./Rules";
 import { RecordingsTab } from "./RecordingsTab";
 import { FilesTab, fileLine } from "./FilesTab";
+
+/** When the latest of these was recorded, by the instant itself (offsets differ from one device to another). */
+export function latestStart(items: readonly Pick<LibraryItem, "started_at">[]): string | undefined {
+  let best: string | undefined;
+  for (const { started_at: at } of items) {
+    if (at && !Number.isNaN(Date.parse(at)) && (best === undefined || Date.parse(at) > Date.parse(best))) best = at;
+  }
+  return best;
+}
 
 type Tab = "recordings" | "files" | "ask" | "memory" | "notes" | "screens";
 

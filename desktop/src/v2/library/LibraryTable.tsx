@@ -1,7 +1,7 @@
 // The Library as a table (classic's "Show as: Table", parity.csv DT-LIB-045..056): the columns people choose (kept on
 // this computer), sections as header rows, a row that opens or (selecting) ticks its recording, its own ⋮ and a
 // right-click, the same as the list's rows.
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from "react";
 import type { LibraryItem, ViewsSummary } from "../../lib/ipc";
 import { rowViewsLine } from "../../lib/progress";
 import type { ItemGroup } from "../../lib/libraryGroups";
@@ -79,7 +79,7 @@ export function columnsMenu(columns: readonly Column[], onChange: (c: Column[]) 
   }));
 }
 
-export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, rowActions, recovered, viewsOf }: {
+export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, onRowPointerDown, rowActions, recovered, viewsOf }: {
   /** A row's views as known last (the Library asks while they are written); its own otherwise. */
   viewsOf?: (item: LibraryItem) => ViewsSummary | null;
   /** Recordings recovered after a restart: their "Recovered" chip. */
@@ -92,6 +92,8 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
   picked: ReadonlySet<string>;
   onRow: (item: LibraryItem, e: MouseEvent<HTMLButtonElement>) => void;
   onRowMenu: (item: LibraryItem, e: MouseEvent<HTMLElement> | KeyboardEvent<HTMLButtonElement>) => void;
+  /** A press that may become a drag onto a project or the Inbox (lib/dragMove.ts), as a list row. */
+  onRowPointerDown?: (item: LibraryItem, e: PointerEvent<HTMLButtonElement>) => void;
   rowActions: (item: LibraryItem) => ReactNode;
 }) {
   const span = columns.length + 2;
@@ -125,7 +127,7 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
                   onContextMenu={(e) => { e.preventDefault(); onRowMenu(item, e); }}>
                   <td>
                     <button type="button" className="el-table__open" data-row-id={item.id} aria-pressed={selecting ? on : undefined}
-                      aria-label={selecting ? `Select ${name}` : name} onClick={(e) => onRow(item, e)}
+                      aria-label={selecting ? `Select ${name}` : name} onClick={(e) => onRow(item, e)} onPointerDown={onRowPointerDown ? (e) => onRowPointerDown(item, e) : undefined}
                       onKeyDown={(e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); onRowMenu(item, e); } }}>
                       {selecting ? <span className={`el-row__tick${on ? " el-row__tick--on" : ""}`} aria-hidden="true">{on && <Icon icon={Icons.CheckIcon} />}</span>
                         : <SourceAvatar item={item} size="sm" />}

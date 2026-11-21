@@ -887,7 +887,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             action={<Button onClick={clearAll}>{query && !filtersOn ? "Clear search" : filtersOn ? "Clear filters" : "Show all"}</Button>} />
         ) : layout === "table" ? (
           <LibraryTable viewsOf={rowViews.summaryFor} groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
-            onRow={rowClick} onRowMenu={rowMenu} recovered={recovered}
+            onRow={rowClick} onRowMenu={rowMenu} onRowPointerDown={rowDrag} recovered={recovered}
             rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
         ) : (
           <List label="Recordings">
