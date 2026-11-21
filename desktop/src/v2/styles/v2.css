@@ -563,6 +563,7 @@
   font-weight: var(--el-text-title-s-weight);
 }
 .el-avatar--sm { inline-size: var(--el-space-32); block-size: var(--el-space-32); font-size: var(--el-text-caption-size); }
+.el-avatar--img { inline-size: var(--el-space-32); block-size: var(--el-space-32); object-fit: cover; padding: 0; }
 
 .el-sidebar {
   display: flex; flex-direction: column; gap: var(--el-space-2);

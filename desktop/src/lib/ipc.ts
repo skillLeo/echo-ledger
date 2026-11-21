@@ -122,6 +122,8 @@ export interface AuthOptions {
   browserSignIn: boolean;
   /** Email codes are offered (since v1.6). */
   code: boolean;
+  /** What a new password needs (since 2.0.0-l); null from an older server. */
+  passwordRules?: { min: number; letters: boolean; numbers: boolean } | null;
 }
 
 /** "Email → Continue" (since v1.6): `older` is a server without the route (the v1.5 sign-in then). */
@@ -350,6 +352,15 @@ export interface Account {
   super_admin?: boolean;
   /** Every workspace of the person (v1.6 shell; empty when the server does not list them). */
   workspaces?: { id: unknown; name: string; role?: string | null; current?: boolean | null }[];
+  /** The person's picture (since 2.0.0-l): a signed link and the version it is kept by; null shows the initials. */
+  avatar_url?: string | null;
+  avatar_version?: number | null;
+  /** The account has a password (one made with Google may not); null from a server before 2.0.0-l. */
+  has_password?: boolean | null;
+  /** An email change waiting for its code, and until when. */
+  pending_email?: string | null;
+  pending_email_expires_at?: string | null;
+  passkeys_available?: boolean | null;
 }
 
 /** Signed updates from the server (since v1.5). */
@@ -1699,7 +1710,7 @@ export type AppEvent = keyof EventPayloads;
 
 /** The server's public pages the app opens in the browser (since v1.5). */
 /** The server's pages the apps open in the browser (v1.6: the console's admin panel, workspace and profile pages). */
-export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "app/workspace" | "app/profile";
+export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "app/workspace" | "app/profile" | "app/settings/security/passkeys";
 /** The words the core uses while the server holds this computer's work (error.rs: MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT). */
 export const MAINTENANCE_TEXT = "The server is in maintenance for a while. Your recordings wait on this computer and upload when it is back.";
 export const UPDATE_REQUIRED_TEXT = "This version of EchoLedger is no longer accepted by the server. Update it: your recordings wait on this computer and upload after the update.";
@@ -1780,6 +1791,16 @@ export const api = {
   signOutEverywhere: () => invoke<AppStatus>("account_sign_out_everywhere"),
   /** When the account will be deleted (in 7 days). */
   deleteAccount: (password: string | null, otp: string | null) => invoke<string | null>("account_delete", { password, otp }),
+  /** One account change of 2.0.0-l, answered whole (lib/account.ts `call`). */
+  accountCall: (action: string, body: Record<string, unknown> | null, id: string | null) => invoke<unknown>("account_call", { action, id, body }),
+  /** Change picture…: the picker, then the upload; null when the person cancels the picker. */
+  chooseAvatar: () => invoke<unknown>("account_avatar_choose"),
+  /** A person's picture as a data: URL, kept on this computer by its version; null shows the initials. */
+  avatarImage: (url: string | null, version: number) => invoke<string | null>("account_avatar_image", { url, version }),
+  /** Save the recovery codes as a text file; null when the person cancels. */
+  saveRecoveryCodes: (codes: string[], email: string) => invoke<string | null>("account_recovery_codes_save", { codes, email }),
+  /** Copy codes: on the clipboard, left out of clipboard history and managers, and taken off it after a minute. */
+  copyRecoveryCodes: (codes: string[]) => invoke<void>("account_recovery_codes_copy", { codes }),
   startExport: () => invoke<AccountExport>("account_export_start"),
   exportStatus: (id: string) => invoke<AccountExport>("account_export_status", { id }),
   openExport: (url: string) => invoke<void>("account_export_open", { url }),

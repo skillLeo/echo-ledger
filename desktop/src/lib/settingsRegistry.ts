@@ -272,6 +272,7 @@ export const SETTINGS: readonly SettingEntry[] = [
 
   // ---- Account ------------------------------------------------------------------------------------------------------
   { id: "profile", title: "Profile", page: null, root: "Account", kind: "page", requires: { account: true }, keywords: ["name", "email", "account", "me"], ru: ["naam", "mera account"], ur: ["پروفائل", "نام"] },
+  { id: "profile.picture", title: "Picture", page: "profile", kind: "action", requires: { account: true }, keywords: ["photo", "avatar", "profile picture", "change photo"], ru: ["tasveer", "photo"], ur: ["تصویر"] },
   { id: "profile.name", title: "Name", page: "profile", kind: "info", requires: { account: true }, keywords: ["change name"], ru: ["naam"], ur: ["نام"] },
   { id: "profile.email", title: "Email", page: "profile", kind: "info", requires: { account: true }, keywords: ["change email"], ru: ["email"], ur: ["ای میل"] },
   { id: "profile.workspace", title: "Workspace", page: "profile", kind: "info", requires: { account: true }, keywords: ["team", "role"], ru: ["team"], ur: ["ٹیم"] },
@@ -307,6 +308,7 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "security.two_step", title: "Two-step sign-in", page: "security", kind: "link", requires: { account: true },
     keywords: ["2fa", "two factor", "authenticator", "otp", "mfa", "2 step", "two step", "verification code"] },
   { id: "security.google", title: "Google sign-in", page: "security", kind: "info", requires: { account: true }, keywords: ["google", "gmail", "link google"], ru: ["google"] },
+  { id: "security.passkeys", title: "Passkeys", page: "security", section: "Passkeys", kind: "link", requires: { account: true }, keywords: ["passkey", "fingerprint", "face id", "webauthn"] },
   { id: "security.activity", title: "Sign-in activity", page: "security", kind: "page", requires: { account: true }, keywords: ["audit log", "recent activity", "history"] },
   { id: "security.signout_all", title: "Sign out everywhere", page: "security", kind: "action", requires: { account: true }, keywords: ["log out all devices", "logout everywhere"], ru: ["sab se logout"] },
 
