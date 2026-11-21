@@ -14,8 +14,8 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 /*
  * The classic console's four wide tables stay exactly as they are while the new frame is off: a recording's Share
  * links, My links, Devices and Request links, each with a row, compared with the HTML saved in tests/Feature/V2/golden/.
- * Since W-201 classic fits them to the page too (the row's actions in one ⋮ menu, the wide columns under Columns, the
- * hour on a second line); the saved HTML is that. A fixed person, device, project and two recordings at a fixed
+ * Since W-201 classic fits them to the page too (the row's actions in one ⋮ menu, the wide columns shown from 1280 px
+ * only, the hour on a second line, a device's app version under its platform); the saved HTML is that. A fixed person, device, project and two recordings at a fixed
  * time, with one share link and one request link. A change to classic on purpose: UPDATE_GOLDEN=1 php artisan test --filter=ClassicTablesGolden.
  */
 

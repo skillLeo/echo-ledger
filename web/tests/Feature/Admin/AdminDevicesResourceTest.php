@@ -57,7 +57,9 @@ it('lists each device with its type, platform, version, session count and last s
 
     $list = $this->panelComponent(ListDevices::class)
         ->assertCanSeeTableRecords([$phone, $desktop])
-        ->assertSee(['Pixel 9', 'Work laptop', 'Phone', 'Desktop', 'Android', '1.4.2', '5 minutes ago', 'never']);
+        ->assertSee(['Pixel 9', 'Work laptop', 'Phone', 'Desktop', 'Android', '1.4.2', '5 minutes ago', 'never'])
+        // W-201: App shows from 1280 px only, so below that the version is the platform's second line.
+        ->assertSeeHtml('<span class="xl:hidden">App 1.4.2</span>');
 
     $counts = $list->instance()->getTableRecords()->pluck('capture_sessions_count', 'name');
     expect($counts['Pixel 9'])->toBe(3)->and($counts['Work laptop'])->toBe(0);
