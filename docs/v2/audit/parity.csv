@@ -405,7 +405,7 @@ DT-LIB-119,desktop,Library,"Shared with me › ""Open"" (read-only)",Shared with
 DT-LIB-120,desktop,Library,"Shared with me › ""Save to my library""",Shared with me › Save to my library,"Shared › With me › Save to my library (row, ⋮, right-click and the read-only view)",done,"src/v2/shared/shared.test.tsx › ""Save to my library makes a copy, marks the row Saved and says where it went""; src/v2/shared/shared.test.tsx › ""Save to my library also works from the read-only view, and a project saves to your projects"""
 DT-LIB-121,desktop,Library,"Shared with me › ""Remove""",Shared with me › Remove,"Shared › With me › ⋮ or right-click › Remove (last, red); also in the read-only view's ⋮",done,"src/v2/shared/shared.test.tsx › ""Remove (last in the ⋮, red) drops the row; the right-click menu is the same"""
 DT-LIB-122,desktop,Library,Shared with me empty state and loading,Shared with me,"Shared › With me: loading skeleton, then Nothing sent to you yet",done,"src/v2/shared/shared.test.tsx › ""With me: loading skeleton, then the empty state"""
-DT-LIB-123,desktop,Library,Projects tree in the Library column (drop targets),Library column › Projects,None,missing,none
+DT-LIB-123,desktop,Library,Projects tree in the Library column (drop targets),Library column › Projects,"Every project as a tree under Projects in the sidebar (pinned first, subfolders under them), each a drop target",done,"src/v2/shell/projectTree.test.tsx › ""DT-LIB-123: pinned first, then by name, subfolders under their project; a project opens and is marked"""
 DT-LIB-124,desktop,Library,"Waiting queue line ""N calls waiting"" with ""Review"" / ""Hide""",Top of the list,"Library top: ""N calls waiting"" with Review / Hide (QueueV2)",done,"src/v2/library/queue.test.tsx › ""says how many wait; Review opens the list, Hide closes it"""
 DT-LIB-125,desktop,Library,"Waiting queue ""Keep all"" / ""Discard all""",Queue › Review,Review › Keep all / Discard all (one question),done,"src/v2/library/queue.test.tsx › ""Keep all keeps every one; Discard all asks once and discards nothing when cancelled"""
 DT-LIB-126,desktop,Library,"Waiting item ""Keep"" / ""Discard""",Queue › item,Review › each row Keep / Discard (asks),done,"src/v2/library/queue.test.tsx › ""Keep keeps one with pending_keep; Discard asks first"""
@@ -584,7 +584,7 @@ DT-NAV-012,desktop,Sidebar,Help & shortcuts button,Sidebar footer,Sidebar foot �
 DT-NAV-013,desktop,Sidebar,Settings,Sidebar footer › Settings,Sidebar foot › Settings,done,"src/v2/shell/shell.test.tsx › ""Library, Projects, Activity and Settings open today's pages; Live and Ask say where to go meanwhile"""
 DT-NAV-014,desktop,Sidebar,"Collapse sidebar (rail, ""["", auto in a narrow window)",Sidebar footer,Icons-only below 720 px only; no button or key,missing,none
 DT-NAV-015,desktop,Sidebar,Resize the sidebar (200–320 px),Sidebar edge,None,missing,none
-DT-NAV-016,desktop,Sidebar,Group open/closed remembered,Sidebar arrows,None,missing,none
+DT-NAV-016,desktop,Sidebar,Group open/closed remembered,Sidebar arrows,"A project's folders fold in the sidebar's tree, kept on this computer",done,"src/v2/shell/projectTree.test.tsx › ""DT-NAV-016: a project's folders fold and stay folded after a restart"""
 DT-NAV-017,desktop,Sidebar,Ctrl/⌘+K opens search,Keyboard,Ctrl/⌘+K opens the palette in the new design,done,"src/v2/shell/shell.test.tsx › ""the command palette in the new design: the sidebar's Search and Ctrl/⌘+K open it in the new look, with every row, the arrows, Enter and Esc"""
 DT-NAV-018,desktop,Sidebar,"""N"" starts or stops a voice note",Keyboard,Same handler,done,"src/views/main/MainApp.test.tsx › ""N starts a voice note, never while typing; Ctrl+K opens search"" (the same handler under the new design)"
 DT-NAV-019,desktop,Sidebar,"""?"" opens Help & shortcuts",Keyboard,Opens the classic sheet,partial,none
@@ -682,7 +682,7 @@ DT-SHR-007,desktop,Shared,Share dialog for a project,Project › Share,Project p
 DT-PRJ-001,desktop,Projects,"Projects list (tree, counts, last call; error; empty)",Sidebar › Projects,Classic list in the v2 frame,partial,none
 DT-PRJ-002,desktop,Projects,New project,Projects page,Classic page only,partial,none
 DT-PRJ-003,desktop,Projects,Request files,Projects page header,Classic page only,partial,none
-DT-PRJ-004,desktop,Projects,Projects column (drop targets),Projects page side column,None,missing,none
+DT-PRJ-004,desktop,Projects,Projects column (drop targets),Projects page side column,The sidebar's project tree takes dropped recordings on any project,done,"src/v2/shell/projectTree.test.tsx › ""DT-PRJ-004: a Library row dropped on any project in the tree moves there"""
 DT-PRJ-005,desktop,Project page,Breadcrumbs (Projects › parent › project),Project page,"Back button, one level",partial,"src/v2/workspace/workspace.test.tsx › ""maps every control today's page has, and nothing it doesn't"""
 DT-PRJ-006,desktop,Project page,Header summary (count and last call),Project page,"Header: ""N recordings · Last call <date>""",done,"src/v2/workspace/workspace.test.tsx › ""says how many recordings and when the last call was, as classic's"""
 DT-PRJ-007,desktop,Project page,Share,Project header,Share,done,"src/v2/workspace/workspace.test.tsx › ""maps every control today's page has, and nothing it doesn't"""
