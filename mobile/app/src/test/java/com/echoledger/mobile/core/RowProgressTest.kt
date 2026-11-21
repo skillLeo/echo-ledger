@@ -32,16 +32,36 @@ class RowProgressTest {
     }
 
     @Test
-    fun `improving shows the default view's lines done, and nothing once the views are ready`() {
+    fun `converting shows the default view's lines done, and nothing once the views are ready`() {
         val making = RowViewsDto("making", "roman", mapOf("roman" to ProgressDto(12, 20), "english" to ProgressDto(12, 20)))
         assertEquals(
-            RowProgress.Stage(RowProgress.Step.IMPROVING, 60, "Improving Roman Urdu… 60%"),
+            RowProgress.Stage(RowProgress.Step.IMPROVING, 60, "Converting to Roman Urdu… 60%"),
             RowProgress.of(item("completed", views = making))
         )
-        assertEquals("Improving English…", RowProgress.of(item("completed", views = RowViewsDto("making", "english")))!!.text)
+        assertEquals("Converting to English…", RowProgress.of(item("completed", views = RowViewsDto("making", "english")))!!.text)
         assertNull(RowProgress.of(item("completed", views = RowViewsDto("ready", "roman"))))
         assertNull(RowProgress.of(item("completed")))
         assertNull(RowProgress.of(item("failed")))
+    }
+
+    @Test
+    fun `a finished Urdu transcript is converting from the moment it is done, before the server starts its view`() {
+        assertEquals(
+            RowProgress.Stage(RowProgress.Step.IMPROVING, null, "Converting to Roman Urdu…"),
+            RowProgress.of(item("completed", views = RowViewsDto("none", "roman")))
+        )
+        // Nothing to convert to: the original words are the default.
+        assertNull(RowProgress.of(item("completed", views = RowViewsDto("none", "original"))))
+        // Still being transcribed: that comes first.
+        assertEquals(RowProgress.Step.TRANSCRIBING, RowProgress.of(item("processing", views = RowViewsDto("none", "roman")))!!.step)
+    }
+
+    @Test
+    fun `a view that could not be made says so with Try again`() {
+        assertEquals(
+            RowProgress.Stage(RowProgress.Step.VIEW_FAILED, null, "Couldn't convert to Roman Urdu · Try again"),
+            RowProgress.of(item("completed", views = RowViewsDto("failed", "roman")))
+        )
     }
 
     @Test
@@ -53,6 +73,6 @@ class RowProgressTest {
         )
         assertEquals("Uploading 60%", SharedNotes.status(local, null, null, upload = 3 to 5).text)
         val ready = item("completed", views = RowViewsDto("making", "roman", mapOf("roman" to ProgressDto(1, 4))))
-        assertEquals("Transcript ready · Improving Roman Urdu… 25%", SharedNotes.status(null, "s1", ready).text)
+        assertEquals("Transcript ready · Converting to Roman Urdu… 25%", SharedNotes.status(null, "s1", ready).text)
     }
 }

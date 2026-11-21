@@ -236,7 +236,8 @@ fun SessionScreen(
     var views by remember(item.id) { mutableStateOf<TranscriptViewsDto?>(null) }
     LaunchedEffect(showAs, views?.status, t?.id) {
         val id = t?.id ?: return@LaunchedEffect
-        if (showAs != ShowAs.ORIGINAL && views?.status == "making") {
+        // Asked again until it is written, then the lines swap to it.
+        while (showAs != ShowAs.ORIGINAL && views?.status == "making") {
             delay(ShowAs.POLL_MS)
             views = vm.transcriptViews(id) ?: views
         }
@@ -252,12 +253,8 @@ fun SessionScreen(
             if (state == null) showAs = ShowAs.ORIGINAL
         }
     }
-    // Open in the default view (console setting) when it is made for this recording.
-    LaunchedEffect(t?.id) {
-        val summary = t?.views ?: return@LaunchedEffect
-        val default = ShowAs.of(summary.default)
-        if (summary.status == "ready" && default != ShowAs.ORIGINAL && default.key in summary.available) chooseView(default)
-    }
+    // Open in the default view (Roman Urdu for Urdu): at once when it is made, else as soon as it is (U19).
+    LaunchedEffect(t?.id) { ShowAs.autoView(t?.views)?.let { chooseView(it) } }
     val shown = ShowAs.lines(segments, showAs, views)
     val appSettings by vm.settings.collectAsState()
     // Screen moments (since v1.5): what was on the shared screen, after the line it belongs to; asked only when there are some.
@@ -568,10 +565,39 @@ fun SessionScreen(
                 }
 
                 else -> {
-                    // Since v1.6 (P5.4): the transcript can be read while its views are written.
-                    if (steps != null && steps.onlyImproving) {
+                    // Since v1.6 (P5.4): the transcript can be read while its views are written; U19: until the default
+                    // view (Roman Urdu) is on screen.
+                    if (steps != null && steps.onlyImproving && shown == null) {
                         item(key = "improving") {
                             ImprovingBar(steps, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3))
+                        }
+                    }
+                    // U19: the default view could not be made: say so, with Try again (which asks for it again).
+                    val viewStage = com.echoledger.mobile.core.RowProgress.of(live)
+                    if (viewStage?.step == com.echoledger.mobile.core.RowProgress.Step.VIEW_FAILED && views?.status != "making" &&
+                        shown == null
+                    ) {
+                        item(key = "convert-failed") {
+                            InlineBanner(
+                                viewStage.text,
+                                Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3),
+                                kind = BannerKind.Warning,
+                                action = "Try again",
+                                onAction = { chooseView(ShowAs.of(live.transcript?.views?.default)) }
+                            )
+                        }
+                    } else if (views?.status == "making" && shown == null && showAs != ShowAs.ORIGINAL &&
+                        !(steps != null && steps.onlyImproving)
+                    ) {
+                        item(key = "converting") {
+                            Row(
+                                Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(Space.s2)
+                            ) {
+                                com.echoledger.mobile.ui.design.Spinner(14.dp)
+                                Text("Converting to ${showAs.label}…", style = type.bodyM, color = c.textMuted)
+                            }
                         }
                     }
                     // Since v1.5: made by a backup engine (the preferred one stayed busy or refused it): offer the best one.

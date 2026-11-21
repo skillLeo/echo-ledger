@@ -137,8 +137,9 @@
     <string name="v2_rec_left">تقریباً %1$s باقی</string>
     <string name="v2_rec_seconds">%1$d سیکنڈ</string>
     <string name="v2_rec_minutes">%1$d منٹ</string>
-    <string name="v2_rec_improving_view">%1$s بہتر ہو رہی ہے…</string>
-    <string name="v2_rec_improving_view_pct">%1$s بہتر ہو رہی ہے… %2$d%%</string>
+    <string name="v2_rec_improving_view">%1$s میں تبدیل ہو رہا ہے…</string>
+    <string name="v2_rec_improving_view_pct">%1$s میں تبدیل ہو رہا ہے… %2$d%%</string>
+    <string name="v2_rec_convert_failed">%1$s میں تبدیل نہیں ہو سکا · دوبارہ کوشش کریں</string>
     <string name="v2_rec_failed_line">ٹرانسکرپشن نہیں ہو سکی</string>
     <string name="v2_rec_notify">تیار ہونے پر مجھے بتائیں</string>
     <string name="v2_rec_notify_set">تیار ہونے پر آپ کو اطلاع ملے گی۔</string>

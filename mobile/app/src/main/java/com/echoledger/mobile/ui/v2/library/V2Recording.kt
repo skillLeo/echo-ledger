@@ -181,7 +181,7 @@ private fun V2RecordingPage(
     }
     fun copy(kind: CopyKind) {
         val t = page.transcript ?: return
-        val copied = RecordingCopy.text(kind, item, t.segments, page.shown, settings, page.screens, page.speakerNames)
+        val copied = RecordingCopy.text(kind, item, t.segments, page.shown, settings, page.screens, page.speakerNames, page.viewKey)
         copyToClipboard(context, "EchoLedger transcript", copied)
         say(
             res.getString(
@@ -445,12 +445,29 @@ fun speedLabel(speed: Float): String = java.math.BigDecimal(speed.toString()).st
 private fun transcriptTop(vm: MainViewModel, page: RecordingPage, scope: kotlinx.coroutines.CoroutineScope): (@Composable () -> Unit)? {
     val t = page.transcript ?: return null
     val steps = page.steps
-    val improving = steps != null && steps.onlyImproving
+    // Converting to Roman Urdu… while the default view is made, unless the page shows it already (U19).
+    val improving = steps != null && steps.onlyImproving && page.shown == null
+    // Making it failed: say so with Try again, unless the page asked again and it is being made.
+    val convertFailed =
+        com.echoledger.mobile.core.RowProgress.of(page.item)?.step == com.echoledger.mobile.core.RowProgress.Step.VIEW_FAILED &&
+            page.views?.status != "making" && page.shown == null
+    // Asked again from here: the page's own views say how far it is until the Library hears of it.
+    val retrying =
+        !improving && page.views?.status == "making" && page.shown == null && page.showAs != com.echoledger.mobile.ui.ShowAs.ORIGINAL
     val backup = t.backupEngine && t.kind == "final"
-    if (!improving && !backup && t.suggestions.isEmpty()) return null
+    if (!improving && !convertFailed && !retrying && !backup && t.suggestions.isEmpty()) return null
     return {
         Column(verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
             if (improving && steps != null) ImprovingLine(page.item, t, steps)
+            if (retrying) {
+                val own = page.views?.progress?.get(page.showAs.key)
+                ConvertingLine(page.showAs.key, own?.takeIf { it.total > 0 }?.let { (it.done * 100 / it.total).coerceIn(0, 100) })
+            }
+            if (convertFailed) {
+                ConvertFailedLine(page.item) {
+                    page.chooseView(com.echoledger.mobile.ui.ShowAs.of(page.item.transcript?.views?.default))
+                }
+            }
             if (backup) BackupBanner { vm.retranscribe(page.item.id, t.language) }
             if (t.suggestions.isNotEmpty()) {
                 SuggestedFixesCard(t.suggestions, t.segments, onPlay = { page.playFrom(it) }) { id, accept ->

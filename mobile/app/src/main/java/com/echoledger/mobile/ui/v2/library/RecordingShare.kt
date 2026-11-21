@@ -57,7 +57,9 @@ object RecordingCopy {
         shown: List<String?>?,
         settings: AppSettings,
         screens: List<ScreenDto>,
-        speakerNames: Map<String, String> = emptyMap()
+        speakerNames: Map<String, String> = emptyMap(),
+        /** The view on screen ("roman"…), null for the original words: Copy for AI's Language line names it. */
+        view: String? = null
     ): String {
         val body = TranscriptText.copied(
             segments,
@@ -69,18 +71,24 @@ object RecordingCopy {
             forAi = kind == CopyKind.ForAi,
             screens = screens
         )
-        return if (kind == CopyKind.ForAi) aiHeader(item, segments, speakerNames) + "\n\n" + body else body
+        return if (kind == CopyKind.ForAi) aiHeader(item, segments, speakerNames, view) + "\n\n" + body else body
     }
 
-    /** "Title: …", "Date: …", "People: …", "Language: …": only the lines the recording has. */
-    fun aiHeader(item: LibraryItem, segments: List<SegmentDto>, speakerNames: Map<String, String> = emptyMap()): String {
+    /** "Title: …", "Date: …", "People: …", "Language: …" (the view's when the text is in one): only the lines it has. */
+    fun aiHeader(
+        item: LibraryItem,
+        segments: List<SegmentDto>,
+        speakerNames: Map<String, String> = emptyMap(),
+        view: String? = null
+    ): String {
         val title = item.title?.takeIf { it.isNotBlank() }
         val date = item.startedAt?.let { runCatching { OffsetDateTime.parse(it) }.getOrNull() }
             ?.format(DateTimeFormatter.ofPattern("d MMM yyyy, h:mm a", Locale.ENGLISH))
         val people = segments.map { it.speaker }.distinct().map { label ->
             com.echoledger.mobile.ui.speakerName(speakerNames, label).let { if (it == "Me") "You" else it }
         }.ifEmpty { listOfNotNull("You", item.client?.name) }
-        val language = item.transcript?.finalLanguage?.let(Languages::label) ?: item.languageChip
+        val language = com.echoledger.mobile.ui.ShowAs.languageName(view)
+            ?: item.transcript?.finalLanguage?.let(Languages::label) ?: item.languageChip
         return listOfNotNull(
             title?.let { "Title: $it" },
             date?.let { "Date: $it" },

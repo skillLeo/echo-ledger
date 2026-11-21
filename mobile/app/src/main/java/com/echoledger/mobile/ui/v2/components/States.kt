@@ -1,6 +1,7 @@
 package com.echoledger.mobile.ui.v2.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -145,5 +148,25 @@ fun EchoBanner(text: String, kind: EchoBannerKind, modifier: Modifier = Modifier
             Text(text, style = EchoV2.type.meta, modifier = Modifier.weight(1f).padding(vertical = EchoTokens.Space.s8))
             if (actionLabel != null) EchoButton(actionLabel, onAction, kind = EchoButtonKind.Quiet)
         }
+    }
+}
+
+/**
+ * A small progress ring (16 dp: the accent's arc on a hairline track) beside words that say what is on its way
+ * ("Converting to Roman Urdu… 60%"). It never loops (v2 has no looping indicators): the arc shows [percent] and moves as
+ * the server's measure does; before there is one it shows a short arc. Screen readers hear the words beside it.
+ */
+@Composable
+fun EchoProgressRing(percent: Int?, modifier: Modifier = Modifier, size: Dp = EchoTokens.Icon.sm) {
+    val track = EchoV2.colors.borderDefault
+    val arc = EchoV2.colors.accent
+    Canvas(modifier.size(size).clearAndSetSemantics {}) {
+        val stroke = EchoTokens.Border.strong.toPx()
+        val inset = stroke / 2
+        val box = androidx.compose.ui.geometry.Size(this.size.width - stroke, this.size.height - stroke)
+        val at = androidx.compose.ui.geometry.Offset(inset, inset)
+        drawArc(track, 0f, 360f, useCenter = false, topLeft = at, size = box, style = Stroke(stroke))
+        val sweep = 360f * ((percent ?: 12).coerceIn(4, 100) / 100f)
+        drawArc(arc, -90f, sweep, useCenter = false, topLeft = at, size = box, style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }

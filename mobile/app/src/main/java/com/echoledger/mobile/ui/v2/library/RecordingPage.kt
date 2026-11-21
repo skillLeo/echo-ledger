@@ -174,16 +174,13 @@ fun rememberRecordingPage(vm: MainViewModel, item: LibraryItem, startAtMs: Long?
     // A view being written is asked for again until it is ready.
     LaunchedEffect(p.showAs, p.views?.status, p.transcript?.id) {
         val id = p.transcript?.id ?: return@LaunchedEffect
-        if (p.showAs != ShowAs.ORIGINAL && p.views?.status == "making") {
+        // Asked again until it is written, then the lines swap to it.
+        while (p.showAs != ShowAs.ORIGINAL && p.views?.status == "making") {
             delay(ShowAs.POLL_MS)
             p.views = vm.transcriptViews(id) ?: p.views
         }
     }
-    // Open in the default view (console setting) when it is made for this recording.
-    LaunchedEffect(p.transcript?.id) {
-        val summary = p.transcript?.views ?: return@LaunchedEffect
-        val default = ShowAs.of(summary.default)
-        if (summary.status == "ready" && default != ShowAs.ORIGINAL && default.key in summary.available) p.chooseView(default)
-    }
+    // Open in the default view (Roman Urdu for Urdu): at once when it is made, else as soon as it is (U19).
+    LaunchedEffect(p.transcript?.id) { ShowAs.autoView(p.transcript?.views)?.let { p.chooseView(it) } }
     return p
 }
