@@ -27,7 +27,6 @@ import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.share.WhatsAppShare
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.SendSheet
-import com.echoledger.mobile.ui.ShareSheet
 import com.echoledger.mobile.ui.v2.components.EchoBottomSheet
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
@@ -72,6 +71,15 @@ object RecordingCopy {
             screens = screens
         )
         return if (kind == CopyKind.ForAi) aiHeader(item, segments, speakerNames, view) + "\n\n" + body else body
+    }
+
+    /**
+     * Copy for AI of several recordings (Library's selection): the note once, then each recording's header and lines
+     * ([text] without its note), a rule between them.
+     */
+    fun forAiMany(parts: List<String>, settings: AppSettings): String {
+        val note = TranscriptText.note(if (settings.unsureStyle == "off") "brackets" else settings.unsureStyle)
+        return note + "\n\n" + parts.joinToString("\n\n---\n\n") { it.replaceFirst(note + "\n\n", "") }
     }
 
     /** "Title: …", "Date: …", "People: …", "Language: …" (the view's when the text is in one): only the lines it has. */
@@ -158,7 +166,7 @@ fun copiedWords(kind: CopyKind): String = stringResource(
 )
 
 /**
- * Share: the transcript's text to any app; Share link (who may open it, downloads, how long: classic's sheet); Send to a
+ * Share: the transcript's text to any app; Share link (who may open it, downloads, how long: [V2ShareLinkSheet]); Send to a
  * teammate (classic's sheet); and, once the transcript is ready, Send to WhatsApp (or WhatsApp Business): Text only,
  * Text and voice (when the recording has audio), or a Link that works for 7 days. The logic is classic's.
  */
@@ -177,7 +185,7 @@ fun RecordingShareSheet(
     var linkSheet by remember { mutableStateOf(false) }
     var sendSheet by remember { mutableStateOf(false) }
     if (linkSheet) {
-        ShareSheet(vm, sessionId = item.id, clientId = null, title = "this recording", onDismiss = onDismiss)
+        V2ShareLinkSheet(vm, sessionId = item.id, clientId = null, onDismiss = onDismiss)
         return
     }
     if (sendSheet) {
@@ -265,3 +273,32 @@ internal fun shareTranscript(context: Context, title: String, text: String) {
 
 /** A call's source in a sentence ("WhatsApp"), for "Back to WhatsApp". */
 fun sourceLabel(item: LibraryItem): String = item.sourceAppLabel ?: SourceApp.from(item.sourceApp).label
+
+/**
+ * Copy for AI from Library's selection: each recording with a finished transcript, in its default view once that is
+ * ready (Roman Urdu), with its screens; the note once. Puts it on the clipboard and says how many were copied (0: none
+ * of them had a transcript, nothing is copied).
+ */
+internal suspend fun copyForAi(vm: MainViewModel, context: Context, items: List<LibraryItem>, settings: AppSettings): Int {
+    val parts = items.mapNotNull { item ->
+        val summary = item.transcript ?: return@mapNotNull null
+        val id = summary.finalTranscriptId?.takeIf { summary.finalStatus == "completed" } ?: return@mapNotNull null
+        val transcript = vm.transcript(id)?.takeIf { it.segments.isNotEmpty() } ?: return@mapNotNull null
+        val view = summary.views?.takeIf { it.status == "ready" }?.default?.takeIf { it != "original" }
+        val shown = view?.let { key ->
+            vm.transcriptViews(id)?.let { v ->
+                when (key) {
+                    "roman" -> v.roman
+                    "urdu" -> v.urdu
+                    "english" -> v.english
+                    else -> null
+                }
+            }
+        }
+        val screens = if ((item.screenCount ?: 0) > 0) vm.screens(item.id) else emptyList()
+        RecordingCopy.text(CopyKind.ForAi, item, transcript.segments, shown, settings, screens, view = view.takeIf { shown != null })
+    }
+    if (parts.isEmpty()) return 0
+    copyToClipboard(context, "Transcript", RecordingCopy.forAiMany(parts, settings))
+    return parts.size
+}

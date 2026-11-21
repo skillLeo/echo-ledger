@@ -120,7 +120,8 @@ object SettingsReset {
                 dynamicColour = d.dynamicColour,
                 phoneFont = d.phoneFont,
                 textSize = d.textSize,
-                appLanguage = d.appLanguage
+                appLanguage = d.appLanguage,
+                librarySwipes = d.librarySwipes
             )
 
             "notifications" -> s.copy(

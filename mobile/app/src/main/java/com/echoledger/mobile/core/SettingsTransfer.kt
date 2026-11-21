@@ -99,6 +99,7 @@ object SettingsTransfer {
         "phoneFont",
         "textSize",
         "appLanguage",
+        "librarySwipes",
         "setupCardHidden",
         "recentSearches",
         // How this phone shows the Library, and what was opened on it (since v1.6).

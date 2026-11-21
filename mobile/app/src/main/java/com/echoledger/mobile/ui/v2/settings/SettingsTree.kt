@@ -79,7 +79,8 @@ object SettingsTree {
             "health check permissions microphone notifications battery overlay ready"
         ),
         SettingsIndex.Item("appearance.textsize", "appearance", "", "Text size", "font size bigger smaller large text zoom read"),
-        SettingsIndex.Item("appearance.language", "appearance", "", "App language", "language urdu english zaban")
+        SettingsIndex.Item("appearance.language", "appearance", "", "App language", "language urdu english zaban"),
+        SettingsIndex.Item("appearance.swipes", "appearance", "", "Swipe actions", "swipe gesture library pin delete row slide")
     )
 
     fun goalOf(page: String): SettingsGoal? = goals.firstOrNull { page in it.second }?.first
@@ -133,6 +134,7 @@ object SettingsTree {
         "appearance.font" to R.string.v2_set_item_appearance_font,
         "appearance.textsize" to R.string.v2_set_item_appearance_textsize,
         "appearance.language" to R.string.v2_set_item_appearance_language,
+        "appearance.swipes" to R.string.v2_set_swipes,
         "notifications.activity" to R.string.v2_set_item_notifications_activity,
         "notifications.quiet" to R.string.v2_set_item_notifications_quiet,
         "lock.app" to R.string.v2_set_item_lock_app,

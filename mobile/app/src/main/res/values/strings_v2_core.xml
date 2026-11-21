@@ -22,7 +22,7 @@
     <string name="v2_no_match_body">Try another word, or clear the filters.</string>
     <string name="v2_load_error_title">Couldn\'t load your recordings</string>
     <string name="v2_load_error_body">Check the internet connection. Recordings on this phone are safe.</string>
-    <string name="v2_offline_banner">Offline. Showing the last synced library.</string>
+    <string name="v2_offline_banner">You\'re offline. Showing the last synced library.</string>
     <string name="v2_try_again">Try again</string>
     <string name="v2_deleted">Recording deleted</string>
     <string name="v2_restored">Restored</string>

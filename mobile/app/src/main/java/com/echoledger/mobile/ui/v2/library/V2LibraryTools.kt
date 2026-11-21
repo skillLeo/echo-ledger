@@ -71,14 +71,21 @@ sealed interface SelectionAction {
     data class Keep(val on: Boolean) : SelectionAction
     data class Important(val on: Boolean) : SelectionAction
     data class Export(val format: String) : SelectionAction
+
+    /** Copy for AI: every selected recording's transcript for an AI chat, the note once. */
+    data object CopyForAi : SelectionAction
     data class Rename(val title: String) : SelectionAction
     data object Delete : SelectionAction
 }
+
+/** The selection's export formats: classic's (Organise.EXPORT_FORMATS, in its order), then a Web page (.html). */
+val SELECTION_EXPORTS: List<String> = Organise.EXPORT_FORMATS.map { it.first } + "html"
 
 /** The export formats, in classic's order (Organise.EXPORT_FORMATS), with their names. */
 @Composable
 fun exportName(format: String): String = stringResource(
     when (format) {
+        "html" -> R.string.v2_rec_export_html
         "docx" -> R.string.v2_lib_fmt_docx
         "txt" -> R.string.v2_lib_fmt_txt
         "md" -> R.string.v2_lib_fmt_md
@@ -174,11 +181,15 @@ fun SelectionBar(
                     if (exportOpen) {
                         // TODO-DS: a sub-menu in the shared menu component; until then Export ▸ swaps the menu for its formats.
                         SubMenuHeader(stringResource(R.string.v2_lib_export_header)) { exportOpen = false }
-                        Organise.EXPORT_FORMATS.forEach { (format, _) ->
+                        SELECTION_EXPORTS.forEach { format ->
                             MenuItem(EchoIcons.Export, exportName(format)) {
                                 close()
                                 onAction(SelectionAction.Export(format))
                             }
+                        }
+                        MenuItem(RecordingIcons.Copy, stringResource(R.string.v2_rec_copy_ai)) {
+                            close()
+                            onAction(SelectionAction.CopyForAi)
                         }
                         return@ProvidePageLook
                     }
@@ -263,12 +274,16 @@ fun SelectionBar(
         }
 
         "export" -> EchoBottomSheet(onDismiss = { sheet = null }, title = stringResource(R.string.v2_lib_export_as)) {
-            Organise.EXPORT_FORMATS.forEach { (format, _) ->
+            SELECTION_EXPORTS.forEach { format ->
                 EchoSettingRow(exportName(format), icon = EchoIcons.Export, onClick = {
                     sheet = null
                     onAction(SelectionAction.Export(format))
                 })
             }
+            EchoSettingRow(stringResource(R.string.v2_rec_copy_ai), icon = RecordingIcons.Copy, onClick = {
+                sheet = null
+                onAction(SelectionAction.CopyForAi)
+            })
         }
 
         "rename" -> SelectionRenameSheet(oneTitle.orEmpty(), { sheet = null }) {
