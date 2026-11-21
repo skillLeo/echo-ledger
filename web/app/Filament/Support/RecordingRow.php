@@ -35,13 +35,14 @@ final class RecordingRow
         return [
             'id' => (string) $session->id,
             'title' => $session->displayTitle(),
-            'app' => $session->source_app->getLabel(),
-            'device' => CaptureSessionsTable::deviceLabel($session),
+            // In the console's language ("واٹس ایپ · Galaxy S25"); a device's own name stays as it is.
+            'app' => __($session->source_app->getLabel()),
+            'device' => $session->device !== null ? CaptureSessionsTable::deviceLabel($session) : __(CaptureSessionsTable::deviceLabel($session)),
             'tile' => self::tile($session->source_app),
             'icon' => self::appIcon($session->source_app),
             'device_icon' => self::deviceIcon($session->source_device),
             'time' => self::shortTime($at, $zone),
-            'full_time' => $at->format('M j, Y · '.Shell::timeFormat()),
+            'full_time' => ConsoleDates::dateTime($at, Shell::timeFormat()),
             'iso' => $session->started_at->toIso8601ZuluString(),
             'meta' => implode(' · ', array_filter([CaptureSessionsTable::duration($session->duration_ms), $with, $labels[0] ?? null])),
             'status' => self::status($session),
@@ -50,15 +51,15 @@ final class RecordingRow
         ];
     }
 
-    /** Today's recordings show the time; older ones the day, with the year when it is not this year. */
+    /** Today's recordings show the time; older ones the day, with the year when it is not this year (ConsoleDates). */
     public static function shortTime(Carbon $at, string $zone): string
     {
         $now = Carbon::now($zone);
         if ($at->isSameDay($now)) {
-            return $at->format(Shell::timeFormat());
+            return ConsoleDates::time($at, Shell::timeFormat());
         }
 
-        return $at->year === $now->year ? $at->format('M j') : $at->format('M j, Y');
+        return $at->year === $now->year ? ConsoleDates::day($at) : ConsoleDates::date($at);
     }
 
     /**

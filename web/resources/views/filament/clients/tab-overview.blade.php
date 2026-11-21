@@ -97,7 +97,7 @@
                                     @if ($item->pinned)@svg('heroicon-s-star', ['aria-hidden' => 'true', 'style' => 'display: inline; width: 14px; height: 14px; color: var(--warning-fill); vertical-align: -1px'])<span class="el-sr">{{ __('Pinned:') }} </span>@endif
                                     {{ $item->text }}
                                     <span class="el-caption" style="display: block">
-                                        {{ $item->happened_on?->format('M j, Y') }}
+                                        {{ $item->happened_on !== null ? \App\Filament\Support\ConsoleDates::date($item->happened_on) : '' }}
                                         @if ($item->source_type === 'call' && $item->source_id)
                                             · <a class="el-note-at" href="{{ $recordingUrl($item->source_id, $item->at_ms) }}">{{ $item->at_ms !== null ? __('From the call at :time', ['time' => \App\Services\ClientAi\ClientWorkspace::clock($item->at_ms)]) : __('From the call') }}</a>
                                         @elseif ($item->source_type === 'user')
@@ -141,7 +141,7 @@
                 <article class="el-note-block" wire:key="note-{{ $note->id }}">
                     <p style="display: flex; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2)">
                         <a class="el-row-title" style="font-size: 15px" href="{{ $recordingUrl($note->capture_session_id) }}">{{ $session?->displayTitle() ?? __('Recording') }}</a>
-                        <time class="el-row-time">{{ $session?->started_at->copy()->setTimezone($zone)->format('M j') }}</time>
+                        <time class="el-row-time">{{ $session !== null ? \App\Filament\Support\ConsoleDates::day($session->started_at->copy()->setTimezone($zone)) : '' }}</time>
                     </p>
                     @if ($note->status === 'pending')
                         <span class="el-status el-status-brand el-status-spin">@svg('heroicon-o-arrow-path', ['aria-hidden' => 'true']) {{ __('Writing the notes') }}</span>

@@ -41,7 +41,7 @@
                 @livewire(filament()->getDatabaseNotificationsLivewireComponent(), ['lazy' => filament()->hasLazyLoadedDatabaseNotifications()])
             @endif
 
-            <button type="button" class="el-tb-icon el-tb-help" x-data x-on:click="$dispatch('el-help')" aria-label="Help &amp; shortcuts" title="Help &amp; shortcuts (?)">
+            <button type="button" class="el-tb-icon el-tb-help" x-data x-on:click="$dispatch('el-help')" aria-label="{{ __('Help & shortcuts') }}" title="{{ __('Help & shortcuts') }} (?)">
                 @svg('heroicon-o-question-mark-circle', ['aria-hidden' => 'true'])
             </button>
 

@@ -16,9 +16,9 @@
     $canMove = ConsoleAccess::full() && ! ConsoleAccess::readOnly();
     $canCreate = ClientResource::canAccess() && ClientResource::canCreate() && ! ConsoleAccess::readOnly();
 @endphp
-<aside class="el-col" aria-label="{{ $places !== [] ? 'Library places and projects' : 'Projects' }}">
+<aside class="el-col" aria-label="{{ $places !== [] ? __('Library places and projects') : __('Projects') }}">
     @if ($places !== [])
-        <ul class="el-col-list" aria-label="Library">
+        <ul class="el-col-list" aria-label="{{ __('Library') }}">
             @foreach ($places as $p)
                 @php($on = $active === $p['key'])
                 <li @if ($canMove && $p['drop']) data-el-drop="{{ $p['drop'] }}" @endif>
@@ -47,17 +47,17 @@
 
     @if (ClientResource::canAccess())
         <div class="el-col-head">
-            <p class="el-col-heading">Projects</p>
+            <p class="el-col-heading">{{ __('Projects') }}</p>
             @if ($canCreate)
-                <a href="{{ ClientResource::getUrl('create') }}" class="el-col-add" title="New project" aria-label="New project">
+                <a href="{{ ClientResource::getUrl('create') }}" class="el-col-add" title="{{ __('New project') }}" aria-label="{{ __('New project') }}">
                     @svg('heroicon-o-plus', ['aria-hidden' => 'true'])
                 </a>
             @endif
         </div>
         @if ($projects === [])
-            <p class="el-col-empty">No projects yet.</p>
+            <p class="el-col-empty">{{ __('No projects yet.') }}</p>
         @else
-            <ul class="el-col-list" aria-label="Projects">
+            <ul class="el-col-list" aria-label="{{ __('Projects') }}">
                 @foreach ($projects as $project)
                     @php($on = $currentProject === $project['id'])
                     <li @if ($canMove) data-el-drop="project:{{ $project['id'] }}" @endif style="--depth: {{ $project['depth'] }}">
@@ -73,10 +73,10 @@
             </ul>
         @endif
         @if ($canCreate)
-            <a href="{{ ClientResource::getUrl('create') }}" class="el-col-new">@svg('heroicon-o-plus', ['aria-hidden' => 'true']) New project</a>
+            <a href="{{ ClientResource::getUrl('create') }}" class="el-col-new">@svg('heroicon-o-plus', ['aria-hidden' => 'true']) {{ __('New project') }}</a>
         @endif
         @if ($canMove && $places !== [])
-            <p class="el-col-hint">Drag recordings onto the Inbox or a project to move them.</p>
+            <p class="el-col-hint">{{ __('Drag recordings onto the Inbox or a project to move them.') }}</p>
         @endif
     @endif
 </aside>
