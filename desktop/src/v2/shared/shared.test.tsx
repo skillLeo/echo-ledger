@@ -166,6 +166,11 @@ describe("the v2 Shared page", () => {
     expect(within(transcript).getByText("Hello, this is Sam.")).toBeInTheDocument();
     // Nothing that changes it: no editing, no Share, no Rename.
     expect(screen.queryByRole("button", { name: /^(Edit|Share|Rename)$/ })).toBeNull();
+    // DT-REC-038: none of the recording page's editing tools, its ⋮, or a title that renames.
+    for (const tool of ["Edit text", "Find and replace", "Speakers", "History", "Recording actions", "Send to WhatsApp…", "Notify me when ready"]) {
+      expect(screen.queryByRole("button", { name: tool }), tool).toBeNull();
+    }
+    expect(within(screen.getByRole("heading", { level: 1, name: "Call a" })).queryByRole("button")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Shared" }));
     expect(screen.getByRole("list", { name: "Shared with me" })).toBeInTheDocument();
   });

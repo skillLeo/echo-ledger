@@ -1,5 +1,6 @@
 import { memo, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Button } from "./Button";
+import { Avatar } from "./layout";
 import { BackIcon, ForwardIcon, PauseIcon, PlayIcon } from "./icons";
 
 /** 1104 → "18:24", 4000 → "1:06:40": durations read left-to-right in every language. */
@@ -49,10 +50,14 @@ export function Player({
 export type Segment = { speaker: string; start: number; text: string };
 
 const defaultPlayLabel = (s: Segment) => `Play from ${clock(s.start)}`;
+/** A speaker's initial for the avatar at the start of their turn. */
+export const speakerInitial = (name: string): string => [...name.trim()][0]?.toUpperCase() ?? "?";
 
 /** One line of a transcript, drawn again only when its own parts change (a long transcript plays without redrawing). */
-const TranscriptLine = memo(function TranscriptLine({ segment: s, index: i, active, text, note, after, title, onPlayLine, playLabel }: {
+const TranscriptLine = memo(function TranscriptLine({ segment: s, index: i, active, text, note, after, title, onPlayLine, playLabel, turn }: {
   segment: Segment;
+  /** Turns grouped: "start" shows the avatar and name, "cont" keeps the name for screen readers only. */
+  turn?: "start" | "cont";
   index: number;
   active: boolean;
   text: ReactNode | undefined;
@@ -63,9 +68,14 @@ const TranscriptLine = memo(function TranscriptLine({ segment: s, index: i, acti
   playLabel: (segment: Segment) => string;
 }) {
   return (
-    <li className={`el-segment${active ? " el-segment--active" : ""}`} aria-current={active || undefined}>
+    <li className={`el-segment${active ? " el-segment--active" : ""}${turn ? ` el-segment--${turn}` : ""}`} aria-current={active || undefined}>
       <span className="el-segment__who">
-        <span className="el-segment__speaker" dir="auto">{s.speaker}</span>
+        {turn === "start" ? (
+          <span className="el-segment__name">
+            <Avatar initials={speakerInitial(s.speaker)} size="sm" />
+            <span className="el-segment__speaker" dir="auto">{s.speaker}</span>
+          </span>
+        ) : <span className={turn === "cont" ? "el-segment__speaker el-visually-hidden" : "el-segment__speaker"} dir="auto">{s.speaker}</span>}
         {onPlayLine ? (
           <button type="button" className="el-segment__time el-segment__play el-num" aria-label={`${playLabel(s)} · ${s.speaker}`} onClick={() => onPlayLine(i)}>{clock(s.start)}</button>
         ) : <span className="el-segment__time el-num">{clock(s.start)}</span>}
@@ -85,8 +95,10 @@ const TranscriptLine = memo(function TranscriptLine({ segment: s, index: i, acti
  * A transcript: who spoke, when, and what; the line being played is marked. Each line is drawn again only when what it
  * shows changes, so `renderText`, `note`, `after` and `lineTitle` should hand back the same values for lines that did not.
  */
-export function Transcript({ label, segments, activeIndex, lang, after, onPlayLine, playLabel = defaultPlayLabel, note, renderText, lineTitle }: {
+export function Transcript({ label, segments, activeIndex, lang, after, onPlayLine, playLabel = defaultPlayLabel, note, renderText, lineTitle, grouped = false }: {
   label: string;
+  /** Lines of one speaker in a row read as one turn: the avatar and name once, at its start (classic's speaker blocks). */
+  grouped?: boolean;
   segments: Segment[];
   activeIndex?: number;
   lang?: string;
@@ -106,7 +118,8 @@ export function Transcript({ label, segments, activeIndex, lang, after, onPlayLi
     <ol className={`el-transcript${onPlayLine ? " el-transcript--play" : ""}`} aria-label={label} lang={lang}>
       {segments.map((s, i) => (
         <TranscriptLine key={`${s.start}-${i}`} segment={s} index={i} active={i === activeIndex} text={renderText?.(i)} note={note?.(i) ?? null}
-          after={after?.(i) ?? null} title={lineTitle?.(i)} onPlayLine={onPlayLine} playLabel={playLabel} />
+          after={after?.(i) ?? null} title={lineTitle?.(i)} onPlayLine={onPlayLine} playLabel={playLabel}
+          turn={grouped ? (i > 0 && segments[i - 1].speaker === s.speaker ? "cont" : "start") : undefined} />
       ))}
     </ol>
   );

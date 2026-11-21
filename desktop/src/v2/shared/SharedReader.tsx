@@ -375,7 +375,7 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
             {findOpen && <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, findCurrent)}
               onStep={(d) => matches.length && setFindAt((findCurrent + d + matches.length) % matches.length)} onClose={() => { setFindOpen(false); setFindQuery(""); }} />}
             <Card>
-              <Transcript label="Transcript" segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={url ? playFrom : undefined}
+              <Transcript label="Transcript" grouped segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={url ? playFrom : undefined}
                 lang={showAs === "urdu" ? "ur" : showAs === "original" ? normalizeLanguage(tDetail?.language) ?? undefined : undefined}
                 note={(i) => {
                   if (viewText(i) !== null) return views?.kept?.[showAs as TranscriptView]?.includes(i) ? <span className="el-segment__note">· original words</span> : null;
