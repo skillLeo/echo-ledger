@@ -100,6 +100,7 @@ echo "== ssh-lockdown.sh"
 inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/ssh-lockdown.sh --admin elops' >/tmp/el-lock-1.log 2>&1
 expect "step 1 lets the tester's address through fail2ban while testing, in its running state only" \
   'fail2ban-client get sshd ignoreip | grep -q 203.0.113.5 && ! grep -q 203.0.113.5 /etc/fail2ban/jail.d/echoledger-sshd.conf'
+expect "for two hours at most, and remembers which address" 'systemctl list-timers --all | grep -q echoledger-f2b-unexempt && grep -qx 203.0.113.5 /run/echoledger-f2b-tester'
 expect "step 1 makes elops with root's key and sudo, and changes no SSH setting" \
   'id elops && grep -q TestKeyOnly /home/elops/.ssh/authorized_keys && sudo -u elops sudo -n true && [ ! -f /etc/ssh/sshd_config.d/00-echoledger.conf ]'
 expect "the admin account has no password" '[ "$(passwd -S elops | cut -d" " -f2)" = L ] || [ "$(passwd -S elops | cut -d" " -f2)" = NP ]'
@@ -109,6 +110,8 @@ inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp
 inside 'rm -f /etc/sudoers.d/99-test-deny'
 [ "$code" = 3 ] && grep -q "cannot use sudo" /tmp/el-lock-0.log && ok "step 2 stops before any SSH change when the admin cannot sudo" || no "step 2 went on without the admin's sudo (exit $code)"
 expect "and wrote nothing" '[ ! -f /etc/ssh/sshd_config.d/00-echoledger.conf ]'
+expect "a step 2 that stops early still takes the tester's exemption back (from the file, not the session)" '! fail2ban-client get sshd ignoreip | grep -q 203.0.113.5 && [ ! -f /run/echoledger-f2b-tester ] && ! systemctl list-timers --all | grep -q echoledger-f2b-unexempt'
+inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/ssh-lockdown.sh --admin elops' >/dev/null 2>&1
 inside 'touch /etc/ssh/sshd_config.d/00-echoledger.conf.prev'
 inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/dev/null 2>&1; code=$?
 [ "$code" = 3 ] && ok "a stale .prev from a run stopped half way stops step 2" || no "a stale .prev went unnoticed (exit $code)"

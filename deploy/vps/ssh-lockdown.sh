@@ -51,15 +51,29 @@ if [ "$(cat "$sudoers" 2>/dev/null)" != "$want" ]; then
 fi
 
 # While the key sign-in is being tested, the address this runs from is not banned for a mistyped key (which would cut
-# this very session): fail2ban's running state only, never its files, and taken back at the end of step 2. A restart
-# of fail2ban forgets it too.
+# this very session): in fail2ban's running state only, never its files. It ends at the first of: step 2 (whatever
+# way it ends), two hours, a fail2ban restart.
 conn=${SSH_CONNECTION:-}
 tester=${conn%% *}
 [[ "$conn" != "" && "$tester" =~ ^[0-9a-fA-F:.]+$ ]] || tester=""
+exempted=/run/echoledger-f2b-tester
+unexempt() {
+  local ip
+  ip=$(cat "$exempted" 2>/dev/null || true)
+  [ -n "$ip" ] && fail2ban-client set sshd delignoreip "$ip" >/dev/null 2>&1
+  rm -f "$exempted"
+  systemctl stop echoledger-f2b-unexempt.timer >/dev/null 2>&1 || true
+  return 0
+}
 
 if [ "$tested" = 0 ]; then
   if [ -n "$tester" ] && fail2ban-client status sshd >/dev/null 2>&1; then
-    fail2ban-client set sshd addignoreip "$tester" >/dev/null && echo "  $tester is not banned while you test (until step 2 or a fail2ban restart)"
+    unexempt   # an address left by an earlier step 1
+    fail2ban-client set sshd addignoreip "$tester" >/dev/null
+    (umask 077; echo "$tester" >"$exempted")
+    systemd-run --quiet --unit=echoledger-f2b-unexempt --on-active=2h \
+      /bin/sh -c "fail2ban-client set sshd delignoreip '$tester'; rm -f '$exempted'" >/dev/null 2>&1 || true
+    echo "  $tester is not banned while you test: until step 2 ends, two hours pass, or fail2ban restarts"
   fi
   cat <<EOF
 
@@ -71,6 +85,8 @@ EOF
   exit 0
 fi
 
+# Step 2 takes the tester's exemption back whichever way it ends: success, a refusal, a failure or a signal.
+trap unexempt EXIT
 [ -s "$keys" ] || { echo "$admin has no authorized keys: stopping." >&2; exit 3; }
 # Without root sign-in, the admin's sudo is the only way to run anything as root: prove it before changing SSH.
 su -s /bin/sh "$admin" -c 'sudo -n true' >/dev/null 2>&1 || { echo "$admin cannot use sudo without a password: stopping before any SSH change." >&2; exit 3; }
@@ -116,9 +132,6 @@ if ! { systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null; };
 fi
 trap - ERR INT TERM HUP
 rm -f "$conf.prev"
-if [ -n "$tester" ] && fail2ban-client status sshd >/dev/null 2>&1; then
-  fail2ban-client set sshd delignoreip "$tester" >/dev/null 2>&1 || true
-fi
 echo "  SSH: keys only, root sign-in off. Open sessions are untouched."
 echo "  Check from the Mac, in a new terminal (keep this one open):"
 echo "    ssh -o IdentitiesOnly=yes -i <key> $admin@<vps> 'sudo -n true && echo OK'   must print OK"
