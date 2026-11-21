@@ -1,6 +1,7 @@
 // What the v2 Library shows of the core's recordings (api.library(), the same list today's Library uses): the saved
 // views, the WhatsApp-style row and the day groups. Pure functions, so the rules are tested without a window.
-import type { BinItem, LibraryItem } from "../../lib/ipc";
+import type { BinItem, LibraryItem, ViewsSummary } from "../../lib/ipc";
+import { rowViewsLine } from "../../lib/progress";
 import { TRASH_KEEP_HOURS_FALLBACK, hoursWords } from "../../lib/trash";
 import { inSmartView } from "../../lib/organise";
 import { dayGroup, itemState, recordingName, searchItems, sortItems, type ItemState } from "../../lib/library";
@@ -73,23 +74,30 @@ export type RowModel = {
   app: string;
   /** Its screen moments, for the screens mark (0: none, or a server without them). */
   screens: number;
+  /** Its default view (Roman Urdu for an Urdu call) is being written, with a spinner, or could not be (U19). */
+  converting: "making" | "failed" | null;
 };
 
 /** A recording as a WhatsApp-style row: who or what, the first words, when and how long. */
-export function rowModel(item: LibraryItem, now: Date = new Date()): RowModel {
+export function rowModel(item: LibraryItem, now: Date = new Date(), views: ViewsSummary | null | undefined = item.transcript?.views): RowModel {
   const state = itemState(item);
   // Processing covers both a transcript under way and none asked for yet: only the second is "Untranscribed".
   const waiting = state === "processing" && !item.transcript?.final_status;
   const app = item.source_app ?? (item.source_device === "phone" ? "phone_call" : "other");
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
   const preview = item.transcript?.preview?.trim() || null;
-  const meta = state === "ready" ? (preview ?? source ?? "") : waiting ? (source ?? "") : [source, STATE_WORDS[state]].filter(Boolean).join(" · ");
+  // A ready transcript whose default view is still written says "Converting to Roman Urdu… 60%" in place of its first
+  // words (they come in Urdu script until then); one that could not be written says so before them.
+  const converting = state === "ready" ? rowViewsLine(views) : null;
+  const meta = converting?.state === "making" ? converting.text
+    : state === "ready" ? [converting?.text, preview ?? source ?? ""].filter(Boolean).join(" · ")
+      : waiting ? (source ?? "") : [source, STATE_WORDS[state]].filter(Boolean).join(" · ");
   const badge = state === "failed" ? { tone: "danger" as const, text: "Failed" }
     : state === "no_audio" ? { tone: "neutral" as const, text: "No audio" }
       : waiting ? { tone: "warning" as const, text: "Untranscribed" } : null;
   const at = item.started_at ? new Date(item.started_at) : null;
   const when = !at || Number.isNaN(at.getTime()) ? "" : sameDay(item.started_at, now) ? formatTime(at) : rowDate(item.started_at, now);
-  return { title: recordingName(item.title), meta, badge, when, duration: formatDuration(item.duration_ms), app, screens: item.screen_count ?? 0 };
+  return { title: recordingName(item.title), meta, badge, when, duration: formatDuration(item.duration_ms), app, screens: item.screen_count ?? 0, converting: converting?.state ?? null };
 }
 
 /** The server's default for how long a deleted recording is kept (lib/trash.ts has the fallback). */

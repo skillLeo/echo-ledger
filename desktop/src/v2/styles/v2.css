@@ -614,6 +614,17 @@
 /* The recording page's tools: Show as above the transcript, the action row under the player. */
 .el-recording__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
 .el-recording__viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-12); margin-block-end: var(--el-space-8); }
+/* "Converting to Roman Urdu… 60%" over the transcript and on a row while the default view is written (U19): a small
+   ring that turns, still with reduced motion; "Couldn't convert" with Try again when it could not be written. */
+.el-converting { display: inline-flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-converting--failed { color: var(--el-role-text-secondary); }
+.el-spinner {
+  flex: none; inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-full);
+  border: var(--el-space-2) solid var(--el-role-border-default); border-block-start-color: var(--el-role-accent-default);
+  animation: el-spin calc(var(--el-motion-slow) * 3) linear infinite;
+}
+@keyframes el-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .el-spinner { animation: none; } }
 .el-recording__toggles { display: flex; flex-wrap: wrap; gap: var(--el-space-16); padding: 0 var(--el-space-16) var(--el-space-12); }
 :lang(ur) .el-segment__text { font-size: var(--el-text-urdu-body-size); line-height: var(--el-text-urdu-body-line); }
 

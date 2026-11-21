@@ -984,6 +984,10 @@ audio.player { display: none; }
 .improving-track { height: 3px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
 .improving-track > div { height: 100%; background: var(--accent); border-radius: inherit; transform-origin: left; transition: transform var(--motion-base) var(--ease-out); }
 .improving-track > div.indeterminate { transform: scaleX(0.3); }
+.converting-line { display: inline-flex; align-items: center; gap: var(--space-1); }
+.converting-line .spinner { width: 12px; height: 12px; }
+.convert-failed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; }
+.convert-failed > .small, .item-sub .convert-note { display: inline-flex; align-items: center; gap: var(--space-1); }
 .activity-row.progress-row { display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-3); }
 
 /* An automatic title (Phase 1C): a quiet note beside it. */

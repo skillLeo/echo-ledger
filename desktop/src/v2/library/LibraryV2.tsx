@@ -23,6 +23,7 @@ import {
 import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { recordingName, searchItems, type SortKey } from "../../lib/library";
 import { RecordingPage } from "./RecordingPage";
+import { useRowViews } from "../../lib/rowViews";
 import { SourceAvatar } from "./SourceAvatar";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
 import { QueueV2 } from "./QueueV2";
@@ -34,7 +35,8 @@ import {
 } from "./organise";
 
 /** What the recording page adds to the one menu: its language item, its view-aware Export ▸, Save audio. */
-export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void };
+/** The recording page's own parts of the menu; `ai` copies for AI in the view on screen (a row copies in its default view). */
+export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void; ai?: () => void };
 
 type Organise =
   | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null }
@@ -144,6 +146,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
   }, []);
 
+  // The rows' "Converting to Roman Urdu… 60%" (U19): asked about while written; once one is ready or failed the
+  // Library syncs, for the title the server may have written in Roman Urdu meanwhile.
+  const quietSync = useCallback(() => {
+    api.refreshLibrary().then(setItems).catch(() => undefined);
+  }, []);
+  const rowViews = useRowViews(items, quietSync);
   useEffect(() => {
     void load().then(() => api.refreshLibrary().then(setItems).catch(() => undefined));
     const un = listen("library:updated", () => void load());
@@ -356,7 +364,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     for (const item of own.organise ?? []) add(item.label, { group: "Organise", ...item });
     add("export", own.export ?? exportMenu((format) => void exportRecordings(ids, format, say)));
     for (const item of own.export_more ?? []) add(item.label, { group: "Export", ...item });
-    add("ai", { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Export", onPick: () => void copyForAiToClipboard(chosen, say) });
+    add("ai", { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Export", onPick: own.ai ?? (() => void copyForAiToClipboard(chosen, say)) });
     if (one) add("whatsapp", { label: "Send to WhatsApp…", icon: Icons.SendIcon, group: "Export", onPick: own.whatsapp ?? (() => setOrganise({ kind: "whatsapp", item: one })) });
     add("delete", { label: ids.length === 1 ? "Delete" : `Delete ${ids.length}`, icon: Icons.TrashIcon, group: "Danger", danger: true, shortcut: "Del", onPick: () => deleteOrAsk(ids) });
     return list.map(({ key: _key, ...item }) => item);
@@ -535,7 +543,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
-      menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} />
+      menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
   // the scrim closes it. The list opens it as its own page.
@@ -742,7 +750,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
               : view === "today" ? "Today's calls and meetings appear here as they are recorded." : view === "untranscribed" ? "Recordings without a transcript appear here." : "Recordings appear here when they fit this view."}
             action={<Button onClick={clearAll}>{query && !filtersOn ? "Clear search" : filtersOn ? "Clear filters" : "Show all"}</Button>} />
         ) : layout === "table" ? (
-          <LibraryTable groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
+          <LibraryTable viewsOf={rowViews.summaryFor} groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
             onRow={rowClick} onRowMenu={rowMenu} recovered={recovered}
             rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
         ) : (
@@ -758,9 +766,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                   } : undefined} />
               ) : null,
               ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
-                const r = rowModel(item);
+                const r = rowModel(item, undefined, rowViews.summaryFor(item));
                 return (
-                  <ListRow key={item.id} leading={<SourceAvatar item={item} />} strong title={r.title} meta={r.meta}
+                  <ListRow key={item.id} leading={<SourceAvatar item={item} />} strong title={r.title}
+                    meta={r.converting === "making" ? <span className="el-converting" data-testid="row-converting"><span className="el-spinner" aria-hidden="true" />{r.meta}</span> : r.meta}
                     badge={r.badge || recovered.has(item.id) ? <>
                       {r.badge && <Badge tone={r.badge.tone}>{r.badge.text}</Badge>}
                       {recovered.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}

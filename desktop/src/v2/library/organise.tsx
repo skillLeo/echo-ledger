@@ -3,7 +3,8 @@
 // dialogs behind Move, Label, Rename and Transcribe. Selection mode, the row ⋮, the right-click menu and the recording
 // page all build from here, so an action is in the same place everywhere (PLAN_V2_PARITY 3, 4 and 7).
 import { useEffect, useId, useRef, useState } from "react";
-import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type ExportFormat, type MeetingPackFormat, type TranscribeEstimate, type TranscriptionLanguage } from "../../lib/ipc";
+import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type ExportFormat, type MeetingPackFormat, type TranscribeEstimate, type TranscriptDetail, type TranscriptionLanguage, type TranscriptView } from "../../lib/ipc";
+import { defaultViewOf } from "../../lib/progress";
 import { englishOnlyRisk, languageLabel, MAIN_LANGUAGES, menuLabel, MORE_LANGUAGES } from "../../lib/languages";
 import { transcriptText, copiedTranscript, DEFAULT_UNSURE, formatDuration, formatTime, sentenceDate, sourceAppLabel } from "../../lib/format";
 import { speakerName } from "../../lib/player";
@@ -66,43 +67,68 @@ export async function exportRecordings(ids: readonly string[], format: BulkExpor
   }
 }
 
-/** A recording's transcript lines with the speakers' names, or null when it has none yet. */
-export async function recordingLines(item: LibraryItem): Promise<{ speaker: string; start_ms: number; text: string; words?: { text: string; confidence?: number | null }[] }[] | null> {
+export type CopyLine = { speaker: string; start_ms: number; text: string; words?: { text: string; confidence?: number | null }[] };
+
+/**
+ * The view a copy reads when none is on screen (a row, several picked ones): the transcript's default view once it is
+ * written (Roman Urdu for an Urdu call), else none, the original words. Its lines are aligned with the segments; a
+ * missing line reads as that line's own words.
+ */
+export async function defaultViewLines(transcript: Pick<TranscriptDetail, "id" | "kind" | "views">): Promise<{ view: TranscriptView; lines: readonly (string | null)[] } | null> {
+  const view = defaultViewOf(transcript.views);
+  if (!view || transcript.kind !== "final" || transcript.views?.status !== "ready") return null;
+  const state = await api.transcriptViews(transcript.id).catch(() => null);
+  const lines = state?.status === "ready" ? state[view] : null;
+  return lines ? { view, lines } : null;
+}
+
+/** A recording's lines with the speakers' names and the view its copies are in (`inView(i)`: the view's words of line i, null for its own). */
+export async function recordingCopy(item: LibraryItem): Promise<{ lines: CopyLine[]; view: TranscriptView | null; inView: (i: number) => string | null } | null> {
   const id = item.transcript?.final_transcript_id ?? item.transcript?.live_transcript_id ?? null;
   if (!id) return null;
   const [detail, transcript] = await Promise.all([api.session(item.id).catch(() => ({} as Record<string, unknown>)), api.transcript(id)]);
   const raw = detail.speaker_names;
   const names = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, string>) : {};
-  return transcript.segments.map((s) => ({ ...s, speaker: speakerName(names, s.speaker) }));
+  const lines = transcript.segments.map((s) => ({ ...s, speaker: speakerName(names, s.speaker) }));
+  const shown = lines.length ? await defaultViewLines(transcript) : null;
+  return { lines, view: shown?.view ?? null, inView: (i) => shown?.lines[i] ?? null };
 }
 
-/** The short header Copy for AI puts above a recording: title, date, people, language. */
-export function aiHeader(item: LibraryItem, people: readonly string[]): string {
+/** The language line's words for text in a view: what the server writes in its own Copy for AI. */
+export const VIEW_LANGUAGE: Record<TranscriptView, string> = { roman: "Roman Urdu", urdu: "Urdu", english: "English" };
+
+/**
+ * The short header Copy for AI puts above a recording: title, date, people, language. The language is the view's
+ * ("Roman Urdu") when the text below is in one, else the recording's chip ("UR+EN").
+ */
+export function aiHeader(item: LibraryItem, people: readonly string[], view: TranscriptView | null = null): string {
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
+  const language = view ? VIEW_LANGUAGE[view] : item.language_chip || item.language;
   return [
     `# ${item.title?.trim() || "Recording"}`,
     [item.started_at ? `${sentenceDate(item.started_at)}, ${formatTime(new Date(item.started_at))}` : null, source, item.duration_ms ? formatDuration(item.duration_ms) : null].filter(Boolean).join(" · "),
     people.length ? `People: ${people.join(", ")}` : null,
-    item.language_chip || item.language ? `Language: ${item.language_chip || item.language}` : null,
+    language ? `Language: ${language}` : null,
   ].filter(Boolean).join("\n");
 }
 
 /**
  * Copy for AI for one or several recordings: the note on unsure words once, then each recording's header and its
- * lines with timestamps. Recordings without a transcript are left out and counted.
+ * lines with timestamps, each in its default view once that is written (Roman Urdu for an Urdu call). Recordings
+ * without a transcript are left out and counted.
  */
 export async function copyForAi(items: readonly LibraryItem[]): Promise<{ text: string; copied: number; skipped: number }> {
   const parts: string[] = [];
   let skipped = 0;
   for (const item of items) {
-    const lines = await recordingLines(item);
-    if (!lines?.length) {
+    const copy = await recordingCopy(item);
+    if (!copy?.lines.length) {
       skipped++;
       continue;
     }
-    const people = [...new Set(lines.map((l) => l.speaker))];
-    const body = copiedTranscript(lines, () => null, true, { ...DEFAULT_UNSURE, note: false }, false);
-    parts.push(`${aiHeader(item, people)}\n\n${body}`);
+    const people = [...new Set(copy.lines.map((l) => l.speaker))];
+    const body = copiedTranscript(copy.lines, copy.inView, true, { ...DEFAULT_UNSURE, note: false }, false);
+    parts.push(`${aiHeader(item, people, copy.view)}\n\n${body}`);
   }
   const text = parts.length ? `${DEFAULT_UNSURE.note_text}\n\n${parts.join("\n\n---\n\n")}` : "";
   return { text, copied: parts.length, skipped };
@@ -299,7 +325,11 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
   const [working, setWorking] = useState<"text" | "voice" | "link" | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   useEffect(() => {
-    if (given === undefined) recordingLines(item).then((l) => setText(l?.length ? transcriptText(l, false) : null)).catch(() => setText(null));
+    // From a row: the text in the recording's default view once it is written, as the page would show it.
+    if (given === undefined) {
+      recordingCopy(item).then((c) => setText(c?.lines.length ? transcriptText(c.lines.map((l, i) => ({ ...l, text: c.inView(i) ?? l.text })), false) : null))
+        .catch(() => setText(null));
+    }
     if (givenAudio === undefined) api.session(item.id).then((d) => setHasAudio(typeof d.playback_url === "string")).catch(() => setHasAudio(false));
   }, [item, given, givenAudio]);
   const copy = async (value: string) => {
