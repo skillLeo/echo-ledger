@@ -3,7 +3,9 @@
 #   sudo bash check.sh [--expect-lockdown]
 # PASS / WARN / FAIL per line; exit 1 when anything FAILs. --expect-lockdown turns the SSH warnings into failures (once
 # ssh-lockdown.sh has run).
-set -uo pipefail
+# No pipefail here: `… | grep -q` stops reading at its first match, and under pipefail the writer's broken pipe would
+# turn a match into a failure, so a leak would read as "none found". The leak checks count their matches instead.
+set -u
 lockdown=0
 [ "${1:-}" = --expect-lockdown ] && lockdown=1
 fails=0
@@ -27,18 +29,26 @@ if [ -f /var/run/reboot-required ]; then warn "a reboot is waiting (security upd
 status=$(ufw status verbose 2>/dev/null)
 grep -q "Status: active" <<<"$status" && pass "firewall on" || fail "firewall on"
 grep -q "Default: deny (incoming)" <<<"$status" && pass "incoming denied by default" || fail "incoming denied by default"
-grep -q 8787 <<<"$status" && fail "the relay's port 8787 is open in the firewall" || pass "8787 closed in the firewall"
-ssh_port=$(sshd -T 2>/dev/null | awk '$1 == "port" { print $2; exit }')
-grep -Eq "^${ssh_port:-22}/tcp +LIMIT" <<<"$status" && pass "SSH rate limited" || warn "SSH not rate limited"
-public=$(ss -H -tln 2>/dev/null | awk -v p="${ssh_port:-22}" '{ split($4, a, ":"); port = a[length(a)]; addr = substr($4, 1, length($4) - length(port) - 1)
-  if (addr !~ /^(127\.|\[::1\]|::1)/ && port != p && port != 80 && port != 443) print $4 }' | tr '\n' ' ')
+rules=$(ufw show added 2>/dev/null)
+grep -Eq '(^| )8787(/(tcp|udp))?( |$)|port 8787( |$)' <<<"$rules" && fail "a firewall rule opens the relay's port 8787" || pass "8787 closed in the firewall"
+sshd_conf=$(sshd -T 2>/dev/null)
+ssh_ports=$(awk '$1 == "port" { print $2 }' <<<"$sshd_conf")
+for port in ${ssh_ports:-22}; do
+  grep -Eq "^${port}/tcp +LIMIT" <<<"$status" && pass "SSH ($port) rate limited" || fail "SSH ($port) not rate limited"
+  # An ALLOW for the same port comes before the LIMIT and lets every attempt through (DEPLOY.md's `ufw allow OpenSSH`).
+  # Read from the rules as added: the same whether the firewall is on or off, and without status's display names.
+  grep -Eq "^ufw allow (OpenSSH|${port}|${port}/tcp)( comment .*)?$" <<<"$rules" && fail "an ALLOW rule for SSH ($port) skips the rate limit" || pass "no ALLOW rule skips the SSH rate limit ($port)"
+done
+public=$(ss -H -tln 2>/dev/null | awk -v ports=" ${ssh_ports:-22} " '{ split($4, a, ":"); port = a[length(a)]; addr = substr($4, 1, length($4) - length(port) - 1)
+  if (addr !~ /^(127\.|\[::1\]|::1)/ && index(ports, " " port " ") == 0 && port != 80 && port != 443) print $4 }' | tr '\n' ' ')
 [ -z "$public" ] && pass "only SSH, 80 and 443 listen publicly" || fail "also listening publicly: $public"
 ss -H -tln | awk '{print $4}' | grep -Eq '^(0\.0\.0\.0|\*|\[::\]):8787$' && fail "relay listens on every address" || pass "relay on loopback only"
 check "fail2ban guards SSH" "fail2ban-client status sshd"
 check "clock in sync" "timedatectl show -p NTPSynchronized --value | grep -qx yes"
 
 # SSH
-eff=$(sshd -T 2>/dev/null)
+# As sshd decides for root signing in from somewhere else (a Match block can change it per user or address).
+eff=$(sshd -T -C user=root,host=check.invalid,addr=203.0.113.9 2>/dev/null)
 grep -qx "permitrootlogin no" <<<"$eff" && pass "root cannot sign in" || sshwarn "root can sign in over SSH"
 grep -qx "passwordauthentication no" <<<"$eff" && pass "no password sign-in" || sshwarn "passwords accepted over SSH"
 
@@ -47,8 +57,12 @@ check "relay service running" "systemctl is-active --quiet assist-relay"
 check "relay healthy" "curl -fsS -m 5 http://127.0.0.1:8787/healthz | grep -q '\"status\":\"ok\"'"
 check "nginx running" "systemctl is-active --quiet nginx"
 # Logs with no content: the apps send tokens in a header, so a token in a logged URL means something is wrong.
-if grep -Eqs 'token=|Bearer ' /var/log/nginx/access.log /var/log/nginx/access.log.1; then fail "a token appears in nginx's access log"; else pass "no tokens in nginx's access log"; fi
-if journalctl -u assist-relay --since "-24h" -o cat 2>/dev/null | grep -Eq 'Bearer |sk-[A-Za-z0-9]{10}|"text":'; then fail "the relay's journal holds a token, key or text"; else pass "relay journal: no tokens, keys or text in 24 h"; fi
+# Counted (grep -c reads to the end), never grep -q in a pipe: see the top of this file.
+leak='token=|Bearer |eyJ[A-Za-z0-9_-]{10,}\.|sk-[A-Za-z0-9_-]{10}'
+n=$(cat /var/log/nginx/access.log /var/log/nginx/access.log.1 2>/dev/null | grep -Ec "$leak")
+[ "${n:-0}" -eq 0 ] && pass "no tokens in nginx's access log" || fail "a token appears in nginx's access log ($n lines)"
+n=$(journalctl -u assist-relay --since "-24h" -o cat 2>/dev/null | grep -Ec "$leak"'|"text":')
+[ "${n:-0}" -eq 0 ] && pass "relay journal: no tokens, keys or text in 24 h" || fail "the relay's journal holds a token, key or text ($n lines)"
 check "journal capped" "grep -q SystemMaxUse /etc/systemd/journald.conf.d/relay.conf"
 
 # Ops
@@ -60,11 +74,15 @@ done
 newest=$(ls -t /var/backups/echoledger-relay/relay-config-*.tar.gz 2>/dev/null | head -1)
 if [ -n "$newest" ] && [ "$(find "$newest" -mmin -1560 | wc -l)" -gt 0 ]; then
   pass "settings backup from the last 26 h ($(basename "$newest"))"
-  tar -tzf "$newest" | grep -Eq '(\.key|\.pem|alert\.env|credstore|credential\.secret)$' && fail "the backup holds a secret" || pass "the backup holds no secret"
+  n=$(tar -tzf "$newest" 2>/dev/null | grep -Ec '(\.key|\.pem)$|alert\.env|credstore|credential\.secret|/\.ssh/')
+  [ "${n:-0}" -eq 0 ] && pass "the backup holds no secret" || fail "the backup holds a secret ($n entries)"
 else
   fail "no settings backup in the last 26 h"
 fi
+[ "$(stat -c '%U:%G %a' /etc/echoledger-ops/alert.env 2>/dev/null)" = "root:root 600" ] && pass "alert.env is root's only" || fail "alert.env is not root:root 0600"
 if grep -Eq '^ALERT_URL=.+' /etc/echoledger-ops/alert.env 2>/dev/null; then pass "alerts go out (ALERT_URL set)"; else warn "alerts only in the journal: set ALERT_URL (README, Alerts)"; fi
+check "needrestart leaves the relay and nginx alone" "grep -q 'assist-relay' /etc/needrestart/conf.d/echoledger.conf"
+check "upgrades run at a quiet hour" "systemctl cat apt-daily-upgrade.timer | grep -q 'echoledger'"
 
 # Now
 cores=$(nproc)

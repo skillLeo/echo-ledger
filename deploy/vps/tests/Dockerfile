@@ -1,13 +1,17 @@
-# A throwaway Ubuntu 24.04 with systemd, nginx and SSH, as on the relay VPS, for deploy/vps/tests/container.sh.
+# A throwaway Ubuntu 24.04 with systemd, nginx, SSH and ufw (as Ubuntu server ships it), like the relay VPS, for
+# deploy/vps/tests/container.sh.
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -q && apt-get install -y -q --no-install-recommends systemd systemd-sysv dbus nginx openssh-server \
-      sudo iproute2 iptables python3 curl ca-certificates jq procps \
+      sudo iproute2 iptables ufw python3 curl ca-certificates jq procps \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /root/.ssh && chmod 700 /root/.ssh
 # A stand-in relay: answers /healthz on 127.0.0.1:8787 while /run/relay-healthy exists, hangs otherwise.
 RUN printf '%s\n' \
-      'import http.server, os, time' \
+      'import http.server, os, sys, time' \
+      'if os.path.exists("/etc/fake-relay-leak"):' \
+      '    for i in range(2000): print("{\"event\":\"filler\",\"n\":%d,\"pad\":\"%s\"}" % (i, "x" * 60))' \
+      '    print("{\"event\":\"oops\",\"auth\":\"Bearer eyJhbGciOiJIUzI1NiJ9.leak.leak\"}"); sys.stdout.flush()' \
       'class H(http.server.BaseHTTPRequestHandler):' \
       '    def do_GET(self):' \
       '        if not os.path.exists("/run/relay-healthy"): time.sleep(30); return' \

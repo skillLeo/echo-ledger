@@ -47,6 +47,23 @@ touch "$tmp/reboot"; REBOOT_FLAG="$tmp/reboot" resources
 expect "a waiting reboot alerts" '[ "$(count "ALERT: security updates wait for a reboot")" = 1 ]'
 expect "messages carry the host name" 'grep -q "^\[" "$sent"'
 
+# Hysteresis: memory fires at 80, stays firing down to 75, clears under 75.
+: >"$sent"; rm -f "$OPS_STATE/memory"
+fixture 0.4 2 1000000 180000; resources   # 82 %
+fixture 0.4 2 1000000 230000; resources   # 77 %
+expect "a value just under the limit keeps the alert (no flapping)" '[ "$(count "ALERT: memory")" = 1 ] && [ "$(count "OK again: memory")" = 0 ]'
+fixture 0.4 2 1000000 260000; resources   # 74 %
+expect "it clears 5 points under the limit" '[ "$(count "OK again: memory")" = 1 ]'
+
+# needrestart holding back the relay or nginx after an update alerts; anything else does not.
+: >"$sent"
+printf 'NEEDRESTART-VER: 3.6\nNEEDRESTART-SVC: assist-relay.service\nNEEDRESTART-SVC: cron.service\n' >"$tmp/nr"
+NEEDRESTART_OUTPUT="$tmp/nr" resources
+expect "the relay waiting for a restart alerts, naming it" '[ "$(count "ALERT: updated libraries wait for a restart of assist-relay.service")" = 1 ]'
+printf 'NEEDRESTART-SVC: cron.service\n' >"$tmp/nr"
+NEEDRESTART_OUTPUT="$tmp/nr" resources
+expect "and recovers once nothing of ours waits" '[ "$(count "OK again: no service waits")" = 1 ]'
+
 # Slack and Discord bodies are JSON.
 : >"$sent"
 printf 'ALERT_URL=https://alerts.invalid/x\nALERT_KIND=slack\n' >"$OPS_ETC/alert.env"
@@ -84,6 +101,9 @@ expect "no restart loop after it" '[ "$(grep -c restart "$tmp/systemctl.log")" =
 echo inactive >"$tmp/active"; : >"$tmp/systemctl.log"; echo 0 >"$OPS_STATE/relay-misses"
 for _ in 1 2 3 4; do watchdog "$down"; done
 expect "a relay stopped on purpose is left alone" '! grep -q restart "$tmp/systemctl.log"'
+echo active >"$tmp/active"; echo 2 >"$OPS_STATE/relay-misses"; echo inactive >"$tmp/active"
+watchdog "$down"
+expect "a clean stop resets the miss count" '[ "$(cat "$OPS_STATE/relay-misses")" = 0 ]'
 
 # Backup: settings in, secrets out, the newest 14 kept.
 root="$tmp/root/"
@@ -97,6 +117,9 @@ echo 'secret' >"$root/etc/credstore.encrypted/relay_secret"
 echo 'key' >"$root/etc/nginx/sites-available/privkey.pem"
 echo 'cert = x' >"$root/etc/letsencrypt/renewal/relay.conf"
 echo 'binary' >"$root/opt/assist-relay/releases/abc123/assist-relay"
+mkdir -p "$root/etc/assist-relay/credstore.encrypted" "$root/etc/assist-relay/.ssh"
+echo 'secret' >"$root/etc/assist-relay/credstore.encrypted/relay_secret"
+echo 'key' >"$root/etc/assist-relay/.ssh/id_ed25519"
 ln -s "$root/opt/assist-relay/releases/abc123" "$root/opt/assist-relay/current"
 backup() { BACKUP_ROOT="$root" BACKUP_DIR="$tmp/backups" BACKUP_KEEP=14 bash "$ops/config-backup.sh" >/dev/null 2>&1; }
 backup
@@ -105,6 +128,7 @@ list=$(tar -tzf "$archive")
 expect "the backup holds the relay's settings, nginx, ops limits and the current binary" \
   'grep -q etc/assist-relay/relay.env <<<"$list" && grep -q sites-available/assist-relay <<<"$list" && grep -q ops.env <<<"$list" && grep -q releases/abc123 <<<"$list"'
 expect "and no secret: no alert.env, credstore, private key" '! grep -Eq "alert.env|credstore|privkey" <<<"$list"'
+expect "not even inside a backed-up folder (credstore, .ssh)" '! grep -Eq "credstore|\.ssh|id_ed25519" <<<"$list"'
 expect "with its sha256" '(cd "$tmp/backups" && (sha256sum -c "$(basename "$archive").sha256" 2>/dev/null || shasum -a 256 -c "$(basename "$archive").sha256") >/dev/null)'
 expect "readable by its owner only" '[ "$(stat -f %Lp "$archive" 2>/dev/null || stat -c %a "$archive")" = 600 ]'
 for i in $(seq 1 16); do touch -t "2026010${i:0:1}0000.$(printf %02d "$i")" "$tmp/backups/relay-config-2026010${i}T000000Z.tar.gz" 2>/dev/null || touch "$tmp/backups/relay-config-old$i.tar.gz"; done

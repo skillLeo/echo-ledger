@@ -19,7 +19,8 @@ if ! $SYSTEMCTL is-enabled --quiet "$UNIT" 2>/dev/null; then
   exit 0   # not installed on this machine, or disabled on purpose
 fi
 if [ "$($SYSTEMCTL is-active "$UNIT" 2>/dev/null)" = inactive ] && [ "$($SYSTEMCTL show -p Result --value "$UNIT" 2>/dev/null)" = success ]; then
-  exit 0   # stopped on purpose: a clean stop is not an outage
+  echo 0 >"$counter"   # stopped on purpose: not an outage, and a start later begins counting afresh
+  exit 0
 fi
 
 if curl -fsS -m 5 "$HEALTH_URL" 2>/dev/null | grep -q '"status":"ok"'; then

@@ -19,11 +19,22 @@ for _ in $(seq 1 30); do inside 'systemctl is-system-running 2>/dev/null | grep 
 docker cp "$vps" "$name:/root/vps" >/dev/null
 inside 'touch /run/relay-healthy; systemctl restart assist-relay; echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyOnlyForTheContainerTest test@mac" > /root/.ssh/authorized_keys'
 
+echo "== the firewall as services/assist-relay/DEPLOY.md leaves it, plus a hand-made 8787 rule, all while ufw is off"
+inside 'ufw allow OpenSSH >/dev/null; ufw allow "Nginx Full" >/dev/null; ufw allow 8787/tcp >/dev/null; ufw allow 18787/tcp >/dev/null'
+
 echo "== harden.sh"
-inside 'bash /root/vps/harden.sh' >/tmp/el-harden-1.log 2>&1; code=$?
+inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/harden.sh' >/tmp/el-harden-1.log 2>&1; code=$?
 [ "$code" = 0 ] && ok "harden.sh runs (exit 0)" || { no "harden.sh exit $code"; tail -30 /tmp/el-harden-1.log; }
 expect "firewall on, incoming denied, SSH limited, 80/443 open" 'ufw status verbose | grep -q "Status: active" && ufw status | grep -Eq "^22/tcp +LIMIT" && ufw status | grep -q "Nginx Full"'
-expect "security updates on, no automatic reboot" 'grep -q "Automatic-Reboot \"false\"" /etc/apt/apt.conf.d/52echoledger-unattended'
+expect "no ALLOW for SSH left to skip the limit (v4 and v6)" '! ufw status | grep -Eq "^(22(/tcp)?|OpenSSH)( \(v6\))? +ALLOW"'
+expect "the hand-made 8787 rule is gone, 18787 stays" '! ufw show added | grep -Eq "(^| )8787(/tcp)?( |$)" && ufw show added | grep -q 18787'
+expect "security updates on, no automatic reboot, Ubuntu's origins cleared" 'grep -q "Automatic-Reboot \"false\"" /etc/apt/apt.conf.d/52echoledger-unattended && grep -q "^#clear Unattended-Upgrade::Allowed-Origins;" /etc/apt/apt.conf.d/52echoledger-unattended'
+expect "needrestart leaves the relay and nginx running" 'grep -q "assist-relay" /etc/needrestart/conf.d/echoledger.conf && grep -q "nginx" /etc/needrestart/conf.d/echoledger.conf'
+expect "upgrades move to 22:30 UTC" 'systemctl cat apt-daily-upgrade.timer | grep -q "OnCalendar=\*-\*-\* 22:30:00 UTC"'
+expect "no copy of a replaced file is left in apt.conf.d" '! ls /etc/apt/apt.conf.d | grep -q before-echoledger'
+expect "fail2ban watches the SSH port" 'grep -q "^port = 22" /etc/fail2ban/jail.d/echoledger-sshd.conf'
+expect "and never bans the address harden.sh ran from" 'grep -q "^ignoreip = 127.0.0.1/8 ::1 203.0.113.5$" /etc/fail2ban/jail.d/echoledger-sshd.conf'
+expect "the watchdog timer fires on the minute" 'grep -q "AccuracySec=1s" /etc/systemd/system/echoledger-relay-watchdog.timer'
 expect "fail2ban guards SSH" 'fail2ban-client status sshd'
 expect "journal capped" 'grep -q SystemMaxUse=1G /etc/systemd/journald.conf.d/relay.conf'
 expect "three ops timers on" '[ "$(systemctl is-active echoledger-relay-watchdog.timer echoledger-resources.timer echoledger-backup.timer | grep -c ^active)" = 3 ]'
@@ -31,13 +42,13 @@ expect "alert.env is root's only" '[ "$(stat -c %a /etc/echoledger-ops/alert.env
 expect "a first backup was made, with no secret" 'f=$(ls /var/backups/echoledger-relay/*.tar.gz | head -1) && tar -tzf "$f" | grep -q assist-relay.service && ! tar -tzf "$f" | grep -Eq "alert.env|credstore|\.key$"'
 
 echo "== harden.sh again"
-inside 'bash /root/vps/harden.sh' >/tmp/el-harden-2.log 2>&1; code=$?
+inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/harden.sh' >/tmp/el-harden-2.log 2>&1; code=$?
 [ "$code" = 0 ] && ok "second run exit 0" || no "second run exit $code"
 grep -q "  wrote " /tmp/el-harden-2.log && { no "second run rewrote files:"; grep "  wrote " /tmp/el-harden-2.log; } || ok "second run changes no file"
 
 echo "== a public listener stops it"
 inside 'nohup python3 -m http.server 8080 --bind 0.0.0.0 >/dev/null 2>&1 &' ; sleep 1
-inside 'bash /root/vps/harden.sh' >/tmp/el-harden-3.log 2>&1; code=$?
+inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/harden.sh' >/tmp/el-harden-3.log 2>&1; code=$?
 [ "$code" = 3 ] && grep -q ":8080" /tmp/el-harden-3.log && ok "stops (exit 3) and names :8080" || no "did not stop for :8080 (exit $code)"
 inside 'pkill -f "http.server 8080"'
 
@@ -48,6 +59,13 @@ grep -E "^(FAIL|WARN)" /tmp/el-check.log | sed 's/^/      /'
 real=$(grep "^FAIL" /tmp/el-check.log | grep -v -e "clock in sync" -e "updates ran" | wc -l | tr -d ' ')
 [ "$real" = 0 ] && ok "check.sh passes (bar the clock, which a container cannot sync)" || no "check.sh: $real failure(s)"
 expect "check.sh warns while root can still sign in" 'bash /root/vps/check.sh | grep -q "WARN  root can sign in"'
+inside 'chmod 644 /etc/echoledger-ops/alert.env'
+expect "check.sh fails an alert.env others can read" 'bash /root/vps/check.sh | grep -q "FAIL  alert.env"'
+inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/harden.sh' >/tmp/el-harden-4.log 2>&1 || tail -5 /tmp/el-harden-4.log
+expect "and harden.sh puts it back to root:root 0600" '[ "$(stat -c "%U:%G %a" /etc/echoledger-ops/alert.env)" = "root:root 600" ]'
+inside 'ufw allow OpenSSH >/dev/null'
+expect "check.sh fails an ALLOW that skips the SSH limit" 'bash /root/vps/check.sh | grep -q "FAIL  an ALLOW rule for SSH"'
+inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/harden.sh' >/tmp/el-harden-4.log 2>&1 || tail -5 /tmp/el-harden-4.log
 
 echo "== watchdog"
 # The installed timer runs the same check every minute: pause it, so only the test counts the misses.
@@ -63,6 +81,14 @@ inside 'systemctl stop assist-relay; rm -f /run/relay-healthy; for i in 1 2 3 4;
 expect "a relay stopped on purpose stays stopped" '[ "$(systemctl is-active assist-relay)" = inactive ]'
 inside 'touch /run/relay-healthy; systemctl start assist-relay; systemctl start echoledger-relay-watchdog.timer'
 
+echo "== check.sh finds what leaks"
+inside 'mkdir -p /var/log/nginx; echo "1.2.3.4 - - [x] \"GET /v1/assist?token=abc HTTP/1.1\" 101" >> /var/log/nginx/access.log'
+expect "a token in nginx's access log fails" 'bash /root/vps/check.sh | grep -q "FAIL  a token appears in nginx"'
+inside ': > /var/log/nginx/access.log'
+inside 'cd /tmp && mkdir -p leak/etc/credstore.encrypted && echo s > leak/etc/credstore.encrypted/relay_secret && tar -C leak -czf /var/backups/echoledger-relay/relay-config-29990101T000000Z.tar.gz etc && touch /var/backups/echoledger-relay/relay-config-29990101T000000Z.tar.gz'
+expect "an archive holding the encrypted relay secret fails" 'bash /root/vps/check.sh | grep -q "FAIL  the backup holds a secret"'
+inside 'rm -f /var/backups/echoledger-relay/relay-config-29990101T000000Z.tar.gz'
+
 echo "== ssh-lockdown.sh"
 inside 'bash /root/vps/ssh-lockdown.sh --admin elops' >/tmp/el-lock-1.log 2>&1
 expect "step 1 makes elops with root's key and sudo, and changes no SSH setting" \
@@ -76,6 +102,19 @@ expect "check.sh --expect-lockdown passes the SSH lines" '! bash /root/vps/check
 inside 'printf "PasswordAuthentication yes\n" > /etc/ssh/sshd_config.d/00-aaa.conf; bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp/el-lock-3.log 2>&1; code=$?
 [ "$code" = 4 ] && ok "a setting that would win over it is found (exit 4)" || no "an overriding setting went unnoticed (exit $code)"
 expect "and the earlier lockdown file is put back as it was" 'grep -qx "PermitRootLogin no" /etc/ssh/sshd_config.d/00-echoledger.conf && [ ! -f /etc/ssh/sshd_config.d/00-echoledger.conf.prev ]'
+inside 'rm -f /etc/ssh/sshd_config.d/00-aaa.conf; cp /etc/ssh/sshd_config /tmp/sshd_config.orig; printf "\nMatch User root\n    PermitRootLogin yes\n" >> /etc/ssh/sshd_config'
+inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp/el-lock-4.log 2>&1; code=$?
+[ "$code" = 4 ] && grep -q "Match block" /tmp/el-lock-4.log && ok "a Match block that lets root in is found (exit 4)" || no "a Match block for root went unnoticed (exit $code)"
+inside 'cp /tmp/sshd_config.orig /etc/ssh/sshd_config'
+inside 'rm -f /etc/ssh/sshd_config.d/00-echoledger.conf; printf "#!/bin/sh\n[ \"\$1\" = reload ] && exit 1\nexec /usr/bin/systemctl \"\$@\"\n" > /usr/local/sbin/systemctl; chmod +x /usr/local/sbin/systemctl'
+inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp/el-lock-5.log 2>&1; code=$?
+[ "$code" = 4 ] && grep -q "did not reload" /tmp/el-lock-5.log && ok "a failed reload is reported (exit 4)" || no "a failed reload went unreported (exit $code)"
+expect "and its file is taken back" '[ ! -f /etc/ssh/sshd_config.d/00-echoledger.conf ]'
+inside 'rm -f /usr/local/sbin/systemctl'
+
+echo "== a token past 64 KiB of the relay's journal"
+inside 'touch /etc/fake-relay-leak; systemctl restart assist-relay; sleep 2'
+expect "check.sh fails it (the leak checks count, they never stop at the first match)" 'bash /root/vps/check.sh | grep -q "FAIL  the relay.s journal holds a token"'
 
 echo
 [ "$failures" -eq 0 ] && echo "ALL CONTAINER TESTS PASSED" || echo "$failures CONTAINER TEST(S) FAILED"

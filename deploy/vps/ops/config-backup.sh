@@ -44,7 +44,9 @@ current=$(readlink -f "${ROOT}opt/assist-relay/current" 2>/dev/null || true)
 
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 archive="$DEST/relay-config-$stamp.tar.gz"
-if ! tar -C "$ROOT" -czf "$archive.part" --exclude='*.key' --exclude='*.pem' --exclude='alert.env' "${present[@]}" 2>/dev/null; then
+# Secrets are left out even when they sit inside a folder that is backed up.
+if ! tar -C "$ROOT" -czf "$archive.part" --exclude='*.key' --exclude='*.pem' --exclude='alert.env' --exclude='*credstore*' \
+    --exclude='credential.secret' --exclude='.ssh' --exclude='*.before-echoledger-*' "${present[@]}" 2>/dev/null; then
   rm -f "$archive.part"
   alert backup firing "daily settings backup failed"
   exit 1

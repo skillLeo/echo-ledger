@@ -15,7 +15,7 @@ needs care here is the machine itself: updates, the firewall, SSH, logs, and kno
 
 ## Running them
 
-From the Mac, with the VPS's SSH alias (here `relay-vps`):
+From the Mac, with the VPS's SSH alias (here `relay-vps`). Before the SSH lockdown, as root:
 
 ```
 scp -r deploy/vps relay-vps:/root/echoledger-vps
@@ -25,27 +25,41 @@ ssh relay-vps 'bash /root/echoledger-vps/harden.sh'
 ssh relay-vps 'bash /root/echoledger-vps/check.sh'          # after: expect only the SSH and alert warnings
 ```
 
+After it, root cannot sign in: copy the folder to the admin account and use sudo:
+
+```
+scp -r deploy/vps elops@<vps>:~/echoledger-vps
+ssh elops@<vps> 'sudo bash ~/echoledger-vps/check.sh --expect-lockdown'
+```
+
 `harden.sh` stops (exit 3) if something besides SSH, 80 and 443 listens on a public address, and names it: the firewall
 would close it. Check what it is; run again with `--yes` only if it is not needed from outside.
 
-Every file it writes keeps the one it replaces next to it as `<file>.before-echoledger-<time>`.
+Every file it replaces is kept in `/var/backups/echoledger-harden/` (never beside it: apt and systemd would read a copy
+left in their folders).
 
 ## What harden.sh sets up
 
-- **Security updates every day** (unattended-upgrades, the `-security` origins only). **No automatic reboot**: a reboot
-  closes every live call. When an update waits for one, the resources check alerts, and someone restarts the VPS
-  outside busy hours (`sudo reboot`; the relay starts by itself and the apps reconnect).
-- **Firewall** (ufw): incoming denied by default; SSH allowed and rate limited (on whatever port sshd uses); 80 and
-  443 for nginx. The relay's 8787 stays closed: it listens on loopback only, behind nginx. A rule that opened 8787 by
-  hand is removed.
-- **fail2ban** on SSH: 5 failed sign-ins in 10 minutes ban the address for an hour.
+- **Security updates every day** (unattended-upgrades, the `-security` origins only, Ubuntu's own list cleared first),
+  at **03:30 in Pakistan** (22:30 UTC, the quietest hour) instead of Ubuntu's morning slot. **No automatic reboot**, and
+  **needrestart never restarts the relay or nginx**: either would close every live call. When an update waits for a
+  reboot, or for the relay or nginx to restart, the resources check alerts, and someone restarts outside busy hours
+  (`sudo reboot`, or `sudo systemctl restart assist-relay nginx`; the apps reconnect by themselves).
+- **Firewall** (ufw): incoming denied by default; SSH rate limited on every port sshd uses (and the one the session
+  running it came in on); 80 and 443 for nginx. A plain ALLOW for SSH (services/assist-relay/DEPLOY.md section 1 adds
+  `ufw allow OpenSSH`) would let every attempt past the limit, so it is removed once the limit is in. The relay's 8787
+  stays closed: it listens on loopback only, behind nginx. A rule that opened 8787 by hand is removed, also while the
+  firewall is still off.
+- **fail2ban** on SSH: 5 failed sign-ins in 10 minutes ban the address for an hour. The address harden.sh is run from
+  is never banned, so a mistyped key while testing cannot cut the session doing it.
 - **Clock in sync** (systemd-timesyncd): assist tokens are checked against it.
 - **Journal capped** at 1 GB and 14 days (services/assist-relay/DEPLOY.md, "Logs").
 - **Relay watchdog**, every minute: systemd already restarts the relay when it exits. The watchdog catches a relay that
   runs but no longer answers `/healthz`: after 3 misses in a row it restarts it once and alerts, then waits for health to
   come back (one more restart every 30 minutes while it stays down). A relay stopped on purpose is left alone.
 - **Resources**, every 5 minutes: CPU (the 5-minute load against the cores), memory (what the kernel says is available)
-  and disk at **80 %**, and a waiting reboot. Each alert is sent once when it starts and once when it clears.
+  and disk at **80 %**, a waiting reboot, and the relay or nginx waiting for a restart after an update. Each alert is
+  sent once when it starts and once when it clears (5 points under its limit, so a value at the limit does not flap).
 - **Settings backup**, every day at 03:30: one archive of the relay's environment file and config, its systemd unit,
   nginx's sites, journald and ops settings, the firewall rules, certbot's renewal settings and the current relay binary,
   in `/var/backups/echoledger-relay/` (root only), 14 kept, each with its sha256.
@@ -65,7 +79,7 @@ ALERT_KIND=ntfy                                    # ntfy (default), slack or di
 ```
 
 ntfy needs no account (install the ntfy app and subscribe to the topic); the topic name is the only secret, so make it
-long and random. Which channel to use is Hassam's choice. Messages hold the host, the check and numbers only, for
+long and random. Which channel to use is the owner's choice. Messages hold the host, the check and numbers only, for
 example `[relay] ALERT: memory at 86% used (limit 80%)`: never anything anyone said, no tokens, no keys.
 
 Still needed from outside, because a VPS cannot report that it is down: an uptime check on
@@ -79,23 +93,33 @@ Still needed from outside, because a VPS cannot report that it is down: an uptim
   `check.sh` fails if one ever appears there. `/healthz` is not logged.
 - The ops checks log the same way: host, check, numbers.
 
-## SSH lockdown (after Hassam changes the root password)
+## SSH lockdown (after the owner changes the root password)
 
 Not before: until then root's password is the way back in. Then, with the Mac's key already in
-`/root/.ssh/authorized_keys`:
+`/root/.ssh/authorized_keys`, open **one interactive root shell and keep it open until the end**: it is the way to put
+things right if anything goes wrong.
 
 ```
-ssh relay-vps 'bash /root/echoledger-vps/ssh-lockdown.sh --admin elops'
-ssh -i <key> elops@<vps> 'sudo -n true && echo OK'           # in a new terminal; must print OK
-ssh relay-vps 'bash /root/echoledger-vps/ssh-lockdown.sh --admin elops --i-tested-key-login'
-ssh root@<vps>                                                # must now be refused
-ssh relay-vps 'bash /root/echoledger-vps/check.sh --expect-lockdown'
+ssh relay-vps                                                        # terminal 1: root, stays open
+bash /root/echoledger-vps/ssh-lockdown.sh --admin elops              # in terminal 1
+
+ssh -o IdentitiesOnly=yes -i <key> elops@<vps> 'sudo -n true && echo OK'   # terminal 2: must print OK
+
+bash /root/echoledger-vps/ssh-lockdown.sh --admin elops --i-tested-key-login   # in terminal 1
+
+ssh -o IdentitiesOnly=yes -i <key> elops@<vps> 'sudo -n true && echo OK'   # terminal 2: still OK
+ssh root@<vps>                                                       # terminal 2: must be refused
 ```
+
+`IdentitiesOnly` makes ssh offer only that key, as a fresh machine would: an agent holding several keys could otherwise
+pass the test with another one.
 
 The first run makes `elops`: no password, root's authorized keys, sudo without a password (it has no password to give).
-The second writes `/etc/ssh/sshd_config.d/00-echoledger.conf` (root sign-in off, keys only, 3 tries, 30 s to sign in),
-checks it with `sshd -t` and with what sshd actually reads (`sshd -T`), and reloads SSH. Open sessions stay. If
-anything fails it puts back what was there before. Update `~/.ssh/config` on the Mac to `User elops`.
+The second writes `/etc/ssh/sshd_config.d/00-echoledger.conf` (root sign-in off, keys only, 30 s to sign in),
+checks it with `sshd -t` and with what sshd will really do for root and for `elops` (`sshd -T -C`, so a `Match` block
+cannot keep root or passwords on), and reloads SSH. Open sessions stay. If any step fails, a failed reload included,
+it puts back what was there before. Update `~/.ssh/config` on the Mac to `User elops`; from then on the scripts run as
+`sudo bash ~/echoledger-vps/<script>` (see "Running them").
 
 **Undo**, from Hostinger's browser terminal (hPanel → VPS → Terminal) if SSH no longer lets you in:
 `rm /etc/ssh/sshd_config.d/00-echoledger.conf && systemctl reload ssh`.
@@ -123,7 +147,10 @@ archive over `/` (`tar -xzf relay-config-<time>.tar.gz -C /`), run `harden.sh`, 
 
 ## Undoing harden.sh
 
-Each replaced file is next to its `.before-echoledger-<time>` copy. The pieces on their own:
+Each file it replaced is in `/var/backups/echoledger-harden/` (its path with `_` for `/`, then the time). The pieces
+on their own:
 `systemctl disable --now echoledger-relay-watchdog.timer echoledger-resources.timer echoledger-backup.timer`;
 `ufw disable`; `rm /etc/fail2ban/jail.d/echoledger-sshd.conf && systemctl restart fail2ban`;
-`rm /etc/apt/apt.conf.d/52echoledger-unattended`; `rm /etc/systemd/journald.conf.d/relay.conf`.
+`rm /etc/apt/apt.conf.d/52echoledger-unattended /etc/needrestart/conf.d/echoledger.conf
+/etc/systemd/system/apt-daily-upgrade.timer.d/echoledger.conf && systemctl daemon-reload`;
+`rm /etc/systemd/journald.conf.d/relay.conf`.
