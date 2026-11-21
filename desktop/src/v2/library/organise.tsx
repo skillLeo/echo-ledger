@@ -11,7 +11,7 @@ import { projectLabel } from "../../lib/projects";
 import { MAX_LABEL_CHARS } from "../../lib/organise";
 import { MAX_TITLE_CHARS } from "../../lib/importFiles";
 import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
-import { ATTACH_NOTE, fileName, linkMessage, WHATSAPP_LINK_SECONDS } from "../../views/main/WhatsAppSheet";
+import { ATTACH_NOTE, fileName, linkMessage, pasteNote, WHATSAPP_LINK_SECONDS } from "../../views/main/WhatsAppSheet";
 import { PACKS } from "../../views/main/TranscriptTools";
 import { Button, Dialog, Icons, Select, TextField } from "../components";
 import type { MenuItem } from "../components/Menu";
@@ -281,11 +281,6 @@ export function knownLabels(items: readonly LibraryItem[]): string[] {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l]) => l);
 }
 
-/** "Voice copied — press ⌘V in the chat" on a Mac, Ctrl+V on Windows: the keys the app said for this system. */
-export function voiceCopiedNote(keys: string): string {
-  return `Voice copied — press ${keys} in the chat`;
-}
-
 /**
  * Send to WhatsApp, as classic's sheet (views/main/WhatsAppSheet.tsx) and the phone: the text of the view being read,
  * the text with the voice (through the system's share, F6; without it WhatsApp with the text and the voice copied or
@@ -306,6 +301,8 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
   const [saved, setSaved] = useState<Extract<WhatsAppVoiceOutcome, { kind: "fallback" }> | null>(null);
   // The share was shown and how it ended is not known (Windows 10, or no answer in time): nothing is claimed.
   const [opened, setOpened] = useState(false);
+  // After a cut text with the voice on the clipboard: the whole text was copied again by the button.
+  const [copiedWhole, setCopiedWhole] = useState(false);
   useEffect(() => {
     if (given === undefined) recordingLines(item).then((l) => setText(l?.length ? transcriptText(l, false) : null)).catch(() => setText(null));
     if (givenAudio === undefined) api.session(item.id).then((d) => setHasAudio(typeof d.playback_url === "string")).catch(() => setHasAudio(false));
@@ -329,6 +326,7 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
     if (running.current) return;
     running.current = true;
     setWorking(kind);
+    setCopiedWhole(false);
     try {
       await fn();
     } catch (e) {
@@ -368,15 +366,26 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
     say("Link made (it works for 7 days) and copied");
     onClose();
   });
+  const copyWhole = async () => {
+    if (text && (await copy(text))) setCopiedWhole(true);
+  };
+  // Done, Cancel, Esc and × wait while a way runs: its answer (a fallback to follow, say) must still be shown.
+  const close = () => {
+    if (!running.current) onClose();
+  };
   const loading = text === undefined || hasAudio === undefined;
   // While one way runs only its button shows it; the others look as they were but take no press (run ignores them).
   const busy = working !== null ? true : undefined;
   if (saved) {
     return (
-      <Dialog open title="Send to WhatsApp" onClose={onClose} actions={<Button variant="primary" onClick={onClose}>Done</Button>}
-        description={saved.fileOnClipboard ? voiceCopiedNote(saved.pasteKeys) : `Saved in Downloads: ${fileName(saved.path)}`}>
+      <Dialog open title="Send to WhatsApp" onClose={close}
+        actions={<>
+          {saved.textCut && saved.fileOnClipboard && <Button onClick={() => void copyWhole()}>{copiedWhole ? "Copied" : "Copy the whole text"}</Button>}
+          <Button variant="primary" onClick={close}>Done</Button>
+        </>}
+        description={saved.fileOnClipboard ? pasteNote(saved.pasteKeys) : <>Saved in Downloads: <bdi>{fileName(saved.path)}</bdi></>}>
         {saved.fileOnClipboard
-          ? <p>The text is in the message. The voice is saved in Downloads too: {fileName(saved.path)}</p>
+          ? <p>The text is in the message. The voice is saved in Downloads too: <bdi>{fileName(saved.path)}</bdi></p>
           : <p><b>{ATTACH_NOTE}</b>: in the chat, click <b>+</b> (or the paper clip), then <b>Document</b>, and choose this file. The text is in the message, and copied too.</p>}
         {saved.textCut && <p className="el-caption el-secondary">The message has the start of the text: it was too long to send whole. After attaching the voice, copy the whole text and paste it there.</p>}
       </Dialog>
@@ -384,19 +393,19 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
   }
   if (opened) {
     return (
-      <Dialog open title="Send to WhatsApp" onClose={onClose} description="The share is open: finish sending there."
+      <Dialog open title="Send to WhatsApp" onClose={close} description="The share is open: finish sending there."
         actions={<>
           <Button loading={working === "voice"} loadingLabel="Opening WhatsApp…" onClick={() => void sendVoice(false)}>Open WhatsApp with the text instead</Button>
-          <Button variant="primary" onClick={onClose}>Done</Button>
+          <Button variant="primary" aria-disabled={busy} onClick={close}>Done</Button>
         </>}>
         <p>Closed it without sending, or WhatsApp was not offered? Open WhatsApp with the text, and paste the voice there.</p>
       </Dialog>
     );
   }
   return (
-    <Dialog open title="Send to WhatsApp" onClose={onClose}
+    <Dialog open title="Send to WhatsApp" onClose={close}
       description={text === null ? "There is no transcript yet: only the link can be sent." : "Opens WhatsApp, or WhatsApp Web, with the message ready to send to the person you choose."}
-      actions={<Button onClick={onClose}>Cancel</Button>}>
+      actions={<Button aria-disabled={busy} onClick={close}>Cancel</Button>}>
       <div className="el-choices">
         <Button variant="primary" disabled={!text} aria-disabled={busy} loading={working === "text"} loadingLabel="Opening WhatsApp…" onClick={() => void sendText()}>Text only</Button>
         <p className="el-caption el-secondary">The text of the view you are reading.</p>

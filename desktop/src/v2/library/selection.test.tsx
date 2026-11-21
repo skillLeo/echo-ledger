@@ -346,7 +346,6 @@ describe("the row ⋮ and the right-click menu", () => {
 
   describe("Send to WhatsApp › Text and voice, through the system's share (F6)", () => {
     const writeText = vi.fn((_: string) => Promise.resolve());
-    const platform = (value: string) => Object.defineProperty(navigator, "platform", { configurable: true, value });
     beforeEach(() => {
       writeText.mockClear();
       Object.assign(navigator, { clipboard: { writeText } });
@@ -402,7 +401,27 @@ describe("the row ⋮ and the right-click menu", () => {
       const calls = callsOf("whatsapp_share_voice") as { id: string; share: boolean }[];
       expect(calls.map((c) => c.share)).toEqual([true, false]);
       expect(calls[1].id).toBe("bilal");
-      expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toHaveAccessibleDescription("Voice copied — press Ctrl+V in the chat");
+      expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toHaveAccessibleDescription("The voice file is copied: in the chat, press Ctrl+V to attach it.");
+    });
+
+    it("opened, then the fallback pressed: Done, Esc and × wait for its answer, which is then shown", async () => {
+      await voice({ kind: "opened" });
+      const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
+      let finish: (v: unknown) => void = () => undefined;
+      respondWith("whatsapp_share_voice", () => new Promise((resolve) => { finish = resolve; }));
+      fireEvent.click(within(sheet).getByRole("button", { name: "Open WhatsApp with the text instead" }));
+      await act(flushAsync);
+      const doneButton = within(sheet).getByRole("button", { name: "Done" });
+      expect(doneButton).toHaveAttribute("aria-disabled", "true");
+      fireEvent.click(doneButton);
+      fireEvent.keyDown(sheet, { key: "Escape" });
+      for (const close of within(sheet).queryAllByRole("button", { name: "Close" })) fireEvent.click(close);
+      expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toBeInTheDocument();
+      await act(async () => finish({ ...fallback, pasteKeys: "Ctrl+V" }));
+      const after = screen.getByRole("dialog", { name: "Send to WhatsApp" });
+      expect(after).toHaveAccessibleDescription("The voice file is copied: in the chat, press Ctrl+V to attach it.");
+      fireEvent.click(within(after).getByRole("button", { name: "Done" }));
+      expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).toBeNull();
     });
 
     it("opened, then Done: the dialog closes without a notice", async () => {
@@ -414,36 +433,59 @@ describe("the row ⋮ and the right-click menu", () => {
 
     it("cancelled: quiet, the dialog stays as it was", async () => {
       await voice({ kind: "cancelled" });
+      const [call] = callsOf("whatsapp_share_voice") as { id: string; share: boolean }[];
+      expect(call).toMatchObject({ id: "bilal", share: true });
       const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
       expect(within(sheet).getByRole("button", { name: "Text and voice" })).not.toHaveAttribute("aria-busy");
+      for (const name of ["Text only", "Link (works for 7 days)", "Cancel"]) {
+        expect(within(sheet).getByRole("button", { name })).not.toHaveAttribute("aria-disabled");
+      }
       expect(screen.queryByRole("status", { name: "Notifications" })?.textContent ?? "").toBe("");
     });
 
-    it("fallback with the voice on the clipboard: ⌘V on a Mac, Ctrl+V on Windows", async () => {
-      const was = navigator.platform;
-      try {
-        platform("MacIntel");
-        await voice(fallback);
-        expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toHaveTextContent("The voice is saved in Downloads too: Bilal Qureshi.ogg");
-        expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toHaveAccessibleDescription("Voice copied — press ⌘V in the chat");
-        expect(writeText).not.toHaveBeenCalled();
-        cleanup();
-        platform("Win32");
-        await voice({ ...fallback, pasteKeys: "Ctrl+V", textCut: true });
-        const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
-        expect(sheet).toHaveAccessibleDescription("Voice copied — press Ctrl+V in the chat");
-        expect(sheet).toHaveTextContent("it was too long to send whole");
-        fireEvent.click(within(sheet).getByRole("button", { name: "Done" }));
-        expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).toBeNull();
-      } finally {
-        platform(was);
-      }
+    it("fallback with the voice on the clipboard: the paste keys are the ones the core sent (⌘V or Ctrl+V)", async () => {
+      await voice(fallback);
+      let sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
+      expect(sheet).toHaveTextContent("The voice is saved in Downloads too: Bilal Qureshi.ogg");
+      expect(sheet.querySelector("p bdi")).toHaveTextContent(/^Bilal Qureshi\.ogg$/);
+      expect(sheet).toHaveAccessibleDescription("The voice file is copied: in the chat, press ⌘V to attach it.");
+      expect(within(sheet).queryByRole("button", { name: "Copy the whole text" })).toBeNull();
+      expect(writeText).not.toHaveBeenCalled();
+      cleanup();
+      await voice({ ...fallback, pasteKeys: "Ctrl+V" });
+      sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
+      expect(sheet).toHaveAccessibleDescription("The voice file is copied: in the chat, press Ctrl+V to attach it.");
+      fireEvent.click(within(sheet).getByRole("button", { name: "Done" }));
+      expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).toBeNull();
+    });
+
+    it("fallback with a cut text and the voice on the clipboard: Copy the whole text copies it and says Copied", async () => {
+      await voice({ ...fallback, textCut: true });
+      const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
+      expect(sheet).toHaveTextContent("it was too long to send whole");
+      expect(writeText).not.toHaveBeenCalled();
+      fireEvent.click(within(sheet).getByRole("button", { name: "Copy the whole text" }));
+      await act(flushAsync);
+      const [call] = callsOf("whatsapp_share_voice") as { text: string }[];
+      expect(writeText).toHaveBeenCalledTimes(1);
+      expect(writeText).toHaveBeenCalledWith(call.text);
+      expect(within(sheet).getByRole("button", { name: "Copied" })).toBeInTheDocument();
+      expect(within(sheet).queryByRole("button", { name: "Copy the whole text" })).toBeNull();
+      expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toBeInTheDocument();
+    });
+
+    it("fallback with a cut text but the voice not on the clipboard: the text is already copied, so no button", async () => {
+      await voice({ ...fallback, textCut: true, fileOnClipboard: false });
+      const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
+      expect(within(sheet).queryByRole("button", { name: "Copy the whole text" })).toBeNull();
+      expect(writeText).toHaveBeenCalledTimes(1);
     });
 
     it("fallback without the voice on the clipboard: the text is copied and the saved file is to attach", async () => {
       await voice({ ...fallback, fileOnClipboard: false });
       const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
       expect(sheet).toHaveAccessibleDescription("Saved in Downloads: Bilal Qureshi.ogg");
+      expect(sheet.querySelector("bdi")).toHaveTextContent(/^Bilal Qureshi\.ogg$/);
       expect(sheet).toHaveTextContent("Attach the saved voice file in WhatsApp");
       expect(writeText).toHaveBeenCalledWith((callsOf("whatsapp_share_voice")[0] as { text: string }).text);
     });
@@ -481,6 +523,21 @@ describe("the row ⋮ and the right-click menu", () => {
       expect(callsOf("share_create")).toEqual([]);
       await act(async () => finish({ kind: "cancelled" }));
       expect(within(sheet).getByRole("button", { name: "Text only" })).not.toHaveAttribute("aria-disabled");
+    });
+
+    it("while it runs, Cancel and Esc wait for the answer: a fallback is still shown", async () => {
+      let finish: (v: unknown) => void = () => undefined;
+      respondWith("whatsapp_share_voice", () => new Promise((resolve) => { finish = resolve; }));
+      const sheet = await open();
+      fireEvent.click(within(sheet).getByRole("button", { name: "Text and voice" }));
+      await act(flushAsync);
+      const cancel = within(sheet).getByRole("button", { name: "Cancel" });
+      expect(cancel).toHaveAttribute("aria-disabled", "true");
+      fireEvent.click(cancel);
+      fireEvent.keyDown(sheet, { key: "Escape" });
+      expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toBeInTheDocument();
+      await act(async () => finish(fallback));
+      expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toHaveAccessibleDescription("The voice file is copied: in the chat, press ⌘V to attach it.");
     });
   });
 
