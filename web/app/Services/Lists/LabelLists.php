@@ -6,6 +6,7 @@ namespace App\Services\Lists;
 
 use App\Exceptions\ApiError;
 use App\Filament\Support\V2RecordingRow;
+use App\Models\LabelColor;
 use App\Models\LabelList;
 use App\Services\AuditLog;
 use App\Services\LibraryOrganiser;
@@ -65,29 +66,51 @@ final class LabelLists
 
     /**
      * Makes the lists for these labels that the person has not got yet, at the end of the row and without a colour
-     * (the apps draw it in their neutral colour until one is chosen). Called whenever a recording is labelled.
+     * (the apps draw it in their neutral colour until one is chosen). Called whenever a recording is labelled. A label
+     * spelt as a fixed chip ("Important", "Unread", written before 2.0.0-m) stays on its recordings but is never a list.
      *
      * @param  iterable<string>  $labels  labels as stored (LibraryOrganiser::cleanLabel)
      */
     public function ensure(int $workspaceId, int $userId, iterable $labels): void
     {
-        $existing = LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->pluck('label_key')->flip()->all();
-        $last = LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->max('position');
-        $next = $last === null ? 0 : (int) $last + 1;
-        $rows = [];
+        $wanted = [];
         foreach ($labels as $label) {
             $key = self::key($label);
-            if (isset($existing[$key])) {
-                continue;
+            if (! self::reserved($key)) {
+                $wanted[$key] ??= $label;
             }
-            $existing[$key] = true;
-            $rows[] = ['workspace_id' => $workspaceId, 'user_id' => $userId, 'label_key' => $key, 'name' => $label, 'color' => null,
-                'position' => $next++, 'created_at' => now(), 'updated_at' => now()];
         }
-        if ($rows !== []) {
+        $person = fn () => LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId);
+        // Most calls find every list there already: answered without a lock.
+        if ($wanted === [] || array_diff_key($wanted, $person()->pluck('label_key')->flip()->all()) === []) {
+            return;
+        }
+        DB::transaction(function () use ($workspaceId, $userId, $wanted, $person): void {
+            // The person's lists, locked before the end of the row is read: two devices labelling at once queue here,
+            // so each new list gets a place of its own.
+            $have = $person()->lockForUpdate()->get(['label_key', 'position']);
+            $existing = $have->pluck('label_key')->flip()->all();
+            $next = $have->isEmpty() ? 0 : (int) $have->max('position') + 1;
+            $rows = [];
+            foreach (array_diff_key($wanted, $existing) as $key => $label) {
+                $rows[] = ['workspace_id' => $workspaceId, 'user_id' => $userId, 'label_key' => (string) $key, 'name' => $label, 'color' => null,
+                    'position' => $next++, 'created_at' => now(), 'updated_at' => now()];
+            }
+            if ($rows === []) {
+                return;
+            }
             // Two devices labelling at once: the unique index keeps one list, the other insert is skipped.
             LabelList::query()->insertOrIgnore($rows);
-        }
+            // With no list of the person's to lock yet (their first ones), two inserts can still take one place: the
+            // row is put back in order, with no gaps.
+            $this->renumber($workspaceId, $userId);
+        });
+    }
+
+    /** True for a fixed chip's word (All, Unread, Important, in English or Urdu): never the name of a list. */
+    public static function reserved(string $key): bool
+    {
+        return in_array($key, self::RESERVED, true);
     }
 
     /**
@@ -134,25 +157,50 @@ final class LabelLists
             return self::payload($list, $this->counts($workspaceId, $userId)[$list->label_key] ?? 0);
         }
         $oldName = $list->name;
-        DB::transaction(function () use ($workspaceId, $userId, $list, $newName, $newColor, $renamed): void {
-            $carriers = $this->carriers($workspaceId, $userId, $list->label_key);
-            if ($renamed) {
-                $newKey = self::key($newName);
-                foreach ($carriers as $label) {
-                    // A recording that already carries the new name (only when the capitals alone change) keeps one label.
-                    $twin = $newKey !== $list->label_key && DB::table('session_labels')->where('capture_session_id', $label->capture_session_id)
-                        ->where('id', '!=', $label->id)->get(['label'])->contains(fn (object $l): bool => self::key((string) $l->label) === $newKey);
-                    $twin
-                        ? DB::table('session_labels')->where('id', $label->id)->delete()
-                        : DB::table('session_labels')->where('id', $label->id)->update(['label' => $newName]);
+        try {
+            DB::transaction(function () use ($workspaceId, $userId, $list, $newName, $newColor, $renamed): void {
+                $labels = $this->labelsOf($workspaceId, $userId);
+                $carriers = array_values(array_filter($labels, fn (object $l): bool => self::key((string) $l->label) === $list->label_key));
+                if ($renamed) {
+                    $newKey = self::key($newName);
+                    // The recordings that already carry the new name (read with the carriers, in the same locked
+                    // read): they keep one label. So does one that carries the old name twice in other capitals.
+                    $twinned = [];
+                    foreach ($labels as $l) {
+                        if ($newKey !== $list->label_key && self::key((string) $l->label) === $newKey) {
+                            $twinned[(string) $l->capture_session_id] = true;
+                        }
+                    }
+                    $drop = $keep = [];
+                    foreach ($carriers as $l) {
+                        $session = (string) $l->capture_session_id;
+                        if (isset($twinned[$session])) {
+                            $drop[] = (int) $l->id;
+                        } else {
+                            $keep[] = (int) $l->id;
+                            $twinned[$session] = true;
+                        }
+                    }
+                    // A set of statements whatever the number of recordings: one delete, one update (a chunk a
+                    // thousand, within every database's limit on bound values).
+                    foreach (array_chunk($drop, 1000) as $ids) {
+                        DB::table('session_labels')->whereIn('id', $ids)->delete();
+                    }
+                    foreach (array_chunk($keep, 1000) as $ids) {
+                        DB::table('session_labels')->whereIn('id', $ids)->update(['label' => $newName]);
+                    }
+                    $list->label_key = $newKey;
+                    $list->name = $newName;
                 }
-                $list->label_key = $newKey;
-                $list->name = $newName;
-            }
-            $list->color = $newColor;
-            $list->save();
-            self::touch(array_map(fn (object $l): string => (string) $l->capture_session_id, $carriers));
-        });
+                $list->color = $newColor;
+                $list->save();
+                self::touch(array_map(fn (object $l): string => (string) $l->capture_session_id, $carriers));
+            });
+        } catch (UniqueConstraintViolationException) {
+            // Another device gave a list this name in the same moment, or a recording carries a label the database
+            // counts as the same ("Résumé" and "Resume" under MySQL's accent-blind collation): nothing changed.
+            throw self::exists($this->clashing($workspaceId, $userId, $newName, $list->id));
+        }
         app(LibraryOrganiser::class)->forgetColors($workspaceId, $userId);
         if ($renamed) {
             app(AuditLog::class)->record('list_renamed', null, null, "List renamed: {$oldName} → {$newName}");
@@ -179,11 +227,7 @@ final class LabelLists
             $changed = count($sessions);
             $list->delete();
             // The row keeps no gaps.
-            foreach ($this->rows($workspaceId, $userId) as $i => $other) {
-                if ($other->position !== $i) {
-                    $other->forceFill(['position' => $i])->save();
-                }
-            }
+            $this->renumber($workspaceId, $userId);
         });
         app(LibraryOrganiser::class)->forgetColors($workspaceId, $userId);
         app(AuditLog::class)->record('list_deleted', null, null, "List deleted: {$list->name}");
@@ -227,6 +271,16 @@ final class LabelLists
      */
     public function setColour(int $workspaceId, int $userId, string $spelt, ?string $color): void
     {
+        if (self::reserved(self::key($spelt))) {
+            // A label spelt as a fixed chip has no list: its colour stays where 2.0.0-i kept it.
+            $row = ['workspace_id' => $workspaceId, 'user_id' => $userId, 'label_key' => self::key($spelt)];
+            $color === null
+                ? LabelColor::query()->where($row)->delete()
+                : LabelColor::query()->upsert([[...$row, 'color' => $color, 'created_at' => now(), 'updated_at' => now()]],
+                    ['workspace_id', 'user_id', 'label_key'], ['color', 'updated_at']);
+
+            return;
+        }
         $this->ensure($workspaceId, $userId, [$spelt]);
         LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->where('label_key', self::key($spelt))
             ->update(['color' => $color, 'updated_at' => now()]);
@@ -239,8 +293,16 @@ final class LabelLists
      */
     public function colors(int $workspaceId, int $userId): array
     {
-        return LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->whereNotNull('color')
-            ->pluck('color', 'label_key')->map(fn ($c): string => strtolower((string) $c))->all();
+        // One read: the lists' colours, and (a label spelt as a fixed chip has no list) the colour 2.0.0-i kept for one.
+        $reserved = DB::table('label_colors')->where('workspace_id', $workspaceId)->where('user_id', $userId)->whereIn('label_key', self::RESERVED)
+            ->select(['label_key', 'color', DB::raw('1 as fallback')]);
+        $colors = [];
+        foreach (DB::table('label_lists')->where('workspace_id', $workspaceId)->where('user_id', $userId)->whereNotNull('color')
+            ->select(['label_key', 'color', DB::raw('0 as fallback')])->unionAll($reserved)->get() as $row) {
+            $colors[(string) $row->label_key] ??= strtolower((string) $row->color);
+        }
+
+        return $colors;
     }
 
     /** The colour fewest of the person's lists have, the earliest in the picker's order on a tie. */
@@ -275,7 +337,7 @@ final class LabelLists
         $key = self::key(LibraryOrganiser::cleanLabel($key) ?? $key);
         $find = fn (): ?LabelList => LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->where('label_key', $key)->first();
         $list = $find();
-        if ($list === null && in_array($key, $this->carried($workspaceId, $userId, true), true)) {
+        if ($list === null && in_array($key, array_map(self::key(...), $this->carried($workspaceId, $userId, true)), true)) {
             $this->ensure($workspaceId, $userId, $this->carried($workspaceId, $userId, true));
             $list = $find();
         }
@@ -296,7 +358,7 @@ final class LabelLists
         if (mb_strlen($raw) > self::MAX_NAME) {
             throw new ApiError(422, 'validation_failed', 'The name is at most '.self::MAX_NAME.' characters.', ['errors' => ['name' => ['The name is at most '.self::MAX_NAME.' characters.']]]);
         }
-        if (in_array(self::key($raw), self::RESERVED, true)) {
+        if (self::reserved(self::key($raw))) {
             throw new ApiError(422, 'name_reserved', "{$raw} is one of the fixed lists. Choose another name.", ['errors' => ['name' => ["{$raw} is one of the fixed lists."]]]);
         }
         $other = LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->where('label_key', self::key($raw))
@@ -331,11 +393,43 @@ final class LabelLists
      */
     private function carriers(int $workspaceId, int $userId, string $key): array
     {
+        return array_values(array_filter($this->labelsOf($workspaceId, $userId), fn (object $l): bool => self::key((string) $l->label) === $key));
+    }
+
+    /**
+     * Every label on the person's recordings in the workspace (Trash too), locked until the transaction ends.
+     *
+     * @return list<object{id: int, capture_session_id: string, label: string}>
+     */
+    private function labelsOf(int $workspaceId, int $userId): array
+    {
         return DB::table('session_labels')->join('capture_sessions', 'capture_sessions.id', '=', 'session_labels.capture_session_id')
             ->where('capture_sessions.workspace_id', $workspaceId)->where('capture_sessions.user_id', $userId)
             ->orderBy('session_labels.id')->lockForUpdate()
-            ->get(['session_labels.id', 'session_labels.capture_session_id', 'session_labels.label'])
-            ->filter(fn (object $l): bool => self::key((string) $l->label) === $key)->values()->all();
+            ->get(['session_labels.id', 'session_labels.capture_session_id', 'session_labels.label'])->values()->all();
+    }
+
+    /** The person's lists numbered from 0 in their order (position, then age), with no gaps and no place twice. */
+    private function renumber(int $workspaceId, int $userId): void
+    {
+        foreach ($this->rows($workspaceId, $userId) as $i => $list) {
+            if ($list->position !== $i) {
+                $list->forceFill(['position' => $i])->save();
+            }
+        }
+    }
+
+    /**
+     * The name of the person's list a rename ran into: the one whose name matches ignoring capitals and accents (as
+     * the database's collation does), else the name asked for.
+     */
+    private function clashing(int $workspaceId, int $userId, string $name, int $self): string
+    {
+        $fold = fn (string $s): string => mb_strtolower((string) preg_replace('/\p{Mn}+/u', '', (string) \Normalizer::normalize($s, \Normalizer::FORM_D)));
+        $other = LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->whereKeyNot($self)->get(['name'])
+            ->first(fn (LabelList $l): bool => $fold($l->name) === $fold($name));
+
+        return $other instanceof LabelList ? $other->name : $name;
     }
 
     /**

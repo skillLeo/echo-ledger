@@ -9,11 +9,13 @@ use App\Models\LabelList;
 use App\Models\SessionLabel;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Lists\LabelLists;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Pdo\Sqlite;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -216,6 +218,115 @@ describe('PATCH /api/lists/{key}', function () {
     });
 });
 
+describe('PATCH /api/lists/{key}, at scale and under contention', function () {
+    it('renames in the same number of statements for a few recordings or many', function () {
+        $n = null;
+        DB::listen(function () use (&$n): void {
+            if ($n !== null) {
+                $n++;
+            }
+        });
+        $queries = function (string $key, string $name) use (&$n): int {
+            $n = 0;
+            $this->api($this->token)->patchJson('/api/lists/'.$key, ['name' => $name])->assertOk();
+            [$counted, $n] = [$n, null];
+
+            return $counted;
+        };
+        $few = collect(range(1, 3))->map(fn () => labelled($this->me, ['Few']));
+        $many = collect(range(1, 60))->map(fn () => labelled($this->me, ['Many']));
+        // One of each carries the label twice in other capitals (written before labels were compared that way): it
+        // keeps one.
+        $fewTwin = labelled($this->me, ['Few', 'FEW']);
+        $manyTwin = labelled($this->me, ['many', 'MANY']);
+        listsOf($this, $this->token);
+        // A first change, so what a request reads once (the person's role) is read before counting.
+        $this->api($this->token)->patchJson('/api/lists/few', ['color' => LIST_RED])->assertOk();
+
+        $forFew = $queries('few', 'Few now');
+        $forMany = $queries('many', 'Many now');
+
+        expect($forMany)->toBe($forFew)
+            ->and($many->every(fn (CaptureSession $s): bool => labelsOf($s->id) === ['Many now']))->toBeTrue()
+            ->and($few->every(fn (CaptureSession $s): bool => labelsOf($s->id) === ['Few now']))->toBeTrue()
+            ->and(labelsOf($fewTwin->id))->toBe(['Few now'])
+            ->and(labelsOf($manyTwin->id))->toBe(['Many now']);
+    });
+
+    it('answers 409 list_exists when another device takes the name in the same moment, changing nothing', function () {
+        $session = labelled($this->me, ['Clients']);
+        listsOf($this, $this->token);
+        // The other device's list lands between the name check and the save.
+        LabelList::saving(function (LabelList $list): void {
+            DB::table('label_lists')->insert(['workspace_id' => $list->workspace_id, 'user_id' => $list->user_id, 'label_key' => 'customers',
+                'name' => 'Customers', 'position' => 1, 'created_at' => now(), 'updated_at' => now()]);
+        });
+        try {
+            // Here the other device's list goes back with this transaction, so the answer names the name asked for;
+            // in production it names the list the other device made.
+            $this->api($this->token)->patchJson('/api/lists/clients', ['name' => 'customers'])->assertStatus(409)
+                ->assertJson(['code' => 'list_exists', 'name' => 'customers', 'message' => 'You already have a list called customers.']);
+        } finally {
+            LabelList::flushEventListeners();
+        }
+
+        expect(labelsOf($session->id))->toBe(['Clients'])
+            ->and(LabelList::query()->where('user_id', $this->me->id)->pluck('name')->all())->toBe(['Clients']);
+    });
+
+    it('answers 409, not 500, when the database counts the new name as a label the recording has ("Résumé", "Resume")', function () {
+        // MySQL's utf8mb4_unicode_ci, which session_labels is under in production, ignores accents: so does this index.
+        $fold = fn (string $s): string => mb_strtolower((string) preg_replace('/\p{Mn}+/u', '', (string) Normalizer::normalize($s, Normalizer::FORM_D)));
+        $pdo = DB::connection()->getPdo();
+        $compare = fn (string $a, string $b): int => strcmp($fold($a), $fold($b));
+        $pdo instanceof Sqlite ? $pdo->createCollation('accent_ci', $compare) : $pdo->sqliteCreateCollation('accent_ci', $compare);
+        DB::statement('CREATE UNIQUE INDEX session_labels_accent_ci ON session_labels (capture_session_id, label COLLATE accent_ci)');
+        try {
+            $session = labelled($this->me, ['Notes', 'Résumé']);
+            listsOf($this, $this->token);
+
+            $this->api($this->token)->patchJson('/api/lists/notes', ['name' => 'Resume'])->assertStatus(409)
+                ->assertJson(['code' => 'list_exists', 'name' => 'Résumé']);
+        } finally {
+            DB::statement('DROP INDEX IF EXISTS session_labels_accent_ci');
+        }
+
+        expect(labelsOf($session->id))->toBe(['Notes', 'Résumé'])
+            ->and(array_column(listsOf($this, $this->token), 'key'))->toBe(['notes', 'résumé']);
+    });
+});
+
+describe('the fixed chips\' words as labels', function () {
+    it('leaves a label spelt All, Unread or Important on its recording, but makes no list of it', function () {
+        $old = labelled($this->me, ['Important', 'Clients', 'سب']);
+        $new = CaptureSession::factory()->create(['user_id' => $this->me->id]);
+
+        $this->api($this->token)->patchJson("/api/sessions/{$new->id}", ['labels' => ['Unread', 'اہم']])->assertOk();
+        $this->api($this->token)->postJson('/api/sessions/bulk', ['ids' => [$new->id], 'action' => 'label', 'label' => 'ALL'])->assertOk();
+
+        expect(listsOf($this, $this->token))->toBe([['key' => 'clients', 'name' => 'Clients', 'color' => null, 'position' => 0, 'count' => 1]])
+            ->and(labelsOf($old->id))->toBe(['Important', 'Clients', 'سب'])
+            ->and(labelsOf($new->id))->toBe(['Unread', 'اہم', 'ALL']);
+        $this->api($this->token)->patchJson('/api/lists/important', ['name' => 'Priority'])->assertNotFound()->assertJson(['code' => 'list_not_found']);
+        $this->api($this->token)->putJson('/api/lists/order', ['keys' => ['clients']])->assertOk();
+        $this->api($this->token)->postJson('/api/lists', ['name' => 'Important'])->assertStatus(422)->assertJson(['code' => 'name_reserved']);
+        expect(LabelList::query()->pluck('label_key')->all())->toBe(['clients']);
+    });
+
+    it('keeps such a label\'s colour as 2.0.0-i did', function () {
+        $session = labelled($this->me, ['Important']);
+
+        $this->api($this->token)->putJson('/api/labels/color', ['label' => 'important', 'color' => LIST_RED])->assertOk();
+
+        $item = collect($this->api($this->token)->getJson('/api/library')->json('data'))->firstWhere('id', $session->id);
+        expect($item['label_colors'])->toBe(['Important' => LIST_RED])
+            ->and(collect($this->api($this->token)->getJson('/api/library/views')->json('labels'))->firstWhere('label', 'Important')['color'])->toBe(LIST_RED)
+            ->and(LabelList::query()->count())->toBe(0);
+        $this->api($this->token)->putJson('/api/labels/color', ['label' => 'Important', 'color' => null])->assertOk();
+        expect(DB::table('label_colors')->count())->toBe(0);
+    });
+});
+
 describe('DELETE /api/lists/{key}', function () {
     it('takes the label off my recordings, which stay, and closes the gap in the row', function () {
         [$mate] = listMate($this);
@@ -297,6 +408,34 @@ describe('labelling a recording', function () {
     });
 });
 
+describe('the row\'s places', function () {
+    it('gives every new list a place of its own, putting back in order two that took the same one', function () {
+        // Two devices made the person's first lists at the same moment, both at the start of the row.
+        foreach (['home', 'clients'] as $key) {
+            LabelList::query()->create(['workspace_id' => $this->workspace->id, 'user_id' => $this->me->id, 'label_key' => $key, 'name' => ucfirst($key), 'position' => 0]);
+        }
+        $session = CaptureSession::factory()->create(['user_id' => $this->me->id]);
+
+        $this->api($this->token)->patchJson("/api/sessions/{$session->id}", ['labels' => ['Family', 'Work']])->assertOk();
+
+        expect(array_map(fn (array $l): array => [$l['key'], $l['position']], listsOf($this, $this->token)))
+            ->toBe([['home', 0], ['clients', 1], ['family', 2], ['work', 3]]);
+    });
+
+    it('reads the end of the row inside a transaction, with the person\'s lists locked', function () {
+        LabelList::query()->create(['workspace_id' => $this->workspace->id, 'user_id' => $this->me->id, 'label_key' => 'home', 'name' => 'Home', 'position' => 0]);
+        $locked = false;
+        // SQLite has no FOR UPDATE: what is checked is that the read of the row's places is made inside a transaction.
+        DB::listen(function ($q) use (&$locked): void {
+            $locked = $locked || (str_contains($q->sql, 'select "label_key", "position" from "label_lists"') && DB::transactionLevel() > 0);
+        });
+
+        app(LabelLists::class)->ensure($this->workspace->id, $this->me->id, ['Work', 'home']);
+
+        expect($locked)->toBeTrue()->and(LabelList::query()->orderBy('position')->pluck('position', 'label_key')->all())->toBe(['home' => 0, 'work' => 1]);
+    });
+});
+
 describe('who may', function () {
     it('lets a viewer read their lists but change none', function () {
         [, $viewerToken] = listMate($this, WorkspaceRole::Viewer);
@@ -314,8 +453,8 @@ describe('who may', function () {
 it('rehearses the migration: up makes a list of each label in name order with its colour, down gives the colours back', function () {
     $migration = 'database/migrations/2026_12_25_000001_create_label_lists.php';
     [$mate] = listMate($this);
-    labelled($this->me, ['zebra', 'Apple']);
-    labelled($this->me, ['apple', 'Mango'])->delete();
+    labelled($this->me, ['zebra', 'Apple', 'Important']);
+    labelled($this->me, ['apple', 'Mango', 'unread'])->delete();
     labelled($mate, ['Apple'], ['workspace_id' => $this->workspace->id]);
 
     Artisan::call('migrate:rollback', ['--path' => $migration, '--force' => true]);
@@ -331,6 +470,8 @@ it('rehearses the migration: up makes a list of each label in name order with it
         ['label_key' => 'mango', 'name' => 'Mango', 'color' => null, 'position' => 1],
         ['label_key' => 'zebra', 'name' => 'zebra', 'color' => null, 'position' => 2],
     ])->and($rows($mate))->toBe([['label_key' => 'apple', 'name' => 'Apple', 'color' => null, 'position' => 0]]);
+    // A label spelt as a fixed chip is no list, and stays on its recording.
+    expect(SessionLabel::query()->where('label', 'Important')->count())->toBe(1);
 
     // A colour chosen since, and one taken away, reach the release before.
     $this->api($this->token)->patchJson('/api/lists/zebra', ['color' => LIST_RED])->assertOk();

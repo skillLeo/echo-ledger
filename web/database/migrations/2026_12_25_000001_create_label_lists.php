@@ -12,11 +12,16 @@ use Illuminate\Support\Facades\Schema;
  * ones in the same order. A list is a label (label_key, the label in lower case as label_colors has it) with the name as
  * typed, its colour and its place in the row. Same owner and workspace keys as label_colors, so a teammate's lists are
  * their own. Up fills one row a label each person carries (deleted recordings too), in name order, with the colour the
- * label had; from then on the colours live here and label_colors is left as it was. Down writes the colours back to
- * label_colors (so the release before shows the colours chosen since) and drops the table. Safe to run again.
+ * label had; a label spelt as a fixed chip (All, Unread, Important) stays on its recordings, with its colour in
+ * label_colors, but is never a list. From then on the colours live here and label_colors is left as it was. Down
+ * writes the colours back to label_colors (so the release before shows the colours chosen since) and drops the table.
+ * Safe to run again.
  */
 return new class extends Migration
 {
+    /** The apps' fixed chips as LabelLists::RESERVED has them at 2.0.0-m (copied: a migration does not follow later code). */
+    private const RESERVED = ['all', 'unread', 'important', 'سب', 'نہ پڑھی گئی', 'اہم'];
+
     public function up(): void
     {
         if (! Schema::hasTable('label_lists')) {
@@ -64,6 +69,11 @@ return new class extends Migration
             $rows = [];
             $position = 0;
             foreach ($labels as $key => $name) {
+                if (in_array($key, self::RESERVED, true)) {
+                    // A label spelt as a fixed chip stays on its recordings (and its colour in label_colors) but is
+                    // never a list.
+                    continue;
+                }
                 $rows[] = ['workspace_id' => $workspaceId, 'user_id' => $userId, 'label_key' => $key, 'name' => $name,
                     'color' => $colors[$person.'|'.$key] ?? null, 'position' => $position++, 'created_at' => $now, 'updated_at' => $now];
             }

@@ -247,10 +247,16 @@ final class LibraryOrganiser
         $colors = $lists->whereNotNull('color')->mapWithKeys(fn (LabelList $l): array => [$l->label_key => strtolower((string) $l->color)])->all();
         $positions = $lists->mapWithKeys(fn (LabelList $l): array => [$l->label_key => $l->position])->all();
 
-        return SessionLabel::query()
+        $labels = SessionLabel::query()
             ->whereHas('captureSession', fn (Builder $q) => $q->where('workspace_id', $workspaceId)->ofPerson())
             ->selectRaw('label, COUNT(*) as aggregate')->groupBy('label')->orderBy('label')->get()
-            ->sortBy(fn (SessionLabel $l): int => $positions[mb_strtolower($l->label)] ?? PHP_INT_MAX)
+            ->sortBy(fn (SessionLabel $l): int => $positions[mb_strtolower($l->label)] ?? PHP_INT_MAX);
+        // A label spelt as a fixed chip has no list, and keeps the colour 2.0.0-i gave it (read only when one is there).
+        if ($userId !== null && $labels->contains(fn (SessionLabel $l): bool => LabelLists::reserved(mb_strtolower($l->label)))) {
+            $colors = $this->labelColors($workspaceId, $userId);
+        }
+
+        return $labels
             ->map(fn (SessionLabel $l): array => ['label' => $l->label, 'count' => (int) $l->getAttribute('aggregate'),
                 'color' => $colors[mb_strtolower($l->label)] ?? null])
             ->values()->all();
