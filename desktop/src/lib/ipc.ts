@@ -835,7 +835,7 @@ export interface LibraryItem {
     /** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
     final_progress?: TranscriptProgress | null;
     /**
-     * The views of the final transcript (since 2.0.0-l on a row): "making" from the moment the transcript is done until
+     * The views of the final transcript (since 2.0.0-n on a row): "making" from the moment the transcript is done until
      * the default view is written (`progress` `{}` until the first lines are), "failed" when it stopped or went quiet.
      */
     views?: ViewsSummary | null;

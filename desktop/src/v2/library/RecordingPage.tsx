@@ -510,7 +510,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
                       { value: "original" as ShowAs, label: "Original" }]} />}
                   {barView && <ConvertingLine view={barView} percent={viewPercent(views?.progress ?? viewsInfo?.progress, barView)} />}
                   {!barView && failedView && <ConvertingLine view={failedView} failed retrying={retrying} onRetry={() => void retryViews()} />}
-                  {showAs !== "original" && (
+                  {/* The converting line says it while the view is written or could not be (U19): no second caption then. */}
+                  {showAs !== "original" && !barView && !failedView && (
                     <span className="el-caption el-secondary" role="status">
                       {views?.status === "ready" ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`
                         : views?.status === "failed" ? `The view could not be made: ${views.error ?? "try again later."}`

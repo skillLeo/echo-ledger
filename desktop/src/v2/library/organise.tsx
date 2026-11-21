@@ -3,8 +3,9 @@
 // dialogs behind Move, Label, Rename and Transcribe. Selection mode, the row ⋮, the right-click menu and the recording
 // page all build from here, so an action is in the same place everywhere (PLAN_V2_PARITY 3, 4 and 7).
 import { useEffect, useId, useRef, useState } from "react";
-import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type ExportFormat, type MeetingPackFormat, type TranscribeEstimate, type TranscriptDetail, type TranscriptionLanguage, type TranscriptView, type WhatsAppVoiceOutcome } from "../../lib/ipc";
+import { api, errorMessage, type BulkExportFormat, type ClientFolder, type ExportView, type LibraryItem, type ExportFormat, type MeetingPackFormat, type TranscribeEstimate, type TranscriptDetail, type TranscriptionLanguage, type TranscriptView, type WhatsAppVoiceOutcome } from "../../lib/ipc";
 import { defaultViewOf } from "../../lib/progress";
+export { shownExportView } from "../../lib/progress";
 import { englishOnlyRisk, languageLabel, MAIN_LANGUAGES, menuLabel, MORE_LANGUAGES } from "../../lib/languages";
 import { transcriptText, copiedTranscript, DEFAULT_UNSURE, formatDuration, formatTime, sentenceDate, sourceAppLabel } from "../../lib/format";
 import { speakerName } from "../../lib/player";
@@ -57,10 +58,13 @@ export function recordingExportItems({ exportAs, packAs, view }: {
 
 export type Say = (text: string, action?: { label: string; run: () => void }) => void;
 
-/** Saves the transcripts of `ids` as one zip in `format` where the person chooses; says where, or nothing on cancel. */
-export async function exportRecordings(ids: readonly string[], format: BulkExportFormat, say: Say): Promise<void> {
+/**
+ * Saves the transcripts of `ids` as one zip in `format` where the person chooses; says where, or nothing on cancel.
+ * Since U19 in the view the list shows them in (`view`, from shownExportView), else the original words.
+ */
+export async function exportRecordings(ids: readonly string[], format: BulkExportFormat, say: Say, view?: ExportView): Promise<void> {
   try {
-    const path = await api.exportSessions([...ids], format);
+    const path = await api.exportSessions([...ids], format, view);
     if (path) say(`Saved ${path}`);
   } catch (e) {
     say(errorMessage(e));

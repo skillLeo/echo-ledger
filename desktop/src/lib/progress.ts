@@ -2,7 +2,7 @@
 // the upload queue), Transcribing (parts done and time left, `progress` / `final_progress`) and Converting (the views'
 // lines done, `views.progress`: an Urdu call opens in Roman Urdu, written after the Urdu transcript). The Library row,
 // the recording page and Activity say it the same way. Pure; tested.
-import type { LibraryItem, TranscriptProgress, TranscriptView, UploadItem, ViewsSummary } from "./ipc";
+import type { ExportView, LibraryItem, TranscriptProgress, TranscriptView, UploadItem, ViewsSummary } from "./ipc";
 
 export type Step = "upload" | "transcribe" | "improve";
 export type StepState = "done" | "active" | "waiting" | "failed";
@@ -103,4 +103,20 @@ export function stepStates(step: Step | null, improving: boolean, failed: boolea
   if (failed) return { upload: "done", transcribe: "failed", improve: "waiting" };
   const at = improving ? 2 : step ? ORDER.indexOf(step) : ORDER.length;
   return Object.fromEntries(ORDER.map((s, i) => [s, i < at ? "done" : i === at ? "active" : "waiting"])) as Record<Step, StepState>;
+}
+
+/**
+ * The view a list shows its recordings in (U19): the default view most of `items` open in (Roman Urdu for Urdu calls),
+ * or undefined when they open in their original words. A zip in that view keeps the original words of a recording whose
+ * view is not made yet, as the server does.
+ */
+export function shownExportView(items: readonly Pick<LibraryItem, "transcript">[]): ExportView | undefined {
+  const counts = new Map<ExportView, number>();
+  for (const item of items) {
+    const view = defaultViewOf(item.transcript?.views);
+    if (view) counts.set(view, (counts.get(view) ?? 0) + 1);
+  }
+  let best: ExportView | undefined;
+  for (const [view, n] of counts) if (best === undefined || n > (counts.get(best) ?? 0)) best = view;
+  return best;
 }

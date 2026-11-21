@@ -32,7 +32,7 @@ import { addToListMenu, inPlace, listKey, ListsRow, placeGone, placeName, unread
 import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
-  copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
+  copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, shownExportView, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
   TranscribeDialog, WhatsAppDialog,
 } from "./organise";
 
@@ -402,7 +402,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         : { label: "Transcribe…", icon: Icons.TranscriptIcon, group: "Organise", onPick: () => setOrganise({ kind: "transcribe", ids: [...ids] }) });
     }
     for (const item of own.organise ?? []) add(item.label, { group: "Organise", ...item });
-    add("export", own.export ?? exportMenu((format) => void exportRecordings(ids, format, say)));
+    add("export", own.export ?? exportMenu((format) => void exportRecordings(ids, format, say, shownExportView(chosen))));
     for (const item of own.export_more ?? []) add(item.label, { group: "Export", ...item });
     add("ai", { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Export", onPick: own.ai ?? (() => void copyForAiToClipboard(chosen, say)) });
     if (one) add("whatsapp", { label: "Send to WhatsApp…", icon: Icons.SendIcon, group: "Export", onPick: own.whatsapp ?? (() => setOrganise({ kind: "whatsapp", item: one })) });
@@ -651,7 +651,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                 onClick={() => setOrganise({ kind: "label", ids: pickedIds })} />
               {pickedIds.length > 0 && !tooMany && (
                 <Menu label="Share or export" button={{ variant: "quiet", icon: Icons.ShareIcon, title: "Share or export" }}
-                  items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say)).items!.map((i) => ({ ...i, group: "Export transcripts" })),
+                  items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
                     { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
               )}
               <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}

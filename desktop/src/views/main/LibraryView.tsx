@@ -34,7 +34,7 @@ import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languag
 import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
-import { defaultViewOf, improvingView, rowViewsLine, stepOf, transcribingLine, viewPercent } from "../../lib/progress";
+import { defaultViewOf, improvingView, rowViewsLine, shownExportView, stepOf, transcribingLine, viewPercent } from "../../lib/progress";
 import { useRowViews } from "../../lib/rowViews";
 import { LockedChip, NEEDS_KEY_TEXT } from "./Upgrade";
 import { openSettingsSection } from "../../lib/entitlements";
@@ -1316,7 +1316,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 else if (item.session) setSelected(item.session.id);
               }} />
           )}
-          {selecting && !shared && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} onSelectAll={() => setPicked(new Set(filtered.map((i) => i.id)))} />}
+          {selecting && !shared && <BulkBar ids={pickedIds} view={shownExportView(filtered.filter((i) => picked.has(i.id)))} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} onSelectAll={() => setPicked(new Set(filtered.map((i) => i.id)))} />}
           {/* Offline (a state, v1.6.1 Notices): no timer; a click tries again; closed until the next problem. */}
           {syncError && (
             <StateBanner id="library-sync" state={syncError} tone="danger" role="alert" className="sync-error" onOpen={() => void refresh()} openLabel="Couldn't sync with the server. Try again"
@@ -1648,7 +1648,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         {!readOnly && <LockedChip feature="connector" label="Ask an AI assistant" />}
                       </div>
                       {galleryOpen && !!screens?.length && <ScreenGallery screens={screens} onOpen={openScreen} onClose={() => setGalleryOpen(false)} />}
-                      {showAs !== "original" && (
+                      {/* The converting line says it while the view is written or could not be (U19): no second caption then. */}
+                      {showAs !== "original" && !(transcript.kind === "final" && (barView !== null || failedView !== null)) && (
                         <div className="small muted" role="status" data-testid="view-status" style={{ marginTop: 6 }}>
                           {views?.status === "ready"
                             ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`

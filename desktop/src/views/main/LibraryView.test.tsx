@@ -1893,7 +1893,10 @@ describe("LibraryView Show as", () => {
     fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
     await flushAsync();
     expect(callsOf("transcript_views_make")).toEqual([{ id: "tr-a" }]);
-    expect(within(detail()).getByTestId("view-status")).toHaveTextContent("Writing the Roman Urdu view…");
+    // U19: the converting line says it, once; the old "Writing the … view…" caption is gone.
+    expect(within(detail()).getAllByText(/Converting to Roman Urdu…/).length).toBeGreaterThan(0);
+    expect(within(detail()).queryByTestId("view-status")).toBeNull();
+    expect(within(detail()).queryByText(/Writing the Roman Urdu view/)).toBeNull();
     expect(within(detail()).getByText("آپ کیسے ہیں")).toBeInTheDocument();
   });
 

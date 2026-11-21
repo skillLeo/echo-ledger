@@ -276,6 +276,14 @@ describe("Save and export", () => {
     expect(callsOf("sessions_export")).toEqual([{ ids: ["a", "b"], format: "json" }]);
     expect(notify).not.toHaveBeenCalled();
   });
+
+  it("exports the zip in the view the list shows (U19: Roman Urdu for Urdu calls)", async () => {
+    respond("sessions_export", null);
+    render(<BulkBar ids={["a", "b"]} view="roman" clients={[]} knownLabels={[]} notify={vi.fn()} onDone={vi.fn()} onClientCreated={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Export transcripts" }));
+    await flushAsync();
+    expect(callsOf("sessions_export")).toEqual([{ ids: ["a", "b"], format: "docx", view: "roman" }]);
+  });
 });
 
 describe("Live status", () => {

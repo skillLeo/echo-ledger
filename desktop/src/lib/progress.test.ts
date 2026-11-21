@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { convertFailedText, convertingText, defaultViewOf, etaText, improvingView, rowViewsLine, stepOf, stepStates, transcribingLine, uploadLine, viewPercent } from "./progress";
+import { convertFailedText, convertingText, defaultViewOf, etaText, improvingView, rowViewsLine, shownExportView, stepOf, stepStates, transcribingLine, uploadLine, viewPercent } from "./progress";
 import { makeItem } from "../test/fixtures";
 
 describe("clear progress", () => {
@@ -67,5 +67,16 @@ describe("clear progress", () => {
     expect(stepStates(null, true, false)).toEqual({ upload: "done", transcribe: "done", improve: "active" });
     expect(stepStates(null, false, false)).toEqual({ upload: "done", transcribe: "done", improve: "done" });
     expect(stepStates(null, false, true)).toEqual({ upload: "done", transcribe: "failed", improve: "waiting" });
+  });
+});
+
+describe("the view a zip of several recordings is in (U19)", () => {
+  const withDefault = (id: string, def: "original" | "roman" | "english") =>
+    makeItem(id, { transcript: { final_status: "completed", final_transcript_id: `tr-${id}`, live_available: false, preview: null, views: { status: "ready", default: def, progress: {} } } });
+
+  it("is the view most of them open in, and none when they open in their original words", () => {
+    expect(shownExportView([withDefault("a", "roman"), withDefault("b", "original"), withDefault("c", "roman"), withDefault("d", "english")])).toBe("roman");
+    expect(shownExportView([withDefault("a", "original"), makeItem("b")])).toBeUndefined();
+    expect(shownExportView([])).toBeUndefined();
   });
 });
