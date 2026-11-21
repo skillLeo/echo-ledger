@@ -14,7 +14,7 @@
     $line = collect([
         $children > 0 ? ($children === 1 ? __(':n subfolder', ['n' => 1]) : __(':n subfolders', ['n' => $children])) : null,
         $count === 0 ? ($children === 0 ? __('No recordings yet') : null) : ($count === 1 ? __(':n recording', ['n' => 1]) : __(':n recordings', ['n' => $count])),
-        $count > 0 && $last ? __('Last call :date', ['date' => \Illuminate\Support\Carbon::parse($last, 'UTC')->setTimezone($zone)->format('M j')]) : null,
+        $count > 0 && $last ? __('Last call :date', ['date' => \App\Filament\Support\ConsoleDates::day(\Illuminate\Support\Carbon::parse($last, 'UTC')->setTimezone($zone))]) : null,
     ])->filter()->implode(' · ');
     // A search lists every level: say which folder a subfolder is in.
     $parent = $client->relationLoaded('parent') ? $client->parent?->name : null;
