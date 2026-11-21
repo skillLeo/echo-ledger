@@ -39,7 +39,7 @@ fun EchoChip(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     /** The chip opens a menu or sheet (Views, Source, Date…): a 16 dp chevron on its end side, never a "▾" in the text. */
-    dropdown: Boolean = false,
+    dropdown: Boolean = false
 ) {
     val c = EchoV2.colors
     Surface(

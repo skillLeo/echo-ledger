@@ -152,7 +152,7 @@ ${type}
 
     /** Label colour names and the #RRGGBB the server stores for each (contract 2.0.0-i); Light/Dark.label* draw them. */
     val labelColours: Map<String, String> = linkedMapOf(
-${labels},
+${labels}
     )
 }
 `;
