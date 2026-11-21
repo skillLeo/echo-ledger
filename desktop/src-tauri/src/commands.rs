@@ -446,9 +446,10 @@ pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callb
 #[tauri::command]
 pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     let state = app.state::<AppState>();
-    // First, so the share copies and kept pictures go even when a later step (the keychain) fails.
+    // First, so the share copies, kept pictures and copied recovery codes go even when a later step (the keychain) fails.
     forget_whatsapp_shares(&app);
     forget_avatars(&app);
+    crate::secret_copy::clear_now(&app).await;
     state.token_store.forget().map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = None;
     state.api_cache.clear();
@@ -1846,8 +1847,15 @@ pub fn lock_now(app: AppHandle) -> LockStatus {
     if state.settings().app_lock {
         state.lock.set_locked(true);
         emit_lock(&app);
+        clear_copied_codes(&app);
     }
     lock_status_of(&state)
+}
+
+/// Recovery codes copied before a lock leave the clipboard with it (secret_copy.rs).
+fn clear_copied_codes(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { crate::secret_copy::clear_now(&app).await });
 }
 
 /// The UI saw the person use the app; resets the lock-after timer.
@@ -1918,6 +1926,7 @@ pub fn spawn_idle_lock(app: AppHandle) {
             if !state.lock.is_locked() && crate::lock::idle_expired(settings.app_lock, settings.lock_after_minutes, state.lock.last_activity(), std::time::Instant::now()) {
                 state.lock.set_locked(true);
                 emit_lock(&app);
+                crate::secret_copy::clear_now(&app).await;
             }
         }
     });
