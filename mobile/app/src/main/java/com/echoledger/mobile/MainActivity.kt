@@ -177,6 +177,12 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // The clipboard can be read again: a copied secret that came due while the app was behind is cleared now.
+        if (hasFocus) com.echoledger.mobile.account.SecretClip.sweep(this)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -279,6 +285,8 @@ class MainActivity : FragmentActivity() {
 
         fun publish() {
             lockState = machine.state
+            // A secret copied from two-step (the key, the recovery codes) leaves the clipboard when the app locks.
+            if (lockState == LockState.Locked) com.echoledger.mobile.account.SecretClip.clearNow(this@MainActivity)
             if (machine.takeNoScreenLockNotice()) vm.showMessage(NO_SCREEN_LOCK)
         }
 

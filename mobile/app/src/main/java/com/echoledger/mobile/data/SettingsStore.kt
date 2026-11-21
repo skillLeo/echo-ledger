@@ -241,6 +241,8 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
     }
 
     suspend fun saveToken(token: String) {
+        // A new sign-in may be another account or another server: no picture of the last one is kept.
+        com.echoledger.mobile.account.AvatarCache.clearAll(context)
         val enc = cipher.encrypt(token.toByteArray(), TOKEN_CONTEXT)
         context.dataStore.edit { it[Keys.TOKEN] = Base64.encodeToString(enc, Base64.NO_WRAP) }
     }
@@ -253,6 +255,9 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
     suspend fun clearPairing() {
         // A device report sent for this account is never attached to another account's support message.
         com.echoledger.mobile.help.DeviceReports(context).clear()
+        // Nor the account's pictures, nor a two-step key or recovery codes still on the clipboard.
+        com.echoledger.mobile.account.AvatarCache.clearAll(context)
+        com.echoledger.mobile.account.SecretClip.clearNow(context)
         context.dataStore.edit {
             it.remove(Keys.TOKEN)
             it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), it.toSettings().copy(deviceId = null, deviceName = null))

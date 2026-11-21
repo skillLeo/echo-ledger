@@ -721,7 +721,9 @@ data class AuthOptionsDto(
     @SerialName("sign_up") val signUp: Boolean = false,
     @SerialName("sign_up_url") val signUpUrl: String? = null,
     @SerialName("reset_url") val resetUrl: String? = null,
-    @SerialName("browser_sign_in") val browserSignIn: Boolean = true
+    @SerialName("browser_sign_in") val browserSignIn: Boolean = true,
+    /** Since 2.0.0-l: what a new password needs, so the phone can say so before sending; the server still decides. */
+    @SerialName("password_rules") val passwordRules: PasswordRulesDto? = null
 )
 
 @Serializable
@@ -957,8 +959,14 @@ data class SharedItemDto(
     val client: ClientDto? = null
 )
 
+/** A person shown beside an item; since 2.0.0-l with their picture ([avatarUrl] null: initials). */
 @Serializable
-data class SenderDto(val name: String? = null, val email: String? = null)
+data class SenderDto(
+    val name: String? = null,
+    val email: String? = null,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("avatar_version") val avatarVersion: Long? = null
+)
 
 /** What you sent of a recording or a project (`GET /api/sent`, since v1.5). */
 @Serializable
@@ -1150,7 +1158,17 @@ data class AccountDto(
     val google: Boolean = false,
     @SerialName("created_at") val createdAt: String? = null,
     val workspace: AccountWorkspaceDto? = null,
-    @SerialName("deletes_at") val deletesAt: String? = null
+    @SerialName("deletes_at") val deletesAt: String? = null,
+    /** Since 2.0.0-l: the person's picture, null for initials; [avatarVersion] changes only when the picture does. */
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("avatar_version") val avatarVersion: Long? = null,
+    /** False for an account made with Google that never set a password (it proves itself with an email code). */
+    @SerialName("has_password") val hasPassword: Boolean = true,
+    /** A new address waiting for its code or link; null once confirmed, cancelled, blocked or expired. */
+    @SerialName("pending_email") val pendingEmail: String? = null,
+    @SerialName("pending_email_expires_at") val pendingEmailExpiresAt: String? = null,
+    /** False when this server is not set up for phone passkeys: they are managed on the website. */
+    @SerialName("passkeys_available") val passkeysAvailable: Boolean = false
 )
 
 @Serializable

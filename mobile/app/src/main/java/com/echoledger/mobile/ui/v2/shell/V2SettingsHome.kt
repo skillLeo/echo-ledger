@@ -52,7 +52,10 @@ data class Profile(
     val storageBytes: Long?,
     val recordings: Int?,
     /** How long recordings are kept before the clean-up (the storage answer's `retention_days`). */
-    val retentionDays: Int? = null
+    val retentionDays: Int? = null,
+    /** The person's picture (since 2.0.0-l); null shows the initials. */
+    val avatarUrl: String? = null,
+    val avatarVersion: Long? = null
 )
 
 /** How the profile card offers Upgrade (classic's rule): filled on Free, outlined on a paid plan with one above it. */
@@ -100,7 +103,9 @@ fun profileOf(account: AccountDto?, storage: StorageDto?, plan: com.echoledger.m
     monthlyMinutes = plan.monthlyMinutes,
     storageBytes = storage?.recordingsBytes,
     recordings = storage?.recordingsCount,
-    retentionDays = storage?.retentionDays?.takeIf { it > 0 }
+    retentionDays = storage?.retentionDays?.takeIf { it > 0 },
+    avatarUrl = account?.avatarUrl,
+    avatarVersion = account?.avatarVersion
 )
 
 /**
@@ -227,7 +232,16 @@ private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modif
     val text = v2Text
     EchoCard(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
-            PersonAvatar(initialsOf(profile.name ?: profile.email))
+            if (profile.avatarVersion != null) {
+                com.echoledger.mobile.ui.v2.account.AccountAvatar(
+                    profile.name ?: profile.email,
+                    profile.avatarUrl,
+                    profile.avatarVersion,
+                    com.echoledger.mobile.account.AvatarCache.personOf(profile.avatarUrl, "me")
+                )
+            } else {
+                PersonAvatar(initialsOf(profile.name ?: profile.email))
+            }
             Column(Modifier.weight(1f)) {
                 Text(
                     profile.name ?: profile.email ?: text.notSignedIn,

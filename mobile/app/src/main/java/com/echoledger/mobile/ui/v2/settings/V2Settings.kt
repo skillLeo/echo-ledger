@@ -198,9 +198,14 @@ fun V2SettingsScreen(
 
                 "key" -> KeyPage(vm, settings.plan, r.highlight, back)
 
+                "account" -> AccountSettingsPage(settings.serverUrl, r.highlight, openClassicPage, { vm.unpair() }, back)
+
                 "lock" -> AppLockPage(settings, vm::updateSettings, { vm.setWidgetHideTitles(it) }, r.highlight, back)
 
-                "privacy" -> PrivacyPage(settings, vm::updateSettings, r.highlight, { page -> route = SettingsRoute.Page(page) }, back)
+                // Export or delete my data opens the account's classic page, where they are.
+                "privacy" -> PrivacyPage(settings, vm::updateSettings, r.highlight, { page ->
+                    route = SettingsRoute.Page(page, if (page == "account") "account.export" else null)
+                }, back)
 
                 "storage" -> StoragePage(
                     load = { vm.storage() },
