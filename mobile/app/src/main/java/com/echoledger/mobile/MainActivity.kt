@@ -751,6 +751,11 @@ class MainActivity : FragmentActivity() {
 
                         !settings.onboardingDone -> OnboardingScreen(vm)
 
+                        // Signed out with the new design chosen on this phone: its sign-in (parity.csv PH-OTH-039).
+                        !settings.paired && shellOn -> com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                            com.echoledger.mobile.ui.v2.account.V2SignInScreen(vm)
+                        }
+
                         !settings.paired -> PairingScreen(vm)
 
                         // The new design's page for the notes when its Library is on (parity.csv PH-OTH-038).

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The new design's sign-in (parity.csv PH-OTH-039). values-ur/ has the same keys. -->
+<resources>
+    <string name="v2_in_title_email">Sign in or create an account</string>
+    <string name="v2_in_title_password">Welcome back</string>
+    <string name="v2_in_title_code">Check your email</string>
+    <string name="v2_in_title_profile">Create your account</string>
+    <string name="v2_in_title_otp">Two-step sign-in</string>
+    <string name="v2_in_change">Change</string>
+    <string name="v2_in_email">Email</string>
+    <string name="v2_in_continue">Continue</string>
+    <string name="v2_in_one_moment">One moment…</string>
+    <string name="v2_in_or">or</string>
+    <string name="v2_in_google">Google</string>
+    <string name="v2_in_google_full">Continue with Google</string>
+    <string name="v2_in_passkey">Passkey</string>
+    <string name="v2_in_passkey_full">Sign in with a passkey</string>
+    <string name="v2_in_advanced">Advanced</string>
+    <string name="v2_in_hide_advanced">Hide advanced</string>
+    <string name="v2_in_server">Server address</string>
+    <string name="v2_in_other_server">Use a different server</string>
+    <string name="v2_in_password">Password</string>
+    <string name="v2_in_sign_in">Sign in</string>
+    <string name="v2_in_signing_in">Signing in…</string>
+    <string name="v2_in_forgot">Forgot it? Email me a code instead</string>
+    <string name="v2_in_code_sent">We sent a 6-digit code to %1$s. It works for 10 minutes.</string>
+    <string name="v2_in_code">6-digit code</string>
+    <string name="v2_in_checking">Checking…</string>
+    <string name="v2_in_send_again_in">Send again in %1$d s</string>
+    <string name="v2_in_send_again">Send again</string>
+    <string name="v2_in_name">Your name</string>
+    <string name="v2_in_accept">I accept the Terms and the Privacy policy</string>
+    <string name="v2_in_terms">Terms</string>
+    <string name="v2_in_privacy">Privacy</string>
+    <string name="v2_in_create">Create account</string>
+    <string name="v2_in_creating">Creating…</string>
+    <string name="v2_in_free_plan">You start on the Free plan. You can upgrade any time.</string>
+    <string name="v2_in_code_email">6-digit code from the email</string>
+    <string name="v2_in_otp">Code from your authenticator app</string>
+    <string name="v2_in_other_ways_full">Other ways to sign in (QR code, one-time code)</string>
+    <string name="v2_in_encrypted">Your recordings are encrypted on this phone and on the way to the server.</string>
+    <string name="v2_in_other_ways">Other ways to sign in</string>
+    <string name="v2_in_qr_help">Signed in on a computer? In the console open Account › Devices › Sign in a device, then scan its QR code here.</string>
+    <string name="v2_in_scan">Scan QR code</string>
+    <string name="v2_in_camera_needed">Camera access is needed to scan. You can still type the code.</string>
+    <string name="v2_in_camera_off">Camera access is turned off for EchoLedger. Tap Scan QR code to open the app settings and allow it, or type the code.</string>
+    <string name="v2_in_one_time">One-time sign-in code</string>
+    <string name="v2_in_with_code">Sign in with the code</string>
+    <string name="v2_in_browser">Sign in in the browser (passkey)</string>
+    <string name="v2_in_confirm_title">Sign in to this server?</string>
+    <string name="v2_in_confirm_text">%1$s
+
+Recordings and transcripts from this phone will be sent only to this server.</string>
+</resources>
