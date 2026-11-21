@@ -183,7 +183,7 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->middleware($own)->name('api.sessions.markers.store');
             Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->middleware($own)->name('api.sessions.retranscribe');
             // Since v1.8 (contract 1.8.0-e): audio only and "Transcribe later", one recording or many.
-            Route::post('sessions/transcribe', [TranscribeLaterController::class, 'many'])->middleware($own)->name('api.sessions.transcribe.many');
+            Route::post('sessions/transcribe', [TranscribeLaterController::class, 'many'])->middleware([$own, 'throttle:transcribe'])->name('api.sessions.transcribe.many');
             Route::post('sessions/{id}/transcribe', [TranscribeLaterController::class, 'one'])->middleware([$own, 'throttle:transcribe'])->name('api.sessions.transcribe');
             Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->middleware($own)->name('api.sessions.markers.destroy');
             // Screen moments (v1.5): a screen comes off the recording's timeline (sending one is an upload route below).

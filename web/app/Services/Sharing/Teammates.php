@@ -341,7 +341,9 @@ final class Teammates
             'language_marks' => $original->language_marks,
             // The names the sender saw, the project's remembered ones included.
             'speaker_names' => array_merge($project->speaker_names ?? [], $original->speaker_names ?? []) ?: null,
-            'status' => SessionStatus::Completed,
+            // An audio-only recording stays audio only in the copy (no transcript to copy; transcribed when asked).
+            'status' => $original->status === SessionStatus::AudioOnly ? SessionStatus::AudioOnly : SessionStatus::Completed,
+            'transcribe' => $original->status !== SessionStatus::AudioOnly,
             'final_provider' => $original->final_provider,
         ]);
         $copy->forceFill(['caller_name' => $original->caller_name, 'caller_number' => $original->caller_number, 'caller_source' => $original->caller_source]);

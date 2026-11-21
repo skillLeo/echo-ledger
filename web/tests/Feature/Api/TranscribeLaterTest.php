@@ -5,16 +5,26 @@ declare(strict_types=1);
 use App\Enums\SessionStatus;
 use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
+use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Plan;
+use App\Models\SentItem;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Sharing\Teammates;
 use App\Services\TranscribeLater;
 use App\Services\Workspaces\Workspaces;
+use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -28,6 +38,7 @@ uses(InteractsWithDeviceApi::class);
  */
 
 beforeEach(function () {
+    TranscribeLater::$lockWaitSeconds = 0;
     Storage::fake('recordings');
     $this->configureAssemblyAi();
     $this->fakeAssemblyAi();
@@ -156,7 +167,8 @@ describe('many at once, and the estimate', function () {
 
         $estimate = $this->postJson('/api/sessions/transcribe-estimate', ['ids' => $this->ids])->assertOk();
 
-        expect($estimate->json())->toBe(['minutes' => 6, 'minutes_left' => 100,
+        // 100 less the 2 minutes of the recording still being transcribed ($this->done).
+        expect($estimate->json())->toBe(['minutes' => 6, 'minutes_left' => 98,
             'items' => array_map(fn (string $id): array => ['id' => $id, 'minutes' => 2], $this->mine)]);
         expect(CaptureSession::query()->whereIn('id', $this->mine)->pluck('status')->unique()->all())->toBe([SessionStatus::AudioOnly]);
     });
@@ -180,7 +192,7 @@ describe('many at once, and the estimate', function () {
         minutesLimit($this->owner, 5);
 
         $this->postJson('/api/sessions/transcribe', ['ids' => $this->ids])->assertForbidden()
-            ->assertJson(['code' => 'budget_exceeded', 'minutes_needed' => 6, 'minutes_left' => 5]);
+            ->assertJson(['code' => 'budget_exceeded', 'minutes_needed' => 6, 'minutes_left' => 3]); // 5 less the 2 in flight
 
         expect(CaptureSession::query()->whereIn('id', $this->mine)->pluck('status')->unique()->all())->toBe([SessionStatus::AudioOnly]);
     });
@@ -254,5 +266,181 @@ describe('for the web console (TranscribeLater, no device)', function () {
         expect(CaptureSession::query()->withoutGlobalScopes()->findOrFail($mine)->status)->toBe(SessionStatus::AudioOnly);
         // The owner starts theirs.
         expect($later->startFor($this->owner, $workspace->id, $mine)->kind->value)->toBe('final');
+    });
+});
+
+describe('spending the same minutes twice', function () {
+    it('counts a transcript started and not finished against the minutes left', function () {
+        [$first, $second] = [audioOnlyCall($this), audioOnlyCall($this)];
+        minutesLimit($this->owner, 3);
+
+        $this->postJson("/api/sessions/{$first}/transcribe")->assertStatus(202);
+        // Nothing is in the ledger yet, but the first one's 2 minutes are spoken for.
+        $this->postJson("/api/sessions/{$second}/transcribe")->assertForbidden()
+            ->assertJson(['code' => 'budget_exceeded', 'minutes_needed' => 2, 'minutes_left' => 1]);
+        expect(collect($this->getJson('/api/library')->json('data'))->firstWhere('id', $second)['transcribe_estimate']['minutes_left'])->toBe(1);
+    });
+
+    it('lets one start of a workspace run at a time', function () {
+        $id = audioOnlyCall($this);
+        $held = Cache::lock('transcribe-later:'.$this->device->workspace_id, 30);
+        expect($held->get())->toBeTrue();
+
+        $this->postJson("/api/sessions/{$id}/transcribe")->assertStatus(429)->assertJson(['code' => 'rate_limited'])->assertHeader('Retry-After', '5');
+        $this->postJson('/api/sessions/transcribe', ['ids' => [$id]])->assertStatus(429);
+        expect(CaptureSession::query()->findOrFail($id)->status)->toBe(SessionStatus::AudioOnly);
+
+        $held->release();
+        $this->postJson("/api/sessions/{$id}/transcribe")->assertStatus(202);
+    });
+
+    it('throttles bulk like the one-recording call', function () {
+        foreach (range(1, 30) as $_) {
+            $this->postJson('/api/sessions/transcribe', ['ids' => ['01ARZ3NDEKTSV4RRFFQ69G5FAV']])->assertStatus(202);
+        }
+        $this->postJson('/api/sessions/transcribe', ['ids' => ['01ARZ3NDEKTSV4RRFFQ69G5FAV']])->assertStatus(429);
+    });
+});
+
+it('shows no estimate on a recording a teammate sent: the minutes left are the sender\'s', function () {
+    $mate = User::factory()->create();
+    app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->device->workspace_id), $mate);
+    $sent = CaptureSession::factory()->create(['user_id' => $mate->id, 'workspace_id' => $this->device->workspace_id, 'status' => SessionStatus::AudioOnly, 'transcribe' => false]);
+    app(Teammates::class)->send($mate, $sent, [$this->owner->email], null);
+    app('auth')->forgetGuards();
+
+    $shared = collect($this->getJson('/api/library?folder=shared')->assertOk()->json('data'))->firstWhere('id', $sent->id);
+
+    expect($shared)->not->toBeNull()->and($shared['status'])->toBe('audio_only')->and($shared['transcribe_estimate'])->toBeNull();
+});
+
+describe('the review of 2356ca5c', function () {
+    it('starts an audio-only recording through "Re-transcribe as" with the same checks', function () {
+        $id = audioOnlyCall($this);
+        minutesLimit($this->owner, 1);
+        $this->postJson("/api/sessions/{$id}/retranscribe", ['language' => 'ur'])->assertForbidden()->assertJson(['code' => 'budget_exceeded', 'minutes_needed' => 2]);
+        expect(CaptureSession::query()->findOrFail($id)->status)->toBe(SessionStatus::AudioOnly);
+
+        minutesLimit($this->owner, null);
+        $this->postJson("/api/sessions/{$id}/retranscribe", ['language' => 'ur'])->assertStatus(202);
+        $session = CaptureSession::query()->findOrFail($id);
+        expect($session->status)->toBe(SessionStatus::Processing)->and($session->transcribe)->toBeTrue()->and($session->language)->toBe('ur');
+    });
+
+    it('starts an audio-only recording from the console\'s "Transcribe again" with the same checks', function () {
+        Filament::setCurrentPanel('app');
+        $id = audioOnlyCall($this);
+        $this->actingAs($this->owner, 'web');
+        minutesLimit($this->owner, 1);
+
+        Livewire::test(ViewCaptureSession::class, ['record' => $id])
+            ->callAction('retry', data: ['language' => ''])->assertNotified('Not transcribed');
+        expect(CaptureSession::query()->findOrFail($id)->status)->toBe(SessionStatus::AudioOnly);
+
+        minutesLimit($this->owner, null);
+        Livewire::test(ViewCaptureSession::class, ['record' => $id])
+            ->callAction('retry', data: ['language' => ''])->assertNotified('Transcription queued');
+        expect(CaptureSession::query()->findOrFail($id)->status)->toBe(SessionStatus::Processing);
+    });
+
+    it('keeps a saved copy of an audio-only recording audio only', function () {
+        $mate = User::factory()->create();
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->device->workspace_id), $mate);
+        $mateDevice = Fx::device($mate, ['workspace_id' => $this->device->workspace_id]);
+        $this->asToken(Fx::token($mateDevice));
+        $sent = audioOnlyCall($this);
+        app(Teammates::class)->send($mate, CaptureSession::query()->withoutGlobalScopes()->findOrFail($sent), [$this->owner->email], null);
+        $this->asToken($this->token);
+        $item = SentItem::query()->withoutGlobalScopes()->latest('id')->firstOrFail();
+
+        $this->postJson("/api/shared-with-me/{$item->id}/save")->assertSuccessful();
+
+        $copy = CaptureSession::query()->where('user_id', $this->owner->id)->where('origin', CaptureSession::ORIGIN_SAVED)->sole();
+        expect($copy->status)->toBe(SessionStatus::AudioOnly)->and($copy->transcribe)->toBeFalse()
+            ->and(collect($this->getJson('/api/library')->json('data'))->firstWhere('id', $copy->id)['transcribe_estimate'])->not->toBeNull();
+    });
+
+    it('puts a recording back to audio only when its transcript cannot start', function () {
+        $id = audioOnlyCall($this);
+        // The transcript row is made, then handing its job to the queue fails.
+        Bus::shouldReceive('dispatch')->andThrow(new RuntimeException('queue down'));
+
+        $this->postJson("/api/sessions/{$id}/transcribe")->assertServerError();
+
+        $session = CaptureSession::query()->findOrFail($id);
+        expect($session->status)->toBe(SessionStatus::AudioOnly)->and($session->transcribe)->toBeFalse();
+    });
+
+    it('lists 6 audio-only recordings in the same queries as 1', function () {
+        $count = function (): int {
+            app('auth')->forgetGuards();
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->getJson('/api/library')->assertOk();
+            // Sanctum notes a token's last use now and then, whatever the page: not a query of the rows.
+            $n = count(array_filter(DB::getQueryLog(), fn (array $q): bool => ! str_contains($q['query'], 'personal_access_tokens')));
+            DB::disableQueryLog();
+
+            return $n;
+        };
+        audioOnlyCall($this);
+        $count();
+        $one = $count();
+        foreach (range(1, 5) as $_) {
+            audioOnlyCall($this);
+        }
+
+        expect($count())->toBe($one);
+    });
+
+    it('turns audio-only recordings into completed ones on rollback, so the release before can read them', function () {
+        $id = audioOnlyCall($this);
+        $migration = 'database/migrations/2026_12_23_000001_add_transcribe_later.php';
+
+        Artisan::call('migrate:rollback', ['--path' => $migration, '--force' => true]);
+        expect(DB::table('capture_sessions')->where('id', $id)->value('status'))->toBe('completed')
+            ->and(Schema::hasColumn('capture_sessions', 'transcribe'))->toBeFalse();
+
+        Artisan::call('migrate', ['--path' => $migration, '--force' => true]);
+        expect(Schema::hasColumn('clients', 'transcribe_calls'))->toBeTrue();
+    });
+
+    it('starts none of many on Free without a key', function () {
+        $ids = [audioOnlyCall($this), audioOnlyCall($this)];
+        Workspace::query()->whereKey($this->device->workspace_id)->update(['plan_id' => Plan::free()->id]);
+        $this->owner->forceFill(['entitlement_overrides' => ['limits' => ['trial_minutes' => 0]]])->save();
+
+        $this->postJson('/api/sessions/transcribe', ['ids' => $ids])->assertForbidden()->assertJson(['code' => 'needs_transcription_key']);
+        expect(CaptureSession::query()->whereKey($ids)->pluck('status')->unique()->all())->toBe([SessionStatus::AudioOnly]);
+    });
+
+    it('lets a finish say Transcribe after the open create said Save audio', function () {
+        $open = $this->openSession(['transcribe' => false]);
+        $finish = $this->postJson("/api/sessions/{$open}/finish", Fixtures::finishBody($bytes = Fixtures::audio(1500), ['transcribe' => true]))->assertOk();
+        $this->uploadAll((string) $finish->json('recordings.0.id'), $bytes, (int) $finish->json('recordings.0.upload.chunk_size_bytes'));
+        $this->postJson('/api/recordings/'.$finish->json('recordings.0.id').'/complete')->assertSuccessful();
+
+        $session = CaptureSession::query()->findOrFail($open);
+        expect($session->transcribe)->toBeTrue()->and($session->status)->toBe(SessionStatus::Processing);
+    });
+
+    it('counts no more than the trial has left on a plan without transcription on EchoLedger', function () {
+        $ids = [audioOnlyCall($this), audioOnlyCall($this), audioOnlyCall($this)];
+        $free = Plan::free();
+        $free->forceFill(['trial_minutes' => 5, 'monthly_minutes' => null])->save();
+        Workspace::query()->whereKey($this->device->workspace_id)->update(['plan_id' => $free->id]);
+
+        expect(collect($this->getJson('/api/library')->json('data'))->firstWhere('id', $ids[0])['transcribe_estimate'])->toBe(['minutes' => 2, 'minutes_left' => 5]);
+        $this->postJson('/api/sessions/transcribe', ['ids' => $ids])->assertForbidden()->assertJson(['code' => 'budget_exceeded', 'minutes_needed' => 6, 'minutes_left' => 5]);
+    });
+
+    it('shows no estimate on a sent recording opened on its own either', function () {
+        $mate = User::factory()->create();
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->device->workspace_id), $mate);
+        $sent = CaptureSession::factory()->create(['user_id' => $mate->id, 'workspace_id' => $this->device->workspace_id, 'status' => SessionStatus::AudioOnly, 'transcribe' => false]);
+        app(Teammates::class)->send($mate, $sent, [$this->owner->email], null);
+        app('auth')->forgetGuards();
+
+        expect($this->getJson("/api/sessions/{$sent->id}")->assertOk()->json('transcribe_estimate'))->toBeNull();
     });
 });

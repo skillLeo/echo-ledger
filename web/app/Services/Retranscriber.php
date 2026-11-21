@@ -62,6 +62,11 @@ final class Retranscriber
             throw new RuntimeException('The recording is not on the server any more, so it cannot be transcribed again.');
         }
         $session->update(['language' => $language]);
+        // Since v1.8 (contract 1.8.0-e): an audio-only recording starts like "Transcribe" does, with its budget, key and
+        // claim, in the language just chosen.
+        if ($session->status === SessionStatus::AudioOnly) {
+            return app(TranscribeLater::class)->start($session->refresh());
+        }
         $final = $session->finalTranscript;
         if (! $final instanceof Transcript || $final->status !== TranscriptStatus::Completed) {
             return app(FinalTranscriptCoordinator::class)->start($session->refresh(), $final);

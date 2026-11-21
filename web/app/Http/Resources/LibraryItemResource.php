@@ -8,11 +8,14 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Api\SessionController;
 use App\Models\CaptureSession;
+use App\Models\Device;
 use App\Models\Transcript;
+use App\Models\User;
 use App\Services\LibraryOrganiser;
 use App\Services\RetentionPolicy;
 use App\Services\TranscribeLater;
 use App\Services\Views\TranscriptViews;
+use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -120,9 +123,24 @@ final class LibraryItemResource extends JsonResource
             'label_colors' => (object) self::labelColors($session),
             'expires_at' => app(RetentionPolicy::class)->expiresAt($session)?->toAtomString(),
             // Since v1.8 (contract 1.8.0-e): what transcribing an audio-only recording would use; null otherwise.
-            'transcribe_estimate' => app(TranscribeLater::class)->estimate($session),
+            // Only for the person whose recording it is: the minutes left are theirs, never a sender's (a recording a
+            // teammate sent shows none).
+            'transcribe_estimate' => self::asksOwner($request, $session) ? app(TranscribeLater::class)->estimate($session) : null,
             'updated_at' => $session->updated_at->toAtomString(),
         ];
+    }
+
+    /** Whether the person asking (a device's, or the signed-in console user) made [$session], in its workspace. */
+    private static function asksOwner(Request $request, CaptureSession $session): bool
+    {
+        $asker = $request->user();
+        [$id, $workspace] = match (true) {
+            $asker instanceof Device => [(int) $asker->user_id, (int) $asker->workspace_id],
+            $asker instanceof User => [(int) $asker->id, (int) CurrentWorkspace::id()],
+            default => [null, null],
+        };
+
+        return $id !== null && $id === (int) $session->user_id && $workspace === (int) $session->workspace_id;
     }
 
     /**

@@ -101,13 +101,14 @@ final class FinalTranscriptCoordinator
      *
      * @return array{provider: SttProviderKey, own_key: bool, language: ?string, route: RouteDecision}
      */
-    public function plan(CaptureSession $session): array
+    public function plan(CaptureSession $session, ?bool $platformTranscription = null): array
     {
         $router = app(LanguageRouter::class);
         $language = $router->languageFor($session);
         $route = $router->final($language, self::useCaseFor($session), $session);
         $provider = $language === null ? $this->providerFor($session) : $route->provider;
-        $ownKey = self::needsOwnKey($session, $provider);
+        // [$platformTranscription] when the caller already knows it (a Library page asks once, not once a row).
+        $ownKey = $platformTranscription === null ? self::needsOwnKey($session, $provider) : UsageLedger::isBillable($provider) && ! $platformTranscription;
 
         return ['provider' => $ownKey ? SttProviderKey::Groq : $provider, 'own_key' => $ownKey, 'language' => $language, 'route' => $route];
     }

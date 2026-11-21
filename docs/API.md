@@ -1546,7 +1546,8 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
   `{"minutes": 5, "minutes_left": 120}` — the minutes a transcript would use (the recording's length rounded up, times
   the billed channels of the engine the routing would pick) and the minutes left this month for this workspace
   (`null` = no limit). These are plan minutes: `0` when it would run on the person's own key (Free) or an on-device
-  engine, which count for none (since 2.0.0-j).
+  engine, which count for none (since 2.0.0-j). Only the person whose recording it is sees it: on a recording a
+  teammate sent (the `shared` folder) it is `null`.
 - `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter).
 - `POST /api/sessions/{id}/transcribe` — `sessions:write`, throttled (30/min/device): starts the transcript of an
   `audio_only` session with the usual routing → `202 {"session": { …status "processing"… }, "transcript": {"id",
@@ -1558,7 +1559,10 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
   budget: when the total exceeds what's left, `403 budget_exceeded` with `minutes_needed` and `minutes_left`, and
   nothing starts. Ids of another workspace are skipped as `not_found`. (Since 2.0.0-j:) so are a teammate's, as only
   the person's own recordings are theirs to transcribe; an id sent twice counts once; on Free without an own key the
-  answer is `403 needs_transcription_key` and nothing starts.
+  answer is `403 needs_transcription_key` and nothing starts. Throttled like the one-recording call (30/min/device).
+- (Since 2.0.0-j, for every start:) the minutes left count the transcripts already started and not finished at their
+  estimate (the month's usage counts a transcript only when it completes), and starts of one workspace run one at a
+  time: a start that waits more than a few seconds for another is `429 rate_limited` with `Retry-After`.
 - `POST /api/sessions/transcribe-estimate` — `library:read`: `{"ids": ["…"]}` (1–50) → `200 {"minutes": 42,
   "minutes_left": 120, "items": [{"id": "…", "minutes": 5}]}` (no side effects). `items` lists the person's
   audio-only recordings among the ids, the ones bulk would start (since 2.0.0-j), and `minutes` is their sum.

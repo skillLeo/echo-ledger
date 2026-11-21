@@ -359,6 +359,9 @@ final class SessionController extends Controller
         $data = $request->validate(['language' => ['present', 'nullable', 'string', 'max:16']]);
         try {
             $run = app(Retranscriber::class)->startAs($session, $data['language']);
+        } catch (ApiError $e) {
+            // Since 2.0.0-j an audio-only recording answers as "Transcribe" does (budget_exceeded, needs_transcription_key).
+            throw $e;
         } catch (RuntimeException $e) {
             throw new ApiError(409, 'cannot_retranscribe', $e->getMessage());
         }

@@ -47,6 +47,7 @@ use App\Services\Retranscriber;
 use App\Services\SettingsRepository;
 use App\Services\Sharing\WhatsAppMessage;
 use App\Services\TextReplacements;
+use App\Services\TranscribeLater;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
 use App\Services\Views\TranscriptViews;
@@ -1041,7 +1042,20 @@ class ViewCaptureSession extends ViewRecord
             ])
             ->action(function (array $data, CaptureSession $record, FinalTranscriptCoordinator $coordinator): void {
                 $record->update(['language' => LanguageChoice::normalize($data['language'] ?? null)]);
-                $coordinator->start($record, $record->finalTranscript);
+                // Since v1.8 (contract 1.8.0-e): an audio-only recording starts as the apps' "Transcribe" does, the
+                // person's own only, with its budget and key.
+                if ($record->status === SessionStatus::AudioOnly) {
+                    $person = auth()->user();
+                    try {
+                        app(TranscribeLater::class)->startFor($person instanceof User ? $person : throw new ApiError(403, 'not_allowed', 'Sign in again.'), (int) $record->workspace_id, $record->id);
+                    } catch (ApiError $e) {
+                        Notification::make()->title('Not transcribed')->body($e->getMessage())->danger()->send();
+
+                        return;
+                    }
+                } else {
+                    $coordinator->start($record, $record->finalTranscript);
+                }
                 Notification::make()->title('Transcription queued')->success()->send();
             });
     }

@@ -18,6 +18,7 @@ use App\Models\Transcript;
 use App\Services\LibraryOrganiser;
 use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\Teammates;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Cursor;
@@ -118,6 +119,12 @@ final class LibraryController extends Controller
 
         $page = $query->orderByDesc('updated_at')->orderByDesc('id')
             ->cursorPaginate((int) ($data['limit'] ?? 50), ['*'], 'cursor', $cursor);
+        // Since 2.0.0-j: an audio-only row's estimate reads its primary recording (length, channels): loaded for those
+        // rows only, in one query, so a page without any costs nothing more.
+        $audioOnly = $page->getCollection()->filter(fn (CaptureSession $s): bool => ! $s->trashed() && $s->status === SessionStatus::AudioOnly);
+        if ($audioOnly->isNotEmpty()) {
+            (new EloquentCollection($audioOnly->all()))->load('recordings:id,capture_session_id,role,duration_ms,channels');
+        }
 
         // The sender's project and device stay theirs here too, as in GET /api/sessions/{id}.
         $items = $shared ? $page->getCollection()->map(fn (CaptureSession $session): CaptureSession => Teammates::readOnly($session)) : $page->getCollection();
