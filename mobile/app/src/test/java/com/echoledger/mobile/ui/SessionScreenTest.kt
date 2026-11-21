@@ -283,14 +283,61 @@ class SessionScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `a readable transcript shows Improving with its percent while the views are made`() {
+    fun `a readable transcript shows Converting to Roman Urdu with its percent while the views are made`() {
         serve()
         val ready = item()
         val views = RowViewsDto(status = "making", default = "roman", progress = mapOf("roman" to ProgressDto(done = 3, total = 5)))
         showSession(ready.copy(transcript = ready.transcript?.copy(views = views)))
 
-        awaitText("Improving Roman Urdu… 60%")
+        awaitText("Converting to Roman Urdu… 60%")
         compose.onAllNodesWithText("Notify me when ready").assertCountEquals(0)
+    }
+
+    private val viewsMaking =
+        """{"status":"making","available":["roman","english"],"default":"roman","progress":{"roman":{"done":1,"total":2}}}"""
+    private val viewsReady =
+        """{"status":"ready","available":["roman","english"],"default":"roman","roman":["Hello ji.","Shukriya call karne ka."],"english":null}"""
+
+    /** U19: a transcript whose default view is Roman Urdu ([status]); the views answer [answers] in turn, the last one after. */
+    private fun romanView(status: String, vararg answers: String) {
+        serve(
+            ServerFixtures.transcript().trimEnd().removeSuffix("}") +
+                ""","views":{"available":["roman","english"],"status":"$status","default":"roman"}}"""
+        )
+        var asked = 0
+        server.on("GET", "/api/transcripts/.+/views") { FakeServer.json(200, answers[minOf(asked++, answers.size - 1)]) }
+        server.on("POST", "/api/transcripts/.+/views", FakeServer.json(202, viewsMaking))
+    }
+
+    @Test
+    fun `an Urdu transcript says it is converting, then shows and copies Roman Urdu once it is ready`() {
+        romanView("making", viewsMaking, viewsReady)
+        val ready = item()
+        showSession(ready.copy(transcript = ready.transcript?.copy(views = RowViewsDto(status = "making", default = "roman"))))
+        awaitText("Converting to Roman Urdu")
+        // The original words can be read meanwhile.
+        awaitText("Hi, thanks for calling.")
+        // The page asks again every 5 s (the test clock moves a second at a time) and swaps the lines once it is ready.
+        pumpUntil("the Roman Urdu lines", timeoutMs = 45_000) {
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.onAllNodesWithText("Shukriya call karne ka.").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onAllNodesWithText("Hi, thanks for calling.").assertCountEquals(0)
+        compose.onAllNodesWithText("Converting to Roman Urdu", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("Copy text").performClick()
+        pumpUntil("the clipboard") { clipboardText()?.contains("Shukriya call karne ka.") == true }
+    }
+
+    @Test
+    fun `a Roman Urdu view that could not be made says so and Try again asks for it again`() {
+        romanView("failed", """{"status":"failed","available":["roman","english"],"default":"roman","error":"x"}""", viewsMaking)
+        val ready = item()
+        showSession(ready.copy(transcript = ready.transcript?.copy(views = RowViewsDto(status = "failed", default = "roman"))))
+        awaitText("Couldn't convert to Roman Urdu.")
+        awaitText("Hi, thanks for calling.")
+        assertTrue(server.requestsTo("POST", "/api/transcripts/.+/views").isEmpty())
+        compose.onNodeWithText("Try again").performClick()
+        pumpUntil("asked again") { server.requestsTo("POST", "/api/transcripts/.+/views").isNotEmpty() }
     }
 
     @Test

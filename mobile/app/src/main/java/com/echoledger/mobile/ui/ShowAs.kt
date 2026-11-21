@@ -31,6 +31,27 @@ enum class ShowAs(val key: String, val label: String) {
         /** How often the page asks whether the views are written yet. */
         const val POLL_MS = 5_000L
 
+        /**
+         * The view a finished transcript opens in (U19): its default (Roman Urdu for Urdu) when it is one of its views
+         * and is ready or being made, so the page shows it the moment it is ready; null for the original words, when
+         * nothing is on its way (`none`), or when making it failed (the page offers Try again instead).
+         */
+        fun autoView(summary: com.echoledger.mobile.data.ViewsSummaryDto?): ShowAs? {
+            summary ?: return null
+            val default = of(summary.default)
+            if (default == ORIGINAL || default.key !in summary.available) return null
+            // Never asked for on opening when nothing is on its way (`none`): that would make views for old calls, or be refused.
+            return default.takeIf { summary.status == "ready" || summary.status == "making" }
+        }
+
+        /** The words for a view in plain English, for Copy for AI's header ("Roman Urdu"); null for the original. */
+        fun languageName(key: String?): String? = when (of(key)) {
+            ORIGINAL -> null
+            ROMAN -> "Roman Urdu"
+            ENGLISH -> "English"
+            URDU -> "Urdu"
+        }
+
         /** The text of each line in [view], aligned with [segments]; null for the original words or a view not ready. */
         fun lines(segments: List<SegmentDto>, view: ShowAs, views: TranscriptViewsDto?): List<String?>? {
             val ready = views?.takeIf { view != ORIGINAL && it.status == "ready" } ?: return null

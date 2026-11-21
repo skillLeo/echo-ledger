@@ -123,12 +123,27 @@ fun V2LibraryScreen(
     extras: LibraryExtras? = null
 ) {
     val text = v2Text
+    // U19: each row's snippet comes in its default view (Roman Urdu) once ready (transcript.preview_view says which).
     val library by vm.library.collectAsState()
     val pending by vm.pending.collectAsState()
     val syncing by vm.syncing.collectAsState()
     val offline by vm.offline.collectAsState()
     val clients by vm.clients.collectAsState()
     val settings by vm.settings.collectAsState()
+    // Live status (classic's rule): while something is uploading, being transcribed or converted to its default view,
+    // the list asks again every 5 s, so "Converting to Roman Urdu… 60%" moves and goes; it stops once all is done.
+    val busy = pending.any { it.state == "uploading" || it.state == "queued" } ||
+        library.any {
+            com.echoledger.mobile.core.ItemStatus.of(it) == com.echoledger.mobile.core.ItemStatus.PROCESSING ||
+                it.transcript?.views?.status == "making"
+        }
+    LaunchedEffect(busy) {
+        while (busy) {
+            kotlinx.coroutines.delay(LIVE_REFRESH_MS)
+            vm.reloadLocal()
+            vm.refreshQuietly()
+        }
+    }
     var query by rememberSaveable { mutableStateOf("") }
     var filters by remember(initialViews) {
         mutableStateOf(
@@ -611,11 +626,16 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
     val c = EchoV2.colors
     val text = v2Text
     val pinned = stringResource(R.string.v2_lib_pinned_mark)
+    val res = androidx.compose.ui.platform.LocalContext.current.resources
+    // U19: "Converting to Roman Urdu… 60%" (with its progress ring) or "Couldn't convert…" in place of the snippet.
+    val stage = if (row.status == RowStatus.Done) com.echoledger.mobile.core.RowProgress.of(row.item) else null
+    val converting = stage?.step == com.echoledger.mobile.core.RowProgress.Step.IMPROVING
+    val conversion = stage?.let { conversionWords(res, row.item) }
     EchoListRow(
         title = row.title,
         // A selected row is tinted all across, as classic's is.
         modifier = if (selected == true) Modifier.background(c.accentSoft) else Modifier,
-        meta = row.meta,
+        meta = conversion ?: row.meta,
         titleEnd = row.time,
         metaEnd = {
             // The screens icon and count (meeting assets) before the length, when it has any.
@@ -634,7 +654,15 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
                 Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary, maxLines = 1, softWrap = false)
             }
         },
-        status = statusBadge(row.status, text),
+        status = if (converting) {
+            (
+                {
+                    com.echoledger.mobile.ui.v2.components.EchoProgressRing(stage?.percent)
+                }
+                )
+        } else {
+            statusBadge(row.status, text)
+        },
         leading = {
             if (selected != null) {
                 androidx.compose.material3.Checkbox(selected, null)
@@ -656,3 +684,6 @@ private fun statusBadge(status: RowStatus, text: V2Text): (@Composable () -> Uni
     RowStatus.Transcribing -> ({ EchoStatus(text.transcribing, EchoStatusKind.Accent) })
     RowStatus.Failed -> ({ EchoStatus(text.failed, EchoStatusKind.Danger) })
 }
+
+/** How often the Library asks again while something is on its way (classic's LIVE_REFRESH_MS). */
+private const val LIVE_REFRESH_MS = 5_000L

@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.RecordingSteps
+import com.echoledger.mobile.core.RowProgress
 import com.echoledger.mobile.core.TranscriptText
 import com.echoledger.mobile.data.CallNotesDto
 import com.echoledger.mobile.data.LibraryItem
@@ -134,17 +135,32 @@ fun stepLine(res: Resources, item: LibraryItem, transcript: TranscriptDto?, step
             ).joinToString(" · ")
         }
 
-        else -> {
-            val views = item.transcript?.views
-            val view = when (views?.default) {
-                "roman" -> res.getString(R.string.v2_rec_view_roman)
-                "urdu" -> res.getString(R.string.v2_rec_view_urdu)
-                "english" -> res.getString(R.string.v2_rec_view_english)
-                else -> views?.default.orEmpty()
-            }
-            steps.percent?.let { res.getString(R.string.v2_rec_improving_view_pct, view, it) }
-                ?: res.getString(R.string.v2_rec_improving_view, view)
-        }
+        else -> conversionWords(res, item) ?: ""
+    }
+}
+
+/** A view's name in the screen's language: Roman Urdu, Urdu, English. */
+fun viewWords(res: Resources, key: String?): String = when (key) {
+    "roman" -> res.getString(R.string.v2_rec_view_roman)
+    "urdu" -> res.getString(R.string.v2_rec_view_urdu)
+    "english" -> res.getString(R.string.v2_rec_view_english)
+    else -> key.orEmpty()
+}
+
+/**
+ * U19, the default view of a finished transcript on its way, in the screen's language: "Converting to Roman Urdu… 60%"
+ * (also before the server started it), "Couldn't convert to Roman Urdu · Try again" when it failed; null otherwise.
+ */
+fun conversionWords(res: Resources, item: LibraryItem): String? {
+    val stage = RowProgress.of(item) ?: return null
+    val view = viewWords(res, item.transcript?.views?.default)
+    return when (stage.step) {
+        RowProgress.Step.IMPROVING -> stage.percent?.let { res.getString(R.string.v2_rec_improving_view_pct, view, it) }
+            ?: res.getString(R.string.v2_rec_improving_view, view)
+
+        RowProgress.Step.VIEW_FAILED -> res.getString(R.string.v2_rec_convert_failed, view)
+
+        else -> null
     }
 }
 
@@ -220,13 +236,54 @@ private fun Bar(percent: Int) {
     }
 }
 
-/** "Improving Roman Urdu… 60%" over a transcript that can be read already. */
+/** "Converting to Roman Urdu… 60%" with a small progress ring over a transcript that can be read already (in its original words). */
 @Composable
 fun ImprovingLine(item: LibraryItem, transcript: TranscriptDto?, steps: RecordingSteps.Steps) {
     val res = LocalContext.current.resources
-    Column(verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
-        Text(stepLine(res, item, transcript, steps), style = EchoV2.type.meta, color = EchoV2.colors.textSecondary)
+    Column(
+        Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+            com.echoledger.mobile.ui.v2.components.EchoProgressRing(steps.percent)
+            Text(stepLine(res, item, transcript, steps), style = EchoV2.type.meta, color = EchoV2.colors.textSecondary)
+        }
         steps.percent?.let { Bar(it) }
+    }
+}
+
+/** "Converting to Roman Urdu… 60%" from the page's own views (after Try again, before the Library hears of it). */
+@Composable
+fun ConvertingLine(view: String?, percent: Int?) {
+    val res = LocalContext.current.resources
+    val name = viewWords(res, view)
+    Column(
+        Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+            com.echoledger.mobile.ui.v2.components.EchoProgressRing(percent)
+            Text(
+                percent?.let { res.getString(R.string.v2_rec_improving_view_pct, name, it) }
+                    ?: res.getString(R.string.v2_rec_improving_view, name),
+                style = EchoV2.type.meta,
+                color = EchoV2.colors.textSecondary
+            )
+        }
+        percent?.let { Bar(it) }
+    }
+}
+
+/** "Couldn't convert to Roman Urdu · Try again" with Try again, which asks the server to make the view again. */
+@Composable
+fun ConvertFailedLine(item: LibraryItem, onTryAgain: () -> Unit) {
+    val res = LocalContext.current.resources
+    if (RowProgress.of(item)?.step != RowProgress.Step.VIEW_FAILED) return
+    // The page's words stop before "Try again": its button follows.
+    val words = res.getString(R.string.v2_rec_convert_failed_page, viewWords(res, item.transcript?.views?.default))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+        Text(words, style = EchoV2.type.meta, color = EchoV2.colors.danger, modifier = Modifier.weight(1f))
+        EchoButton(stringResource(R.string.v2_try_again), onTryAgain, kind = EchoButtonKind.Secondary)
     }
 }
 
