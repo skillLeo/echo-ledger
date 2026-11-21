@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { etaText, improvingText, improvingView, stepOf, stepStates, transcribingLine, uploadLine, viewPercent } from "./progress";
+import { convertFailedText, convertingText, defaultViewOf, etaText, improvingView, rowViewsLine, stepOf, stepStates, transcribingLine, uploadLine, viewPercent } from "./progress";
 import { makeItem } from "../test/fixtures";
 
 describe("clear progress", () => {
@@ -24,12 +24,27 @@ describe("clear progress", () => {
     expect(viewPercent({}, "roman")).toBeNull();
     expect(viewPercent(undefined, "roman")).toBeNull();
     expect(viewPercent({ roman: { done: 0, total: 0 } }, "roman")).toBeNull();
-    expect(improvingText("roman", 60)).toBe("Improving Roman Urdu… 60%");
-    expect(improvingText("english", null)).toBe("Improving English…");
+    expect(convertingText("roman", 60)).toBe("Converting to Roman Urdu… 60%");
+    expect(convertingText("english", null)).toBe("Converting to English…");
     expect(improvingView({ urdu: { done: 1, total: 2 } }, "original", "roman")).toBe("roman");
     expect(improvingView({ urdu: { done: 1, total: 2 } }, "english", "roman")).toBe("english");
     expect(improvingView({ urdu: { done: 1, total: 2 } }, "original", "original")).toBe("urdu");
     expect(improvingView({}, "original", undefined)).toBeNull();
+  });
+
+  it("says a row is converting to its default view from the moment the transcript is done, or that it could not (U19)", () => {
+    // Making with no lines done yet (the job is about to start): no percent.
+    expect(rowViewsLine({ status: "making", default: "roman", progress: {} })).toEqual({ state: "making", view: "roman", text: "Converting to Roman Urdu…", percent: null });
+    expect(rowViewsLine({ status: "making", default: "roman", progress: { roman: { done: 6, total: 10 } } })?.text).toBe("Converting to Roman Urdu… 60%");
+    expect(rowViewsLine({ status: "failed", default: "roman", progress: {} })).toEqual({ state: "failed", view: "roman", text: "Couldn't convert to Roman Urdu", percent: null });
+    expect(rowViewsLine({ status: "ready", default: "roman", progress: {} })).toBeNull();
+    // An English call opens in its own words: nothing to say on its row.
+    expect(rowViewsLine({ status: "making", default: "original", progress: {} })).toBeNull();
+    expect(rowViewsLine(null)).toBeNull();
+    expect(convertFailedText("english")).toBe("Couldn't convert to English");
+    expect(defaultViewOf({ default: "roman" })).toBe("roman");
+    expect(defaultViewOf({ default: "original" })).toBeNull();
+    expect(defaultViewOf(undefined)).toBeNull();
   });
 
   it("says the upload in percent of bytes", () => {

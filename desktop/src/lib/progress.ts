@@ -1,7 +1,8 @@
 // Clear progress (Phase 1C, C): a recording goes through three steps, each with real progress: Upload (% of bytes, from
-// the upload queue), Transcribing (parts done and time left, `progress` / `final_progress`) and Improving (the views'
-// lines done, `views.progress`). The Library row, the recording page and Activity say it the same way. Pure; tested.
-import type { LibraryItem, TranscriptProgress, TranscriptView, UploadItem } from "./ipc";
+// the upload queue), Transcribing (parts done and time left, `progress` / `final_progress`) and Converting (the views'
+// lines done, `views.progress`: an Urdu call opens in Roman Urdu, written after the Urdu transcript). The Library row,
+// the recording page and Activity say it the same way. Pure; tested.
+import type { LibraryItem, TranscriptProgress, TranscriptView, UploadItem, ViewsSummary } from "./ipc";
 
 export type Step = "upload" | "transcribe" | "improve";
 export type StepState = "done" | "active" | "waiting" | "failed";
@@ -41,10 +42,36 @@ export function improvingView(
   return first ?? null;
 }
 
-/** "Improving Roman Urdu… 60%", or without a percent when the server does not say. */
-export function improvingText(view: TranscriptView | null, percent: number | null): string {
+/** "Converting to Roman Urdu… 60%", or without a percent while the server has no lines done yet. */
+export function convertingText(view: TranscriptView | null, percent: number | null): string {
   const name = view ? VIEW_NAMES[view] : "the views";
-  return percent === null ? `Improving ${name}…` : `Improving ${name}… ${percent}%`;
+  return percent === null ? `Converting to ${name}…` : `Converting to ${name}… ${percent}%`;
+}
+
+/** "Couldn't convert to Roman Urdu": the view stopped, or went quiet and the server gave up on it. */
+export function convertFailedText(view: TranscriptView | null): string {
+  return `Couldn't convert to ${view ? VIEW_NAMES[view] : "the views"}`;
+}
+
+/** The view a transcript opens in when it is not its original words (Roman Urdu for an Urdu call), else null. */
+export function defaultViewOf(views: Pick<ViewsSummary, "default"> | null | undefined): TranscriptView | null {
+  const view = views?.default;
+  return view && view !== "original" ? view : null;
+}
+
+/**
+ * What a Library row says about its default view: converting (with the percent once there is one) from the moment the
+ * transcript is done, or that it failed. Null when the row opens in its original words or the view is ready.
+ */
+export function rowViewsLine(views: ViewsSummary | null | undefined): { state: "making" | "failed"; view: TranscriptView; text: string; percent: number | null } | null {
+  const view = defaultViewOf(views);
+  if (!views || !view) return null;
+  if (views.status === "making") {
+    const percent = viewPercent(views.progress, view);
+    return { state: "making", view, text: convertingText(view, percent), percent };
+  }
+  if (views.status === "failed") return { state: "failed", view, text: convertFailedText(view), percent: null };
+  return null;
 }
 
 /** "Uploading… 42%" from the upload queue's item; "Waiting to upload" while queued. */

@@ -16,7 +16,8 @@ import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
 import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName } from "../../lib/player";
-import { CallNotesV2, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
+import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
+import { defaultViewOf, improvingView, viewPercent } from "../../lib/progress";
 import { normalizeLanguage, scriptWarning, transcribedIn } from "../../lib/languages";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
@@ -42,6 +43,8 @@ export type RecordingPageProps = {
   onOpenProject?: (id: string) => void;
   /** The Library's one menu for this recording, with this page's parts in their places (Delete stays last). */
   menu: (own: RecordingMenuParts) => MenuItem[];
+  /** What the page read about the transcript's views, for the recording's row in the Library. */
+  onViews?: (views: TranscriptViewsState) => void;
 };
 
 const SPEEDS = ["0.5", "0.75", "1", "1.25", "1.5", "1.75", "2"];
@@ -55,7 +58,7 @@ type ShowAs = "original" | TranscriptView;
 const inField = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"]:not(.el-drawer), [role="alertdialog"], [role="menu"], [role="listbox"]'));
 
-export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject }: RecordingPageProps) {
+export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject, onViews }: RecordingPageProps) {
   const [sharing, setSharing] = useState(false);
   const [tab, setTab] = useState<Tab>("transcript");
   const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string>; bookmarks: Bookmark[] }>>({ state: "loading" });
@@ -136,13 +139,51 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     void chooseView(preferred, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tDetail?.id, viewsInfo?.status]);
+  // The default view (Roman Urdu for an Urdu call) is written after the transcript: "making" from the moment it is
+  // done, so the page asks at once and then every few seconds, and stops once the views are ready or failed.
+  const viewsStatus = views?.status ?? viewsInfo?.status ?? null;
+  const viewsMaking = viewsStatus === "making" && tDetail?.kind === "final";
   useEffect(() => {
-    if (!transcriptId || views?.status !== "making") return;
+    const id = tDetail?.id;
+    if (!id || !viewsMaking) return;
+    let alive = true;
     const timer = window.setTimeout(() => {
-      api.transcriptViews(transcriptId).then(setViews).catch(() => undefined);
-    }, VIEWS_POLL_MS);
-    return () => window.clearTimeout(timer);
-  }, [transcriptId, views]);
+      api.transcriptViews(id).then((v) => { if (alive && shownTranscript.current === id) setViews(v); }).catch(() => undefined);
+    }, views ? VIEWS_POLL_MS : 0);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [tDetail?.id, views, viewsMaking]);
+  // Made while the page is open: the default view comes in (unless the person chose one), and the Library syncs, for
+  // the title the server may have written in Roman Urdu meanwhile. The row hears of every read.
+  const lastStatus = useRef<string | null>(null);
+  useEffect(() => {
+    if (views && tDetail && shownTranscript.current === tDetail.id) onViews?.(views);
+    const became = lastStatus.current === "making" && viewsStatus === "ready";
+    lastStatus.current = viewsStatus;
+    if (!became) return;
+    void api.refreshLibrary().catch(() => undefined);
+    const preferred = defaultViewOf(viewsInfo);
+    if (!viewPicked.current && !editing && preferred && views?.available.includes(preferred)) setShowAs(preferred);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views, viewsStatus]);
+  const barView = viewsMaking ? improvingView(views?.progress ?? viewsInfo?.progress, showAs, viewsInfo?.default) : null;
+  const failedView = viewsStatus === "failed" && tDetail?.kind === "final" ? (showAs !== "original" ? showAs : defaultViewOf(viewsInfo)) : null;
+  const [retrying, setRetrying] = useState(false);
+  const retryViews = async () => {
+    const id = tDetail?.id;
+    if (!id || retrying) return;
+    setRetrying(true);
+    try {
+      const state = await api.makeTranscriptViews(id);
+      if (shownTranscript.current === id) setViews(state);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    } finally {
+      if (mounted.current) setRetrying(false);
+    }
+  };
   const chooseView = async (view: ShowAs, picked = true) => {
     const press = ++viewPress.current;
     if (picked) viewPicked.current = true;
@@ -242,7 +283,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       const after = (i: number) => (screensAfter.get(i) ?? []).map(screenMarker);
       const body = copiedTranscript(lines, viewText, withTimestamps, unsure, forAi, after);
       const people = [...new Set(lines.map((l) => l.speaker))];
-      await navigator.clipboard.writeText(forAi ? `${aiHeader(item, people)}\n\n${body}` : body);
+      // The header's language is the view's when the lines are in one ("Roman Urdu"), as the server writes it.
+      await navigator.clipboard.writeText(forAi ? `${aiHeader(item, people, exportView)}\n\n${body}` : body);
       onMessage(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied");
     } catch {
       onMessage("Could not access the clipboard");
@@ -273,6 +315,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const [whatsApp, setWhatsApp] = useState(false);
   // The menus are made once per recording, view and transcript: never on the player's position.
   const exportsRef = useRef({ exportAs, packAs });
+  const copyRef = useRef(copy);
+  copyRef.current = copy;
   exportsRef.current = { exportAs, packAs };
   const exportItems: MenuItem[] = useMemo(() => recordingExportItems({
     exportAs: (f) => void exportsRef.current.exportAs(f),
@@ -284,6 +328,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     export: canExport ? { label: "Export", icon: Icons.DownloadIcon, group: "Export", items: exportItems } : undefined,
     export_more: [{ label: "Save audio", icon: Icons.StorageIcon, onPick: () => void act(async () => { if (await api.saveAudio(item.id)) onMessage("Audio saved"); }) }],
     whatsapp: () => setWhatsApp(true),
+    ai: () => void copyRef.current(false, true),
   }).filter((i) => canExport || i.label !== "Export"),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [menu, canChangeLanguage, canExport, exportItems, item.id]);
@@ -463,6 +508,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
                   {editing ? <span className="el-caption el-secondary">Show as is off while you edit: you edit the words as heard.</span> : <Segmented label="Show as" value={showAs} onChange={(v) => void chooseView(v)}
                     options={[...VIEW_ORDER.filter((v) => viewsInfo!.available.includes(v)).map((v) => ({ value: v as ShowAs, label: VIEW_LABELS[v] })),
                       { value: "original" as ShowAs, label: "Original" }]} />}
+                  {barView && <ConvertingLine view={barView} percent={viewPercent(views?.progress ?? viewsInfo?.progress, barView)} />}
+                  {!barView && failedView && <ConvertingLine view={failedView} failed retrying={retrying} onRetry={() => void retryViews()} />}
                   {showAs !== "original" && (
                     <span className="el-caption el-secondary" role="status">
                       {views?.status === "ready" ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`
