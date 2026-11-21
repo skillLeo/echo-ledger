@@ -28,6 +28,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.window.Dialog
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.PhoneDialogRadius
+import com.echoledger.mobile.ui.v2.theme.ProvidePageLook
+import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import kotlinx.coroutines.launch
 
@@ -45,8 +47,12 @@ fun EchoDialog(
     onDismiss: () -> Unit,
     destructive: Boolean = false
 ) {
+    val look = rememberPageLook()
     Dialog(onDismissRequest = onDismiss) {
-        EchoDialogContent(title, text, confirmLabel, onConfirm, dismissLabel, onDismiss, destructive)
+        // The dialog's window starts from the activity's: keep the page's language and text size.
+        ProvidePageLook(look) {
+            EchoDialogContent(title, text, confirmLabel, onConfirm, dismissLabel, onDismiss, destructive)
+        }
     }
 }
 
@@ -103,6 +109,7 @@ fun EchoBottomSheet(onDismiss: () -> Unit, title: String? = null, content: @Comp
     val c = EchoV2.colors
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
+    val look = rememberPageLook()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = state,
@@ -111,11 +118,14 @@ fun EchoBottomSheet(onDismiss: () -> Unit, title: String? = null, content: @Comp
         contentColor = c.textPrimary,
         dragHandle = { SheetHandle() }
     ) {
-        SheetBody(
-            title = title,
-            onClose = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } },
-            content = content
-        )
+        // The sheet's window starts from the activity's: keep the page's language and text size.
+        ProvidePageLook(look) {
+            SheetBody(
+                title = title,
+                onClose = { scope.launch { state.hide() }.invokeOnCompletion { onDismiss() } },
+                content = content
+            )
+        }
     }
 }
 

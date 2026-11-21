@@ -234,6 +234,7 @@ class RecordingPageTest : ScreenTest() {
 
     @Test
     fun exportOffersEveryFormatAndAsksTheServerForIt() {
+        V2Testing.freshFileProvider()
         open()
         openMenu()
         press("Export")

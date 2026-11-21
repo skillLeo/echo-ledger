@@ -66,6 +66,7 @@ object SettingsTransfer {
         // What the server says for this person (since 2.0.0), and when this phone saved the Free plan's key (v1.8.1).
         "uiFlags",
         "uiClassic",
+        "uiDesign",
         "trashKeepHours",
         "relayPins",
         "ownKeySavedAt",
@@ -96,6 +97,9 @@ object SettingsTransfer {
         "themeMode",
         "dynamicColour",
         "phoneFont",
+        "textSize",
+        "appLanguage",
+        "setupCardHidden",
         "recentSearches",
         // How this phone shows the Library, and what was opened on it (since v1.6).
         "libraryViews",

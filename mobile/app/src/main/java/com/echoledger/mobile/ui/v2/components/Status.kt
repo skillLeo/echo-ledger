@@ -51,7 +51,14 @@ fun EchoStatus(label: String, kind: EchoStatusKind, modifier: Modifier = Modifie
 
 /** A count badge (unread, waiting). [contentDescription] says what is counted ("3 untranscribed"). */
 @Composable
-fun EchoCountBadge(count: Int, contentDescription: String, modifier: Modifier = Modifier, color: Color = EchoV2.colors.accent) {
+fun EchoCountBadge(
+    count: Int,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    color: Color = EchoV2.colors.accent,
+    /** Above this the badge says "9+" (Activity, as classic) or "99+". */
+    cap: Int = 99
+) {
     Box(
         modifier
             .defaultMinSize(minWidth = EchoTokens.Space.s20, minHeight = EchoTokens.Space.s20)
@@ -60,6 +67,6 @@ fun EchoCountBadge(count: Int, contentDescription: String, modifier: Modifier = 
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center
     ) {
-        Text(if (count > 99) "99+" else count.toString(), style = EchoV2.type.captionStrong, color = EchoV2.colors.textOnAccent)
+        Text(if (count > cap) "$cap+" else count.toString(), style = EchoV2.type.captionStrong, color = EchoV2.colors.textOnAccent)
     }
 }

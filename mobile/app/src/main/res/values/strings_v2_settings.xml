@@ -83,6 +83,20 @@
     <string name="v2_set_value_dark">Dark</string>
     <string name="v2_set_value_automatic">Automatic</string>
     <string name="v2_set_value_quiet">Quiet %1$s–%2$s</string>
+    <string name="v2_set_value_raw_mic">Raw microphone</string>
+    <string name="v2_set_value_tap_to_start">Tap to start</string>
+    <string name="v2_set_value_hold_to_talk">Hold to talk</string>
+    <string name="v2_set_value_added">Added</string>
+    <string name="v2_set_value_not_added">Not added</string>
+    <string name="v2_set_value_not_set_up">Not set up</string>
+    <plurals name="v2_set_value_games">
+        <item quantity="one">%1$d game</item>
+        <item quantity="other">%1$d games</item>
+    </plurals>
+    <plurals name="v2_set_value_apps">
+        <item quantity="one">%1$d app</item>
+        <item quantity="other">%1$d apps</item>
+    </plurals>
     <string name="v2_set_search_settings">Search settings</string>
     <string name="v2_set_no_settings_title">No settings match \"%1$s\"</string>
     <string name="v2_set_no_settings_body">Try another word, such as language, lock or theme.</string>
