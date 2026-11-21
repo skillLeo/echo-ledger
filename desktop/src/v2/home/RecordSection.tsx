@@ -6,13 +6,17 @@
 import { useRef } from "react";
 import { api, type AppStatus } from "../../lib/ipc";
 import { sourceAppLabel } from "../../lib/format";
-import { DISCARD_QUESTION } from "../../lib/pending";
 import { BLUETOOTH_NOTE } from "../../lib/microphone";
 import { confirmAction } from "../../lib/confirm";
 import { fillWidth } from "../../lib/motion";
 import { useBluetoothMic } from "../../views/main/RecordView";
 import { SETTINGS_LABEL, usePermissions } from "../../views/main/Permissions";
 import { Banner, Button, Card, Icons, Status, Toggle } from "../components";
+
+/** Cancel recording asks first, in the same word as its button (the recording so far is thrown away). */
+export const CANCEL_QUESTION = {
+  title: "Cancel this recording?", body: "What was recorded so far is deleted. It can't be undone.", confirm: "Cancel recording", cancel: "Keep recording", tone: "danger",
+} as const;
 
 /** Runs a core command; `ok` is said once it is done, an error is said instead (MainApp's run). */
 export type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
@@ -67,7 +71,7 @@ export function RecordSection({ status, run, onImport }: { status: AppStatus; ru
   recordingNow.current = recording?.clientRef ?? null;
   const cancel = async () => {
     const asked = recordingNow.current;
-    if (!asked || !(await confirmAction(DISCARD_QUESTION))) return;
+    if (!asked || !(await confirmAction(CANCEL_QUESTION))) return;
     if (recordingNow.current === asked) await run(api.cancelRecording);
   };
   const [mic, sys] = status.levels ?? [0, 0];
@@ -81,11 +85,12 @@ export function RecordSection({ status, run, onImport }: { status: AppStatus; ru
         <Status kind={recording ? "recording" : "idle"} live>{recordingLine(status)}</Status>
         {recording && (
           <div className="el-record__controls" role="group" aria-label="Recording controls">
+            {/* Classic's names; Stop and save is the strip's button above. */}
             {paused
-              ? <Button size="sm" icon={Icons.PlayIcon} onClick={() => void run(api.resumeRecording)}>Resume</Button>
-              : <Button size="sm" icon={Icons.PauseIcon} onClick={() => void run(api.pauseRecording)}>Pause</Button>}
+              ? <Button size="sm" icon={Icons.PlayIcon} onClick={() => void run(api.resumeRecording)}>Resume recording</Button>
+              : <Button size="sm" icon={Icons.PauseIcon} onClick={() => void run(api.pauseRecording)}>Pause recording</Button>}
             <Button size="sm" icon={Icons.PinIcon} title="Marks this moment in the recording" onClick={() => void run(() => api.markMoment(), "Bookmarked")}>Bookmark this moment</Button>
-            <Button size="sm" variant="quiet" icon={Icons.CloseIcon} onClick={() => void cancel()}>Cancel</Button>
+            <Button size="sm" variant="danger" icon={Icons.CloseIcon} onClick={() => void cancel()}>Cancel recording</Button>
           </div>
         )}
         <div className="el-record__meters">

@@ -75,28 +75,29 @@ describe("the Record page's recording section", () => {
     expect(now().getByRole("status")).toHaveTextContent("Paused · voice note");
   });
 
-  it("DT-HOME-008: Pause pauses the recording; while paused, Resume resumes it", async () => {
+  it("DT-HOME-008: Pause recording pauses it; while paused, Resume recording resumes it", async () => {
     const { rerender, p } = await show({ recording: CALL });
-    fireEvent.click(now().getByRole("button", { name: "Pause" }));
+    fireEvent.click(now().getByRole("button", { name: "Pause recording" }));
     await act(flushAsync);
     expect(callsOf("pause_recording")).toHaveLength(1);
     expect(callsOf("resume_recording")).toHaveLength(0);
     rerender(<HomeV2 status={makeStatus({ platform: "macos", recording: CALL, paused: true })} {...p} />);
-    expect(now().queryByRole("button", { name: "Pause" })).toBeNull();
-    fireEvent.click(now().getByRole("button", { name: "Resume" }));
+    expect(now().queryByRole("button", { name: "Pause recording" })).toBeNull();
+    fireEvent.click(now().getByRole("button", { name: "Resume recording" }));
     await act(flushAsync);
     expect(callsOf("resume_recording")).toHaveLength(1);
   });
 
-  it("DT-HOME-009: Cancel asks first; No keeps recording, Discard cancels it", async () => {
+  it("DT-HOME-009: Cancel recording asks first, in the same word; Keep recording keeps it, Cancel recording cancels it", async () => {
     const asked = answerConfirm();
     await show({ recording: CALL });
-    fireEvent.click(now().getByRole("button", { name: "Cancel" }));
+    fireEvent.click(now().getByRole("button", { name: "Cancel recording" }));
     await act(flushAsync);
-    expect(asked).toHaveBeenCalledWith("Discard this recording? It can't be undone.");
+    expect(asked).toHaveBeenCalledWith("Cancel this recording? What was recorded so far is deleted. It can't be undone.");
+    expect(now().getByRole("button", { name: "Cancel recording" })).toHaveClass("el-button--danger");
     expect(callsOf("cancel_recording")).toHaveLength(0);
     asked.mockReturnValue(true);
-    fireEvent.click(now().getByRole("button", { name: "Cancel" }));
+    fireEvent.click(now().getByRole("button", { name: "Cancel recording" }));
     await act(flushAsync);
     expect(callsOf("cancel_recording")).toHaveLength(1);
   });
