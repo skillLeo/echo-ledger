@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,7 +31,10 @@ import com.echoledger.mobile.ui.ShareSheet
 import com.echoledger.mobile.ui.v2.components.EchoBottomSheet
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
+import com.echoledger.mobile.ui.v2.components.EchoSplitButton
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.ProvidePageLook
+import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -86,30 +90,51 @@ object RecordingCopy {
     }
 }
 
-/** Copy ▾: Copy text, Copy with timestamps, Copy without timestamps, Copy for AI (with what its header holds). */
+/**
+ * Copy on the recording page: one split button. Its main part copies the text without timestamps at once ([CopyKind.Text])
+ * and the page confirms; its chevron opens the other ways to copy ([CopyChoices]).
+ */
 @Composable
-fun CopyMenuSheet(onCopy: (CopyKind) -> Unit, onDismiss: () -> Unit) {
-    EchoBottomSheet(onDismiss = onDismiss, title = stringResource(R.string.v2_rec_copy)) {
-        CopyMenuContent(onCopy = {
-            onDismiss()
-            onCopy(it)
-        })
+fun RecordingCopyButton(onCopy: (CopyKind) -> Unit, modifier: Modifier = Modifier) {
+    val look = rememberPageLook()
+    EchoSplitButton(
+        text = stringResource(R.string.v2_rec_copy),
+        onClick = { onCopy(CopyKind.Text) },
+        menuLabel = stringResource(R.string.v2_rec_copy_more),
+        mainLabel = stringResource(R.string.v2_rec_copy_main),
+        icon = RecordingIcons.Copy,
+        modifier = modifier
+    ) { close ->
+        ProvidePageLook(look) {
+            CopyChoices(onCopy = {
+                close()
+                onCopy(it)
+            })
+        }
     }
 }
 
-/** The Copy menu without the sheet (screenshots and tests). */
+/** The split button's other choices: Copy with timestamps, Copy without timestamps, Copy for AI (with what its header holds). */
 @Composable
-fun CopyMenuContent(onCopy: (CopyKind) -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        MenuRow(RecordingIcons.Copy, stringResource(R.string.v2_rec_copy_text), { onCopy(CopyKind.Text) })
-        MenuRow(null, stringResource(R.string.v2_rec_copy_with), { onCopy(CopyKind.WithTimestamps) })
-        MenuRow(null, stringResource(R.string.v2_rec_copy_without), { onCopy(CopyKind.WithoutTimestamps) })
-        MenuRow(null, stringResource(R.string.v2_rec_copy_ai), { onCopy(CopyKind.ForAi) })
-        Text(
-            stringResource(R.string.v2_rec_copy_ai_help),
-            style = EchoV2.type.meta,
-            color = EchoV2.colors.textSecondary,
-            modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4)
+fun CopyChoices(onCopy: (CopyKind) -> Unit) {
+    val tint = EchoV2.colors.textPrimary
+    Column {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.v2_rec_copy_with), style = EchoV2.type.body, color = tint) },
+            onClick = { onCopy(CopyKind.WithTimestamps) }
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.v2_rec_copy_without), style = EchoV2.type.body, color = tint) },
+            onClick = { onCopy(CopyKind.WithoutTimestamps) }
+        )
+        DropdownMenuItem(
+            text = {
+                Column {
+                    Text(stringResource(R.string.v2_rec_copy_ai), style = EchoV2.type.body, color = tint)
+                    Text(stringResource(R.string.v2_rec_copy_ai_help), style = EchoV2.type.meta, color = EchoV2.colors.textSecondary)
+                }
+            },
+            onClick = { onCopy(CopyKind.ForAi) }
         )
     }
 }
