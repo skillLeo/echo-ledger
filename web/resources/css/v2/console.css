@@ -1824,3 +1824,17 @@ html[dir='rtl'] .v2-row-title {
     border: var(--el-border-hairline) solid var(--el-role-border-strong);
     background-color: var(--label-own, var(--el-role-bg-subtle));
 }
+
+/* Selection on the Library list (U9): a selected row is tinted, never marked with a coloured start bar (anti-template
+   rule 4), and Filament's red "Clear" link goes: the selection bar's × already clears it, and red is for deleting. */
+.v2-library .fi-ta-record.fi-selected::before {
+    content: none;
+}
+
+.v2-library .fi-ta-record.fi-selected {
+    background-color: var(--el-role-accent-soft);
+}
+
+.v2-library .fi-ta-selection-indicator-actions-ctn .fi-link.fi-color-danger {
+    display: none;
+}
