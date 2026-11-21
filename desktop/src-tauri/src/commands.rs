@@ -2025,6 +2025,119 @@ pub fn is_time_zone(zone: &str) -> bool {
     (1..=64).contains(&zone.len()) && zone.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '+'))
 }
 
+// ---- Lists (contract 2.0.0-m) -------------------------------------------------------------------------------------
+
+/// The longest list name (a list is a label).
+pub const MAX_LIST_NAME: usize = 40;
+
+/// A list name as the server stores it: trimmed, single spaces, 1 to 40 characters.
+pub fn list_name(name: &str) -> AppResult<String> {
+    let clean = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if clean.is_empty() {
+        return Err(AppError::msg("Type a name for the list."));
+    }
+    if clean.chars().count() > MAX_LIST_NAME {
+        return Err(AppError::msg(format!("A list name is at most {MAX_LIST_NAME} characters.")));
+    }
+    Ok(clean)
+}
+
+/// "#rrggbb", or an error.
+pub fn list_colour(color: &str) -> AppResult<String> {
+    let ok = color.len() == 7 && color.starts_with('#') && color[1..].chars().all(|c| c.is_ascii_hexdigit());
+    if ok { Ok(color.to_ascii_lowercase()) } else { Err(AppError::msg("Choose one of the list colours.")) }
+}
+
+/// The person's lists in their order; `None` on a server without lists yet (the Library shows its fixed chips only).
+#[tauri::command]
+pub async fn lists_get(app: AppHandle) -> AppResult<Option<Vec<crate::net::models::ListDto>>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.lists().await {
+        Ok(answer) => Ok(Some(answer.data)),
+        Err(e) if e.is_missing_route() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// "+" in the Library's list row: a new, empty list at the end; without a colour the server picks the least used.
+#[tauri::command]
+pub async fn list_create(app: AppHandle, name: String, color: Option<String>) -> AppResult<crate::net::models::ListDto> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let name = list_name(&name)?;
+    let color = color.as_deref().map(list_colour).transpose()?;
+    match state.api()?.create_list(&name, color.as_deref()).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Lists")),
+        other => Ok(other?.data),
+    }
+}
+
+/// Rename… and Change colour… on a list chip. A rename or a recolour changes every recording in the list: the Library
+/// syncs once afterwards (the page asks for it), not here as well.
+#[tauri::command]
+pub async fn list_update(app: AppHandle, key: String, name: Option<String>, color: Option<String>) -> AppResult<crate::net::models::ListDto> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let mut patch = serde_json::Map::new();
+    if let Some(name) = name.as_deref() {
+        patch.insert("name".into(), list_name(name)?.into());
+    }
+    if let Some(color) = color.as_deref() {
+        patch.insert("color".into(), list_colour(color)?.into());
+    }
+    if patch.is_empty() {
+        return Err(AppError::msg("There is nothing to change."));
+    }
+    let answer = match state.api()?.update_list(&key, &serde_json::Value::Object(patch)).await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("Lists")),
+        other => other?,
+    };
+    Ok(answer.data)
+}
+
+/// Delete list…: the label comes off its recordings (they stay); returns how many changed. The page syncs the Library
+/// once afterwards.
+#[tauri::command]
+pub async fn list_delete(app: AppHandle, key: String) -> AppResult<u64> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let answer = match state.api()?.delete_list(&key).await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("Lists")),
+        other => other?,
+    };
+    Ok(answer.changed)
+}
+
+/// The person opened a recording here (`POST /api/sessions/{id}/opened`, since v1.3): it is no longer unread, on
+/// every device. The saved Library says so at once, as the server doesn't send the recording again for it. A server
+/// before v1.3 has no unread recordings: nothing to do.
+#[tauri::command]
+pub async fn session_opened(app: AppHandle, id: String) -> AppResult<()> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.session_opened(&id).await {
+        Err(e) if e.is_missing_route() => return Ok(()),
+        other => other?,
+    }
+    let mut cache = state.library.lock().await;
+    if cache.mark_opened(&id) {
+        cache.save(&paths::library(&state.data_dir))?;
+    }
+    Ok(())
+}
+
+/// Move left / Move right on a list chip: every list's key once, in the new order.
+#[tauri::command]
+pub async fn lists_order(app: AppHandle, keys: Vec<String>) -> AppResult<Vec<crate::net::models::ListDto>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.order_lists(&keys).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Lists")),
+        other => Ok(other?.data),
+    }
+}
+
 /// Deletes a project. Nothing in it is lost: its recordings go to the Inbox and its subfolders up a level (its files,
 /// brief, notes, memory and rules go with it). Returns `{"moved_sessions", "moved_projects"}`.
 #[tauri::command]

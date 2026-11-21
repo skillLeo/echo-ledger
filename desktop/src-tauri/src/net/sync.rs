@@ -39,6 +39,17 @@ pub fn merge(items: &mut Vec<LibraryItem>, incoming: Vec<LibraryItem>) {
 }
 
 impl LibraryCache {
+    /// The recording was opened (it is no longer unread): true when the saved copy changed.
+    pub fn mark_opened(&mut self, id: &str) -> bool {
+        match self.items.iter_mut().find(|i| i.id == id) {
+            Some(item) if item.rest.get("opened") != Some(&serde_json::Value::Bool(true)) => {
+                item.rest.insert("opened".into(), serde_json::Value::Bool(true));
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn load(path: &Path) -> Self {
         std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }

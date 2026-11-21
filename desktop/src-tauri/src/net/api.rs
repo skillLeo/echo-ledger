@@ -1037,6 +1037,53 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `POST /api/sessions/{id}/opened` (since v1.3): the person opened the recording; `204`.
+    pub async fn session_opened(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.post(self.url(&format!("sessions/{id}/opened"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `api/lists[/<key>]` with the key as one path segment (spaces, Urdu letters and "/" encoded).
+    fn list_url(&self, key: Option<&str>) -> AppResult<reqwest::Url> {
+        let mut url = reqwest::Url::parse(&self.url("lists")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;
+        if let Some(key) = key {
+            url.path_segments_mut().map_err(|()| AppError::msg("Bad server address"))?.push(key);
+        }
+        Ok(url)
+    }
+
+    /// `GET /api/lists` (since 2.0.0-m): the person's lists in their order, with counts.
+    pub async fn lists(&self) -> AppResult<ListsResponse> {
+        let resp = self.authed(self.http.get(self.list_url(None)?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/lists` (since 2.0.0-m): a new, empty list at the end; without a colour the server picks the one
+    /// fewest lists have.
+    pub async fn create_list(&self, name: &str, color: Option<&str>) -> AppResult<ListResponse> {
+        let resp = self.authed(self.http.post(self.list_url(None)?))?.json(&json!({ "name": name, "color": color })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/lists/{key}` (since 2.0.0-m): `name` and/or `color`; a rename relabels every recording in it.
+    pub async fn update_list(&self, key: &str, patch: &serde_json::Value) -> AppResult<ListResponse> {
+        let resp = self.authed(self.http.patch(self.list_url(Some(key))?))?.json(patch).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/lists/{key}` (since 2.0.0-m): the label comes off its recordings, which stay.
+    pub async fn delete_list(&self, key: &str) -> AppResult<ListDeleted> {
+        let resp = self.authed(self.http.delete(self.list_url(Some(key))?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PUT /api/lists/order` (since 2.0.0-m): every list's key once, in the new order.
+    pub async fn order_lists(&self, keys: &[String]) -> AppResult<ListsResponse> {
+        let url = format!("{}/order", self.list_url(None)?);
+        let resp = self.authed(self.http.put(url))?.json(&json!({ "keys": keys })).send().await?;
+        Self::parse(resp).await
+    }
+
     /// `GET /api/library/views?tz=` (since v1.1): the smart views' counts and the labels; since v1.5 `folders`, the
     /// smart folders' counts.
     pub async fn library_views(&self, tz: Option<&str>) -> AppResult<serde_json::Value> {
