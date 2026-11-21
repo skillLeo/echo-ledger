@@ -30,6 +30,7 @@
             "live_available": false,
             "live_transcript_id": null,
             "preview": null,
+            "preview_view": "original",
             "final_language": null,
             "final_provider": null,
             "final_provider_label": null,

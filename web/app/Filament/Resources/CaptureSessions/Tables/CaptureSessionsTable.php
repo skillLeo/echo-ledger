@@ -438,13 +438,25 @@ final class CaptureSessionsTable
             $out[] = BulkAction::make($prefix.ucfirst($format))->label(self::formatLabel($label))
                 ->modalHeading(__('Export as :format', ['format' => __($label)]))->modalSubmitActionLabel(__('Export'))
                 ->schema([
-                    Select::make('view')->label(__('Show as'))->placeholder(__('Original words'))->options(TranscriptViews::VIEWS)
+                    Select::make('view')->label(__('Show as'))->placeholder(__('Original words'))->options(self::exportViewOptions())
+                        ->default(TranscriptViews::SHOWN)
                         ->helperText(__('A recording whose view is not made yet keeps its original words.')),
                 ])
                 ->action(fn (Collection $records, array $data): ?StreamedResponse => self::exportDownload($records, $format, $data['view'] ?? null));
         }
 
         return $out;
+    }
+
+    /**
+     * Since U19: an export of several recordings starts "As shown": each recording in the view the Library shows it in
+     * (Roman Urdu for an Urdu call once made, else its original words), decided per recording; or one view for all.
+     *
+     * @return array<string, string>
+     */
+    public static function exportViewOptions(): array
+    {
+        return [TranscriptViews::SHOWN => __('As shown (each recording\'s own view)')] + array_map(fn (string $view): string => __($view), TranscriptViews::VIEWS);
     }
 
     /** Where the v2.0 selection's last Delete waits for its Undo (one batch, one person). */
@@ -611,13 +623,25 @@ final class CaptureSessionsTable
 
     /**
      * The new Library's rows read only a few columns of each final transcript: its status, the start of its text (the
-     * snippet) and, while a Show as view is being made, its meta (the poll's "still moving"). Never its lines.
+     * snippet) and, while a Show as view is being made or when it failed, its meta (the poll's "still moving", "Couldn't
+     * convert"). Never its lines. Since U19 `has_views` says views were stored, so a finished transcript whose view is
+     * about to be made ("Converting to Roman Urdu…", TranscriptViews::expected) is told apart from one whose views are in.
      */
     private static function rowTranscriptColumns(mixed $final): mixed
     {
-        return $final->select(['id', 'capture_session_id', 'kind', 'status', 'language', 'provider', 'edited_at', 'updated_at'])
+        $final->select(['id', 'capture_session_id', 'kind', 'status', 'language', 'provider', 'completed_at', 'edited_at', 'updated_at'])
             ->selectRaw('SUBSTR(text, 1, 600) AS text')
-            ->selectRaw("CASE WHEN meta LIKE '%\"making\"%' THEN meta ELSE NULL END AS meta");
+            ->selectRaw("CASE WHEN meta LIKE '%\"making\"%' OR meta LIKE '%\"failed\"%' THEN meta ELSE NULL END AS meta")
+            ->selectRaw("CASE WHEN JSON_VALID(meta) THEN (CASE WHEN JSON_EXTRACT(meta, '$.views') IS NOT NULL THEN 1 ELSE 0 END) ELSE 0 END AS has_views")
+            // Since U19 the snippet is in the view the recording opens in once made: the views' state and the start of
+            // each view (a few hundred characters, never every line), read by TranscriptViews::rowPreview.
+            ->selectRaw("CASE WHEN JSON_VALID(meta) THEN JSON_EXTRACT(meta, '$.views.status') END AS views_status_head")
+            ->selectRaw("CASE WHEN JSON_VALID(meta) THEN JSON_EXTRACT(meta, '$.views.made_at') END AS views_made_at_head");
+        foreach (array_keys(TranscriptViews::VIEWS) as $view) {
+            $final->selectRaw("CASE WHEN JSON_VALID(meta) THEN SUBSTR(JSON_EXTRACT(meta, '$.views.{$view}'), 1, ".TranscriptViews::ROW_HEAD_CHARS.") END AS views_{$view}_head");
+        }
+
+        return $final;
     }
 
     /**
@@ -738,7 +762,8 @@ final class CaptureSessionsTable
                     Select::make('format')->label(__('Format'))->required()->default('docx')->selectablePlaceholder(false)
                         ->options(array_map(fn (string $format): string => __($format), ['docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Web subtitles (.vtt)', 'json' => 'JSON'])),
                     Select::make('view')->label(__('Show as'))->placeholder(__('Original words'))
-                        ->options(array_map(fn (string $view): string => __($view), TranscriptViews::VIEWS))
+                        ->options(self::exportViewOptions())
+                        ->default(TranscriptViews::SHOWN)
                         ->helperText(__('A recording whose view is not made yet keeps its original words.')),
                 ])
                 ->action(fn (Collection $records, array $data): ?StreamedResponse => self::exportDownload($records, (string) $data['format'], $data['view'] ?? null)),
@@ -752,7 +777,7 @@ final class CaptureSessionsTable
      */
     public static function exportDownload(Collection $records, string $format, mixed $view): ?StreamedResponse
     {
-        $view = is_string($view) && array_key_exists($view, TranscriptViews::VIEWS) ? $view : null;
+        $view = is_string($view) && ($view === TranscriptViews::SHOWN || array_key_exists($view, TranscriptViews::VIEWS)) ? $view : null;
         try {
             $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), $format, $view);
             // The new Library says when the zip holds fewer than were picked (it takes the first ones only).
@@ -827,8 +852,8 @@ final class CaptureSessionsTable
         }
         $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
 
-        return $final !== null && $final->status === TranscriptStatus::Completed && ($final->meta['views']['status'] ?? null) === 'making'
-            && app(TranscriptViews::class)->state($final)['status'] === 'making';
+        // From what is stored (no lines read); since U19 also a view about to be made ("Converting to Roman Urdu…").
+        return $final !== null && $final->status === TranscriptStatus::Completed && (TranscriptViews::rowSummary($final)['status'] ?? null) === 'making';
     }
 
     /** @param  iterable<mixed>|null  $records  the rows the list shows now */

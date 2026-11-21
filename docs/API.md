@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-m (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-n (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-n (proposed 2026-11-21, accepted when merged; U19 "Roman Urdu by default"): `views.status` (a transcript's `views`, `GET /api/transcripts/{id}/views` and a library item's `transcript.views`) is `making` from the moment a finished transcript's default view is on its way, also before its job has started (`progress` is `{}` until the job counts the lines), so apps show "Converting to Roman Urdu…" at once; a `making` that moved no line for 20 minutes, and a view that never started within 20 minutes of the transcript (until 24 hours after it, `none` then), is `failed` (`error` "Converting took too long. Try again."), never busy for ever, and `POST` starts it again. A library item's `transcript.views` counts only views made (or failed) after the transcript's last edit. A library item's `transcript.preview` is in the default view once it is `ready`, and the new `transcript.preview_view` (`"roman"` | `"urdu"` | `"english"` | `"original"`) says which, so rows need not fetch the views. A recording that opens in Roman Urdu gets its automatic title in Roman Urdu, and an automatic title in Urdu letters is written again in Roman Urdu when the view is made. No other field changes.
 2.0.0-m (proposed 2026-11-21, accepted when merged): lists (B11, see "Lists (since 2.0.0-m)"). A person's lists are their labels with a name, a colour and a place in the apps' row, kept by the server so every device shows the same ones: `GET /api/lists`, `POST /api/lists` (an empty list), `PATCH` and `DELETE /api/lists/{key}` (rename or delete changes every recording of the person in one transaction) and `PUT /api/lists/order`. Labelling a recording makes its list when it is new (never for a label spelt All, Unread or Important, which stays a plain label). `GET /api/library/views` gives the labels in list order. A label's colour is its list's (`PUT /api/labels/color` and `label_colors` answer as before). New codes `name_reserved`, `list_exists`, `list_not_found`. Only additions: older apps ignore them.
 2.0.0-l (proposed 2026-11-21, accepted by the lead and EL-UX 2026-11-21, served when merged, after 2.0.0-m): the person's account and security from the apps — name, profile picture (`avatar_url` and `avatar_version` beside every person shown), email change, password, sign-in methods, browsers and devices of every workspace, two-step setup, phone passkeys, Keep my account through sign-in (`403 deletion_scheduled`, then `"keep": true`), `error_codes` beside `errors`. Additions only, except that an app sign-in during a deletion's grace now answers `deletion_scheduled` instead of `not_allowed`. See "Account and security from the apps (since 2.0.0-l)".
 2.0.0-k (proposed 2026-11-21, accepted when merged): a call's title comes from the person called (see "Title from the person"): a person's own title (any rename wins), then "Call with <name>" or the number, then the automatic title. `title` is that title; the new `title_source` (`own` | `person` | `auto` | `app`) says which, and `title_auto` stays `true` only for `auto`. Outside the account (share links, exports, WhatsApp, the audit log) the title never names the person called.
@@ -1056,7 +1057,7 @@ when `status=recording` is given).
     "client": {"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH"},
     "title": "Zoom call", "started_at": "…", "ended_at": "…", "duration_ms": 2530000, "status": "completed",
     "transcript": {"final_status": "completed", "final_transcript_id": "01JB…", "live_available": true,
-                   "live_transcript_id": "01JB…", "preview": "first 160 characters…"},
+                   "live_transcript_id": "01JB…", "preview": "first 160 characters…", "preview_view": "roman"},
     "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"], "opened": false,
     "important": false, "label_colors": {"Invoice": "#16a34a"}, "expires_at": "2026-12-14T09:00:00+00:00",
     "updated_at": "…"},
@@ -1654,6 +1655,15 @@ other languages; as made since v1.3);
 when ready, each available view is a list aligned with the segments (`null` for an empty line); `default` is the view
 the apps open it in (console setting, `original` unless that view is available). An edit to the transcript makes the
 views stale (`none`) until they are made again. Every transcript carries `views: {"available", "status", "default"}`.
+Since 2.0.0-n (U19): `making` also while the default view is about to be made: for 20 minutes after the transcript is
+finished or edited, when it opens in a view, a key is set and the plan has views (a short note is checked by a second
+engine first, so its job starts a little later); `progress` stays `{}` until the job has counted the lines. A `making`
+that moved no line for 20 minutes, and a default view that never started within 20 minutes of the transcript (up to 24
+hours after it; older ones read `none`), read `failed` with `error` "Converting took too long. Try again.", and `POST`
+starts it again. Apps show "Converting to Roman Urdu… 60%" (with a spinner) while `making`, the percent once `progress` has it,
+and "Couldn't convert to Roman Urdu · Try again" on `failed`. Copies (Copy text, with timestamps, Copy for AI, WhatsApp
+text) use the default view once it is `ready` and the original words before; Copy for AI's header then says
+`Language: Roman Urdu`.
 
 ### `POST /api/transcripts/{id}/views` — `sessions:write` (since v1.2)
 Starts making the views on the queue: `202` with the state (`making`), or `200` when they are ready.
@@ -2175,6 +2185,10 @@ the usage ledger:
   transcript is finished, then `{"status": "none" | "making" | "ready" | "failed", "default": "roman", "progress":
   {"roman": {"done": 12, "total": 20}}}` from what the server stored (no lines are read), so a row can say "Improving
   Roman Urdu… 60%".
+- **Preview in the view shown** (since 2.0.0-n). A library item's `transcript.preview` is the default view's words (at
+  most 160 characters, one line of the view per line, no speaker names) once that view is `ready` and was made after the
+  last edit, else the transcript's own words as before. `transcript.preview_view` says which: `"roman"`, `"urdu"`,
+  `"english"` or `"original"` (always present; `"original"` also when there is no transcript yet).
 - **Views progress.** While a view is being made, `views.progress` carries `{"roman": {"done": 12, "total": 20}}` (lines
   done of lines), `{}` otherwise. `views.status` is unchanged.
 - **Views only transliterate.** The Roman Urdu, English and Urdu views keep every word of the original: a view line whose
@@ -2183,7 +2197,10 @@ the usage ledger:
   becomes a suggested fix (`suggestions`, `reason: "view_check"`), accepted or dismissed as other suggestions are.
   Numbers, units, prices, dates and times are written as digits in every view ("16 GB", "M6 Pro", "Rs 2,500", "3:30").
 - **Automatic titles.** When a recording's final transcript is ready and nobody has given it a title, the server gives it
-  a short one from what was said (at most 60 characters, digits for numbers, for example "Laptop — 16 vs 32 GB"). Library
+  a short one from what was said (at most 60 characters, digits for numbers, for example "Laptop — 16 vs 32 GB"). Since
+  2.0.0-n a recording that opens in Roman Urdu (Urdu and mixed calls by default) gets it in Roman Urdu ("Meeting ka time
+  aur tax form"), from the Roman Urdu view once it is made; an automatic title still in Urdu letters is written again in
+  Roman Urdu when that view is made (never a title a person gave). English and Arabic titles stay in their language. Library
   items and `GET /api/sessions/{id}` carry `title_auto: true` for such a title, and only for such a title (since 2.0.0-k
   it is `title_source == "auto"`). A title set by a person (`PATCH` with `title`, or a title an app sent at upload that is
   not generic) is never replaced. Setting `title` to `null` asks for the automatic one again.
