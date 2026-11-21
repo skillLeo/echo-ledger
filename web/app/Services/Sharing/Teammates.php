@@ -85,7 +85,7 @@ final class Teammates
                     'client_id' => $target instanceof Client ? $target->id : null,
                 ]);
                 $item->fill(['workspace_id' => $target->workspace_id, 'from_user_id' => $sender->id, 'session_ids' => $held, 'title' => $title, 'note' => $note, 'sent_at' => now()])->save();
-                app(ActivityFeed::class)->sharedWithYou($person, "{$sender->name} sent you {$title}", $note ?? 'Open it in Shared with me.', $target instanceof CaptureSession ? $target->id : null);
+                app(ActivityFeed::class)->sharedWithYou($person, ActivityFeed::line(':name sent you :title', ['name' => $sender->name, 'title' => $title]), $note ?? ActivityFeed::line('Open it in Shared with me.'), $target instanceof CaptureSession ? $target->id : null);
             }
         });
         // Since v1.5 each person also gets an email, and the sending is in the sender's audit log.

@@ -192,8 +192,11 @@ final class UpgradeRequests
         $when = $until?->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y');
         Mail::to($user->email)->queue(new UpgradeDecidedMail($approved, $planName, $when, $reply, url('/app')));
         $approved
-            ? app(ActivityFeed::class)->post($user, 'upgrade_approved', "You are on {$planName} now", $reply ?? ($when !== null ? "Until {$when}. Thank you!" : 'Thank you! Everything in it is on.'), null, 'heroicon-o-check-badge')
-            : app(ActivityFeed::class)->post($user, 'upgrade_declined', "Your request for {$planName} was declined", $reply ?? 'Write to us if you have a question.', null, 'heroicon-o-x-circle');
+            // Lines in the reader's language (W-218); staff's reply as they wrote it.
+            ? app(ActivityFeed::class)->post($user, 'upgrade_approved', ActivityFeed::line('You are on :plan now', ['plan' => $planName]),
+                $reply ?? ($when !== null ? ActivityFeed::line('Until :date. Thank you!', ['date' => $when]) : ActivityFeed::line('Thank you! Everything in it is on.')), null, 'heroicon-o-check-badge')
+            : app(ActivityFeed::class)->post($user, 'upgrade_declined', ActivityFeed::line('Your request for :plan was declined', ['plan' => $planName]),
+                $reply ?? ActivityFeed::line('Write to us if you have a question.'), null, 'heroicon-o-x-circle');
     }
 
     /** The request's row, held until the transaction ends. */
