@@ -596,13 +596,14 @@ export default function MainApp() {
   const goRef = useRef<((target: NoticeTarget) => void) | null>(null);
   const inApp = !!status?.paired && restored && !lock?.locked && setupDone !== false;
   // In the new design's window the message is the new design's toast: Open goes where it is about, Esc or × closes it.
-  const toastV2 = !!toast && inApp && ui.flags["ui_v2.shell"];
-  const toastView = toast && toastV2 ? (
+  // The new design's window keeps its message regions mounted; only the message in them changes.
+  const toastV2 = inApp && ui.flags["ui_v2.shell"];
+  const toastView = toastV2 ? (
     <Suspense fallback={null}>
       <div className="el-root el-embedded">
-        <AppToastV2 key={toast.id} text={toast.text} error={toast.error} duration={toast.error ? ERROR_MS : MESSAGE_MS}
-          onOpen={toast.target ? () => goRef.current?.(toast.target!) : undefined}
-          onClose={() => setToast((t) => (t?.id === toast.id ? null : t))} />
+        <AppToastV2 duration={(m) => (m.error ? ERROR_MS : MESSAGE_MS)}
+          message={toast ? { id: toast.id, text: toast.text, error: toast.error, onOpen: toast.target ? () => goRef.current?.(toast.target!) : undefined } : null}
+          onClose={() => setToast((t) => (t?.id === toast?.id ? null : t))} />
       </div>
     </Suspense>
   ) : toast && (

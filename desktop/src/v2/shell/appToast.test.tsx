@@ -41,7 +41,7 @@ describe("the app's messages in the new design", () => {
     await act(() => emitEvent("app:toast", { text: "The transcript is ready", target: { kind: "recording", id: "a" } }));
     await act(flushAsync);
     const toast = await screen.findByTestId("app-toast");
-    expect(toast).toHaveAttribute("role", "status");
+    expect(toast.closest('[aria-live="polite"]')).toBe(screen.getByTestId("app-messages"));
     expect(toast).toHaveTextContent("The transcript is ready");
     expect(document.querySelector(".toast-region")).toBeNull();
     fireEvent.click(within(toast).getByRole("button", { name: "The transcript is ready" }));
@@ -56,7 +56,7 @@ describe("the app's messages in the new design", () => {
     await act(() => emitEvent("app:error", "The upload stopped: the server didn't answer."));
     await act(flushAsync);
     let toast = await screen.findByTestId("app-toast");
-    expect(toast).toHaveAttribute("role", "alert");
+    expect(toast.closest('[role="alert"]')).toBe(screen.getByTestId("app-problems"));
     expect(within(toast).queryByRole("button", { name: /The upload stopped/ })).toBeNull();
     fireEvent.keyDown(within(toast).getByRole("button", { name: "Dismiss" }), { key: "Escape" });
     expect(screen.queryByTestId("app-toast")).toBeNull();
@@ -65,6 +65,28 @@ describe("the app's messages in the new design", () => {
     toast = await screen.findByTestId("app-toast");
     fireEvent.click(within(toast).getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByTestId("app-toast")).toBeNull();
+  });
+
+  it("DT-HLP-013: the message regions are in the page before any message and stay after it; only the words change", async () => {
+    await app({ "ui_v2.shell": true });
+    const polite = await screen.findByTestId("app-messages");
+    const assertive = screen.getByTestId("app-problems");
+    expect(polite).toHaveAttribute("aria-live", "polite");
+    expect(assertive).toHaveAttribute("aria-live", "assertive");
+    expect(polite).toBeEmptyDOMElement();
+    await act(() => emitEvent("app:toast", "Copied"));
+    await act(flushAsync);
+    expect(screen.getByTestId("app-messages")).toBe(polite);
+    expect(polite).toHaveTextContent("Copied");
+    await act(() => emitEvent("app:toast", "Renamed"));
+    await act(flushAsync);
+    expect(screen.getByTestId("app-messages")).toBe(polite);
+    expect(polite).toHaveTextContent("Renamed");
+    expect(polite).not.toHaveTextContent("Copied");
+    fireEvent.click(within(polite).getByRole("button", { name: "Dismiss" }));
+    expect(screen.getByTestId("app-messages")).toBe(polite);
+    expect(polite).toBeEmptyDOMElement();
+    expect(screen.getByTestId("app-problems")).toBe(assertive);
   });
 
   it("DT-HLP-013: classic's window keeps classic's toast", async () => {

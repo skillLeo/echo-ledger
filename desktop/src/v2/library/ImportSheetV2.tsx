@@ -52,10 +52,11 @@ export function ImportSheetV2({ paths, notify, onClose }: { paths: string[]; not
       </>}>
       <div className="el-form el-form--flush">
         <ul className="el-import__files" aria-label="Files to import">
-          {paths.map((path) => {
+          {paths.map((path, i) => {
             const ok = isImportable(path);
             return (
-              <li key={path} className={`el-import__file${ok ? "" : " el-import__file--no"}`} title={path}>
+              // The same file can be picked twice: each row has its own key.
+              <li key={`${i}:${path}`} className={`el-import__file${ok ? "" : " el-import__file--no"}`} title={path}>
                 <span className="el-body-strong" dir="auto">{(ok && importTitle(path)) || fileName(path)}</span>
                 <span className="el-caption el-secondary" dir="auto">{ok ? fileName(path) : "Can't be imported: not a voice note, audio or video file"}</span>
               </li>

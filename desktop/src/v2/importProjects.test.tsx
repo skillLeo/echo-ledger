@@ -74,6 +74,15 @@ describe("the import sheet", () => {
     expect(screen.getByRole("dialog", { name: "Import 1 file" })).toBeInTheDocument();
   });
 
+  it("DT-HLP-005: the same file picked twice is listed twice, each row its own", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    render(<div className="el-root"><ImportSheetV2 paths={[NOTE, NOTE]} notify={vi.fn()} onClose={vi.fn()} /></div>);
+    await act(flushAsync);
+    expect(within(screen.getByRole("list", { name: "Files to import" })).getAllByRole("listitem")).toHaveLength(2);
+    expect(errors.mock.calls.filter((c) => String(c[0]).includes("same key"))).toEqual([]);
+    errors.mockRestore();
+  });
+
   it("DT-HLP-005: nothing importable: Nothing to import, and Import can't be pressed; Cancel closes", async () => {
     const onClose = vi.fn();
     render(<div className="el-root"><ImportSheetV2 paths={[TEXT]} notify={vi.fn()} onClose={onClose} /></div>);
@@ -185,6 +194,9 @@ describe("the Projects page", () => {
     expect(within(screen.getByRole("list", { name: "Projects" })).getAllByRole("listitem").map((li) => li.querySelector(".el-body-strong")?.textContent))
       .toEqual(["Acme Holdings", "March order", "Northwind"]);
     expect(screen.getByRole("button", { name: "Hide the folders in Acme Holdings" })).toHaveAttribute("aria-expanded", "true");
+    // A folder says where it sits and its level; a top project says neither.
+    expect(screen.getByRole("button", { name: /^March order, folder in Acme Holdings, level 2/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Northwind/ }).textContent).not.toMatch(/level/);
     fireEvent.click(screen.getByRole("button", { name: /^March order/ }));
     expect(p.onOpen).toHaveBeenCalledWith("c1a");
     fireEvent.click(screen.getByRole("button", { name: "Request files" }));

@@ -33,6 +33,7 @@ export function projectLine(project: ClientFolder, projects: readonly ClientFold
 
 export function ProjectsListV2({ projects, error, onRetry, items, expanded, onToggle, onOpen, onNew, onRequest }: ProjectsListV2Props) {
   const rows = useMemo(() => (projects ? visibleRows(projectTree(projects), expanded) : []), [projects, expanded]);
+  const names = useMemo(() => new Map((projects ?? []).map((p) => [p.id, p.name])), [projects]);
   return (
     <div className="el-page el-page--narrow" data-v2="projects">
       <header className="el-page__head">
@@ -71,6 +72,8 @@ export function ProjectsListV2({ projects, error, onRetry, items, expanded, onTo
                   <Avatar initials={initials(project.name, "")} size="sm" />
                   <span className="el-projects__text">
                     <span className="el-body-strong" dir="auto">{project.name}</span>
+                    {/* Where it sits, for screen readers (the indent says it on screen): "folder in Acme Holdings, level 2". */}
+                    {depth > 1 && <span className="el-visually-hidden">{`, folder in ${names.get(project.parent_id ?? "") ?? "a project"}, level ${depth}`}</span>}
                     <span className="el-caption el-secondary">{projectLine(project, projects, items, children.length)}</span>
                   </span>
                 </button>
