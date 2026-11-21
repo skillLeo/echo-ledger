@@ -89,9 +89,12 @@ export function rowModel(item: LibraryItem, now: Date = new Date(), views: Views
   // A ready transcript whose default view is still written says "Converting to Roman Urdu… 60%" in place of its first
   // words (they come in Urdu script until then); one that could not be written says so before them.
   const converting = state === "ready" ? rowViewsLine(views) : null;
-  const meta = converting?.state === "making" ? converting.text
+  const base = converting?.state === "making" ? converting.text
     : state === "ready" ? [converting?.text, preview ?? source ?? ""].filter(Boolean).join(" · ")
       : waiting ? (source ?? "") : [source, STATE_WORDS[state]].filter(Boolean).join(" · ");
+  // Classic's sub-line after it: the project and how many bookmarks (the length is at the row's end).
+  const marks = item.marker_count ?? 0;
+  const meta = [base, item.client?.name, marks > 0 ? (marks === 1 ? "1 bookmark" : `${marks} bookmarks`) : null].filter(Boolean).join(" · ");
   const badge = state === "failed" ? { tone: "danger" as const, text: "Failed" }
     : state === "no_audio" ? { tone: "neutral" as const, text: "No audio" }
       : waiting ? { tone: "warning" as const, text: "Untranscribed" } : null;

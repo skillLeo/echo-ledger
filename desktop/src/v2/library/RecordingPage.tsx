@@ -14,23 +14,36 @@ import { screenSaid, screensByLine } from "../../lib/screens";
 import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
-import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
+import { copiedTranscript, DEFAULT_UNSURE, fileSize, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
 import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName } from "../../lib/player";
 import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
-import { defaultViewOf, improvingView, viewPercent } from "../../lib/progress";
+import { defaultViewOf, improvingView, transcribingLine, viewPercent } from "../../lib/progress";
 import { usePoll } from "../../lib/usePoll";
-import { normalizeLanguage, scriptWarning, transcribedIn } from "../../lib/languages";
+import { failureLine, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn } from "../../lib/languages";
+import { PLAYBACK_EXPIRED } from "../shared/SharedReader";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
 import { PDF_HINT } from "../../views/main/TranscriptTools";
 import { screenMarker } from "../../lib/screens";
-import { Badge, Button, Card, copyMenuItems, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
+import { Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
 import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
 
 type Tab = "transcript" | "notes" | "details";
+
+/** A transcript still being made (queued, waiting for the engine, in parts). */
+const IN_FLIGHT = new Set(["pending", "submitted", "processing"]);
+const isTranscribing = (status?: string | null) => !!status && IN_FLIGHT.has(status);
+
+/** The primary recording's size from the session's detail, when the server says it. */
+export function primarySize(detail: Record<string, unknown>): number | null {
+  const recordings = Array.isArray(detail.recordings) ? (detail.recordings as Record<string, unknown>[]) : [];
+  const primary = recordings.find((r) => r.role === "primary") ?? recordings[0];
+  const size = primary?.size_bytes;
+  return typeof size === "number" && size > 0 ? size : null;
+}
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; value: T };
 
 export type RecordingPageProps = {
@@ -62,7 +75,10 @@ const inField = (target: EventTarget | null) =>
 export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject, onViews }: RecordingPageProps) {
   const [sharing, setSharing] = useState(false);
   const [tab, setTab] = useState<Tab>("transcript");
-  const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string>; bookmarks: Bookmark[] }>>({ state: "loading" });
+  const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string>; bookmarks: Bookmark[]; sizeBytes: number | null }>>({ state: "loading" });
+  // An expired playback link is asked for again once (classic's); a second failure says so.
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const refreshedLink = useRef(false);
   const [transcript, setTranscript] = useState<Load<TranscriptDetail | null>>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -96,6 +112,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   useEffect(() => {
     let live = true;
     setDetail({ state: "loading" });
+    setPlaybackError(null);
+    refreshedLink.current = false;
     setTranscript(transcriptId ? { state: "loading" } : { state: "ready", value: null });
     api.session(item.id).then((d) => {
       if (!live) return;
@@ -106,6 +124,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           url: typeof d.playback_url === "string" ? d.playback_url : null,
           names: names && typeof names === "object" && !Array.isArray(names) ? (names as Record<string, string>) : {},
           bookmarks: bookmarksOf(d),
+          sizeBytes: primarySize(d),
         },
       });
     }).catch((e) => live && setDetail({ state: "error", message: errorMessage(e) }));
@@ -272,7 +291,32 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     }
   };
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
-  const meta = [source, formatWhen(item.started_at)].filter(Boolean).join(" · ");
+  // When, how long, then the project (its own button after this line).
+  const meta = [source, formatWhen(item.started_at), formatDuration(item.duration_ms)].filter(Boolean).join(" · ");
+  // A transcription waiting for its engine says when it tries again; a failed one says why.
+  const engineRetry = tDetail && isTranscribing(tDetail.status) ? retryLine(tDetail) : null;
+  const failureCode = tDetail?.status === "failed" ? tDetail.error_code ?? null : item.transcript?.final_error_code ?? null;
+  const liveLine = tDetail?.kind === "live"
+    ? `Live captions (final transcript pending${partsText(item.transcript?.final_progress) ? ` · ${partsText(item.transcript?.final_progress)}` : ""})` : null;
+  /** A label's × on the page: the recording keeps its other labels ("Label removed"). */
+  const removeLabel = async (label: string) => {
+    try {
+      await api.organiseSession(item.id, { labels: (item.labels ?? []).filter((l) => l !== label) });
+      onMessage(`Label removed: ${label}`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
+  const audioError = () => {
+    if (refreshedLink.current) return setPlaybackError(PLAYBACK_EXPIRED);
+    refreshedLink.current = true;
+    const failed = detail.state === "ready" ? detail.value.url : null;
+    api.session(item.id).then((d) => {
+      const next = typeof d.playback_url === "string" ? d.playback_url : null;
+      if (next && next !== failed) setDetail((s) => (s.state === "ready" ? { state: "ready", value: { ...s.value, url: next } } : s));
+      else setPlaybackError(PLAYBACK_EXPIRED);
+    }).catch(() => setPlaybackError(PLAYBACK_EXPIRED));
+  };
   const engine = transcribedIn(item.transcript);
   const warning = scriptWarning(item.transcript?.script_warning);
   const bookmarks = detail.state === "ready" ? detail.value.bookmarks : [];
@@ -439,7 +483,13 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
                 : state === "no_audio" ? <Badge>Nothing was heard</Badge>
                   : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge tone="warning">Untranscribed</Badge>}
           </p>
+          {(item.labels?.length ?? 0) > 0 && (
+            <ul className="el-recording__labels" aria-label="Labels">
+              {item.labels!.map((l) => <li key={l}><LabelChip name={l} colour={null} onRemove={() => void removeLabel(l)} /></li>)}
+            </ul>
+          )}
           {engine && <p className="el-caption el-secondary">Transcribed in {engine}</p>}
+          {engineRetry && <p className="el-caption el-secondary" role="status" dir="auto">{engineRetry}</p>}
           {warning && <p className="el-caption el-row__error" role="status">{warning}</p>}
         </div>
         <div className="el-page__actions">
@@ -456,8 +506,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             {detail.state === "ready" && detail.value.url && (
               <audio ref={audio} src={detail.value.url} preload="metadata" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
                 onLoadedMetadata={(e) => setMediaSeconds(e.currentTarget.duration)}
-                onEnded={() => setPlaying(false)} onTimeUpdate={(e) => timeUpdate(e.currentTarget)} />
+                onEnded={() => setPlaying(false)} onTimeUpdate={(e) => timeUpdate(e.currentTarget)} onError={audioError} />
             )}
+            {playbackError && <Banner tone="warning" icon={Icons.WarningIcon}>{playbackError}</Banner>}
             <Player playing={playing} position={Math.round(position)} duration={durationS} onToggle={toggle} onSeek={seek}
               onSkip={(s) => seek(position + s)}
               end={<Select label="Playback speed" hideLabel value={speed} onChange={setSpeed} className="el-page__speed"
@@ -505,6 +556,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
           ) : segments.length > 0 ? (
             <>
+              {liveLine && <p className="el-caption el-secondary" role="status" data-testid="live-line">{liveLine}</p>}
               {(viewsInfo?.available.length ?? 0) > 0 && tDetail?.kind === "final" && (
                 <div className="el-recording__viewbar">
                   {editing ? <span className="el-caption el-secondary">Show as is off while you edit: you edit the words as heard.</span> : <Segmented label="Show as" value={showAs} onChange={(v) => void chooseView(v)}
@@ -542,12 +594,14 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           ) : transcript.state === "ready" && transcript.value?.status === "completed" && transcript.value.segments.length === 0 ? (
             <EmptyState icon={Icons.TranscriptIcon} title="The transcript is empty" body="No speech was detected in this recording." />
           ) : state === "processing" && item.transcript?.final_status ? (
-            <EmptyState icon={Icons.TranscriptIcon} title="Transcribing" body="The transcript appears here when it is ready. You can keep working meanwhile." />
+            <EmptyState icon={Icons.TranscriptIcon} title="Transcribing"
+              body={`${transcribingLine(item.transcript?.final_progress ?? tDetail?.progress)} The transcript appears here when it is ready. You can keep working meanwhile.`} />
           ) : state === "no_audio" ? (
             <EmptyState icon={Icons.MicIcon} title="Nothing was heard" body="The recording has no sound to transcribe. Check the microphone and system audio before the next call." />
           ) : (
             <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : "Not transcribed yet"}
-              body={`Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
+              body={state === "failed" ? `${failureLine(failureCode)} Transcribe it again to read, search and share what was said.`
+                : `Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
               action={<Button variant="primary" loading={busy} loadingLabel="Starting…"
                 onClick={() => setTranscribeOpen(true)}>Transcribe</Button>} />
           )
@@ -560,6 +614,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             {item.device?.name && <><dt>Device</dt><dd>{item.device.name}</dd></>}
             {item.client?.name && <><dt>Project</dt><dd>{item.client.name}</dd></>}
             {item.language_chip && <><dt>Language</dt><dd>{item.language_chip}</dd></>}
+            {detail.state === "ready" && detail.value.sizeBytes ? <><dt>File size</dt><dd className="el-num">{fileSize(detail.value.sizeBytes)}</dd></> : null}
             {item.transcript?.final_provider_label || item.transcript?.final_provider
               ? <><dt>Transcription engine</dt><dd>{item.transcript.final_provider_label || providerName(item.transcript.final_provider)}</dd></> : null}
             <dt>Kept</dt><dd>{item.keep ? "Forever" : "Until auto clean-up (Settings › Storage)"}</dd>

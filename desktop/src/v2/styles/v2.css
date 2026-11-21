@@ -1361,3 +1361,6 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
   cursor: default; color: var(--el-role-text-disabled); background: var(--el-role-bg-subtle); border-color: var(--el-role-border-default);
 }
 .el-split:has(> :disabled) { --split-divider: var(--el-role-border-default); }
+
+/* The recording page's labels, each with its × (parity DT-REC-045). */
+.el-recording__labels { display: flex; flex-wrap: wrap; gap: var(--el-space-4); list-style: none; margin: 0; padding: 0; }
