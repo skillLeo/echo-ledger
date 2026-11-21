@@ -21,7 +21,7 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::oneshot;
 use windows_collections::IIterable;
 
-use super::{ATTACH_FAILED, Native, SHARE_TITLE, SHARE_WAIT, WINDOWS_WHATSAPP_FAMILY, after_wait, drop_files, is_whatsapp_target, says_cancel};
+use super::{Native, SHARE_TITLE, SHARE_WAIT, WINDOWS_WHATSAPP_FAMILY, after_wait, attach_failed_text, drop_files, is_whatsapp_target, says_cancel};
 
 type Answer = Arc<Mutex<Option<oneshot::Sender<Native>>>>;
 
@@ -55,7 +55,7 @@ pub async fn share(app: &AppHandle, text: &str, path: &str) -> Native {
     let (text, path) = (text.to_string(), path.to_string());
     let shown = to.clone();
     let says_cancel = says_cancel(crate::audio::platform::windows::os_build());
-    let started = app.run_on_main_thread(move || match show(hwnd, text, path, shown.clone()) {
+    let started = app.run_on_main_thread(move || match show(hwnd, text, path, says_cancel, shown.clone()) {
         Err(e) => answer(&shown, Native::Unavailable(format!("the Share window did not open: {e}"))),
         // Nothing would say a close: the window is open, and that is all that is known.
         Ok(()) if !says_cancel => answer(&shown, Native::Opened),
@@ -67,7 +67,7 @@ pub async fn share(app: &AppHandle, text: &str, path: &str) -> Native {
     after_wait(tokio::time::timeout(SHARE_WAIT, rx).await.ok().map(Result::ok))
 }
 
-fn show(hwnd: isize, text: String, path: String, to: Answer) -> ::windows::core::Result<()> {
+fn show(hwnd: isize, text: String, path: String, says_cancel: bool, to: Answer) -> ::windows::core::Result<()> {
     let hwnd = HWND(hwnd as *mut _);
     let interop = ::windows::core::factory::<DataTransferManager, IDataTransferManagerInterop>()?;
     // SAFETY: the main window's handle, on its own thread.
@@ -108,7 +108,7 @@ fn show(hwnd: isize, text: String, path: String, to: Answer) -> ::windows::core:
             if let Err(e) = attach(&data, &path) {
                 eprintln!("[whatsapp] the voice was not attached: {e}");
                 // The Share window says so instead of offering the text alone; the window offers the fallback.
-                let _ = request.FailWithDisplayText(&HSTRING::from(ATTACH_FAILED));
+                let _ = request.FailWithDisplayText(&HSTRING::from(attach_failed_text(says_cancel)));
                 answer(&failed, Native::Unavailable(format!("the voice file could not be shared: {e}")));
             }
             let _ = deferral.Complete();

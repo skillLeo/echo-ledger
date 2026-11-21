@@ -100,7 +100,15 @@ pub const SHARE_TITLE: &str = "Send to WhatsApp";
 /// The first Windows build whose share says it was closed without sending (`DataPackage.ShareCanceled`).
 pub const SHARE_CANCELED_BUILD: u32 = 20348;
 /// What the Share window shows when the voice file could not be added.
-pub const ATTACH_FAILED: &str = "EchoLedger could not add the voice file. Close this window: EchoLedger opens WhatsApp with the text instead.";
+/// What the Share window shows when the voice file could not be added: before build 20348 the sheet already shows
+/// "Open WhatsApp with the text instead" (the share answered `Opened`); from it on, the fallback runs by itself.
+pub fn attach_failed_text(says_cancel: bool) -> &'static str {
+    if says_cancel {
+        "EchoLedger could not add the voice file. Close this window: EchoLedger opens WhatsApp with the text instead."
+    } else {
+        "EchoLedger could not add the voice file. Close this window, then choose Open WhatsApp with the text instead."
+    }
+}
 
 /// Windows says a closed Share window from this build on; an unknown build is taken as not saying.
 pub fn says_cancel(build: Option<u32>) -> bool {
@@ -112,36 +120,87 @@ pub fn is_whatsapp_target(app_user_model_id: &str) -> bool {
     app_user_model_id.to_lowercase().starts_with(&format!("{}!", WINDOWS_WHATSAPP_FAMILY.to_lowercase()))
 }
 
-/// The cache folder's name for a recording: its id's letters, digits, `-` and `_` only (the id comes from the window, so
-/// it never names another folder), at most 64 of them.
-pub fn cache_key(id: &str) -> String {
-    let key: String = id.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')).take(64).collect();
-    if key.is_empty() { "recording".into() } else { key }
+/// The recording's audio as the server has it now, from its detail: the primary recording's id, size and type (the
+/// link's signature changes on every read and is left out), and its size when the server says it.
+pub fn audio_version(detail: &serde_json::Value) -> (String, Option<u64>) {
+    let primary = detail.get("recordings").and_then(serde_json::Value::as_array).and_then(|all| all.iter().find(|r| r.get("role").and_then(serde_json::Value::as_str) == Some("primary")));
+    let field = |name: &str| primary.and_then(|p| p.get(name)).map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_string)).unwrap_or_default();
+    let link = detail.get("playback_url").and_then(serde_json::Value::as_str).unwrap_or_default();
+    let path = link.split('?').next().unwrap_or_default();
+    let size = primary.and_then(|p| p.get("size_bytes")).and_then(serde_json::Value::as_u64);
+    (format!("{}|{}|{}|{path}", field("id"), field("size_bytes"), field("mime")), size)
 }
 
-/// Removes every recording's share copy under `root` but `keep_id`'s (only the last one shared is kept).
-pub fn clear_other_shares(root: &Path, keep_id: &str) {
-    let keep = cache_key(keep_id);
+/// The cache folder's name for a recording's audio: its id's letters, digits, `-` and `_` only (the id comes from the
+/// window, so it never names another folder; at most 64), then a digest of the audio's version, so a replaced audio is
+/// never taken for the old one.
+pub fn cache_key(id: &str, version: &str) -> String {
+    let safe: String = id.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')).take(64).collect();
+    let safe = if safe.is_empty() { "recording".to_string() } else { safe };
+    // FNV-1a: stable across builds and runs; a name, not a secret (the folder is the app's own).
+    let hash = version.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3));
+    format!("{safe}-{hash:016x}")
+}
+
+/// Where the share copies live: the app's cache folder (else its data folder), `whatsapp-share`.
+pub fn share_root(cache_dir: Option<PathBuf>, data_dir: &Path) -> PathBuf {
+    cache_dir.unwrap_or_else(|| data_dir.to_path_buf()).join("whatsapp-share")
+}
+
+/// Removes every share copy (sign-out, another account signed in).
+pub fn clear_all(root: &Path) {
+    let _ = std::fs::remove_dir_all(root);
+}
+
+/// Removes every share copy under `root` but `keep_key`'s. Called once a share has settled, so a copy a still-open
+/// share window may read stays until the next share is done.
+pub fn clear_other_shares(root: &Path, keep_key: &str) {
     let Ok(entries) = std::fs::read_dir(root) else { return };
     for entry in entries.flatten() {
-        if entry.file_name().to_string_lossy() != keep {
+        if entry.file_name().to_string_lossy() != keep_key {
             let _ = std::fs::remove_dir_all(entry.path());
         }
     }
 }
 
-/// A finished copy of the recording is there (a download in progress is written beside it as `.part`).
-pub fn is_cached(path: &Path) -> bool {
-    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() > 0)
+/// A finished copy of the recording is there (a download in progress is written beside it as `.part`), of the size the
+/// server says when it says one.
+pub fn is_cached(path: &Path, expected: Option<u64>) -> bool {
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() > 0 && expected.is_none_or(|size| m.len() == size))
 }
 
-/// The voice in Downloads for the fallback: the file already there under `name` when it is this copy (same size),
-/// else a copy under a free name.
+/// The two files hold the same bytes (compared in full, not by name or size alone).
+pub fn same_bytes(a: &Path, b: &Path) -> std::io::Result<bool> {
+    use std::io::Read;
+    if std::fs::metadata(a)?.len() != std::fs::metadata(b)?.len() {
+        return Ok(false);
+    }
+    let (mut a, mut b) = (std::fs::File::open(a)?, std::fs::File::open(b)?);
+    let (mut left, mut right) = (vec![0u8; 64 * 1024], vec![0u8; 64 * 1024]);
+    loop {
+        let read = a.read(&mut left)?;
+        if read == 0 {
+            return Ok(true);
+        }
+        b.read_exact(&mut right[..read])?;
+        if left[..read] != right[..read] {
+            return Ok(false);
+        }
+    }
+}
+
+/// The voice in Downloads for the fallback: a file already there under `name` (or its "(2)", "(3)"… names) only when it
+/// holds exactly these bytes, else a copy under a free name. A same-named file of another recording is never used.
 pub fn downloads_copy(dir: &Path, name: &str, source: &Path) -> std::io::Result<PathBuf> {
-    let size = std::fs::metadata(source)?.len();
-    let there = dir.join(name);
-    if std::fs::metadata(&there).is_ok_and(|m| m.is_file() && m.len() == size) {
-        return Ok(there);
+    let (stem, ext) = name.rsplit_once('.').map_or((name, ""), |(s, e)| (s, e));
+    let candidates = std::iter::once(dir.join(name)).chain((2..1000).map(|n| dir.join(if ext.is_empty() { format!("{stem} ({n})") } else { format!("{stem} ({n}).{ext}") })));
+    for there in candidates {
+        if !there.exists() {
+            break;
+        }
+        if there.is_file() && same_bytes(&there, source).unwrap_or(false) {
+            return Ok(there);
+        }
     }
     let target = crate::commands::export_target(dir, name);
     std::fs::copy(source, &target)?;
@@ -253,20 +312,47 @@ mod tests {
     }
 
     #[test]
-    fn a_recording_has_one_share_folder_named_safely() {
-        assert_eq!(cache_key("0b6f6a3e-1c2d-4e5f-9a8b-7c6d5e4f3a2b"), "0b6f6a3e-1c2d-4e5f-9a8b-7c6d5e4f3a2b");
-        assert_eq!(cache_key("../../etc/x"), "etcx");
-        assert_eq!(cache_key("a\\b:c"), "abc");
-        assert_eq!(cache_key(".."), "recording");
-        assert_eq!(cache_key(&"x".repeat(200)).len(), 64);
+    fn a_recordings_share_copy_is_named_by_its_id_and_its_audio_version() {
+        let key = cache_key("0b6f6a3e-1c2d-4e5f-9a8b-7c6d5e4f3a2b", "rec-1:1000:audio/ogg");
+        assert!(key.starts_with("0b6f6a3e-1c2d-4e5f-9a8b-7c6d5e4f3a2b-"), "{key}");
+        assert_eq!(key, cache_key("0b6f6a3e-1c2d-4e5f-9a8b-7c6d5e4f3a2b", "rec-1:1000:audio/ogg"), "stable");
+        assert_ne!(key, cache_key("0b6f6a3e-1c2d-4e5f-9a8b-7c6d5e4f3a2b", "rec-2:1000:audio/ogg"), "new audio, new copy");
+        assert!(cache_key("../../etc/x", "v").starts_with("etcx-"));
+        assert!(cache_key("a\\b:c", "v").starts_with("abc-"));
+        assert!(cache_key("..", "v").starts_with("recording-"));
+        assert!(cache_key(&"x".repeat(200), "v").len() <= 64 + 1 + 16);
+        assert!(cache_key("s1", "v").chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
+    }
+
+    #[test]
+    fn the_audio_version_is_the_primary_recording_and_its_size() {
+        let detail = serde_json::json!({
+            "updated_at": "2026-11-20T10:00:00Z",
+            "recordings": [
+                {"id": "mic", "role": "mic", "mime": "audio/ogg", "size_bytes": 5},
+                {"id": "rec-1", "role": "primary", "mime": "audio/ogg", "size_bytes": 1000}
+            ],
+            "playback_url": "https://ledger.example.test/api/recordings/rec-1/audio?expires=1&signature=abc"
+        });
+        let (version, size) = audio_version(&detail);
+        assert_eq!(size, Some(1000));
+        assert!(version.contains("rec-1") && version.contains("1000"), "{version}");
+        // The link's signature changes on every read: it is not part of the version.
+        let mut again = detail.clone();
+        again["playback_url"] = serde_json::json!("https://ledger.example.test/api/recordings/rec-1/audio?expires=2&signature=def");
+        assert_eq!(audio_version(&again).0, version);
+        let mut replaced = detail.clone();
+        replaced["recordings"][1]["id"] = serde_json::json!("rec-2");
+        assert_ne!(audio_version(&replaced).0, version);
+        assert_eq!(audio_version(&serde_json::json!({})).1, None);
     }
 
     #[test]
     fn only_the_last_recordings_share_copy_is_kept() {
         let root = tempfile::tempdir().unwrap();
-        for id in ["old", "keep"] {
-            std::fs::create_dir_all(root.path().join(id)).unwrap();
-            std::fs::write(root.path().join(id).join("Call.ogg"), b"audio").unwrap();
+        for key in ["old", "keep"] {
+            std::fs::create_dir_all(root.path().join(key)).unwrap();
+            std::fs::write(root.path().join(key).join("Call.ogg"), b"audio").unwrap();
         }
         clear_other_shares(root.path(), "keep");
         assert!(!root.path().join("old").exists());
@@ -275,14 +361,45 @@ mod tests {
     }
 
     #[test]
+    fn signing_out_leaves_no_share_copy() {
+        let base = tempfile::tempdir().unwrap();
+        let root = share_root(Some(base.path().to_path_buf()), Path::new("/unused"));
+        assert_eq!(root, base.path().join("whatsapp-share"));
+        assert_eq!(share_root(None, base.path()), base.path().join("whatsapp-share"));
+        std::fs::create_dir_all(root.join("s1-abc")).unwrap();
+        std::fs::write(root.join("s1-abc").join("Call.ogg"), b"audio").unwrap();
+        clear_all(&root);
+        assert!(!root.exists());
+        clear_all(&root);
+    }
+
+    #[test]
+    fn sign_out_and_a_new_sign_in_forget_the_share_copies() {
+        let source = include_str!("../commands.rs");
+        for start in ["pub async fn unpair(", "async fn adopt_registration("] {
+            let at = source.find(start).unwrap_or_else(|| panic!("{start} not found"));
+            let body = &source[at..at + source[at..].find("\n}\n").unwrap()];
+            assert!(body.contains("forget_whatsapp_shares("), "{start} clears the WhatsApp share copies");
+        }
+    }
+
+    #[test]
     fn a_kept_share_copy_is_used_again_and_a_partial_one_is_not() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("Call.ogg");
-        assert!(!is_cached(&file));
+        assert!(!is_cached(&file, None));
         std::fs::write(&file, b"").unwrap();
-        assert!(!is_cached(&file), "an empty file is not a recording");
+        assert!(!is_cached(&file, None), "an empty file is not a recording");
         std::fs::write(&file, b"audio").unwrap();
-        assert!(is_cached(&file));
+        assert!(is_cached(&file, None));
+        assert!(is_cached(&file, Some(5)));
+        assert!(!is_cached(&file, Some(6)), "not the size the server says");
+    }
+
+    #[test]
+    fn the_windows_attach_failure_says_what_to_do_on_each_build() {
+        assert!(attach_failed_text(false).contains("Close this window, then choose Open WhatsApp with the text instead"));
+        assert!(attach_failed_text(true).contains("EchoLedger opens WhatsApp with the text instead"));
     }
 
     #[test]
@@ -298,11 +415,15 @@ mod tests {
         let again = downloads_copy(&downloads, "Kick-off 2026-11-06.ogg", &source).unwrap();
         assert_eq!(again, first, "a retry uses the same file, no (2)");
         assert_eq!(std::fs::read_dir(&downloads).unwrap().count(), 1);
-        // Another file of that name (another recording, or changed) is left alone.
-        std::fs::write(&first, b"something else entirely").unwrap();
+        // Another file of that name and the same size (another client's recording) is left alone and never sent.
+        std::fs::write(&first, b"other one").unwrap();
         let other = downloads_copy(&downloads, "Kick-off 2026-11-06.ogg", &source).unwrap();
         assert_eq!(other, downloads.join("Kick-off 2026-11-06 (2).ogg"));
-        assert_eq!(std::fs::read(&first).unwrap(), b"something else entirely");
+        assert_eq!(std::fs::read(&first).unwrap(), b"other one");
+        assert_eq!(std::fs::read(&other).unwrap(), b"the voice");
+        // Of another size too.
+        std::fs::write(&first, b"something else entirely").unwrap();
+        assert_eq!(downloads_copy(&downloads, "Kick-off 2026-11-06.ogg", &source).unwrap(), other, "the matching copy is found");
     }
 
     #[test]

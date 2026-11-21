@@ -83,7 +83,9 @@ describe("Send to WhatsApp on the computer (v1.6, P5.5)", () => {
     respond("whatsapp_share_voice", { kind: "opened" });
     const props = renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Text and voice" }));
-    expect(await screen.findByTestId("whatsapp-opened")).toHaveTextContent("The Share window is open: choose WhatsApp there, then the chat.");
+    expect(await screen.findByTestId("whatsapp-opened")).toHaveTextContent("The share is open: finish sending there.");
+    // Where it went is not known: nothing names WhatsApp as the place it went.
+    expect(screen.getByTestId("whatsapp-opened")).not.toHaveTextContent(/WhatsApp/);
     expect(props.notify).not.toHaveBeenCalled();
     expect(props.onClose).not.toHaveBeenCalled();
     respond("whatsapp_share_voice", { kind: "fallback", path: "C:\\Users\\me\\Downloads\\Kick-off.ogg", fileOnClipboard: true, textCut: false, pasteKeys: "Ctrl+V" });

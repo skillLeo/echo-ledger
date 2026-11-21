@@ -348,6 +348,13 @@ const SCREENS = [
     await page.getByRole("button", { name: "Text and voice" }).click();
     await page.waitForSelector("[data-testid=whatsapp-paste]");
   }]),
+  // F6: a share whose end is not known: nothing claimed, the fallback offered (Windows 10; a Mac share with no answer).
+  ...[["whatsapp-opened", "library-whatsapp-opened"], ["whatsapp-opened-mac", "library-whatsapp-opened-mac"]].map(([name, fixture]) => [name, fixture, async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.locator(".detail").getByRole("button", { name: "Send to WhatsApp" }).click();
+    await page.getByRole("button", { name: "Text and voice" }).click();
+    await page.waitForSelector("[data-testid=whatsapp-opened]");
+  }]),
   // v1.6.1 (Notices): a toast that goes somewhere, with × and its timer bar (reduced motion keeps the bar still).
   ["toast", "library", async (page) => {
     await page.waitForSelector(".segments .segment");

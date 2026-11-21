@@ -290,8 +290,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   whatsapp_open: () => false,
   save_audio_downloads: () => "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
   // Text and voice (F6): no share here, so the fallback: the voice in Downloads and on the clipboard, pasted with the
-  // system's keys ("-mac": ⌘V).
-  whatsapp_share_voice: () => ({
+  // system's keys ("-mac": ⌘V). "whatsapp-opened": a share whose end is not known (Windows 10, or no answer in time).
+  whatsapp_share_voice: (args: Args) => screen.includes("whatsapp-opened") && args.share !== false ? { kind: "opened" } : ({
     kind: "fallback",
     path: mac ? "/Users/ayesha/Downloads/Kick-off Contoso website 2026-11-06.ogg" : "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
     fileOnClipboard: true,

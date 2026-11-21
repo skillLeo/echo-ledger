@@ -125,8 +125,8 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
     <Sheet title="Send to WhatsApp" onClose={onClose} busy={working !== null} className="whatsapp-sheet">
       {opened && !saved ? (
         <div className="whatsapp-done" aria-live="polite">
-          <p data-testid="whatsapp-opened"><b>The Share window is open: choose WhatsApp there, then the chat.</b></p>
-          <p className="small muted">Closed it, or WhatsApp is not in the list? Open WhatsApp with the text, and paste the voice there.</p>
+          <p data-testid="whatsapp-opened"><b>The share is open: finish sending there.</b></p>
+          <p className="small muted">Closed it without sending, or WhatsApp was not offered? Open WhatsApp with the text, and paste the voice there.</p>
           <div className="row sheet-actions">
             <button type="button" className="btn" aria-busy={working === "voice" || undefined} onClick={() => void sendVoice(false)}>
               {working === "voice" ? "Opening WhatsApp…" : "Open WhatsApp with the text instead"}
