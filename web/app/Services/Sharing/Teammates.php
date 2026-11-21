@@ -70,7 +70,10 @@ final class Teammates
         }
         $note = $note !== null && trim($note) !== '' ? mb_substr(trim($note), 0, 500) : null;
         $kind = $target instanceof Client ? 'project' : 'session';
+        // Teammates of the workspace may see the person called (docs/API.md "Title from the person"); the audit log,
+        // which support staff can read, never names them (outsideTitle).
         $title = mb_substr($target instanceof Client ? $target->name : $target->displayTitle(), 0, 200);
+        $audited = mb_substr($target instanceof Client ? $target->name : $target->outsideTitle(), 0, 200);
 
         DB::transaction(function () use ($sender, $target, $people, $note, $kind, $title): void {
             $held = $target instanceof Client ? $this->heldBy($target) : null;
@@ -91,7 +94,7 @@ final class Teammates
                 Mail::to($person->email)->queue(new ShareReceivedMail($sender->name, $title, $kind === 'project', url('/app/shared-with-me'), $note));
             }
         }
-        app(AuditLog::class)->record('sent_to_teammate', $sender->id, $target, 'Sent '.($kind === 'project' ? 'project ' : '').$title.' to '.Str::limit($people->pluck('email')->implode(', '), 160, '…'));
+        app(AuditLog::class)->record('sent_to_teammate', $sender->id, $target, 'Sent '.($kind === 'project' ? 'project ' : '').$audited.' to '.Str::limit($people->pluck('email')->implode(', '), 160, '…'));
 
         return count($wanted);
     }

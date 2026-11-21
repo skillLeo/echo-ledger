@@ -37,10 +37,10 @@ final class TitleSql
      */
     public static function named(Builder $query): array
     {
-        $name = $query->qualifyColumn('caller_name');
+        $name = self::squeezed($query->qualifyColumn('caller_name'));
         $nobody = GenericTitles::exactNobodies();
 
-        return ['('.self::call($query)." AND TRIM(COALESCE({$name}, '')) <> '' AND LOWER(TRIM({$name})) NOT IN (".self::marks($nobody).'))', $nobody];
+        return ['('.self::call($query)." AND {$name} <> '' AND {$name} NOT IN (".self::marks($nobody).'))', $nobody];
     }
 
     /**
@@ -64,12 +64,14 @@ final class TitleSql
         [$own, $ownBindings] = self::own($query);
         [$named, $namedBindings] = self::named($query);
         $numbered = self::numbered($query);
-        [$title, $name, $number] = [$query->qualifyColumn('title'), $query->qualifyColumn('caller_name'), $query->qualifyColumn('caller_number')];
+        $title = $query->qualifyColumn('title');
+        [$shownName, $shownNumber] = [self::shownName($query), self::shownNumber($query)];
 
+        // As shown: "call with ahmed" finds it, and so does "ahmed".
         $query->where(fn (Builder $q) => $q
             ->whereRaw("({$own} AND LOWER({$title}) LIKE ? ESCAPE '!')", [...$ownBindings, $pattern])
-            ->orWhereRaw("(NOT {$own} AND {$named} AND LOWER({$name}) LIKE ? ESCAPE '!')", [...$ownBindings, ...$namedBindings, $pattern])
-            ->orWhereRaw("(NOT {$own} AND NOT {$named} AND {$numbered} AND LOWER({$number}) LIKE ? ESCAPE '!')", [...$ownBindings, ...$namedBindings, $pattern])
+            ->orWhereRaw("(NOT {$own} AND {$named} AND {$shownName} LIKE ? ESCAPE '!')", [...$ownBindings, ...$namedBindings, $pattern])
+            ->orWhereRaw("(NOT {$own} AND NOT {$named} AND {$numbered} AND {$shownNumber} LIKE ? ESCAPE '!')", [...$ownBindings, ...$namedBindings, $pattern])
             ->orWhereRaw("(NOT {$own} AND NOT {$named} AND NOT {$numbered} AND LOWER({$title}) LIKE ? ESCAPE '!')", [...$ownBindings, ...$namedBindings, $pattern]));
     }
 
@@ -84,14 +86,36 @@ final class TitleSql
         [$own, $ownBindings] = self::own($query);
         [$named, $namedBindings] = self::named($query);
         $numbered = self::numbered($query);
-        [$title, $name, $number, $source, $app] = [$query->qualifyColumn('title'), $query->qualifyColumn('caller_name'),
-            $query->qualifyColumn('caller_number'), $query->qualifyColumn('caller_source'), $query->qualifyColumn('source_app')];
-        $callWith = fn (string $column): string => self::concat($query, "'call with '", "LOWER(TRIM({$column}))");
+        [$title, $app] = [$query->qualifyColumn('title'), $query->qualifyColumn('source_app')];
 
         return $query->orderByRaw("CASE WHEN {$own} THEN LOWER({$title})"
-            ." WHEN {$named} THEN CASE WHEN {$source} IN ('window_title', 'calendar') THEN LOWER(TRIM({$name})) ELSE {$callWith($name)} END"
-            ." WHEN {$numbered} THEN {$callWith($number)}"
+            .' WHEN '.$named.' THEN '.self::shownName($query)
+            .' WHEN '.$numbered.' THEN '.self::shownNumber($query)
             ." ELSE LOWER(COALESCE(NULLIF({$title}, ''), {$app})) END", [...$ownBindings, ...$namedBindings]);
+    }
+
+    /**
+     * The person called's title as shown, lower case: a meeting's name as it is, else "call with <name>".
+     *
+     * @param  Builder<CaptureSession>  $query
+     */
+    private static function shownName(Builder $query): string
+    {
+        $name = self::squeezed($query->qualifyColumn('caller_name'));
+
+        return "CASE WHEN {$query->qualifyColumn('caller_source')} IN ('window_title', 'calendar') THEN {$name} ELSE ".self::concat($query, "'call with '", $name).' END';
+    }
+
+    /** @param  Builder<CaptureSession>  $query */
+    private static function shownNumber(Builder $query): string
+    {
+        return self::concat($query, "'call with '", self::squeezed($query->qualifyColumn('caller_number')));
+    }
+
+    /** LOWER(TRIM()) with runs of spaces made one, as GenericTitles does with `\s+` (runs of up to 8 spaces). */
+    private static function squeezed(string $column): string
+    {
+        return "LOWER(TRIM(REPLACE(REPLACE(REPLACE(COALESCE({$column}, ''), '  ', ' '), '  ', ' '), '  ', ' ')))";
     }
 
     /** @param  Builder<CaptureSession>  $query */

@@ -92,6 +92,8 @@ final class AutoTitles
         // Only while still untitled (or still the title nobody chose): a person who named it meanwhile wins.
         $before = $session->title;
         $saved = CaptureSession::withTrashed()->withoutGlobalScopes()->whereKey($session->id)
+            // Since 2.0.0-k: never over a title a person gave by renaming meanwhile, even the same generic words.
+            ->where('title_by_person', false)
             ->where(function ($q) use ($before): void {
                 $q->whereNull('title')->orWhere('title', '');
                 if ($before !== null && $before !== '') {

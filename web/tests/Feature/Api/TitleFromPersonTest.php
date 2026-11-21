@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Enums\SourceApp;
+use App\Filament\Support\WhatsAppActions;
+use App\Models\AuditEvent;
 use App\Models\CallNote;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -10,6 +12,7 @@ use App\Models\SentItem;
 use App\Models\Transcript;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Screens\MeetingPack;
 use App\Services\ShareLinks;
 use App\Services\Sharing\Teammates;
 use App\Services\Titles\AutoTitles;
@@ -17,6 +20,9 @@ use App\Services\Titles\GenericTitles;
 use App\Services\Titles\TitleSql;
 use App\Services\TranscriptExporter;
 use App\Services\Workspaces\Workspaces;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -131,20 +137,36 @@ describe('the review of bb2bfd13', function () {
         // Clearing it gives the person called again.
         $this->patchJson("/api/sessions/{$call->id}", ['title' => ''])->assertOk();
         expect(collect($this->getJson('/api/library')->json('data'))->firstWhere('id', $call->id))
-            ->toMatchArray(['title' => 'Call with Ahmed', 'title_auto' => true]);
+            ->toMatchArray(['title' => 'Call with Ahmed', 'title_source' => 'person', 'title_auto' => false]);
     });
 
-    it('says title_auto for every title the person did not choose', function () {
+    it('says where the title comes from, and title_auto only for one written from what was said', function () {
         $own = titled($this, ['title' => 'Rent for March', 'title_auto' => false, 'caller_name' => 'Ahmed']);
         $person = titled($this, ['title' => 'WhatsApp call', 'title_auto' => false, 'caller_number' => '+92 300 1234567']);
         $automatic = titled($this, ['title' => 'Laptop prices', 'title_auto' => true]);
         $untitled = titled($this, ['title' => null]);
 
         $items = collect($this->getJson('/api/library')->json('data'))->keyBy('id');
-        expect($items[$own->id]['title_auto'])->toBeFalse()
-            ->and($items[$person->id])->toMatchArray(['title' => 'Call with +92 300 1234567', 'title_auto' => true])
-            ->and($items[$automatic->id]['title_auto'])->toBeTrue()
-            ->and($items[$untitled->id]['title_auto'])->toBeTrue();
+        expect($items[$own->id])->toMatchArray(['title_source' => 'own', 'title_auto' => false])
+            ->and($items[$person->id])->toMatchArray(['title' => 'Call with +92 300 1234567', 'title_source' => 'person', 'title_auto' => false])
+            ->and($items[$automatic->id])->toMatchArray(['title_source' => 'auto', 'title_auto' => true])
+            ->and($items[$untitled->id])->toMatchArray(['title' => 'WhatsApp call', 'title_source' => 'app', 'title_auto' => false])
+            ->and($this->getJson("/api/sessions/{$person->id}")->json('title_source'))->toBe('person');
+    });
+
+    it('changes nothing when an app sends back the "Call with" it showed', function () {
+        $call = titled($this, ['title' => 'Laptop prices', 'title_auto' => true, 'caller_name' => 'Ahmed']);
+
+        $this->patchJson("/api/sessions/{$call->id}", ['title' => 'Call with Ahmed'])->assertOk();
+        expect($this->getJson("/api/sessions/{$call->id}")->json('title_source'))->toBe('person');
+        $fresh = $call->fresh();
+        expect($fresh->title)->toBe('Laptop prices')->and($fresh->title_by_person)->toBeFalse()->and($fresh->title_auto)->toBeTrue();
+        // The console's Urdu words, with B8's isolates, are the same title.
+        app()->setLocale('ur');
+        $urdu = $fresh->personTitle();
+        app()->setLocale('en');
+        $this->patchJson("/api/sessions/{$call->id}", ['title' => $urdu])->assertOk();
+        expect($call->fresh()->title_by_person)->toBeFalse();
     });
 
     it('never shows the person called outside the account: share links, exports, WhatsApp text', function () {
@@ -162,7 +184,61 @@ describe('the review of bb2bfd13', function () {
             $file = app(TranscriptExporter::class)->export(Transcript::query()->findOrFail($transcript->id), $format);
             expect($file['body'].$file['filename'])->not->toContain('7654321', $format)->not->toContain('Ahmed Raza', $format);
         }
+        // A Word file's name and its words.
+        $docx = app(TranscriptExporter::class)->export(Transcript::query()->findOrFail($transcript->id), 'docx');
+        $zipPath = tempnam(sys_get_temp_dir(), 'b10');
+        file_put_contents($zipPath, $docx['body']);
+        $zip = new ZipArchive;
+        expect($zip->open($zipPath))->toBeTrue();
+        $words = (string) $zip->getFromName('word/document.xml');
+        $zip->close();
+        unlink($zipPath);
+        expect($docx['filename'].$words)->not->toContain('7654321')->not->toContain('Ahmed Raza')->and($words)->toContain('WhatsApp call');
+        // WhatsApp: the message and the audio file's name.
+        $panel = WhatsAppActions::panel($call->fresh(), null);
+        expect((string) $panel['text'].$panel['audio_name'])->not->toContain('7654321')->not->toContain('Ahmed Raza');
+        // A meeting pack, every format.
+        foreach (MeetingPack::FORMATS as $format) {
+            $pack = json_encode(app(MeetingPack::class)->build($call->fresh(), $format), JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+            expect((string) $pack)->not->toContain('7654321', $format)->not->toContain('Ahmed Raza', $format);
+        }
+        // A shared project's page lists it without the person.
+        $project = Client::factory()->create(['workspace_id' => $call->workspace_id, 'user_id' => $call->user_id, 'name' => 'Acme']);
+        $call->forceFill(['client_id' => $project->id])->save();
+        ['url' => $projectUrl] = app(ShareLinks::class)->make($project, ['audience' => 'public', 'include_audio' => false, 'allow_download' => false,
+            'expires_at' => now()->addHour(), 'view' => null], 'Ana');
+        expect((string) $this->get($projectUrl)->assertOk()->getContent())->toContain('WhatsApp call')->not->toContain('7654321')->not->toContain('Ahmed Raza');
         expect($call->fresh()->outsideTitle())->toBe('WhatsApp call')->and($call->fresh()->displayTitle())->toBe('Call with Ahmed Raza');
+    });
+
+    it('never names the person called in the audit log, while teammates see the title the sender sees', function () {
+        $mate = User::factory()->create();
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->device->workspace_id), $mate);
+        $call = titled($this, ['title' => null, 'caller_name' => 'Ahmed Raza', 'caller_number' => '+92 300 7654321', 'workspace_id' => $this->device->workspace_id]);
+        $call->transcripts()->create(['kind' => 'final', 'provider' => 'assemblyai', 'status' => 'completed', 'text' => 'hello']);
+
+        app(Teammates::class)->send(User::query()->findOrFail($this->device->user_id), $call, [$mate->email], null);
+
+        $audit = (string) AuditEvent::query()->where('event', 'sent_to_teammate')->latest('id')->value('summary');
+        expect($audit)->toContain('WhatsApp call')->not->toContain('Ahmed Raza')->not->toContain('7654321')
+            ->and(SentItem::query()->withoutGlobalScopes()->latest('id')->value('title'))->toBe('Call with Ahmed Raza');
+        // The deletion's audit line too.
+        $call->delete();
+        expect((string) AuditEvent::query()->where('event', 'session_deleted')->latest('id')->value('summary'))->not->toContain('Ahmed Raza');
+    });
+
+    it('rolls title_by_person back and forth without touching titles', function () {
+        $call = titled($this, ['title' => 'Budget', 'caller_name' => 'Ahmed']);
+        $this->patchJson("/api/sessions/{$call->id}", ['title' => 'WhatsApp call'])->assertOk();
+        $migration = 'database/migrations/2026_12_24_000001_add_title_by_person.php';
+
+        Artisan::call('migrate:rollback', ['--path' => $migration, '--force' => true]);
+        expect(Schema::hasColumn('capture_sessions', 'title_by_person'))->toBeFalse()
+            ->and(DB::table('capture_sessions')->where('id', $call->id)->value('title'))->toBe('WhatsApp call');
+
+        Artisan::call('migrate', ['--path' => $migration, '--force' => true]);
+        expect(Schema::hasColumn('capture_sessions', 'title_by_person'))->toBeTrue()
+            ->and(DB::table('capture_sessions')->where('id', $call->id)->value('title_by_person'))->toBeIn([0, false]);
     });
 
     it('finds and sorts recordings by the title shown', function () {
@@ -176,6 +252,7 @@ describe('the review of bb2bfd13', function () {
         $shown = fn (string $needle): array => CaptureSession::query()->whereKey($ids)
             ->where(fn ($q) => TitleSql::whereShownLike($q, '%'.$needle.'%'))->pluck('id')->sort()->values()->all();
         expect($shown('ahmed'))->toBe([$ahmed->id])
+            ->and($shown('call with ahmed'))->toBe([$ahmed->id])
             ->and($shown('1112223'))->toBe([$number->id])
             // Bilal is not shown (the person's own title wins), nor Daud (a voice note).
             ->and($shown('bilal'))->toBe([])->and($shown('daud'))->toBe([])

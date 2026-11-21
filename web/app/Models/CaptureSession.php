@@ -270,23 +270,37 @@ class CaptureSession extends Model
     }
 
     /**
+     * Where the title shown comes from (since 2.0.0-k, `title_source` in the API): `own` (the person chose it), `person`
+     * (the person called), `auto` (written from what was said) or `app` (the app's or a file's name).
+     */
+    public function titleSource(): string
+    {
+        return match (true) {
+            $this->titleIsOwn() => 'own',
+            $this->personTitle() !== null => 'person',
+            $this->title_auto && trim((string) $this->title) !== '' => 'auto',
+            default => 'app',
+        };
+    }
+
+    /**
      * The title the person called gives (since v1.2, the rule since 2.0.0-k): "Call with Omar Khan" (a meeting's window or
      * calendar title as it is), else "Call with +92 300 1234567". Null for a voice note, or when nobody is known: a name
      * that is only an app's label ("WhatsApp") or what apps write for an unknown caller names nobody. In the console's
      * language (the API's is always English).
      */
-    public function personTitle(): ?string
+    public function personTitle(?string $locale = null): ?string
     {
         if ($this->source_app === SourceApp::VoiceNote) {
             return null;
         }
         $name = trim((string) $this->caller_name);
         if (! GenericTitles::namesNobody($name)) {
-            return in_array($this->caller_source, ['window_title', 'calendar'], true) ? $name : __('Call with :name', ['name' => $name]);
+            return in_array($this->caller_source, ['window_title', 'calendar'], true) ? $name : __('Call with :name', ['name' => $name], $locale);
         }
         $number = trim((string) $this->caller_number);
 
-        return $number !== '' ? __('Call with :name', ['name' => $number]) : null;
+        return $number !== '' ? __('Call with :name', ['name' => $number], $locale) : null;
     }
 
     /**

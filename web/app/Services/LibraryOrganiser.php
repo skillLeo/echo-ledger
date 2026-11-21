@@ -9,6 +9,7 @@ use App\Enums\SourceApp;
 use App\Enums\TranscriptStatus;
 use App\Enums\UploadStatus;
 use App\Exceptions\ApiError;
+use App\Filament\Support\ConsoleV2;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\LabelColor;
@@ -19,6 +20,7 @@ use App\Services\Titles\AutoTitles;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
 use App\Support\Brand;
+use App\Support\Translation\IsolatingTranslator;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -336,7 +338,11 @@ final class LibraryOrganiser
                 $session->client_id = $this->ownedClient($session->workspace_id, $data['client_id'])?->id;
                 $learn = $session->client_id !== null && $session->client_id !== $before;
             }
-            if (array_key_exists('title', $data)) {
+            // Since 2.0.0-k: "Call with …" sent back as it is shown (an app's pre-filled rename box) changes nothing: it
+            // stays the person called's title, never the person's own.
+            $shown = array_map(IsolatingTranslator::strip(...), array_filter(array_map(
+                fn (string $language): ?string => $session->personTitle($language), array_keys(ConsoleV2::LANGUAGES))));
+            if (array_key_exists('title', $data) && ! in_array(IsolatingTranslator::strip(trim((string) $data['title'])), $shown, true)) {
                 $title = trim((string) $data['title']);
                 $session->title = $title === '' ? null : $title;
                 // A person's title is never replaced; clearing it asks for the automatic one again (since v1.5, Phase 1C).

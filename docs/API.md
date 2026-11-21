@@ -4,7 +4,7 @@ Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mob
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
 **Contract revision: 2.0.0-k (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
-2.0.0-k (proposed 2026-11-21, accepted when merged): a call's title comes from the person called (see "Title from the person"): a person's own title (any rename wins), then "Call with <name>" or the number, then the automatic title. `title` is that title, and `title_auto` is `true` unless the person chose it. Outside the account (share links, exports, WhatsApp) the title never names the person called.
+2.0.0-k (proposed 2026-11-21, accepted when merged): a call's title comes from the person called (see "Title from the person"): a person's own title (any rename wins), then "Call with <name>" or the number, then the automatic title. `title` is that title; the new `title_source` (`own` | `person` | `auto` | `app`) says which, and `title_auto` stays `true` only for `auto`. Outside the account (share links, exports, WhatsApp, the audit log) the title never names the person called.
 2.0.0-j (accepted 2026-11-21): "Audio only and Transcribe later" (1.8.0-e) is served: the three endpoints, `audio_only`, `transcribe_estimate` and projects' `transcribe_calls`. Clarified where the server had to decide: minutes are plan minutes (0 on the person's own key or an on-device engine); the estimate lists only the person's audio-only recordings among the ids (what bulk would start); bulk on Free without an own key is `403 needs_transcription_key` and nothing starts; the open create takes `transcribe` too.
 2.0.0-i (accepted 2026-11-21): the parity plan's row indicators (docs/PLAN_V2_PARITY.md section 3). Library items carry
 `important`, `label_colors` and `expires_at`; `PATCH /api/sessions/{id}` takes `important` and answers with `opened`;
@@ -1845,9 +1845,9 @@ the usage ledger:
   Numbers, units, prices, dates and times are written as digits in every view ("16 GB", "M6 Pro", "Rs 2,500", "3:30").
 - **Automatic titles.** When a recording's final transcript is ready and nobody has given it a title, the server gives it
   a short one from what was said (at most 60 characters, digits for numbers, for example "Laptop — 16 vs 32 GB"). Library
-  items and `GET /api/sessions/{id}` carry `title_auto: true` for such a title. A title set by a person (`PATCH` with
-  `title`, or at upload) is `title_auto: false` and is never replaced. Setting `title` to `null` asks for the automatic
-  one again.
+  items and `GET /api/sessions/{id}` carry `title_auto: true` for such a title, and only for such a title (since 2.0.0-k
+  it is `title_source == "auto"`). A title set by a person (`PATCH` with `title`, or a title an app sent at upload that is
+  not generic) is never replaced. Setting `title` to `null` asks for the automatic one again.
 - **Title from the person** (since 2.0.0-k). Every `title` the API gives to the person and their workspace (Library
   items, `GET /api/sessions/{id}`, search, Shared with me, activity, call notes) follows one order:
   1. a title the person chose: any title given by renaming (`PATCH` with `title`, the console's Rename), even an app's
@@ -1858,14 +1858,18 @@ the usage ledger:
      only an app's label ("WhatsApp", "WhatsApp call", "Unknown", "Private number") counts as no name;
   3. the automatic title, made only when no person is known;
   4. the app's own name for an untitled recording ("WhatsApp call", "Voice note").
-  `title_auto` is `false` only for step 1. For steps 2 to 4 it is `true`, so an app never pre-fills its rename box with
-  "Call with …" and saves it as the person's own. An automatic title made before the caller was known gives way to the
-  person as soon as `caller` is known; nothing stored changes, and clearing a title (`PATCH` `title: ""`) goes back to
-  steps 2 to 4. Search and the name sort follow the same order: "Ahmed" finds a call shown as "Call with Ahmed".
+  `title_source` says which step gave the title: `"own"` (1), `"person"` (2), `"auto"` (3) or `"app"` (4).
+  `title_auto` is `true` only for `"auto"`, as in v1.5, so older apps' "named from what was said" badge stays right.
+  Apps pre-fill their rename box only for `"own"`. A `PATCH` whose `title` is the "Call with …" shown (English, or the
+  console's language) changes nothing: the title stays the person called's. An automatic title made before the caller
+  was known gives way to the person as soon as `caller` is known. Nothing stored changes, and clearing a title
+  (`PATCH` `title: ""`) goes back to steps 2 to 4. Search and the name sort follow the same order: "Ahmed" and
+  "call with Ahmed" find a call shown as "Call with Ahmed".
   The API always says "Call with" in English, and the console says it in its own language.
-  **Outside the account** (share pages and links already sent, WhatsApp messages and file names, exported files and
-  meeting packs, the audit log, support staff) the title is the stored one, or the app's name for an untitled
-  recording. The person called's name and number are never shown there.
+  **Outside the account** the title never names the person called: on share pages (links already sent too), in
+  WhatsApp messages and file names, exported files and meeting packs, the audit log, support staff's views and the
+  operators' checks, it is the stored title, or the app's name for an untitled recording. Teammates of the workspace
+  see it as the person does (Shared with me, the bell, the email).
   A teammate's saved copy keeps the stored title and its kind and works out its own title from the caller.
 - **Two engines on every short note** (Settings → Recording → Double-check short notes, on by default). A recording of
   up to 3 minutes is heard by a second engine, the cheapest other one with a key; the words are lined up. A segment word

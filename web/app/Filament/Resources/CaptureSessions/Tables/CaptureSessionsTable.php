@@ -884,7 +884,7 @@ final class CaptureSessionsTable
      */
     public static function searchDisplayedTitle(Builder $query, string $search): Builder
     {
-        $needle = mb_strtolower(trim($search));
+        $needle = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $search)));
         $title = $query->qualifyColumn('title');
         $pattern = '%'.strtr($needle, ['!' => '!!', '%' => '!%', '_' => '!_']).'%';
         $apps = array_values(array_map(
