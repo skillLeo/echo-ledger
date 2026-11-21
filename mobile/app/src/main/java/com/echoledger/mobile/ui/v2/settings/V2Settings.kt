@@ -328,8 +328,9 @@ private fun GoalHeader(goal: SettingsGoal) {
         ),
         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
     ) {
-        androidx.compose.material3.Icon(goal.icon, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
-        Column(Modifier.padding(start = EchoTokens.Space.s12).semantics(mergeDescendants = true) { heading() }) {
+        // 24 dp, as the page rows' icons (the D3 map), so the group's words start in the rows' text column.
+        androidx.compose.material3.Icon(goal.icon, null, Modifier.size(EchoTokens.Icon.lg), tint = c.accentText)
+        Column(Modifier.padding(start = EchoTokens.Space.s16).semantics(mergeDescendants = true) { heading() }) {
             androidx.compose.material3.Text(stringResource(goal.title), style = EchoV2.type.label, color = c.textPrimary)
             androidx.compose.material3.Text(stringResource(goal.description), style = EchoV2.type.caption, color = c.textSecondary)
         }

@@ -5,17 +5,20 @@ import com.echoledger.mobile.R
 import com.echoledger.mobile.core.SettingsIndex
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 
-/** A goal of Settings (docs/v2/IA.md 5.1–5.9): the same groups on every platform, each with its icon and one line. */
+/**
+ * A goal of Settings (docs/v2/IA.md 5.1–5.9): the same groups on every platform, each with its icon (the D3 map,
+ * tokens/icons/settings.json) and one line.
+ */
 enum class SettingsGoal(val title: Int, val description: Int, val icon: ImageVector) {
-    Recording(R.string.v2_set_group_recording, R.string.v2_set_desc_recording, EchoIcons.Mic),
-    Transcription(R.string.v2_set_group_transcription, R.string.v2_set_desc_transcription, EchoIcons.Transcribe),
+    Recording(R.string.v2_set_group_recording, R.string.v2_set_desc_recording, EchoIcons.SettingsRecording),
+    Transcription(R.string.v2_set_group_transcription, R.string.v2_set_desc_transcription, EchoIcons.SettingsTranscription),
     Live(R.string.v2_set_group_live, R.string.v2_set_desc_live, EchoIcons.Live),
     Privacy(R.string.v2_set_group_privacy, R.string.v2_set_desc_privacy, EchoIcons.Privacy),
     Notifications(R.string.v2_set_group_notifications, R.string.v2_set_desc_notifications, EchoIcons.Bell),
     Appearance(R.string.v2_set_group_appearance, R.string.v2_set_desc_appearance, EchoIcons.Palette),
-    Account(R.string.v2_set_group_account, R.string.v2_set_desc_account, EchoIcons.Account),
-    Setup(R.string.v2_set_group_setup, R.string.v2_set_desc_setup, EchoIcons.Health),
-    About(R.string.v2_set_group_about, R.string.v2_set_desc_about, EchoIcons.Info)
+    Account(R.string.v2_set_group_account, R.string.v2_set_desc_account, EchoIcons.SettingsAccount),
+    Setup(R.string.v2_set_group_setup, R.string.v2_set_desc_setup, EchoIcons.SettingsSetup),
+    About(R.string.v2_set_group_about, R.string.v2_set_desc_about, EchoIcons.SettingsAbout)
 }
 
 /**
@@ -44,26 +47,26 @@ object SettingsTree {
     /** Settings v2 leaves out nothing of classic's (wallpaper colours came back, docs/PLAN_V2_PARITY.md section 5). */
     val hiddenItems = emptySet<String>()
 
-    /** Each page's icon on its row (as classic had one per page). */
+    /** Each page's icon on its row, from the D3 map (tokens/icons/settings.json): one meaning, one glyph. */
     val pageIcons: Map<String, ImageVector> = mapOf(
         "calls" to EchoIcons.PhoneCall,
         "mic" to EchoIcons.Mic,
-        "voice" to EchoIcons.VoiceNote,
-        "language" to EchoIcons.Language,
+        "voice" to EchoIcons.SettingsVoice,
+        "language" to EchoIcons.SettingsLanguage,
         "words" to EchoIcons.Words,
         "key" to EchoIcons.Key,
         "captions" to EchoIcons.Captions,
         "games" to EchoIcons.Games,
         "videos" to EchoIcons.Videos,
         "lock" to EchoIcons.Lock,
-        "privacy" to EchoIcons.Privacy,
+        "privacy" to com.echoledger.mobile.ui.v2.shell.PendingIcons.Policy,
         "storage" to EchoIcons.Storage,
         "notifications" to EchoIcons.Bell,
         "appearance" to EchoIcons.Palette,
-        "plan" to EchoIcons.Plan,
-        "account" to EchoIcons.Account,
+        "plan" to EchoIcons.SettingsPlan,
+        "account" to EchoIcons.SettingsProfile,
         "devices" to EchoIcons.Devices,
-        SETUP to EchoIcons.Health,
+        SETUP to EchoIcons.SettingsSetup,
         "help" to EchoIcons.Help,
         "about" to EchoIcons.Info
     )

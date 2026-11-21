@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.PhoneCallback
 import androidx.compose.material.icons.outlined.AutoDelete
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -17,6 +18,9 @@ object PendingIcons {
 
     /** The person's avatar when there is no name to take initials from. */
     val Person: ImageVector get() = Icons.Outlined.Person
+
+    /** Settings › Privacy › Privacy & data (the D3 map's page glyph, unlike the group's shield). */
+    val Policy: ImageVector get() = Icons.Outlined.Policy
 
     /** Auto-record calls (the Record sheet). */
     val PhoneCallback: ImageVector get() = Icons.AutoMirrored.Outlined.PhoneCallback
