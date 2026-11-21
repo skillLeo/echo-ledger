@@ -1439,7 +1439,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             <>
               <div className="detail-body">
                 {/* A narrow window shows the recording in place of the list (styles.css .app.narrow .library.has-open); Back returns to it. */}
-                {!tableView && <ItemBar title={recordingName(current.title)} onBack={backToList} />}
+                {/* Keyed by the recording: another recording opens with its own bar, untitled until its header scrolls under. */}
+                {!tableView && <ItemBar key={current.id} title={recordingName(current.title)} onBack={backToList} />}
                 {findOpen && transcript && (
                   <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, currentMatch)} onStep={stepFind}
                     onClose={() => { setFindOpen(false); setFindQuery(""); }} />
@@ -1751,8 +1752,10 @@ function ItemBar({ title, onBack }: { title: string; onBack: () => void }) {
   useEffect(() => {
     const check = () => {
       const el = bar.current;
-      const head = el?.closest(".detail-body")?.querySelector(".detail-title");
-      if (!el || !head) return;
+      // Hidden on a wide page: nothing to measure on every scroll.
+      if (!el || el.offsetParent === null) return;
+      const head = el.closest(".detail-body")?.querySelector(".detail-title");
+      if (!head) return;
       setTitled(head.getBoundingClientRect().bottom <= el.getBoundingClientRect().bottom);
     };
     // The page scrolls (.content), not the window: scroll events don't bubble, so listen while they come down.

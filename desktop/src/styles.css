@@ -418,13 +418,15 @@ select.chip option { color: var(--text); background: var(--surface); }
    text takes its own direction from its first letter: an English line keeps its order ("Northwind · 42:10",
    "Transcribing…", "2 calls waiting", a full stop at its end) and an Urdu title stays right to left. It stays on the
    window's start side (match-parent; plain "start" would follow the text). Classic only: v2 (.el-root) has its own
-   rules. The alignment has no specificity, so an element's own alignment still wins; buttons keep theirs (centred). */
+   rules. The direction carries one class's weight (the only classic rules that set unicode-bidi are the titles' and
+   snippets' plaintext, the same value, and the times' isolate, raised below); the alignment has none, so an element's
+   own alignment still wins; buttons keep theirs (centred). -webkit-match-parent for WebKit. */
 :where([dir="rtl"] .app) :is(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div, button):not(.el-root, .el-root *) { unicode-bidi: plaintext; }
-:where([dir="rtl"] .app) :where(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div):not(.el-root, .el-root *) { text-align: match-parent; }
+:where([dir="rtl"] .app :where(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div):not(.el-root, .el-root *)) { text-align: -webkit-match-parent; text-align: match-parent; }
 /* Times read as in English in every window ("8:12 AM", "0:00 / 2:15"). */
 .item-time, .player-time, .seg-time, .app :is(.item-time, .player-time, .seg-time) { direction: ltr; unicode-bidi: isolate; }
 /* Chevrons that point along the reading direction turn round; disclosures (down/up) and the external-link icon don't. */
-[dir="rtl"] :is(.set-trail:not(.disclosure):not(.set-ext), .crumb-step svg, .back-link svg, .screen-step svg) { transform: scaleX(-1); }
+[dir="rtl"] :is(.set-trail:not(.disclosure):not(.set-ext), .crumb-step svg, .back-link svg) { transform: scaleX(-1); }
 /* A title that is cut gets its ellipsis at its own end. */
 .activity-title[dir="auto"] { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item-time { flex: none; font-size: var(--text-xs); color: var(--text-muted); }
@@ -1751,7 +1753,7 @@ button.state-main:hover { background: var(--surface-3); }
 .menu-who-text > b, .menu-who-text > .small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .menu-who-text .plan-chip { margin-top: 2px; }
 .menu-theme { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-2); }
-.menu-theme .segmented > button { height: 26px; padding: 0 var(--space-2); }
+.menu-theme .segmented > button { height: 26px; min-height: 26px; padding: 0 var(--space-2); }
 .palette-field { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) 0 var(--space-5); border-bottom: 1px solid var(--border); color: var(--text-muted); }
 .palette-field .palette-input { border-bottom: 0; padding-left: 0; color: var(--text); }
 .palette-clear { flex: none; width: 28px; height: 28px; }

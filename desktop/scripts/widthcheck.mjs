@@ -423,7 +423,9 @@ try {
     if (name === "recording-scrolled") {
       const back = await page.evaluate(() => {
         const el = document.querySelector(".detail .detail-back");
-        if (!el || getComputedStyle(el).display === "none") return "ok";
+        const narrow = !!document.querySelector(".app.narrow .library.has-open");
+        // On a narrow page the recording takes the list's place: no Back there is a fault, not a pass.
+        if (!el || getComputedStyle(el).display === "none") return narrow ? "no Back on a narrow recording page" : "ok";
         const r = el.getBoundingClientRect();
         const top = r.bottom > 0 && r.top < innerHeight ? document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
         return top && (el === top || el.contains(top)) ? "ok" : `Back out of sight after scrolling (${Math.round(r.top)} px)`;
