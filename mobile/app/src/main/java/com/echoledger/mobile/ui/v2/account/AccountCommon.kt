@@ -124,7 +124,7 @@ fun AccountAvatar(
     var picture by remember(person, version) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(person, version, url) {
         if (version == null) return@LaunchedEffect
-        val cache = AvatarCache.of(context)
+        val cache = AvatarCache.of(context, actions.origin() ?: return@LaunchedEffect)
         val bytes = withContext(Dispatchers.IO) { cache.load(person, version) { url?.let { actions.avatarImage(it) } } }
         picture = bytes?.let { withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() } }
     }

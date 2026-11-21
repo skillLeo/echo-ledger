@@ -57,6 +57,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import mockwebserver3.MockResponse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -365,6 +366,48 @@ class AccountScreensTest : ScreenTest() {
             server.requestsTo("POST", "/api/account/two-factor/confirm").single().bodyText()
         ).jsonObject
         assertEquals("123456", confirm["code"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun theKeyAndTheRecoveryCodesAreCoveredAndTheCodesOutliveARotation() {
+        server.on("POST", "/api/account/two-factor", answer(200, sample("account_two_factor").replace("sample-secret", "JBSWY3DPEHPK3PXP")))
+        server.on(
+            "POST",
+            "/api/account/two-factor/confirm",
+            answer(
+                200,
+                """{"recovery_codes":["aaaa-1111","bbbb-2222","cccc-3333","dddd-4444","eeee-5555","ffff-6666","gggg-7777","hhhh-8888"]}"""
+            )
+        )
+        var window: android.view.Window? = null
+        // A configuration change: everything the page remembered in its composition is gone, its ViewModel is not.
+        var generation by mutableStateOf(0)
+        page {
+            window = (androidx.compose.ui.platform.LocalContext.current as android.app.Activity).window
+            androidx.compose.runtime.key(generation) { TwoStepPage(account, null, onChanged = {}, onBack = {}) }
+        }
+        fun covered() = window!!.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE != 0
+        assertFalse(covered())
+        click("Turn on two-step sign-in")
+        type("Password", "my password 2026")
+        click("Continue")
+        waitFor("Open in authenticator app")
+        assertTrue(covered())
+        type("6-digit code", "123456")
+        click("Turn on")
+        waitFor("Save your recovery codes")
+        assertTrue(covered())
+        generation++
+        compose.waitForIdle()
+        assertTrue(seen("Save your recovery codes"))
+        assertTrue(seen("aaaa-1111"))
+        assertTrue(seen("hhhh-8888"))
+        assertTrue(covered())
+        button("Done").assertIsNotEnabled()
+        click("I saved them")
+        click("Done")
+        waitFor("Turn on two-step sign-in")
+        assertFalse(covered())
     }
 
     @Test

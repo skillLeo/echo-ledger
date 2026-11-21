@@ -335,6 +335,34 @@ class AccountActionsTest {
     }
 
     @Test
+    fun `an avatar address that redirects is not followed, even on this server`() = runBlocking {
+        server.on(
+            "GET",
+            "/api/avatars/1/4",
+            MockResponse.Builder().code(302).addHeader("Location", "${server.baseUrl}/api/avatars/1/3").build()
+        )
+        server.on("GET", "/api/avatars/1/3", MockResponse.Builder().code(200).body("abc").build())
+        assertNull(actions.avatarImage("${server.baseUrl}/api/avatars/1/4?signature=s"))
+        assertTrue(server.requestsTo("GET", "/api/avatars/1/3").isEmpty())
+    }
+
+    @Test
+    fun `a device, browser or passkey id that is not one never reaches a request path`() = runBlocking {
+        server.onAny(FakeServer.empty(204))
+        val bad = listOf("../two-factor", "d1/../../account", "d1?x=1", "d1#x", "%2e%2e", "", "a".repeat(129), "d 1")
+        for (id in bad) {
+            assertTrue(id, actions.signOutDevice(id) is AccountResult.Failed)
+            assertTrue(id, actions.renameDevice(id, "x") is AccountResult.Failed)
+            assertTrue(id, actions.signOutBrowser(id) is AccountResult.Failed)
+            assertTrue(id, actions.renamePasskey(id, "x") is AccountResult.Failed)
+            assertTrue(id, actions.removePasskey(id, Proof(otp = "123456")) is AccountResult.Failed)
+        }
+        assertTrue(server.requests.isEmpty())
+        assertTrue(actions.signOutDevice("01JA_device-2") is AccountResult.Done)
+        assertEquals(1, server.requestsTo("DELETE", "/api/account/devices/01JA_device-2").size)
+    }
+
+    @Test
     fun `a signed-out phone and an unreachable server are their own problems`() = runBlocking {
         server.on("GET", "/api/account", problem(401, """{"message":"Unauthenticated."}"""))
         assertEquals(AccountProblem.SignedOut, failed(actions.account()))

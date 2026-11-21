@@ -89,13 +89,15 @@ object PhonePasskeyMaker : PasskeyMaker {
 }
 
 /**
- * Profile pictures kept on the phone by person and `avatar_version` (docs/API.md "Avatar URLs"): a new signed address of
- * the same version is the same picture, so it is never downloaded again, and the copy shows offline. A picture whose
- * version changed replaces the old one.
+ * Profile pictures kept on the phone by server, person and `avatar_version` (docs/API.md "Avatar URLs"): a new signed
+ * address of the same version is the same picture, so it is never downloaded again, and the copy shows offline. A
+ * picture whose version changed replaces the old one. [origin] is the paired server's (scheme, host and port): person
+ * 7 of one server is never shown for person 7 of another. Every picture is deleted on sign-out and on a new sign-in
+ * ([clearAll]).
  */
-class AvatarCache(private val dir: File) {
-    private fun safe(key: String): String =
-        MessageDigest.getInstance("SHA-256").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
+class AvatarCache(private val dir: File, private val origin: String) {
+    private fun safe(person: String): String =
+        MessageDigest.getInstance("SHA-256").digest("$origin\n$person".toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
 
     private fun file(person: String, version: Long) = File(dir, "${safe(person)}_$version.img")
 
@@ -116,7 +118,14 @@ class AvatarCache(private val dir: File) {
         get(person, version) ?: fetch()?.also { put(person, version, it) }
 
     companion object {
-        fun of(context: Context) = AvatarCache(File(context.cacheDir, "avatars"))
+        private fun dir(context: Context) = File(context.cacheDir, "avatars")
+
+        fun of(context: Context, origin: String) = AvatarCache(dir(context), origin)
+
+        /** Sign-out, or a sign-in that may be another account: no one's picture stays on the phone. */
+        fun clearAll(context: Context) {
+            dir(context).deleteRecursively()
+        }
 
         /** The person an avatar address belongs to (`/api/avatars/{user}/{version}`), or [fallback]. */
         fun personOf(url: String?, fallback: String): String =

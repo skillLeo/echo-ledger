@@ -66,6 +66,9 @@ import okhttp3.Response
 
 class NotPairedException : IOException("This phone is not signed in to an EchoLedger server.")
 
+/** A server id that may go into a request path as one segment. */
+private val SAFE_ID = Regex("[A-Za-z0-9_-]{1,128}")
+
 const val HTTPS_ONLY = "The server address must use https://"
 const val EMPTY_ANSWER = "Your server sent an empty answer. Try again in a minute."
 const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. If this Wi-Fi has a sign-in page, open it first; " +
@@ -105,6 +108,20 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     }
 
     private fun url(path: String) = "$base/api/${path.trimStart('/')}"
+
+    /** The server's origin: scheme, host and port (what the picture cache is kept under). */
+    val origin: String by lazy {
+        base.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}:${it.port}" } ?: base
+    }
+
+    /**
+     * A device, browser or passkey id from the server as one path segment: only `[A-Za-z0-9_-]{1,128}`, so an id can
+     * never reach another path (`../`, `/`, `?`, `#`, `%`).
+     */
+    private fun segment(id: String): String {
+        require(SAFE_ID.matches(id)) { "Not an id: the server sent something else." }
+        return id
+    }
 
     private fun request(path: String): Request.Builder {
         val builder = Request.Builder().url(url(path)).header("Accept", "application/json")
@@ -1033,7 +1050,10 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return liveHttp.newCall(req)
     }
 
-    /** The API's client (its pins kept) that never follows a redirect: the meeting's words go to this server or nowhere. */
+    /**
+     * The API's client (its pins kept) that never follows a redirect: the meeting's words go to this server or nowhere,
+     * and a profile picture is read from it alone.
+     */
     private val liveHttp: OkHttpClient by lazy { http.newBuilder().followRedirects(false).followSslRedirects(false).build() }
 
     /** `POST /api/assist/sessions/{id}/token`: new relay grant (tokens last at most 15 minutes). */
@@ -1152,12 +1172,12 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     /** `PATCH /api/devices/{id}` (since v1.6): a new name for one of this person's devices. */
     suspend fun renameDevice(id: String, name: String) {
         val body = buildJsonObject { put("name", name.trim().take(60)) }.toString().toRequestBody(jsonType)
-        call(request("devices/$id").patch(body).build(), null as KSerializer<Unit>?, allowEmpty = true)
+        call(request("devices/${segment(id)}").patch(body).build(), null as KSerializer<Unit>?, allowEmpty = true)
     }
 
     /** `DELETE /api/devices/{id}` (since v1.1): revokes another paired device. */
     suspend fun revokeDevice(id: String) {
-        call(request("devices/$id").delete().build(), null as KSerializer<Unit>?)
+        call(request("devices/${segment(id)}").delete().build(), null as KSerializer<Unit>?)
     }
 
     /** `POST /api/vocabulary/keyterms`: for the client, or for every recording without one. */
@@ -1207,7 +1227,8 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun avatarImage(url: String): ByteArray? = withContext(Dispatchers.IO) {
         if (!onServer(url)) return@withContext null
         val req = Request.Builder().url(url).get().build()
-        http.newCall(req).execute().use { resp -> if (resp.isSuccessful) resp.body.bytes() else null }
+        // Never a redirect: a picture is read from this server or not at all.
+        liveHttp.newCall(req).execute().use { resp -> if (resp.isSuccessful) resp.body.bytes() else null }
     }
 
     /** `POST /api/account/email {"email", …proof}` → 202: the address waiting for its code. */
@@ -1247,13 +1268,13 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
 
     /** `PATCH /api/account/devices/{id} {"name"}`: a device of any of the person's workspaces. */
     suspend fun renameAccountDevice(id: String, name: String) =
-        noAnswer(request("account/devices/$id").patch(jsonBody { put("name", name.trim()) }).build())
+        noAnswer(request("account/devices/${segment(id)}").patch(jsonBody { put("name", name.trim()) }).build())
 
     /** `DELETE /api/account/devices/{id}` → 204 (`409 current_device` for this phone). */
-    suspend fun signOutAccountDevice(id: String) = noAnswer(request("account/devices/$id").delete().build())
+    suspend fun signOutAccountDevice(id: String) = noAnswer(request("account/devices/${segment(id)}").delete().build())
 
     /** `DELETE /api/account/browsers/{id}` → 204. */
-    suspend fun signOutBrowser(id: String) = noAnswer(request("account/browsers/$id").delete().build())
+    suspend fun signOutBrowser(id: String) = noAnswer(request("account/browsers/${segment(id)}").delete().build())
 
     /** `DELETE /api/account/google {…proof}` → 204 (`409 last_sign_in_method`). */
     suspend fun unlinkGoogle(proof: com.echoledger.mobile.data.Proof) =
@@ -1283,11 +1304,11 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
 
     /** `PATCH /api/account/passkeys/{id} {"name"}`. */
     suspend fun renamePasskey(id: String, name: String) =
-        noAnswer(request("account/passkeys/$id").patch(jsonBody { put("name", name.trim()) }).build())
+        noAnswer(request("account/passkeys/${segment(id)}").patch(jsonBody { put("name", name.trim()) }).build())
 
     /** `DELETE /api/account/passkeys/{id} {…proof}` → 204. */
     suspend fun removePasskey(id: String, proof: com.echoledger.mobile.data.Proof) =
-        noAnswer(request("account/passkeys/$id").delete(jsonBody { proof.into(this) }).build())
+        noAnswer(request("account/passkeys/${segment(id)}").delete(jsonBody { proof.into(this) }).build())
 
     /** `POST /api/account/two-factor {…proof}`: the secret to add to an authenticator app (nothing saved yet). */
     suspend fun startTwoFactor(proof: com.echoledger.mobile.data.Proof): com.echoledger.mobile.data.TwoFactorSetupDto = call(

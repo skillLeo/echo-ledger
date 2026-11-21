@@ -55,6 +55,24 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * The camera app's photo for the profile (cache/camera/profile.jpg): deleted before each launch, so an old photo is
+ * never read as the new one, and after the camera answers, taken or not.
+ */
+object CameraPhoto {
+    fun prepare(photo: File) {
+        photo.delete()
+        photo.parentFile?.mkdirs()
+    }
+
+    /** The photo's bytes when [taken] (null otherwise, or when it can't be read); the file is gone either way. */
+    fun taken(photo: File, taken: Boolean): ByteArray? = try {
+        if (taken) runCatching { photo.readBytes() }.getOrNull() else null
+    } finally {
+        photo.delete()
+    }
+}
+
 /** The person key the own picture is kept under: the id in its address, else "me". */
 fun ownAvatarKey(account: AccountDto): String = AvatarCache.personOf(account.avatarUrl, "me")
 
@@ -97,8 +115,10 @@ fun ProfilePage(
                 is AvatarEncoder.Outcome.Ready -> when (val r = actions.uploadAvatar(made.jpeg)) {
                     is AccountResult.Done -> {
                         val now = account.copy(avatarUrl = r.value.avatarUrl, avatarVersion = r.value.avatarVersion)
-                        r.value.avatarVersion?.let { v ->
-                            withContext(Dispatchers.IO) { AvatarCache.of(context).put(ownAvatarKey(now), v, made.jpeg) }
+                        val origin = actions.origin()
+                        val version = r.value.avatarVersion
+                        if (origin != null && version != null) {
+                            withContext(Dispatchers.IO) { AvatarCache.of(context, origin).put(ownAvatarKey(now), version, made.jpeg) }
                         }
                         onChanged(now)
                         say(pictureSaved)
@@ -116,11 +136,9 @@ fun ProfilePage(
     }
     val photo = remember { File(context.cacheDir, "camera/profile.jpg") }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
-        if (taken) {
-            scope.launch {
-                val bytes = withContext(Dispatchers.IO) { runCatching { photo.readBytes() }.getOrNull().also { photo.delete() } }
-                upload(bytes)
-            }
+        scope.launch {
+            val bytes = withContext(Dispatchers.IO) { CameraPhoto.taken(photo, taken) }
+            upload(bytes)
         }
     }
 
@@ -151,11 +169,13 @@ fun ProfilePage(
             )
             EchoButton(stringResource(R.string.v2_acct_picture_take), {
                 try {
-                    photo.parentFile?.mkdirs()
+                    CameraPhoto.prepare(photo)
                     camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.exports", photo))
                 } catch (e: ActivityNotFoundException) {
+                    photo.delete()
                     pictureProblem = res.getString(R.string.v2_acct_no_camera)
                 } catch (e: IllegalArgumentException) {
+                    photo.delete()
                     pictureProblem = res.getString(R.string.v2_acct_no_camera)
                 }
             }, Modifier.fillMaxWidth(), kind = EchoButtonKind.Secondary, enabled = !picturing)
@@ -165,7 +185,9 @@ fun ProfilePage(
                     scope.launch {
                         when (val r = actions.removeAvatar()) {
                             is AccountResult.Done -> {
-                                withContext(Dispatchers.IO) { AvatarCache.of(context).forget(ownAvatarKey(account)) }
+                                actions.origin()?.let { origin ->
+                                    withContext(Dispatchers.IO) { AvatarCache.of(context, origin).forget(ownAvatarKey(account)) }
+                                }
                                 onChanged(account.copy(avatarUrl = null, avatarVersion = null))
                                 say(pictureRemoved)
                             }

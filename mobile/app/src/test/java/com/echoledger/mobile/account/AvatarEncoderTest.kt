@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.ExifInterface
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.nio.file.Files
 import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
@@ -149,7 +150,7 @@ class AvatarEncoderTest {
 
     @Test
     fun `pictures are kept by person and version, downloaded once per version`(): Unit = runBlocking {
-        val cache = AvatarCache(Files.createTempDirectory("avatars").toFile())
+        val cache = AvatarCache(Files.createTempDirectory("avatars").toFile(), "https://echoledger.test:443")
         var downloads = 0
         val fetch: suspend () -> ByteArray? = {
             downloads++
@@ -169,6 +170,41 @@ class AvatarEncoderTest {
         assertNull(cache.get("2", 1))
         assertEquals("7", AvatarCache.personOf("https://echoledger.test/api/avatars/7/1795276846?expires=1&signature=s", "me"))
         assertEquals("me", AvatarCache.personOf(null, "me"))
+    }
+
+    @Test
+    fun `person 7 of one server is never the picture of person 7 of another`(): Unit = runBlocking {
+        val dir = Files.createTempDirectory("avatars").toFile()
+        AvatarCache(dir, "https://one.example:443").put("7", 1, byteArrayOf(1))
+        assertNull(AvatarCache(dir, "https://two.example:443").get("7", 1))
+        assertNull(AvatarCache(dir, "https://one.example:8443").get("7", 1))
+        assertArrayEquals(byteArrayOf(1), AvatarCache(dir, "https://one.example:443").get("7", 1))
+        // Forgetting one server's person leaves the other server's.
+        AvatarCache(dir, "https://two.example:443").put("7", 1, byteArrayOf(2))
+        AvatarCache(dir, "https://one.example:443").forget("7")
+        assertArrayEquals(byteArrayOf(2), AvatarCache(dir, "https://two.example:443").get("7", 1))
+        assertEquals(
+            "https://echoledger.test:443",
+            com.echoledger.mobile.net.ApiClient("https://echoledger.test/", emptyList(), null).origin
+        )
+    }
+
+    @Test
+    fun `the camera's photo is gone before each launch and after the camera answers`() {
+        val photo = File(Files.createTempDirectory("cache").toFile(), "camera/profile.jpg")
+        photo.parentFile!!.mkdirs()
+        photo.writeBytes(byteArrayOf(9))
+        com.echoledger.mobile.ui.v2.account.CameraPhoto.prepare(photo)
+        assertFalse(photo.exists())
+        assertTrue(photo.parentFile!!.isDirectory)
+        photo.writeBytes(byteArrayOf(1, 2))
+        assertArrayEquals(byteArrayOf(1, 2), com.echoledger.mobile.ui.v2.account.CameraPhoto.taken(photo, taken = true))
+        assertFalse(photo.exists())
+        // Cancelled, or the camera failed: whatever it wrote is deleted and nothing is uploaded.
+        photo.writeBytes(byteArrayOf(3))
+        assertNull(com.echoledger.mobile.ui.v2.account.CameraPhoto.taken(photo, taken = false))
+        assertFalse(photo.exists())
+        assertNull(com.echoledger.mobile.ui.v2.account.CameraPhoto.taken(photo, taken = true))
     }
 
     @Test

@@ -32,6 +32,15 @@ class AccountActions(private val api: suspend () -> ApiClient?) {
         }
     }
 
+    /** The paired server's origin (scheme, host and port), which the picture cache is kept under; null when signed out. */
+    suspend fun origin(): String? = try {
+        api()?.origin
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
     suspend fun account(): AccountResult<AccountDto> = run { it.account() }
 
     suspend fun security(): AccountResult<AccountSecurityDto> = run { it.accountSecurity() }

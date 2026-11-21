@@ -1,12 +1,7 @@
 package com.echoledger.mobile.ui.v2.account
 
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.PersistableBundle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,14 +30,18 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.echoledger.mobile.R
 import com.echoledger.mobile.account.AccountFormat
 import com.echoledger.mobile.account.AccountProblem
 import com.echoledger.mobile.account.AccountResult
 import com.echoledger.mobile.account.AuthenticatorApp
 import com.echoledger.mobile.account.QrCode
+import com.echoledger.mobile.account.SecretClip
 import com.echoledger.mobile.data.AccountDto
 import com.echoledger.mobile.data.TwoFactorSetupDto
+import com.echoledger.mobile.ui.SecureWhileShown
 import com.echoledger.mobile.ui.v2.components.EchoBanner
 import com.echoledger.mobile.ui.v2.components.EchoBannerKind
 import com.echoledger.mobile.ui.v2.components.EchoButton
@@ -62,13 +61,19 @@ sealed interface TwoStepStep {
     data class Codes(val codes: List<String>) : TwoStepStep
 }
 
-/** Copies [text] and marks it sensitive, so the phone doesn't show it in its clipboard preview (Android 13 and later). */
-fun copySecret(context: Context, label: String, text: String) {
-    val clip = ClipData.newPlainText(label, text)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
-    }
-    (context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager)?.setPrimaryClip(clip)
+/**
+ * Copies a secret (the key, the recovery codes): marked sensitive (no clipboard preview on Android 13 and later) and
+ * cleared after a minute, on app lock and on sign-out, while it is still what the clipboard holds ([SecretClip]).
+ */
+fun copySecret(context: Context, label: String, text: String) = SecretClip.copy(context, label, text)
+
+/**
+ * Where the two-step page is, kept across a rotation or any other configuration change: the recovery codes are shown
+ * once and can't be fetched again. A ViewModel and not saved state, so the codes and the key never go into the saved
+ * instance state that Android writes out.
+ */
+class TwoStepModel : ViewModel() {
+    var step by mutableStateOf<TwoStepStep>(TwoStepStep.Overview)
 }
 
 /**
@@ -78,7 +83,8 @@ fun copySecret(context: Context, label: String, text: String) {
  */
 @Composable
 fun TwoStepPage(account: AccountDto, codesLeft: Int?, onChanged: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    var step by remember { mutableStateOf<TwoStepStep>(TwoStepStep.Overview) }
+    val model = viewModel<TwoStepModel>(key = "two-step:${account.email}")
+    var step by model::step
     when (val s = step) {
         TwoStepStep.Overview -> TwoStepOverview(account, codesLeft, onStarted = { step = TwoStepStep.Scan(it) }, onCodes = {
             step = TwoStepStep.Codes(it)
@@ -226,6 +232,7 @@ private fun ScanStep(setup: TwoFactorSetupDto, onConfirmed: (List<String>) -> Un
     val qr = remember(setup.otpauthUri) { runCatching { QrCode.bitmap(setup.otpauthUri).asImageBitmap() }.getOrNull() }
     val copied = stringResource(R.string.v2_acct_copied)
     val onWords = stringResource(R.string.v2_acct_2s_on_done)
+    SecureWhileShown()
     AccountPage(stringResource(R.string.v2_acct_two_step), onBack, modifier) {
         EchoSectionHeader(stringResource(R.string.v2_acct_2s_scan))
         FormColumn {
@@ -317,6 +324,7 @@ fun RecoveryCodesStep(codes: List<String>, onDone: () -> Unit, modifier: Modifie
         }
     }
     BackHandler(enabled = !saved) {}
+    SecureWhileShown()
     AccountPage(stringResource(R.string.v2_acct_rc_title), onBack = { if (saved) onDone() }, modifier = modifier) {
         FormColumn {
             Text(stringResource(R.string.v2_acct_rc_body), style = EchoV2.type.body, color = EchoV2.colors.textPrimary)
