@@ -52,12 +52,19 @@ pub fn clear_if_unchanged(board: &mut impl Board, put: u64) -> Outcome {
 /// The counters read after each copy that may still be on the clipboard: what a lock, a sign-out or a quit empties.
 /// Each copy's counter is its own entry, so two copies at once never lose one; the clipboard's counter decides which
 /// one it still holds.
-static PENDING: std::sync::Mutex<Pending> = std::sync::Mutex::new(Pending { puts: Vec::new(), clears: 0 });
+static PENDING: std::sync::Mutex<Pending> = std::sync::Mutex::new(Pending { puts: Vec::new(), clears: 0, writing: 0 });
+/// Told whenever a write ends, for a quit waiting on writes in flight.
+static WRITES_DONE: std::sync::Condvar = std::sync::Condvar::new();
 
-/// The copies still to empty, and how many times they were all taken to be emptied (a lock, a sign-out, a quit).
+/// How long a quit waits for a copy being written before it empties the clipboard whatever it holds.
+pub const QUIT_WAIT: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The copies still to empty, how many times they were all taken to be emptied (a lock, a sign-out, a quit), and how
+/// many writes are on their way.
 struct Pending {
     puts: Vec<u64>,
     clears: u64,
+    writing: u32,
 }
 
 fn pending() -> std::sync::MutexGuard<'static, Pending> {
@@ -78,10 +85,20 @@ pub fn remember(put: u64) {
 /// could not see this copy, so the writer empties it itself (`clear`) and keeps it pending only if the clipboard was
 /// busy.
 pub fn put_remembered<E>(write: impl FnOnce() -> Result<u64, E>, clear: impl FnOnce(u64) -> Outcome) -> Result<u64, E> {
-    let began = pending().clears;
-    let put = write()?;
-    let overtaken = {
+    let began = {
         let mut all = pending();
+        all.writing += 1;
+        all.clears
+    };
+    let written = write();
+    let mut all = pending();
+    all.writing -= 1;
+    WRITES_DONE.notify_all();
+    let Ok(put) = written else {
+        drop(all);
+        return written;
+    };
+    let overtaken = {
         if all.clears == began {
             if !all.puts.contains(&put) {
                 all.puts.push(put);
@@ -91,6 +108,7 @@ pub fn put_remembered<E>(write: impl FnOnce() -> Result<u64, E>, clear: impl FnO
             true
         }
     };
+    drop(all);
     if overtaken {
         settle(put, clear(put));
     }
@@ -173,11 +191,28 @@ pub async fn clear_now(app: &AppHandle) {
     clear_pending(|put| platform::clear_if_unchanged(app, put)).await;
 }
 
-/// The app quits: the same, from the run loop on the main thread (nothing may wait on it there).
+/// The app quits: the same, from the run loop on the main thread (it may wait there only a moment).
 pub fn clear_now_on_main_thread(app: &AppHandle) {
+    clear_on_quit(QUIT_WAIT, |put| platform::clear_on_main_thread(app, put), || platform::clear_any_on_main_thread(app));
+}
+
+/// A quit: waits up to `wait` for copies being written (the process is about to end, and a copy written after the
+/// last clear would stay on the clipboard), then empties every pending copy. A write still on its way after the wait
+/// (on Windows it may be waiting on this very thread) can't be told apart from what else the clipboard holds, so the
+/// clipboard is then emptied whatever it holds (`clear_any`). True when nothing was still being written.
+pub fn clear_on_quit(wait: std::time::Duration, mut clear_one: impl FnMut(u64) -> Outcome, clear_any: impl FnOnce()) -> bool {
+    let settled = {
+        let all = pending();
+        let (all, _) = WRITES_DONE.wait_timeout_while(all, wait, |p| p.writing > 0).unwrap_or_else(|p| p.into_inner());
+        all.writing == 0
+    };
     for put in take_all() {
-        settle(put, platform::clear_on_main_thread(app, put));
+        settle(put, clear_one(put));
     }
+    if !settled {
+        clear_any();
+    }
+    settled
 }
 
 #[cfg(windows)]
@@ -212,6 +247,17 @@ mod platform {
 
     pub fn clear_on_main_thread(app: &AppHandle, put: u64) -> super::Outcome {
         clear_blocking(owner(app), put)
+    }
+
+    /// A quit while codes are being written: the clipboard is emptied whatever it holds (when it can be opened).
+    pub fn clear_any_on_main_thread(app: &AppHandle) {
+        if open_clipboard(owner(app).map(|h| HWND(h as *mut _))).is_ok() {
+            // SAFETY: opened just above, closed just after.
+            unsafe {
+                let _ = EmptyClipboard();
+                let _ = CloseClipboard();
+            }
+        }
     }
 
     fn clear_blocking(owner: Option<isize>, put: u64) -> super::Outcome {
@@ -368,6 +414,11 @@ mod platform {
         super::clear_if_unchanged(&mut Pasteboard(NSPasteboard::generalPasteboard()), put)
     }
 
+    /// A quit while codes are being written: the pasteboard is emptied whatever it holds.
+    pub fn clear_any_on_main_thread(_app: &AppHandle) {
+        NSPasteboard::generalPasteboard().clearContents();
+    }
+
     struct Pasteboard(objc2::rc::Retained<NSPasteboard>);
 
     impl super::Board for Pasteboard {
@@ -405,6 +456,11 @@ mod platform {
 
     pub fn clear_on_main_thread(app: &AppHandle, put: u64) -> super::Outcome {
         super::clear_if_unchanged(&mut Clipboard(app), put)
+    }
+
+    /// A quit while codes are being written: the clipboard is emptied whatever it holds.
+    pub fn clear_any_on_main_thread(app: &AppHandle) {
+        let _ = app.clipboard().clear();
     }
 
     struct Clipboard<'a>(&'a AppHandle);
@@ -680,6 +736,75 @@ mod tests {
         assert_eq!(board.lock().unwrap().text, None);
         assert_eq!(take_all(), Vec::<u64>::new());
         assert!(put > 0);
+    }
+
+    #[test]
+    fn a_quit_waits_a_moment_for_a_write_in_flight_and_then_empties_that_copy() {
+        let _turn = PENDING_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = take_all();
+        let board = std::sync::Arc::new(std::sync::Mutex::new(Fake { counter: 0, text: None }));
+        let (writing_tx, writing_rx) = std::sync::mpsc::channel::<()>();
+        let writer_board = board.clone();
+        let copier = std::thread::spawn(move || {
+            put_remembered(
+                || {
+                    writing_tx.send(()).unwrap();
+                    // The clipboard takes a moment: the quit comes in now.
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                    Ok::<u64, ()>(writer_board.lock().unwrap().copy("aaaa-bbbb"))
+                },
+                |_| Outcome::Changed,
+            )
+        });
+        writing_rx.recv().unwrap();
+        let anyway = std::cell::Cell::new(false);
+        let started = std::time::Instant::now();
+        // The quit waits for the write, then empties its copy the usual way; nothing else on the clipboard is touched.
+        let settled = clear_on_quit(std::time::Duration::from_secs(2), |put| clear_if_unchanged(&mut *board.lock().unwrap(), put), || anyway.set(true));
+        assert!(settled);
+        assert!(started.elapsed() >= std::time::Duration::from_millis(100), "the quit waited for the write");
+        assert!(!anyway.get());
+        assert!(copier.join().unwrap().is_ok());
+        assert_eq!(board.lock().unwrap().text, None, "the codes written during the quit are gone");
+        assert_eq!(take_all(), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn a_quit_waits_only_so_long_for_a_stuck_write_then_empties_the_clipboard_whatever_it_holds() {
+        let _turn = PENDING_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = take_all();
+        let (writing_tx, writing_rx) = std::sync::mpsc::channel::<()>();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let writer_cleared = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let seen = writer_cleared.clone();
+        let copier = std::thread::spawn(move || {
+            put_remembered(
+                || {
+                    writing_tx.send(()).unwrap();
+                    // Windows: stuck waiting on the main thread, which is the one quitting.
+                    release_rx.recv().unwrap();
+                    Ok::<u64, ()>(77)
+                },
+                move |_| {
+                    seen.store(true, std::sync::atomic::Ordering::SeqCst);
+                    Outcome::Cleared
+                },
+            )
+        });
+        writing_rx.recv().unwrap();
+        let anyway = std::cell::Cell::new(false);
+        let started = std::time::Instant::now();
+        let settled = clear_on_quit(std::time::Duration::from_millis(100), |_| Outcome::Cleared, || anyway.set(true));
+        let waited = started.elapsed();
+        assert!(!settled);
+        assert!(anyway.get(), "a write still in flight: the clipboard is emptied whatever it holds");
+        assert!(waited >= std::time::Duration::from_millis(90) && waited < std::time::Duration::from_secs(1), "a bounded wait: {waited:?}");
+        // Were the process still running, the write that comes in afterwards would see the quit and empty itself.
+        release_tx.send(()).unwrap();
+        assert_eq!(copier.join().unwrap(), Ok(77));
+        assert!(writer_cleared.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(take_all(), Vec::<u64>::new());
+        assert_eq!(QUIT_WAIT.as_millis(), 1000);
     }
 
     #[test]
