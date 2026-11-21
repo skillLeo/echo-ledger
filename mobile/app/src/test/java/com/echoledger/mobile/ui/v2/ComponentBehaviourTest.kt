@@ -361,4 +361,3 @@ class ComponentBehaviourTest {
         compose.onNodeWithContentDescription("Zoom on a computer").assertExists()
     }
 }
-
