@@ -52,8 +52,8 @@ function ShareCheck({ platform }: { platform: string }) {
   const line = view ? summary(view, platform, new Date(), status?.apps ?? [], "onboarding") : null;
   const busy = running || !!status?.checkRunning;
   return (
-    <section className="el-wizard__group" aria-label="Private notes" data-testid="onboarding-share-check">
-      <h2 className="el-body-strong">Private notes</h2>
+    <section className="el-wizard__group" aria-label="Screen-share privacy" data-testid="onboarding-share-check">
+      <h2 className="el-body-strong">Screen-share privacy</h2>
       {sharePrivacyTop(status?.hiding, status?.badge).map((l) => <p key={l} className="el-caption el-secondary">{l}</p>)}
       <p className="el-caption el-secondary">{PATTERN_FLASH}</p>
       <Button loading={busy} loadingLabel="Checking…" onClick={() => void run()}>{view ? "Check again" : "Check screen-share privacy"}</Button>
@@ -82,6 +82,8 @@ export function OnboardingV2({ status, onStatus, onFinished, notify }: {
   const [result, setResult] = useState<TestResult | null>(null);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  // A permission request the system refused to show: said on the step, never silent.
+  const [askFailed, setAskFailed] = useState<{ kind: PermissionKind; words: string } | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
   // Read again whenever the window comes back, which is what returning from System Settings looks like.
@@ -142,7 +144,8 @@ export function OnboardingV2({ status, onStatus, onFinished, notify }: {
           return (
             <Button key={action} variant={variant} loading={busy === k} loadingLabel="Asking…" onClick={() => {
               setBusy(k);
-              void api.permissionRequest(k).then(setPermissions, () => undefined).finally(() => setBusy(null));
+              setAskFailed(null);
+              void api.permissionRequest(k).then(setPermissions, (e) => setAskFailed({ kind: k, words: errorMessage(e) })).finally(() => setBusy(null));
             }}>Allow</Button>
           );
         case "settings":
@@ -195,6 +198,11 @@ export function OnboardingV2({ status, onStatus, onFinished, notify }: {
               <p className="el-secondary">{PERMISSION_STEP[kind].forWhat}</p>
               <p className="el-caption" role="status">{plan.words}</p>
               {buttons}
+              {askFailed?.kind === kind && (
+                <p className="el-field__error" role="alert" data-testid="allow-failed">
+                  {`macOS didn't ask: ${askFailed.words} Use ${plan.settingsLabel} instead.`}
+                </p>
+              )}
               {plan.showWhere && <p className="el-caption el-secondary">{PERMISSION_STEP[kind].where}</p>}
               {actions(<Button variant="primary" onClick={next}>Continue</Button>)}
             </section>

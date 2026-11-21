@@ -3,9 +3,9 @@
 // share check, Skip setup on every step; the commands and what is saved are classic's.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import MainApp from "../../views/main/MainApp";
+import MainApp, { WIZARD_FLAGS_WAIT_MS } from "../../views/main/MainApp";
 import type { PermissionsStatus } from "../../lib/ipc";
-import { callsOf, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeEntitlements, makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { OnboardingV2 } from "./OnboardingV2";
@@ -116,7 +116,8 @@ describe("the first-run wizard in the new design", () => {
     next();
     next();
     fireEvent.click(screen.getByRole("button", { name: "Skip the test" }));
-    const check = within(screen.getByTestId("onboarding-share-check"));
+    const check = within(screen.getByRole("region", { name: "Screen-share privacy" }));
+    expect(check.getByRole("heading", { name: "Screen-share privacy" })).toBeInTheDocument();
     fireEvent.click(check.getByRole("button", { name: "Check screen-share privacy" }));
     await act(flushAsync);
     expect(callsOf("share_check_run")).toEqual([{ why: "onboarding" }]);
@@ -149,6 +150,29 @@ describe("in the app", () => {
     await act(flushAsync);
     await act(flushAsync);
     expect(await screen.findByRole("navigation", { name: "Main" })).toBeInTheDocument();
+  });
+
+  it("DT-HLP-008: flags that never come don't leave the window blank: after a moment the wizard is classic's", async () => {
+    app(null);
+    respondWith("ui_flags", () => new Promise(() => undefined));
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(screen.queryByRole("heading", { name: "Welcome to EchoLedger" })).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Welcome to EchoLedger" }, { timeout: WIZARD_FLAGS_WAIT_MS + 1500 })).toBeInTheDocument();
+    expect(document.querySelector(".onboarding-card")).not.toBeNull();
+  });
+
+  it("DT-HLP-008: a refused Allow says so on its step", async () => {
+    respond("permissions_status", perms({ microphone: "unknown" }));
+    fail("permission_request", "The request couldn't be shown.");
+    render(<div className="el-root"><OnboardingV2 status={makeStatus({ platform: "macos", paired: true })} {...{ onStatus: vi.fn(), onFinished: vi.fn(), notify: vi.fn() }} /></div>);
+    await act(flushAsync);
+    next();
+    fireEvent.click(screen.getByRole("button", { name: "Allow" }));
+    await act(flushAsync);
+    expect(screen.getByTestId("allow-failed")).toHaveTextContent("macOS didn't ask: The request couldn't be shown. Use Open System Settings instead.");
+    expect(screen.getByTestId("allow-failed")).toHaveAttribute("role", "alert");
   });
 
   it("DT-HLP-008: without it, classic's wizard as before", async () => {

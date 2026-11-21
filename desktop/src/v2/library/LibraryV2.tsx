@@ -66,6 +66,12 @@ const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 
 type Message = { id: number; text: string; action?: { label: string; run: () => void } };
 
+/** The views the When and Marked chips own: asked for from outside, they open as the chip with that value ticked. */
+const CHIP_VIEWS: Partial<Record<ListView, { key: FilterKey; value: string }>> = {
+  today: { key: "when", value: "today" }, this_week: { key: "when", value: "this_week" },
+  pinned: { key: "marked", value: "pinned" }, bookmarked: { key: "marked", value: "bookmarked" },
+};
+
 export type LibraryV2Props = {
   onImport?: () => void;
   onRecord?: () => void;
@@ -260,11 +266,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const groups = sections(searchItems(inThis, query), choice.group, choice.sort, opened, view !== "pinned");
     return { groups, rows: groups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.items), matching: groups.reduce((n, g) => n + g.items.length, 0) };
   };
+  // A view the chips own (the sidebar's Pinned, the palette's Today) opens as that chip, the rest as the view.
   useEffect(() => {
-    if (viewRequest) {
-      setOpenId(null);
-      setView(viewRequest.view);
-    }
+    if (!viewRequest) return;
+    setOpenId(null);
+    const chip = CHIP_VIEWS[viewRequest.view as ListView];
+    if (chip) {
+      setView("all");
+      setFilters({ [chip.key]: [chip.value] });
+    } else setView(viewRequest.view);
   }, [viewRequest]);
   // A smart folder: what this computer can tell (the Inbox, an app's calls), else the server's list (Imported).
   const [folderIds, setFolderIds] = useState<ReadonlySet<string> | null>(null);
@@ -745,7 +755,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   );
 
   const viewMenu: MenuItem[] = [
-    ...LIST_VIEWS.map((v) => ({ label: VIEW_NAMES[v], checked: view === v, radio: true, count: counts?.[v], onPick: () => setView(v) })),
+    // Today, This week, Pinned and Bookmarked are the When and Marked chips' now: Views ▾ has the rest, one at a time.
+    ...LIST_VIEWS.filter((v) => !CHIP_VIEWS[v]).map((v) => ({ label: VIEW_NAMES[v], checked: view === v, radio: true, count: counts?.[v], onPick: () => setView(v) })),
   ];
   const filterMenu = (key: FilterKey): MenuItem[] => options[key].map((o) => ({
     label: o.label, checked: (filters[key] ?? []).includes(o.value), count: o.count, keepOpen: true,
@@ -762,12 +773,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
   // The place the list shows, after "Library" in the breadcrumbs.
+  // One chip-owned value on its own (Marked: Pinned from the sidebar) reads as that place.
+  const chipPlace = filterCount(filters) === 1 ? (Object.keys(CHIP_VIEWS) as ListView[]).find((v) => filters[CHIP_VIEWS[v]!.key]?.[0] === CHIP_VIEWS[v]!.value) : undefined;
   const crumb = view === "trash" ? null : folder ? folderLabel(folder) : view !== "all" ? VIEW_NAMES[view as ListView]
-    : place !== "all" ? placeName(place, lists ?? []) : null;
+    : place !== "all" ? placeName(place, lists ?? []) : chipPlace ? VIEW_NAMES[chipPlace] : null;
   const showEverything = () => {
     onFolder?.(null);
     setView("all");
     setPlace("all");
+    setFilters({});
   };
   const clearAll = () => {
     onFolder?.(null);

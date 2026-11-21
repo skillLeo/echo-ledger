@@ -10,7 +10,7 @@ import { CloseIcon } from "./Icons";
 type PauseReason = "hover" | "focus" | "touch" | "drag";
 
 /** The timer of a notice: pauses for any reason given, resumes when none is left, calls `onEnd` when it runs out. */
-function useNoticeTimer(ms: number | null, onEnd: () => void): { paused: boolean; pause: (r: PauseReason) => void; resume: (r: PauseReason) => void } {
+function useNoticeTimer(ms: number | null, onEnd: () => void, restart?: unknown): { paused: boolean; pause: (r: PauseReason) => void; resume: (r: PauseReason) => void } {
   const countdown = useRef<Countdown | null>(null);
   const reasons = useRef(new Set<PauseReason>());
   const timer = useRef(0);
@@ -30,7 +30,7 @@ function useNoticeTimer(ms: number | null, onEnd: () => void): { paused: boolean
     setPaused(false);
     schedule();
     return () => window.clearTimeout(timer.current);
-  }, [ms, schedule]);
+  }, [ms, schedule, restart]);
   const pause = useCallback((reason: PauseReason) => {
     const c = countdown.current;
     reasons.current.add(reason);
@@ -57,15 +57,27 @@ function useNoticeTimer(ms: number | null, onEnd: () => void): { paused: boolean
 export const NoticeLook = createContext<"classic" | "v2">("classic");
 
 const V2_TONE: Record<string, "info" | "warning" | "danger"> = { warn: "warning", danger: "danger", error: "danger" };
+/** Classic's look-only classes (its banner box and tone colours): the new look leaves them out and keeps the rest. */
+const CLASSIC_LOOK = new Set(["banner", "warn", "info", "danger", "error", "quiet", "accent", "neutral"]);
+const ownClasses = (className: string) => className.split(/\s+/).filter((c) => c && !CLASSIC_LOOK.has(c)).join(" ");
 
-/** A banner in the new design's look (its .el-banner, with the classic banner's parts). */
-function BannerV2({ tone, icon, children, onOpen, openLabel, onDismiss, actions, details, role, testId }: {
+/**
+ * A banner in the new design's look (its .el-banner, with the classic banner's parts): the same timer (paused while
+ * the pointer or the keyboard is on it, started again by a new `timerKey`), classes, Open, buttons, × and Esc. Its words
+ * are read out by the live region around the banners (MainApp's .el-app-banners, always in the page); a danger banner
+ * is an alert of its own.
+ */
+function BannerV2({ tone, icon, children, onOpen, openLabel, onDismiss, actions, details, role, testId, timeoutMs = null, className = "", timerKey }: {
   tone: string; icon?: ReactNode; children: ReactNode; onOpen?: () => void; openLabel?: string; onDismiss: () => void;
-  actions?: ReactNode; details?: ReactNode; role?: "status" | "alert"; testId?: string;
+  actions?: ReactNode; details?: ReactNode; role?: "status" | "alert"; testId?: string; timeoutMs?: number | null; className?: string; timerKey?: unknown;
 }) {
   const v2Tone = V2_TONE[tone] ?? "info";
+  const timer = useNoticeTimer(timeoutMs, onDismiss, timerKey);
   return (
-    <div className={`el-banner el-banner--${v2Tone} el-banner--app`} role={role ?? (v2Tone === "danger" ? "alert" : "status")} data-testid={testId}
+    <div className={`el-banner el-banner--${v2Tone} el-banner--app ${ownClasses(className)}`.trim()} role={role === "alert" || v2Tone === "danger" ? "alert" : undefined} data-testid={testId}
+      onMouseEnter={() => timer.pause("hover")} onMouseLeave={() => timer.resume("hover")}
+      onFocus={() => timer.pause("focus")}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) timer.resume("focus"); }}
       onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onDismiss(); } }}>
       {icon && <span className="el-banner__icon" aria-hidden="true">{icon}</span>}
       <span className="el-banner__text" dir="auto">
@@ -74,7 +86,8 @@ function BannerV2({ tone, icon, children, onOpen, openLabel, onDismiss, actions,
       </span>
       {actions && <span className="el-banner__actions">{actions}</span>}
       <button type="button" className="el-button el-button--quiet el-button--sm el-button--icon" aria-label="Dismiss" title="Dismiss (Esc)" onClick={onDismiss}>
-        <CloseIcon size={14} />
+        {/* Sized by the new design's icon token (.el-icon), not a number. */}
+        <span className="el-icon" aria-hidden="true"><CloseIcon /></span>
       </button>
     </div>
   );

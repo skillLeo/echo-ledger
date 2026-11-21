@@ -32,6 +32,9 @@ const tick = (chipName: RegExp, item: RegExp) => {
   fireEvent.click(screen.getByRole("menuitemcheckbox", { name: item }));
 };
 
+/** Untranscribed keeps its own grouping (by date, pinned first), not the project grouping chosen for All. */
+const UNTRANSCRIBED_SECTIONS = ["Pinned · 1", "Earlier · 1"];
+
 describe("the filter rules", () => {
   it("ticks inside one filter add up; filters narrow each other", () => {
     expect(applyFilters(ITEMS, { source: ["whatsapp", "zoom"] }).map((i) => i.id)).toEqual(["a", "b", "c"]);
@@ -115,17 +118,17 @@ describe("Find in the Library", () => {
     expect(rows()).toEqual(["c", "a", "b", "d"]);
   });
 
-  it("Views ▾ has classic's smart views with counts; a filled chip and Clear all", async () => {
+  it("Views ▾ has classic's smart views with counts (Today, This week, Pinned and Bookmarked are chips now); a filled chip and Clear all", async () => {
     await show();
     fireEvent.click(chip(/^Views$/));
     const menu = screen.getByRole("menu", { name: "Views" });
     expect(within(menu).getAllByRole("menuitemradio").map((m) => m.textContent)).toEqual([
-      "All recordings4", "Today2", "This week3", "Untranscribed2", "Waiting for decision0", "Pinned1", "Bookmarked1", "Failed1",
+      "All recordings4", "Untranscribed2", "Waiting for decision0", "Failed1",
     ]);
     expect(within(menu).getByRole("menuitemradio", { name: /^All recordings/ })).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /^Bookmarked/ }));
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /^Failed/ }));
     expect(rows()).toEqual(["d"]);
-    expect(chip(/^Bookmarked$/)).toHaveClass("el-chip--on");
+    expect(chip(/^Failed$/)).toHaveClass("el-chip--on");
     fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(rows()).toHaveLength(4);
     expect(screen.queryByRole("button", { name: "Clear all" })).toBeNull();
@@ -180,9 +183,9 @@ describe("Find in the Library", () => {
     expect([...document.querySelectorAll(".el-list-section")].map((h) => h.textContent)).toEqual(["Acme · 2", "No project · 2"]);
     // Another view has its own; coming back finds this one.
     fireEvent.click(chip(/^Views$/));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /^This week/ }));
-    expect([...document.querySelectorAll(".el-list-section")].map((h) => h.textContent)).toEqual(["Pinned · 1", "Today · 2"]);
-    fireEvent.click(chip(/^This week$/));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^Untranscribed/ }));
+    expect([...document.querySelectorAll(".el-list-section")].map((h) => h.textContent)).toEqual(UNTRANSCRIBED_SECTIONS);
+    fireEvent.click(chip(/^Untranscribed$/));
     fireEvent.click(screen.getByRole("menuitemradio", { name: /^All recordings/ }));
     expect([...document.querySelectorAll(".el-list-section")].map((h) => h.textContent)).toEqual(["Acme · 2", "No project · 2"]);
     expect(JSON.parse(window.localStorage.getItem("echoledger-library-view") ?? "{}").all).toEqual({ group: "project", sort: "longest" });

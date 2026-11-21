@@ -7,7 +7,8 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import MainApp from "../../views/main/MainApp";
 import type { AppStatus } from "../../lib/ipc";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeEntitlements, makeItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeEntitlements, makeItem, makePrivacyStatus, makeSettings, makeStatus } from "../../test/fixtures";
+import { Notice, NoticeLook } from "../../components/Notice";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { restartForTests } from "../../components/StateBanner";
 
@@ -109,6 +110,94 @@ describe("the banners in the new design's window", () => {
     fireEvent.click(button);
     await act(flushAsync);
     expect(callsOf("update_check").length).toBeGreaterThan(0);
+  });
+
+  it("DT-HLP-012: the share banner (the window is in a whole-screen share) in the new look", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "windows", mainInShare: true, shareNumber: 1 }));
+    await app(makeStatus());
+    await screen.findByRole("navigation", { name: "Main" });
+    const share = await screen.findByTestId("main-in-share");
+    expect(share).toHaveClass("el-banner", "el-banner--warning", "el-banner--app");
+    expect(share).not.toHaveClass("banner");
+    expect(share.closest('[data-testid="app-banners"]')).not.toBeNull();
+    fireEvent.click(within(share).getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByTestId("main-in-share")).toBeNull();
+  });
+
+  it("DT-HLP-012: the permission banner (macOS forgot a permission) in the new look, with its own button", async () => {
+    respond("permissions_status", { microphone: "allowed", systemAudio: "denied", screen: "allowed", browserAutomation: true, platform: "macos",
+      lost: "macOS turned off System audio for EchoLedger: calls record only your side." });
+    respond("permission_notice_dismiss", undefined);
+    await app(makeStatus({ platform: "macos" }));
+    await screen.findByRole("navigation", { name: "Main" });
+    const loss = await screen.findByTestId("permission-loss");
+    expect(loss).toHaveClass("el-banner--warning", "el-banner--app");
+    expect(loss).not.toHaveClass("banner", "warn");
+    expect(loss).toHaveTextContent("macOS turned off System audio for EchoLedger");
+    fireEvent.click(within(loss).getByRole("button", { name: "Dismiss" }));
+    await act(flushAsync);
+    expect(screen.queryByTestId("permission-loss")).toBeNull();
+    expect(callsOf("permission_notice_dismiss")).toHaveLength(1);
+  });
+
+  it("DT-HLP-012: the one-sided call banner in the new look: an alert, Ready check goes to the Record page; it outranks the budget", async () => {
+    await app(makeStatus({ budget: "warn" }));
+    await screen.findByRole("navigation", { name: "Main" });
+    await screen.findByTestId("budget-banner");
+    await act(() => emitEvent("capture:one_sided", { title: "Only your side was heard", reason: "Zoom's sound never reached EchoLedger.", fix: "Run the Ready check." }));
+    await act(flushAsync);
+    const one = await screen.findByTestId("one-sided");
+    expect(screen.queryByTestId("budget-banner")).toBeNull();
+    expect(one).toHaveAttribute("role", "alert");
+    expect(one).toHaveClass("el-banner--warning", "el-banner--app", "one-sided-banner");
+    expect(one).not.toHaveClass("banner");
+    fireEvent.click(within(one).getByRole("button", { name: "Ready check" }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(screen.queryByTestId("one-sided")).toBeNull();
+    // The budget waited its turn and shows again.
+    expect(screen.getByTestId("budget-banner")).toBeInTheDocument();
+  });
+
+  it("DT-HLP-012: the banners' live region is in the page before any banner and stays after the last", async () => {
+    await app(makeStatus({ budget: "warn" }));
+    await screen.findByRole("navigation", { name: "Main" });
+    const region = screen.getByTestId("app-banners");
+    expect(region).toHaveAttribute("aria-live", "polite");
+    const budget = await screen.findByTestId("budget-banner");
+    expect(region).toContainElement(budget);
+    fireEvent.click(within(budget).getByRole("button", { name: "Dismiss" }));
+    expect(screen.getByTestId("app-banners")).toBe(region);
+    expect(region.querySelector(".el-banner")).toBeNull();
+  });
+
+  it("DT-HLP-012: a banner with a time goes by itself, paused while the pointer is on it; a new timerKey starts it again; its own classes stay", async () => {
+    vi.useFakeTimers();
+    try {
+      const onDismiss = vi.fn();
+      const banner = (key: number) => (
+        <NoticeLook.Provider value="v2">
+          <Notice kind="banner" tone="info" className="banner info my-banner" timeoutMs={1000} timerKey={key} onDismiss={onDismiss} testId="timed">Saved</Notice>
+        </NoticeLook.Provider>
+      );
+      const { rerender } = render(banner(1));
+      const el = screen.getByTestId("timed");
+      expect(el).toHaveClass("el-banner", "my-banner");
+      expect(el).not.toHaveClass("banner", "info");
+      expect(el.querySelector(".el-button .el-icon svg")).not.toBeNull();
+      fireEvent.mouseEnter(el);
+      act(() => vi.advanceTimersByTime(2000));
+      expect(onDismiss).not.toHaveBeenCalled();
+      fireEvent.mouseLeave(el);
+      act(() => vi.advanceTimersByTime(600));
+      rerender(banner(2));
+      act(() => vi.advanceTimersByTime(600));
+      expect(onDismiss).not.toHaveBeenCalled();
+      act(() => vi.advanceTimersByTime(500));
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("DT-HLP-012: classic's window keeps classic's banners", async () => {

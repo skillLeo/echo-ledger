@@ -82,6 +82,8 @@ const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNot
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
 const TABS: readonly Tab[] = ["record", "library", "projects", "activity", "shared", "settings"];
+/** How long the first-run wizard waits for the interface flags before it shows classic's (no blank window). */
+export const WIZARD_FLAGS_WAIT_MS = 1500;
 /** The pages in words, for a Back link that returns to one ("Library"). */
 const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Library", projects: "Projects", activity: "Activity", shared: "Shared", settings: "Settings" };
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
@@ -234,6 +236,14 @@ export default function MainApp() {
     if (status.paired && flagsReadFor === null) return;
     setWizardDesign(status.paired && ui.flags["ui_v2.shell"] ? "v2" : "classic");
   }, [setupDone, wizardDesign, status, flagsReadFor, ui.flags]);
+  // Flags that never come (a core without the command hanging, a slow server) never leave the window blank: after a
+  // moment the wizard is classic's.
+  const waitingForWizard = setupDone === false && wizardDesign === null;
+  useEffect(() => {
+    if (!waitingForWizard) return;
+    const timer = window.setTimeout(() => setWizardDesign((d) => d ?? "classic"), WIZARD_FLAGS_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [waitingForWizard]);
   // A new start of the wizard (Settings can show it again) chooses again.
   useEffect(() => {
     if (setupDone === true) setWizardDesign(null);
@@ -1036,7 +1046,7 @@ export default function MainApp() {
                   onCaptions={() => void run(api.toggleCaptions)} onSettings={openAccount} run={run} />
               </div></Suspense>
             ) : undefined}
-            banners={<NoticeLook.Provider value="v2"><div className="el-root el-embedded el-app-banners">{banners}</div></NoticeLook.Provider>}>
+            banners={<NoticeLook.Provider value="v2"><div className="el-root el-embedded el-app-banners" role="status" aria-live="polite" aria-label="Notices" data-testid="app-banners">{banners}</div></NoticeLook.Provider>}>
             <section ref={contentRef} className={`content page-${tab}`}>{page}</section>
           </ShellV2>
         </Suspense>
