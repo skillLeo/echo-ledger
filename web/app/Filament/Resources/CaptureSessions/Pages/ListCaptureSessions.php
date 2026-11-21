@@ -609,7 +609,7 @@ class ListCaptureSessions extends ListRecords
         return [
             // Opens the file picker of the drop zone below (several files at once, on phones too).
             Action::make('upload')
-                ->label('Upload')
+                ->label(__('Upload'))
                 ->icon(Heroicon::OutlinedArrowUpTray)
                 ->alpineClickHandler("\$dispatch('el-upload-pick')"),
         ];
@@ -638,7 +638,8 @@ class ListCaptureSessions extends ListRecords
 
     public function getTitle(): string|Htmlable
     {
-        return ConsoleV2::library() ? __('Library') : parent::getTitle();
+        // Since W-213 the classic Library's title in the console's language too (English reads exactly as before).
+        return ConsoleV2::library() ? __('Library') : __((string) parent::getTitle());
     }
 
     /** A list page is the top of its section: no "Sessions > List" trail (C3). */

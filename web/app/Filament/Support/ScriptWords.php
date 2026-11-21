@@ -1,0 +1,51 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Filament\Support;
+
+/**
+ * A page script's words in the console's language (W-213): a sentence becomes the JavaScript that writes it, its
+ * values joined in where its placeholders are, so a translation may put them in another order. English comes out as
+ * the same JavaScript the scripts have always had ("'Uploading ' + size + ' of ' + total"), so classic pages do not
+ * change by a byte (tests/Feature/V2/ClassicGoldenTest.php).
+ */
+final class ScriptWords
+{
+    /**
+     * A text as a JavaScript string in single quotes: "'Ready to upload'". A double quote is escaped too, so the string
+     * may also stand in an HTML attribute (x-text="…").
+     */
+    public static function quote(string $text): string
+    {
+        return "'".str_replace(['\\', "'", '"', "\r", "\n", '</'], ['\\\\', "\\'", '\\x22', '\\r', '\\n', '<\\/'], $text)."'";
+    }
+
+    /**
+     * The sentence [$english] in the console's language as a JavaScript expression, each `:name` replaced by the
+     * expression [$values] gives for it: say('Uploading :sent of :size', ['sent' => 'a', 'size' => 'b']) is
+     * "'Uploading ' + a + ' of ' + b".
+     *
+     * @param  array<string, string>  $values
+     */
+    public static function say(string $english, array $values = []): string
+    {
+        $parts = preg_split('/:([a-z_]+)/', (string) __($english), -1, PREG_SPLIT_DELIM_CAPTURE) ?: [];
+        $out = [];
+        foreach ($parts as $i => $part) {
+            if ($i % 2 === 1) {
+                $out[] = $values[$part] ?? self::quote(':'.$part);
+            } elseif ($part !== '') {
+                $out[] = self::quote($part);
+            }
+        }
+
+        return $out === [] ? "''" : implode(' + ', $out);
+    }
+
+    /** A name inside a sentence, as an expression isolated in right to left so the sentence keeps the page's direction (W-209, D4 §4). */
+    public static function name(string $expression): string
+    {
+        return ConsoleV2::rtl() ? "'\u{2068}' + ".$expression." + '\u{2069}'" : $expression;
+    }
+}

@@ -7,7 +7,7 @@
                 <span class="el-row-main">
                     <span class="el-row-top">
                         <span @class(['el-row-title', 'el-unread' => ! $item['read']])>
-                            @if (! $item['read'])<span class="el-sr">Unread: </span>@endif{{ $item['title'] }}
+                            @if (! $item['read'])<span class="el-sr">{{ __('Unread:') }} </span>@endif{{ $item['title'] }}
                         </span>
                         <time class="el-row-time" datetime="{{ $item['at'] }}" title="{{ $item['full_time'] }}">{{ $item['time'] }}</time>
                     </span>

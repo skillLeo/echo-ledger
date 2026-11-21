@@ -7,6 +7,7 @@ use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Support\SettingsContext;
 use App\Models\Client;
 use App\Services\InterfaceFlags;
+use App\Stt\LanguageChoice;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\App;
 use Livewire\Livewire;
@@ -22,6 +23,8 @@ require_once __DIR__.'/Support/parity_world.php';
 
 beforeEach(function () {
     [$this->owner, $this->pages] = webParityWorld();
+    // W-213: a new project's page (Filament's create words, the colour picker, the folding section).
+    $this->pages['project-create'] = '/app/clients/create';
 });
 
 /** A page in the new frame (or classic) in a language; `$library` false keeps the classic Library inside the frame. */
@@ -59,16 +62,29 @@ function leftoverHas(string $html, string $english): bool
 /** The frame's own words, on every page. */
 const LEFTOVER_FRAME = ['Help & shortcuts', 'Search recordings, transcripts, pages and settings, or type a command', 'Search the list on this page',
     'Fold the sidebar to icons, and back', 'Close a panel, a menu or this list', "You're offline. Changes are saved once the connection is back.",
-    'Press Down arrow to browse results', '="Global search results"'];
+    'Press Down arrow to browse results', '="Global search results"',
+    // W-213: the skip link and the bell's name.
+    'Skip to content', '="Notifications, 1 needs you"'];
 
 /** Per page (and whether the new Library is on): the English it shows in this world. */
 const LEFTOVER_ENGLISH = [
     'library' => [false, ['Nov 16', '="Nov 15, 2026 · 5:00 PM"', 'Phone call · Galaxy S25', 'Voice note · Galaxy S25', '="Nov 17, 2026 · 9:00 AM"',
-        '="Phone call · Galaxy S25"', 'Drag recordings onto the Inbox or a project to move them.', '="Library places and projects"']],
+        '="Phone call · Galaxy S25"', 'Drag recordings onto the Inbox or a project to move them.', '="Library places and projects"',
+        // W-213: the classic Library's day headings, places, menus, filters, rows and upload panel.
+        'Sunday, Nov 15', 'Saturday, Nov 14', '="Date: Today"', '="Date: Yesterday"', 'This week', 'Voice notes', 'Shared with me',
+        'All recordings', 'All folders', 'Group by', 'Sort by', 'App / Type', 'Recently opened', 'Name A–Z', '="Library view"',
+        'Source device', 'Source app', 'Bookmark tag', 'Has bookmarks', 'Until', '="Filters (0 active)"',
+        'Add label', 'Remove label', 'Stop keeping', 'Keep forever', 'Pin to the top', 'Send to WhatsApp…', 'No audio', '="Uploaded: done',
+        'Failed uploads (1)', 'See why', '="Dismiss"', '="With the selected recordings"', '="recordings"', 'Library - EchoLedger',
+        'Drop sound or video files here, or', 'choose files', 'each file becomes its own recording, titled from its name', 'Clear the list',
+        'Auto (English / Urdu / Arabic)', 'Urdu (with English words)', 'Portuguese', '="More languages"', '="Files"']],
     'project-recordings' => [true, ['Nov 15', '9:00 AM', 'Zoom · Galaxy S25', '="Nov 15, 2026 · 5:00 PM"', 'Last call Nov 17',
         '="Projects"', '="New project"']],
     'projects' => [true, ['Name', 'Ascending', 'Descending', 'Automatic', 'Pin to the top', 'Loading...', '1 result', 'Last call Nov 17']],
     'usage' => [true, ['November 2026', 'October 2026', 'Nov 2026']],
+    // W-213: Activity's headings and dates, a new project's form.
+    'activity' => [true, ['Mark all as read', 'Needs action', 'Unread:', '="Nov 17, 2026 · 11:42 AM"']],
+    'project-create' => [true, ['Create & create another', '="Color picker"', '="Collapse section"', '="Breadcrumb"', 'Urdu (with English words)', 'Portuguese']],
 ];
 
 it('shows the classic pages\' last English in Urdu in the new frame, with Urdu month names and the digits 0-9', function () {
@@ -82,6 +98,15 @@ it('shows the classic pages\' last English in Urdu in the new frame, with Urdu m
     expect(leftoverWords(leftoverPage($this, true, 'ur', 'projects')))->toContain('آخری کال 17 نومبر')->not->toMatch('/[٠-٩۰-۹]/u');
     expect(leftoverWords(leftoverPage($this, true, 'ur', 'project-recordings')))->toContain('پروجیکٹس')->toContain('نیا پروجیکٹ');
     expect(leftoverWords(leftoverPage($this, true, 'ur', 'usage')))->toContain('نومبر 2026');
+    // W-213: the classic Library's days as "اتوار، 15 نومبر", Activity's as "17 نومبر 2026", a new project's words.
+    $library = leftoverPage($this, true, 'ur', 'library', false);
+    expect(leftoverWords($library))->toContain('اتوار، 15 نومبر')->toContain('ہفتہ، 14 نومبر')->toContain('تاریخ: آج')
+        ->toContain('فائلیں یہاں چھوڑیں')->not->toMatch('/[٠-٩۰-۹]/u');
+    expect(html_entity_decode($library))->toContain('="اطلاعات، 1 آپ کی منتظر ہے"');
+    expect(html_entity_decode(leftoverPage($this, true, 'ur', 'activity')))->toContain('="17 نومبر 2026 · ');
+    $create = leftoverWords(leftoverPage($this, true, 'ur', 'project-create'));
+    expect($create)->toContain('پروجیکٹ بنائیں')->toContain('بنائیں اور ایک اور بنائیں')->toContain('منسوخ کریں')->toContain('اردو (انگریزی الفاظ کے ساتھ)')
+        ->not->toContain('Create')->not->toContain('Cancel');
 });
 
 it('keeps the same words in English in the new frame and in classic', function () {
@@ -131,4 +156,29 @@ it('titles the Projects page with its own Urdu plural, and keeps "Projects" in E
     $urdu = leftoverWords(leftoverPage($this, true, 'ur', 'projects'));
     expect($urdu)->toContain('پروجیکٹس')->not->toContain('پروجیکٹs');
     expect(leftoverWords(leftoverPage($this, true, 'en', 'projects')))->toContain('Projects');
+});
+
+// W-213: the bell's name says how many need the person, one or more, in the console's language.
+it('names the bell with its count, one or more, in Urdu and in English', function () {
+    Filament::setCurrentPanel('app');
+    $bell = fn (int $count): string => html_entity_decode(view('filament.activity-bell-trigger', ['badge' => (string) $count, 'count' => $count])->render());
+
+    expect($bell(1))->toContain('="Notifications, 1 needs you"')
+        ->and($bell(3))->toContain('="Notifications, 3 need you"')
+        ->and($bell(0))->toContain('="Notifications"');
+    App::setLocale('ur');
+    expect($bell(1))->toContain('="اطلاعات، 1 آپ کی منتظر ہے"')
+        ->and($bell(3))->toContain('="اطلاعات، 3 آپ کی منتظر ہیں"')
+        ->and($bell(0))->toContain('="اطلاعات"');
+});
+
+// W-213: the languages' names are shown in Urdu; the codes kept are the same.
+it('shows the offered languages in Urdu and keeps their codes', function () {
+    expect(LanguageChoice::offered())->toBe(LanguageChoice::OFFERED);
+    App::setLocale('ur');
+    expect(array_keys(LanguageChoice::offered()))->toBe(array_keys(LanguageChoice::OFFERED))
+        ->and(LanguageChoice::offered()['ur'])->toBe('اردو (انگریزی الفاظ کے ساتھ)')
+        ->and(LanguageChoice::offered()['fr'])->toBe('فرانسیسی')
+        ->and(array_keys(LanguageChoice::selectOptions()))->toBe(['', 'en', 'ur', 'ar', 'مزید زبانیں'])
+        ->and(array_keys(LanguageChoice::selectOptions()['مزید زبانیں']))->toBe(array_keys(LanguageChoice::MORE));
 });

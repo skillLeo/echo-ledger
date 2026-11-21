@@ -10,7 +10,7 @@
     {{ $attributes->class(['el-notice', 'el-has-target' => filled($href)]) }}
     data-notice="{{ $id }}" data-remember="{{ $remember }}" @if (filled($href)) data-el-target="{{ $href }}" @endif role="{{ $role }}">
     {{ $slot }}
-    <button type="button" class="el-notice-close" x-on:click.stop="dismiss()" aria-label="Dismiss" title="Dismiss">
+    <button type="button" class="el-notice-close" x-on:click.stop="dismiss()" aria-label="{{ __('Dismiss') }}" title="{{ __('Dismiss') }}">
         @svg('heroicon-m-x-mark', ['aria-hidden' => 'true'])
     </button>
 </div>

@@ -878,7 +878,7 @@ class ViewCaptureSession extends ViewRecord
                 'engines' => array_map(fn (SttProviderKey $k): string => $k->value, array_slice(app(LanguageRouter::class)->candidates(app(LanguageRouter::class)->languageFor($record) ?? 'en+ur', $record), 0, EngineComparison::MAX_ENGINES)),
             ])
             ->schema([
-                Select::make('language')->label('Language')->options(array_filter(LanguageChoice::OFFERED, fn (string $k): bool => $k !== '', ARRAY_FILTER_USE_KEY))->required()->live(),
+                Select::make('language')->label('Language')->options(array_filter(LanguageChoice::offered(), fn (string $k): bool => $k !== '', ARRAY_FILTER_USE_KEY))->required()->live(),
                 CheckboxList::make('engines')->label('Engines (up to 3)')
                     ->options(fn (CaptureSession $record, $get): array => collect(app(LanguageRouter::class)->candidates((string) $get('language'), $record))
                         ->mapWithKeys(fn (SttProviderKey $k): array => [$k->value => $k->getLabel()])->all())
@@ -1040,7 +1040,7 @@ class ViewCaptureSession extends ViewRecord
                 && in_array($record->finalTranscript?->status, [null, TranscriptStatus::Failed], true))
             ->fillForm(fn (CaptureSession $record): array => ['language' => LanguageChoice::normalize($record->language) ?? ''])
             ->schema([
-                Select::make('language')->label('Language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false),
+                Select::make('language')->label('Language')->options(LanguageChoice::offered())->selectablePlaceholder(false),
             ])
             ->action(function (array $data, CaptureSession $record, FinalTranscriptCoordinator $coordinator): void {
                 $before = $record->language;
@@ -1138,7 +1138,7 @@ class ViewCaptureSession extends ViewRecord
                 Select::make('provider')->label('Engine')->required()->options(collect(SttProviderKey::cases())
                     ->reject(fn (SttProviderKey $k): bool => $k->value === $record->finalTranscript?->provider)
                     ->mapWithKeys(fn (SttProviderKey $k): array => [$k->value => $k->getLabel()])->all()),
-                Select::make('language')->label('Language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false),
+                Select::make('language')->label('Language')->options(LanguageChoice::offered())->selectablePlaceholder(false),
             ])
             ->action(function (array $data, CaptureSession $record): void {
                 try {

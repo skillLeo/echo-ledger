@@ -128,7 +128,8 @@ class RequestLinksPage extends Page implements HasTable
                     ->description(fn (RequestLink $link): string => __('up to :mb MB each', ['mb' => $link->max_mb])),
                 TextColumn::make('state')->label(__('Status'))->badge()
                     ->state(fn (RequestLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isActive() ? 'Open' : 'Expired'))
-                    ->formatStateUsing(fn (string $state): string => __($state))
+                    // "Open" is the action (کھولیں) elsewhere: a link's state has its own word (کھلا), English "Open" as before.
+                    ->formatStateUsing(fn (string $state): string => $state === 'Open' ? (trans()->has('Open (state)') ? __('Open (state)') : 'Open') : __($state))
                     ->color(fn (string $state): string => $state === 'Open' ? 'success' : 'gray'),
                 TextColumn::make('expires_at')->label(__('Open until'))->dateTime('M j, Y · g:i A', $tz)->placeholder(__('Until revoked'))
                     ->when($v2, fn (TextColumn $column): TextColumn => V2Tables::date($column, $tz), fn (TextColumn $column): TextColumn => $column->date('M j, Y', $tz)
