@@ -56,4 +56,16 @@ describe("firstSentence: a row's snippet is the first meaningful sentence (D12)"
   it("drops numbered speaker labels too", () => {
     expect(firstSentence("Speaker 1: Can you send the estimate by Monday? Speaker 2: Yes.")).toBe("Can you send the estimate by Monday?");
   });
+  it("drops a numbered label inside Urdu with no full stop before it", () => {
+    expect(firstSentence("Speaker 1: میسج کا آپ کو میں کیا جواب دوں Speaker 2: جی")).toBe("میسج کا آپ کو میں کیا جواب دوں");
+  });
+  it("keeps a phrase before a colon that is not a speaker", () => {
+    expect(firstSentence("Yes. Next step: send the estimate today.")).toBe("Next step: send the estimate today.");
+  });
+  it("ignores direction marks around a label", () => {
+    expect(firstSentence("\u200FSpeaker:\u200F کل کی میٹنگ کا وقت بدل گیا ہے۔")).toBe("کل کی میٹنگ کا وقت بدل گیا ہے۔");
+  });
+  it("skips a short sentence for the next one", () => {
+    expect(firstSentence("Me: Thanks. I will send it tomorrow.")).toBe("I will send it tomorrow.");
+  });
 });

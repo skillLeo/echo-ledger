@@ -13,6 +13,9 @@ const OWN_LABELS = ["Speaker", "Me", "Client", "مقرر"];
 /** The first sentence end: a run of marks followed by a space, other punctuation or the end ("3.5" is no end). */
 const SENTENCE_END = new RegExp(String.raw`[${ENDS}]+(?=[\s\p{P}]|$)`, "u");
 const WORD = /[\p{L}\p{N}]/u;
+/** The app's own speaker words, with an optional number ("Speaker 2"). */
+const OWN = new RegExp(String.raw`^(?:${OWN_LABELS.join("|")})(?: \p{N}{1,2})?$`, "iu");
+const NUMBERED = / \p{N}{1,2}$/u;
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -27,18 +30,25 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  * 4. The first one left is cut at its first sentence end; a longer line is left to the row's ellipsis.
  */
 export function firstSentence(preview: string | null | undefined): string | null {
-  const text = (preview ?? "").replace(/\s+/g, " ").trim();
+  // Direction marks (U+200E, U+200F) are invisible and would hide a label from the rule.
+  const text = (preview ?? "").replace(/[\u200E\u200F]/g, "").replace(/\s+/g, " ").trim();
   if (!text) return null;
 
-  // The labels where the rule finds them for sure, then each of those (and the app's own) wherever it stands.
+  // A label is a speaker at the start, as one of the app's own (numbered or not: "Speaker 2"), when it repeats, or
+  // anywhere after a sentence end in a transcript that starts with a label. Otherwise a phrase before a colon after a
+  // full stop ("Yes. Next step: …") is only words.
   const cuts: [number, number][] = [];
   const known = new Set(OWN_LABELS);
-  for (const m of text.matchAll(OPENING)) {
+  const openings = [...text.matchAll(OPENING)];
+  const labelled = openings.length > 0 && openings[0].index === 0 && openings[0][1] === "";
+  for (const m of openings) {
+    const label = m[2].trim();
+    if (!labelled && !OWN.test(label) && text.split(`${label}:`).length - 1 < 2) continue;
     const start = m.index + m[1].length;
     cuts.push([start, start + m[2].length + 1]);
-    known.add(m[2]);
+    known.add(label.replace(NUMBERED, ""));
   }
-  const anywhere = new RegExp(String.raw`(?<=\s|^)(?:${[...known].map(escape).join("|")}):(?=\s|$)`, "gu");
+  const anywhere = new RegExp(String.raw`(?<=\s|^)(?:${[...known].map(escape).join("|")})(?: \p{N}{1,2})?:(?=\s|$)`, "gu");
   for (const m of text.matchAll(anywhere)) cuts.push([m.index, m.index + m[0].length]);
   cuts.sort((a, b) => a[0] - b[0]);
 
@@ -51,12 +61,24 @@ export function firstSentence(preview: string | null | undefined): string | null
   }
   utterances.push(text.slice(from));
 
+  // The first sentence of 3 words or more, in the first utterance that has one ("Thanks. I'll send it tomorrow."
+  // gives the second sentence); a longer line is left to the row's ellipsis.
   for (const raw of utterances) {
-    const words = raw.trim().split(" ").filter((w) => WORD.test(w));
-    if (words.length < 3) continue;
-    const utterance = raw.trim();
-    const end = SENTENCE_END.exec(utterance);
-    return end ? utterance.slice(0, end.index + end[0].length) : utterance;
+    for (const sentence of sentences(raw.trim())) {
+      if (sentence.split(" ").filter((w) => WORD.test(w)).length >= 3) return sentence;
+    }
   }
   return null;
+}
+
+/** An utterance cut into its sentences, each with its end mark. */
+function sentences(utterance: string): string[] {
+  const out: string[] = [];
+  let rest = utterance;
+  for (let end = SENTENCE_END.exec(rest); end; end = SENTENCE_END.exec(rest)) {
+    out.push(rest.slice(0, end.index + end[0].length).trim());
+    rest = rest.slice(end.index + end[0].length).trim();
+  }
+  if (rest) out.push(rest);
+  return out;
 }

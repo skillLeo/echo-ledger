@@ -31,10 +31,15 @@ The components and tokens change in my folders; EL-UX switches the screens to th
 
 ## The snippet: the first meaningful sentence
 One rule, implemented once per platform (`firstSentence(preview)`):
-1. Split the preview into utterances at speaker labels. A label is up to 24 letters, digits, spaces or brackets (starting with a letter) followed by ": " at the start or after a sentence end ("Client:", "Me:", "Speaker:", "Sara (Acme):", "مقرر:").
-2. Drop the labels. Never show "Speaker:", "Client:" or "Me:" in a row.
-3. Skip utterances that are empty, only punctuation, or under 3 words ("the time.", "Hello.", "Yeah").
-4. Take the first remaining utterance and cut it at its first sentence end (. ? ! ۔ ؟). If it's longer than the line, the ellipsis does the rest.
+1. Drop the direction marks U+200E and U+200F.
+2. Find the speaker labels. A label is up to 24 letters, digits, spaces or brackets, starting with a letter or bracket, followed by ": ". It counts as a speaker when:
+   - it starts the preview;
+   - it's one of the app's own (Speaker, Me, Client, مقرر, with an optional number: "Speaker 2");
+   - it repeats; or
+   - the preview starts with a label (a labelled transcript) and this one comes after a sentence end.
+   The app's own labels and any label found that way also count wherever they stand, since Urdu often has no full stop before the next speaker. A phrase before a colon that isn't a speaker ("Yes. Next step: send it") stays as words.
+3. Split into utterances at the speaker labels and drop the labels. Never show "Speaker:", "Client:" or "Me:" in a row.
+4. Take the first sentence (ending at . ? ! ۔ ؟) of 3 words or more, from the first utterance that has one. "Thanks. I'll send it tomorrow." gives the second sentence; "the time." and "Speaker: ." give nothing.
 5. If nothing is left, show a quiet "No speech" (text-secondary) for a finished transcript, and nothing while it's still transcribing.
 
 Examples from the before picture:
