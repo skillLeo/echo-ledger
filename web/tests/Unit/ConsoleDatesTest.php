@@ -30,3 +30,14 @@ it('writes Urdu month names with the digits 0-9', function () {
         ->and(ConsoleDates::dateTime($at, 'g:i A', 'ur'))->toStartWith('20 اکتوبر 2026 · 9:30 ')
         ->and(ConsoleDates::dateTime($at, 'g:i A', 'ur'))->not->toMatch('/[A-Za-z٠-٩۰-۹]/u');
 });
+
+// W-213: the classic Library's day headings ("Sunday, Nov 15"), the year only when it is not this year.
+it('writes a day heading with its weekday, in English as before and in Urdu', function () {
+    $now = Carbon::parse('2026-11-17 11:42:00', 'UTC');
+
+    expect(ConsoleDates::dayHeading(Carbon::parse('2026-11-15 09:00:00', 'UTC'), $now, 'en'))->toBe('Sunday, Nov 15')
+        ->and(ConsoleDates::dayHeading(Carbon::parse('2025-12-31 09:00:00', 'UTC'), $now, 'en'))->toBe('Wednesday, Dec 31, 2025')
+        ->and(ConsoleDates::dayHeading(Carbon::parse('2026-11-15 09:00:00', 'UTC'), $now, 'ur'))->toBe('اتوار، 15 نومبر')
+        ->and(ConsoleDates::dayHeading(Carbon::parse('2026-11-14 09:00:00', 'UTC'), $now, 'ur'))->toBe('ہفتہ، 14 نومبر')
+        ->and(ConsoleDates::dayHeading(Carbon::parse('2025-12-31 09:00:00', 'UTC'), $now, 'ur'))->toBe('بدھ، 31 دسمبر 2025');
+});

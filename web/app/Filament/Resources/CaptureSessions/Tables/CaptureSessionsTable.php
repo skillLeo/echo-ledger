@@ -100,7 +100,7 @@ final class CaptureSessionsTable
                         ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
                     IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)
                         ->trueColor('warning')->falseColor('gray')->grow(false)
-                        ->tooltip(fn (CaptureSession $record): string => $record->pinned ? 'Unpin' : 'Pin to the top')
+                        ->tooltip(fn (CaptureSession $record): string => $record->pinned ? __('Unpin') : __('Pin to the top'))
                         ->extraAttributes(fn (CaptureSession $record): array => ['class' => $record->pinned ? 'el-pin el-on' : 'el-pin'])
                         ->action(fn (CaptureSession $record) => app(LibraryOrganiser::class)->update($record, ['pinned' => ! $record->pinned])),
                 ])->extraAttributes(['class' => 'el-split']),
@@ -117,24 +117,26 @@ final class CaptureSessionsTable
             ->columnManagerTriggerAction(fn (Action $action): Action => $action->label(__('Columns'))->icon(Heroicon::OutlinedViewColumns))
             ->recordClasses(fn (CaptureSession $record, HasTable $livewire): ?string => property_exists($livewire, 'selected') && $livewire->selected === $record->id ? 'el-current' : null)
             ->filters([
-                SelectFilter::make('source_device')->label('Source device')->options(SourceDevice::class)->multiple(),
-                SelectFilter::make('source_app')->label('Source app')->options(SourceApp::class)->multiple(),
-                SelectFilter::make('client')->label('Project')
+                // The filters in the console's language (since W-213; English reads exactly as before).
+                SelectFilter::make('source_device')->label(__('Source device'))->options(self::choices(SourceDevice::class))->multiple(),
+                SelectFilter::make('source_app')->label(__('Source app'))->options(self::choices(SourceApp::class))->multiple(),
+                SelectFilter::make('client')->label(__('Project'))
                     ->relationship('client', 'name', fn (Builder $query): Builder => $query->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId()))
                     ->searchable()->preload(),
-                SelectFilter::make('status')->options(SessionStatus::class),
-                SelectFilter::make('tag')->label('Bookmark tag')
-                    ->options(fn (): array => array_combine(app(SettingsRepository::class)->markerTags(), app(SettingsRepository::class)->markerTags()))
+                SelectFilter::make('status')->label(__('Status'))->options(self::choices(SessionStatus::class)),
+                SelectFilter::make('tag')->label(__('Bookmark tag'))
+                    ->options(fn (): array => array_combine(app(SettingsRepository::class)->markerTags(), array_map(fn (string $tag): string => __($tag), app(SettingsRepository::class)->markerTags())))
                     ->query(fn (Builder $query, array $data): Builder => blank($data['value'] ?? null) ? $query
                         : $query->whereHas('markers', fn (Builder $m): Builder => $m->where('tag', $data['value']))),
-                SelectFilter::make('label')->label('Label')
+                SelectFilter::make('label')->label(__('Label'))
                     ->options(fn (): array => collect(app(LibraryOrganiser::class)->labels((int) CurrentWorkspace::id()))->pluck('label', 'label')->all())
                     ->query(fn (Builder $query, array $data): Builder => blank($data['value'] ?? null) ? $query
                         : $query->whereHas('labels', fn (Builder $l): Builder => $l->where('label', $data['value']))),
-                Filter::make('bookmarked')->label('Has bookmarks')->toggle()
+                Filter::make('bookmarked')->label(__('Has bookmarks'))->toggle()
                     ->query(fn (Builder $query): Builder => $query->whereHas('markers')),
                 Filter::make('started_at')
-                    ->schema([DatePicker::make('from')->label('From'), DatePicker::make('until')->label('Until')])
+                    // "From" alone is a call's sender in Urdu (ماخذ): the date's own word, English "From" as before.
+                    ->schema([DatePicker::make('from')->label(trans()->has('From (date)') ? __('From (date)') : 'From'), DatePicker::make('until')->label(__('Until'))])
                     ->query(fn (Builder $query, array $data): Builder => self::filterByDisplayDay($query, $data['from'] ?? null, $data['until'] ?? null)),
             ])
             // The trigger shows the active-filter count as a badge once a filter is on; its accessible name must
@@ -142,23 +144,23 @@ final class CaptureSessionsTable
             ->filtersTriggerAction(fn (Action $action, Table $table): Action => $action
                 ->icon(Heroicon::OutlinedAdjustmentsHorizontal)
                 ->extraAttributes(fn (): array => ['data-active-filters' => (string) $table->getActiveFiltersCount()])
-                ->label(fn (): string => 'Filters ('.$table->getActiveFiltersCount().' active)'))
+                ->label(fn (): string => __('Filters (:count active)', ['count' => $table->getActiveFiltersCount()])))
             // Live status: the list refreshes every few seconds while it shows a recording that is uploading or being
             // transcribed, and stops by itself once none is.
             // The new Library polls through its own quiet check instead (ListCaptureSessions::v2Poll): the list is drawn
             // again only when one of its moving rows moved.
             ->poll(fn (HasTable $livewire): ?string => ! ConsoleV2::library() && self::showsPending($livewire->getTableRecords()) ? self::LIVE_POLL : null)
             // Since v1.5 members and viewers only open their recordings here (a read-only console).
-            ->recordActions(ConsoleAccess::readOnly() ? [ViewAction::make()->label('Open')] : [
+            ->recordActions(ConsoleAccess::readOnly() ? [ViewAction::make()->label(__('Open'))] : [
                 // Since v1.6 (P5.3): in Failed uploads, Retry where something here can fix it, and Delete.
                 ...self::failedActions(),
                 ActionGroup::make([
-                    ViewAction::make()->label('Open'),
+                    ViewAction::make()->label(__('Open')),
                     self::renameAction(),
                     // Since v1.6 (P5.5): the text of the view it opens in, the text and the voice, or a 7-day link.
                     WhatsAppActions::send(),
-                    DeleteAction::make()->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for '.CaptureSession::binHours().' hours.'),
-                ])->label('More')->tooltip('More')->color('gray'),
+                    DeleteAction::make()->label(__('Delete'))->modalDescription(__('Deletes the recording and transcript on every device. You can restore it from Recently deleted for :hours hours.', ['hours' => CaptureSession::binHours()])),
+                ])->label(__('More'))->tooltip(__('More'))->color('gray'),
             ])
             // Since v1.6 (P5.2) the selection bar holds them: "8 selected · Move · Label · Export · Delete · More · Clear".
             ->toolbarActions(ConsoleAccess::readOnly() ? [] : self::bulkBar())
@@ -169,24 +171,24 @@ final class CaptureSessionsTable
             ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => self::emptyState($livewire, $table)['heading'])
             ->emptyStateDescription(fn (HasTable $livewire, Table $table): string => self::emptyState($livewire, $table)['description'])
             ->emptyStateActions([
-                Action::make('clearSearchAndFilters')->label('Clear search and filters')->color('gray')
+                Action::make('clearSearchAndFilters')->label(__('Clear search and filters'))->color('gray')
                     ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'search')
                     // Only the sessions list page shows this table, and its page has the filter form.
                     ->action(function (ListRecords $livewire): void {
                         $livewire->resetTableSearch();
                         $livewire->removeTableFilters();
                     }),
-                Action::make('showAll')->label('Show all recordings')->color('gray')
+                Action::make('showAll')->label(__('Show all recordings'))->color('gray')
                     ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'view')
                     ->action(function (HasTable $livewire): void {
                         if (method_exists($livewire, 'showAllRecordings')) {
                             $livewire->showAllRecordings();
                         }
                     }),
-                Action::make('uploadFirst')->label('Upload a voice note')->icon(Heroicon::OutlinedArrowUpTray)
+                Action::make('uploadFirst')->label(__('Upload a voice note'))->icon(Heroicon::OutlinedArrowUpTray)
                     ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'empty' && ! ConsoleAccess::readOnly())
                     ->alpineClickHandler("\$dispatch('el-upload-pick')"),
-                Action::make('pairDevice')->label('Sign in a device')->icon(Heroicon::OutlinedQrCode)->color('gray')
+                Action::make('pairDevice')->label(__('Sign in a device'))->icon(Heroicon::OutlinedQrCode)->color('gray')
                     ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'empty')
                     ->url(fn (): string => DeviceResource::getUrl('index')),
             ]);
@@ -206,6 +208,17 @@ final class CaptureSessionsTable
                     ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
             ]),
         ];
+    }
+
+    /**
+     * An enum's cases as a filter's choices, each named in the console's language (the values stay the cases').
+     *
+     * @param  class-string<SourceDevice|SourceApp|SessionStatus>  $enum
+     * @return array<string, string>
+     */
+    private static function choices(string $enum): array
+    {
+        return collect($enum::cases())->mapWithKeys(fn (SourceDevice|SourceApp|SessionStatus $case): array => [$case->value => __((string) $case->getLabel())])->all();
     }
 
     /** Whether the Library shows its table rather than its list (the page's List/Table switch). */
@@ -260,8 +273,8 @@ final class CaptureSessionsTable
     {
         $failedView = fn (HasTable $livewire): bool => property_exists($livewire, 'activeTab') && (string) $livewire->activeTab === 'failed';
         $retry = fn (CaptureSession $record): ?string => FailedUpload::for($record)['retry'] ?? null;
-        // In the console's language under the new Library (English reads exactly as before).
-        $t = fn (string $words, array $replace = []): string => ConsoleV2::library() ? __($words, $replace) : strtr($words, collect($replace)->mapWithKeys(fn ($v, $k) => [':'.$k => $v])->all());
+        // In the console's language (since W-213 in the classic Library too; English reads exactly as before).
+        $t = fn (string $words, array $replace = []): string => __($words, $replace);
 
         return [
             Action::make('retryFailed')->label(fn (): string => $t('Retry'))->icon(Heroicon::OutlinedArrowPath)->button()->size(Size::Small)
@@ -296,31 +309,31 @@ final class CaptureSessionsTable
     public static function emptyState(HasTable $livewire, Table $table): array
     {
         if ($livewire->hasTableSearch() || $table->isFiltered()) {
-            return ['kind' => 'search', 'icon' => 'heroicon-o-magnifying-glass', 'heading' => $livewire->hasTableSearch() ? 'No recordings match your search' : 'No recordings match these filters',
-                'description' => 'Try other words, or clear the search and filters.'];
+            return ['kind' => 'search', 'icon' => 'heroicon-o-magnifying-glass', 'heading' => $livewire->hasTableSearch() ? __('No recordings match your search') : __('No recordings match these filters'),
+                'description' => __('Try other words, or clear the search and filters.')];
         }
         $view = property_exists($livewire, 'activeTab') ? (string) ($livewire->activeTab ?: 'all') : 'all';
         $folder = property_exists($livewire, 'folder') && is_string($livewire->folder) ? $livewire->folder : null;
         if ($view !== 'all') {
             return ['kind' => 'view', ...match ($view) {
-                'today' => ['icon' => 'heroicon-o-calendar', 'heading' => 'Nothing recorded today', 'description' => 'Calls and voice notes from today show here as soon as they are uploaded.'],
-                'this_week' => ['icon' => 'heroicon-o-calendar-days', 'heading' => 'Nothing recorded this week', 'description' => 'This week starts on Monday.'],
-                'waiting' => ['icon' => 'heroicon-o-clock', 'heading' => 'No calls waiting for a decision', 'description' => 'When the phone or computer asks whether to keep a call, it waits here until you decide.'],
-                'bookmarked' => ['icon' => 'heroicon-o-bookmark', 'heading' => 'No bookmarks yet', 'description' => 'Add a bookmark while recording, or on a recording\'s page, to find a moment again.'],
-                'failed' => ['icon' => 'heroicon-o-check-circle', 'heading' => 'No failed uploads', 'description' => 'Every recording reached the server and was transcribed.'],
-                'pinned' => ['icon' => 'heroicon-o-star', 'heading' => 'Nothing pinned', 'description' => 'Pin a recording with its star to keep it here and at the top of the list.'],
-                default => ['icon' => 'heroicon-o-funnel', 'heading' => 'Nothing to show here', 'description' => 'Choose All recordings to see everything.'],
+                'today' => ['icon' => 'heroicon-o-calendar', 'heading' => __('Nothing recorded today'), 'description' => __('Calls and voice notes from today show here as soon as they are uploaded.')],
+                'this_week' => ['icon' => 'heroicon-o-calendar-days', 'heading' => __('Nothing recorded this week'), 'description' => __('This week starts on Monday.')],
+                'waiting' => ['icon' => 'heroicon-o-clock', 'heading' => __('No calls waiting for a decision'), 'description' => __('When the phone or computer asks whether to keep a call, it waits here until you decide.')],
+                'bookmarked' => ['icon' => 'heroicon-o-bookmark', 'heading' => __('No bookmarks yet'), 'description' => __('Add a bookmark while recording, or on a recording\'s page, to find a moment again.')],
+                'failed' => ['icon' => 'heroicon-o-check-circle', 'heading' => __('No failed uploads'), 'description' => __('Every recording reached the server and was transcribed.')],
+                'pinned' => ['icon' => 'heroicon-o-star', 'heading' => __('Nothing pinned'), 'description' => __('Pin a recording with its star to keep it here and at the top of the list.')],
+                default => ['icon' => 'heroicon-o-funnel', 'heading' => __('Nothing to show here'), 'description' => __('Choose All recordings to see everything.')],
             }];
         }
         if ($folder !== null) {
-            $name = ListCaptureSessions::FOLDER_LABELS[$folder] ?? 'this folder';
+            $name = __(ListCaptureSessions::FOLDER_LABELS[$folder] ?? 'this folder');
 
-            return ['kind' => 'view', 'icon' => 'heroicon-o-folder-open', 'heading' => $folder === 'inbox' ? 'The Inbox is empty' : 'No recordings in '.$name,
-                'description' => $folder === 'inbox' ? 'Every recording is filed in a project.' : 'Recordings from '.$name.' show here once there are some.'];
+            return ['kind' => 'view', 'icon' => 'heroicon-o-folder-open', 'heading' => $folder === 'inbox' ? __('The Inbox is empty') : __('No recordings in :name', ['name' => $name]),
+                'description' => $folder === 'inbox' ? __('Every recording is filed in a project.') : __('Recordings from :name show here once there are some.', ['name' => $name])];
         }
 
-        return ['kind' => 'empty', 'icon' => 'heroicon-o-microphone', 'heading' => 'No recordings yet',
-            'description' => 'Calls, meetings and voice notes you capture will appear here. Sign in a phone or computer under Devices, or upload a voice note.'];
+        return ['kind' => 'empty', 'icon' => 'heroicon-o-microphone', 'heading' => __('No recordings yet'),
+            'description' => __('Calls, meetings and voice notes you capture will appear here. Sign in a phone or computer under Devices, or upload a voice note.')];
     }
 
     /**
@@ -338,12 +351,12 @@ final class CaptureSessionsTable
         $small = fn (BulkAction $action): BulkAction => $action->button()->size(Size::Small);
 
         return [
-            $small($actions['move'])->label('Move')->color('gray'),
-            BulkActionGroup::make([$actions['label'], $actions['unlabel']])->label('Label')->icon(Heroicon::OutlinedTag)
+            $small($actions['move'])->label(__('Move'))->color('gray'),
+            BulkActionGroup::make([$actions['label'], $actions['unlabel']])->label(__('Label'))->icon(Heroicon::OutlinedTag)
                 ->button()->size(Size::Small)->color('gray'),
-            $small($actions['export'])->label('Export')->color('gray'),
-            $small(DeleteBulkAction::make()->authorizeIndividualRecords('delete'))->label('Delete'),
-            BulkActionGroup::make([$actions['pin'], $actions['unpin'], $actions['keep'], $actions['unkeep']])->label('More')
+            $small($actions['export'])->label(__('Export'))->color('gray'),
+            $small(DeleteBulkAction::make()->authorizeIndividualRecords('delete'))->label(__('Delete')),
+            BulkActionGroup::make([$actions['pin'], $actions['unpin'], $actions['keep'], $actions['unkeep']])->label(__('More'))
                 ->icon(Heroicon::OutlinedEllipsisHorizontal)->button()->size(Size::Small)->color('gray'),
         ];
     }
@@ -679,7 +692,7 @@ final class CaptureSessionsTable
                 foreach (ConsoleV2::library() ? array_chunk(self::ids($records), LibraryOrganiser::MAX_BULK) : [self::ids($records)] as $ids) {
                     $changed += app(LibraryOrganiser::class)->bulk((int) CurrentWorkspace::id(), $ids, $action, $client, $label, auth()->user());
                 }
-                Notification::make()->title($changed === 1 ? '1 recording updated' : "{$changed} recordings updated")->success()->send();
+                Notification::make()->title($changed === 1 ? __('1 recording updated') : __(':count recordings updated', ['count' => $changed]))->success()->send();
             } catch (ApiError $e) {
                 Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
             }
@@ -687,17 +700,17 @@ final class CaptureSessionsTable
 
         return [
             BulkAction::make('move')->label(__('Move to project'))->icon(Heroicon::OutlinedFolder)->modalHeading(__('Move to project'))
-                ->schema([Select::make('client_id')->label('Project')->placeholder('No project')
+                ->schema([Select::make('client_id')->label(__('Project'))->placeholder(__('No project'))
                     ->options(fn (): array => Client::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all())])
                 ->action(fn (Collection $records, array $data) => $run($records, 'move', $data['client_id'] ?? null))
                 ->deselectRecordsAfterCompletion(),
             BulkAction::make('label')->label(__('Add label'))->icon(Heroicon::OutlinedTag)
-                ->schema([TextInput::make('label')->label('Label')->required()->maxLength(LibraryOrganiser::MAX_LABEL_CHARS)
+                ->schema([TextInput::make('label')->label(__('Label'))->required()->maxLength(LibraryOrganiser::MAX_LABEL_CHARS)
                     ->datalist(fn (): array => array_column(app(LibraryOrganiser::class)->labels((int) CurrentWorkspace::id()), 'label'))])
                 ->action(fn (Collection $records, array $data) => $run($records, 'label', null, $data['label']))
                 ->deselectRecordsAfterCompletion(),
             BulkAction::make('unlabel')->label(__('Remove label'))->icon(Heroicon::OutlinedXMark)
-                ->schema([Select::make('label')->label('Label')->required()
+                ->schema([Select::make('label')->label(__('Label'))->required()
                     ->options(fn (): array => collect(app(LibraryOrganiser::class)->labels((int) CurrentWorkspace::id()))->pluck('label', 'label')->all())])
                 ->action(fn (Collection $records, array $data) => $run($records, 'unlabel', null, $data['label']))
                 ->deselectRecordsAfterCompletion(),
@@ -717,13 +730,13 @@ final class CaptureSessionsTable
                 ->action(fn (Collection $records) => $run($records, 'keep'))->deselectRecordsAfterCompletion(),
             BulkAction::make('unkeep')->label(__('Stop keeping'))->icon(Heroicon::OutlinedLockOpen)
                 ->action(fn (Collection $records) => $run($records, 'unkeep'))->deselectRecordsAfterCompletion(),
-            BulkAction::make('export')->label('Export transcripts')->icon(Heroicon::OutlinedArrowDownTray)->modalHeading('Export transcripts')
+            BulkAction::make('export')->label(__('Export transcripts'))->icon(Heroicon::OutlinedArrowDownTray)->modalHeading(__('Export transcripts'))
                 ->schema([
-                    Select::make('format')->label('Format')->required()->default('docx')->selectablePlaceholder(false)
-                        ->options(['docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Web subtitles (.vtt)', 'json' => 'JSON']),
-                    Select::make('view')->label('Show as')->placeholder('Original words')
-                        ->options(TranscriptViews::VIEWS)
-                        ->helperText('A recording whose view is not made yet keeps its original words.'),
+                    Select::make('format')->label(__('Format'))->required()->default('docx')->selectablePlaceholder(false)
+                        ->options(array_map(fn (string $format): string => __($format), ['docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Web subtitles (.vtt)', 'json' => 'JSON'])),
+                    Select::make('view')->label(__('Show as'))->placeholder(__('Original words'))
+                        ->options(array_map(fn (string $view): string => __($view), TranscriptViews::VIEWS))
+                        ->helperText(__('A recording whose view is not made yet keeps its original words.')),
                 ])
                 ->action(fn (Collection $records, array $data): ?StreamedResponse => self::exportDownload($records, (string) $data['format'], $data['view'] ?? null)),
         ];
@@ -765,18 +778,18 @@ final class CaptureSessionsTable
             ->label(__('Rename'))
             ->icon(Heroicon::OutlinedPencilSquare)
             ->color('gray')
-            ->modalHeading('Rename recording')
+            ->modalHeading(__('Rename recording'))
             ->modalWidth('lg')
             ->fillForm(fn (CaptureSession $record): array => ['title' => $record->title])
             ->schema([
-                TextInput::make('title')->label('Title')->maxLength(200)->autofocus()
+                TextInput::make('title')->label(__('Title'))->maxLength(200)->autofocus()
                     ->placeholder(fn (CaptureSession $record): string => self::automaticTitle($record))
-                    ->helperText('Leave it empty to use the automatic title.'),
+                    ->helperText(__('Leave it empty to use the automatic title.')),
             ])
-            ->modalSubmitActionLabel('Save')
+            ->modalSubmitActionLabel(__('Save'))
             ->action(function (CaptureSession $record, array $data): void {
                 app(LibraryOrganiser::class)->update($record, ['title' => $data['title'] ?? null]);
-                Notification::make()->title('Renamed to “'.$record->displayTitle().'”')->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
+                Notification::make()->title(__('Renamed to “:title”', ['title' => $record->displayTitle()]))->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
             });
     }
 

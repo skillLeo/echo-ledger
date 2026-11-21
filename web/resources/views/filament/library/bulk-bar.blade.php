@@ -3,7 +3,7 @@
     Move · Label · Export · Delete · More · Clear". The actions are the table's own bulk actions, drawn here instead of
     in the toolbar above the list (the toolbar's copy is hidden by the theme).
 --}}
-<div class="el-bulk-actions" role="group" aria-label="With the selected recordings">
+<div class="el-bulk-actions" role="group" aria-label="{{ __('With the selected recordings') }}">
     @foreach ($this->getTable()->getToolbarActions() as $action)
         @if ($action->isVisible())
             {{ $action }}

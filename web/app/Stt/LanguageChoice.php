@@ -216,12 +216,32 @@ final class LanguageChoice
     }
 
     /**
-     * The choices for a select in the console: Auto and the main languages, then "More languages".
+     * The choices for a select in the console: Auto and the main languages, then "More languages", named in the
+     * console's language (W-213; the codes stay as they are, English reads exactly as before).
      *
      * @return array<string, string|array<string, string>>
      */
     public static function selectOptions(): array
     {
-        return [...self::MAIN, 'More languages' => self::MORE];
+        return [...self::named(self::MAIN), __('More languages') => self::named(self::MORE)];
+    }
+
+    /**
+     * Every choice [OFFERED] as a menu or a list shows it: the same codes, named in the console's language (W-213).
+     *
+     * @return array<string, string>
+     */
+    public static function offered(): array
+    {
+        return self::named(self::OFFERED);
+    }
+
+    /**
+     * @param  array<string, string>  $choices
+     * @return array<string, string>
+     */
+    private static function named(array $choices): array
+    {
+        return array_map(fn (string $label): string => __($label), $choices);
     }
 }

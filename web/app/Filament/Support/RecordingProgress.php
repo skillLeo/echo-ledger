@@ -71,11 +71,11 @@ final class RecordingProgress
             $transcribe['percent'] = $progress !== null && $progress['total'] > 1 ? (int) floor($progress['done'] * 100 / $progress['total']) : null;
         }
         $improveState = $improving ? 'active' : 'waiting';
-        $improve = ['key' => self::IMPROVE, 'label' => self::word(self::IMPROVE, $improveState), 'state' => $improveState, 'detail' => $view !== null ? TranscriptViews::VIEWS[$view] : null, 'percent' => null];
+        $improve = ['key' => self::IMPROVE, 'label' => self::word(self::IMPROVE, $improveState), 'state' => $improveState, 'detail' => $view !== null ? __(TranscriptViews::VIEWS[$view]) : null, 'percent' => null];
         if ($improving && $view !== null) {
             $lines = is_array($views['progress']) ? ($views['progress'][$view] ?? null) : null;
             $improve['percent'] = is_array($lines) && $lines['total'] > 0 ? (int) floor($lines['done'] * 100 / $lines['total']) : 0;
-            $improve['detail'] = TranscriptViews::VIEWS[$view].'… '.$improve['percent'].'%';
+            $improve['detail'] = __(TranscriptViews::VIEWS[$view]).'… '.$improve['percent'].'%';
         }
         $steps = [$upload, $transcribe, $improve];
         $active = $uploading ? self::UPLOAD : ($transcribing ? self::TRANSCRIBE : self::IMPROVE);
@@ -84,10 +84,11 @@ final class RecordingProgress
         return [
             'active' => $active,
             'steps' => $steps,
+            // In the console's language (since W-213; English reads exactly as before).
             'summary' => match ($active) {
-                self::UPLOAD => 'Uploading '.$upload['percent'].'%',
-                self::TRANSCRIBE => 'Transcribing'.($current['detail'] !== null ? ' · '.$current['detail'] : ''),
-                default => $view !== null ? 'Improving '.TranscriptViews::VIEWS[$view].'… '.$current['percent'].'%' : 'Improving…',
+                self::UPLOAD => __('Uploading :percent%', ['percent' => $upload['percent']]),
+                self::TRANSCRIBE => __('Transcribing').($current['detail'] !== null ? ' · '.$current['detail'] : ''),
+                default => $view !== null ? __('Improving :view… :percent%', ['view' => __(TranscriptViews::VIEWS[$view]), 'percent' => $current['percent']]) : __('Improving…'),
             },
         ];
     }
@@ -102,6 +103,19 @@ final class RecordingProgress
             'done' => $words[2],
             default => $words[0],
         };
+    }
+
+    /**
+     * A step's name as shown, in the console's language. "Transcribe" as a step (ٹرانسکرپشن) has its own key, apart
+     * from the Transcribe button (ٹرانسکرائب کریں); English reads "Transcribe" either way (W-213 visual).
+     */
+    public static function stageLabel(string $word): string
+    {
+        if ($word === self::WORDS[self::TRANSCRIBE][0]) {
+            return trans()->has('Transcribe (stage)') ? (string) __('Transcribe (stage)') : $word;
+        }
+
+        return (string) __($word);
     }
 
     /**
@@ -146,7 +160,7 @@ final class RecordingProgress
         if ($progress === null) {
             return null;
         }
-        $parts = $progress['total'] > 1 ? 'part '.min($progress['total'], $progress['done'] + 1).' of '.$progress['total'] : null;
+        $parts = $progress['total'] > 1 ? __('part :n of :total', ['n' => min($progress['total'], $progress['done'] + 1), 'total' => $progress['total']]) : null;
         $left = self::timeLeft($progress['eta_seconds']);
         $detail = implode(' · ', array_filter([$parts, $left]));
 
@@ -160,9 +174,9 @@ final class RecordingProgress
             return null;
         }
         $seconds = max(0, $seconds);
-        $amount = $seconds < 60 ? intdiv(max(5, $seconds) + 4, 5) * 5 .' s' : intdiv($seconds + 30, 60).' min';
+        $amount = $seconds < 60 ? __(':n s', ['n' => intdiv(max(5, $seconds) + 4, 5) * 5]) : __(':n min', ['n' => intdiv($seconds + 30, 60)]);
 
-        return 'about '.$amount.' left';
+        return __('about :amount left', ['amount' => $amount]);
     }
 
     /**
