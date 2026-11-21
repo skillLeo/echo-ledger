@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { getConfig, getRoles } from "@testing-library/dom";
+import { createRequire } from "node:module";
 import type { ClientFolder, ClientWorkspace, MemoryLine } from "../../lib/ipc";
 import MainApp from "../../views/main/MainApp";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
@@ -12,6 +14,9 @@ import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { WorkspaceV2, memoryGroups } from "./WorkspaceV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
+// The accessible-name library Testing Library itself loads (the same version, so the same names as its ByRole queries).
+const fromTestingLibrary = createRequire(createRequire(import.meta.url).resolve("@testing-library/dom"));
+const { computeAccessibleName: accessibleName } = fromTestingLibrary("dom-accessibility-api") as { computeAccessibleName: (el: Element, options?: { computedStyleSupportsPseudoElements?: boolean }) => string };
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 const PROJECT = { id: "c1", name: "Qureshi Textiles", ai_notes: true };
@@ -164,20 +169,30 @@ describe("parity with today's project page", () => {
     respondWith("screen_image", ({ url }) => `data:image/webp;base64,${btoa(String(url))}`);
   };
   const MENU = () => [{ label: "New folder inside", onPick: vi.fn() }, { label: "Rename", onPick: vi.fn() }, { label: "Delete project…", danger: true, onPick: vi.fn() }];
-  const settle = async () => {
-    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+  /** The project search shows what it found (it asks the server 350 ms after the last key): wait for that, not a guess. */
+  const searched = async () => {
+    await screen.findAllByRole("button", { name: /^Play Payment terms for the March shipment from / });
     await act(flushAsync);
   };
   const press = async (role: Role, name: string) => {
     fireEvent.click(screen.getByRole(role, { name }));
     await act(flushAsync);
   };
+  /**
+   * Every control's "role: name" in one walk of the page (D-167): Testing Library's own roles and names (its getRoles,
+   * and the accessible-name library it uses itself), where queryAllByRole for each role in turn walked it twelve times.
+   */
   const collect = (into: Set<string>) => {
-    for (const role of ROLES) screen.queryAllByRole(role, { name: (n) => (into.add(`${role}: ${n}`), true) });
+    const byRole = getRoles(document.body, { hidden: false });
+    for (const role of ROLES) {
+      for (const element of byRole[role] ?? []) into.add(`${role}: ${accessibleName(element, { computedStyleSupportsPseudoElements: getConfig().computedStyleSupportsPseudoElements })}`);
+    }
   };
 
   /** Every control today's page shows, in every tab and state. */
-  const todays = async (): Promise<string[]> => {
+  const todays = async (signal: AbortSignal): Promise<string[]> => {
+    // A run that ran out of time stops here, instead of rendering on into the tests after it (D-167).
+    const step = () => { if (signal.aborted) throw new Error("timed out: stopped"); };
     fixtures();
     const seen = new Set<string>();
     const page = () => (
@@ -192,12 +207,14 @@ describe("parity with today's project page", () => {
     collect(seen);
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     fireEvent.change(screen.getByRole("textbox", { name: "Search in this project" }), { target: { value: "advance" } });
-    await settle();
+    await searched();
+    step();
     await press("button", "Edit rules");
     collect(seen);
     for (const tab of ["Files", "Notes", "Screens", "AI notes"]) {
+      step();
       await press("tab", tab);
-      await settle();
+      if (tab === "Screens") await screen.findByRole("button", { name: "Screen 1 · 1:00" });
       collect(seen);
       if (tab === "Files") await press("button", "Paste instructions");
       if (tab === "Notes") {
@@ -210,6 +227,7 @@ describe("parity with today's project page", () => {
       collect(seen);
     }
     unmount();
+    step();
     // A workspace that didn't load.
     fail("client_workspace", "The server is out of reach.");
     render(page());
@@ -219,8 +237,8 @@ describe("parity with today's project page", () => {
     return [...seen];
   };
 
-  it("maps every control today's page has, and nothing it doesn't", async () => {
-    const today = await todays();
+  it("maps every control today's page has, and nothing it doesn't", async ({ signal }) => {
+    const today = await todays(signal);
     expect(today.length).toBeGreaterThan(50);
     const matches = (key: string | RegExp, name: string) => (typeof key === "string" ? key === name : key.test(name));
     expect(today.filter((name) => !WHERE.some(([key]) => matches(key, name)))).toEqual([]);
@@ -235,7 +253,7 @@ describe("parity with today's project page", () => {
     if (where.state === "menu") await press("button", "Project menu");
     if (where.state === "search") {
       fireEvent.change(screen.getByRole("searchbox", { name: "Search Qureshi Textiles" }), { target: { value: "advance" } });
-      await settle();
+      await searched();
     }
     if (where.state === "paste") await press("button", "Paste instructions");
     if (where.state === "brief") await press("button", "Edit");
