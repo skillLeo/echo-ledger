@@ -25,10 +25,12 @@
   --el-icon-lg: 24px;
   --el-icon-xl: 40px;
   --el-breakpoint-compact: 720px;
+  --el-breakpoint-rail: 780px;
   --el-breakpoint-medium: 1024px;
   --el-breakpoint-wide: 1440px;
   --el-layer-base: 0;
   --el-layer-sticky: 10;
+  --el-layer-dock: 15;
   --el-layer-menu: 20;
   --el-layer-toast: 30;
   --el-layer-dialog: 40;

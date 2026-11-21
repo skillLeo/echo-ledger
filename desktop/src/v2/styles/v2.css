@@ -809,9 +809,10 @@ button.el-step__head { cursor: pointer; }
 .el-group__progress { padding: 0 var(--el-space-12) var(--el-space-8); }
 .el-settings-top { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 11); margin-block-end: var(--el-space-24); }
 
-/* Below the compact breakpoint the sidebar keeps its icons only; the names stay for assistive tools and as tooltips.
-   Media queries cannot read variables: the width mirrors --el-breakpoint-compact (tokensOnly.test.ts checks it). */
-@media (width < 720px) {
+/* Below the rail breakpoint the sidebar keeps its icons only; the names stay for assistive tools and as tooltips. The
+   window is never narrower than 720 px, so this is classic's AUTO_RAIL_BELOW (lib/shell.ts), not the web's compact.
+   Media queries cannot read variables: the width mirrors --el-breakpoint-rail and AUTO_RAIL_BELOW (tokens/test/tokens.test.mjs checks both). */
+@media (width < 780px) {
   .el-sidebar { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
   .el-sidebar__brand { display: none; }
   .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }

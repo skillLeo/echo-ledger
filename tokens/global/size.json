@@ -42,6 +42,10 @@
       "$type": "dimension",
       "$value": "720px"
     },
+    "rail": {
+      "$type": "dimension",
+      "$value": "780px"
+    },
     "medium": {
       "$type": "dimension",
       "$value": "1024px"
@@ -50,7 +54,7 @@
       "$type": "dimension",
       "$value": "1440px"
     },
-    "$description": "Window widths: below compact the sidebar collapses to icons; below medium two-pane views stack."
+    "$description": "Window widths: below compact (web) and below rail (desktop, whose window is at least 720 px) the sidebar collapses to icons; below medium two-pane views stack."
   },
   "layer": {
     "base": {
@@ -60,6 +64,10 @@
     "sticky": {
       "$type": "number",
       "$value": 10
+    },
+    "dock": {
+      "$type": "number",
+      "$value": 15
     },
     "menu": {
       "$type": "number",
