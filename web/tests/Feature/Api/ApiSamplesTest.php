@@ -256,9 +256,10 @@ it('keeps the shape of every answer the apps read', function () {
     $record('account_email', $api()->postJson('/api/account/email', ['email' => 'sample.new@example.test', 'password' => 'Sample-password-1234']));
     $record('account_email_confirm', $api()->postJson('/api/account/email/confirm', ['code' => Mail::queued(EmailCodeMail::class)->last()->code]));
     $begin = $record('account_two_factor', $api()->postJson('/api/account/two-factor', ['password' => 'Sample-password-1234']));
-    $record('account_two_factor_confirm', $api()->postJson('/api/account/two-factor/confirm', ['ceremony' => $begin['ceremony'], 'code' => app(Google2FA::class)->getCurrentOtp($begin['secret'])]));
-    $record('account_recovery_codes', $api()->postJson('/api/account/two-factor/recovery-codes', ['password' => 'Sample-password-1234']));
-    $ceremony = $record('account_passkey_options', $api()->postJson('/api/account/passkeys/options', ['password' => 'Sample-password-1234']));
+    $recovery = $record('account_two_factor_confirm', $api()->postJson('/api/account/two-factor/confirm', ['ceremony' => $begin['ceremony'], 'code' => app(Google2FA::class)->getCurrentOtp($begin['secret'])]));
+    // With two-step on, every proof takes an authenticator or recovery code.
+    $fresh = $record('account_recovery_codes', $api()->postJson('/api/account/two-factor/recovery-codes', ['otp' => $recovery['recovery_codes'][0]]));
+    $ceremony = $record('account_passkey_options', $api()->postJson('/api/account/passkeys/options', ['otp' => $fresh['recovery_codes'][0]]));
     $record('account_passkey', $api()->postJson('/api/account/passkeys', ['ceremony' => $ceremony['ceremony'], 'name' => 'Sample phone',
         'credential' => (new SoftAuthenticator)->create($ceremony['options'], Passkeys::androidOrigins()[0])]));
     $record('account_security', $api()->getJson('/api/account/security'));

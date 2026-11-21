@@ -21,6 +21,7 @@ use App\Services\Accounts\TwoFactorSetup;
 use App\Services\AuditLog;
 use App\Services\Passkeys;
 use App\Services\WebSessions;
+use App\Support\Api\AccountRules;
 use App\Support\Api\FieldErrors;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,6 +37,8 @@ final class AccountSecurityController extends Controller
 {
     /** Signed-out devices stay in the list this long. */
     public const SIGNED_OUT_DAYS = 30;
+
+    public const PASSKEY_NAME_MAX = 80;
 
     public function __construct(private readonly AccountProof $proof) {}
 
@@ -140,12 +143,19 @@ final class AccountSecurityController extends Controller
     {
         $data = FieldErrors::validate($request->all(), [
             'ceremony' => ['required', 'string', 'max:64'],
-            'name' => ['nullable', 'string', 'max:80'],
             'credential' => ['required', 'array'],
         ]);
+        // The same rules as a person's name: a passkey's name is shown in the account holder's emails and lists.
+        $name = '';
+        if ($request->filled('name')) {
+            [$name, $problems] = AccountRules::name($request->input('name'), self::PASSKEY_NAME_MAX);
+            if ($problems !== []) {
+                throw FieldErrors::fail(['name' => $problems]);
+            }
+        }
         $user = $this->owner($request);
         $this->assertPhonePasskeys();
-        $passkey = $passkeys->register($user, (string) json_encode($data['credential']), (string) ($data['name'] ?? ''), (string) $data['ceremony']);
+        $passkey = $passkeys->register($user, (string) json_encode($data['credential']), $name, (string) $data['ceremony']);
         if (! $passkey instanceof Passkey) {
             throw new ApiError(422, 'invalid_passkey', "Couldn't add that passkey. Try again.");
         }
@@ -157,9 +167,11 @@ final class AccountSecurityController extends Controller
     /** PATCH /api/account/passkeys/{id} {"name"} — `404 passkey_not_found`. */
     public function renamePasskey(Request $request, string $id, Passkeys $passkeys): JsonResponse
     {
-        $data = FieldErrors::validate(['name' => is_string($request->input('name')) ? trim($request->input('name')) : $request->input('name')],
-            ['name' => ['required', 'string', 'min:1', 'max:80']]);
-        $passkey = $passkeys->rename($this->owner($request), $id, (string) $data['name']);
+        [$name, $problems] = AccountRules::name($request->input('name'), self::PASSKEY_NAME_MAX);
+        if ($problems !== []) {
+            throw FieldErrors::fail(['name' => $problems]);
+        }
+        $passkey = $passkeys->rename($this->owner($request), $id, $name);
         if (! $passkey instanceof Passkey) {
             throw self::passkeyNotFound();
         }
@@ -210,13 +222,19 @@ final class AccountSecurityController extends Controller
         return response()->json(['recovery_codes' => $codes]);
     }
 
-    /** POST /api/account/two-factor/recovery-codes {…proof} — new codes; the old ones stop working. */
+    /** POST /api/account/two-factor/recovery-codes {"otp"} — new codes; the old ones stop working; `409 not_enabled`. */
     public function recoveryCodes(Request $request, TwoFactorSetup $setup): JsonResponse
     {
         $user = $this->owner($request);
-        $this->proof->check($user, $request->only(['password', 'otp', 'email_code']));
+        if (! $user->hasTwoFactor()) {
+            throw new ApiError(409, 'not_enabled', 'Two-step sign-in is off: there are no recovery codes to make again.');
+        }
+        // An authenticator or recovery code, never the password alone: new codes would stand in for the second step.
+        $this->proof->check($user, $request->only(['password', 'otp']), authenticatorOnly: true);
+        $codes = $setup->regenerate($user);
+        self::notify($user, SecurityChangeMail::RECOVERY_CODES, $this->device($request));
 
-        return response()->json(['recovery_codes' => $setup->regenerate($user)]);
+        return response()->json(['recovery_codes' => $codes]);
     }
 
     /**
@@ -230,8 +248,9 @@ final class AccountSecurityController extends Controller
             return response()->noContent();
         }
         $setup->assertMayDisable($user);
-        $this->proof->check($user, $request->only(['otp']), authenticatorOnly: true);
+        $this->proof->check($user, $request->only(['password', 'otp', 'email_code']), authenticatorOnly: true);
         $setup->disable($user);
+        self::notify($user, SecurityChangeMail::TWO_FACTOR_OFF, $this->device($request));
 
         return response()->noContent();
     }

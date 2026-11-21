@@ -104,7 +104,8 @@ final class AccountProfileController extends Controller
             if (! is_string($current) || $current === '') {
                 throw FieldErrors::fail(['current' => [['required', 'Enter your current password.']]]);
             }
-            $this->proof->check($user, ['password' => $current]);
+            // With two-step on, the `otp` too (AccountProof).
+            $this->proof->check($user, ['password' => $current, 'otp' => $request->input('otp')]);
             // Only after the proof: otherwise this would tell anyone holding the device whether a guess is the password.
             if (Hash::check((string) $new, (string) $user->password)) {
                 throw FieldErrors::fail(['new' => [['same_as_current', 'Choose a password you are not using now.']]]);
