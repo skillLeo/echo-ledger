@@ -2,7 +2,8 @@
 // this computer), sections as header rows, a row that opens or (selecting) ticks its recording, its own ⋮ and a
 // right-click, the same as the list's rows.
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
-import type { LibraryItem } from "../../lib/ipc";
+import type { LibraryItem, ViewsSummary } from "../../lib/ipc";
+import { rowViewsLine } from "../../lib/progress";
 import type { ItemGroup } from "../../lib/libraryGroups";
 import { formatDuration, rowDate } from "../../lib/format";
 import { itemState, recordingName } from "../../lib/library";
@@ -52,13 +53,19 @@ export const saveColumns = (c: readonly Column[]) => write(COLUMNS_KEY, JSON.str
 const STATUS_WORDS = { ready: "Ready", processing: "Transcribing", failed: "Failed", no_audio: "No audio" } as const;
 const DEVICE_WORDS: Record<string, string> = { phone: "Phone", desktop: "Computer", web: "Web" };
 
-function cell(item: LibraryItem, column: Column): ReactNode {
+function cell(item: LibraryItem, column: Column, views: ViewsSummary | null): ReactNode {
   switch (column) {
     case "date": return rowDate(item.started_at);
     case "length": return <span className="el-num">{formatDuration(item.duration_ms)}</span>;
     case "app": return sourceLabel(item);
     case "project": return item.client?.name ?? "Inbox";
-    case "status": return STATUS_WORDS[itemState(item)];
+    case "status": {
+      // A ready transcript whose default view is still written: "Converting to Roman Urdu… 60%" (U19).
+      const converting = itemState(item) === "ready" ? rowViewsLine(views) : null;
+      if (converting?.state === "making") return <span className="el-converting"><span className="el-spinner" aria-hidden="true" />{converting.text}</span>;
+      if (converting?.state === "failed") return <span className="el-converting el-converting--danger" data-testid="table-convert-failed"><Icon icon={Icons.ErrorIcon} size="sm" />{converting.text}</span>;
+      return STATUS_WORDS[itemState(item)];
+    }
     case "labels": return (item.labels ?? []).join(", ");
     case "device": return item.device?.name ?? (item.source_device ? DEVICE_WORDS[item.source_device] : "");
   }
@@ -72,7 +79,9 @@ export function columnsMenu(columns: readonly Column[], onChange: (c: Column[]) 
   }));
 }
 
-export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, rowActions, recovered }: {
+export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, rowActions, recovered, viewsOf }: {
+  /** A row's views as known last (the Library asks while they are written); its own otherwise. */
+  viewsOf?: (item: LibraryItem) => ViewsSummary | null;
   /** Recordings recovered after a restart: their "Recovered" chip. */
   recovered?: ReadonlySet<string>;
   groups: readonly ItemGroup[];
@@ -125,7 +134,7 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
                     </button>
                     {recovered?.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
                   </td>
-                  {columns.map((c) => <td key={c} dir="auto">{cell(item, c)}</td>)}
+                  {columns.map((c) => <td key={c} dir="auto">{cell(item, c, viewsOf ? viewsOf(item) : item.transcript?.views ?? null)}</td>)}
                   <td className="el-table__actions">{selecting ? null : rowActions(item)}</td>
                 </tr>
               );

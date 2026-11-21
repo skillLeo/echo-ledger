@@ -1630,7 +1630,7 @@ describe("LibraryView clear progress (Phase 1C)", () => {
     expect(within(detail()).getByText("You will get a notification when it is ready.")).toBeInTheDocument();
   });
 
-  it("shows the transcript at once with a slim Improving bar, and swaps the default view in when it is made", async () => {
+  it("shows the transcript at once with a slim Converting bar, and swaps the default view in when it is made", async () => {
     TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(),
       views: { available: ["roman"], status: "making", default: "roman", progress: { roman: { done: 12, total: 20 } } } });
     const making = { status: "making", available: ["roman"], roman: null, english: null, default: "roman", progress: { roman: { done: 12, total: 20 } }, model: null, made_at: null, error: null };
@@ -1639,8 +1639,8 @@ describe("LibraryView clear progress (Phase 1C)", () => {
     respondWith("transcript_views", () => (++reads === 1 ? making : ready));
     await renderLibrary();
     await selectItem("Zoom with Acme", "آپ کیسے ہیں");
-    expect(within(detail()).getByTestId("improving-bar")).toHaveTextContent("Improving Roman Urdu… 60%");
-    expect(within(detail()).getByRole("progressbar", { name: "Improving Roman Urdu… 60%" })).toHaveAttribute("aria-valuenow", "60");
+    expect(within(detail()).getByTestId("improving-bar")).toHaveTextContent("Converting to Roman Urdu… 60%");
+    expect(within(detail()).getByRole("progressbar", { name: "Converting to Roman Urdu… 60%" })).toHaveAttribute("aria-valuenow", "60");
     expect(within(detail()).getByTestId("step-improve")).toHaveTextContent("Improving");
     await waitFor(() => expect(within(detail()).getByText("aap kaise hain")).toBeInTheDocument(), { timeout: 8000 });
     expect(within(detail()).queryByTestId("improving-bar")).not.toBeInTheDocument();
@@ -1660,6 +1660,131 @@ describe("LibraryView clear progress (Phase 1C)", () => {
     await flushAsync();
     expect(within(detail()).getByText("آپ کیسے ہیں")).toBeInTheDocument();
   }, 15_000);
+});
+
+describe("LibraryView Roman Urdu by default (U19)", () => {
+  const urdu = (): Segment[] => [
+    { channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "آپ کیسے ہیں" },
+    { channel: 2, speaker: "Client", start_ms: 1_500, end_ms: 3_000, text: "میں ٹھیک ہوں" },
+  ];
+  const READY = { status: "ready", available: ["roman"], roman: ["aap kaise hain", "main theek hoon"], english: null, default: "roman", progress: {}, model: "m", made_at: null, error: null };
+  const making = (progress: Record<string, { done: number; total: number }> = {}) => ({ ...READY, status: "making", roman: null, progress });
+  const urduCall = (views: { status: string; progress?: Record<string, { done: number; total: number }> }) => makeItem("a", {
+    title: "Zoom with Acme", source_app: "zoom", source_app_label: "Zoom", started_at: local(9, 24, 9, 30), duration_ms: 125_000,
+    transcript: { final_status: "completed", final_transcript_id: "tr-a", live_available: false, preview: "آپ کیسے ہیں",
+      views: { status: views.status as "making", default: "roman", progress: views.progress ?? {} } },
+  });
+  const tick = async (ms: number) => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+    await flushAsync();
+  };
+
+  it("copies, copies for AI and sends to WhatsApp in the Roman Urdu it opens in; Original copies the words as heard", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman"], status: "ready", default: "roman" } });
+    respond("transcript_views", READY);
+    respond("whatsapp_open", false);
+    await renderLibrary([urduCall({ status: "ready" })]);
+    await selectItem("Zoom with Acme", "aap kaise hain");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Copy text" }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith("Me: aap kaise hain\nClient: main theek hoon"));
+    fireEvent.click(within(detail()).getByRole("button", { name: "Copy with timestamps" }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith("[0:00] Me: aap kaise hain\n[0:01] Client: main theek hoon"));
+    fireEvent.click(within(detail()).getByRole("button", { name: "Copy for AI" }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(expect.stringMatching(/^Note: [\s\S]*\n\nMe: aap kaise hain\nClient: main theek hoon$/)));
+    fireEvent.click(within(detail()).getByRole("button", { name: "Send to WhatsApp" }));
+    const sheet = await screen.findByRole("dialog", { name: "Send to WhatsApp" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Text only" }));
+    await waitFor(() => expect(callsOf("whatsapp_open")).toHaveLength(1));
+    expect(callsOf("whatsapp_open")[0].text).toBe("Me: aap kaise hain\nClient: main theek hoon");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).not.toBeInTheDocument());
+    fireEvent.click(within(detail()).getByRole("button", { name: "Original" }));
+    fireEvent.click(within(detail()).getByRole("button", { name: "Copy text" }));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith("Me: آپ کیسے ہیں\nClient: میں ٹھیک ہوں"));
+  });
+
+  it("a row says Converting to Roman Urdu… right after the transcript is done, then the percent, and stops once it is ready", async () => {
+    vi.useFakeTimers({ now: NOW });
+    const answers: unknown[] = [making({ roman: { done: 6, total: 10 } }), READY];
+    respondWith("transcript_views", () => answers.shift() ?? READY);
+    // Rendered by hand: Testing Library's find* waits on a timer, and the timers are fake here.
+    mockBackend([urduCall({ status: "making" })]);
+    render(<LibraryView notify={vi.fn()} />);
+    await flushAsync();
+    expect(within(list()).getByTestId("row-converting")).toHaveTextContent(/^Converting to Roman Urdu…$/);
+    expect(within(list()).getByTestId("row-converting").querySelector(".spinner")).not.toBeNull();
+    await tick(5_000);
+    expect(within(list()).getByTestId("row-converting")).toHaveTextContent("Converting to Roman Urdu… 60%");
+    const synced = callsOf("library_refresh").length;
+    await tick(5_000);
+    expect(within(list()).queryByTestId("row-converting")).toBeNull();
+    // Synced once it is ready: the title the server may have written in Roman Urdu meanwhile is the one shown.
+    expect(callsOf("library_refresh").length).toBeGreaterThan(synced);
+    await tick(20_000);
+    expect(callsOf("transcript_views")).toHaveLength(2);
+  });
+
+  it("the page keeps asking after a read that failed, so Converting… never spins for ever on one lost answer", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman"], status: "making", default: "roman", progress: {} } });
+    vi.useFakeTimers({ now: NOW });
+    const answers: unknown[] = [making(), "lost", READY];
+    respondWith("transcript_views", () => {
+      const next = answers.shift() ?? READY;
+      return next === "lost" ? Promise.reject("The server could not be reached.") : next;
+    });
+    mockBackend([urduCall({ status: "making" })]);
+    render(<LibraryView notify={vi.fn()} />);
+    await flushAsync();
+    fireEvent.click(itemButton("Zoom with Acme"));
+    await tick(10);
+    expect(within(detail()).getByTestId("improving-bar")).toHaveTextContent("Converting to Roman Urdu…");
+    await tick(5_000);
+    await tick(5_000);
+    expect(answers).toEqual([]);
+    expect(within(detail()).queryByTestId("improving-bar")).toBeNull();
+    expect(within(detail()).getByText("aap kaise hain")).toBeInTheDocument();
+  });
+
+  it("the table's Status says Couldn't convert in the danger colour with the alert icon", async () => {
+    window.localStorage.setItem("echoledger-library-layout", "table");
+    respondWith("transcript_views", () => new Promise(() => undefined));
+    await renderLibrary([urduCall({ status: "failed" })]);
+    const pill = within(screen.getByRole("table", { name: "Recordings" })).getByTestId("convert-failed-pill");
+    expect(pill).toHaveTextContent("Couldn't convert to Roman Urdu");
+    expect(pill).toHaveClass("pill", "failed");
+    expect(pill.querySelector("svg")).not.toBeNull();
+  });
+
+  it("the page says Converting to Roman Urdu… with no percent until lines are done, from the moment the transcript is done", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman"], status: "making", default: "roman", progress: {} } });
+    respondWith("transcript_views", () => new Promise(() => undefined));
+    await renderLibrary([urduCall({ status: "making" })]);
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    const bar = within(detail()).getByTestId("improving-bar");
+    expect(bar).toHaveTextContent(/^Converting to Roman Urdu…$/);
+    expect(bar.querySelector(".spinner")).not.toBeNull();
+    expect(within(bar).getByRole("progressbar", { name: "Converting to Roman Urdu…" })).not.toHaveAttribute("aria-valuenow");
+  });
+
+  it("a view that went quiet: Couldn't convert to Roman Urdu on the page and its row, and Try again starts it again", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman"], status: "failed", default: "roman", progress: {} } });
+    respond("transcript_views_make", making());
+    respondWith("transcript_views", () => new Promise(() => undefined));
+    await renderLibrary([urduCall({ status: "failed" })]);
+    expect(within(list()).getByTestId("row-convert-failed")).toHaveTextContent("Couldn't convert to Roman Urdu");
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    const failed = within(detail()).getByTestId("convert-failed");
+    expect(failed).toHaveTextContent("Couldn't convert to Roman Urdu");
+    expect(within(detail()).queryByTestId("improving-bar")).toBeNull();
+    fireEvent.click(within(failed).getByRole("button", { name: "Try again" }));
+    await flushAsync();
+    expect(callsOf("transcript_views_make")).toEqual([{ id: "tr-a" }]);
+    expect(within(detail()).getByTestId("improving-bar")).toHaveTextContent("Converting to Roman Urdu…");
+    expect(within(detail()).queryByTestId("convert-failed")).toBeNull();
+    // Its row hears of it too.
+    expect(within(list()).getByTestId("row-converting")).toHaveTextContent("Converting to Roman Urdu…");
+  });
 });
 
 describe("LibraryView player length (E1)", () => {
@@ -1743,7 +1868,7 @@ describe("LibraryView Show as", () => {
     await act(async () => answer(ready));
     await flushAsync();
     // B shows no bar for A's views, and its own Roman Urdu is asked for and shown, never A's words.
-    expect(within(detail()).queryByText(/Improving/)).toBeNull();
+    expect(within(detail()).queryByText(/Converting/)).toBeNull();
     fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
     await flushAsync();
     expect(callsOf("transcript_views")).toEqual([{ id: "tr-a" }, { id: "tr-d" }]);
@@ -1799,7 +1924,10 @@ describe("LibraryView Show as", () => {
     fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
     await flushAsync();
     expect(callsOf("transcript_views_make")).toEqual([{ id: "tr-a" }]);
-    expect(within(detail()).getByTestId("view-status")).toHaveTextContent("Writing the Roman Urdu view…");
+    // U19: the converting line says it, once; the old "Writing the … view…" caption is gone.
+    expect(within(detail()).getAllByText(/Converting to Roman Urdu…/)).toHaveLength(1);
+    expect(within(detail()).queryByTestId("view-status")).toBeNull();
+    expect(within(detail()).queryByText(/Writing the Roman Urdu view/)).toBeNull();
     expect(within(detail()).getByText("آپ کیسے ہیں")).toBeInTheDocument();
   });
 

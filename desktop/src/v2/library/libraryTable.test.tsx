@@ -41,6 +41,19 @@ describe("the Library as a table", () => {
     expect(window.localStorage.getItem("echoledger-v2-library-layout")).toBe("table");
   });
 
+  it("Status says Couldn't convert in the danger colour with the alert icon (U19)", async () => {
+    const failed = makeItem("u", { title: "Usman", started_at: new Date(2026, 10, 18, 10).toISOString(),
+      transcript: { final_status: "completed", final_transcript_id: "tr-u", live_available: false, preview: null, views: { status: "failed", default: "roman", progress: {} } } });
+    respond("library_list", [failed]);
+    respond("library_refresh", [failed]);
+    await show();
+    fireEvent.click(screen.getByRole("radio", { name: "Table" }));
+    const cell = within(table()).getByTestId("table-convert-failed");
+    expect(cell).toHaveTextContent("Couldn't convert to Roman Urdu");
+    expect(cell).toHaveClass("el-converting--danger");
+    expect(cell.querySelector("svg")).not.toBeNull();
+  });
+
   it("Columns: Labels and Device on, Date off, kept; List brings the rows back", async () => {
     await show();
     fireEvent.click(screen.getByRole("radio", { name: "Table" }));

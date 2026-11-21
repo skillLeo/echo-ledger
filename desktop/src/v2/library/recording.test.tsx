@@ -135,7 +135,9 @@ describe("the recording page", () => {
     fireEvent.click(within(show).getByRole("radio", { name: "Roman Urdu" }));
     await act(flushAsync);
     expect(callsOf("transcript_views_make")).toEqual([{ id: "tr-bilal" }]);
-    expect(screen.getByText("Writing the Roman Urdu view… this takes a minute or two.")).toBeInTheDocument();
+    // U19: the converting line says it, once; the old "Writing the … view…" caption is gone.
+    expect(screen.getAllByText(/Converting to Roman Urdu…/)).toHaveLength(1);
+    expect(screen.queryByText(/Writing the Roman Urdu view/)).toBeNull();
 
     resetTauriMock();
     respond("library_list", [BILAL]);

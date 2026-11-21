@@ -834,6 +834,11 @@ export interface LibraryItem {
     alternate_language?: string | null;
     /** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
     final_progress?: TranscriptProgress | null;
+    /**
+     * The views of the final transcript (since 2.0.0-n on a row): "making" from the moment the transcript is done until
+     * the default view is written (`progress` `{}` until the first lines are), "failed" when it stopped or went quiet.
+     */
+    views?: ViewsSummary | null;
   };
   /** How it got into its project (since v1.5): by hand, the caller is a contact, a filing rule; null = the Inbox. */
   filed_by?: "user" | "contact" | "rule" | null;
@@ -1096,6 +1101,13 @@ export interface TranscriptProgress {
 
 /** Lines done of lines per view while the views are being made (`views.progress`, Phase 1C); `{}` otherwise. */
 export type ViewsProgress = Partial<Record<TranscriptView, { done: number; total: number }>>;
+
+/** A transcript's views as a Library row and the transcript detail carry them: their state, the view the apps open in, how far. */
+export interface ViewsSummary {
+  status: TranscriptViewsStatus;
+  default?: "original" | TranscriptView;
+  progress?: ViewsProgress;
+}
 
 export interface TranscriptDetail {
   id: string;

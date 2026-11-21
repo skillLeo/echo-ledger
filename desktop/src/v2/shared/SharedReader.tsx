@@ -230,7 +230,7 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
     try {
       const body = copiedTranscript(lines, viewText, withTimestamps, unsure, forAi);
       const people = [...new Set(lines.map((l) => l.speaker))];
-      await navigator.clipboard.writeText(forAi ? `${aiHeader(session, people)}\n\n${body}` : body);
+      await navigator.clipboard.writeText(forAi ? `${aiHeader(session, people, showAs !== "original" && views?.status === "ready" ? showAs : null)}\n\n${body}` : body);
       notify(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied", false, NO_TARGET);
     } catch {
       notify("Could not access the clipboard", true);

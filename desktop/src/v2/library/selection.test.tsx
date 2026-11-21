@@ -156,6 +156,21 @@ describe("selection mode", () => {
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Saved /Users/me/Downloads/EchoLedger transcripts.zip");
   });
 
+  it("exports the picked recordings in the view the list shows them in: Roman Urdu for Urdu calls (U19)", async () => {
+    respond("sessions_export", "/Users/me/Downloads/EchoLedger transcripts.zip");
+    const roman = ITEMS.map((i) => (i.id === "bilal" || i.id === "usman" ? { ...i, transcript: { ...i.transcript!, views: { status: "ready" as const, default: "roman" as const, progress: {} } } } : i));
+    respond("library_list", roman);
+    respond("library_refresh", roman);
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Usman Chaudhry"), { metaKey: true });
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    fireEvent.click(menuItem("Export"));
+    fireEvent.click(within(screen.getByRole("menu", { name: "Export" })).getByRole("menuitem", { name: "Text (.txt)" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_export").at(-1)).toMatchObject({ format: "txt", view: "roman" });
+  });
+
   it("Export ▸ opens from the keyboard: ArrowRight in, ArrowLeft back, Esc closes one level", async () => {
     await show();
     fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
