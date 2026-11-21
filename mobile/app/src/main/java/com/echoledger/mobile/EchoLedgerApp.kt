@@ -18,6 +18,7 @@ import com.echoledger.mobile.recording.AutoRecordKeeper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class EchoLedgerApp : Application() {
     lateinit var graph: AppGraph
@@ -39,6 +40,8 @@ class EchoLedgerApp : Application() {
         com.echoledger.mobile.overlay.AssistCardWindow.follow(this, graph.scope)
         // Auto-record comes back on by itself after an update or a restart, without the app being opened.
         cancelStartCheck = AutoRecordKeeper.onAppStart(this)
+        // Send to WhatsApp's voice copies an hour old or more (WhatsApp has read them by then).
+        graph.scope.launch(Dispatchers.IO) { com.echoledger.mobile.share.WhatsAppShare.clearOldCopies(this@EchoLedgerApp) }
     }
 
     /** Calls off the auto-record check of this process start (tests set up their own state). */

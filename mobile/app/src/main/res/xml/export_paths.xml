@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Exported transcripts are shared from the app's private cache only (emptied before every export). -->
+<!-- Exported transcripts are shared from the app's private cache only (emptied before every export); the voice
+     WhatsApp is sent from its own folder (cleared on the next share and an hour after, WhatsAppShare). -->
 <paths>
     <cache-path name="exports" path="exports/" />
+    <cache-path name="whatsapp" path="whatsapp/" />
 </paths>

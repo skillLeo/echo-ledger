@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.data.SearchItemDto
+import com.echoledger.mobile.share.WhatsAppShare
 import com.echoledger.mobile.ui.design.OutlinedTextField
 import java.io.File
 import kotlinx.coroutines.launch
@@ -264,8 +265,9 @@ fun TranscriptionSection(vm: MainViewModel, settings: com.echoledger.mobile.data
 }
 
 /**
- * Send to WhatsApp (since v1.6, P5.5): the transcript (in the view being read) as text, with the voice too, or a link
- * that works for 7 days.
+ * Send to WhatsApp (since v1.6, P5.5): the transcript (in the view being read) as text, with the voice too (attached to
+ * the message), or a link that works for 7 days. While one is being prepared only that choice shows it ("Saving the
+ * voice…"); the others look as before but wait for it.
  */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -273,9 +275,10 @@ fun WhatsAppSheet(vm: MainViewModel, sessionId: String, transcriptId: String, ha
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf<String?>(null) }
-    val target = remember { com.echoledger.mobile.share.WhatsAppShare.target(com.echoledger.mobile.share.WhatsAppShare.installed(context)) }
+    val target = remember { WhatsAppShare.target(WhatsAppShare.installed(context)) }
     suspend fun transcriptText(): String? = vm.export(transcriptId, "txt", view)?.readText()
     fun run(kind: String, block: suspend () -> Unit) {
+        if (working != null) return
         working = kind
         scope.launch {
             block()
@@ -289,54 +292,32 @@ fun WhatsAppSheet(vm: MainViewModel, sessionId: String, transcriptId: String, ha
             verticalArrangement = Arrangement.spacedBy(Space.s2)
         ) {
             Text(
-                if (target ==
-                    com.echoledger.mobile.share.WhatsAppShare.BUSINESS
-                ) {
-                    "Send to WhatsApp Business"
-                } else {
-                    "Send to WhatsApp"
-                },
+                if (target == WhatsAppShare.BUSINESS) "Send to WhatsApp Business" else "Send to WhatsApp",
                 style = LocalEchoType.current.titleM,
                 color = Brand.Text
             )
             com.echoledger.mobile.ui.design.EchoButton("Text only", {
-                run("text") {
-                    transcriptText()?.let {
-                        com.echoledger.mobile.share.WhatsAppShare.start(
-                            context,
-                            com.echoledger.mobile.share.WhatsAppShare.textIntent(it, target)
-                        )
-                    }
-                }
-            }, Modifier.fillMaxWidth(), loading = working == "text", enabled = working == null)
+                run("text") { transcriptText()?.let { WhatsAppShare.start(context, WhatsAppShare.textIntent(it, target)) } }
+            }, Modifier.fillMaxWidth(), loading = working == "text")
             if (hasAudio) {
                 com.echoledger.mobile.ui.design.EchoButton(
-                    "Text and voice",
+                    if (working == "voice") WhatsAppShare.SAVING_VOICE else "Text and voice",
                     {
                         run("voice") {
                             val text = transcriptText() ?: return@run
-                            val audio = vm.downloadAudio(sessionId, "EchoLedger recording") ?: return@run
-                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.exports", audio)
-                            // WhatsApp may drop text sent with audio: it is on the clipboard too.
-                            context.getSystemService(android.content.ClipboardManager::class.java)
-                                ?.setPrimaryClip(
-                                    android.content.ClipData.newPlainText(
-                                        "Transcript",
-                                        com.echoledger.mobile.share.WhatsAppShare.clip(text)
-                                    )
-                                )
-                            vm.showMessage(com.echoledger.mobile.share.WhatsAppShare.TEXT_COPIED)
-                            com.echoledger.mobile.share.WhatsAppShare.start(
+                            val sent = WhatsAppShare.sendTextAndVoice(
                                 context,
-                                com.echoledger.mobile.share.WhatsAppShare.voiceIntent(uri, text, target)
+                                text,
+                                target,
+                                save = { dir -> vm.downloadAudio(sessionId, "EchoLedger recording", dir) },
+                                notSaved = { vm.showMessage(WhatsAppShare.VOICE_NOT_SAVED) }
                             )
+                            if (sent) vm.showMessage(WhatsAppShare.TEXT_COPIED)
                         }
                     },
                     Modifier.fillMaxWidth(),
                     kind = com.echoledger.mobile.ui.design.ButtonKind.Secondary,
-                    loading = working == "voice",
-                    enabled =
-                        working == null
+                    loading = working == "voice"
                 )
             }
             com.echoledger.mobile.ui.design.EchoButton(
@@ -344,17 +325,12 @@ fun WhatsAppSheet(vm: MainViewModel, sessionId: String, transcriptId: String, ha
                 {
                     run("link") {
                         val link = vm.createShare(sessionId, 7L * 24 * 3600, null, includeAudio = hasAudio)?.url ?: return@run
-                        com.echoledger.mobile.share.WhatsAppShare.start(
-                            context,
-                            com.echoledger.mobile.share.WhatsAppShare.textIntent(link, target)
-                        )
+                        WhatsAppShare.start(context, WhatsAppShare.textIntent(link, target))
                     }
                 },
                 Modifier.fillMaxWidth(),
                 kind = com.echoledger.mobile.ui.design.ButtonKind.Secondary,
-                loading = working == "link",
-                enabled =
-                    working == null
+                loading = working == "link"
             )
         }
     }

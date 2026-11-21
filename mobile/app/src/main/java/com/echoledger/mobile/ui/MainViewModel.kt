@@ -647,24 +647,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * The recording's audio (since v1.6, Send to WhatsApp) in the app's private `exports/` cache, from its temporary
-     * signed address; null with a message when it could not be fetched.
+     * signed address (or into [dir]: Send to WhatsApp's share folder); null with a message when it could not be fetched,
+     * and no half-written file left.
      */
-    suspend fun downloadAudio(sessionId: String, title: String): File? = withContext(Dispatchers.IO) {
+    suspend fun downloadAudio(sessionId: String, title: String, dir: File? = null): File? = withContext(Dispatchers.IO) {
+        var file: File? = null
         try {
             val api = graph.api() ?: return@withContext null
             val url = sessionDetail(sessionId)?.playbackUrl ?: run {
                 _message.value = "This recording has no audio on the server."
                 return@withContext null
             }
-            val dir = File(getApplication<Application>().cacheDir, "exports").apply { mkdirs() }
+            val folder = (dir ?: File(getApplication<Application>().cacheDir, "exports")).apply { mkdirs() }
             val name = title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().ifBlank { "Recording" }.take(60) + ".ogg"
-            val file = File(dir, name)
+            val out = File(folder, name).also { file = it }
             api.http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { resp ->
                 if (!resp.isSuccessful) throw java.io.IOException("The audio could not be downloaded (${resp.code}).")
-                file.outputStream().use { out -> resp.body.byteStream().copyTo(out) }
+                out.outputStream().use { o -> resp.body.byteStream().copyTo(o) }
             }
-            file
+            out
         } catch (e: Exception) {
+            file?.delete()
+            if (e is kotlinx.coroutines.CancellationException) throw e
             _message.value = "The audio could not be downloaded. Check the connection and try again."
             null
         }

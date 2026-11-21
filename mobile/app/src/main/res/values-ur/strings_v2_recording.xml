@@ -73,6 +73,8 @@
     <string name="v2_rec_wa_voice">متن اور آواز</string>
     <string name="v2_rec_wa_link">لنک (7 دن کام کرے گا)</string>
     <string name="v2_rec_wa_text_copied">ٹرانسکرپٹ کلپ بورڈ پر بھی ہے، اگر واٹس ایپ اسے چھوڑ دے۔</string>
+    <string name="v2_rec_wa_saving">آواز محفوظ ہو رہی ہے…</string>
+    <string name="v2_rec_wa_voice_failed">آواز محفوظ نہیں ہو سکی، اس لیے کچھ نہیں بھیجا گیا۔ دوبارہ کوشش کریں۔</string>
     <string name="v2_rec_view_original">اصل</string>
     <string name="v2_rec_view_roman">رومن اردو</string>
     <string name="v2_rec_view_urdu">اردو</string>

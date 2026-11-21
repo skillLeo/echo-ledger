@@ -41,6 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.Organise
@@ -104,22 +105,34 @@ enum class ExportFormat(val label: Int, val pack: Boolean = false) {
     val printed: Boolean get() = this == Pdf || this == PackPdf
 }
 
-/** One line of a menu: its icon and words, 48 dp or more; [danger] draws it in the danger colour. */
+/**
+ * One line of a menu: its icon and words, 48 dp or more; [danger] draws it in the danger colour. While [busy] (the task
+ * in words: "Saving the voice…") those words replace the label and the row waits, like a loading button.
+ */
 @Composable
-internal fun MenuRow(icon: ImageVector?, label: String, onClick: () -> Unit, danger: Boolean = false, trailing: ImageVector? = null) {
+internal fun MenuRow(
+    icon: ImageVector?,
+    label: String,
+    onClick: () -> Unit,
+    danger: Boolean = false,
+    trailing: ImageVector? = null,
+    busy: String? = null
+) {
     val c = EchoV2.colors
     val tint = if (danger) c.danger else c.textPrimary
+    val loadingLabel = EchoV2.strings.loading
     Row(
         Modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(enabled = busy == null, role = Role.Button, onClick = onClick)
+            .semantics { if (busy != null) stateDescription = loadingLabel }
             .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
     ) {
         icon?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.lg), tint = if (danger) c.danger else c.textSecondary) }
-        Text(label, style = EchoV2.type.body, color = tint, modifier = Modifier.weight(1f))
+        Text(busy ?: label, style = EchoV2.type.body, color = if (busy != null) c.textSecondary else tint, modifier = Modifier.weight(1f))
         trailing?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary) }
     }
 }

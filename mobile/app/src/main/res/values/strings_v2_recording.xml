@@ -73,6 +73,8 @@
     <string name="v2_rec_wa_voice">Text and voice</string>
     <string name="v2_rec_wa_link">Link (works for 7 days)</string>
     <string name="v2_rec_wa_text_copied">The transcript is on the clipboard too, in case WhatsApp drops it.</string>
+    <string name="v2_rec_wa_saving">Saving the voice…</string>
+    <string name="v2_rec_wa_voice_failed">The voice could not be saved, so nothing was sent. Try again.</string>
     <string name="v2_rec_view_original">Original</string>
     <string name="v2_rec_view_roman">Roman Urdu</string>
     <string name="v2_rec_view_urdu">اردو</string>
