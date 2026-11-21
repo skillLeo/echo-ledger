@@ -41,7 +41,8 @@ it('shows the four main actions and ⋮ with Organise, Export and Danger, and ×
     $groups = collect($bar->last()->getActions());
     expect($groups->map(fn ($g) => $g->getLabel())->all())->toBe(['Organise', 'Export', 'Danger'])
         ->and(collect($groups[0]->getActions())->map(fn ($a) => $a->getLabel())->all())
-        ->toBe(['Pin', 'Unpin', 'Keep forever', 'Stop keeping', 'Move to project', 'Add label', 'Remove label'])
+        ->toBe(['Pin', 'Unpin', 'Mark important', 'Unmark important', 'Keep forever', 'Stop keeping', 'Move to project', 'Add label', 'Remove label', 'Transcribe…'])
+        ->and(collect($groups[1]->getActions())->map(fn ($a) => $a->getLabel())->last())->toBe('Copy for AI')
         ->and($groups[2]->getActions()[0]->getColor())->toBe('danger');
 
     $this->get('/app/sessions')->assertOk()->assertSee('data-selection-exit', false)->assertSee('Leave the selection');

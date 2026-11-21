@@ -25,6 +25,7 @@ use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\SharingActions;
 use App\Filament\Support\Shell;
 use App\Filament\Support\StopsSharing;
+use App\Filament\Support\V2CopyForAi;
 use App\Filament\Support\V2RecordingRow;
 use App\Filament\Support\WhatsAppActions;
 use App\Http\Controllers\AdminMediaController;
@@ -440,6 +441,22 @@ class ViewCaptureSession extends ViewRecord
             ->url($session->pinned ? CaptureSessionResource::getUrl('index', ['tab' => 'pinned']) : null)->success()->send();
     }
 
+    /**
+     * Mark important (U9, parity plan 4): the flag the Library row and the apps show, set through the same update as
+     * PATCH /api/sessions/{id}; Unmark important when it is already flagged.
+     */
+    private function importantAction(): Action
+    {
+        return Action::make('important')
+            ->label(fn (): string => $this->session()->important ? __('Unmark important') : __('Mark important'))
+            ->icon(Heroicon::OutlinedFlag)
+            ->action(function (): void {
+                $this->assertCanChange();
+                $session = app(LibraryOrganiser::class)->update($this->session(), ['important' => ! $this->session()->important]);
+                Notification::make()->title($session->important ? __('Marked important') : __('No longer important'))->success()->send();
+            });
+    }
+
     public function toggleKeep(): void
     {
         $this->assertCanChange();
@@ -539,6 +556,7 @@ class ViewCaptureSession extends ViewRecord
                     ])->dropdown(false),
                     ActionGroup::make([
                         CaptureSessionsTable::renameAction(),
+                        $this->importantAction(),
                         SharingActions::send(fn (): CaptureSession => $this->session()),
                         SharingActions::sentTo(fn (): CaptureSession => $this->session()),
                         $this->retryAction(),
@@ -602,18 +620,15 @@ class ViewCaptureSession extends ViewRecord
             ->visible(fn (): bool => $this->session()->finalTranscript?->status === TranscriptStatus::Completed);
     }
 
-    /** Copy for AI's first lines: what the transcript is, so an AI reads it in context. */
+    /**
+     * Copy for AI's first lines: what the transcript is, so an AI reads it in context. The same header as the desktop
+     * and phone apps and the Library's Copy for AI (V2CopyForAi): title; date, time, source, length; people; language.
+     */
     private function copyHeader(): string
     {
         $session = $this->session();
-        $people = array_values(array_unique(array_filter([...array_values((array) ($session->speaker_names ?? [])), $session->caller_name])));
 
-        return implode("\n", array_filter([
-            __('Recording: :title', ['title' => $session->displayTitle()]),
-            __('Date: :date', ['date' => $session->started_at->copy()->timezone(app(SettingsRepository::class)->displayTimezone())->format('j M Y, H:i')]),
-            $people !== [] ? __('People: :people', ['people' => implode(', ', $people)]) : null,
-            __('Language: :language', ['language' => LanguageChoice::label($session->finalTranscript->language ?? $session->language)]),
-        ]));
+        return V2CopyForAi::header($session, V2CopyForAi::people(V2CopyForAi::lines($session, UnsureMarkers::settings()['threshold'])));
     }
 
     /** Download: the audio, and the transcript as a file in the chosen Show as view (unsure words keep their marks). */

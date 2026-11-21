@@ -9,21 +9,38 @@ use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
+use App\Http\Resources\LibraryItemResource;
 use App\Models\CaptureSession;
 use App\Models\SessionLabel;
+use App\Services\RetentionPolicy;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Carbon;
 
 /**
  * One recording as the v2.0 Library draws it (the apps' RecordingRow): the source's glyph, the title, at most one
  * status (only what needs the person: Untranscribed, Transcribing, Waiting, Failed), a second line (the source and the
- * project or caller), and on the end the time above the length.
+ * project or caller), and on the end the time above the length. Since U9 (contract 2.0.0-i, parity plan 3) also the
+ * row's indicators: the unread dot, the important flag, its labels' colour dots, "Audio · N days left" and a snippet
+ * of what was said.
  */
 final class V2RecordingRow
 {
     /**
+     * The eight label colours as the server stores them (#rrggbb, docs/v2/DESIGN_SYSTEM.md "Label colours",
+     * tokens/global/label.json); a row draws one with its role token var(--el-role-label-<name>-dot), never this value.
+     */
+    public const LABEL_COLOURS = [
+        'grey' => '#8e8a80', 'red' => '#e15f56', 'orange' => '#dc6718', 'amber' => '#b3820f',
+        'green' => '#2d9a63', 'teal' => '#26978f', 'blue' => '#458cde', 'pink' => '#d7609c',
+    ];
+
+    /** At most this many label dots on a row (the rest are in its labels). */
+    public const MAX_LABEL_DOTS = 3;
+
+    /**
      * @return array{id: string, title: string, icon: string, source: string, line: string, device: string|null, pinned: bool,
-     *     time: string, full_time: string, iso: string, length: string, status: array{label: string, tone: string, icon: string}|null}
+     *     time: string, full_time: string, iso: string, length: string, status: array{label: string, tone: string, icon: string}|null,
+     *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, style: string}>, left: string|null}
      */
     public static function for(CaptureSession $session): array
     {
@@ -48,7 +65,75 @@ final class V2RecordingRow
             'iso' => $session->started_at->toIso8601ZuluString(),
             'length' => CaptureSessionsTable::duration($session->duration_ms),
             'status' => self::status($session),
+            'important' => (bool) $session->important,
+            // The unread dot: this person has not opened it yet (only known when the list loaded their opens).
+            'unread' => $session->relationLoaded('opens') && $session->opens->isEmpty(),
+            'snippet' => self::snippet($session),
+            'labels' => self::labelDots($session, $labels),
+            'left' => self::daysLeft($session),
         ];
+    }
+
+    /** The first words of the finished transcript, as the apps' row shows them; null without one. */
+    public static function snippet(CaptureSession $session): ?string
+    {
+        $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : null;
+
+        return $final?->status === TranscriptStatus::Completed && filled($final->text) ? $final->preview(140) : null;
+    }
+
+    /**
+     * "Audio · N days left" while retention will move the recording to Trash: N is the hours left divided by 24, rounded
+     * up, never below 0 (contract 2.0.0-i expires_at); null when it is kept forever or still recording.
+     */
+    public static function daysLeft(CaptureSession $session): ?string
+    {
+        $at = app(RetentionPolicy::class)->expiresAt($session);
+        if ($at === null) {
+            return null;
+        }
+        $days = max(0, (int) ceil(Carbon::now()->diffInSeconds($at, false) / 3600 / 24));
+
+        return trans_choice('Audio · :count day left|Audio · :count days left', $days, ['count' => $days]);
+    }
+
+    /**
+     * Each label's dot (at most three), by the design's label colour rules: one of the eight draws with its role token;
+     * any other stored colour only as the dot, with a hairline ring; no colour, the neutral dot with the ring. The
+     * stored value is matched ignoring case and is never used as text or fill elsewhere.
+     *
+     * @param  list<string>  $labels
+     * @return list<array{name: string, style: string}>
+     */
+    public static function labelDots(CaptureSession $session, array $labels): array
+    {
+        if ($labels === []) {
+            return [];
+        }
+        $colours = array_change_key_case(LibraryItemResource::labelColors($session), CASE_LOWER);
+        $dots = [];
+        foreach (array_slice($labels, 0, self::MAX_LABEL_DOTS) as $label) {
+            $dots[] = ['name' => $label, 'style' => self::dotStyle($colours[mb_strtolower($label)] ?? null)];
+        }
+
+        return $dots;
+    }
+
+    /** The dot's look for a stored colour: a role token for one of the eight, else the colour itself with a ring. */
+    public static function dotStyle(?string $stored): string
+    {
+        $value = strtolower(trim((string) $stored));
+        $name = array_search($value, self::LABEL_COLOURS, true);
+        $ring = 'box-shadow: 0 0 0 var(--el-border-hairline) var(--el-role-border-strong)';
+        if (is_string($name)) {
+            // Until the label tokens arrive (design/D6), the dot falls back to the neutral text colour.
+            return 'background-color: var(--el-role-label-'.$name.'-dot, var(--el-role-text-secondary))';
+        }
+        if (preg_match('/^#[0-9a-f]{6}$/', $value) === 1) {
+            return 'background-color: '.$value.'; '.$ring;
+        }
+
+        return 'background-color: var(--el-role-bg-subtle); '.$ring;
     }
 
     /** Today's recordings show the time, older ones the day; in the console's language. */

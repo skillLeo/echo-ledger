@@ -18,6 +18,7 @@ use App\Filament\Support\LibraryView;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\Shell;
+use App\Filament\Support\V2CopyForAi;
 use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -27,6 +28,7 @@ use App\Services\SettingsRepository;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
+use App\Services\Workspaces\PlanLimits;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
@@ -53,6 +55,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -76,7 +79,10 @@ final class CaptureSessionsTable
             ->groups(LibraryView::groups())
             ->groupingSettingsHidden()
             ->groupingDirectionSettingHidden()
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(ConsoleV2::library() ? ['labels', 'finalTranscript', 'client', 'device'] : 'labels'))
+            // The new Library's rows also show the unread dot: whether this person opened each one (U9).
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(ConsoleV2::library()
+                ? ['labels', 'finalTranscript', 'client', 'device', 'opens' => fn ($opens) => $opens->where('user_id', (int) auth()->id())]
+                : 'labels'))
             // The phone's list: one row per recording (tile, title, time, a second line, a status only when needed).
             // Since v1.6 (P4.4) the Library's List/Table switch shows a table instead, its columns chosen in Columns.
             // Since v2.0 (ui_v2.library) the rows of the apps' Library: filament.v2.library-row.
@@ -351,9 +357,13 @@ final class CaptureSessionsTable
             $icon(BulkActionGroup::make(self::exportFormatActions('export'))->icon(Heroicon::OutlinedArrowDownTray), 'Export'),
             $icon(self::trashBulkAction('trash'), 'Delete')->color('danger')->extraAttributes(['data-selection-delete' => true]),
             BulkActionGroup::make([
-                BulkActionGroup::make([$menu['pin'], $menu['unpin'], $menu['keep'], $menu['unkeep'], $menu['move'], $menu['label'], $menu['unlabel']])
+                BulkActionGroup::make([$menu['pin'], $menu['unpin'],
+                    // Mark unless every selected one is important, Unmark unless none is, both when mixed (the apps' rule).
+                    $menu['important']->extraAttributes(['x-show' => "window.elV2Selection && window.elV2Selection.shows('important', selectedRecords, isTrackingDeselectedRecords)"]),
+                    $menu['unimportant']->extraAttributes(['x-show' => "window.elV2Selection && window.elV2Selection.shows('unimportant', selectedRecords, isTrackingDeselectedRecords)"]),
+                    $menu['keep'], $menu['unkeep'], $menu['move'], $menu['label'], $menu['unlabel'], self::transcribeBulkAction('transcribeInMenu')])
                     ->label(__('Organise'))->dropdown(false),
-                BulkActionGroup::make(self::exportFormatActions('exportInMenu'))->label(__('Export'))->dropdown(false),
+                BulkActionGroup::make([...self::exportFormatActions('exportInMenu'), self::copyForAiBulkAction('copyForAiInMenu')])->label(__('Export'))->dropdown(false),
                 BulkActionGroup::make([self::trashBulkAction('trashFromMenu')->label(__('Delete'))->color('danger')])->label(__('Danger'))->dropdown(false),
             ])->label(__('More'))->tooltip(__('More'))->icon(Heroicon::OutlinedEllipsisVertical)->iconButton()->color('gray')
                 ->extraAttributes(['data-selection-more' => true]),
@@ -391,6 +401,132 @@ final class CaptureSessionsTable
     public static function undoKey(string $token): string
     {
         return 'el-library-undo:'.auth()->id().':'.$token;
+    }
+
+    /**
+     * The recordings of a selection the signed-in person may change: their own in this workspace, the scope the API's
+     * bulk path keeps to (LibraryOrganiser::bulk); none from a read-only console. Read from the database, not trusted from
+     * the selection.
+     *
+     * @param  Collection<int, CaptureSession>  $records
+     * @return Collection<int, CaptureSession>
+     */
+    public static function changeable(Collection $records): Collection
+    {
+        if (ConsoleAccess::readOnly() || $records->isEmpty()) {
+            return new Collection;
+        }
+        $own = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->ofPerson()
+            ->whereIn('id', $records->modelKeys())->pluck('id')->map(fn ($id): string => (string) $id)->all();
+
+        return $records->filter(fn (CaptureSession $r): bool => in_array((string) $r->getKey(), $own, true))->values();
+    }
+
+    /**
+     * The recordings of a selection the signed-in person may open: what the Library lists for them
+     * (CaptureSessionResource's query), read from the database.
+     *
+     * @param  Collection<int, CaptureSession>  $records
+     * @return Collection<int, CaptureSession>
+     */
+    public static function viewable(Collection $records): Collection
+    {
+        if ($records->isEmpty()) {
+            return new Collection;
+        }
+        $open = CaptureSessionResource::getEloquentQuery()->whereIn('id', $records->modelKeys())->pluck('id')->map(fn ($id): string => (string) $id)->all();
+
+        return $records->filter(fn (CaptureSession $r): bool => in_array((string) $r->getKey(), $open, true))->values();
+    }
+
+    /** Transcribe… takes at most this many recordings at a time, as the apps do. */
+    public const MAX_TRANSCRIBE = 50;
+
+    /**
+     * Transcribe… for the v2.0 selection (U9, parity plan 3): the minutes it will use and the minutes left this month
+     * first, then each recording that can be transcribed (its audio is here, it has no transcript or a failed one)
+     * starts as the recording page's Transcribe again starts one. Nothing starts when the month can't cover them all.
+     */
+    public static function transcribeBulkAction(string $name): BulkAction
+    {
+        return BulkAction::make($name)->label(__('Transcribe…'))->icon(Heroicon::OutlinedDocumentText)
+            // As the recording page's Transcribe again: never from a read-only console, only the person's own recordings.
+            ->visible(fn (): bool => ! ConsoleAccess::readOnly())
+            ->modalHeading(fn (Collection $records): string => $records->count() === 1 ? __('Transcribe this recording?')
+                : __('Transcribe :count recordings?', ['count' => $records->count()]))
+            ->modalDescription(fn (Collection $records): string => self::transcribePlan($records)['words'])
+            ->modalSubmitActionLabel(__('Transcribe'))
+            ->modalSubmitAction(fn (Action $action, Collection $records): Action => $action->disabled(! self::transcribePlan($records)['can']))
+            ->action(function (Collection $records, FinalTranscriptCoordinator $coordinator): void {
+                abort_if(ConsoleAccess::readOnly(), 403);
+                $plan = self::transcribePlan($records);
+                if (! $plan['can']) {
+                    Notification::make()->title($plan['words'])->danger()->send();
+
+                    return;
+                }
+                foreach ($plan['ready'] as $record) {
+                    $coordinator->start($record, $record->finalTranscript);
+                }
+                $started = count($plan['ready']);
+                $skipped = $records->count() - $started;
+                $rest = $skipped > 0 ? ' · '.trans_choice(':count skipped (already transcribed or no audio)|:count skipped (already transcribed or no audio)', $skipped, ['count' => $skipped]) : '';
+                Notification::make()->title(($started > 0
+                    ? trans_choice('Transcribing 1 recording|Transcribing :count recordings', $started, ['count' => $started])
+                    : __('Nothing to transcribe')).$rest)->success()->send();
+            })
+            ->deselectRecordsAfterCompletion();
+    }
+
+    /**
+     * What Transcribe… would do with a selection: the recordings that can be transcribed, their minutes (each
+     * recording's length rounded up), the minutes left this month (null: no limit), whether it may start, and the words
+     * the window says (the desktop's).
+     *
+     * @param  Collection<int, CaptureSession>  $records
+     * @return array{ready: list<CaptureSession>, minutes: int, left: int|null, can: bool, words: string}
+     */
+    public static function transcribePlan(Collection $records): array
+    {
+        $records->loadMissing(['primaryRecording', 'finalTranscript']);
+        // Only what the person may change starts; the rest is skipped like a transcribed one.
+        $ready = self::changeable($records)->filter(fn (CaptureSession $r): bool => $r->primaryRecording?->isReady() === true && ! $r->hasNoAudio()
+            && in_array($r->finalTranscript?->status, [null, TranscriptStatus::Failed], true))->values()->all();
+        $minutes = array_sum(array_map(fn (CaptureSession $r): int => max(1, (int) ceil(((int) $r->duration_ms) / 60000)), $ready));
+        $workspace = (int) CurrentWorkspace::id();
+        $limits = app(PlanLimits::class);
+        $limit = $limits->limit($workspace, 'monthly_minutes', (int) CurrentWorkspace::userId());
+        $left = $limit === null ? null : max(0, (int) floor((float) $limit - $limits->minutesUsed($workspace)));
+        $count = fn (int $n): string => trans_choice('1 minute|:count minutes', $n, ['count' => $n]);
+        $tooMany = $records->count() > self::MAX_TRANSCRIBE;
+        $over = $left !== null && $minutes > $left;
+        $none = ! $tooMany && $ready === [];
+        $words = $tooMany ? __('Up to :max at a time: pick fewer recordings.', ['max' => self::MAX_TRANSCRIBE])
+            : ($none ? __('Nothing here can be transcribed: each one is already transcribed or has no audio.') : ($left === null ? __('About :minutes.', ['minutes' => $count($minutes)])
+                : __('About :minutes of the :left left this month.', ['minutes' => $count($minutes), 'left' => $count($left)]))
+                .($over ? ' '.__('That is more than is left, so nothing will start. Pick fewer recordings.') : ''));
+
+        return ['ready' => $ready, 'minutes' => $minutes, 'left' => $left, 'can' => ! $tooMany && ! $over && ! $none, 'words' => $words];
+    }
+
+    /**
+     * Copy for AI for the v2.0 selection (U9, parity plan 3): the apps' text (V2CopyForAi) goes on the clipboard; the
+     * recordings without a transcript are left out and counted.
+     */
+    public static function copyForAiBulkAction(string $name): BulkAction
+    {
+        return BulkAction::make($name)->label(__('Copy for AI'))->icon(Heroicon::OutlinedSparkles)
+            ->action(function (Collection $records, HasTable $livewire): void {
+                ['text' => $text, 'copied' => $copied, 'skipped' => $skipped] = V2CopyForAi::forMany(self::viewable($records)->take(V2CopyForAi::MAX));
+                if ($copied === 0) {
+                    Notification::make()->title($records->count() === 1 ? __('This recording has no transcript to copy yet') : __('None of these has a transcript to copy yet'))->warning()->send();
+
+                    return;
+                }
+                $done = $copied === 1 && $skipped === 0 ? __('Copied for AI')
+                    : __('Copied :count for AI', ['count' => $copied]).($skipped > 0 ? ' · '.__(':count without a transcript left out', ['count' => $skipped]) : '');
+                $livewire->js('window.elV2Selection.copy('.Js::from($text).', '.Js::from($done).', '.Js::from(__('Could not access the clipboard')).')');
+            });
     }
 
     /**
@@ -463,6 +599,14 @@ final class CaptureSessionsTable
                 ->action(fn (Collection $records) => $run($records, 'pin'))->deselectRecordsAfterCompletion(),
             BulkAction::make('unpin')->label('Unpin')->icon(Heroicon::OutlinedMinusCircle)
                 ->action(fn (Collection $records) => $run($records, 'unpin'))->deselectRecordsAfterCompletion(),
+            // Since U9 (contract 2.0.0-i): the flag the apps show, through the same bulk path as POST /api/sessions/bulk.
+            // Only the person's own recordings change (the bulk path's scope); never from a read-only console.
+            BulkAction::make('important')->label(__('Mark important'))->icon(Heroicon::OutlinedFlag)
+                ->visible(fn (): bool => ! ConsoleAccess::readOnly())
+                ->action(fn (Collection $records) => $run(self::changeable($records), 'important'))->deselectRecordsAfterCompletion(),
+            BulkAction::make('unimportant')->label(__('Unmark important'))->icon(Heroicon::OutlinedFlag)
+                ->visible(fn (): bool => ! ConsoleAccess::readOnly())
+                ->action(fn (Collection $records) => $run(self::changeable($records), 'unimportant'))->deselectRecordsAfterCompletion(),
             BulkAction::make('keep')->label('Keep forever')->icon(Heroicon::OutlinedLockClosed)
                 ->action(fn (Collection $records) => $run($records, 'keep'))->deselectRecordsAfterCompletion(),
             BulkAction::make('unkeep')->label('Stop keeping')->icon(Heroicon::OutlinedLockOpen)
