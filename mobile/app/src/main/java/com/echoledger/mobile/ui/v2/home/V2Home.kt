@@ -315,7 +315,7 @@ fun V2HomeContent(
                         meta = row.meta,
                         titleEnd = row.time,
                         metaEnd = { Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary) },
-                        leading = { EchoAvatar(icon = row.icon, contentDescription = row.source) },
+                        leading = { com.echoledger.mobile.ui.v2.library.RowSourceLogo(row) },
                         tall = true,
                         onClick = { actions.onOpenRecording(item.id) }
                     )

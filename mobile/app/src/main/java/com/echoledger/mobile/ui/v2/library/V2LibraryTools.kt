@@ -480,6 +480,8 @@ fun LibraryFilterRow(
     labels: List<String>,
     tags: List<String>,
     languages: List<String>,
+    /** How many recordings each saved view holds, said beside its choice as classic does ("Today (3)"). */
+    counts: Map<SmartView, Int> = emptyMap(),
     onChange: (V2Filters) -> Unit
 ) {
     var open by remember { mutableStateOf<FilterChip?>(null) }
@@ -528,7 +530,7 @@ fun LibraryFilterRow(
         }
     }
     open?.let { chip ->
-        FilterSheet(chip, filters, folders, labels, tags, languages, { open = null }) {
+        FilterSheet(chip, filters, folders, labels, tags, languages, counts, { open = null }) {
             onChange(it)
             open = null
         }
@@ -574,6 +576,7 @@ private fun FilterSheet(
     labels: List<String>,
     tags: List<String>,
     languages: List<String>,
+    counts: Map<SmartView, Int>,
     onDismiss: () -> Unit,
     onApply: (V2Filters) -> Unit
 ) {
@@ -582,20 +585,24 @@ private fun FilterSheet(
     fun base(change: (LibraryFilters) -> LibraryFilters) {
         draft = draft.copy(base = change(draft.base))
     }
+
+    @Composable
+    fun viewName(v: SmartView): String =
+        counts[v]?.let { stringResource(R.string.v2_lib_option_count, smartViewName(v), it) } ?: smartViewName(v)
     EchoBottomSheet(onDismiss = onDismiss, title = chipName(chip)) {
         when (chip) {
             FilterChip.Views -> {
                 EchoCheckbox(draft.untranscribed, { draft = draft.copy(untranscribed = it) }, v2TextUntranscribed())
                 EchoCheckbox(draft.audioOnly, { draft = draft.copy(audioOnly = it) }, stringResource(R.string.v2_lib_audio_only))
-                VIEWS.forEach { v -> EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, smartViewName(v)) }
+                VIEWS.forEach { v -> EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, viewName(v)) }
             }
 
             FilterChip.Date -> DATES.forEach { v ->
-                EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, smartViewName(v))
+                EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, viewName(v))
             }
 
             FilterChip.Status -> STATUSES.forEach { v ->
-                EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, smartViewName(v))
+                EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, viewName(v))
             }
 
             FilterChip.Source -> SourceDevice.entries.forEach { d ->

@@ -87,13 +87,21 @@ fun V2WorkspacesContent(
                     onAction = onNew
                 )
             }
+            val text = com.echoledger.mobile.ui.v2.shell.v2Text
+            val locale = com.echoledger.mobile.ui.v2.theme.screenLocale()
+            val now = remember(library) { java.time.ZonedDateTime.now() }
             roots.forEach { project ->
                 val mine = ProjectTree.recordings(all, library, project.id, nested = true)
+                // As classic: when the project's last call was ("Last call 10:42", "Yesterday", "Oct 20").
+                val last = mine.filter { !it.startedAt.isNullOrBlank() }.maxByOrNull { it.startedAt.orEmpty() }
                 ProjectRow(
                     project,
                     recordings = if (mine.isNotEmpty()) mine.size else project.sessionCount,
                     folders = ProjectTree.children(all, project.id).size,
-                    onOpen = { onOpen(project.id) }
+                    onOpen = { onOpen(project.id) },
+                    lastCall = last?.let {
+                        com.echoledger.mobile.ui.v2.library.LibraryModel.time(it, now, text, locale)
+                    }?.takeIf { it.isNotEmpty() }
                 )
             }
             EchoSettingRow(

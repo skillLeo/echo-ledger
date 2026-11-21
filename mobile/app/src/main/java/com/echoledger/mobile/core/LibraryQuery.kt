@@ -56,7 +56,8 @@ data class LibraryFilters(
     val count: Int get() = views.size + devices.size + folders.size + labels.size + tags.size + languages.size
 
     fun matches(item: LibraryItem, now: ZonedDateTime = ZonedDateTime.now()): Boolean = !item.deleted &&
-        (views.isEmpty() || views.any { Organise.inView(item, it, now) }) &&
+        // A date and a mark narrow each other (Today and Pinned: pinned recordings from today); choices of one kind widen.
+        views.partition { it in DATE_VIEWS }.toList().all { kind -> kind.isEmpty() || kind.any { Organise.inView(item, it, now) } } &&
         (devices.isEmpty() || SourceDevice.from(item.sourceDevice) in devices) &&
         (folders.isEmpty() || folders.any { Organise.inFolder(item, it) }) &&
         (labels.isEmpty() || labels.any { Organise.hasLabel(item, it) }) &&
@@ -64,6 +65,9 @@ data class LibraryFilters(
         (languages.isEmpty() || item.languageChip in languages)
 
     companion object {
+        /** The saved views that are a date (the Date chip) rather than a mark or a state. */
+        val DATE_VIEWS: Set<SmartView> = setOf(SmartView.TODAY, SmartView.THIS_WEEK)
+
         fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value
     }
 }

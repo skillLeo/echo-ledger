@@ -370,7 +370,8 @@ class V2LibraryActionsTest : ScreenTest() {
     fun nothingMatchesOffersToClearTheFilters() {
         seed()
         compose.onNodeWithText("Status ▾").performClick()
-        compose.onNode(hasText("Waiting for decision") and isToggleable()).performClick()
+        // Each choice says how many it holds, as classic: none are waiting.
+        compose.onNode(hasText("Waiting for decision (0)") and isToggleable()).performClick()
         click("Apply")
         compose.onNodeWithText("Nothing matches").assertExists()
         click("Clear filters")

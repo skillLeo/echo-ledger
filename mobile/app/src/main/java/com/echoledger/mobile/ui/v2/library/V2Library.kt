@@ -49,6 +49,7 @@ import com.echoledger.mobile.ui.v2.components.EchoSearchField
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoSkeletonList
+import com.echoledger.mobile.ui.v2.components.EchoSourceLogo
 import com.echoledger.mobile.ui.v2.components.EchoStatus
 import com.echoledger.mobile.ui.v2.components.EchoStatusKind
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
@@ -220,6 +221,7 @@ fun V2LibraryScreen(
     val folders = remember(library, clients) { com.echoledger.mobile.core.Organise.folders(library, clients) }
     val labels = remember(library) { com.echoledger.mobile.core.Organise.labels(library) }
     val tags = remember(library) { com.echoledger.mobile.core.Bookmarks.tags(library) }
+    val viewCounts = remember(library, now) { com.echoledger.mobile.core.Organise.counts(library, now) }
     val languages = remember(library) { library.mapNotNull { it.languageChip?.takeIf { l -> l.isNotBlank() } }.distinct().sorted() }
     // Transcript words found on the server (two characters or more), beside the titles matched here.
     var found by remember { mutableStateOf<List<TranscriptMatch>>(emptyList()) }
@@ -472,7 +474,7 @@ fun V2LibraryScreen(
                     canTranscribe = visible.any { it.id in ticked && LibraryModel.audioOnly(it) }
                 )
             },
-            filterRow = { LibraryFilterRow(filters, folders, labels, tags, languages) { filters = it } },
+            filterRow = { LibraryFilterRow(filters, folders, labels, tags, languages, viewCounts) { filters = it } },
             listRow = {
                 LibraryListRow(
                     lists = lists,
@@ -820,7 +822,7 @@ fun V2LibraryContent(
                                     title = m.row.title,
                                     meta = m.snippet,
                                     titleEnd = formatClock(m.atMs),
-                                    leading = { EchoAvatar(icon = m.row.icon, contentDescription = m.row.source) },
+                                    leading = { RowSourceLogo(m.row) },
                                     tall = true,
                                     onClick = { tools.onOpenAt(m) }
                                 )
@@ -990,7 +992,7 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
             if (selected != null) {
                 androidx.compose.material3.Checkbox(selected, null)
             } else {
-                EchoAvatar(icon = row.icon, contentDescription = row.source)
+                RowSourceLogo(row)
             }
         },
         tall = !compact,
@@ -1030,6 +1032,24 @@ private fun rowProblem(row: V2Row): (@Composable () -> Unit)? {
             )
         }
     }
+}
+
+/**
+ * A row's source as classic draws it: the app's own mark (its installed icon, else the one icon set's glyph) with the
+ * small device badge for a recording made on a computer or on the web; TalkBack hears the app, then the device.
+ */
+@Composable
+fun RowSourceLogo(row: V2Row) {
+    val device = com.echoledger.mobile.core.SourceDevice.from(row.item.sourceDevice)
+    EchoSourceLogo(
+        com.echoledger.mobile.core.SourceApp.from(row.item.sourceApp),
+        device = device,
+        label = if (device == com.echoledger.mobile.core.SourceDevice.PHONE) {
+            row.source
+        } else {
+            stringResource(R.string.v2_lib_source_device, row.source, deviceName(device))
+        }
+    )
 }
 
 /** At most one badge per row: only what needs attention. */
