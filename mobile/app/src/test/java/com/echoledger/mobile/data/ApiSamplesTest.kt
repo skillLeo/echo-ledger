@@ -19,7 +19,17 @@ class ApiSamplesTest {
 
     private val readBy: Map<String, KSerializer<*>> = mapOf(
         "account" to AccountDto.serializer(),
+        "account_avatar" to AvatarDto.serializer(),
+        "account_email" to PendingEmailDto.serializer(),
+        "account_email_confirm" to AccountDto.serializer(),
         "account_export" to AccountExportDto.serializer(),
+        "account_passkey" to AddedPasskeyDto.serializer(),
+        "account_passkey_options" to PasskeyOptionsDto.serializer(),
+        "account_recovery_codes" to RecoveryCodesDto.serializer(),
+        "account_security" to AccountSecurityDto.serializer(),
+        "account_two_factor" to TwoFactorSetupDto.serializer(),
+        "account_two_factor_confirm" to RecoveryCodesDto.serializer(),
+        "account_update" to AccountDto.serializer(),
         "activity" to ActivityResponse.serializer(),
         "activity_read" to UnreadAnswer.serializer(),
         "auth_options" to AuthOptionsDto.serializer(),
@@ -93,22 +103,12 @@ class ApiSamplesTest {
     private val notRead =
         setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
-    /** Answers the phone does not ask for yet: Transcribe later (2.0.0-j) reaches the phone with its Audio only screen; account (2.0.0-l) with its account screens. */
+    /** Answers the phone does not ask for yet: Transcribe later (2.0.0-j) reaches the phone with its Audio only screen. */
     private val notUsedYet =
         setOf(
             "session_transcribe",
             "sessions_transcribe",
-            "sessions_transcribe_estimate",
-            "account_avatar",
-            "account_email",
-            "account_email_confirm",
-            "account_passkey",
-            "account_passkey_options",
-            "account_recovery_codes",
-            "account_security",
-            "account_two_factor",
-            "account_two_factor_confirm",
-            "account_update"
+            "sessions_transcribe_estimate"
         )
 
     private val everyField = Json {
