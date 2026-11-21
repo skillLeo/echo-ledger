@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="v2_ask_everywhere">میری تمام ریکارڈنگز</string>
+    <string name="v2_ask_empty_body_all">اپنی تمام ریکارڈنگز یا کسی ایک پروجیکٹ کے بارے میں اپنے الفاظ میں پوچھیں۔ جواب بتاتے ہیں کہ وہ کس ریکارڈنگ سے ہیں۔</string>
+    <string name="v2_ask_nothing_yet">ابھی پوچھنے کے لیے کچھ ٹرانسکرائب نہیں ہوا۔ ٹرانسکرپٹ تیار ہونے پر دوبارہ پوچھیں۔</string>
+    <string name="v2_ask_recording_help">اس ریکارڈنگ کے بارے میں پوچھیں: اس کا ٹرانسکرپٹ اور نوٹس۔</string>
+    <string name="v2_ask_recording_hint">انہوں نے کس بات پر اتفاق کیا؟</string>
+    <string name="v2_rec_tab_ask">پوچھیں</string>
+    <string name="v2_rec_ask">پوچھیں</string>
+    <string name="v2_rec_lines_in">لائنیں جس زبان میں</string>
+</resources>
