@@ -311,9 +311,9 @@ class SessionScreenTest : ScreenTest() {
 
     @Test
     fun `an Urdu transcript says it is converting, then shows and copies Roman Urdu once it is ready`() {
-        romanView("none", viewsMaking, viewsReady)
+        romanView("making", viewsMaking, viewsReady)
         val ready = item()
-        showSession(ready.copy(transcript = ready.transcript?.copy(views = RowViewsDto(status = "none", default = "roman"))))
+        showSession(ready.copy(transcript = ready.transcript?.copy(views = RowViewsDto(status = "making", default = "roman"))))
         awaitText("Converting to Roman Urdu")
         // The original words can be read meanwhile.
         awaitText("Hi, thanks for calling.")
@@ -333,7 +333,7 @@ class SessionScreenTest : ScreenTest() {
         romanView("failed", """{"status":"failed","available":["roman","english"],"default":"roman","error":"x"}""", viewsMaking)
         val ready = item()
         showSession(ready.copy(transcript = ready.transcript?.copy(views = RowViewsDto(status = "failed", default = "roman"))))
-        awaitText("Couldn't convert to Roman Urdu · Try again")
+        awaitText("Couldn't convert to Roman Urdu.")
         awaitText("Hi, thanks for calling.")
         assertTrue(server.requestsTo("POST", "/api/transcripts/.+/views").isEmpty())
         compose.onNodeWithText("Try again").performClick()

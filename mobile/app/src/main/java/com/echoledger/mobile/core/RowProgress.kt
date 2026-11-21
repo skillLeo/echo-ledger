@@ -33,27 +33,30 @@ object RowProgress {
         val views = transcript.views ?: return null
         val name = viewName(views.default)
         return when (converting(views)) {
-            true -> {
-                val percent = viewPercent(views)
-                Stage(Step.IMPROVING, percent, "Converting to $name" + (percent?.let { "… $it%" } ?: "…"))
-            }
-
-            false -> Stage(Step.VIEW_FAILED, null, "Couldn't convert to $name · Try again")
-
+            true -> viewPercent(views).let { percent -> Stage(Step.IMPROVING, percent, convertingWords(views.default, percent)) }
+            false -> Stage(Step.VIEW_FAILED, null, convertFailedWords(views.default, tryAgain = true))
             null -> null
         }
     }
 
     /**
-     * Whether the default view of a finished transcript is on its way: true while it is made or not started yet (the
-     * server makes it by itself), false when making it failed, null when there is none to make or it is ready.
+     * Whether the default view of a finished transcript is on its way: true while it is `making` (since 2.0.0-n the
+     * server says so whenever one is on its way, before its job starts too), false when making it failed, null otherwise:
+     * `none` means nothing will happen (an older recording, a plan or key without views, or it timed out).
      */
     fun converting(views: com.echoledger.mobile.data.RowViewsDto): Boolean? = when {
         views.default == "original" || views.default.isBlank() -> null
-        views.status == "making" || views.status == "none" -> true
+        views.status == "making" -> true
         views.status == "failed" -> false
         else -> null
     }
+
+    /** "Converting to Roman Urdu… 60%", or "Converting to Roman Urdu…" before the lines are counted. */
+    fun convertingWords(view: String, percent: Int?): String = "Converting to ${viewName(view)}" + (percent?.let { "… $it%" } ?: "…")
+
+    /** "Couldn't convert to Roman Urdu · Try again" on a row; on a page, whose Try again button follows, without it. */
+    fun convertFailedWords(view: String, tryAgain: Boolean): String =
+        "Couldn't convert to ${viewName(view)}" + if (tryAgain) " · Try again" else "."
 
     /** The default view's lines done of lines, 0-100, or null before the server has a measure. */
     fun viewPercent(views: com.echoledger.mobile.data.RowViewsDto): Int? {

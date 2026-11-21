@@ -33,14 +33,15 @@ enum class ShowAs(val key: String, val label: String) {
 
         /**
          * The view a finished transcript opens in (U19): its default (Roman Urdu for Urdu) when it is one of its views
-         * and is ready, being made or not started yet, so the page shows it the moment it is ready; null for the
-         * original words, or when making it failed (the page offers Try again instead).
+         * and is ready or being made, so the page shows it the moment it is ready; null for the original words, when
+         * nothing is on its way (`none`), or when making it failed (the page offers Try again instead).
          */
         fun autoView(summary: com.echoledger.mobile.data.ViewsSummaryDto?): ShowAs? {
             summary ?: return null
             val default = of(summary.default)
             if (default == ORIGINAL || default.key !in summary.available) return null
-            return default.takeIf { summary.status == "ready" || summary.status == "making" || summary.status == "none" }
+            // Never asked for on opening when nothing is on its way (`none`): that would make views for old calls, or be refused.
+            return default.takeIf { summary.status == "ready" || summary.status == "making" }
         }
 
         /** The words for a view in plain English, for Copy for AI's header ("Roman Urdu"); null for the original. */

@@ -140,6 +140,7 @@
     <string name="v2_rec_improving_view">%1$s میں تبدیل ہو رہا ہے…</string>
     <string name="v2_rec_improving_view_pct">%1$s میں تبدیل ہو رہا ہے… %2$d%%</string>
     <string name="v2_rec_convert_failed">%1$s میں تبدیل نہیں ہو سکا · دوبارہ کوشش کریں</string>
+    <string name="v2_rec_convert_failed_page">%1$s میں تبدیل نہیں ہو سکا۔</string>
     <string name="v2_rec_failed_line">ٹرانسکرپشن نہیں ہو سکی</string>
     <string name="v2_rec_notify">تیار ہونے پر مجھے بتائیں</string>
     <string name="v2_rec_notify_set">تیار ہونے پر آپ کو اطلاع ملے گی۔</string>

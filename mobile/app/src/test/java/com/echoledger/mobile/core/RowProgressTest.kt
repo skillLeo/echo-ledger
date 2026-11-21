@@ -45,11 +45,13 @@ class RowProgressTest {
     }
 
     @Test
-    fun `a finished Urdu transcript is converting from the moment it is done, before the server starts its view`() {
+    fun `a finished Urdu transcript is converting while its view is on its way, with no percent before the lines are counted`() {
         assertEquals(
             RowProgress.Stage(RowProgress.Step.IMPROVING, null, "Converting to Roman Urdu…"),
-            RowProgress.of(item("completed", views = RowViewsDto("none", "roman")))
+            RowProgress.of(item("completed", views = RowViewsDto("making", "roman")))
         )
+        // Since 2.0.0-n `none` means nothing will happen (an older recording, no views on the plan, timed out).
+        assertNull(RowProgress.of(item("completed", views = RowViewsDto("none", "roman"))))
         // Nothing to convert to: the original words are the default.
         assertNull(RowProgress.of(item("completed", views = RowViewsDto("none", "original"))))
         // Still being transcribed: that comes first.

@@ -173,6 +173,14 @@ class ApiSamplesTest {
         "upgrade_request_latest.amount_due",
         // Trash's keep time (contract 2.0.0-b) until the server's samples carry it; missing reads as 48 hours.
         "config.trash",
+        // The preview's view (contract 2.0.0-n, U19) until the server's samples carry it; missing reads as the original.
+        "library.data[0].transcript.preview_view",
+        "library_folder.data[0].transcript.preview_view",
+        "search.data[0].session.transcript.preview_view",
+        "session_create.session.transcript.preview_view",
+        "session_finish.session.transcript.preview_view",
+        "session_open.session.transcript.preview_view",
+        "shared_with_me.data[0].session.transcript.preview_view",
         "auth_password.config.trash",
         "auth_password.config.providers.live_captions.required_artifacts",
         "auth_password.config.providers.live_captions.preferred_primary",

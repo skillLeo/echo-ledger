@@ -157,12 +157,14 @@ class V2RomanUrduTest : ScreenTest() {
     }
 
     @Test
-    fun aFinishedUrduTranscriptCountsAsConvertingBeforeTheServerStartsItsView() {
-        views("none", """{"status":"none","available":["roman","english"],"default":"roman"}""", making)
+    fun aViewThatIsNotOnItsWayIsNeverAskedForOnOpening() {
+        views("none", """{"status":"none","available":["roman","english"],"default":"roman"}""")
         open(item(RowViewsDto("none", "roman")))
-        awaitText("Converting to Roman Urdu…")
-        // The page asked for it, so it is made even if the server had not started.
-        pumpUntil("asked") { server.requestsTo("POST", "/api/transcripts/.+/views").isNotEmpty() }
+        awaitText("Hi, thanks for calling.")
+        // An older recording, or one whose plan has no views: opening it never makes (or bills) its views.
+        compose.onAllNodesWithText("Converting", substring = true).assertCountEquals(0)
+        assertTrue(server.requestsTo("POST", "/api/transcripts/.+/views").isEmpty())
+        assertTrue(server.requestsTo("GET", "/api/transcripts/.+/views").isEmpty())
     }
 
     @Test
@@ -176,7 +178,9 @@ class V2RomanUrduTest : ScreenTest() {
     fun aViewThatFailedSaysSoAndTryAgainAsksForItAgain() {
         views("failed", """{"status":"failed","available":["roman","english"],"default":"roman","error":"x"}""", making)
         open(item(RowViewsDto("failed", "roman")))
-        awaitText("Couldn't convert to Roman Urdu · Try again")
+        // The page's words stop before "Try again": its button follows.
+        awaitText("Couldn't convert to Roman Urdu.")
+        compose.onAllNodesWithText("· Try again", substring = true).assertCountEquals(0)
         assertTrue(server.requestsTo("POST", "/api/transcripts/.+/views").isEmpty())
         press("Try again")
         pumpUntil("asked again") { server.requestsTo("POST", "/api/transcripts/.+/views").isNotEmpty() }
@@ -218,6 +222,21 @@ class V2RomanUrduTest : ScreenTest() {
         assertEquals("roman", vm.library.value.single().transcript?.previewView)
         // The row needs no views of its own.
         assertTrue(server.requestsTo("GET", "/api/transcripts/.+/views").isEmpty())
+    }
+
+    @Test
+    fun aConvertingRowAsksAgainUntilItsRomanSnippetArrives() {
+        library("""{"status":"making","default":"roman","progress":{}}""")
+        awaitText("Converting to Roman Urdu…")
+        val row = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, title = "Bilal Traders", preview = "Hello ji.", client = null)
+            .replace(
+                "\"preview\":\"Hello ji.\"",
+                "\"preview\":\"Hello ji.\",\"preview_view\":\"roman\",\"views\":{\"status\":\"ready\",\"default\":\"roman\",\"progress\":{}}"
+            )
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(row))))
+        // The Library asks again every 5 s while something is converting.
+        awaitPolled("Hello ji.")
+        compose.onAllNodesWithText("Converting", substring = true).assertCountEquals(0)
     }
 
     @Test

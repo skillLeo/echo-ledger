@@ -523,7 +523,7 @@ data class TranscriptSummary(
     @SerialName("final_progress") val finalProgress: ProgressDto? = null,
     /** The views of the finished transcript (since v1.5): being made and how far, for "Improving Roman Urdu… 60%". */
     val views: RowViewsDto? = null,
-    /** Which words [preview] is in (contract 2.0.0-l): "roman", "urdu", "english" or "original" (the default view once ready). */
+    /** Which words [preview] is in (contract 2.0.0-n): "roman", "urdu", "english" or "original" (the default view once ready). */
     @SerialName("preview_view") val previewView: String? = null
 )
 

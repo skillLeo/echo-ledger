@@ -278,7 +278,9 @@ fun ConvertingLine(view: String?, percent: Int?) {
 @Composable
 fun ConvertFailedLine(item: LibraryItem, onTryAgain: () -> Unit) {
     val res = LocalContext.current.resources
-    val words = conversionWords(res, item) ?: return
+    if (RowProgress.of(item)?.step != RowProgress.Step.VIEW_FAILED) return
+    // The page's words stop before "Try again": its button follows.
+    val words = res.getString(R.string.v2_rec_convert_failed_page, viewWords(res, item.transcript?.views?.default))
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
         Text(words, style = EchoV2.type.meta, color = EchoV2.colors.danger, modifier = Modifier.weight(1f))
         EchoButton(stringResource(R.string.v2_try_again), onTryAgain, kind = EchoButtonKind.Secondary)

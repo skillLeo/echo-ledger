@@ -130,6 +130,20 @@ fun V2LibraryScreen(
     val offline by vm.offline.collectAsState()
     val clients by vm.clients.collectAsState()
     val settings by vm.settings.collectAsState()
+    // Live status (classic's rule): while something is uploading, being transcribed or converted to its default view,
+    // the list asks again every 5 s, so "Converting to Roman Urdu… 60%" moves and goes; it stops once all is done.
+    val busy = pending.any { it.state == "uploading" || it.state == "queued" } ||
+        library.any {
+            com.echoledger.mobile.core.ItemStatus.of(it) == com.echoledger.mobile.core.ItemStatus.PROCESSING ||
+                it.transcript?.views?.status == "making"
+        }
+    LaunchedEffect(busy) {
+        while (busy) {
+            kotlinx.coroutines.delay(LIVE_REFRESH_MS)
+            vm.reloadLocal()
+            vm.refreshQuietly()
+        }
+    }
     var query by rememberSaveable { mutableStateOf("") }
     var filters by remember(initialViews) {
         mutableStateOf(
@@ -670,3 +684,6 @@ private fun statusBadge(status: RowStatus, text: V2Text): (@Composable () -> Uni
     RowStatus.Transcribing -> ({ EchoStatus(text.transcribing, EchoStatusKind.Accent) })
     RowStatus.Failed -> ({ EchoStatus(text.failed, EchoStatusKind.Danger) })
 }
+
+/** How often the Library asks again while something is on its way (classic's LIVE_REFRESH_MS). */
+private const val LIVE_REFRESH_MS = 5_000L

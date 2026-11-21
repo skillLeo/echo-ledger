@@ -594,7 +594,10 @@ fun SessionScreen(
                     ) {
                         item(key = "convert-failed") {
                             InlineBanner(
-                                viewStage.text,
+                                com.echoledger.mobile.core.RowProgress.convertFailedWords(
+                                    live.transcript?.views?.default.orEmpty(),
+                                    tryAgain = false
+                                ),
                                 Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3),
                                 kind = BannerKind.Warning,
                                 action = "Try again",
@@ -611,7 +614,14 @@ fun SessionScreen(
                                 horizontalArrangement = Arrangement.spacedBy(Space.s2)
                             ) {
                                 com.echoledger.mobile.ui.design.Spinner(14.dp)
-                                Text("Converting to ${showAs.label}…", style = type.bodyM, color = c.textMuted)
+                                val own = views?.progress?.get(showAs.key)?.takeIf {
+                                    it.total > 0
+                                }?.let { (it.done * 100 / it.total).coerceIn(0, 100) }
+                                Text(
+                                    com.echoledger.mobile.core.RowProgress.convertingWords(showAs.key, own),
+                                    style = type.bodyM,
+                                    color = c.textMuted
+                                )
                             }
                         }
                     }
