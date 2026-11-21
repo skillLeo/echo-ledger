@@ -48,10 +48,14 @@ private fun buttonColors(kind: EchoButtonKind, enabled: Boolean): ButtonColors {
     }
     return when (kind) {
         EchoButtonKind.Primary -> ButtonColors(c.accent, c.textOnAccent, null)
+
         // Tonal with a hairline, not a dark outline: next to the 4 dp corner a strong border read as a boxed form field.
         EchoButtonKind.Secondary -> ButtonColors(c.bgSubtle, c.textPrimary, c.borderDefault)
+
         EchoButtonKind.Quiet -> ButtonColors(c.clear, c.accentText, null)
+
         EchoButtonKind.Plain -> ButtonColors(c.clear, c.textPrimary, null)
+
         EchoButtonKind.Danger -> ButtonColors(c.danger, c.textOnAccent, null)
     }
 }

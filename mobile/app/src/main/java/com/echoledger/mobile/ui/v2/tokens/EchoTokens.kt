@@ -234,6 +234,6 @@ object EchoTokens {
         "green" to "#2D9A63",
         "teal" to "#26978F",
         "blue" to "#458CDE",
-        "pink" to "#D7609C",
+        "pink" to "#D7609C"
     )
 }

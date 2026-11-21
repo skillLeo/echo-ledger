@@ -236,7 +236,8 @@ fun EchoTopBar(
         .fillMaxWidth()
         .background(c.bgCanvas)
         .padding(start = if (onBack != null) EchoTokens.Space.s4 else EchoTokens.Layout.pagePaddingMobile, end = EchoTokens.Space.s4)
-    if (!largeText()) {
+    // A page without a title (a recording, whose name is in its header) keeps one row at any text size.
+    if (!largeText() || title.isBlank()) {
         Row(padded.defaultMinSize(minHeight = EchoTokens.Space.s64), verticalAlignment = Alignment.CenterVertically) {
             back()
             titleText(Modifier.weight(1f), 1)
