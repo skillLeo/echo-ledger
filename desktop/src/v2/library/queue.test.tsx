@@ -154,6 +154,18 @@ describe("waiting recordings at the top of the v2 Library", () => {
     expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { language: "ur" } }]);
   });
 
+  it("one primary per area: Keep all is the card's only filled button; each row's Keep is secondary", async () => {
+    await show([makePendingItem("p1"), makePendingItem("p2", { title: "Board call" })]);
+    fireEvent.click(review());
+    const card = screen.getByRole("region", { name: "Waiting recordings" });
+    const primary = [...card.querySelectorAll("button.el-button--primary")].map((b) => b.textContent);
+    expect(primary).toEqual(["Keep all"]);
+    for (const keep of within(waiting()).getAllByRole("button", { name: "Keep" })) {
+      expect(keep).toHaveClass("el-button--secondary");
+      expect(keep).not.toHaveClass("el-button--primary");
+    }
+  });
+
   it("follows pending:changed from the core", async () => {
     await show([makePendingItem("p1")]);
     await act(() => emitEvent("pending:changed", [makePendingItem("p1"), makePendingItem("p2"), makePendingItem("p3")]));
