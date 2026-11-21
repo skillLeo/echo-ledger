@@ -13,6 +13,7 @@ use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
@@ -66,6 +67,7 @@ class ViewClient extends ViewRecord
 
     protected static string $resource = ClientResource::class;
 
+    /** English, as the keys of their words in the console's language (the views pass them through __()). */
     public const TABS = ['overview' => 'Overview', 'recordings' => 'Recordings', 'screens' => 'Screens', 'files' => 'Files', 'ask' => 'Ask', 'rules' => 'Rules'];
 
     /** The Screens tab (v1.5) shows the screens of this many recordings, newest first. */
@@ -137,8 +139,9 @@ class ViewClient extends ViewRecord
         $zone = app(SettingsRepository::class)->displayTimezone();
 
         return match (true) {
-            $count === 0 => 'No recordings yet',
-            default => ($count === 1 ? '1 recording' : "{$count} recordings").' · Last call '.Carbon::parse((string) $last, 'UTC')->setTimezone($zone)->format('M j'),
+            $count === 0 => __('No recordings yet'),
+            default => ($count === 1 ? __(':n recording', ['n' => 1]) : __(':n recordings', ['n' => $count])).' · '
+                .__('Last call :date', ['date' => Carbon::parse((string) $last, 'UTC')->setTimezone($zone)->format('M j')]),
         };
     }
 
@@ -147,14 +150,14 @@ class ViewClient extends ViewRecord
         return [
             SharingActions::share(fn (): Client => $this->client(), fn (): array => []),
             ActionGroup::make([
-                Action::make('newSubfolder')->label('New subfolder')->icon(Heroicon::OutlinedFolderPlus)
+                Action::make('newSubfolder')->label(__('New subfolder'))->icon(Heroicon::OutlinedFolderPlus)
                     ->url(fn (): string => ClientResource::getUrl('create', ['parent' => $this->client()->id]))
                     ->visible(fn (): bool => $this->depth() < Client::MAX_DEPTH),
                 SharingActions::send(fn (): Client => $this->client()),
                 SharingActions::sentTo(fn (): Client => $this->client()),
                 SharingActions::renameProject(),
                 SharingActions::moveProject(),
-                EditAction::make()->label('Settings')->icon(Heroicon::OutlinedCog6Tooth),
+                EditAction::make()->label(__('Settings'))->icon(Heroicon::OutlinedCog6Tooth),
                 SharingActions::deleteProject(fn () => $this->redirect(ClientResource::getUrl('index'))),
             ])->icon(Heroicon::OutlinedEllipsisVertical)->color('gray'),
         ];
@@ -183,13 +186,13 @@ class ViewClient extends ViewRecord
     /** The upgrade sheet for AI notes (since v1.6): what they do, the plans side by side, Request upgrade. */
     public function upgradeAiNotesAction(): Action
     {
-        return PlanLock::sheet('upgradeAiNotes', 'ai_notes', 'AI notes');
+        return PlanLock::sheet('upgradeAiNotes', 'ai_notes', __('AI notes'));
     }
 
     /** The upgrade sheet for screen moments (since v1.6.2), from the Screens tab when the plan leaves them out. */
     public function upgradeScreensAction(): Action
     {
-        return PlanLock::sheet('upgradeScreens', 'screen_moments', 'Screen moments');
+        return PlanLock::sheet('upgradeScreens', 'screen_moments', __('Screen moments'));
     }
 
     /**
@@ -214,16 +217,16 @@ class ViewClient extends ViewRecord
         }
         $client = $this->client();
         $client->update(['ai_notes' => ! $client->ai_notes]);
-        Notification::make()->title($client->ai_notes ? 'AI notes are on for '.$client->name : 'AI notes are off for '.$client->name)->success()->send();
+        Notification::make()->title($client->ai_notes ? __('AI notes are on for :name', ['name' => self::iso($client->name)]) : __('AI notes are off for :name', ['name' => self::iso($client->name)]))->success()->send();
     }
 
     /** The edit form of the brief: the goal on one line, every other section one line per item. */
     public function editBriefAction(): Action
     {
         return Action::make('editBrief')
-            ->label('Edit')
-            ->modalHeading('Edit the brief')
-            ->modalDescription('Once you edit the brief it is not rewritten by itself; Make again replaces it.')
+            ->label(__('Edit'))
+            ->modalHeading(__('Edit the brief'))
+            ->modalDescription(__('Once you edit the brief it is not rewritten by itself; Make again replaces it.'))
             ->modalWidth('2xl')
             ->fillForm(function (): array {
                 $sections = ClientBrief::clean($this->brief()->sections);
@@ -235,11 +238,11 @@ class ViewClient extends ViewRecord
                 return $data;
             })
             ->schema([
-                TextInput::make('goal')->label('Goal')->maxLength(300),
-                ...array_map(fn (string $key): Textarea => Textarea::make($key)->label(ucfirst($key))->rows(3)
-                    ->helperText($key === 'scope' ? 'One line per item.' : null), array_slice(ClientBrief::SECTIONS, 1)),
+                TextInput::make('goal')->label(__('Goal'))->maxLength(300),
+                ...array_map(fn (string $key): Textarea => Textarea::make($key)->label(__(ucfirst($key)))->rows(3)
+                    ->helperText($key === 'scope' ? __('One line per item.') : null), array_slice(ClientBrief::SECTIONS, 1)),
             ])
-            ->modalSubmitActionLabel('Save')
+            ->modalSubmitActionLabel(__('Save'))
             ->action(function (array $data): void {
                 $sections = ['goal' => (string) ($data['goal'] ?? '')];
                 foreach (array_slice(ClientBrief::SECTIONS, 1) as $key) {
@@ -248,7 +251,7 @@ class ViewClient extends ViewRecord
                 $client = $this->client();
                 $brief = ClientBrief::query()->firstOrNew(['client_id' => $client->id]);
                 $brief->fill(['workspace_id' => $client->workspace_id, 'sections' => ClientBrief::clean($sections), 'edited' => true, 'status' => 'ready', 'error' => null])->save();
-                Notification::make()->title('Brief saved')->success()->send();
+                Notification::make()->title(__('Brief saved'))->success()->send();
             });
     }
 
@@ -327,7 +330,7 @@ class ViewClient extends ViewRecord
         }
         try {
             $file = app(ClientWorkspace::class)->addFile($this->client(), $upload, (int) auth()->id());
-            Notification::make()->title('Added '.$file->name)->body('Its text is being read for the brief and Ask.')->success()->send();
+            Notification::make()->title(__('Added :name', ['name' => self::iso($file->name)]))->body(__('Its text is being read for the brief and Ask.'))->success()->send();
         } catch (ApiError $e) {
             $this->addError('upload', $e->getMessage());
         } finally {
@@ -345,7 +348,7 @@ class ViewClient extends ViewRecord
         app(ClientWorkspace::class)->addInstructions($this->client(), $this->instructions, $this->instructionsName ?: null, (int) auth()->id());
         $this->instructions = '';
         $this->instructionsName = '';
-        Notification::make()->title('Instructions added')->success()->send();
+        Notification::make()->title(__('Instructions added'))->success()->send();
     }
 
     public function removeFileAction(): Action
@@ -353,14 +356,14 @@ class ViewClient extends ViewRecord
         return Action::make('removeFile')
             ->requiresConfirmation()
             ->color('danger')
-            ->modalHeading('Remove this file?')
-            ->modalDescription('The file and the text read from it are deleted. The brief keeps what it has until it is made again.')
-            ->modalSubmitActionLabel('Remove')
+            ->modalHeading(__('Remove this file?'))
+            ->modalDescription(__('The file and the text read from it are deleted. The brief keeps what it has until it is made again.'))
+            ->modalSubmitActionLabel(__('Remove'))
             ->action(function (array $arguments): void {
                 $file = ClientFile::query()->where('client_id', $this->client()->id)->find($arguments['file'] ?? null);
                 if ($file instanceof ClientFile) {
                     app(ClientWorkspace::class)->deleteFile($file);
-                    Notification::make()->title('Removed '.$file->name)->success()->send();
+                    Notification::make()->title(__('Removed :name', ['name' => self::iso($file->name)]))->success()->send();
                 }
             });
     }
@@ -401,7 +404,7 @@ class ViewClient extends ViewRecord
             return;
         }
         $this->ruleValue = '';
-        Notification::make()->title($created ? 'Rule added' : 'This project already has that rule')->success()->send();
+        Notification::make()->title($created ? __('Rule added') : __('This project already has that rule'))->success()->send();
     }
 
     public function removeRule(int $id): void
@@ -573,11 +576,17 @@ class ViewClient extends ViewRecord
         $client = $this->client();
         $nodes = Client::query()->where('workspace_id', $client->workspace_id)->where('user_id', $client->user_id)->get(['id', 'parent_id', 'name'])
             ->mapWithKeys(fn (Client $c): array => [$c->id => ['parent_id' => $c->parent_id, 'name' => $c->name]])->all();
-        $crumbs = [ClientResource::getUrl('index') => 'Projects'];
+        $crumbs = [ClientResource::getUrl('index') => __('Projects')];
         foreach (ProjectTree::pathOf($client->id, $nodes) as $ancestor) {
             $crumbs[ClientResource::getUrl('view', ['record' => $ancestor['id']])] = $ancestor['name'];
         }
 
         return [...$crumbs, $client->name];
+    }
+
+    /** A name inside a translated sentence, isolated in right to left so the sentence keeps the page's direction (W-209, D4 §4). */
+    private static function iso(string $value): string
+    {
+        return ConsoleV2::rtl() ? "\u{2068}{$value}\u{2069}" : $value;
     }
 }

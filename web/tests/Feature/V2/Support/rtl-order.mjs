@@ -1,6 +1,8 @@
-// W-203: the classic pages still in English inside the Urdu (right-to-left) frame: Usage and a project's pages. In a
-// browser at 720 and 1280 px it finds English text drawn out of its own order: its first character drawn after its
-// last on one line ("B 68.0" for 68.0 B, "min · no limit 0.0", a sentence's full stop first). Fails when any is found.
+// W-203 / W-209: Usage and a project's pages inside the Urdu (right-to-left) frame, every project tab, at 720 and
+// 1280 px. It finds English text drawn out of its own order (its first character drawn after its last on one line:
+// "B 68.0" for 68.0 B, a sentence's full stop first) and Urdu sentences turned left to right (a sentence that starts
+// with a name, "Qureshi Textiles میں تلاش کریں", drawn with the name at the left end), and in right to left a select
+// whose arrow is on its value's side. Fails when any is found.
 //
 //   A local server with the parity world (tests/Feature/V2/Support/parity_world.php) in a local SQLite file, never
 //   production, the new frame on and the person's console in Urdu:
@@ -21,7 +23,8 @@ await page.fill('input[type=password]', process.env.PASSWORD);
 await page.locator('button[type=submit]').last().click();
 await page.waitForURL((u) => !u.pathname.endsWith('/login'), { timeout: 30000 });
 
-const pages = { usage: '/app/usage', project: `/app/clients/${process.env.PROJECT}` };
+const pages = { usage: '/app/usage', ...Object.fromEntries(['overview', 'recordings', 'screens', 'files', 'ask', 'rules']
+    .map((tab) => [`project-${tab}`, `/app/clients/${process.env.PROJECT}?tab=${tab}`])) };
 let bad = 0;
 for (const [name, path] of Object.entries(pages)) {
     for (const width of [720, 1280]) {
@@ -36,14 +39,48 @@ for (const [name, path] of Object.entries(pages)) {
             const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
             for (let t = walker.nextNode(); t; t = walker.nextNode()) {
                 const raw = t.textContent;
-                const start = raw.search(/\S/), end = raw.search(/\S\s*$/);
+                // The first and last characters drawn: spaces and the invisible isolate marks (U+2066-U+2069) don't count.
+                const start = raw.search(/[^\s\u2066-\u2069]/), end = raw.search(/[^\s\u2066-\u2069][\s\u2066-\u2069]*$/);
                 const el = t.parentElement;
-                if (start < 0 || end - start < 2 || !/[A-Za-z0-9]/.test(raw) || ARABIC.test(raw) || !el) continue;
+                if (start < 0 || end - start < 2 || !el) continue;
+                const urdu = ARABIC.test(raw);
+                if (!urdu && !/[A-Za-z0-9]/.test(raw)) continue;
                 const r0 = el.getBoundingClientRect();
                 if (r0.width < 2 || r0.height < 2 || getComputedStyle(el).visibility === 'hidden') continue;
                 const box = (i) => { const r = document.createRange(); r.setStart(t, i); r.setEnd(t, i + 1); return r.getClientRects()[0]; };
                 const first = box(start), last = box(end);
-                if (first && last && Math.abs(first.top - last.top) < 4 && first.left > last.left + 1) out.push(raw.trim().slice(0, 50));
+                if (!first || !last || Math.abs(first.top - last.top) >= 4) continue;
+                // English reads left to right (first char at the left); an Urdu sentence right to left (first at the right).
+                // A line of values ("18:24 · Qureshi Textiles") follows the page's order; each value keeps its own.
+                if (!urdu && /\s·\s/.test(raw)) {
+                    let at = 0;
+                    for (const part of raw.split('·')) {
+                        const s = at + part.search(/\S/), e = at + part.search(/\S\s*$/);
+                        at += part.length + 1;
+                        if (s < at - part.length - 1 || e - s < 2 || !/[A-Za-z]/.test(part)) continue;
+                        const a = box(s), z = box(e);
+                        if (a && z && Math.abs(a.top - z.top) < 4 && a.left > z.left + 1) out.push(part.trim().slice(0, 50));
+                    }
+                    continue;
+                }
+                if (!urdu && first.left > last.left + 1) out.push(raw.trim().slice(0, 50));
+                if (urdu && first.left + 1 < last.left) out.push(`turned LTR: ${raw.trim().slice(0, 50)}`);
+            }
+            for (const input of main.querySelectorAll('input[placeholder], textarea[placeholder]')) {
+                const ph = input.getAttribute('placeholder');
+                if (!ARABIC.test(ph) || !/^[\u2068]?[^\u0600-\u06FF]*[A-Za-z]/.test(ph)) continue;
+                // A placeholder that starts with a name: drawn by its own first letter unless the name is isolated.
+                if (!ph.startsWith('\u2068') && input.getAttribute('dir') !== 'rtl') out.push(`placeholder turned LTR: ${ph.slice(0, 50)}`);
+            }
+            // A select's arrow sits at its end: on the left in right to left, with the room for it on that side.
+            if (document.documentElement.dir === 'rtl') {
+                for (const select of main.querySelectorAll('select')) {
+                    const st = getComputedStyle(select);
+                    if (st.backgroundImage === 'none' || select.getBoundingClientRect().width < 2) continue;
+                    const x = st.backgroundPositionX;
+                    const onRight = /right|100%/.test(x) || (/%$/.test(x) && parseFloat(x) > 50);
+                    if (onRight || parseFloat(st.paddingLeft) < parseFloat(st.paddingRight)) out.push(`select arrow on the value's side: ${(select.selectedOptions[0]?.textContent ?? '').trim().slice(0, 30)}`);
+                }
             }
             return { dir: document.documentElement.dir, root: document.querySelector('.fi-page')?.className ?? '', out: [...new Set(out)] };
         });
