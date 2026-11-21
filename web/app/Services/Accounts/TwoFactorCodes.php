@@ -7,7 +7,9 @@ namespace App\Services\Accounts;
 use App\Models\User;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
+use PragmaRX\Google2FA\Google2FA;
 use RuntimeException;
 
 /**
@@ -43,7 +45,14 @@ final class TwoFactorCodes
         $provider = $this->provider();
         $code = trim($code);
         if (preg_match('/^\d{6}$/', $code) === 1) {
-            return $provider->verifyCode($code, $provider->getSecret($user));
+            // Replay-safe as verify() is (security review of 2.0.0-l): a code from a step already used, or an older one,
+            // is wrong here too; nothing is stored, so the call with `keep` can still use this one.
+            $secret = $provider->getSecret($user);
+            $last = Cache::get('filament:auth:app_authentication:code:'.hash('sha256', $secret));
+            $last = is_int($last) || (is_string($last) && ctype_digit($last)) ? (int) $last : null;
+            $google = app(Google2FA::class);
+
+            return $google->verifyKeyNewer($secret, $code, $last ?? $google->getTimestamp() - $provider->getCodeWindow() - 1, $provider->getCodeWindow()) !== false;
         }
         if (! $provider->isRecoverable() || $code === '' || strlen($code) > 64) {
             return false;

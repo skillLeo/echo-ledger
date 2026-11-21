@@ -53,16 +53,21 @@ final class AccountProof
         $password = is_string($input['password'] ?? null) ? $input['password'] : '';
         $otp = is_string($input['otp'] ?? null) ? $input['otp'] : '';
         $emailCode = is_string($input['email_code'] ?? null) ? $input['email_code'] : '';
+        if ($password === '' && $otp === '' && $emailCode === '') {
+            $this->required($user);
+        }
+        // Counted before it is checked (atomic): proofs sent at the same moment cannot pass a count made before any of
+        // them failed. A right proof clears the count, one that guessed nothing gives its try back.
+        $this->guard->claim($user->email);
 
         if ($authenticatorOnly || $user->hasTwoFactor()) {
             if ($password !== '' && ! $this->passwordMatches($user, $password)) {
                 $this->fail($user, 'wrong_password', 'That password is wrong.');
             }
             if ($otp === '') {
-                if ($password === '' && $emailCode === '') {
-                    $this->required($user);
-                }
                 // Nothing was guessed: not counted as a failure.
+                $this->guard->release($user->email);
+
                 throw new ApiError(422, 'invalid_otp', 'Enter a code from your authenticator app, or a recovery code.', ['accepts' => ['otp']]);
             }
             if (! $this->codes->verify($user, $otp)) {
@@ -81,8 +86,6 @@ final class AccountProof
             if (! self::needsEmailCode($user) || ! $this->useCode($user, $emailCode)) {
                 $this->fail($user, 'invalid_code', 'That code is wrong or has expired. Ask for a new one.');
             }
-        } else {
-            $this->required($user);
         }
         $this->guard->clear($user->email);
     }
@@ -154,7 +157,7 @@ final class AccountProof
 
     private function fail(User $user, string $code, string $message): never
     {
-        $this->guard->fail($user->email, $user->id);
+        $this->guard->claimedFailed($user->email, $user->id);
 
         throw new ApiError(422, $code, $message);
     }

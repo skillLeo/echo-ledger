@@ -53,6 +53,7 @@ final class AuditLog
         'email_changed' => 'Email changed',
         'email_change_cancelled' => 'Email change cancelled',
         'email_change_blocked' => 'Email change blocked',
+        'email_change_undone' => 'Email change undone from the old address',
         'avatar_changed' => 'Profile picture changed',
         'avatar_removed' => 'Profile picture removed',
         'recovery_codes_regenerated' => 'Recovery codes made again',

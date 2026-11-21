@@ -1820,7 +1820,8 @@ The person's own account, from the phone and desktop apps, with the same rules a
   from `POST /api/account/proof-code` → `202`. That sends a 6-digit code to the current address, valid 10 minutes,
   with at most 5 sent an hour. A wrong proof is `422 wrong_password`, `422 invalid_otp` or `422 invalid_code`. After
   5 wrong proofs in 15 minutes the answer is `429 too_many_attempts` with `Retry-After`, through the same SignInGuard
-  as sign-in.
+  as sign-in. Each proof is counted before it is checked (an atomic count), so proofs sent at the same moment are
+  never more than 5 tries; a right one clears the count. Every route that takes a proof also has a per-person limit.
   - **With two-step on, the proof must include an `otp`** (an authenticator or recovery code): the password alone is
     never enough, or the password and a device would stand in for the second step. A password sent with it is checked
     too (`422 wrong_password`). A right password without a code is `422 invalid_otp` with `"accepts": ["otp"]`, not
@@ -1921,9 +1922,15 @@ show initials), `"has_password": true`, `"pending_email": "new@example.com" | nu
      - `422 email_taken`;
      - `422 validation_failed` (the address is not valid, or is the same as now);
      - the proof errors listed above.
+   - The address is checked first (`invalid_email`, `same_as_now`), so a one-time code is not used up by a mistyped
+     address; `email_taken` is said only after the proof.
 2. `POST /api/account/email/confirm {"code"}` → `200`, with the account carrying the new `email` and
    `pending_email: null`.
-   - The change is audited and other browsers are signed out, as on the web.
+   - The change is audited, other browsers are signed out and "remember me" is renewed.
+   - The old address then gets "Your email address was changed" with **Put my address back**: a signed link for 7 days
+     that needs no sign-in (whoever changed it may hold the account). It opens a page whose button puts the old address
+     back (confirmed) and signs out everywhere (audited as `email_change_undone`). It does nothing once the address
+     changed again or another account has the old one. The console's own link confirmation sends the same email.
    - Errors: `422 invalid_code` (the fifth wrong code ends the change), `422 email_taken` when the address was taken
      meanwhile, and `410 expired` when the change has expired, ended or was blocked.
 3. `DELETE /api/account/email` → `204` cancels a pending change.
@@ -1940,7 +1947,8 @@ Limits: 3 requests an hour; 5 code attempts an hour, after which the change is c
 - `PUT /api/account/password {"current": "…" | null, "new": "…", "sign_out_others": true}` → `204`.
   - `current` is required when `has_password` is true. An account made with Google sets a first password with proof
     instead (an `otp` or `email_code`).
-  - `sign_out_others` is true by default. It signs out every other device and every browser. This device's token stays
+  - `sign_out_others` is true by default. It does what Sign out everywhere does (every other device, every browser,
+    sign-in and pairing codes not used yet, connected apps, "remember me"). This device's token stays
     valid: the answer is `204` with nothing to sign in again and no new token.
   - Errors:
     - `422 wrong_password` for the current password, counted by SignInGuard like a failed sign-in;
@@ -1949,6 +1957,7 @@ Limits: 3 requests an hour; 5 code attempts an hour, after which the change is c
       by a password that is too short; `same_as_current` only after it.
     - for an account without a password: the proof errors listed above.
   - Limit: 5 an hour, on top of the sign-in throttles.
+  - The account holder gets an email "Your password was changed" naming the device.
 - `GET /api/auth/options` gains `"password_rules": {"min": 12, "letters": true, "numbers": true}`, so the apps can check
   before sending. The server still decides.
 
@@ -1972,8 +1981,9 @@ Limits: 3 requests an hour; 5 code attempts an hour, after which the change is c
   `/api/devices/{id}` (which stays limited to the current workspace).
 - `DELETE /api/account/browsers/{id}` → `204`. Error: `404 browser_not_found`.
 - `DELETE /api/account/google {…proof}` → `204`. Error: `409 last_sign_in_method` when there is no password and no
-  passkey left.
+  passkey left. Limit: 10 an hour with passkey options and removal. The account holder gets an email.
 - `DELETE /api/account/passkeys/{id} {…proof}` → `204`. Errors: `404 passkey_not_found`, and `409 last_sign_in_method`.
+  Limit: 10 an hour (as above). The account holder gets an email naming the passkey.
 - `PATCH /api/account/passkeys/{id} {"name"}` → `200` renames one.
 
 #### 7. Two-step (authenticator app)
@@ -1990,7 +2000,8 @@ Limits: 3 requests an hour; 5 code attempts an hour, after which the change is c
    that ended, expired or is someone else's; 5 wrong codes end a ceremony). The account holder gets an email "Two-step
    sign-in is on" naming the device, never the secret.
 3. `POST /api/account/two-factor/recovery-codes {"otp"}` → `200 {"recovery_codes": […]}`. The old codes stop working.
-   The proof is an authenticator or recovery code, never a password alone. Errors: `409 not_enabled` without two-step
+   The proof is an authenticator or recovery code, never a password alone. Limit: 10 an hour with starting two-step and
+   turning it off. Errors: `409 not_enabled` without two-step
    (before any proof), `422 invalid_otp`. The account holder gets an email "New recovery codes were made" naming the
    device, never a code.
 4. `DELETE /api/account/two-factor {"otp"}` → `204`. The proof here must be an authenticator or recovery code, never
@@ -2012,7 +2023,8 @@ Limits: 3 requests an hour; 5 code attempts an hour, after which the change is c
    someone else's), and `422 validation_failed` on `name`, which follows the rules of a person's name (section 2) at
    up to 80 characters (`invalid_characters`, `too_long`); no name is "Passkey". `PATCH` takes the same rules. The account holder gets an email "A passkey was added" naming the passkey and the device.
 3. The Android origin `android:apk-key-hash:<base64url of the signing cert SHA-256>` is accepted next to the console
-   origin, built from `echoledger.android_app.fingerprints`. `/.well-known/assetlinks.json` gains the
+   origin, built from `echoledger.android_app.fingerprints` (`ECHOLEDGER_ANDROID_FINGERPRINTS`; empty by default, so a
+   server sets its release key and a local `.env` the debug keys, see `.env.example`). `/.well-known/assetlinks.json` gains the
    `delegate_permission/common.get_login_creds` relation, which Credential Manager needs.
 4. The desktop app opens `https://<console>/app/settings/security/passkeys`, a stable link added by B9 that
    redirects to wherever the console's passkeys section is (classic Profile or the v2 Sign-in & security), after
@@ -2027,8 +2039,10 @@ it. The fix is in sign-in:
   `403 deletion_scheduled {"deletes_at"}`. Until now they answered `403 not_allowed`; an older app shows the message
   as before. `POST /api/auth/code/verify` (the email code) does the same, and the email code stays good for the call
   with `keep`, so an account without a password can keep itself too.
-- The answer comes only once the password (or email code) and the two-step code are right. The two-step code is
-  checked without being used up, so the call with `keep` sends the same one.
+- The answer comes only once the password (or email code) and the two-step code are right, and after the account's
+  own state: a suspended or unconfirmed account gets `account_suspended` or `email_not_verified` first. The two-step
+  code is checked without being used up (a code used already is refused, as at any sign-in), so the call with `keep`
+  sends the same one.
 - The app then asks "Keep my account?" and repeats the same call with `"keep": true`. That cancels the deletion
   (audited as `account_deletion_cancelled`, and the account gets an email) and signs in as usual (`201`).
 - Browser sign-in (desktop, and the phone's browser path) gets the same: `POST /api/auth/device/token` answers
@@ -2044,7 +2058,7 @@ it. The fix is in sign-in:
 These are new: `name_changed`, `email_change_requested`, `email_changed`, `email_change_cancelled`,
 `email_change_blocked`, `avatar_changed`, `avatar_removed`, `recovery_codes_regenerated`, `passkey_renamed`.
 
-`email_changed` is written for every change of address (the console's link, an app's code, staff).
+`email_change_undone` is new too: the old address's "Put my address back". `email_changed` is written for every change of address (the console's link, an app's code, staff).
 
 These already exist and are now also written from the apps: `password_changed`, `mfa_enabled`, `mfa_disabled`,
 `passkey_added`, `passkey_removed`, `web_session_revoked`, `google_unlinked`, `account_deletion_cancelled` ("Keep my
@@ -2052,7 +2066,8 @@ account", the same event as the console's).
 
 Summaries never contain the addresses in full ("Email changed to h…@example.com").
 
-The account holder's emails about these changes (two-step on or off, new recovery codes, a passkey added) name the
+The account holder's emails about these changes (two-step on or off, new recovery codes, a passkey added or removed,
+the password changed, Google unlinked) name the
 device and the passkey as plain text: every character but letters, marks, numbers and spaces is written as a
 character reference and control and direction characters are dropped, so a name can never become a link, an image or
 emphasis.

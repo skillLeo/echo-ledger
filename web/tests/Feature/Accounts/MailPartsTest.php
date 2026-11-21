@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Mail\DeletionCancelledMail;
 use App\Mail\DeletionScheduledMail;
+use App\Mail\EmailChangedMail;
 use App\Mail\EmailCodeMail;
 use App\Mail\ExportReadyMail;
 use App\Mail\InvitationMail;
@@ -46,6 +47,9 @@ function everyMail(): array
         'two-step on' => new SecurityChangeMail(SecurityChangeMail::TWO_FACTOR_ON, 'S25 Ultra', "$u/app/settings/security"),
         'passkey added' => new SecurityChangeMail(SecurityChangeMail::PASSKEY_ADDED, 'S25 Ultra', "$u/app/settings/security", 'Phone'),
         'recovery codes' => new SecurityChangeMail(SecurityChangeMail::RECOVERY_CODES, 'S25 Ultra', "$u/app/settings/security"),
+        'email changed' => new EmailChangedMail('n…@example.test', "$u/account/email/restore/1?signature=x", 7),
+        'password changed' => new SecurityChangeMail(SecurityChangeMail::PASSWORD_CHANGED, 'S25 Ultra', "$u/app/settings/security"),
+        'passkey removed' => new SecurityChangeMail(SecurityChangeMail::PASSKEY_REMOVED, 'S25 Ultra', "$u/app/settings/security", 'Phone'),
         'two-step off' => new SecurityChangeMail(SecurityChangeMail::TWO_FACTOR_OFF, 'S25 Ultra', "$u/app/settings/security"),
         'upgrade approved' => new UpgradeDecidedMail(true, 'Pro', 'Dec 9, 2026', null, "$u/admin"),
         'upgrade declined' => new UpgradeDecidedMail(false, 'Pro', null, 'Payment not received yet.', "$u/admin"),

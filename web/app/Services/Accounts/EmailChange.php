@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Accounts;
 
 use App\Exceptions\ApiError;
+use App\Mail\EmailChangedMail;
 use App\Mail\EmailCodeMail;
 use App\Models\User;
 use App\Services\AuditLog;
@@ -17,7 +18,9 @@ use Filament\Panel;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
 /**
@@ -34,6 +37,9 @@ final class EmailChange
 
     public const CODE_TRIES = 5;
 
+    /** Days the old address's "put it back" link works. */
+    public const RESTORE_DAYS = 7;
+
     public function __construct(private readonly AuditLog $audit, private readonly WebSessions $browsers, private readonly AccountSessions $sessions) {}
 
     /**
@@ -43,13 +49,7 @@ final class EmailChange
      */
     public function request(User $user, mixed $email): array
     {
-        $data = FieldErrors::validate(['email' => is_string($email) ? Str::lower(trim($email)) : $email],
-            ['email' => ['required', 'string', 'email', 'max:255']],
-            ['email.email' => 'Enter a valid email address.']);
-        $email = (string) $data['email'];
-        if ($email === Str::lower($user->email)) {
-            throw FieldErrors::fail(['email' => [['same_as_now', 'That is the address you use now.']]]);
-        }
+        $email = $this->validated($user, $email);
         if (User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [$email])->exists()) {
             throw new ApiError(422, 'email_taken', 'Another account uses that address.');
         }
@@ -74,6 +74,24 @@ final class EmailChange
         $this->audit->record('email_change_requested', $user->id, $user, 'Email change asked for: '.AccountRules::maskEmail($email));
 
         return ['pending_email' => $email, 'pending_email_expires_at' => $expires->toAtomString()];
+    }
+
+    /**
+     * The new address checked as an address (before any proof is asked): `422 validation_failed` with `invalid_email`,
+     * `required`, `too_long` or `same_as_now`. Whether another account has it is said only after the proof
+     * (`email_taken`), so the check tells nobody without it which addresses have accounts.
+     */
+    public function validated(User $user, mixed $email): string
+    {
+        $data = FieldErrors::validate(['email' => is_string($email) ? Str::lower(trim($email)) : $email],
+            ['email' => ['required', 'string', 'email', 'max:255']],
+            ['email.email' => 'Enter a valid email address.']);
+        $email = (string) $data['email'];
+        if ($email === Str::lower($user->email)) {
+            throw FieldErrors::fail(['email' => [['same_as_now', 'That is the address you use now.']]]);
+        }
+
+        return $email;
     }
 
     /**
@@ -147,10 +165,51 @@ final class EmailChange
         if (User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [$email])->exists()) {
             throw new ApiError(422, 'email_taken', 'Another account uses that address.');
         }
+        $old = $user->email;
         // As Filament's link does: the new address is confirmed by the code that reached it.
-        $user->forceFill(['email' => $email])->save();
+        $user->forceFill(['email' => $email, 'remember_token' => Str::random(60)])->save();
         $user->markEmailAsVerified();
         $this->browsers->revokeOthers($user->id, null);
+        $this->tellOldAddress($user, $old);
+    }
+
+    /**
+     * The old address hears that the change happened, with a link that needs no sign-in (whoever changed it may hold
+     * the account now): for 7 days it puts the old address back and signs out everywhere (restore()). Since the
+     * security review of 2.0.0-l, for a change confirmed by code in an app and by the console's link.
+     */
+    public function tellOldAddress(User $user, string $old): void
+    {
+        $url = URL::temporarySignedRoute('account.email.restore', now()->addDays(self::RESTORE_DAYS), [
+            'user' => $user->id, 'to' => Crypt::encryptString($old), 'from' => self::addressHash($user->email),
+        ]);
+        Mail::to($old)->queue(new EmailChangedMail(AccountRules::maskEmail($user->email), $url, self::RESTORE_DAYS));
+    }
+
+    /**
+     * The old address's link was used: the address goes back to [$old], confirmed, and every device, browser, code and
+     * connected app is signed out. Nothing happens when the address changed again since ([$fromHash] is not the
+     * account's address now) or another account has the old one. Returns whether it was put back.
+     */
+    public function restore(User $user, string $old, string $fromHash): bool
+    {
+        if (! hash_equals(self::addressHash($user->email), $fromHash) || Str::lower($user->email) === Str::lower($old)
+            || User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [Str::lower($old)])->exists()) {
+            return false;
+        }
+        $this->forget($user);
+        $user->forceFill(['email' => $old])->save();
+        $user->markEmailAsVerified();
+        $this->sessions->signOutEverywhere($user);
+        $this->audit->record('email_change_undone', $user->id, $user, 'Email put back to '.AccountRules::maskEmail($old));
+
+        return true;
+    }
+
+    /** A keyed hash of an address, so a link can say which address it undoes without naming it. */
+    public static function addressHash(string $email): string
+    {
+        return hash_hmac('sha256', 'email-restore|'.Str::lower($email), (string) config('app.key'));
     }
 
     /** DELETE /api/account/email: ends a change waiting for its confirmation; nothing to do is not an error. */

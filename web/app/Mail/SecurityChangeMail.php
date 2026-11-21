@@ -7,8 +7,8 @@ namespace App\Mail;
 use App\Support\Brand;
 
 /**
- * A way to sign in changed from an app (since 2.0.0-l): two-step sign-in turned on or off, new recovery codes, or a
- * passkey added. The account holder hears of it, so a stolen device cannot change one quietly. Names the change and
+ * A way to sign in changed from an app (since 2.0.0-l): two-step sign-in turned on or off, new recovery codes, a
+ * passkey added or removed, the password changed or Google unlinked. The account holder hears of it, so a stolen device cannot change one quietly. Names the change and
  * the device, never a secret or a code.
  */
 final class SecurityChangeMail extends AccountMail
@@ -21,11 +21,20 @@ final class SecurityChangeMail extends AccountMail
 
     public const TWO_FACTOR_OFF = 'two_factor_off';
 
+    public const PASSWORD_CHANGED = 'password_changed';
+
+    public const GOOGLE_UNLINKED = 'google_unlinked';
+
+    public const PASSKEY_REMOVED = 'passkey_removed';
+
     private const SUBJECTS = [
         self::TWO_FACTOR_ON => 'Two-step sign-in is on for your account',
         self::PASSKEY_ADDED => 'A passkey was added to your account',
         self::RECOVERY_CODES => 'New recovery codes were made for your account',
         self::TWO_FACTOR_OFF => 'Two-step sign-in was turned off for your account',
+        self::PASSWORD_CHANGED => 'The password of your account was changed',
+        self::GOOGLE_UNLINKED => 'Google was unlinked from your account',
+        self::PASSKEY_REMOVED => 'A passkey was removed from your account',
     ];
 
     private const HEADINGS = [
@@ -33,6 +42,9 @@ final class SecurityChangeMail extends AccountMail
         self::PASSKEY_ADDED => 'A passkey was added',
         self::RECOVERY_CODES => 'New recovery codes were made',
         self::TWO_FACTOR_OFF => 'Two-step sign-in is off',
+        self::PASSWORD_CHANGED => 'Your password was changed',
+        self::GOOGLE_UNLINKED => 'Google was unlinked',
+        self::PASSKEY_REMOVED => 'A passkey was removed',
     ];
 
     public function __construct(

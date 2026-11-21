@@ -117,6 +117,7 @@ final class AccountSecurityController extends Controller
         }
         $user->forceFill(['google_id' => null])->save();
         $audit->record('google_unlinked', $user->id, $user);
+        self::notify($user, SecurityChangeMail::GOOGLE_UNLINKED, $this->device($request));
 
         return response()->noContent();
     }
@@ -193,6 +194,7 @@ final class AccountSecurityController extends Controller
             throw new ApiError(409, 'last_sign_in_method', 'This passkey is your only way to sign in. Choose a password first.');
         }
         $passkeys->remove($user, $passkey->id);
+        self::notify($user, SecurityChangeMail::PASSKEY_REMOVED, $this->device($request), $passkey->name);
 
         return response()->noContent();
     }

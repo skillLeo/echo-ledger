@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\Account;
 
 use App\Exceptions\ApiError;
+use App\Filament\Auth\EditProfile;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Controller;
+use App\Mail\SecurityChangeMail;
 use App\Models\Device;
 use App\Models\User;
 use App\Services\Accounts\AccountProof;
+use App\Services\Accounts\AccountSessions;
 use App\Services\Accounts\EmailChange;
 use App\Services\AuditLog;
-use App\Services\WebSessions;
 use App\Services\Workspaces\Workspaces;
 use App\Support\Api\AccountRules;
 use App\Support\Api\FieldErrors;
@@ -20,7 +22,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
 
 /**
  * The person's name, email and password from the apps (since 2.0.0-l, docs/API.md "Account and security from the
@@ -61,9 +63,11 @@ final class AccountProfileController extends Controller
     public function email(Request $request, EmailChange $change): JsonResponse
     {
         $user = $this->owner($request);
+        // The address first, so a one-time code is not used up by a mistyped address.
+        $email = $change->validated($user, $request->input('email'));
         $this->proof->check($user, $request->only(['password', 'otp', 'email_code']));
 
-        return response()->json($change->request($user, $request->input('email')), 202);
+        return response()->json($change->request($user, $email), 202);
     }
 
     /** POST /api/account/email/confirm {"code"} — 5 code attempts an hour; the fifth wrong one ends the change. */
@@ -89,7 +93,7 @@ final class AccountProfileController extends Controller
      * `email_code`. Every other device and every browser is signed out unless `sign_out_others` is false; this device's
      * token stays.
      */
-    public function password(Request $request, WebSessions $browsers): Response
+    public function password(Request $request, AccountSessions $sessions): Response
     {
         $user = $this->owner($request);
         $new = $request->input('new');
@@ -116,19 +120,13 @@ final class AccountProfileController extends Controller
         /** @var string $new */
         $user->forceFill(['password' => Hash::make($new), 'has_password' => true])->save();
         if ($signOutOthers) {
-            $this->signOutOthers($user, $this->device($request), $browsers);
+            // Everything Sign out everywhere ends (devices, browsers, sign-in and pairing codes not used yet, connected
+            // apps, "remember me"), this device kept.
+            $sessions->signOutEverywhere($user, $this->device($request)->id);
         }
+        Mail::to($user->email)->queue(new SecurityChangeMail(SecurityChangeMail::PASSWORD_CHANGED, $this->device($request)->readableName(), EditProfile::settingsUrl('security')));
 
         return response()->noContent();
-    }
-
-    /** Every other device of the person, in every workspace, and every console browser; this device stays. */
-    private function signOutOthers(User $user, Device $current, WebSessions $browsers): void
-    {
-        Device::query()->withoutGlobalScopes()->where('user_id', $user->id)->whereKeyNot($current->id)->whereNull('signed_out_at')
-            ->get()->each(fn (Device $d) => $d->signOut('self'));
-        $browsers->revokeOthers($user->id, null);
-        $user->forceFill(['remember_token' => Str::random(60)])->saveQuietly();
     }
 
     private function device(Request $request): Device

@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Filament\Support\Notice;
 use App\Http\Requests\BlockEmailChangeRequest;
+use App\Http\Requests\ConfirmEmailChangeRequest;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientKeyterm;
@@ -55,6 +56,7 @@ use App\Support\Brand;
 use App\Support\Translation\IsolatingTranslator;
 use Filament\Actions\Action;
 use Filament\Auth\Http\Requests\BlockEmailChangeVerificationRequest;
+use Filament\Auth\Http\Requests\EmailChangeVerificationRequest;
 use Filament\Notifications\Notification as FilamentNotification;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Auth\Events\Login;
@@ -97,6 +99,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(FilamentNotification::class, Notice::class);
         // Since 2.0.0-l: "Block" in the notice of an email change also ends a change asked for in an app (EmailChange).
         $this->app->bind(BlockEmailChangeVerificationRequest::class, BlockEmailChangeRequest::class);
+        // Since the security review of 2.0.0-l: a change confirmed by the console's link tells the old address too.
+        $this->app->bind(EmailChangeVerificationRequest::class, ConfirmEmailChangeRequest::class);
         // Scoped = fresh per request and per queued job (no stale settings/secrets across jobs).
         $this->app->scoped(SettingsRepository::class);
         $this->app->scoped(CredentialVault::class);

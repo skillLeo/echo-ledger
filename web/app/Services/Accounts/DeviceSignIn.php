@@ -77,6 +77,8 @@ final class DeviceSignIn
 
             throw new ApiError(422, 'invalid_credentials', 'Wrong email or password.');
         }
+        // The account's own state first (security review of 2.0.0-l): never "being deleted" for one that may not sign in.
+        $this->assertNotBlocked($user);
         if ($user->hasTwoFactor()) {
             $otp = trim((string) ($data['otp'] ?? ''));
             if ($otp === '') {
@@ -118,6 +120,7 @@ final class DeviceSignIn
 
             return ['sign_up_token' => $this->emailCodes->signUpToken($row)];
         }
+        $this->assertNotBlocked($user, emailProven: true);
         if ($user->hasTwoFactor()) {
             $this->guard->assertNotLocked($email);
             $otp = trim((string) ($data['otp'] ?? ''));
@@ -210,6 +213,20 @@ final class DeviceSignIn
     }
 
     /**
+     * Suspended or not confirmed: answered before anything about a deletion (security review of 2.0.0-l), with the same
+     * codes as assertCanSignIn(). [$emailProven]: the email code itself confirms the address (it is marked afterwards).
+     */
+    private function assertNotBlocked(User $user, bool $emailProven = false): void
+    {
+        if ($user->isSuspended()) {
+            throw new ApiError(403, 'account_suspended', EnsureNotSuspended::MESSAGE);
+        }
+        if (! $emailProven && ! $user->hasVerifiedEmail()) {
+            throw new ApiError(403, 'email_not_verified', 'Confirm your email first: open the link in the email the console sent you.');
+        }
+    }
+
+    /**
      * The apps' sign-in during the deletion grace (since 2.0.0-l): `403 deletion_scheduled {"deletes_at"}` unless the
      * call says `"keep": true`. With [$proof] (the two-step code, checked without using it up) the answer comes only for
      * a right code, so it says nothing to someone who knows only the password; a wrong one counts as a failure.
@@ -289,6 +306,7 @@ final class DeviceSignIn
         if (! $found instanceof DeviceSignInCode || ! $user instanceof User) {
             throw $invalid;
         }
+        $this->assertNotBlocked($user);
         $this->assertNotScheduled($user, $keep);
         $this->assertCanSignIn($user, $keep);
         // The workspace it was approved for, while the person still belongs to it.
