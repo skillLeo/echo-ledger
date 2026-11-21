@@ -84,7 +84,8 @@ fun AppearancePage(
                     modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
                 )
             }
-            // Wallpaper colours, as classic (Android 12 and later): the wallpaper's accent; Record keeps its colour.
+            // Wallpaper colours (Android 12 and later), a classic setting kept here for parity: it changes the classic
+            // screens only, and the redesigned ones keep EchoLedger's own colours (its hint says so).
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 EchoSwitch(
                     checked = settings.dynamicColour,

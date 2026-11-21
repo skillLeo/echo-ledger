@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
@@ -58,6 +59,8 @@ fun EchoListRow(
     tall: Boolean = false,
     /** Not read yet (Activity): a dot in the accent just before the title, as classic has it. */
     unread: Boolean = false,
+    /** What screen readers hear for [unread] ("Unread"), in the screen's words. */
+    unreadLabel: String? = null,
     onClickLabel: String? = null,
     onLongClickLabel: String? = null,
     onLongClick: (() -> Unit)? = null,
@@ -83,7 +86,7 @@ fun EchoListRow(
                     else -> Modifier
                 }
             )
-            .semantics(mergeDescendants = true) {}
+            .semantics(mergeDescendants = true) { if (unread && unreadLabel != null) stateDescription = unreadLabel }
             .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)

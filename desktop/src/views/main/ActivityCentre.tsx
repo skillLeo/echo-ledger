@@ -36,7 +36,7 @@ export function inProgressRows(uploads: UploadItem[], items: LibraryItem[]): InP
   return [...sending, ...moving];
 }
 
-function useInProgress(): InProgressRow[] {
+export function useInProgress(): InProgressRow[] {
   const [rows, setRows] = useState<InProgressRow[]>([]);
   const shown = useWindowShown();
   useEffect(() => {
@@ -96,7 +96,7 @@ export function activitySubtitle(needsYou: number, unread: number): string {
 }
 
 /** Today's notifications show the time, older ones the day. */
-function shortWhen(iso: string | null): string {
+export function shortWhen(iso: string | null): string {
   if (!iso) return "";
   const text = formatWhen(iso);
   return text.startsWith("Today · ") ? text.slice("Today · ".length) : text.split(" · ")[0];
