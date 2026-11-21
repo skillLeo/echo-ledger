@@ -340,7 +340,9 @@ final class LibraryOrganiser
                 $title = trim((string) $data['title']);
                 $session->title = $title === '' ? null : $title;
                 // A person's title is never replaced; clearing it asks for the automatic one again (since v1.5, Phase 1C).
+                // Since 2.0.0-k it always wins, even a generic word ("WhatsApp call"): title_by_person.
                 $session->title_auto = false;
+                $session->title_by_person = $session->title !== null;
                 $askTitle = $session->title === null;
             }
             if (array_key_exists('pinned', $data)) {

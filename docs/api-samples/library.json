@@ -78,7 +78,7 @@
             },
             "filed_by": "user",
             "title": "WhatsApp Business call",
-            "title_auto": false,
+            "title_auto": true,
             "caller": null,
             "started_at": "2026-11-14T13:15:00+00:00",
             "ended_at": "2026-11-14T13:15:09+00:00",

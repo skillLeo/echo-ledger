@@ -37,6 +37,7 @@ use App\Services\Entitlements\Entitlements;
 use App\Services\Projects\FilingRules;
 use App\Services\Projects\ProjectTree;
 use App\Services\SettingsRepository;
+use App\Services\Titles\TitleSql;
 use App\Services\TranscriptExporter;
 use App\Services\Workspaces\PlanLimits;
 use App\Support\UrduText;
@@ -535,7 +536,7 @@ class ViewClient extends ViewRecord
 
         return match ($this->sort) {
             'oldest' => $query->oldest('started_at'),
-            'title' => $query->orderByRaw('LOWER(COALESCE(title, caller_name, source_app))'),
+            'title' => TitleSql::orderByShown($query),
             'longest' => $query->orderByDesc('duration_ms'),
             default => $query->latest('started_at'),
         };

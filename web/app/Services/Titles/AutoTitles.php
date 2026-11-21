@@ -38,7 +38,7 @@ final class AutoTitles
     public static function wanted(CaptureSession $session): bool
     {
         // Since 2.0.0-k: never where a person is known (a name, or a number), as the title is theirs.
-        return GenericTitles::is($session->title) && $session->personTitle() === null;
+        return ! $session->title_by_person && GenericTitles::is($session->title) && $session->personTitle() === null;
     }
 
     /** Queues the title of [$transcript]'s recording when it is a finished final transcript of an untitled one. Never throws. */

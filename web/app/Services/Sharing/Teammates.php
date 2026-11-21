@@ -332,7 +332,9 @@ final class Teammates
             'client_ref' => (string) Str::uuid(),
             'source_device' => $original->source_device,
             'source_app' => $original->source_app,
-            'title' => $original->displayTitle(),
+            // The stored title and its kind (since 2.0.0-k): the copy works out "Call with …" from the caller fields itself.
+            'title' => $original->title,
+            'title_auto' => $original->title_auto,
             'language' => $original->language,
             'started_at' => $original->started_at,
             'ended_at' => $original->ended_at,
@@ -346,7 +348,7 @@ final class Teammates
             'transcribe' => $original->status !== SessionStatus::AudioOnly,
             'final_provider' => $original->final_provider,
         ]);
-        $copy->forceFill(['caller_name' => $original->caller_name, 'caller_number' => $original->caller_number, 'caller_source' => $original->caller_source]);
+        $copy->forceFill(['title_by_person' => $original->title_by_person, 'caller_name' => $original->caller_name, 'caller_number' => $original->caller_number, 'caller_source' => $original->caller_source]);
         $copy->save();
 
         foreach ($original->recordings()->get() as $recording) {

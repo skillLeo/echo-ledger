@@ -26,6 +26,7 @@ use App\Models\Client;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
+use App\Services\Titles\TitleSql;
 use App\Services\Usage\UsageLedger;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
@@ -892,10 +893,14 @@ final class CaptureSessionsTable
         ));
 
         return $query->where(function (Builder $query) use ($title, $pattern, $apps): void {
-            $query->whereRaw("LOWER({$title}) LIKE ? ESCAPE '!'", [$pattern]);
+            // Since 2.0.0-k the title shown: the person's own, else the person called, else the stored one (TitleSql).
+            TitleSql::whereShownLike($query, $pattern);
             if ($apps !== []) {
+                [$named, $nobody] = TitleSql::named($query);
                 $query->orWhere(fn (Builder $q) => $q
                     ->where(fn (Builder $q) => $q->whereNull($title)->orWhere($title, ''))
+                    // The app's name is shown only when nobody called is known.
+                    ->whereRaw("NOT {$named} AND NOT ".TitleSql::numbered($q), $nobody)
                     ->whereIn($q->qualifyColumn('source_app'), $apps));
             }
         });

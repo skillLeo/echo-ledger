@@ -62,7 +62,7 @@ final class WhatsAppActions
             'url' => $message['url'] ?? null,
             'cut' => $message['cut'] ?? false,
             'audio' => $primary?->isReady() === true ? route('admin.recordings.stream', ['recording' => $primary->id, 'download' => 1]) : null,
-            'audio_name' => $session->displayTitle(),
+            'audio_name' => $session->outsideTitle(),
             'view' => $view,
         ];
     }

@@ -58,6 +58,6 @@ trait SendsToWhatsApp
             return ['error' => $e->getMessage()];
         }
 
-        return ['url' => WhatsAppMessage::url(WhatsAppMessage::linkMessage($session->displayTitle(), $link))['url'], 'link' => $link];
+        return ['url' => WhatsAppMessage::url(WhatsAppMessage::linkMessage($session->outsideTitle(), $link))['url'], 'link' => $link];
     }
 }

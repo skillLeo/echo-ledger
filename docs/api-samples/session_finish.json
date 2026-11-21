@@ -15,7 +15,7 @@
         "client": null,
         "filed_by": null,
         "title": "WhatsApp call",
-        "title_auto": false,
+        "title_auto": true,
         "caller": null,
         "started_at": "2026-10-24T09:00:00+00:00",
         "ended_at": "2026-10-24T09:10:00+00:00",

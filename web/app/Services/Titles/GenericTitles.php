@@ -49,6 +49,33 @@ final class GenericTitles
         return false;
     }
 
+    /**
+     * The exact generic titles, lower case, for SQL (TitleSql): the file-name patterns cannot be written there, so a
+     * recording titled like a phone's file name sorts by that name until it is renamed.
+     *
+     * @return list<string>
+     */
+    public static function exactNames(): array
+    {
+        return array_values(array_unique([...self::NAMES, ...self::fallbacks()]));
+    }
+
+    /**
+     * Every exact "name" that names nobody, lower case, for SQL (TitleSql), as namesNobody() decides for one name.
+     *
+     * @return list<string>
+     */
+    public static function exactNobodies(): array
+    {
+        $labels = [];
+        foreach (SourceApp::cases() as $app) {
+            $label = mb_strtolower($app->getLabel());
+            array_push($labels, $label, $label.' call', $label.' audio call', $label.' video call');
+        }
+
+        return array_values(array_unique([...self::NO_NAMES, ...self::exactNames(), ...$labels]));
+    }
+
     public static function is(?string $title): bool
     {
         $title = mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', (string) $title)));

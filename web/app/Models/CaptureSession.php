@@ -46,6 +46,7 @@ use Illuminate\Support\Carbon;
  * @property SourceApp $source_app
  * @property string|null $title
  * @property bool $title_auto the title was written by the server from what was said (since v1.5, Phase 1C)
+ * @property bool $title_by_person the title was given by a person renaming the recording (since 2.0.0-k): it always wins
  * @property string|null $language
  * @property Carbon $started_at
  * @property Carbon|null $ended_at
@@ -234,18 +235,45 @@ class CaptureSession extends Model
     {
         // docs/API.md "Title from the person" (since 2.0.0-k): a person's own title, then the person called, then the
         // automatic title, then the app's name for an untitled recording.
-        $title = trim((string) $this->title);
-        if ($title !== '' && ! $this->title_auto && ! GenericTitles::is($title)) {
+        if ($this->titleIsOwn()) {
             return (string) $this->title;
         }
+        $title = trim((string) $this->title);
 
         return $this->personTitle() ?? ($title !== '' ? (string) $this->title : self::fallbackTitleFor($this->source_app));
     }
 
     /**
+     * The title for people outside the account (share links, WhatsApp text, exported files; since 2.0.0-k): the same as
+     * before the person called counted, so the caller's name and number never reach anyone the recording is sent to,
+     * links already sent included.
+     */
+    public function outsideTitle(): string
+    {
+        $title = trim((string) $this->title);
+
+        return $title !== '' ? (string) $this->title : self::fallbackTitleFor($this->source_app);
+    }
+
+    /**
+     * Whether the title shown is one a person chose (since 2.0.0-k): renamed by a person (always, even "WhatsApp call"),
+     * or sent by an app at upload when it is not a generic one. `title_auto` in the API is the opposite.
+     */
+    public function titleIsOwn(): bool
+    {
+        $title = trim((string) $this->title);
+        if ($title === '') {
+            return false;
+        }
+
+        return $this->title_by_person || (! $this->title_auto && ! GenericTitles::is($title));
+    }
+
+    /**
      * The title the person called gives (since v1.2, the rule since 2.0.0-k): "Call with Omar Khan" (a meeting's window or
      * calendar title as it is), else "Call with +92 300 1234567". Null for a voice note, or when nobody is known: a name
-     * that is only an app's label ("WhatsApp") or what apps write for an unknown caller names nobody.
+     * that is only an app's label ("WhatsApp") or what apps write for an unknown caller names nobody. In the console's
+     * language (the API's is always English).
      */
     public function personTitle(): ?string
     {
@@ -254,11 +282,11 @@ class CaptureSession extends Model
         }
         $name = trim((string) $this->caller_name);
         if (! GenericTitles::namesNobody($name)) {
-            return in_array($this->caller_source, ['window_title', 'calendar'], true) ? $name : 'Call with '.$name;
+            return in_array($this->caller_source, ['window_title', 'calendar'], true) ? $name : __('Call with :name', ['name' => $name]);
         }
         $number = trim((string) $this->caller_number);
 
-        return $number !== '' ? 'Call with '.$number : null;
+        return $number !== '' ? __('Call with :name', ['name' => $number]) : null;
     }
 
     /**
@@ -402,6 +430,7 @@ class CaptureSession extends Model
             'speaker_names' => 'array',
             'pinned' => 'boolean',
             'title_auto' => 'boolean',
+            'title_by_person' => 'boolean',
             'keep_forever' => 'boolean',
             'important' => 'boolean',
             'transcribe' => 'boolean',

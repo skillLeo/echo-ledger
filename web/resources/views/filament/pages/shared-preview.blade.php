@@ -10,7 +10,7 @@
     @if ($sessions !== null)
         @forelse ($sessions as $session)
             <div class="text-sm" style="display: flex; justify-content: space-between; gap: 12px;">
-                <span dir="auto">{{ $session->displayTitle() }}</span>
+                <span dir="auto">{{ $session->outsideTitle() }}</span>
                 <span class="text-gray-500 dark:text-gray-400" style="white-space: nowrap;">{{ $session->started_at->copy()->setTimezone($zone)->format('M j') }}</span>
             </div>
         @empty
