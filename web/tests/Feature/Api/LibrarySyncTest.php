@@ -9,7 +9,7 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Models\CaptureSession;
 use App\Models\Client;
-use App\Models\LabelColor;
+use App\Models\LabelList;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -177,7 +177,7 @@ describe('paging', function () {
             // Since 2.0.0-i labels with a colour too, so the colours are counted.
             $session->labels()->create(['label' => "Label {$i}"]);
         }
-        LabelColor::query()->create(['workspace_id' => $this->owner->current_workspace_id, 'user_id' => $this->owner->id, 'label_key' => 'label 1', 'color' => '#16a34a']);
+        LabelList::query()->create(['workspace_id' => $this->owner->current_workspace_id, 'user_id' => $this->owner->id, 'label_key' => 'label 1', 'name' => 'Label 1', 'color' => '#16a34a']);
         $this->app['auth']->forgetGuards();
         DB::flushQueryLog();
         DB::enableQueryLog();

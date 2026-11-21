@@ -69,6 +69,12 @@ function secDeviceGuardedRoutes(): array
         'POST sessions/transcribe-estimate' => ['POST', '/api/sessions/transcribe-estimate', 'library:read'],
         // Since 2.0.0-i: a label's colour.
         'PUT labels/color' => ['PUT', '/api/labels/color', 'sessions:write'],
+        // Since 2.0.0-m: lists.
+        'GET lists' => ['GET', '/api/lists', 'config:read'],
+        'POST lists' => ['POST', '/api/lists', 'sessions:write'],
+        'PUT lists/order' => ['PUT', '/api/lists/order', 'sessions:write'],
+        'PATCH lists/{key}' => ['PATCH', '/api/lists/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE lists/{key}' => ['DELETE', '/api/lists/'.Fx::MISSING_ID, 'sessions:write'],
         'POST sessions' => ['POST', '/api/sessions', 'sessions:write'],
         'POST sessions/{id}/finish' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/finish', 'sessions:write'],
         'POST sessions/{id}/markers' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/markers', 'sessions:write'],
@@ -224,7 +230,8 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(140);
+    // 2.0.0-m: the five list routes.
+    expect($guarded)->toBe(145);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

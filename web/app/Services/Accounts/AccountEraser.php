@@ -17,6 +17,7 @@ use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
 use App\Models\Device;
 use App\Models\LabelColor;
+use App\Models\LabelList;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
 use App\Models\User;
@@ -113,6 +114,8 @@ final class AccountEraser
 
         // Since 2.0.0-i: their label colours (the foreign keys would take them with the account too).
         LabelColor::query()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->delete();
+        // Since 2.0.0-m: their lists.
+        LabelList::query()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->delete();
 
         // Since v1.8 P6.3: the invitations they sent and nobody used (their invite links too), and those waiting for
         // their address: nobody joins on the word of an account that is gone.

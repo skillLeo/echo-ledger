@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
+use App\Models\LabelList;
 use App\Models\MissedRecording;
 use App\Models\Screen;
 use App\Models\SentItem;
@@ -233,6 +234,14 @@ function isoApiCases(array $b): array
             fn (TestResponse $r): bool => $r->status() === 200 && $r->json('items') === [] && $r->json('minutes') === 0],
         // Since 2.0.0-i: the other side's label is no label of this person's, so nothing is coloured or re-synced.
         'api.labels.color' => ['PUT', '/api/labels/color', ['label' => 'bobsecretlabel', 'color' => '#000000'], 404],
+        // Since 2.0.0-m: the other side's label is no list of this person's: never listed, renamed, deleted or ordered.
+        'api.lists' => ['GET', '/api/lists', [], 'list'],
+        'api.lists.store' => ['POST', '/api/lists', ['name' => 'Alice list'], fn (TestResponse $r): bool => $r->status() === 201
+            && unscoped(fn (): bool => SessionLabel::query()->where('capture_session_id', $b['session']->id)->pluck('label')->all() === ['bobsecretlabel'])],
+        'api.lists.update' => ['PATCH', '/api/lists/bobsecretlabel', ['name' => 'hijacked'], 404],
+        'api.lists.destroy' => ['DELETE', '/api/lists/bobsecretlabel', [], 404],
+        'api.lists.order' => ['PUT', '/api/lists/order', ['keys' => ['bobsecretlabel']], fn (TestResponse $r): bool => $r->status() === 422
+            && unscoped(fn (): bool => LabelList::query()->where('user_id', $b['bob']->id)->doesntExist() || LabelList::query()->where('user_id', $b['bob']->id)->pluck('position')->all() === [0])],
         'api.clients.store' => ['POST', '/api/clients', ['name' => 'Alice new client'], fn (TestResponse $r): bool => $r->status() === 201],
         'api.clients.update' => ['PATCH', "/api/clients/{$b['client']->id}", ['name' => 'hijacked'], 404],
         'api.clients.destroy' => ['DELETE', "/api/clients/{$b['client']->id}", [], 404],
