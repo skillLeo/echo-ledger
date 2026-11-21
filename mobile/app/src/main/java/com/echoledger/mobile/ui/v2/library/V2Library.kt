@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -237,6 +238,7 @@ fun V2LibraryScreen(
                 is SelectionAction.Label -> vm.bulk(ids, if (action.add) "label" else "unlabel", label = action.label)
                 is SelectionAction.Pin -> vm.bulk(ids, if (action.on) "pin" else "unpin")
                 is SelectionAction.Keep -> vm.bulk(ids, if (action.on) "keep" else "unkeep")
+                is SelectionAction.Important -> vm.bulk(ids, if (action.on) "important" else "unimportant")
                 is SelectionAction.Export -> vm.exportSelected(ids, action.format)?.let { com.echoledger.mobile.ui.shareFile(context, it) }
                 is SelectionAction.Rename -> ids.singleOrNull()?.let { vm.organise(it, title = action.title) }
                 SelectionAction.Delete -> deleteRows(items)
@@ -659,17 +661,34 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
     val text = v2Text
     val pinned = stringResource(R.string.v2_lib_pinned_mark)
     val problem = rowProblem(row)
+    // Audio kept without a transcript says how long it stays: "Audio · 18 days left".
+    val daysLeft = if (row.status == RowStatus.Untranscribed) LibraryModel.daysLeft(row.item.expiresAt) else null
+    val important = stringResource(R.string.v2_lib_important_mark)
     EchoListRow(
         title = row.title,
         // A selected row is tinted all across, as classic's is.
         modifier = if (selected == true) Modifier.background(c.accentSoft) else Modifier,
         // A failed transcript or one with nothing heard says so in place of the meta line, as classic's row does.
-        meta = if (problem != null) null else row.meta,
+        meta = when {
+            problem != null -> null
+            daysLeft != null -> pluralStringResource(R.plurals.v2_lib_audio_days_left, daysLeft, daysLeft)
+            else -> row.meta
+        },
         titleEnd = row.time,
         metaEnd = {
             // The screens icon and count (meeting assets) before the length, when it has any.
             val screens = row.item.screenCount ?: 0
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                // Its lists as their colour dots, up to three, each named for screen readers (D14 §3).
+                row.item.labels.take(3).forEach { label ->
+                    val stored =
+                        row.item.labelColors[label]
+                            ?: row.item.labelColors.entries.firstOrNull { it.key.equals(label, ignoreCase = true) }?.value
+                    com.echoledger.mobile.ui.v2.components.EchoLabelDot(stored, Modifier.semantics { contentDescription = label })
+                }
+                if (row.item.important) {
+                    androidx.compose.material3.Icon(EchoIcons.Important, important, Modifier.size(EchoTokens.Icon.sm), tint = c.danger)
+                }
                 if (row.item.pinned) {
                     androidx.compose.material3.Icon(
                         EchoIcons.Pin,

@@ -498,7 +498,13 @@ data class LibraryItem(
     /** How it got its project (since v1.5): "user", "contact", "rule", or null (the Inbox). */
     @SerialName("filed_by") val filedBy: String? = null,
     /** Screen moments kept during the meeting (since v1.5); null from an older server. */
-    @SerialName("screen_count") val screenCount: Int? = null
+    @SerialName("screen_count") val screenCount: Int? = null,
+    /** The person flagged it (contract 2.0.0-i). */
+    val important: Boolean = false,
+    /** The colours of its labels that have one, `{label: "#rrggbb"}` (contract 2.0.0-i). */
+    @SerialName("label_colors") val labelColors: Map<String, String> = emptyMap(),
+    /** When retention moves it to Trash (contract 2.0.0-i); null when kept forever or still recording. */
+    @SerialName("expires_at") val expiresAt: String? = null
 )
 
 @Serializable

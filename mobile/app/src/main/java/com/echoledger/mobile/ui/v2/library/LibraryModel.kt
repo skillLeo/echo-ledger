@@ -131,6 +131,16 @@ object LibraryModel {
             .toList()
     }
 
+    /**
+     * Days until retention moves it to Trash (docs/API.md 2.0.0-i): the hours left divided by 24, rounded up, never
+     * below 0, from [expiresAt] and the phone's clock; null when it has none (kept forever, still recording).
+     */
+    fun daysLeft(expiresAt: String?, now: java.time.Instant = java.time.Instant.now()): Int? {
+        val at = expiresAt?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() } ?: return null
+        val hours = java.time.Duration.between(now, at).toMinutes() / 60.0
+        return kotlin.math.ceil(hours / 24.0).toInt().coerceAtLeast(0)
+    }
+
     /** Arabic-Indic and Eastern Arabic digits to Latin ones: times and durations stay 0-9 in every language. */
     fun latinDigits(s: String): String = buildString(s.length) {
         for (ch in s) {

@@ -212,6 +212,14 @@ private fun V2RecordingPage(
             }
         }
 
+        override fun important(on: Boolean) {
+            scope.launch {
+                if (vm.organise(item.id, important = on)) {
+                    say(res.getString(if (on) R.string.v2_rec_marked_important else R.string.v2_rec_unmarked_important))
+                }
+            }
+        }
+
         override fun keep(on: Boolean) {
             scope.launch {
                 if (vm.organise(item.id, keep = on)) say(res.getString(if (on) R.string.v2_rec_kept else R.string.v2_rec_not_kept))
@@ -349,8 +357,11 @@ private fun V2RecordingPage(
     }
     // Views not in the plan: said, with the plans one tap away (classic's plan badge).
     val viewsLock = settings.plan.lockFor("views")
-    var upgrading by remember { mutableStateOf(false) }
-    if (upgrading && viewsLock != null) com.echoledger.mobile.ui.UpgradeSheet(vm, settings.plan, viewsLock) { upgrading = false }
+    // See plans opens the plans for what it is under: the views, or call notes (ai_notes).
+    var upgrading by remember { mutableStateOf<String?>(null) }
+    upgrading?.let { feature ->
+        com.echoledger.mobile.ui.UpgradeSheet(vm, settings.plan, settings.plan.lockFor(feature)) { upgrading = null }
+    }
     val finalReady = t?.kind == "final" && t.status == "completed"
     val tools = TranscriptTools(
         names = page.speakerNames,
@@ -361,7 +372,7 @@ private fun V2RecordingPage(
         showAs = page.showAs,
         views = page.views,
         onView = page::chooseView,
-        onPlans = { upgrading = true },
+        onPlans = { upgrading = "views" },
         version = page.version to { v: TranscriptVersion -> page.version = v },
         final = t?.let { it.kind == "final" },
         activeIndex = page.activeIndex,
@@ -418,7 +429,7 @@ private fun V2RecordingPage(
                 ready = finalReady,
                 notesOnPlan = settings.plan.aiNotes,
                 onPlay = { page.playFrom(it) },
-                onPlans = { upgrading = true }
+                onPlans = { upgrading = "ai_notes" }
             )
         },
         head = RecordingHead(

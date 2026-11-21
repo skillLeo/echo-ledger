@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.Forum
@@ -151,6 +152,7 @@ object EchoIcons {
     val Stop: ImageVector get() = Icons.Outlined.Stop
     val Mic: ImageVector get() = Icons.Outlined.Mic
     val MicOff: ImageVector get() = Icons.Outlined.MicOff
+    val Important: ImageVector get() = Icons.Outlined.Flag
     val Dictation: ImageVector get() = Icons.Outlined.KeyboardVoice
     val Translate: ImageVector get() = Icons.Outlined.Translate
     val Assist: ImageVector get() = Icons.Outlined.AutoAwesome

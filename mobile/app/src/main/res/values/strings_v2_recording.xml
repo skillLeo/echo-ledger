@@ -28,6 +28,8 @@
     <string name="v2_rec_keep">Keep forever</string>
     <string name="v2_rec_stop_keeping">Stop keeping</string>
     <string name="v2_rec_kept">Kept forever</string>
+    <string name="v2_rec_marked_important">Marked important</string>
+    <string name="v2_rec_unmarked_important">No longer important</string>
     <string name="v2_rec_not_kept">No longer kept forever</string>
     <string name="v2_rec_retranscribe">Change language &amp; re-transcribe</string>
     <string name="v2_rec_retranscribe_title">Re-transcribe as</string>

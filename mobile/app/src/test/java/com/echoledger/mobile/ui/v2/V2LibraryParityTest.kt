@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -25,6 +26,7 @@ import androidx.compose.ui.test.swipeDown
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.ui.v2.components.EchoToastHost
@@ -219,5 +221,45 @@ class V2LibraryParityTest : ScreenTest() {
         compose.onNodeWithText("Old call").performClick()
         compose.onNodeWithText("Restore").performClick()
         pumpUntil("restored") { server.requestsTo("POST", "/api/sessions/01JT/restore").isNotEmpty() }
+    }
+
+    @Test
+    fun anImportantRowHasItsFlagAndTheSelectionMarksAndUnmarksImportant() {
+        seed(listOf(item("01JA", "Bilal Traders", "\"important\":true"), item("01JB", "Rehman and Sons Textiles")), "Bilal Traders")
+        server.on("POST", "/api/sessions/bulk", FakeServer.json(200, """{"changed": 1}"""))
+        compose.onAllNodes(hasContentDescription("Important"), useUnmergedTree = true).assertCountEquals(1)
+        compose.onNodeWithText("Rehman and Sons Textiles", substring = true).performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("More").performClick()
+        // Only Rehman is selected and it is not important: Mark important, no Unmark.
+        compose.onAllNodesWithText("Unmark important").assertCountEquals(0)
+        compose.onAllNodes(hasText("Mark important") and hasClickAction()).onFirst().performClick()
+        pumpUntil("marked") {
+            server.requestsTo("POST", "/api/sessions/bulk").any {
+                it.bodyText().contains("\"important\"") && it.bodyText().contains("01JB")
+            }
+        }
+    }
+
+    @Test
+    fun aRowShowsItsListsAsColourDotsNamedForScreenReaders() {
+        val lists = "\"labels\":[\"Clients\",\"Home\",\"Family\",\"Extra\"],\"label_colors\":{\"Clients\":\"#16a34a\"}"
+        seed(listOf(item("01JA", "Bilal Traders", lists)), "Bilal Traders")
+        listOf("Clients", "Home", "Family").forEach {
+            compose.onAllNodes(hasContentDescription(it), useUnmergedTree = true).assertCountEquals(1)
+        }
+        // Up to three.
+        compose.onAllNodes(hasContentDescription("Extra"), useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun audioKeptWithoutATranscriptSaysHowManyDaysAreLeft() {
+        val expires = java.time.OffsetDateTime.now().plusDays(17).plusHours(6).toString()
+        seed(listOf(item("01JA", "Bilal Traders", "\"expires_at\":\"$expires\"", finalStatus = null)), "Bilal Traders")
+        compose.onNodeWithText("Audio · 18 days left", useUnmergedTree = true).assertExists()
+        val now = java.time.Instant.parse("2026-11-21T10:00:00Z")
+        assertEquals(1, com.echoledger.mobile.ui.v2.library.LibraryModel.daysLeft("2026-11-21T11:00:00+00:00", now))
+        assertEquals(0, com.echoledger.mobile.ui.v2.library.LibraryModel.daysLeft("2026-11-20T11:00:00+00:00", now))
+        assertEquals(2, com.echoledger.mobile.ui.v2.library.LibraryModel.daysLeft("2026-11-23T09:00:00+00:00", now))
+        assertEquals(null, com.echoledger.mobile.ui.v2.library.LibraryModel.daysLeft(null, now))
     }
 }

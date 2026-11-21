@@ -670,11 +670,13 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         clearClient: Boolean = false,
         labels: List<String>? = null,
         keep: Boolean? = null,
-        title: String? = null
+        title: String? = null,
+        important: Boolean? = null
     ) {
         val body = buildJsonObject {
             title?.let { put("title", it) }
             pinned?.let { put("pinned", it) }
+            important?.let { put("important", it) }
             keep?.let { put("keep", it) }
             if (clearClient) put("client_id", kotlinx.serialization.json.JsonNull) else clientId?.let { put("client_id", it) }
             labels?.let { list -> put("labels", buildJsonArray { list.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) }

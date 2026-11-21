@@ -109,6 +109,13 @@
     <string name="v2_lib_unknown_device">Unknown device</string>
     <string name="v2_lib_automatic">Automatic</string>
     <string name="v2_lib_pinned_mark">Pinned</string>
+    <string name="v2_lib_mark_important">Mark important</string>
+    <string name="v2_lib_unmark_important">Unmark important</string>
+    <string name="v2_lib_important_mark">Important</string>
+    <plurals name="v2_lib_audio_days_left">
+        <item quantity="one">Audio · %d day left</item>
+        <item quantity="other">Audio · %d days left</item>
+    </plurals>
     <string name="v2_lib_row_failed">Transcription failed · Tap to retry</string>
     <string name="v2_lib_row_no_audio">No audio</string>
     <string name="v2_lib_not_opened">Not opened yet</string>

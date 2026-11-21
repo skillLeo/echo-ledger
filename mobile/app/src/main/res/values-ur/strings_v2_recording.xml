@@ -28,6 +28,8 @@
     <string name="v2_rec_keep">ہمیشہ رکھیں</string>
     <string name="v2_rec_stop_keeping">ہمیشہ رکھنا بند کریں</string>
     <string name="v2_rec_kept">ہمیشہ کے لیے رکھ لی گئی</string>
+    <string name="v2_rec_marked_important">اہم نشان زد ہو گئی</string>
+    <string name="v2_rec_unmarked_important">اب اہم نہیں</string>
     <string name="v2_rec_not_kept">اب ہمیشہ کے لیے نہیں رکھی جائے گی</string>
     <string name="v2_rec_retranscribe">زبان بدل کر دوبارہ ٹرانسکرائب کریں</string>
     <string name="v2_rec_retranscribe_title">دوبارہ ٹرانسکرائب کریں، زبان:</string>
