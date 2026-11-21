@@ -230,7 +230,7 @@ final class ActivityFeed
             $kind === 'budget_reached'
                 ? $this->post($user, $kind, self::line('Monthly transcription limit reached'), self::line('New transcripts wait until the limit is raised in Settings or the month ends.'), null, 'heroicon-o-no-symbol')
                 : $this->post($user, $kind, self::line('Transcription at :percent% of the monthly limit', ['percent' => $usage['warn_at_percent']]),
-                    self::line(':minutes minutes used this month.', ['minutes' => $usage['minutes']]), null, 'heroicon-o-chart-bar');
+                    self::plural(':minutes minute used this month.|:minutes minutes used this month.', (int) $usage['minutes'], ['minutes' => $usage['minutes']]), null, 'heroicon-o-chart-bar');
         }
     }
 
@@ -370,6 +370,18 @@ final class ActivityFeed
     }
 
     /**
+     * A line with singular and plural forms (`one|many`, as trans_choice() takes them), chosen by [$count] in the
+     * reader's language (W-218 follow-up: "1 minute used", and Urdu's own forms).
+     *
+     * @param  array<string, mixed>  $params
+     * @return array{key: string, params: array<string, mixed>, count: int}
+     */
+    public static function plural(string $key, int $count, array $params = []): array
+    {
+        return ['key' => $key, 'params' => $params, 'count' => $count];
+    }
+
+    /**
      * The words of a line in [$locale] (null: the reader's), or words as they are.
      *
      * @param  string|array<array-key, mixed>  $line
@@ -382,6 +394,10 @@ final class ActivityFeed
         $params = [];
         foreach ((array) ($line['params'] ?? []) as $name => $value) {
             $params[(string) $name] = is_array($value) && isset($value['key']) ? self::text($value, $locale) : (is_scalar($value) ? (string) $value : '');
+        }
+
+        if (isset($line['count']) && is_int($line['count'])) {
+            return (string) trans_choice((string) ($line['key'] ?? ''), $line['count'], $params, $locale);
         }
 
         return (string) __((string) ($line['key'] ?? ''), $params, $locale);

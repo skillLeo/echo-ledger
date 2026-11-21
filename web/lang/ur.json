@@ -949,12 +949,13 @@
     "AI credits at :percent% of your plan": "AI کریڈٹس آپ کے پلان کے :percent% پر",
     ":size used.": ":size استعمال ہوئی۔",
     ":amount used this month.": "اس مہینے :amount استعمال ہوئے۔",
-    ":name sent you :title": ":name کی طرف سے آپ کے لیے: :title",
+    ":name sent you :title": ":name نے آپ کو :title بھیجا",
     "Open it in Shared with me.": "اسے میرے ساتھ شیئر شدہ میں کھولیں۔",
     "You are on :plan now": "اب آپ :plan پر ہیں",
     "Until :date. Thank you!": ":date تک۔ شکریہ!",
     "Thank you! Everything in it is on.": "شکریہ! اس کی ہر چیز چالو ہے۔",
     "Your request for :plan was declined": ":plan کے لیے آپ کی درخواست منظور نہیں ہوئی",
     "Write to us if you have a question.": "کوئی سوال ہو تو ہمیں لکھیں۔",
-    "We need another receipt for :plan": "ہمیں :plan کے لیے ایک اور رسید درکار ہے"
+    "We need another receipt for :plan": "ہمیں :plan کے لیے ایک اور رسید درکار ہے",
+    ":minutes minute used this month.|:minutes minutes used this month.": "اس مہینے :minutes منٹ استعمال ہوا۔|اس مہینے :minutes منٹ استعمال ہوئے۔"
 }
