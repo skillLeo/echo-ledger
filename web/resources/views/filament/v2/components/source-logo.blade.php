@@ -36,7 +36,12 @@
     };
 @endphp
 <span @class(['v2-source', 'v2-source--sm' => ($size ?? null) === 'sm']) @if (! empty($label)) role="img" aria-label="{{ $label }}" @else aria-hidden="true" @endif>
-    @if ($mark)
+    @if ($app === 'voice_note')
+        {{-- EchoLedger's own source: the app's calm accent with the voice glyph (D12), not a grey mic. --}}
+        <span class="v2-source-mark v2-source--voice">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 10v3" /><path d="M6 6v11" /><path d="M10 3v18" /><path d="M14 8v7" /><path d="M18 5v13" /><path d="M22 10v3" /></svg>
+        </span>
+    @elseif ($mark)
         <svg class="v2-source-mark" viewBox="0 0 24 24" focusable="false" aria-hidden="true">{!! $mark !!}</svg>
     @else
         <span class="v2-source-fallback"><x-el.v2.icon :name="$fallback ?? 'mic'" /></span>

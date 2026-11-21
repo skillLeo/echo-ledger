@@ -1941,3 +1941,124 @@ html[dir='rtl'] .v2-row-title {
     z-index: 1;
     background-color: var(--el-role-bg-canvas);
 }
+
+/*
+ * The Library row (D12, docs/v2/design-review/D12-library-row.md): room for two lines (the title, then the first
+ * meaningful sentence), a hairline between rows from the text on, the whole row tinted on hover, one slot for the
+ * marks (.v2-row-marks: unread · pin · important · label dots) and the time over the length in the row's own face.
+ */
+.v2-library .v2-lib-row {
+    min-height: var(--el-component-list-row-height);
+    padding-block: var(--el-space-12);
+    gap: var(--el-space-16);
+    border-radius: var(--el-radius-md);
+}
+
+.v2-library .fi-ta-record:hover .v2-lib-row,
+.v2-library .fi-ta-record:focus-within .v2-lib-row {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-library .fi-ta-record + .fi-ta-record .v2-lib-row {
+    box-shadow: inset 0 var(--el-border-hairline) 0 var(--el-role-border-default);
+}
+
+.v2-library .v2-lib-row .v2-row-title {
+    font-size: var(--el-text-title-s-size);
+    line-height: var(--el-text-title-s-line);
+    font-weight: var(--el-text-title-s-weight);
+}
+
+.v2-library .v2-lib-row [data-snippet] {
+    color: var(--el-role-text-secondary);
+}
+
+.v2-row-marks {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--el-space-4);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-row-marks:empty {
+    display: none;
+}
+
+.v2-row-marks .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* The time and the length: one size, one face (not mono), figures that line up, left to right in every language. */
+.v2-library .v2-row-value time,
+.v2-library .v2-row-length {
+    font-family: inherit;
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-caption-line);
+    color: var(--el-role-text-secondary);
+    font-variant-numeric: tabular-nums;
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
+/* The source mark's device badge: a ring in the row's colour keeps it off the mark's edge (D12 "The marks"). */
+.v2-source-device {
+    inset-block-end: calc(-1 * var(--el-space-4));
+    inset-inline-end: calc(-1 * var(--el-space-4));
+    border: var(--el-border-strong) solid var(--el-role-bg-canvas);
+}
+
+.v2-library .fi-ta-record:hover .v2-source-device {
+    border-color: var(--el-role-bg-subtle);
+}
+
+/* A voice note's own mark: the app's calm accent with the voice glyph, instead of a grey mic. */
+.v2-source--voice {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-source--voice svg {
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+}
+
+/* A split button (Copy): the main part acts, the chevron part opens the other choices; one shape, a hairline between. */
+.v2-split {
+    display: inline-flex;
+    align-items: stretch;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-split > button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-height: var(--el-layout-control-touch-min);
+    padding-inline: var(--el-space-16) var(--el-space-12);
+    border: 0;
+    background: transparent;
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-split > button + button {
+    padding-inline: var(--el-space-12);
+    border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-split > button:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(-1 * var(--el-focus-width));
+}
+
+.v2-split > button:hover {
+    background-color: var(--el-role-bg-canvas);
+}
