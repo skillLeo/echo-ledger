@@ -3,7 +3,7 @@
     recordings, Today, This week, Waiting for decision, Bookmarked, Failed uploads, Pinned, Untranscribed), then the
     most used as chips; the one you are on is marked. While calls wait for a decision one quiet line says so, with
     Review (parity plan 2: "Needs action" as one quiet banner in the Library), and × to close it until more calls wait
-    (App\Filament\Support\DismissedBanners).
+    (App\Filament\Support\V2DismissedBanners).
 --}}
 @php
     $menu = $this->v2ViewMenu();

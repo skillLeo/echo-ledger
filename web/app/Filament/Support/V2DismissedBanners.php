@@ -13,7 +13,7 @@ use App\Models\User;
  * so a later rise shows it again. What was closed is kept per person (`console_preferences.dismissed`), as each kind
  * and its count, so it is the same on every browser and another person still sees their own line.
  */
-final class DismissedBanners
+final class V2DismissedBanners
 {
     public const BANNERS = ['library', 'home'];
 
