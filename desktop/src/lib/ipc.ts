@@ -1787,6 +1787,8 @@ export const api = {
   avatarImage: (url: string | null, version: number) => invoke<string | null>("account_avatar_image", { url, version }),
   /** Save the recovery codes as a text file; null when the person cancels. */
   saveRecoveryCodes: (codes: string[], email: string) => invoke<string | null>("account_recovery_codes_save", { codes, email }),
+  /** Copy codes: on the clipboard, left out of clipboard history and managers, and taken off it after a minute. */
+  copyRecoveryCodes: (codes: string[]) => invoke<void>("account_recovery_codes_copy", { codes }),
   startExport: () => invoke<AccountExport>("account_export_start"),
   exportStatus: (id: string) => invoke<AccountExport>("account_export_status", { id }),
   openExport: (url: string) => invoke<void>("account_export_open", { url }),

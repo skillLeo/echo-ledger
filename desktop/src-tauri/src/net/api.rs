@@ -22,6 +22,9 @@ pub struct ApiClient {
     install_id: Option<String>,
 }
 
+/// How long a person's picture may take to come (the live client has no total timeout of its own).
+const AVATAR_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// A transcript the month's minutes can't cover (`budget_exceeded` with `minutes_needed` and `minutes_left`), in the
 /// person's words (pure).
 pub fn budget_sentence(needed: u64, left: u64) -> String {
@@ -573,9 +576,10 @@ impl ApiClient {
     }
 
     /// A person's picture from its signed link (no token: the signature is the key). `None` for an expired or replaced
-    /// link (`403`, `404`), which the window answers with the copy it has or the initials.
+    /// link (`403`, `404`), which the window answers with the copy it has or the initials. Redirects are refused (the
+    /// live client follows none): a picture comes from the link the server signed, never from where it points.
     pub async fn avatar_bytes(&self, url: &str) -> AppResult<Option<Vec<u8>>> {
-        let resp = self.http.get(url).send().await?;
+        let resp = self.live.get(url).timeout(AVATAR_TIMEOUT).send().await?;
         if !resp.status().is_success() {
             return Ok(None);
         }

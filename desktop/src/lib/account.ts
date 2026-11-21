@@ -1,7 +1,7 @@
 // Your account from the app (contract 2.0.0-l, docs/API.md "Account and security from the apps"): the words the app
 // says for each answer, in English and Urdu, the checks it makes before sending (the server still decides), and the
 // proof each change asks for. The flows themselves are in views/main/AccountFlows.tsx, drawn by both designs.
-import { api, type Account } from "./ipc";
+import { api, errorMessage, type Account } from "./ipc";
 
 /** One account action, answered whole (src-tauri my_account.rs `AccountReply`). */
 export interface AccountReply<T = Record<string, unknown>> {
@@ -113,6 +113,16 @@ const EN: Words = {
   too_many_attempts: "Too many tries. Wait {wait}, then try again.",
   rate_limited: "That's a lot of changes for now. Try again in {wait}.",
   email_change_locked: "Your email was changed recently. You can change it again from {until}.",
+  image_heic: "This computer can't read HEIC photos. Save the photo as JPEG or PNG, then choose it again.",
+  file_too_large: "This picture is too large. Choose one under 50 MB.",
+  image_too_wide: "This picture is too big. Choose one under 8192 pixels wide and tall.",
+  locked: "EchoLedger is locked.",
+  not_accepted: "The server did not accept this.",
+  field_not_accepted: "This wasn't accepted. Check it and try again.",
+  failed: "That didn't work. Try again.",
+  codes_copied: "Copied. They leave the clipboard after a minute.",
+  codes_copy_failed: "Could not copy. Save them as a file instead.",
+  codes_saved: "Saved to {path}",
 };
 
 const UR: Words = {
@@ -152,6 +162,16 @@ const UR: Words = {
   too_many_attempts: "بہت زیادہ کوششیں۔ {wait} انتظار کریں، پھر دوبارہ کوشش کریں۔",
   rate_limited: "ابھی بہت زیادہ تبدیلیاں ہو گئیں۔ {wait} بعد دوبارہ کوشش کریں۔",
   email_change_locked: "آپ کی ای میل حال ہی میں بدلی گئی ہے۔ آپ اسے {until} سے دوبارہ بدل سکتے ہیں۔",
+  image_heic: "یہ کمپیوٹر HEIC تصویریں نہیں پڑھ سکتا۔ تصویر کو JPEG یا PNG میں محفوظ کریں، پھر دوبارہ چنیں۔",
+  file_too_large: "یہ تصویر بہت بڑی ہے۔ 50 MB سے چھوٹی تصویر چنیں۔",
+  image_too_wide: "یہ تصویر بہت بڑی ہے۔ 8192 پکسل سے کم چوڑی اور اونچی تصویر چنیں۔",
+  locked: "EchoLedger لاک ہے۔",
+  not_accepted: "سرور نے یہ قبول نہیں کیا۔",
+  field_not_accepted: "یہ قبول نہیں ہوا۔ دیکھ کر دوبارہ کوشش کریں۔",
+  failed: "یہ نہیں ہو سکا۔ دوبارہ کوشش کریں۔",
+  codes_copied: "کاپی ہو گئے۔ ایک منٹ بعد کلپ بورڈ سے ہٹ جائیں گے۔",
+  codes_copy_failed: "کاپی نہیں ہو سکے۔ انہیں فائل کے طور پر محفوظ کریں۔",
+  codes_saved: "{path} میں محفوظ ہو گئے",
 };
 
 export const ACCOUNT_WORDS: Record<Lang, Words> = { en: EN, ur: UR };
@@ -174,8 +194,9 @@ export function fieldErrors(reply: AccountReply<unknown>, lang: Lang = accountLa
     const text = entries.map((e) => fieldText(e, lang)).find(Boolean);
     if (text) out[field] = text;
   }
+  // The server's own sentence is English: an Urdu window says its own words instead, so a dialog never mixes the two.
   for (const [field, messages] of Object.entries(reply.errors ?? {})) {
-    if (!out[field] && messages[0]) out[field] = messages[0];
+    if (!out[field] && messages[0]) out[field] = lang === "ur" ? ACCOUNT_WORDS.ur.field_not_accepted : messages[0];
   }
   return out;
 }
@@ -193,8 +214,37 @@ export function replyText(reply: AccountReply<unknown>, lang: Lang = accountLang
       : lang === "ur" ? "کچھ دنوں بعد" : "a few days from now";
     return fill(words.email_change_locked, { until: when });
   }
-  if (code === "validation_failed") return Object.values(fieldErrors(reply, lang))[0] ?? reply.message ?? words.proof_required;
-  return words[code] ?? reply.message ?? (lang === "ur" ? "سرور نے یہ قبول نہیں کیا۔" : "The server did not accept this.");
+  // The core's sentence (reply.message) is English: an Urdu window says its own instead.
+  const message = lang === "ur" ? null : reply.message;
+  if (code === "validation_failed") return Object.values(fieldErrors(reply, lang))[0] ?? message ?? words.proof_required;
+  return words[code] ?? message ?? words.not_accepted;
+}
+
+/** The core's English sentences this window has words of its own for (the picture, the lock, the codes). */
+const CORE_SENTENCES: Record<string, string> = {
+  "This picture can't be read. Choose a JPEG, PNG or WebP photo.": "image_format",
+  "This computer can't read HEIC photos. Save the photo as JPEG or PNG, then choose it again.": "image_heic",
+  "This picture is too large. Choose one under 5 MB.": "too_large",
+  "This picture is too large. Choose one under 50 MB.": "file_too_large",
+  "This picture is too big. Choose one under 8192 pixels wide and tall.": "image_too_wide",
+  "EchoLedger is locked.": "locked",
+  "Could not copy. Save them as a file instead.": "codes_copy_failed",
+};
+
+/**
+ * A failed call in the window's language: the window's own words for a sentence of the core it knows; else the core's
+ * sentence in an English window, and a plain "That didn't work" in an Urdu one (never English inside an Urdu dialog).
+ */
+export function failureText(e: unknown, lang: Lang = accountLang()): string {
+  const message = errorMessage(e);
+  const key = CORE_SENTENCES[message];
+  if (key) return ACCOUNT_WORDS[lang][key];
+  return lang === "ur" ? ACCOUNT_WORDS.ur.failed : message;
+}
+
+/** A sentence of these words with its values filled in ("Saved to {path}"). */
+export function sentence(key: string, values: Record<string, string | number | undefined> = {}, lang: Lang = accountLang()): string {
+  return fill(ACCOUNT_WORDS[lang][key] ?? ACCOUNT_WORDS.en[key] ?? key, values);
 }
 
 // ---- Checks before sending (the server still decides) ------------------------------------------------------------

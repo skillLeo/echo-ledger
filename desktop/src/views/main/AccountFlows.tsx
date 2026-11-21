@@ -4,10 +4,10 @@
 // Every change that needs proof asks for it the way the account can give it: a two-step code when two-step is on
 // (never the password alone), else the password, else a code sent to the email.
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { api, errorMessage, type Account } from "../../lib/ipc";
+import { api, type Account } from "../../lib/ipc";
 import {
-  ACCOUNT_WORDS, call, cleanCode, DEFAULT_PASSWORD_RULES, fieldErrors, fieldText, looksLikeEmail, nameProblem, PASSKEY_NAME_MAX, passwordProblems,
-  proofAfter, proofBody, proofFor, replyText, rulesLine, spacedSecret, type AccountReply, type PasswordRules, type ProofKind, type SecurityInfo,
+  ACCOUNT_WORDS, accountLang, call, cleanCode, DEFAULT_PASSWORD_RULES, failureText, fieldErrors, fieldText, looksLikeEmail, nameProblem, PASSKEY_NAME_MAX, passwordProblems,
+  proofAfter, proofBody, proofFor, replyText, rulesLine, sentence, spacedSecret, type AccountReply, type PasswordRules, type ProofKind, type SecurityInfo,
   type TwoFactorStart,
 } from "../../lib/account";
 
@@ -70,7 +70,8 @@ export type Flow =
 
 type Done = (message: string, account?: Partial<Account>) => void;
 
-const words = () => ACCOUNT_WORDS.en;
+/** The words of the window's language (English unless the page is Urdu), the same as every refusal in the dialog. */
+const words = () => ACCOUNT_WORDS[accountLang()];
 
 /** Opens one flow's dialog; `onDone` says what changed (the page shows it and reads the account again). */
 export function AccountFlow({ kit, flow, account, onClose, onDone }: { kit: AccountKit; flow: Flow; account: Account; onClose: () => void; onDone: Done }) {
@@ -112,7 +113,7 @@ function useSend() {
       }
       return reply;
     } catch (e) {
-      setProblem(errorMessage(e));
+      setProblem(failureText(e));
       return null;
     } finally {
       setBusy(false);
@@ -144,7 +145,7 @@ function ProofField({ kit, kind, value, onChange, error, email, onSent }: {
       setSent(reply.ok);
       onSent(reply.ok ? null : replyText(reply));
     } catch (e) {
-      onSent(errorMessage(e));
+      onSent(failureText(e));
     } finally {
       setSending(false);
     }
@@ -430,20 +431,21 @@ export function QrCode({ rows, label }: { rows: string[]; label: string }) {
 /** The recovery codes, shown once: Copy and Save, then "I've saved them". */
 function RecoveryCodes({ kit, codes, email, title, onDone }: { kit: AccountKit; codes: string[]; email: string; title: string; onDone: () => void }) {
   const [said, setSaid] = useState<string | null>(null);
+  // Through the core: marked so clipboard history and managers keep no copy, and taken off the clipboard after a minute.
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(codes.join("\n"));
-      setSaid("Copied");
+      await api.copyRecoveryCodes(codes);
+      setSaid(sentence("codes_copied"));
     } catch {
-      setSaid("Could not copy. Save them as a file instead.");
+      setSaid(sentence("codes_copy_failed"));
     }
   };
   const save = async () => {
     try {
       const path = await api.saveRecoveryCodes(codes, email);
-      if (path) setSaid(`Saved to ${path}`);
+      if (path) setSaid(sentence("codes_saved", { path }));
     } catch (e) {
-      setSaid(errorMessage(e));
+      setSaid(failureText(e));
     }
   };
   return (
@@ -614,7 +616,7 @@ export async function choosePicture(): Promise<{ ok: boolean; message: string; a
     if (reply.ok && reply.data) return { ok: true, message: "Picture changed", account: { avatar_url: reply.data.avatar_url, avatar_version: reply.data.avatar_version } };
     return { ok: false, message: replyText(reply) };
   } catch (e) {
-    return { ok: false, message: errorMessage(e) };
+    return { ok: false, message: failureText(e) };
   }
 }
 

@@ -40,6 +40,7 @@ pub mod receipts;
 pub mod recovery;
 pub mod refusal;
 pub mod screens;
+pub mod secret_copy;
 pub mod settings;
 pub mod share_sheet;
 pub mod sharing;
@@ -591,6 +592,7 @@ pub fn run() {
             commands::account_avatar_choose,
             commands::account_avatar_image,
             commands::account_recovery_codes_save,
+            commands::account_recovery_codes_copy,
             commands::account_sign_out_everywhere,
             commands::account_delete,
             commands::account_export_start,

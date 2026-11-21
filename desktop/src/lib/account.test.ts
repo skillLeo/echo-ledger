@@ -2,7 +2,7 @@
 // Urdu, the name and password checks made before sending, and the proof rule (two-step on: a code, never a password).
 import { describe, expect, it } from "vitest";
 import {
-  ACCOUNT_WORDS, fieldErrors, fieldText, nameProblem, passwordProblems, proofAfter, proofBody, proofFor, replyText, rulesLine, spacedSecret,
+  ACCOUNT_WORDS, failureText, fieldErrors, fieldText, nameProblem, passwordProblems, proofAfter, proofBody, proofFor, replyText, rulesLine, spacedSecret,
   type AccountReply,
 } from "./account";
 
@@ -38,6 +38,21 @@ describe("the words", () => {
     const r = reply("validation_failed", { errorCodes: { new: [{ code: "needs_numbers" }] }, errors: { new: ["The password must contain a number."], current: ["The current field is required."] } });
     expect(fieldErrors(r, "en")).toEqual({ new: "Add at least one number.", current: "The current field is required." });
     expect(replyText(reply("something_new"), "en")).toBe("The server's own words.");
+  });
+
+  it("never puts the core's or the server's English inside an Urdu window", () => {
+    expect(replyText(reply("something_new"), "ur")).toBe("سرور نے یہ قبول نہیں کیا۔");
+    const r = reply("validation_failed", { errorCodes: { new: [{ code: "needs_numbers" }] }, errors: { current: ["The current field is required."] } });
+    expect(fieldErrors(r, "ur")).toEqual({ new: "کم از کم ایک ہندسہ شامل کریں۔", current: ACCOUNT_WORDS.ur.field_not_accepted });
+    // The core's refusals of a picture, the lock and the clipboard in the window's words; any other, plainly.
+    expect(failureText("This picture is too big. Choose one under 8192 pixels wide and tall.", "ur")).toBe(ACCOUNT_WORDS.ur.image_too_wide);
+    expect(failureText(new Error("This picture is too large. Choose one under 50 MB."), "en")).toBe("This picture is too large. Choose one under 50 MB.");
+    expect(failureText("EchoLedger is locked.", "ur")).toBe("EchoLedger لاک ہے۔");
+    expect(failureText("connection reset by peer", "ur")).toBe(ACCOUNT_WORDS.ur.failed);
+    expect(failureText("connection reset by peer", "en")).toBe("connection reset by peer");
+    for (const lang of ["en", "ur"] as const) {
+      for (const text of Object.values(ACCOUNT_WORDS[lang])) expect(/[a-z]{3,}/i.test(text.replace(/\{\w+\}|EchoLedger|JPEG|PNG|WebP|HEIC|MB|name@example\.com/g, "")), `${lang}: ${text}`).toBe(lang === "en");
+    }
   });
 });
 

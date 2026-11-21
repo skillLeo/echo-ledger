@@ -196,6 +196,28 @@ describe.each(["classic", "v2"] as const)("Profile, %s", (design) => {
     expect(dialog()).toHaveAccessibleName("Change email");
   });
 
+  it("Change email in an Urdu window: every refusal in Urdu, the window's own check and the server's alike", async () => {
+    document.documentElement.lang = "ur";
+    let answer = refuse(422, "email_taken");
+    serve({ email: () => answer });
+    profile(design);
+    await act(flushAsync);
+    await openRow("Change email");
+    type("Your password", "secret");
+    type("New email", "not-an-address");
+    await press("Send code");
+    expect(dialog()).toHaveTextContent("پوری ای میل لکھیں، جیسے name@example.com۔");
+    expect(dialog()).not.toHaveTextContent("Type a full email address");
+    type("New email", "taken@example.com");
+    await press("Send code");
+    expect(dialog()).toHaveTextContent("یہ ای میل کسی اور اکاؤنٹ میں استعمال ہو رہی ہے۔");
+    // A code this window has no words for: its own Urdu sentence, never the core's English one.
+    answer = refuse(422, "something_new");
+    await press("Send code");
+    expect(dialog()).toHaveTextContent("سرور نے یہ قبول نہیں کیا۔");
+    expect(dialog()).not.toHaveTextContent("The server said");
+  });
+
   it("Change email while the last change can still be put back: said with its date, nothing else asked", async () => {
     serve({ email: refuse(409, "email_change_locked", { until: "2026-11-28T10:00:00Z" }) });
     profile(design);
@@ -295,6 +317,7 @@ describe.each(["classic", "v2"] as const)("Sign-in & security, %s", (design) => 
     const writeText = vi.fn(() => Promise.resolve());
     Object.assign(navigator, { clipboard: { writeText } });
     respond("account_recovery_codes_save", "/Users/ayesha/Downloads/EchoLedger recovery codes.txt");
+    respond("account_recovery_codes_copy", null);
     serve({
       security: ok(SECURITY),
       two_factor_begin: ok({ ceremony: "c1", secret: "JBSWY3DPEHPK3PXP", otpauth_uri: "otpauth://totp/EchoLedger:a?secret=JBSWY3DPEHPK3PXP" }, 200, { qr: ["1110", "1010", "1110", "0001"] }),
@@ -316,8 +339,11 @@ describe.each(["classic", "v2"] as const)("Sign-in & security, %s", (design) => 
     expect(calls("two_factor_confirm").at(-1)?.body).toEqual({ ceremony: "c1", code: "123456" });
     const list = within(dialog()).getByRole("list", { name: "Recovery codes" });
     expect(within(list).getAllByRole("listitem").map((i) => i.textContent)).toEqual(CODES);
+    // Through the core (left out of clipboard history and managers, cleared after a minute), never the page's clipboard.
     await press("Copy codes");
-    expect(writeText).toHaveBeenCalledWith(CODES.join("\n"));
+    expect(callsOf("account_recovery_codes_copy")).toEqual([{ codes: CODES }]);
+    expect(writeText).not.toHaveBeenCalled();
+    expect(dialog()).toHaveTextContent("Copied. They leave the clipboard after a minute.");
     await press("Save as a file…");
     expect(callsOf("account_recovery_codes_save")).toEqual([{ codes: CODES, email: ME.email }]);
     expect(dialog()).toHaveTextContent("Saved to /Users/ayesha/Downloads/EchoLedger recovery codes.txt");

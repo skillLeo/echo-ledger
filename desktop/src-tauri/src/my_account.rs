@@ -127,8 +127,14 @@ pub fn qr_rows(text: &str) -> Option<Vec<String>> {
 
 /// The largest picture the server takes.
 pub const MAX_AVATAR_BYTES: usize = 5 * 1024 * 1024;
+/// The largest file read at all: a photo between 5 and 50 MB is made again smaller here.
+pub const MAX_AVATAR_INPUT: usize = 50 * 1024 * 1024;
 /// A picture made again here is at most this wide or tall (the server keeps 512 px).
 pub const AVATAR_SIDE: u32 = 2048;
+/// The widest or tallest picture read; its size is known from its header before any pixel is.
+pub const MAX_READ_SIDE: u32 = 8192;
+/// The most memory a picture's pixels may take while it is read.
+pub const MAX_READ_ALLOC: u64 = 256 * 1024 * 1024;
 /// What the picker offers; the bytes decide all the same.
 pub const AVATAR_EXTENSIONS: [&str; 11] = ["jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp", "tif", "tiff", "avif"];
 
@@ -151,31 +157,46 @@ pub const UNREADABLE: &str = "This picture can't be read. Choose a JPEG, PNG or 
 pub const HEIC_UNREADABLE: &str = "This computer can't read HEIC photos. Save the photo as JPEG or PNG, then choose it again.";
 /// Still over 5 MB after making it smaller.
 pub const TOO_LARGE: &str = "This picture is too large. Choose one under 5 MB.";
+/// A file over 50 MB, which is not read.
+pub const FILE_TOO_LARGE: &str = "This picture is too large. Choose one under 50 MB.";
+/// Wider or taller than 8192 px, or more pixels than may be read.
+pub const TOO_MANY_PIXELS: &str = "This picture is too big. Choose one under 8192 pixels wide and tall.";
 
-/// The picture as the server takes it: a JPEG, PNG or WebP of at most 5 MB is sent with its metadata (place, camera)
-/// taken out; anything else, or a larger file, is made again as a JPEG of at most 2048 px. HEIC is turned into a
-/// JPEG by the system first (`from_heif`, macOS) and refused where it can't be.
+/// The picture as the server takes it, the right way up and with no metadata (place, camera): a JPEG, PNG or WebP of
+/// at most 5 MB that needs no turning is sent with its metadata taken out; anything else (another format, a larger
+/// file, a phone photo turned by its EXIF orientation) is made again as a JPEG of at most 2048 px, turned first. HEIC
+/// is turned into a JPEG by the system first (`from_heif`, macOS) and refused where it can't be. A file over 50 MB, or
+/// a picture over 8192 px a side or 256 MiB of pixels, is refused before its pixels are read.
 pub fn prepare_avatar(bytes: Vec<u8>, from_heif: impl FnOnce(&[u8]) -> Option<Vec<u8>>) -> Result<AvatarFile, &'static str> {
     use crate::receipts::{ReceiptKind, sniff, strip_jpeg, strip_png, strip_webp};
-    let bytes = if is_heif(&bytes) { from_heif(&bytes).ok_or(HEIC_UNREADABLE)? } else { bytes };
-    match sniff(&bytes) {
-        Some(ReceiptKind::Jpeg) if bytes.len() <= MAX_AVATAR_BYTES => {
-            return Ok(AvatarFile { bytes: strip_jpeg(&bytes).unwrap_or(bytes), mime: "image/jpeg", name: "avatar.jpg" });
-        }
-        Some(ReceiptKind::Png) if bytes.len() <= MAX_AVATAR_BYTES => {
-            return Ok(AvatarFile { bytes: strip_png(&bytes).unwrap_or(bytes), mime: "image/png", name: "avatar.png" });
-        }
-        Some(ReceiptKind::Webp) if bytes.len() <= MAX_AVATAR_BYTES => {
-            return Ok(AvatarFile { bytes: strip_webp(&bytes).unwrap_or(bytes), mime: "image/webp", name: "avatar.webp" });
-        }
-        _ => {}
+    if bytes.len() > MAX_AVATAR_INPUT {
+        return Err(FILE_TOO_LARGE);
     }
-    let picture = decode(&bytes).ok_or(UNREADABLE)?;
+    let bytes = if is_heif(&bytes) { from_heif(&bytes).ok_or(HEIC_UNREADABLE)? } else { bytes };
+    if bytes.len() > MAX_AVATAR_INPUT {
+        return Err(FILE_TOO_LARGE);
+    }
+    let orientation = look(&bytes)?;
+    if orientation == image::metadata::Orientation::NoTransforms && bytes.len() <= MAX_AVATAR_BYTES {
+        // A file this can't walk is made again below rather than sent with its metadata.
+        let sent = match sniff(&bytes) {
+            Some(ReceiptKind::Jpeg) => strip_jpeg(&bytes).map(|b| (b, "image/jpeg", "avatar.jpg")),
+            Some(ReceiptKind::Png) => strip_png(&bytes).map(|b| (b, "image/png", "avatar.png")),
+            Some(ReceiptKind::Webp) => strip_webp(&bytes).map(|b| (b, "image/webp", "avatar.webp")),
+            _ => None,
+        };
+        if let Some((bytes, mime, name)) = sent {
+            return Ok(AvatarFile { bytes, mime, name });
+        }
+    }
+    let mut picture = decode(&bytes)?;
+    picture.apply_orientation(orientation);
     let picture = if picture.width() > AVATAR_SIDE || picture.height() > AVATAR_SIDE {
         picture.resize(AVATAR_SIDE, AVATAR_SIDE, image::imageops::FilterType::Lanczos3)
     } else {
         picture
     };
+    // Made again from the pixels alone: no EXIF, XMP or comment goes with it.
     let rgb = picture.to_rgb8();
     for quality in [88u8, 75, 60] {
         let mut out = Vec::new();
@@ -188,18 +209,81 @@ pub fn prepare_avatar(bytes: Vec<u8>, from_heif: impl FnOnce(&[u8]) -> Option<Ve
     Err(TOO_LARGE)
 }
 
-/// Any picture this app can read: WebP through libwebp (already here for screens), the rest through the image crate.
-fn decode(bytes: &[u8]) -> Option<image::DynamicImage> {
+/// The limits every picture is read with: 8192 px a side, 256 MiB of pixels.
+fn read_limits() -> image::Limits {
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_READ_SIDE);
+    limits.max_image_height = Some(MAX_READ_SIDE);
+    limits.max_alloc = Some(MAX_READ_ALLOC);
+    limits
+}
+
+/// A size within the limits, or the refusal.
+fn within_limits(width: u32, height: u32, bytes_per_pixel: u64) -> Result<(), &'static str> {
+    if width == 0 || height == 0 {
+        return Err(UNREADABLE);
+    }
+    if width > MAX_READ_SIDE || height > MAX_READ_SIDE || u64::from(width) * u64::from(height) * bytes_per_pixel > MAX_READ_ALLOC {
+        return Err(TOO_MANY_PIXELS);
+    }
+    Ok(())
+}
+
+/// The refusal for a reader's error: a limit, or a picture that can't be read.
+fn refusal(e: &image::ImageError) -> &'static str {
+    if matches!(e, image::ImageError::Limits(_)) { TOO_MANY_PIXELS } else { UNREADABLE }
+}
+
+/// How the picture is turned (its EXIF orientation), read from its header with its size checked first; no pixel is
+/// read here.
+fn look(bytes: &[u8]) -> Result<image::metadata::Orientation, &'static str> {
+    use image::ImageDecoder as _;
+    use image::metadata::Orientation;
     if crate::receipts::sniff(bytes) == Some(crate::receipts::ReceiptKind::Webp) {
-        let decoded = webp::Decoder::new(bytes).decode()?;
+        let features = webp::BitstreamFeatures::new(bytes).ok_or(UNREADABLE)?;
+        within_limits(features.width(), features.height(), 4)?;
+        return Ok(webp_exif(bytes).and_then(Orientation::from_exif_chunk).unwrap_or(Orientation::NoTransforms));
+    }
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|_| UNREADABLE)?;
+    reader.limits(read_limits());
+    let mut decoder = reader.into_decoder().map_err(|e| refusal(&e))?;
+    let (width, height) = decoder.dimensions();
+    within_limits(width, height, u64::from(decoder.color_type().bytes_per_pixel()))?;
+    Ok(decoder.orientation().unwrap_or(Orientation::NoTransforms))
+}
+
+/// The payload of a WebP's EXIF chunk, without the `Exif\0\0` some writers put before it.
+fn webp_exif(bytes: &[u8]) -> Option<&[u8]> {
+    let mut i = 12;
+    while i + 8 <= bytes.len() {
+        let len = u32::from_le_bytes(bytes[i + 4..i + 8].try_into().ok()?) as usize;
+        let body = bytes.get(i + 8..(i + 8).checked_add(len)?)?;
+        if &bytes[i..i + 4] == b"EXIF" {
+            return Some(body.strip_prefix(b"Exif\0\0").unwrap_or(body));
+        }
+        i += 8 + len + (len & 1);
+    }
+    None
+}
+
+/// Any picture this app can read, within the limits: WebP through libwebp (already here for screens), its size checked
+/// from its bitstream first; the rest through the image crate's reader.
+fn decode(bytes: &[u8]) -> Result<image::DynamicImage, &'static str> {
+    if crate::receipts::sniff(bytes) == Some(crate::receipts::ReceiptKind::Webp) {
+        let features = webp::BitstreamFeatures::new(bytes).ok_or(UNREADABLE)?;
+        within_limits(features.width(), features.height(), 4)?;
+        let decoded = webp::Decoder::new(bytes).decode().ok_or(UNREADABLE)?;
         let (width, height, pixels) = (decoded.width(), decoded.height(), decoded.to_vec());
-        return if decoded.is_alpha() {
+        let picture = if decoded.is_alpha() {
             image::RgbaImage::from_raw(width, height, pixels).map(image::DynamicImage::ImageRgba8)
         } else {
             image::RgbImage::from_raw(width, height, pixels).map(image::DynamicImage::ImageRgb8)
         };
+        return picture.ok_or(UNREADABLE);
     }
-    image::load_from_memory(bytes).ok()
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|_| UNREADABLE)?;
+    reader.limits(read_limits());
+    reader.decode().map_err(|e| refusal(&e))
 }
 
 /// macOS turns a HEIC photo into a JPEG with its own `sips` (in /usr/bin on every Mac); `None` when it can't.
@@ -370,6 +454,100 @@ mod tests {
         assert_eq!(prepare_avatar(b"not a picture".to_vec(), |_| None).unwrap_err(), UNREADABLE);
     }
 
+    /// An EXIF block (big-endian TIFF) holding only the orientation tag.
+    fn exif_orientation(value: u16) -> Vec<u8> {
+        let mut tiff = b"MM\0\x2a\0\0\0\x08\0\x01".to_vec();
+        tiff.extend_from_slice(&[0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01]);
+        tiff.extend_from_slice(&value.to_be_bytes());
+        tiff.extend_from_slice(&[0, 0, 0, 0, 0, 0]);
+        tiff
+    }
+
+    /// A 40 × 20 phone photo stored on its side: red on the left, blue on the right, EXIF orientation `value`, with a
+    /// camera note in the same APP1 block.
+    fn sideways_jpeg(value: u16) -> Vec<u8> {
+        let picture = image::RgbImage::from_fn(40, 20, |x, _| if x < 20 { image::Rgb([220, 0, 0]) } else { image::Rgb([0, 0, 220]) });
+        let mut plain = Vec::new();
+        picture.write_with_encoder(image::codecs::jpeg::JpegEncoder::new_with_quality(&mut plain, 95)).unwrap();
+        let mut payload = b"Exif\0\0".to_vec();
+        payload.extend(exif_orientation(value));
+        payload.extend_from_slice(b"Pixel 9 Pro, 31.5204 N 74.3587 E");
+        let mut out = plain[..2].to_vec();
+        out.extend_from_slice(&[0xFF, 0xE1]);
+        out.extend_from_slice(&((payload.len() + 2) as u16).to_be_bytes());
+        out.extend(payload);
+        out.extend_from_slice(&plain[2..]);
+        out
+    }
+
+    fn red_at(picture: &image::RgbImage, x: u32, y: u32) -> bool {
+        let p = picture.get_pixel(x, y);
+        p[0] > 150 && p[2] < 80
+    }
+
+    #[test]
+    fn a_phone_photo_stored_on_its_side_is_sent_the_right_way_up_without_its_exif() {
+        let photo = sideways_jpeg(6);
+        assert_eq!(look(&photo), Ok(image::metadata::Orientation::Rotate90), "the test photo says it is turned");
+        let ready = prepare_avatar(photo, |_| None).unwrap();
+        assert_eq!(ready.mime, "image/jpeg");
+        // Turned 90° clockwise: 20 wide and 40 tall, the left (red) half now on top.
+        let back = image::load_from_memory(&ready.bytes).unwrap().to_rgb8();
+        assert_eq!((back.width(), back.height()), (20, 40));
+        assert!(red_at(&back, 10, 5) && !red_at(&back, 10, 35), "red on top, blue below");
+        // No EXIF left at all: no APP1, no orientation for a viewer to apply twice, no camera or place.
+        let mut decoder = image::ImageReader::new(std::io::Cursor::new(&ready.bytes)).with_guessed_format().unwrap().into_decoder().unwrap();
+        assert_eq!(image::ImageDecoder::exif_metadata(&mut decoder).unwrap(), None);
+        assert!(!ready.bytes.windows(4).any(|w| w == b"Exif") && !ready.bytes.windows(7).any(|w| w == b"Pixel 9"));
+        // Upright already (orientation 1): sent as it was, without its EXIF block.
+        let upright = prepare_avatar(sideways_jpeg(1), |_| None).unwrap();
+        let back = image::load_from_memory(&upright.bytes).unwrap().to_rgb8();
+        assert_eq!((back.width(), back.height()), (40, 20));
+        assert!(!upright.bytes.windows(4).any(|w| w == b"Exif"));
+        // Upside down (3) is turned too.
+        let back = image::load_from_memory(&prepare_avatar(sideways_jpeg(3), |_| None).unwrap().bytes).unwrap().to_rgb8();
+        assert!(!red_at(&back, 5, 10) && red_at(&back, 35, 10));
+    }
+
+    #[test]
+    fn a_webp_s_orientation_is_read_from_its_exif_chunk() {
+        let mut riff = b"RIFF\0\0\0\0WEBP".to_vec();
+        let mut exif = b"Exif\0\0".to_vec();
+        exif.extend(exif_orientation(8));
+        riff.extend_from_slice(b"EXIF");
+        riff.extend_from_slice(&(exif.len() as u32).to_le_bytes());
+        riff.extend_from_slice(&exif);
+        assert_eq!(webp_exif(&riff).and_then(image::metadata::Orientation::from_exif_chunk), Some(image::metadata::Orientation::Rotate270));
+        assert_eq!(webp_exif(b"RIFF\0\0\0\0WEBPVP8 \x01\0\0\0\0\0"), None);
+    }
+
+    #[test]
+    fn a_huge_file_or_picture_is_refused_before_its_pixels_are_read() {
+        assert_eq!(prepare_avatar(vec![0xFF; MAX_AVATAR_INPUT + 1], |_| None).unwrap_err(), FILE_TOO_LARGE);
+        let mut heic = vec![0, 0, 0, 24];
+        heic.extend_from_slice(b"ftypheic");
+        heic.extend_from_slice(&[0; 16]);
+        assert_eq!(prepare_avatar(heic, |_| Some(vec![0xFF; MAX_AVATAR_INPUT + 1])).unwrap_err(), FILE_TOO_LARGE, "HEIC made large");
+        // Wider than 8192 px, though small as a file: PNG, JPEG and WebP alike.
+        let mut png = Vec::new();
+        image::GrayImage::new(MAX_READ_SIDE + 1, 2).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        assert!(png.len() < MAX_AVATAR_BYTES);
+        assert_eq!(prepare_avatar(png, |_| None).unwrap_err(), TOO_MANY_PIXELS);
+        let mut wide = Vec::new();
+        image::RgbImage::new(2, MAX_READ_SIDE + 1).write_with_encoder(image::codecs::jpeg::JpegEncoder::new(&mut wide)).unwrap();
+        assert_eq!(prepare_avatar(wide, |_| None).unwrap_err(), TOO_MANY_PIXELS);
+        let rgb = vec![0u8; (MAX_READ_SIDE as usize + 8) * 3 * 2];
+        let webp = webp::Encoder::from_rgb(&rgb, MAX_READ_SIDE + 8, 2).encode(50.0).to_vec();
+        assert_eq!(webp::BitstreamFeatures::new(&webp).map(|f| f.width()), Some(MAX_READ_SIDE + 8));
+        assert_eq!(prepare_avatar(webp, |_| None).unwrap_err(), TOO_MANY_PIXELS);
+        // At the limit, still read (and made smaller).
+        let mut edge = Vec::new();
+        image::GrayImage::new(MAX_READ_SIDE, 2).write_to(&mut std::io::Cursor::new(&mut edge), image::ImageFormat::Png).unwrap();
+        assert_eq!(prepare_avatar(edge, |_| None).unwrap().mime, "image/png");
+        assert_eq!(within_limits(8192, 8192, 4), Ok(()));
+        assert_eq!(within_limits(8192, 8192, 5), Err(TOO_MANY_PIXELS), "more than 256 MiB of pixels");
+    }
+
     /// On a Mac the system's own tool turns an iPhone photo (HEIC) into a JPEG: made here with the same tool.
     #[cfg(target_os = "macos")]
     #[test]
@@ -428,6 +606,10 @@ mod tests {
         }
         let image = &source[source.find("pub async fn account_avatar_image(").unwrap()..];
         assert!(image[..image.find("\n}\n").unwrap()].contains("ensure_unlocked(&state)?"), "locked, no picture");
+        for start in ["pub async fn account_recovery_codes_save(", "pub async fn account_recovery_codes_copy(", "pub async fn account_avatar_choose("] {
+            let at = &source[source.find(start).unwrap_or_else(|| panic!("{start} not found"))..];
+            assert!(at[..at.find("\n}\n").unwrap()].contains("ensure_unlocked("), "locked: {start} does nothing");
+        }
     }
 
     #[test]

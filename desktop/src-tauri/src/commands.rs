@@ -550,7 +550,19 @@ pub async fn account_avatar_choose(app: AppHandle) -> AppResult<Option<crate::my
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
     let Some(path) = crate::files::pick_avatar(&app).await else { return Ok(None) };
-    let bytes = tokio::fs::read(&path).await?;
+    // A file over 50 MB is not read at all (and no more than that is read of a file that grows meanwhile).
+    let too_large = || AppError::msg(crate::my_account::FILE_TOO_LARGE);
+    if tokio::fs::metadata(&path).await?.len() > crate::my_account::MAX_AVATAR_INPUT as u64 {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    {
+        use tokio::io::AsyncReadExt as _;
+        tokio::fs::File::open(&path).await?.take(crate::my_account::MAX_AVATAR_INPUT as u64 + 1).read_to_end(&mut bytes).await?;
+    }
+    if bytes.len() > crate::my_account::MAX_AVATAR_INPUT {
+        return Err(too_large());
+    }
     let picture = tokio::task::spawn_blocking(move || crate::my_account::prepare_avatar(bytes, crate::my_account::heif_to_jpeg))
         .await
         .map_err(|e| AppError::msg(e.to_string()))?
@@ -598,12 +610,32 @@ pub async fn account_avatar_image(app: AppHandle, url: Option<String>, version: 
 /// Save the recovery codes as a text file where the person chooses; `None` when they cancel.
 #[tauri::command]
 pub async fn account_recovery_codes_save(app: AppHandle, codes: Vec<String>, email: String) -> AppResult<Option<String>> {
-    if codes.is_empty() || codes.len() > 32 || codes.iter().any(|c| c.len() > 64) {
-        return Err(AppError::msg("There are no recovery codes to save."));
-    }
+    ensure_unlocked(&app.state::<AppState>())?;
+    recovery_codes_ok(&codes, "There are no recovery codes to save.")?;
     let Some(path) = crate::files::ask_save_path(&app, "EchoLedger recovery codes.txt", "Text").await else { return Ok(None) };
     tokio::fs::write(&path, crate::my_account::recovery_codes_text(&codes, &email)).await?;
     Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Copy codes: the recovery codes on the clipboard, marked so clipboard history and clipboard managers keep no copy,
+/// and emptied after a minute if nothing was copied since (`secret_copy`).
+#[tauri::command]
+pub async fn account_recovery_codes_copy(app: AppHandle, codes: Vec<String>) -> AppResult<()> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    recovery_codes_ok(&codes, "There are no recovery codes to copy.")?;
+    let text = codes.iter().map(|c| c.trim()).collect::<Vec<_>>().join("\n");
+    crate::secret_copy::copy_concealed(&app, text).await.map_err(|e| {
+        eprintln!("[account] clipboard: {e}");
+        AppError::msg("Could not copy. Save them as a file instead.")
+    })
+}
+
+/// Recovery codes as the server makes them: 1 to 32 of them, none longer than 64.
+fn recovery_codes_ok(codes: &[String], refusal: &str) -> AppResult<()> {
+    if codes.is_empty() || codes.len() > 32 || codes.iter().any(|c| c.len() > 64 || c.trim().is_empty()) {
+        return Err(AppError::msg(refusal));
+    }
+    Ok(())
 }
 
 /// The server's public pages the app links to (docs/API.md "Public pages and app downloads"), opened in the browser.
