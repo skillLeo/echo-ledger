@@ -1,6 +1,7 @@
 package com.echoledger.mobile.ui.v2.shell
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.data.AccountDto
 import com.echoledger.mobile.data.StorageDto
@@ -48,8 +50,27 @@ data class Profile(
     val usedMinutes: Long?,
     val monthlyMinutes: Long?,
     val storageBytes: Long?,
-    val recordings: Int?
+    val recordings: Int?,
+    /** How long recordings are kept before the clean-up (the storage answer's `retention_days`). */
+    val retentionDays: Int? = null
 )
+
+/** How the profile card offers Upgrade (classic's rule): filled on Free, outlined on a paid plan with one above it. */
+enum class UpgradeLook { Filled, Outlined }
+
+/**
+ * Upgrade on the profile card, or null: none for a team member or viewer, on the top plan, while a request is open, on
+ * a build without manual payments, or signed out.
+ */
+fun upgradeLook(
+    plan: com.echoledger.mobile.core.PlanState,
+    signedIn: Boolean,
+    manual: Boolean = com.echoledger.mobile.ui.manualPayments
+): UpgradeLook? {
+    val member = plan.role == "member" || plan.role == "viewer"
+    if (!manual || member || !signedIn || plan.upgrade?.open == true || plan.higherPlans.isEmpty()) return null
+    return if (plan.isFree) UpgradeLook.Filled else UpgradeLook.Outlined
+}
 
 /** What the profile card shows. */
 sealed interface ProfileState {
@@ -76,7 +97,8 @@ fun profileOf(account: AccountDto?, storage: StorageDto?, plan: com.echoledger.m
     usedMinutes = plan.usedMinutes,
     monthlyMinutes = plan.monthlyMinutes,
     storageBytes = storage?.recordingsBytes,
-    recordings = storage?.recordingsCount
+    recordings = storage?.recordingsCount,
+    retentionDays = storage?.retentionDays?.takeIf { it > 0 }
 )
 
 /**
@@ -111,7 +133,8 @@ fun V2SettingsHome(
         onAllSettings = onAllSettings,
         onRetry = { attempt++ },
         onBack = onBack,
-        modifier = modifier
+        modifier = modifier,
+        upgrade = upgradeLook(settings.plan, settings.serverUrl != null)
     )
 }
 
@@ -125,14 +148,15 @@ fun V2SettingsHomeContent(
     onAllSettings: () -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    upgrade: UpgradeLook? = UpgradeLook.Filled
 ) {
     val c = EchoV2.colors
     val text = v2Text
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(text.settings, onBack = onBack)
         LazyColumn(Modifier.weight(1f)) {
-            item { ProfileCardSlot(state, onUpgrade, onRetry) }
+            item { ProfileCardSlot(state, onUpgrade, onRetry, upgrade = upgrade) }
             if (flags.offersClassicSwitch) {
                 item { SwitchBackToClassic { onSwitchToClassic(true) } }
             }
@@ -148,9 +172,14 @@ fun ProfileCardSlot(
     onUpgrade: () -> Unit,
     onRetry: () -> Unit,
     /** False where this month's minutes have their own bar (Settings v2's Account & plan), so they show once. */
-    showMinutes: Boolean = true
+    showMinutes: Boolean = true,
+    /** How Upgrade shows; null: not at all (the top plan, a request open, a team member). */
+    upgrade: UpgradeLook? = UpgradeLook.Filled,
+    /** A tap on the card opens Plan & usage; null: the card is not a button. */
+    onOpenPlan: (() -> Unit)? = null
 ) {
     val text = v2Text
+    val planWords = androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.v2_set_page_plan)
     val cardPadding = Modifier.padding(
         start = EchoTokens.Layout.pagePaddingMobile,
         end = EchoTokens.Layout.pagePaddingMobile,
@@ -177,12 +206,21 @@ fun ProfileCardSlot(
             onAction = onRetry
         )
 
-        is ProfileState.Ready -> ProfileCard(state.profile, onUpgrade, cardPadding, showMinutes)
+        is ProfileState.Ready -> ProfileCard(
+            state.profile,
+            onUpgrade,
+            cardPadding.then(
+                if (onOpenPlan != null) Modifier.clickable(onClickLabel = planWords, role = Role.Button, onClick = onOpenPlan) else Modifier
+            ),
+            showMinutes,
+            upgrade
+        )
     }
 }
 
 @Composable
-private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modifier, showMinutes: Boolean) {
+private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modifier, showMinutes: Boolean, upgrade: UpgradeLook?) {
+    val kind = if (upgrade == UpgradeLook.Outlined) EchoButtonKind.Secondary else EchoButtonKind.Primary
     val c = EchoV2.colors
     val text = v2Text
     EchoCard(modifier) {
@@ -208,8 +246,19 @@ private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modif
                     Text(text.minutesUsed(profile.usedMinutes, profile.monthlyMinutes), style = EchoV2.type.meta, color = c.textSecondary)
                 }
                 if (profile.storageBytes != null && profile.recordings != null) {
+                    val used = text.storageUsed(LibraryModel.size(profile.storageBytes), profile.recordings)
+                    // "Audio kept: 2.1 GB in 318 recordings · cleaned up automatically after N days" (classic's line).
                     Text(
-                        text.storageUsed(LibraryModel.size(profile.storageBytes), profile.recordings),
+                        profile.retentionDays?.let { days ->
+                            androidx.compose.ui.res.stringResource(
+                                com.echoledger.mobile.R.string.v2_set_audio_kept,
+                                used,
+                                com.echoledger.mobile.ui.v2.library.daysWords(
+                                    androidx.compose.ui.platform.LocalContext.current.resources,
+                                    days
+                                )
+                            )
+                        } ?: used,
                         style = EchoV2.type.meta,
                         color = c.textSecondary
                     )
@@ -219,11 +268,11 @@ private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modif
         if (largeText()) {
             // From 150 % text Upgrade goes under the usage lines, full width, so they keep the card's width.
             usage(Modifier.fillMaxWidth())
-            EchoButton(text.upgrade, onClick = onUpgrade, modifier = Modifier.fillMaxWidth())
+            if (upgrade != null) EchoButton(text.upgrade, onClick = onUpgrade, modifier = Modifier.fillMaxWidth(), kind = kind)
         } else {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
                 usage(Modifier.weight(1f))
-                EchoButton(text.upgrade, onClick = onUpgrade)
+                if (upgrade != null) EchoButton(text.upgrade, onClick = onUpgrade, kind = kind)
             }
         }
     }

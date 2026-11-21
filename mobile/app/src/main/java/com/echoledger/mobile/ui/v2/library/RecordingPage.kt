@@ -56,6 +56,9 @@ class RecordingPage internal constructor(
         }
     var bookmarks by mutableStateOf<List<SessionMarkerDto>>(emptyList())
     var speakerNames by mutableStateOf<Map<String, String>>(emptyMap())
+
+    /** The primary recording file's size in bytes (Details), null until read. */
+    var fileBytes by mutableStateOf<Long?>(null)
     var pendingSeek by mutableStateOf<Long?>(null)
     var shownTitle by mutableStateOf(item.title)
     var version by mutableStateOf(TranscriptVersion.CURRENT)
@@ -148,6 +151,8 @@ fun rememberRecordingPage(vm: MainViewModel, item: LibraryItem, startAtMs: Long?
         p.playbackUrl = detail?.playbackUrl
         p.bookmarks = detail?.markers.orEmpty().sortedBy { it.atMs }
         p.speakerNames = detail?.speakerNames.orEmpty()
+        p.fileBytes = detail?.recordings?.let { files -> (files.firstOrNull { it.role == "primary" } ?: files.firstOrNull())?.sizeBytes }
+            ?.takeIf { it > 0 }
     }
     // The recording's screens (meeting assets): read when the Library says it has any, or doesn't say.
     LaunchedEffect(item.id) { if (item.screenCount != 0) p.screens = vm.screens(item.id).sortedBy { it.atMs } }

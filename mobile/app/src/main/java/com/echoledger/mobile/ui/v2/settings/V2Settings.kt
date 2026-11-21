@@ -290,7 +290,16 @@ fun V2SettingsRoot(
                 return@LazyColumn
             }
             // This month's minutes show once: as the bar in Account & plan when the plan has them, else on the card.
-            item { ProfileCardSlot(profile, onUpgrade, onRetryProfile, showMinutes = settings.plan.usedMinutes == null) }
+            item {
+                ProfileCardSlot(
+                    profile,
+                    onUpgrade,
+                    onRetryProfile,
+                    showMinutes = settings.plan.usedMinutes == null,
+                    upgrade = com.echoledger.mobile.ui.v2.shell.upgradeLook(settings.plan, signedIn),
+                    onOpenPlan = { onOpen("plan", null) }
+                )
+            }
             SettingsTree.goals.forEach { (goal, pages) ->
                 item(key = goal.name) { GoalHeader(goal) }
                 // Account & plan: this month's minutes first (Home's usage meter, docs/PLAN_V2_PARITY.md section 2).

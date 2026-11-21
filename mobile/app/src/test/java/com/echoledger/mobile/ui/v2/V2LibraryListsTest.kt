@@ -183,7 +183,7 @@ class V2LibraryListsTest : ScreenTest() {
         awaitText("You already have a list called Home.")
         compose.onNode(hasText("Create") and hasClickAction()).assert(isNotEnabled())
         nameField().performTextReplacement("Important")
-        awaitText("Important is one of the Library's own chips. Choose another name.")
+        awaitText("Important is one of the fixed lists. Choose another name.")
         compose.onNode(hasText("Create") and hasClickAction()).assert(isNotEnabled())
         assertTrue(server.requestsTo("POST", "/api/lists").isEmpty())
     }
@@ -320,5 +320,37 @@ class V2LibraryListsTest : ScreenTest() {
         seed()
         compose.onAllNodes(hasText("Unread") and hasText("1")).assertCountEquals(1)
         compose.onAllNodes(hasContentDescription("New list")).assertCountEquals(1)
+    }
+
+    @Test
+    fun aNameAnotherDeviceTookSaysTheServersSpellingAndTheListsAreReadAgain() {
+        seed()
+        server.on("POST", "/api/lists", FakeServer.json(409, """{"message":"Taken","code":"list_exists","name":"Suppliers"}"""))
+        compose.onNodeWithContentDescription("New list").performClick()
+        awaitText("List name")
+        nameField().performTextInput("suppliers")
+        compose.onNode(hasText("Create") and hasClickAction()).performClick()
+        awaitText("You already have a list called Suppliers.")
+    }
+
+    @Test
+    fun aFailedChangeReadsTheListsAgain() {
+        seed()
+        server.on("PATCH", "/api/lists/clients", FakeServer.json(404, """{"message":"Gone","code":"list_not_found"}"""))
+        val before = server.requestsTo("GET", "/api/lists").size
+        menuOf("Clients")
+        compose.onNodeWithText("Change colour…").performClick()
+        awaitText("Change colour")
+        compose.onAllNodes(hasText("Save") and hasClickAction()).onFirst().performClick()
+        pumpUntil("read again") { server.requestsTo("GET", "/api/lists").size > before }
+    }
+
+    @Test
+    fun aListChipsLongPressIsNamedListOptionsAndAFixedChipHasNone() {
+        seed()
+        val clients = chip("Clients").fetchSemanticsNode().config
+        assertEquals("List options", clients[androidx.compose.ui.semantics.SemanticsActions.OnLongClick].label)
+        val all = chip("All").fetchSemanticsNode().config
+        assertTrue(!all.contains(androidx.compose.ui.semantics.SemanticsActions.OnLongClick))
     }
 }

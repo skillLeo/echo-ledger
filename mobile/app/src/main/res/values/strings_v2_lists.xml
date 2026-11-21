@@ -10,7 +10,8 @@
     <string name="v2_lists_colour">Colour</string>
     <string name="v2_lists_create">Create</string>
     <string name="v2_lists_duplicate">You already have a list called %1$s.</string>
-    <string name="v2_lists_reserved">%1$s is one of the Library\'s own chips. Choose another name.</string>
+    <string name="v2_lists_reserved">%1$s is one of the fixed lists. Choose another name.</string>
+    <string name="v2_lists_options">List options</string>
     <string name="v2_lists_empty_title">Nothing in %1$s yet</string>
     <string name="v2_lists_empty_body">Add recordings from their ⋮ menu: Add to list.</string>
     <string name="v2_lists_rename">Rename…</string>

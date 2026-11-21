@@ -61,6 +61,20 @@ class LibraryRepository(
         save(Cache(since, updated))
     }
 
+    /**
+     * Gives [id]'s row the views state the server has now (its `/views`): a view that stopped (failed after 20 minutes
+     * with nothing done) does not change the recording, so no sync brings it.
+     */
+    suspend fun setViewsLocally(id: String, views: RowViewsDto) = lock.withLock {
+        val current = _items.value
+        val updated = current.map { item ->
+            if (item.id == id) item.copy(transcript = item.transcript?.copy(views = views)) else item
+        }
+        if (updated == current) return@withLock
+        _items.value = updated
+        save(Cache(since, updated))
+    }
+
     /** True once a sync has completed (the server time of the last sync is known). */
     fun hasSynced(): Boolean = since != null
 

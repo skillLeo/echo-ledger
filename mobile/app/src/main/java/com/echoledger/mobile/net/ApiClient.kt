@@ -80,7 +80,9 @@ class ApiException(
     /** The plan an answer names (since v1.6.2: `promo_other_plan`). */
     val planKey: String? = null,
     /** The session a `409 session_active` names (Live Assist, 1.9.0-k). */
-    val sessionId: String? = null
+    val sessionId: String? = null,
+    /** The name an answer gives (`409 list_exists`: the person's list of that name, contract 2.0.0-m). */
+    val name: String? = null
 ) : IOException(message)
 
 /**
@@ -140,7 +142,8 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         val retryAfter = resp.header("Retry-After")?.trim()?.toLongOrNull()?.coerceAtLeast(0)
         val plan = json?.get("plan")?.let { (it as? JsonPrimitive)?.contentOrNull }
         val session = json?.get("session_id")?.let { (it as? JsonPrimitive)?.contentOrNull }
-        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter, plan, session)
+        val name = json?.get("name")?.let { (it as? JsonPrimitive)?.contentOrNull }
+        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter, plan, session, name)
     }
 
     private val jsonType = "application/json".toMediaType()

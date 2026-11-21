@@ -174,6 +174,8 @@ fun EchoListChip(
     count: Int? = null,
     onMenu: (() -> Unit)? = null,
     selectedLabel: String = EchoV2.strings.selected,
+    /** What screen readers call the long press ("List options"). */
+    menuLabel: String? = null,
     menu: (@Composable () -> Unit)? = null
 ) {
     val c = EchoV2.colors
@@ -183,7 +185,12 @@ fun EchoListChip(
         Surface(
             modifier = Modifier
                 .minimumInteractiveComponentSize()
-                .combinedClickable(role = Role.Tab, onClick = onClick, onLongClick = if (fixed) null else onMenu)
+                .combinedClickable(
+                    role = Role.Tab,
+                    onClick = onClick,
+                    onLongClickLabel = if (fixed) null else menuLabel,
+                    onLongClick = if (fixed) null else onMenu
+                )
                 .semantics {
                     this.selected = selected
                     if (selected) stateDescription = selectedLabel
