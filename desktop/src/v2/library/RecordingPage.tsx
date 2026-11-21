@@ -1,7 +1,8 @@
 // The v2 recording page (ui_v2.library): title, the one player, the transcript with speakers, and the actions. The
 // data are today's: session_detail for the audio and speaker names, transcript_detail for the text. Its ⋮ is the
 // Library's one menu (organise.tsx) with this page's parts: Change language, the Export ▸ in the view on screen with
-// PDF and the meeting packs, and Save audio. Under the player: Send to WhatsApp · Copy ▾ · Export ▾; over the
+// PDF and the meeting packs, and Save audio. Under the player: Send to WhatsApp · Copy (the text at once, its chevron
+// for the other ways) · Export ▾; over the
 // transcript: Show as (Roman Urdu · اردو · English · Original), as classic.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -21,7 +22,7 @@ import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
 import { PDF_HINT } from "../../views/main/TranscriptTools";
 import { screenMarker } from "../../lib/screens";
-import { Badge, Button, Card, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, Tabs, Toggle, Transcript, type Segment } from "../components";
+import { Badge, Button, Card, copyMenuItems, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
 import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
@@ -437,11 +438,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       {canExport && (
         <div className="el-recording__actions" role="toolbar" aria-label="Share, copy and export">
           <Button icon={Icons.SendIcon} disabled={busy} onClick={sendToWhatsApp}>Send to WhatsApp…</Button>
-          <Menu label="Copy" button={{ icon: Icons.CopyIcon, iconEnd: Icons.ChevronDownIcon, text: "Copy" }} items={[
-            { label: "Copy text", icon: Icons.CopyIcon, onPick: () => void copy(false) },
-            { label: "Copy with timestamps", icon: Icons.ClockIcon, onPick: () => void copy(true) },
-            { label: "Copy for AI", icon: Icons.SparkleIcon, onPick: () => void copy(false, true) },
-          ]} />
+          {/* Copy: the main part copies the text without timestamps at once; the chevron has the other ways. */}
+          <SplitButton label="Copy" icon={Icons.CopyIcon} mainLabel="Copy text" onClick={() => void copy(false)} menuLabel="More copy options"
+            items={copyMenuItems({ withTimestamps: () => void copy(true), forAi: () => void copy(false, true) })} />
           <Menu label={exportView ? `Export as ${VIEW_LABELS[exportView]}` : "Export"} items={exportItems}
             button={{ icon: Icons.DownloadIcon, iconEnd: Icons.ChevronDownIcon, text: exportView ? `Export as ${VIEW_LABELS[exportView]}` : "Export", title: PDF_HINT }} />
         </div>

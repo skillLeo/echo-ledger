@@ -3,7 +3,7 @@
 // title, when it was recorded, its length and project, "Transcribed in", a retry or script note, and who sent it with
 // their note. The player: play, back and forward 10 s, the position, speed, Skip silence, Follow, the keys, and the
 // bookmarks. The transcript: its kind ("Final transcript · edited", "Live captions…"), Show as when the owner's views are
-// ready (never made from here), Find (Cmd/Ctrl+F), Copy ▾ (text, with timestamps, for AI), and its lines with the words
+// ready (never made from here), Find (Cmd/Ctrl+F), Copy (the text at once; its chevron: with timestamps, for AI), and its lines with the words
 // a second transcription heard. Nothing here changes it: Save to my library makes a copy that can be changed, and
 // Remove takes it off Shared with me. Same commands as classic: session_detail, transcript_detail, transcript_views.
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +18,7 @@ import { NO_AUDIO_HINT } from "../../lib/pending";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { sentLine } from "../../views/main/SharedWithMe";
-import { Badge, Banner, Button, Card, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, Toggle, Transcript, type Segment } from "../components";
+import { Badge, Banner, Button, Card, copyMenuItems, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Toggle, Transcript, type Segment } from "../components";
 import { Menu } from "../components/Menu";
 import { SourceAvatar } from "../library/SourceAvatar";
 import { FindBar } from "../library/TranscriptToolsV2";
@@ -339,11 +339,8 @@ export function SharedReader({ item, busy, notify, onBack, onSave, onRemove }: {
           <span className="el-caption el-secondary">{kindLine}</span>
           <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-pressed={findOpen} aria-keyshortcuts="Meta+F Control+F" disabled={segments.length === 0}
             title="Find in this transcript (Ctrl+F)" onClick={() => setFindOpen(!findOpen)}>Find</Button>
-          <Menu label="Copy" button={{ icon: Icons.CopyIcon, iconEnd: Icons.ChevronDownIcon, text: "Copy", disabled: segments.length === 0 }} items={[
-            { label: "Copy text", icon: Icons.CopyIcon, onPick: () => void copy(false) },
-            { label: "Copy with timestamps", icon: Icons.ClockIcon, onPick: () => void copy(true) },
-            { label: "Copy for AI", icon: Icons.SparkleIcon, onPick: () => void copy(false, true) },
-          ]} />
+          <SplitButton label="Copy" icon={Icons.CopyIcon} mainLabel="Copy text" onClick={() => void copy(false)} menuLabel="More copy options"
+            disabled={segments.length === 0} items={copyMenuItems({ withTimestamps: () => void copy(true), forAi: () => void copy(false, true) })} />
         </div>
       )}
 

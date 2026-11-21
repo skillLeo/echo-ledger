@@ -94,18 +94,31 @@ describe("the recording page", () => {
     expect(callsOf("meeting_pack").at(-1)).toMatchObject({ id: "bilal", format: "zip", view: "roman", includeAudio: true });
   });
 
-  it("Copy ▾: Copy text, Copy with timestamps, and Copy for AI with a header and the note on unsure words", async () => {
+  it("Copy: the main part copies the text without timestamps at once; the chevron has Copy with timestamps and Copy for AI", async () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.assign(navigator, { clipboard: { writeText } });
     await open();
     const tools = screen.getByRole("toolbar", { name: "Share, copy and export" });
+    // The main part: no menu, the plain text on the clipboard, "Copied".
+    fireEvent.click(within(tools).getByRole("button", { name: "Copy text" }));
+    await act(flushAsync);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect((writeText.mock.calls.at(-1) as unknown as [string])[0]).toBe("Me: Hello, this is Sam.\nBilal: Hi Sam, thanks for calling back.\nMe: Let us go over the invoice.\nBilal: That works for us.");
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Copied");
+    // The chevron: the menu, and nothing copied by opening it.
+    const more = within(tools).getByRole("button", { name: "More copy options" });
+    expect(more).toHaveAttribute("aria-haspopup", "menu");
+    fireEvent.click(more);
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(within(screen.getByRole("menu", { name: "More copy options" })).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Copy with timestamps", "Copy for AI"]);
+    fireEvent.click(more);
     const pick = async (name: string) => {
-      fireEvent.click(within(tools).getByRole("button", { name: "Copy" }));
+      fireEvent.click(within(tools).getByRole("button", { name: "More copy options" }));
       fireEvent.click(menuItem(name));
       await act(flushAsync);
       return (writeText.mock.calls.at(-1) as unknown as [string])[0];
     };
-    expect(await pick("Copy text")).toBe("Me: Hello, this is Sam.\nBilal: Hi Sam, thanks for calling back.\nMe: Let us go over the invoice.\nBilal: That works for us.");
     expect(await pick("Copy with timestamps")).toMatch(/^\[0:00\] Me: Hello, this is Sam\.\n\[0:12\] Bilal:/);
     const ai = await pick("Copy for AI");
     expect(ai).toMatch(/^# Bilal Qureshi\n17 November 2026, 11:42 am · WhatsApp · 1:02:10\nPeople: Me, Bilal\nLanguage: ur\n\nNote: \[\?word\]/);
