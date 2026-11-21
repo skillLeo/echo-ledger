@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use App\Exceptions\ApiError;
+use App\Services\Assist\AssistMonitor;
 use App\Services\Assist\RelaySecret;
 use Closure;
 use Illuminate\Http\Request;
@@ -32,6 +33,8 @@ final class VerifyAssistRelay
             || ! app(RelaySecret::class)->verifies($timestamp, $request->getMethod(), $path, $request->getContent(), $signature)) {
             throw new ApiError(401, 'unauthenticated', 'Unauthenticated.');
         }
+        // Since B4: the admin's "last contact from the relay" (a time only, at most once a minute).
+        AssistMonitor::sawRelay();
 
         return $next($request);
     }
