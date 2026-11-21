@@ -2062,3 +2062,26 @@ html[dir='rtl'] .v2-row-title {
 .v2-split > button:hover {
     background-color: var(--el-role-bg-canvas);
 }
+
+/* A row's tile holding a source mark draws no tile of its own: the mark is the shape (replaces an inline style). */
+.v2-row-tile:has(> .v2-source) {
+    background-color: transparent;
+}
+
+/* The player bar's moment ticks (bookmarks, pauses) stay 6 px to see, with a larger invisible area to press: about
+   22 px with a mouse and 38 px on touch. */
+.fi-body .el-player .el-tick {
+    position: relative;
+}
+
+.fi-body .el-player .el-tick::after {
+    content: '';
+    position: absolute;
+    inset: calc(-1 * var(--el-space-8));
+}
+
+@media (pointer: coarse) {
+    .fi-body .el-player .el-tick::after {
+        inset: calc(-1 * var(--el-space-16));
+    }
+}
