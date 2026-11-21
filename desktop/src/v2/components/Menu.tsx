@@ -49,8 +49,11 @@ type ListProps = {
 const EDGE = 8;
 const rtl = (el: Element | null) => !!el && getComputedStyle(el).direction === "rtl";
 
-/** The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level. */
-function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false }: ListProps) {
+/**
+ * The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level.
+ * Exported for openers of their own (SplitButton); a page uses Menu or ContextMenu.
+ */
+export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false }: ListProps) {
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
   const own = useRef<HTMLUListElement | null>(null);

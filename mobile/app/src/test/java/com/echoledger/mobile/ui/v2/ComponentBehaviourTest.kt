@@ -23,6 +23,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
+import com.echoledger.mobile.ui.v2.components.EchoActionItem
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoBottomSheet
 import com.echoledger.mobile.ui.v2.components.EchoButton
@@ -44,6 +46,7 @@ import com.echoledger.mobile.ui.v2.components.EchoRadio
 import com.echoledger.mobile.ui.v2.components.EchoSearchField
 import com.echoledger.mobile.ui.v2.components.EchoSelect
 import com.echoledger.mobile.ui.v2.components.EchoSourceLogo
+import com.echoledger.mobile.ui.v2.components.EchoSplitButton
 import com.echoledger.mobile.ui.v2.components.EchoSwitch
 import com.echoledger.mobile.ui.v2.components.EchoToastHost
 import com.echoledger.mobile.ui.v2.components.EchoToastResult
@@ -359,5 +362,24 @@ class ComponentBehaviourTest {
         }
         compose.onNodeWithContentDescription("Voice note").assertExists()
         compose.onNodeWithContentDescription("Zoom on a computer").assertExists()
+    }
+
+    @Test
+    fun aSplitButtonsMainPartActsAtOnceAndItsChevronOpensTheMenu() {
+        var copied = 0
+        show {
+            EchoSplitButton(
+                text = "Copy",
+                onClick = { copied++ },
+                menuLabel = "More copy options",
+                mainLabel = "Copy text"
+            ) { close -> EchoActionItem(EchoIcons.Export, "Copy with timestamps", { close() }) }
+        }
+        compose.onNodeWithContentDescription("Copy text").performClick()
+        assertEquals(1, copied)
+        compose.onAllNodesWithText("Copy with timestamps").assertCountEquals(0)
+        compose.onNodeWithContentDescription("More copy options").performClick()
+        compose.onNodeWithText("Copy with timestamps").assertExists()
+        assertEquals(1, copied)
     }
 }
