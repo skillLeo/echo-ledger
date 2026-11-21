@@ -325,6 +325,8 @@
 .el-chip--menu { padding-inline-end: var(--el-space-8); }
 .el-chip--on { background: var(--el-role-accent-soft); border-color: var(--el-role-accent-default); color: var(--el-role-accent-text); font-weight: var(--el-text-body-strong-weight); }
 .el-chip-group { display: inline-flex; align-items: center; }
+/* Urdu chips take Nastaliq's taller line (D4 3.2: 28 + 2 × 4), so the letters sit in the middle, descenders clear. */
+:lang(ur) .el-chip { min-block-size: calc(var(--el-text-urdu-caption-line) + var(--el-space-8)); line-height: var(--el-text-urdu-caption-line); padding-block: 0; }
 .el-chip-clear { margin-inline-start: calc(-1 * var(--el-space-4)); }
 .el-list-section__button { display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .el-list-section__button .el-icon { transition: transform var(--el-motion-fast); }
