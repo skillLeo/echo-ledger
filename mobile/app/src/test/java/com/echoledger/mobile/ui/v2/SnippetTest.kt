@@ -44,4 +44,16 @@ class SnippetTest {
             firstSentence("Speaker 1: Can you send the estimate by Monday? Speaker 2: Yes.")
         )
     }
+
+    @Test
+    fun followsTheReviewedRules() {
+        assertEquals("میسج کا آپ کو میں کیا جواب دوں", firstSentence("Speaker 1: میسج کا آپ کو میں کیا جواب دوں Speaker 2: جی"))
+        assertEquals("Next step: send the estimate today.", firstSentence("Yes. Next step: send the estimate today."))
+        assertEquals("کل کی میٹنگ کا وقت بدل گیا ہے۔", firstSentence("\u200FSpeaker:\u200F کل کی میٹنگ کا وقت بدل گیا ہے۔"))
+        assertEquals("I will send it tomorrow.", firstSentence("Me: Thanks. I will send it tomorrow."))
+        assertEquals(
+            "The second container leaves Karachi on the 14th.",
+            firstSentence("Sara (Acme): Hi. Bilal Qureshi: The second container leaves Karachi on the 14th. Sara (Acme): Good.")
+        )
+    }
 }
