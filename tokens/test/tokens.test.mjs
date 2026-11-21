@@ -23,6 +23,19 @@ for (const theme of ['light', 'dark']) {
       }
     }
   });
+  test(`${theme}: every label colour's text reaches 4.5:1 on its fill and the backgrounds, its dot 3:1`, () => {
+    const names = Object.keys(json('global/label.json').label).filter((n) => !n.startsWith('$'));
+    assert.equal(names.length, 8);
+    for (const n of names) {
+      const l = r.label[n]; const c = (k) => hex(l[k].$value);
+      for (const bg of [c('fill'), v('bg', 'canvas'), v('bg', 'surface'), v('bg', 'subtle')]) {
+        assert.ok(ratio(c('text'), bg) >= 4.5, `label.${n}.text on ${bg}: ${ratio(c('text'), bg).toFixed(2)}`);
+      }
+      for (const bg of ['canvas', 'surface', 'subtle']) assert.ok(ratio(c('dot'), v('bg', bg)) >= 3, `label.${n}.dot on bg.${bg}`);
+      // On its own chip the dot is drawn in the text colour (v2.css .el-label-chip .el-label-dot), so that pair must hold 3:1 too.
+      assert.ok(ratio(c('text'), c('fill')) >= 3, `label.${n}.text as the chip's dot`);
+    }
+  });
   test(`${theme}: text on the accent and on the record button reaches 4.5:1`, () => {
     assert.ok(ratio(v('text', 'on-accent'), v('accent', 'default')) >= 4.5);
   });

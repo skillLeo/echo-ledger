@@ -5,6 +5,14 @@
   --el-shadow-1: 0px 2px 8px 0px #0000001F;
   --el-shadow-2: 0px 8px 24px 0px #00000029;
   --el-shadow-3: 0px 12px 32px 0px #00000033;
+  --el-label-grey: #8E8A80;
+  --el-label-red: #E15F56;
+  --el-label-orange: #DC6718;
+  --el-label-amber: #B3820F;
+  --el-label-green: #2D9A63;
+  --el-label-teal: #26978F;
+  --el-label-blue: #458CDE;
+  --el-label-pink: #D7609C;
   --el-motion-fast: 100ms;
   --el-motion-base: 200ms;
   --el-motion-slow: 300ms;
@@ -190,6 +198,30 @@
   --el-role-danger-default: #B42318;
   --el-role-danger-soft: #FEF3F2;
   --el-role-scrim-default: #1A1A1A66;
+  --el-role-label-grey-fill: #EEEEEC;
+  --el-role-label-grey-text: #6C6860;
+  --el-role-label-grey-dot: #8E8A80;
+  --el-role-label-red-fill: #FAE6E5;
+  --el-role-label-red-text: #C32D22;
+  --el-role-label-red-dot: #E15F56;
+  --el-role-label-orange-fill: #FCEDE3;
+  --el-role-label-orange-text: #AE5113;
+  --el-role-label-orange-dot: #DC6718;
+  --el-role-label-amber-fill: #FDF5E3;
+  --el-role-label-amber-text: #8E670B;
+  --el-role-label-amber-dot: #B3820F;
+  --el-role-label-green-fill: #E7F8F0;
+  --el-role-label-green-text: #247B4F;
+  --el-role-label-green-dot: #2D9A63;
+  --el-role-label-teal-fill: #E7F9F8;
+  --el-role-label-teal-text: #1F7A74;
+  --el-role-label-teal-dot: #26978F;
+  --el-role-label-blue-fill: #E5EFFA;
+  --el-role-label-blue-text: #226BBF;
+  --el-role-label-blue-dot: #458CDE;
+  --el-role-label-pink-fill: #F9E7F0;
+  --el-role-label-pink-text: #BC2F75;
+  --el-role-label-pink-dot: #D7609C;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -218,6 +250,30 @@
     --el-role-danger-default: #F97066;
     --el-role-danger-soft: #2A0E0B;
     --el-role-scrim-default: #00000099;
+    --el-role-label-grey-fill: #353431;
+    --el-role-label-grey-text: #A29E96;
+    --el-role-label-grey-dot: #726D65;
+    --el-role-label-red-fill: #3C1D1B;
+    --el-role-label-red-text: #E3675F;
+    --el-role-label-red-dot: #CC2F24;
+    --el-role-label-orange-fill: #3E2818;
+    --el-role-label-orange-text: #E8772C;
+    --el-role-label-orange-dot: #AE5113;
+    --el-role-label-amber-fill: #403317;
+    --el-role-label-amber-text: #D09611;
+    --el-role-label-amber-dot: #8E670B;
+    --el-role-label-green-fill: #1E382B;
+    --el-role-label-green-text: #34B273;
+    --el-role-label-green-dot: #247B4F;
+    --el-role-label-teal-fill: #1D3A38;
+    --el-role-label-teal-text: #2DB4AB;
+    --el-role-label-teal-dot: #1F7A74;
+    --el-role-label-blue-fill: #1B2A3C;
+    --el-role-label-blue-text: #5294E0;
+    --el-role-label-blue-dot: #226DC3;
+    --el-role-label-pink-fill: #3A1D2B;
+    --el-role-label-pink-text: #D968A1;
+    --el-role-label-pink-dot: #C4317A;
   }
 }
 
@@ -246,4 +302,28 @@
   --el-role-danger-default: #F97066;
   --el-role-danger-soft: #2A0E0B;
   --el-role-scrim-default: #00000099;
+  --el-role-label-grey-fill: #353431;
+  --el-role-label-grey-text: #A29E96;
+  --el-role-label-grey-dot: #726D65;
+  --el-role-label-red-fill: #3C1D1B;
+  --el-role-label-red-text: #E3675F;
+  --el-role-label-red-dot: #CC2F24;
+  --el-role-label-orange-fill: #3E2818;
+  --el-role-label-orange-text: #E8772C;
+  --el-role-label-orange-dot: #AE5113;
+  --el-role-label-amber-fill: #403317;
+  --el-role-label-amber-text: #D09611;
+  --el-role-label-amber-dot: #8E670B;
+  --el-role-label-green-fill: #1E382B;
+  --el-role-label-green-text: #34B273;
+  --el-role-label-green-dot: #247B4F;
+  --el-role-label-teal-fill: #1D3A38;
+  --el-role-label-teal-text: #2DB4AB;
+  --el-role-label-teal-dot: #1F7A74;
+  --el-role-label-blue-fill: #1B2A3C;
+  --el-role-label-blue-text: #5294E0;
+  --el-role-label-blue-dot: #226DC3;
+  --el-role-label-pink-fill: #3A1D2B;
+  --el-role-label-pink-text: #D968A1;
+  --el-role-label-pink-dot: #C4317A;
 }

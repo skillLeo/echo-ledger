@@ -51,3 +51,15 @@ html:has(.g-body), .g-body { margin: 0; block-size: 100%; background: var(--el-r
 .g-settings-loading { gap: var(--el-space-16); }
 .g-profile-error > .el-empty { padding: var(--el-space-24); }
 .g-assist { display: flex; justify-content: center; padding-block-start: var(--el-space-48); }
+
+/* The shared bars page (screen=kit): each component's states, one under the other. */
+.g-kit-card { display: flex; flex-direction: column; gap: var(--el-space-16); padding: var(--el-space-16); }
+.g-kit-case { display: flex; flex-direction: column; gap: var(--el-space-8); min-inline-size: 0; }
+.g-kit-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.g-kit-itembar { position: relative; min-block-size: calc(var(--el-space-40) + var(--el-space-8)); }
+.g-kit-scroller {
+  position: relative; overflow-y: auto; max-block-size: calc(var(--el-space-64) * 3);
+  border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md);
+}
+.g-kit-scroller__head { padding: var(--el-space-16); }
+.g-kit-scroller__line { padding: var(--el-space-8) var(--el-space-16); }

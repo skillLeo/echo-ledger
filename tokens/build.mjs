@@ -89,6 +89,7 @@ function kotlin(light, dark) {
     return `val ${camel(t.path.slice(1))} = TextStyle(fontSize = ${px(v.fontSize)}.sp, lineHeight = ${px(v.lineHeight)}.sp, fontWeight = FontWeight(${v.fontWeight}))`;
   });
   const comp = props(light.filter((t) => t.path[0] === 'component' && (t.$type === 'dimension' || t.$type === 'duration')), (t) => (t.$type === 'duration' ? `const val ${camel(t.path.slice(1))}Ms = ${ms(t.$value)}` : `val ${camel(t.path.slice(1))} = ${px(t.$value)}.dp`));
+  const labels = props(group('label'), (t) => `"${t.path[1]}" to "${t.$value.toUpperCase()}"`).replace(/\n/g, ',\n');
   return `// ${HEADER}
 package com.echoledger.mobile.ui.v2.tokens
 
@@ -143,6 +144,11 @@ ${durations}
     object Type {
 ${type}
     }
+
+    /** Label colour names and the #RRGGBB the server stores for each (contract 2.0.0-i); Light/Dark.label* draw them. */
+    val labelColours: Map<String, String> = linkedMapOf(
+${labels}
+    )
 }
 `;
 }
