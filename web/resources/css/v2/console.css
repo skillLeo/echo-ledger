@@ -1848,3 +1848,33 @@ html[dir='rtl'] .v2-row-title {
     inline-size: var(--el-space-12);
     block-size: var(--el-space-12);
 }
+
+/* A recording row's marks (U9): the unread dot before the title, and its labels' colour dots (DESIGN_SYSTEM "Label
+   colours"). A label whose stored colour is one of the eight takes .v2-label-dot--<name>; any other colour comes in
+   as --label-own on .v2-label-dot--other and draws the dot alone, with a hairline ring, never as text or fill. */
+.v2-unread-dot,
+.v2-label-dot {
+    display: inline-block;
+    flex: none;
+    inline-size: var(--el-component-status-dot-size);
+    block-size: var(--el-component-status-dot-size);
+    border-radius: var(--el-radius-full);
+}
+
+.v2-unread-dot {
+    background-color: var(--el-role-accent-default);
+}
+
+.v2-label-dot--grey { background-color: var(--el-role-label-grey-dot); }
+.v2-label-dot--red { background-color: var(--el-role-label-red-dot); }
+.v2-label-dot--orange { background-color: var(--el-role-label-orange-dot); }
+.v2-label-dot--amber { background-color: var(--el-role-label-amber-dot); }
+.v2-label-dot--green { background-color: var(--el-role-label-green-dot); }
+.v2-label-dot--teal { background-color: var(--el-role-label-teal-dot); }
+.v2-label-dot--blue { background-color: var(--el-role-label-blue-dot); }
+.v2-label-dot--pink { background-color: var(--el-role-label-pink-dot); }
+
+.v2-label-dot--other {
+    border: var(--el-border-hairline) solid var(--el-role-border-strong);
+    background-color: var(--label-own, var(--el-role-bg-subtle));
+}
