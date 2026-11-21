@@ -177,6 +177,8 @@ fun V2SettingsScreen(
     var profile by remember { mutableStateOf<ProfileState>(ProfileState.Loading) }
     var attempt by remember { mutableIntStateOf(0) }
     var confirmSignOut by remember { mutableStateOf(false) }
+    // The upgrade flow (choose, pay, promo code, receipt, status), over whichever page opened it.
+    var flow by remember { mutableStateOf<com.echoledger.mobile.ui.FlowStart?>(null) }
     LaunchedEffect(attempt) {
         profile = ProfileState.Loading
         val account = vm.accountQuietly()
@@ -194,6 +196,16 @@ fun V2SettingsScreen(
                 "notifications" -> NotificationsPage(settings, vm::updateSettings, r.highlight, back)
 
                 "captions" -> CaptionsPage(settings, vm::updateSettings, r.highlight, back)
+
+                "plan" -> PlanPage(
+                    settings.plan,
+                    r.highlight,
+                    back,
+                    onOpenKey = { route = SettingsRoute.Page("key") },
+                    onFlow = { flow = it },
+                    cancelRequest = { id -> vm.cancelUpgradeRequest(id).error },
+                    loadRequest = { vm.loadUpgradeRequest() }
+                )
 
                 "games" -> GamesPage(settings, vm::updateSettings, r.highlight, back)
 
@@ -274,6 +286,9 @@ fun V2SettingsScreen(
             onBack = onBack,
             modifier = modifier
         )
+    }
+    flow?.let { start ->
+        com.echoledger.mobile.ui.UpgradeFlow(vm, start.planKey, start.feature, start.step, given = settings.plan) { flow = null }
     }
     if (confirmSignOut) {
         EchoDialog(

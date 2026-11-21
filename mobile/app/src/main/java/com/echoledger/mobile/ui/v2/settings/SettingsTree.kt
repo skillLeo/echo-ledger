@@ -48,6 +48,7 @@ object SettingsTree {
         "captions",
         "games",
         "videos",
+        "plan",
         "voice",
         "language",
         "words",
