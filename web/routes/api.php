@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\Account\AccountProfileController;
+use App\Http\Controllers\Api\Account\AccountSecurityController;
+use App\Http\Controllers\Api\Account\AvatarController;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\Assist\AssistLiveController;
@@ -85,6 +88,11 @@ Route::post('webhooks/stt/{provider}', SttWebhookController::class)
 Route::get('recordings/{recording}/audio', [RecordingController::class, 'audio'])
     ->middleware(['signed', 'throttle:device'])->name('api.recordings.audio');
 
+// Since 2.0.0-l: a person's profile picture, from the signed, versioned `avatar_url` the API gives where it shows them.
+// The signature is checked in the controller, so an expired or wrong one answers 403 with an empty body.
+Route::get('avatars/{user}/{version}', [AvatarController::class, 'show'])
+    ->middleware('throttle:device')->whereNumber(['user', 'version'])->name('api.avatars.show');
+
 // Since v1.6 a suspended account's devices are refused on every call (403 account_suspended).
 Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class, EnsurePlatformAvailable::class])->group(function (): void {
     // Every authenticated route except the upload routes counts against the general per-device limit.
@@ -99,6 +107,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::post('diagnostics/share-checks', ShareCheckController::class)->middleware(['abilities:config:read', 'throttle:share-check'])->name('api.diagnostics.share-checks');
         Route::get('config/share-bars', ShareBarsController::class)->middleware('abilities:config:read')->name('api.config.share-bars');
         Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');
+        // Since 2.0.0-l (docs/API.md "Account and security from the apps"): sign-in methods, browsers, devices, events.
+        Route::get('account/security', [AccountSecurityController::class, 'show'])->middleware('abilities:config:read')->name('api.account.security');
         // Interface flags (2.0.0-a): the person's "Switch back to classic".
         Route::put('account/ui', [AccountController::class, 'ui'])->middleware('abilities:config:read')->name('api.account.ui');
         // Since 2.0.0-g: the design switch, read on its own.
@@ -185,6 +195,27 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
                 Route::post('upgrade-requests/{id}/cancel', [UpgradeRequestController::class, 'cancel'])->name('api.upgrade-requests.cancel');
             });
             Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
+            // Since 2.0.0-l (docs/API.md "Account and security from the apps"): the person's own account only.
+            Route::post('account/proof-code', [AccountProfileController::class, 'proofCode'])->middleware('throttle:account-proof-code')->name('api.account.proof-code');
+            Route::patch('account', [AccountProfileController::class, 'update'])->middleware('throttle:account-name')->name('api.account.update');
+            Route::post('account/avatar', [AvatarController::class, 'store'])->middleware('throttle:account-avatar')->name('api.account.avatar.store');
+            Route::delete('account/avatar', [AvatarController::class, 'destroy'])->middleware('throttle:account-avatar')->name('api.account.avatar.destroy');
+            Route::post('account/email', [AccountProfileController::class, 'email'])->middleware('throttle:account-email')->name('api.account.email');
+            Route::post('account/email/confirm', [AccountProfileController::class, 'confirmEmail'])->middleware('throttle:account-email-code')->name('api.account.email.confirm');
+            Route::delete('account/email', [AccountProfileController::class, 'cancelEmail'])->name('api.account.email.cancel');
+            Route::put('account/password', [AccountProfileController::class, 'password'])->middleware('throttle:account-password')->name('api.account.password');
+            Route::patch('account/devices/{id}', [AccountSecurityController::class, 'renameDevice'])->name('api.account.devices.rename');
+            Route::delete('account/devices/{id}', [AccountSecurityController::class, 'revokeDevice'])->name('api.account.devices.revoke');
+            Route::delete('account/browsers/{id}', [AccountSecurityController::class, 'revokeBrowser'])->name('api.account.browsers.revoke');
+            Route::delete('account/google', [AccountSecurityController::class, 'unlinkGoogle'])->middleware('throttle:account-passkeys')->name('api.account.google.unlink');
+            Route::post('account/passkeys/options', [AccountSecurityController::class, 'passkeyOptions'])->middleware('throttle:account-passkeys')->name('api.account.passkeys.options');
+            Route::post('account/passkeys', [AccountSecurityController::class, 'storePasskey'])->name('api.account.passkeys.store');
+            Route::patch('account/passkeys/{id}', [AccountSecurityController::class, 'renamePasskey'])->name('api.account.passkeys.rename');
+            Route::delete('account/passkeys/{id}', [AccountSecurityController::class, 'removePasskey'])->middleware('throttle:account-passkeys')->name('api.account.passkeys.remove');
+            Route::post('account/two-factor', [AccountSecurityController::class, 'beginTwoFactor'])->middleware('throttle:account-two-factor')->name('api.account.two-factor.begin');
+            Route::post('account/two-factor/confirm', [AccountSecurityController::class, 'confirmTwoFactor'])->name('api.account.two-factor.confirm');
+            Route::post('account/two-factor/recovery-codes', [AccountSecurityController::class, 'recoveryCodes'])->middleware('throttle:account-two-factor')->name('api.account.two-factor.recovery-codes');
+            Route::delete('account/two-factor', [AccountSecurityController::class, 'disableTwoFactor'])->middleware('throttle:account-two-factor')->name('api.account.two-factor.disable');
             Route::delete('account', [AccountController::class, 'destroy'])->name('api.account.destroy');
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->middleware($own)->name('api.sessions.restore');
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->middleware($own)->name('api.bin.destroy');

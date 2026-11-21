@@ -12,9 +12,13 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Accounts\AccountDeletion;
 use App\Services\Accounts\AccountExports;
+use App\Services\Accounts\AccountProof;
 use App\Services\Accounts\AccountSessions;
+use App\Services\Accounts\Avatars;
+use App\Services\Accounts\EmailChange;
 use App\Services\DeviceConfigPayload;
 use App\Services\InterfaceFlags;
+use App\Services\Passkeys;
 use App\Services\Staff\StaffAccess;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Http\JsonResponse;
@@ -55,6 +59,12 @@ final class AccountController extends Controller
                     'role' => (string) $w->getRelationValue('pivot')?->getAttribute('role'),
                     'current' => $w->id === $workspace?->id,
                 ])->values()->all(),
+            // Since 2.0.0-l (docs/API.md "Account and security from the apps"): the picture, the password, a change of
+            // address waiting for its confirmation, and whether the phone can add passkeys on this server.
+            ...Avatars::of($user),
+            'has_password' => AccountProof::hasPassword($user),
+            ...app(EmailChange::class)->payload($user),
+            'passkeys_available' => Passkeys::availableOnPhone(),
         ]);
     }
 

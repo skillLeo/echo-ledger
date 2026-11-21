@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Accounts\SignUp;
 use App\Services\CredentialVault;
 use App\Services\InterfaceFlags;
+use App\Services\Passkeys;
 use App\Services\RecordingIngestor;
 use App\Services\SettingsRepository;
 use App\Services\Views\TranscriptConverter;
@@ -20,8 +21,10 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
+use PragmaRX\Google2FA\Google2FA;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
+use Tests\Feature\Support\SoftAuthenticator;
 
 uses(ApiClient::class);
 
@@ -130,14 +133,15 @@ function cleanSample(mixed $value, ?string $key = null): mixed
         return $out;
     }
     if (is_array($value)) {
-        return array_map(fn (mixed $item): mixed => cleanSample($item), $value);
+        // Since 2.0.0-l: recovery codes are shown once, and never kept in a sample.
+        return array_map(fn (mixed $item): mixed => $key === 'recovery_codes' ? 'sample-recovery-code' : cleanSample($item), $value);
     }
     if (is_string($value)) {
         if ($key !== null && preg_match('/token|secret|password|signature|hash/i', $key) === 1) {
             return 'sample-'.$key;
         }
 
-        return preg_replace('/([?&](?:signature|expires|token)=)[^&"]+/', '$1sample', $value);
+        return preg_replace('/([?&](?:signature|expires|token|secret)=)[^&"]+/', '$1sample', $value);
     }
 
     return $value;
@@ -242,6 +246,23 @@ it('keeps the shape of every answer the apps read', function () {
     $record('upgrade_request', $api()->postJson('/api/upgrade-requests', ['plan' => 'business', 'message' => 'For the team', 'promo_code' => 'TEAM25']));
     $record('upgrade_request_latest', $api()->getJson('/api/upgrade-requests/latest'));
     $record('device_rename', $api()->patchJson('/api/devices/'.$signedIn['device']['id'], ['name' => 'Sample phone']));
+
+    // Since 2.0.0-l: account and security from the apps.
+    $picture = imagecreatetruecolor(300, 300);
+    ob_start();
+    imagepng($picture);
+    $record('account_avatar', $api()->post('/api/account/avatar', ['image' => UploadedFile::fake()->createWithContent('me.png', (string) ob_get_clean())], ['Accept' => 'application/json']));
+    $record('account_update', $api()->patchJson('/api/account', ['name' => 'Sample Owner']));
+    $record('account_email', $api()->postJson('/api/account/email', ['email' => 'sample.new@example.test', 'password' => 'Sample-password-1234']));
+    $record('account_email_confirm', $api()->postJson('/api/account/email/confirm', ['code' => Mail::queued(EmailCodeMail::class)->last()->code]));
+    $begin = $record('account_two_factor', $api()->postJson('/api/account/two-factor', ['password' => 'Sample-password-1234']));
+    $recovery = $record('account_two_factor_confirm', $api()->postJson('/api/account/two-factor/confirm', ['ceremony' => $begin['ceremony'], 'code' => app(Google2FA::class)->getCurrentOtp($begin['secret'])]));
+    // With two-step on, every proof takes an authenticator or recovery code.
+    $fresh = $record('account_recovery_codes', $api()->postJson('/api/account/two-factor/recovery-codes', ['otp' => $recovery['recovery_codes'][0]]));
+    $ceremony = $record('account_passkey_options', $api()->postJson('/api/account/passkeys/options', ['otp' => $fresh['recovery_codes'][0]]));
+    $record('account_passkey', $api()->postJson('/api/account/passkeys', ['ceremony' => $ceremony['ceremony'], 'name' => 'Sample phone',
+        'credential' => (new SoftAuthenticator)->create($ceremony['options'], Passkeys::androidOrigins()[0])]));
+    $record('account_security', $api()->getJson('/api/account/security'));
 
     // The library, with the demo recordings and their transcripts.
     $record('library', $api()->getJson('/api/library?limit=100'));

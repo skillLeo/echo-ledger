@@ -1,0 +1,10 @@
+{
+    "ceremony": "SD7xDOJivxWwYxL9KEg7ytD9HaabQnwt04C2YKtM",
+    "secret": "sample-secret",
+    "otpauth_uri": "otpauth://totp/EchoLedger:sample.new%40example.test?secret=sample&issuer=EchoLedger&algorithm=SHA1&digits=6&period=30",
+    "issuer": "EchoLedger",
+    "label": "s…@example.test",
+    "digits": 6,
+    "period": 30,
+    "algorithm": "SHA1"
+}
