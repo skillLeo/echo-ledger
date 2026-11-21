@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeItem, makeStatus } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeStatus } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -26,9 +26,9 @@ describe("the top of the Library", () => {
   });
   const show = async (status = makeStatus({ platform: "macos", pendingDecisions: 2 })) => {
     const top = { status, onSetup: vi.fn(), onReadyCheck: vi.fn(), onRecord: vi.fn(), onActivity: vi.fn() };
-    render(<LibraryV2 top={top} />);
+    const { unmount } = render(<LibraryV2 top={top} />);
     await act(flushAsync);
-    return top;
+    return Object.assign(top, { unmount });
   };
 
   it("the get-started card until setup is done: each step runs its fix, and Hide keeps it hidden on this computer", async () => {
@@ -63,5 +63,80 @@ describe("the top of the Library", () => {
     await show(makeStatus({ platform: "macos" }));
     expect(screen.queryByRole("region", { name: "Get started" })).toBeNull();
     expect(screen.queryByTestId("needs-action")).toBeNull();
+  });
+
+  describe("the banner's × (Dismiss)", () => {
+    const KEY = "echoledger-library-needs-action-dismissed";
+    const dismiss = () => fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" }));
+    // Starts with 2 waiting calls and 1 untranscribed recording.
+    const again = (status: Parameters<typeof makeStatus>[0]) => show(makeStatus({ platform: "macos", ...status }));
+
+    it("is a button named Dismiss that the keyboard reaches; it hides the banner and remembers what it said", async () => {
+      await show();
+      const button = within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" });
+      expect(button.tagName).toBe("BUTTON");
+      expect(button.tabIndex).toBe(0);
+      button.focus();
+      expect(document.activeElement).toBe(button);
+      dismiss();
+      expect(screen.queryByTestId("needs-action")).toBeNull();
+      expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 2, untranscribed: 1 });
+    });
+
+    it("stays hidden after a restart with the same counts, and when a count falls", async () => {
+      const first = await again({ pendingDecisions: 2 });
+      dismiss();
+      first.unmount();
+      const same = await again({ pendingDecisions: 2 });
+      expect(screen.queryByTestId("needs-action")).toBeNull();
+      same.unmount();
+      await again({ pendingDecisions: 1 });
+      expect(screen.queryByTestId("needs-action")).toBeNull();
+      expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 1, untranscribed: 1 });
+    });
+
+    it("comes back when a count goes up, also after it fell", async () => {
+      const first = await again({ pendingDecisions: 2 });
+      dismiss();
+      first.unmount();
+      const fewer = await again({ pendingDecisions: 1 });
+      expect(screen.queryByTestId("needs-action")).toBeNull();
+      fewer.unmount();
+      await again({ pendingDecisions: 2 });
+      expect(screen.getByTestId("needs-action")).toHaveTextContent("2 calls wait for your decision · 1 more needs you");
+      expect(window.localStorage.getItem(KEY)).toBeNull();
+    });
+
+    it("comes back when a new kind of notice appears", async () => {
+      const first = await again({ pendingDecisions: 2 });
+      dismiss();
+      first.unmount();
+      await again({ pendingDecisions: 2, failedUploads: 1 });
+      expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording didn't upload · 2 more need you");
+    });
+
+    it("stays hidden after a restart while the queue shows the waiting calls (it reports that once it has loaded)", async () => {
+      respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
+      const first = await again({ pendingDecisions: 2 });
+      expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording isn't transcribed");
+      dismiss();
+      first.unmount();
+      await again({ pendingDecisions: 2 });
+      expect(screen.queryByTestId("needs-action")).toBeNull();
+      expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 2, untranscribed: 1 });
+    });
+
+    it("shows when storage is unavailable", async () => {
+      window.localStorage.setItem(KEY, JSON.stringify({ waiting: 5, untranscribed: 5 }));
+      const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("no storage");
+      });
+      try {
+        await show();
+        expect(screen.getByTestId("needs-action")).toBeInTheDocument();
+      } finally {
+        get.mockRestore();
+      }
+    });
   });
 });
