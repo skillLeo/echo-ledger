@@ -337,4 +337,3 @@ class ComponentBehaviourTest {
         assertEquals(EchoTokens.Light.accentDefault, accent)
     }
 }
-
