@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { formatWhen } from "../../lib/format";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { getConfig, getRoles } from "@testing-library/dom";
 import { createRequire } from "node:module";
@@ -496,5 +497,18 @@ describe("the app's project page with ui_v2.ask keeps today's actions", () => {
     expect(within(screen.getByRole("menu")).getAllByRole("menuitem").map((i) => i.textContent)).toContain("Delete project…");
     fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
     expect(await screen.findByRole("dialog", { name: "Rename Qureshi Textiles" })).toBeInTheDocument();
+  });
+});
+
+describe("the project's header (parity DT-PRJ-006)", () => {
+  it("says how many recordings and when the last call was, as classic's", async () => {
+    respond("library_list", [
+      makeItem("bilal", { title: "Payment terms", client: { id: "c1", name: "Qureshi Textiles" }, started_at: "2026-11-10T06:42:00Z" }),
+      makeItem("later", { title: "Follow-up", client: { id: "c1", name: "Qureshi Textiles" }, started_at: "2026-11-17T06:42:00Z" }),
+      makeItem("other", { title: "Weekly sales review", client: { id: "c2", name: "Mehran Foods" }, started_at: "2026-11-18T06:42:00Z" }),
+    ]);
+    await show();
+    expect(screen.getByTestId("project-summary")).toHaveTextContent(/^2 recordings · Last call /);
+    expect(screen.getByTestId("project-summary").textContent).toContain(formatWhen("2026-11-17T06:42:00Z").split(" · ")[0]);
   });
 });

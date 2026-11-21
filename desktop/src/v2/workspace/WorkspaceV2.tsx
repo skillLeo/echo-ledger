@@ -16,6 +16,7 @@ import { confirmAction } from "../../lib/confirm";
 import { NO_AI_NOTES } from "../../lib/plan";
 import { BRIEF_FIELDS, budgetLine, workspaceBusy } from "../../views/main/ClientWorkspace";
 import { NotesSections } from "../../views/main/CallNotes";
+import { clientSummary } from "../../views/main/ClientAvatar";
 import { LockedChip, PlanBadge, useLocked } from "../../views/main/Upgrade";
 import { ProjectScreens } from "../../views/main/ScreenMoments";
 import type { Notify } from "../../lib/notice";
@@ -118,7 +119,10 @@ export function WorkspaceV2({
   usePoll(workspaceBusy(ws), load);
 
   const all = useMemo(() => (projects.length ? projects : [project as ClientFolder]), [projects, project]);
-  const ownCount = useMemo(() => (items ? items.filter((i) => !i.deleted && i.client?.id === project.id).length : null), [items, project.id]);
+  const own = useMemo(() => (items ? items.filter((i) => !i.deleted && i.client?.id === project.id) : null), [items, project.id]);
+  const ownCount = own ? own.length : null;
+  // Classic's summary: how many, and when the last call was.
+  const lastCall = useMemo(() => own?.map((i) => i.started_at).filter((at): at is string => !!at).sort().pop(), [own]);
   // AI notes while they are on for the project and in the plan; a plan without them keeps memory and the brief.
   const aiNotes = aiNotesInPlan && (ws ? ws.client.ai_notes : project.ai_notes !== false);
   const tabs: { value: Tab; label: string }[] = [
@@ -144,7 +148,7 @@ export function WorkspaceV2({
       <header className="el-page__head el-page__head--top">
         <div className="el-page__titles">
           <h1 className="el-title-l" dir="auto">{project.name}</h1>
-          {ownCount !== null && <p className="el-secondary">{ownCount === 1 ? "1 recording" : `${ownCount} recordings`}</p>}
+          {ownCount !== null && <p className="el-secondary" data-testid="project-summary">{ownCount === 0 ? "0 recordings" : clientSummary(ownCount, lastCall)}</p>}
         </div>
         <div className="el-page__actions">
           {onShare && <Button icon={Icons.ShareIcon} onClick={onShare}>Share</Button>}

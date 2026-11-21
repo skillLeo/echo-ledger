@@ -11,6 +11,7 @@ import { Badge, Button, Card, EmptyState, Icon, Icons, List, ListRow, Loading, P
 import { shellStatus } from "../shell/status";
 import { isUntranscribed, rowModel } from "../library/model";
 import { minutesLine } from "../settings/AccountCard";
+import { isViewer, viewerSentence } from "../../lib/plan";
 
 export type ChecklistItem = { id: "permissions" | "ready" | "first"; title: string; done: boolean; action: string };
 
@@ -93,6 +94,15 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
           : strip.kind === "setup" ? <Button variant="primary" onClick={onSetup}>Fix setup</Button>
             : onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>}
       </Card>
+      {/* A viewer records nothing: said instead of a Record button that isn't there (classic's notice). */}
+      {isViewer(status) && strip.kind !== "recording" && (
+        <div className="el-home-viewer" data-testid="home-viewer">
+          <Card>
+            <EmptyState icon={Icons.RecordIcon} title="Recording is off for viewers"
+              body={`${viewerSentence(status.plan.workspace)} An owner or admin of the workspace can change your role in the console.`} />
+          </Card>
+        </div>
+      )}
 
       {list && (
         <section className="el-group" aria-label="Get started">

@@ -1361,3 +1361,12 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
   cursor: default; color: var(--el-role-text-disabled); background: var(--el-role-bg-subtle); border-color: var(--el-role-border-default);
 }
 .el-split:has(> :disabled) { --split-divider: var(--el-role-border-default); }
+
+/* The recording page's labels, each with its × (parity DT-REC-045). */
+.el-recording__labels { display: flex; flex-wrap: wrap; gap: var(--el-space-4); list-style: none; margin: 0; padding: 0; }
+
+/* Rename by clicking the recording's title (parity DT-REC-004): the title reads as text until it is pressed. */
+.el-recording__title { all: unset; cursor: text; border-radius: var(--el-radius-sm); }
+.el-recording__title:hover { background: var(--el-role-bg-subtle); }
+.el-recording__title:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-recording__title-field { inline-size: 100%; border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm); background: transparent; color: inherit; font: inherit; padding-inline: var(--el-space-4); }

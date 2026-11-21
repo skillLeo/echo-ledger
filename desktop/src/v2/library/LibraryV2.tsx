@@ -12,7 +12,7 @@ import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Banner, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
@@ -23,6 +23,7 @@ import {
 } from "./filters";
 import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { recordingName, searchItems, type SortKey } from "../../lib/library";
+import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type Density, type Preferences } from "../../lib/shell";
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
 import { SourceAvatar } from "./SourceAvatar";
@@ -43,6 +44,11 @@ export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; exp
 type Organise =
   | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null }
   | { kind: "rename" | "whatsapp"; item: LibraryItem };
+
+/** How often the list syncs while something uploads or is transcribed (classic's). */
+export const RESYNC_MS = 5000;
+/** A transcript is being made for it. */
+const isUnderWay = (i: LibraryItem) => ["pending", "submitted", "processing"].includes(i.transcript?.final_status ?? "");
 
 /** The core's limits (src-tauri commands.rs MAX_BULK, MAX_TRANSCRIBE): more picked than this and the bar says so. */
 const MAX_BULK = 200;
@@ -99,6 +105,22 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   useEffect(() => {
     if (placeGone(place, lists)) setPlace("all");
   }, [place, lists]);
+  // Density, shared with Settings › Appearance (classic's View menu has it too): both follow each other at once.
+  const [density, setDensityNow] = useState<Density>(() => loadPreferences().density);
+  useEffect(() => {
+    const follow = (e: Event) => {
+      const prefs = (e as CustomEvent<Preferences>).detail;
+      setDensityNow(prefs?.density ?? loadPreferences().density);
+    };
+    window.addEventListener(PREFERENCES_EVENT, follow);
+    return () => window.removeEventListener(PREFERENCES_EVENT, follow);
+  }, []);
+  const setDensity = (next: Density) => {
+    const prefs = { ...loadPreferences(), density: next };
+    savePreferences(prefs);
+    setDensityNow(next);
+    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: prefs }));
+  };
   /** The words of each value when it was ticked, for a chip whose value this view doesn't offer. */
   const knownValues = useRef<Record<string, string>>({});
   // Sort and group, remembered per view on this computer (classic's View menu).
@@ -107,6 +129,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const [queueShows, setQueueShows] = useState<{ waiting: boolean; failed: boolean }>({ waiting: false, failed: false });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
+  // The server didn't answer a sync: the list shown is what this computer saved (classic's banner, with Retry).
+  const [syncError, setSyncError] = useState<string | null>(null);
   // Show as List or Table, and the table's columns, kept on this computer (classic's).
   const [layout, setLayoutNow] = useState<Layout>(loadLayout);
   const [columns, setColumnsNow] = useState<Column[]>(loadColumns);
@@ -170,12 +194,21 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   }, []);
   const rowViews = useRowViews(items, quietSync);
   useEffect(() => {
-    void load().then(() => api.refreshLibrary().then(setItems).catch(() => undefined));
+    void load().then(() => api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e))));
     const un = listen("library:updated", () => void load());
     return () => {
       void un.then((f) => f());
     };
   }, [load]);
+  // While something uploads or is transcribed the list syncs every 5 s (classic's), until nothing is under way.
+  const busyItems = (items ?? []).some((i) => !i.deleted && (i.status === "uploading" || isUnderWay(i)));
+  useEffect(() => {
+    if (!busyItems) return;
+    const timer = window.setInterval(() => {
+      api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e)));
+    }, RESYNC_MS);
+    return () => window.clearInterval(timer);
+  }, [busyItems]);
   useEffect(() => {
     if (view === "trash") void loadBin();
     else setChoiceNow(loadChoice(view));
@@ -190,8 +223,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     try {
       setItems(await api.refreshLibrary());
       setError(null);
+      setSyncError(null);
     } catch (e) {
-      say(errorMessage(e));
+      setSyncError(errorMessage(e));
     } finally {
       setSyncing(false);
     }
@@ -583,6 +617,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
+      onRenamed={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
       menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
@@ -618,6 +653,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       onPick: () => setChoice({ ...choice, sort: k }) })),
     ...(Object.keys(GROUP_NAMES) as GroupKey[]).map((k) => ({ label: GROUP_NAMES[k], group: "Group by", checked: choice.group === k, radio: true,
       onPick: () => setChoice({ ...choice, group: k }) })),
+    ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
   const clearAll = () => {
     setFilters({});
@@ -685,6 +721,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         {top && view !== "trash" && !selecting && (
           <LibraryTop {...top} items={items} covered={queueShows}
             onAction={(a) => (a === "missed" ? top.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"))} />
+        )}
+        {view !== "trash" && syncError && items && (
+          <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
+            action={<Button size="sm" loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Retry</Button>}>
+            Couldn't sync with the server. Showing what is saved on this computer.
+          </Banner>
         )}
         {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} onShown={setQueueShows} />}
         <div className="el-page__tools">

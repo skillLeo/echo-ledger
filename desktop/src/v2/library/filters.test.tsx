@@ -167,6 +167,8 @@ describe("Find in the Library", () => {
     const menu = screen.getByRole("menu", { name: "Sort and group" });
     expect(within(menu).getAllByRole("menuitemradio").map((m) => m.textContent)).toEqual([
       "Newest", "Oldest", "Longest", "Shortest", "Name A–Z", "Recently opened", "Date", "Source", "Project", "Language", "Status", "Device", "None",
+      // Density, shared with Settings › Appearance (classic's View menu).
+      "Comfortable", "Compact",
     ]);
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: "Longest" }));
     fireEvent.click(screen.getByRole("button", { name: "Sort and group" }));
