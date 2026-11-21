@@ -87,7 +87,7 @@ class ApiSamplesTest {
     private val notRead =
         setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
-    /** Answers the phone does not ask for yet: Transcribe later (2.0.0-j) reaches the phone with its Audio only screen; lists (2.0.0-m) with its lists screen. */
+    /** Answers the phone does not ask for yet: Transcribe later (2.0.0-j) reaches the phone with its Audio only screen; lists (2.0.0-m) with its lists screen; account (2.0.0-l) with its account screens. */
     private val notUsedYet =
         setOf(
             "session_transcribe",
@@ -97,7 +97,17 @@ class ApiSamplesTest {
             "list_create",
             "list_update",
             "list_order",
-            "list_delete"
+            "list_delete",
+            "account_avatar",
+            "account_email",
+            "account_email_confirm",
+            "account_passkey",
+            "account_passkey_options",
+            "account_recovery_codes",
+            "account_security",
+            "account_two_factor",
+            "account_two_factor_confirm",
+            "account_update"
         )
 
     private val everyField = Json {
