@@ -40,9 +40,12 @@ use Filament\Support\Facades\FilamentView;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\View\TablesRenderHook;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\Pagination\CursorPaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\On;
@@ -387,6 +390,43 @@ class ListCaptureSessions extends ListRecords
         return [...parent::getListeners(), ...(ConsoleV2::library() ? ['el-library-undo-delete' => 'undoDelete'] : [])];
     }
 
+    /** The new Library's rows come in chunks of this many (WEB-LIB-033): the first ones, then Load more. */
+    public const V2_CHUNK = 50;
+
+    /** How many rows the new Library shows now; Load more adds a chunk, and a new search, filter or order starts over. */
+    public int $v2Shown = self::V2_CHUNK;
+
+    /** Load more (also when its button scrolls into view): the next chunk of the list, the counts unchanged. */
+    public function v2LoadMore(): void
+    {
+        if (ConsoleV2::library()) {
+            $this->v2Shown += self::V2_CHUNK;
+        }
+    }
+
+    /**
+     * Since U9b (WEB-LIB-033, 2,000+ recordings): the new Library is one growing list instead of pages of 5 to 50. Its
+     * first v2Shown rows, with the true total, so "Showing 1 to 50 of 2,000" and the counts stay right; Load more grows
+     * it. Classic keeps its pages.
+     */
+    protected function paginateTableQuery(Builder $query): Paginator|CursorPaginator
+    {
+        if (! ConsoleV2::library()) {
+            return parent::paginateTableQuery($query);
+        }
+        $total = (clone $query)->toBase()->getCountForPagination();
+        $items = (clone $query)->limit(max(1, $this->v2Shown))->get();
+
+        return new LengthAwarePaginator($items, $total, max(1, $total), 1, ['pageName' => $this->getTablePaginationPageName()]);
+    }
+
+    /** A new search, filter, order or grouping shows the first chunk again (Filament resets the page then). */
+    public function resetPage(?string $pageName = null): void
+    {
+        $this->v2Shown = self::V2_CHUNK;
+        parent::resetPage($pageName);
+    }
+
     /** v2.0: another page of the list, or another page size, starts with nothing selected, so Delete takes what is on screen. */
     public function updatedPaginators(): void
     {
@@ -543,6 +583,8 @@ class ListCaptureSessions extends ListRecords
             // Since v2.0 (ui_v2.library): the quick filters right after the search field.
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_SEARCH_AFTER, fn (): string => Livewire::current() instanceof self && ConsoleV2::library() ? view('filament.v2.library-toolbar')->render() : '');
             FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view(ConsoleV2::library() ? 'filament.v2.bulk-bar' : 'filament.library.bulk-bar'), scopes: self::class);
+            // Since U9b: the new Library's Load more, under the list.
+            FilamentView::registerRenderHook(TablesRenderHook::CONTENT_AFTER, fn (): string => ConsoleV2::library() ? view('filament.v2.library-more')->render() : '', scopes: self::class);
         }
     }
 

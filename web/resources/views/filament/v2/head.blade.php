@@ -56,3 +56,4 @@
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-keys')
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.copy')
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-selection')
+@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-swipe')

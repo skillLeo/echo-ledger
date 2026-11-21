@@ -154,6 +154,8 @@ final class CaptureSessionsTable
             ])
             // Since v1.6 (P5.2) the selection bar holds them: "8 selected · Move · Label · Export · Delete · More · Clear".
             ->toolbarActions(ConsoleAccess::readOnly() ? [] : self::bulkBar())
+            // Since U9b: the new Library grows with Load more (ListCaptureSessions::paginateTableQuery): no page size to pick.
+            ->when(ConsoleV2::library(), fn (Table $table): Table => $table->paginated([ListCaptureSessions::V2_CHUNK]))
             // Since v1.6 (P5.2): an empty state for each way the list can be empty, with one clear next step.
             ->emptyStateIcon(fn (HasTable $livewire, Table $table): string => self::emptyState($livewire, $table)['icon'])
             ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => self::emptyState($livewire, $table)['heading'])
