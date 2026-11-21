@@ -16,9 +16,12 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ClosedCaption
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Edit
@@ -40,11 +43,13 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardVoice
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneMissed
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.PushPin
@@ -64,6 +69,7 @@ import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.Support
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tv
@@ -163,4 +169,16 @@ object EchoIcons {
     val Key: ImageVector get() = Icons.Outlined.Key
     val Games: ImageVector get() = Icons.Outlined.SportsEsports
     val Videos: ImageVector get() = Icons.Outlined.Tv
+
+    // Settings (docs/v2/DESIGN_SYSTEM.md "Settings icons", tokens/icons/settings.json): one glyph per meaning, so a group
+    // never repeats its pages' glyphs (Recording vs Microphone & audio vs Voice notes).
+    val SettingsRecording: ImageVector get() = Icons.Outlined.RadioButtonChecked
+    val SettingsTranscription: ImageVector get() = Icons.Outlined.Description
+    val SettingsAccount: ImageVector get() = Icons.Outlined.Person
+    val SettingsSetup: ImageVector get() = Icons.Outlined.CheckCircle
+    val SettingsAbout: ImageVector get() = Icons.Outlined.Support
+    val SettingsVoice: ImageVector get() = Icons.Outlined.GraphicEq
+    val SettingsLanguage: ImageVector get() = Icons.Outlined.Translate
+    val SettingsProfile: ImageVector get() = Icons.Outlined.ManageAccounts
+    val SettingsPlan: ImageVector get() = Icons.Outlined.CreditCard
 }
