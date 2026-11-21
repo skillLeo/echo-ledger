@@ -6,14 +6,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
-import { folderLabel, inFolderHere } from "../../lib/folders";
+import { folderKnownHere, folderLabel, inFolderHere } from "../../lib/folders";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Banner, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Banner, Breadcrumbs, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
@@ -83,9 +83,13 @@ export type LibraryV2Props = {
   top?: Omit<LibraryTopProps, "items" | "onAction"> & { onActivity: () => void };
   /** Opens a project (the recording page's project name). */
   onOpenProject?: (id: string) => void;
+  /** The recording that was open when the main window was last closed: opened again once it is known. */
+  initialOpen?: string | null;
+  /** The open recording changed (null: back to the list), to be kept for the next main window. */
+  onOpenChange?: (id: string | null) => void;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject, folder = null, onFolder }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -264,22 +268,65 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   }, [viewRequest]);
   // A smart folder: what this computer can tell (the Inbox, an app's calls), else the server's list (Imported).
   const [folderIds, setFolderIds] = useState<ReadonlySet<string> | null>(null);
+  // The server's list of the folder didn't come: said above the list, with Try again (what this computer can tell
+  // shows meanwhile).
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [folderTry, setFolderTry] = useState(0);
+  const [folderTrying, setFolderTrying] = useState(false);
   useEffect(() => {
     setFolderIds(null);
+    setFolderError(null);
     if (!folder) return;
     setOpenId(null);
     setView("all");
+  }, [folder]);
+  useEffect(() => {
+    if (!folder) return;
     let live = true;
-    api.libraryFolder(folder).then((list) => live && setFolderIds(new Set(list.filter((i) => !i.deleted).map((i) => i.id)))).catch(() => undefined);
+    setFolderTrying(true);
+    api.libraryFolder(folder).then((list) => {
+      if (!live) return;
+      setFolderIds(new Set(list.filter((i) => !i.deleted).map((i) => i.id)));
+      setFolderError(null);
+    }).catch((e) => live && setFolderError(errorMessage(e))).finally(() => live && setFolderTrying(false));
     return () => {
       live = false;
     };
-  }, [folder]);
+  }, [folder, folderTry]);
   const inFolder = (i: LibraryItem) => {
     if (!folder) return true;
     if (folderIds) return folderIds.has(i.id);
     return inFolderHere(i, folder) ?? false;
   };
+  // The recording open when the main window closed opens again (classic's), once; what is opened after is kept.
+  const restored = useRef(false);
+  const restoredId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialOpen || restored.current) return;
+    restored.current = true;
+    restoredId.current = initialOpen;
+    setOpenIdNow((now) => now ?? initialOpen);
+  }, [initialOpen]);
+  // The kept recording was deleted (or is gone) since: once the list has loaded it isn't open, and isn't kept either.
+  useEffect(() => {
+    const id = restoredId.current;
+    if (!id || !items) return;
+    restoredId.current = null;
+    if (!items.some((i) => i.id === id && !i.deleted)) setOpenIdNow((now) => (now === id ? null : now));
+  }, [items, initialOpen]);
+  const reported = useRef<string | null | undefined>(undefined);
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  useEffect(() => {
+    // Not on the first draw: the kept recording isn't forgotten before it is read back.
+    if (reported.current === undefined) {
+      reported.current = openId;
+      return;
+    }
+    if (reported.current === openId) return;
+    reported.current = openId;
+    onOpenChangeRef.current?.(openId);
+  }, [openId]);
   useEffect(() => {
     if (openRequest) {
       setView("all");
@@ -714,6 +761,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       onPick: () => setChoice({ ...choice, group: k }) })),
     ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
+  // The place the list shows, after "Library" in the breadcrumbs.
+  const crumb = view === "trash" ? null : folder ? folderLabel(folder) : view !== "all" ? VIEW_NAMES[view as ListView]
+    : place !== "all" ? placeName(place, lists ?? []) : null;
+  const showEverything = () => {
+    onFolder?.(null);
+    setView("all");
+    setPlace("all");
+  };
   const clearAll = () => {
     onFolder?.(null);
     setFilters({});
@@ -762,6 +817,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         ) : (
           <header className="el-page__head">
             <div className="el-page__titles">
+              {/* Library › the place shown (a smart folder, a view, a list); Library shows every recording again. */}
+              {crumb && <Breadcrumbs crumbs={[{ label: "Library", onOpen: showEverything }, { label: crumb }]} />}
               <h1 className="el-title-l">{view === "trash" ? "Trash" : "Library"}</h1>
               {subtitle && <p className="el-secondary" aria-live="polite">{subtitle}</p>}
             </div>
@@ -787,6 +844,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
             action={<Button size="sm" loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Retry</Button>}>
             Couldn't sync with the server. Showing what is saved on this computer.
+          </Banner>
+        )}
+        {view !== "trash" && folder && folderError && (
+          <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-folder-error"
+            action={<Button size="sm" loading={folderTrying} loadingLabel="Trying…" onClick={() => setFolderTry((n) => n + 1)}>Try again</Button>}>
+            {`${folderLabel(folder)} didn't load from the server: ${folderError}${folderKnownHere(folder) ? " Showing what this computer knows meanwhile." : ""}`}
           </Banner>
         )}
         {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} onShown={setQueueShows} />}

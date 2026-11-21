@@ -6,7 +6,7 @@
 // transcript: Show as (Roman Urdu · اردو · English · Original), as classic.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  api, errorMessage, type ExportFormat, type LibraryItem, type TranscriptionLanguage, type TranscriptSuggestion, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
+  api, errorMessage, type ExportFormat, type LearnOffer, type LibraryItem, type TranscriptionLanguage, type TranscriptSuggestion, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
   type TranscriptViewsState,
 } from "../../lib/ipc";
 import { confirmAction } from "../../lib/confirm";
@@ -15,16 +15,18 @@ import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
 import { copiedTranscript, DEFAULT_UNSURE, fileSize, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
-import { PLAYER_HINT, activeIndex, activeWord, waveformBars, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
+import { PLAYER_HINT, activeIndex, activeWord, waveformBars, findMatches, KEY_SECONDS, markParts, newTerms, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
 import { defaultViewOf, improvingView, transcribingLine, viewPercent } from "../../lib/progress";
 import { usePoll } from "../../lib/usePoll";
-import { canTryAgain, failureLine, languageLabel, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn } from "../../lib/languages";
+import { canTryAgain, failureLine, languageLabel, needsKeyAction, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn, usedBackupEngine } from "../../lib/languages";
+import { openSettingsSection } from "../../lib/entitlements";
 import { PLAYBACK_EXPIRED } from "../shared/SharedReader";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
 import { PDF_HINT, WAVE_BARS } from "../../views/main/TranscriptTools";
-import { LockedChip } from "../../views/main/Upgrade";
+import { LockedChip, NEEDS_KEY_TEXT } from "../../views/main/Upgrade";
+import { BackupEngineLine, FiledByLineV2, LearnOfferV2, RecordingStepsV2, VocabularyOfferV2 } from "./recordingExtras";
 import { screenMarker } from "../../lib/screens";
 import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
@@ -54,7 +56,8 @@ export const UNSURE_LINE = "The engine was not sure of this line. Click to hear 
  * without the line's commas and full stops): only then are they drawn one by one.
  */
 export function wordsMatch(words: readonly { text: string }[], text: string): boolean {
-  const squash = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
+  // An apostrophe joins its word ("don't" is one word whether an engine sends "don't" or "dont"); other marks split.
+  const squash = (t: string) => t.toLowerCase().replace(/['’‘`ʼ]/g, "").replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
   return squash(words.map((w) => w.text).join(" ")) === squash(text);
 }
 
@@ -138,7 +141,18 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const [screenOpen, setScreenOpen] = useState<number | null>(null);
   const { screens, reload: reloadScreens } = useSessionScreens(item.id, item.screen_count);
   const state = itemState(item);
-  const transcriptId = item.transcript?.final_transcript_id ?? item.transcript?.live_transcript_id ?? null;
+  // Which version is shown after Re-transcribe as: the transcript (newest), or the previous one while it is kept.
+  const [version, setVersion] = useState<"final" | "alternate">("final");
+  useEffect(() => setVersion("final"), [item.id]);
+  const alternateId = item.transcript?.alternate_status === "completed" ? item.transcript?.alternate_transcript_id ?? null : null;
+  const transcriptId = (version === "alternate" && alternateId) || (item.transcript?.final_transcript_id ?? item.transcript?.live_transcript_id ?? null);
+  // After an edit: "Always write X as Y for Acme?" (one at a time), else the new words to add to the vocabulary.
+  const [learn, setLearn] = useState<LearnOffer[]>([]);
+  const [vocabTerms, setVocabTerms] = useState<string[]>([]);
+  useEffect(() => {
+    setLearn([]);
+    setVocabTerms([]);
+  }, [transcriptId]);
 
   useEffect(() => {
     let live = true;
@@ -284,10 +298,15 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     if (mounted.current) setEditLine((l) => (l === index ? null : l));
     const id = shownTranscript.current;
     if (!id) return;
+    const before = transcript.state === "ready" ? transcript.value?.segments[index]?.text ?? "" : "";
     try {
-      const { learn: _learn, ...edited } = await api.editTranscript(id, index, text);
+      const { learn: offers, ...edited } = await api.editTranscript(id, index, text);
       if (!stillShown(id)) return;
       setTranscript({ state: "ready", value: edited });
+      // For a project's recording the server names the words worth a rule; that offer takes the vocabulary's place.
+      const rules = Array.isArray(offers) ? offers : [];
+      setLearn(rules);
+      setVocabTerms(rules.length ? [] : newTerms(before, text));
       onMessage("Line saved");
     } catch (e) {
       onMessage(errorMessage(e));
@@ -479,6 +498,29 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       onMessage(errorMessage(e));
     } finally {
       setBusy(false);
+    }
+  };
+  /** The preferred engine again, in the same language (the backup engine's Re-transcribe). */
+  const retranscribeSame = tryAgain;
+  const answerLearn = async (yes: boolean) => {
+    const offer = learn[0];
+    if (!offer) return;
+    setLearn((list) => list.slice(1));
+    if (!yes) return;
+    try {
+      await api.addReplacement(offer.from, offer.to, offer.client_id);
+      onMessage(`${offer.client_name}'s transcripts will write “${offer.to}” from now on`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
+  const addToVocabulary = async (term: string) => {
+    try {
+      await api.addToVocabulary(term, item.client?.id ?? null);
+      setVocabTerms((terms) => terms.filter((t) => t !== term));
+      onMessage(`Added “${term}” to the vocabulary`);
+    } catch (e) {
+      onMessage(errorMessage(e));
     }
   };
   /** A label's × on the page: the recording keeps its other labels ("Label removed"). */
@@ -717,7 +759,12 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               {item.labels!.map((l) => <li key={l}><LabelChip name={l} colour={item.label_colors?.[l] ?? null} onRemove={() => void removeLabel(l)} /></li>)}
             </ul>
           )}
+          <RecordingStepsV2 item={item} improving={barView !== null && tDetail?.kind === "final"} say={onMessage} />
           {engine && <p className="el-caption el-secondary">Transcribed in {engine}</p>}
+          {tDetail?.kind === "final" && tDetail.status === "completed" && version === "final" && usedBackupEngine(tDetail) && !isTranscribing(item.transcript?.final_status) && (
+            <BackupEngineLine busy={busy} onRetranscribe={() => void retranscribeSame()} />
+          )}
+          <FiledByLineV2 item={item} />
           {/* What the plan leaves out here, each with the plan that has it (classic's locked chips; none when all are in). */}
           <p className="el-recording__locked el-caption" data-testid="locked-chips">
             {item.transcript?.final_status && <LockedChip feature="premium_engines" label="Premium engines" />}
@@ -795,6 +842,13 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
           ) : segments.length > 0 ? (
             <>
+              {alternateId && (
+                <div className="el-recording__viewbar">
+                  <Segmented label="Version" value={version} onChange={(v) => { setEditing(false); setVersion(v); }}
+                    options={[{ value: "final" as const, label: "Current" },
+                      { value: "alternate" as const, label: `Previous${item.transcript?.alternate_language ? ` (${languageLabel(item.transcript.alternate_language)})` : ""}` }]} />
+                </div>
+              )}
               {liveLine && <p className="el-caption el-secondary" role="status" data-testid="live-line">{liveLine}</p>}
               {(viewsInfo?.available.length ?? 0) > 0 && tDetail?.kind === "final" && (
                 <div className="el-recording__viewbar">
@@ -825,13 +879,15 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               )}
               {findOpen && <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, findCurrent)}
                 onStep={(d) => matches.length && setFindAt((findCurrent + d + matches.length) % matches.length)} onClose={() => { setFindOpen(false); setFindQuery(""); }} />}
+              {learn[0] && <LearnOfferV2 key={`${learn[0].from}-${learn[0].to}`} offer={learn[0]} onAnswer={(yes) => void answerLearn(yes)} />}
+              {!learn.length && <VocabularyOfferV2 terms={vocabTerms} projectName={item.client?.name ?? null} onAdd={(t) => void addToVocabulary(t)} onDismiss={() => setVocabTerms([])} />}
               {fixesShown.length > 0 && (
                 <p className="el-suggestions el-caption" role="status" dir="auto">
                   <span>{fixesShown.length === 1 ? "1 suggested fix" : `${fixesShown.length} suggested fixes`}: words that may have been misheard are underlined.</span>
                   <Button ref={reviewButton} size="sm" variant="quiet" icon={Icons.SparkleIcon} onClick={() => openFixAndFocus(fixesShown[0].id)}>Review</Button>
                 </p>
               )}
-              <Transcript label="Transcript" segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={canPlay ? playLine : undefined}
+              <Transcript label="Transcript" grouped segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={canPlay ? playLine : undefined}
                 lang={showAs === "urdu" ? "ur" : showAs === "original" ? normalizeLanguage(tDetail?.language) ?? undefined : undefined}
                 note={(i) => parts[i]?.note} lineTitle={(i) => parts[i]?.title} after={(i) => parts[i]?.after} />
             </>
@@ -844,9 +900,12 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             <EmptyState icon={Icons.MicIcon} title="Nothing was heard" body="The recording has no sound to transcribe. Check the microphone and system audio before the next call." />
           ) : (
             <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : "Not transcribed yet"}
-              body={state === "failed" ? `${failureLine(failureCode)} Transcribe it again to read, search and share what was said.`
+              body={state === "failed" ? (failureCode === "needs_transcription_key" ? NEEDS_KEY_TEXT
+                : needsKeyAction(failureCode) ? failureLine(failureCode) : `${failureLine(failureCode)} Transcribe it again to read, search and share what was said.`)
                 : `Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
-              action={state === "failed" && canTryAgain(failureCode)
+              action={state === "failed" && needsKeyAction(failureCode)
+                ? <Button variant="primary" icon={Icons.SettingsIcon} onClick={() => openSettingsSection("transcription-key")}>{failureCode === "own_key_rejected" ? "Check my Groq key" : "Add my Groq key"}</Button>
+                : state === "failed" && canTryAgain(failureCode)
                 ? <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => void tryAgain()}>Try again</Button>
                 : <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => setTranscribeOpen(true)}>Transcribe</Button>} />
           )

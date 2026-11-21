@@ -194,6 +194,10 @@ describe("the words as heard", () => {
     expect(wordsMatch([{ text: "hello" }, { text: "there" }, { text: "omar" }], "Hello there, Omar.")).toBe(true);
     expect(wordsMatch([{ text: "kya" }, { text: "haal" }, { text: "hai" }], "Kya haal hai?")).toBe(true);
     expect(wordsMatch([{ text: "ٹھیک" }, { text: "ہے" }], "ٹھیک ہے۔")).toBe(true);
+    // An apostrophe joins its word, whichever way the engine sent it.
+    expect(wordsMatch([{ text: "dont" }, { text: "worry" }], "Don't worry.")).toBe(true);
+    expect(wordsMatch([{ text: "Omar’s" }, { text: "file" }], "Omars file")).toBe(true);
+    expect(wordsMatch([{ text: "don" }, { text: "t" }, { text: "worry" }], "Don't worry.")).toBe(false);
   });
 
   it("suggested fixes are left alone while editing", async () => {

@@ -206,7 +206,7 @@ export function PermissionGuide({ permissions, onChange, onClose }: { permission
   );
 }
 
-const SETTINGS_LABEL: Record<PermissionsStatus["platform"], string> = { macos: "Open System Settings", windows: "Open Windows Settings", other: "" };
+export const SETTINGS_LABEL: Record<PermissionsStatus["platform"], string> = { macos: "Open System Settings", windows: "Open Windows Settings", other: "" };
 
 /** Record page: what is missing and what a recording holds without it. */
 export function PermissionBanner({ recordingRef }: { recordingRef: string | null }) {

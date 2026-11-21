@@ -364,7 +364,8 @@ describe("the new project page does what today's does", () => {
 
   it("a plan without AI notes: no Ask or call notes, the reason with its badge, the brief by hand", async () => {
     await show({ aiNotesInPlan: false });
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings", "Files", "Memory & instructions", "Screens"]);
+    // The tabs that list things show their counts after the name (1 recording, 2 files).
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings1", "Files2", "Memory & instructions", "Screens"]);
     await openTab("Memory & instructions");
     expect(screen.getByTestId("ai-not-in-plan")).toHaveTextContent("not in your workspace's plan");
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();

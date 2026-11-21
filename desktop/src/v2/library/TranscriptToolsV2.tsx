@@ -10,7 +10,7 @@ import { formatWhen, timestamp } from "../../lib/format";
 import { confirmAction } from "../../lib/confirm";
 import { usePoll } from "../../lib/usePoll";
 import { notesWorking } from "../../views/main/CallNotes";
-import { Badge, Button, Checkbox, Dialog, EmptyState, Icon, Icons, Loading, SearchField, Segmented, Skeleton, TextField } from "../components";
+import { Badge, Button, Checkbox, Dialog, EmptyState, Icon, Icons, Loading, Progress, SearchField, Segmented, Skeleton, TextField } from "../components";
 
 /** Find in this transcript: the field, "N of M", previous and next; Enter, Shift+Enter and Esc as classic. */
 export function FindBar({ query, onQuery, count, current, onStep, onClose }: {
@@ -308,6 +308,8 @@ export function ConvertingLine({ view, percent = null, failed = false, retrying 
     <span className="el-converting" role="status" data-testid="converting-line">
       <span className="el-spinner" aria-hidden="true" />
       <span className="el-caption el-secondary">{convertingText(view, percent)}</span>
+      {/* How far, once lines are written (classic's slim bar). */}
+      {percent !== null && <Progress value={percent} label={convertingText(view, null)} valueText={`${percent}%`} />}
     </span>
   );
 }

@@ -89,4 +89,68 @@ describe("the Library's places", () => {
     // Pinned is one of the Library's own views: Views ▾ says so.
     expect(within(screen.getByRole("group", { name: "Filter recordings" })).getByRole("button", { name: /^Pinned/ })).toHaveAttribute("aria-haspopup", "menu");
   });
+
+  it("in the app, pressing Library after a folder shows every recording again", async () => {
+    respond("app_status", makeStatus());
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("get_settings", makeSettings());
+    respond("list_clients", { data: [{ id: "p1", name: "Qureshi Textiles" }] });
+    respond("mic_users", []);
+    respond("session_detail", {});
+    respond("bin_list", { data: [] });
+    respond("library_views", { views: { waiting: 0, pinned: 0, failed: 0 }, labels: [], folders: { inbox: 2, zoom: 1 } });
+    respondWith("library_folder", ({ folder }) => ITEMS.filter((i) => (folder === "zoom" ? i.source_app === "zoom" : !i.client)));
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.library": true }, ui_classic: false });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const list = await screen.findByRole("list", { name: "Library places" });
+    fireEvent.click(within(list).getByRole("button", { name: "Zoom, 1" }));
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(rows()).toEqual(["zoom"]);
+    const library = within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Library" });
+    fireEvent.click(library);
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(rows()).toEqual(["wa", "zoom", "file"]);
+    expect(within(list).getByRole("button", { name: "Zoom, 1" })).not.toHaveAttribute("aria-current");
+    expect(screen.queryByRole("button", { name: "Show every recording, not only Zoom" })).toBeNull();
+  });
+
+  it("a folder the server couldn't list says so, with Try again that asks again", async () => {
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("bin_list", { data: [] });
+    let fail = true;
+    respondWith("library_folder", ({ folder }) => {
+      if (fail) return Promise.reject("The server didn't answer.");
+      return folder === "imported" ? [ITEMS[2]] : [];
+    });
+    render(<LibraryV2 folder="imported" onFolder={() => undefined} />);
+    await act(flushAsync);
+    const banner = screen.getByTestId("library-folder-error");
+    expect(banner).toHaveTextContent("Imported didn't load from the server: The server didn't answer.");
+    // Imported is the server's to say: nothing is guessed meanwhile.
+    expect(banner).not.toHaveTextContent("Showing what this computer knows");
+    expect(screen.queryByRole("list", { name: "Recordings" })).toBeNull();
+    fail = false;
+    fireEvent.click(within(banner).getByRole("button", { name: "Try again" }));
+    await act(flushAsync);
+    expect(callsOf("library_folder")).toEqual([{ folder: "imported" }, { folder: "imported" }]);
+    expect(screen.queryByTestId("library-folder-error")).toBeNull();
+    expect(rows()).toEqual(["file"]);
+  });
+
+  it("an Inbox the server couldn't list shows what this computer knows, and says so", async () => {
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("bin_list", { data: [] });
+    respondWith("library_folder", () => Promise.reject("Offline."));
+    render(<LibraryV2 folder="inbox" onFolder={() => undefined} />);
+    await act(flushAsync);
+    expect(screen.getByTestId("library-folder-error")).toHaveTextContent("Inbox didn't load from the server: Offline. Showing what this computer knows meanwhile.");
+    expect(rows()).toEqual(["zoom", "file"]);
+  });
 });

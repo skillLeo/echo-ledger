@@ -69,6 +69,7 @@ export {
   DownloadIcon,
   GlobeIcon as WebIcon,
   ColumnsIcon,
+  SidebarIcon,
   LinkIcon,
   PlusIcon,
   UsersIcon,

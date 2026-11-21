@@ -4,10 +4,10 @@ import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type Ap
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityItems } from "./ActivityCentre";
-import { actionCount } from "../../lib/badge";
+import { actionCount, needsAction as needsActionItem } from "../../lib/badge";
 import { AUTO_RAIL_BELOW, COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, paletteKeys, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL, sidebarFolded } from "../../lib/shell";
 import { Sidebar, SHARED_TABS, type SharedTab, type ShellPage } from "./Sidebar";
-import { TopBar } from "./TopBar";
+import { TopBar, workspacesOf } from "./TopBar";
 import { HelpDialog } from "./HelpDialog";
 import { LibraryColumn, ProjectsColumn } from "./SecondaryColumn";
 import { HomeView } from "./HomeView";
@@ -34,11 +34,11 @@ import { CommandPalette } from "./CommandPalette";
 import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
 import { fileDropClaim } from "../../lib/dropTarget";
-import { isViewer, viewerSentence } from "../../lib/plan";
+import { isViewer, ROLE_LABEL, viewerSentence } from "../../lib/plan";
 import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib/motion";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import type { Account, OneSided } from "../../lib/ipc";
-import { OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
+import { isLocked, lowestPlan, planName, OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
 import { isHoldMessage, ServerBanners } from "./ServerBanners";
 import { ShareNotice } from "./PrivacySettings";
@@ -49,7 +49,9 @@ import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { useUiFlags } from "../../v2/flags";
-import { shellStatus as shellStatusOf } from "../../v2/shell/status";
+import { shellChip } from "../../v2/shell/status";
+import { sourceAppLabel } from "../../lib/format";
+import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
 import { hasV2Page } from "../../v2/settings/pages/route";
 
@@ -68,12 +70,19 @@ const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
 const ActivityV2 = lazy(() => v2().then((m) => ({ default: m.ActivityV2 })));
 const SharedV2 = lazy(() => v2().then((m) => ({ default: m.SharedV2 })));
 const RequestLinkSheetV2 = lazy(() => v2().then((m) => ({ default: m.RequestLinkSheet })));
+const ImportSheetV2 = lazy(() => v2().then((m) => ({ default: m.ImportSheetV2 })));
+const DropHintV2 = lazy(() => v2().then((m) => ({ default: m.DropHintV2 })));
+const ProjectsListV2 = lazy(() => v2().then((m) => ({ default: m.ProjectsListV2 })));
+const NameDialogV2 = lazy(() => v2().then((m) => ({ default: m.NameDialogV2 })));
+const AppToastV2 = lazy(() => v2().then((m) => ({ default: m.AppToastV2 })));
 const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
 const TABS: readonly Tab[] = ["record", "library", "projects", "activity", "shared", "settings"];
+/** The pages in words, for a Back link that returns to one ("Library"). */
+const TAB_NAMES: Record<Tab, string> = { record: "Record page", library: "Library", projects: "Projects", activity: "Activity", shared: "Shared", settings: "Settings" };
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
 const RELOAD_AFTER_CHANGE_MS = 800;
 
@@ -139,7 +148,12 @@ export default function MainApp() {
     if (done) saveSidebarWidth(width);
   }, []);
   const [help, setHelp] = useState(false);
-  const [requestSheet, setRequestSheet] = useState(false);
+  // Help & shortcuts in the new design: Settings › Help on its Shortcuts tab ("?", the sidebar, the palette).
+  // `from`: the page "?" was pressed on; Help's Back goes there (Settings when it was opened from Settings).
+  const [helpStart, setHelpStart] = useState<{ tab: HelpTab; seq: number; from: Tab | null } | null>(null);
+  const openHelpRef = useRef<() => void>(() => setHelp(true));
+  // Request files: the sheet, and the project new links send into (null: the Inbox).
+  const [requestSheet, setRequestSheet] = useState<false | { projectId: string | null }>(false);
   // "+ New project" from the top bar or the Projects column: the Projects page opens its dialog.
   const [projectRequest, setProjectRequest] = useState<{ kind: "new"; seq: number } | null>(null);
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
@@ -257,7 +271,7 @@ export default function MainApp() {
       }
       if (e.key === "?" && statusRef.current?.paired && !open) {
         e.preventDefault();
-        setHelp(true);
+        openHelpRef.current();
         return;
       }
       if (e.key.toLowerCase() === "n" && statusRef.current?.paired && !open) {
@@ -581,7 +595,18 @@ export default function MainApp() {
   // Its target opens only in the main window itself (never on the lock screen, the sign-in or the first-run wizard).
   const goRef = useRef<((target: NoticeTarget) => void) | null>(null);
   const inApp = !!status?.paired && restored && !lock?.locked && setupDone !== false;
-  const toastView = toast && (
+  // In the new design's window the message is the new design's toast: Open goes where it is about, Esc or × closes it.
+  // The new design's window keeps its message regions mounted; only the message in them changes.
+  const toastV2 = inApp && ui.flags["ui_v2.shell"];
+  const toastView = toastV2 ? (
+    <Suspense fallback={null}>
+      <div className="el-root el-embedded">
+        <AppToastV2 duration={(m) => (m.error ? ERROR_MS : MESSAGE_MS)}
+          message={toast ? { id: toast.id, text: toast.text, error: toast.error, onOpen: toast.target ? () => goRef.current?.(toast.target!) : undefined } : null}
+          onClose={() => setToast((t) => (t?.id === toast?.id ? null : t))} />
+      </div>
+    </Suspense>
+  ) : toast && (
     <div className="toast-region">
       <Notice key={toast.id} kind="toast" className={`toast ${toast.error ? "error" : ""}`} tone={toast.error ? "error" : "neutral"}
         role={toast.error ? "alert" : "status"} timeoutMs={toast.error ? ERROR_MS : MESSAGE_MS}
@@ -689,6 +714,15 @@ export default function MainApp() {
     setTab("settings");
     setSettingsSection({ id: section, seq: ++navigations.current });
   };
+  const helpInV2 = ui.flags["ui_v2.shell"] && ui.flags["ui_v2.settings"] && helpV2Reachable(ui.flags);
+  const openHelp = () => {
+    if (!helpInV2) return setHelp(true);
+    const seq = ++navigations.current;
+    setHelpStart({ tab: "shortcuts", seq, from: tab === "settings" ? null : tab });
+    setTab("settings");
+    setSettingsSection({ id: "help", seq });
+  };
+  openHelpRef.current = openHelp;
   const newProject = () => {
     setTab("projects");
     setProjectId(null);
@@ -725,7 +759,7 @@ export default function MainApp() {
     ...SHARED_TABS.map(([id, label]) => ({ id: `shared-${id}`, label, group: "Shared", keywords: "share links shared", open: () => openShared(id) })),
     ...(canRecord ? [{ id: "upload", label: "Upload", keywords: "import files audio video", open: () => void pickImport() }] : []),
     ...settingsPages(settingsAvailable).map((p) => ({ id: p.id, label: p.label, group: p.group, keywords: p.keywords, open: () => openAccount(p.page) })),
-    { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => setHelp(true) },
+    { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => openHelp() },
   ];
   const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
   // While the server holds the queue (v1.6, P2.7) the recordings wait; they are not on their way.
@@ -733,6 +767,21 @@ export default function MainApp() {
   const uploading = status.pendingUploads === 0 ? null
     : waitingFor ? `${status.pendingUploads === 1 ? "1 recording waits" : `${status.pendingUploads} recordings wait`}: ${waitingFor}`
       : status.pendingUploads === 1 ? "Uploading 1 recording…" : `Uploading ${status.pendingUploads} recordings…`;
+  // The new sidebar's workspace menu (classic's top bar switcher): Invite people for an owner or admin, or with the
+  // plan's name when the plan leaves teams out; the rest is in the browser.
+  const workspaceList = workspacesOf(account, status);
+  const workspaceHere = workspaceList.find((w) => w.current) ?? workspaceList[0];
+  const teamLocked = isLocked(entitlements, "team");
+  const openWorkspaces = () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true));
+  const roleWord = (role: string | null) => (role && role in ROLE_LABEL ? ROLE_LABEL[role as keyof typeof ROLE_LABEL] : null);
+  const shellWorkspace = account === undefined ? null : {
+    name: workspaceHere.name,
+    role: roleWord(workspaceHere.role),
+    others: workspaceList.filter((w) => w !== workspaceHere).map((w) => ({ key: w.key, name: w.name, role: roleWord(w.role) })),
+    invite: teamLocked ? { locked: `in ${planName(lowestPlan(entitlements, "team")) || "a paid plan"}`, onPick: () => openUpgradeSheet("team") }
+      : workspaceHere.role === "owner" || workspaceHere.role === "admin" ? { locked: null, onPick: openWorkspaces } : null,
+    onManage: openWorkspaces,
+  };
   const libraryCrumb = libraryView ? LIBRARY_VIEWS.find(([v]) => v === libraryView)?.[1] ?? null : libraryFolder ? folderLabel(libraryFolder) : null;
 
   const banners = (
@@ -764,7 +813,7 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} reviewRequest={reviewV2}
             folder={libraryFolder === "shared" ? null : libraryFolder} onFolder={openFolder}
-            onOpenProject={(id) => openProject(id)}
+            onOpenProject={(id) => openProject(id)} initialOpen={restoredRecording} onOpenChange={rememberRecording}
             top={ui.flags["ui_v2.shell"] ? {
               status, onRecord: canRecord && !status.recording ? record : undefined, onActivity: () => goTo("activity"),
               onSetup: () => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic"),
@@ -783,13 +832,25 @@ export default function MainApp() {
         <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
           projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
           requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
+          onRequestLink={ui.flags["ui_v2.shell"] ? (id) => setRequestSheet({ projectId: id }) : undefined}
+          renderList={ui.flags["ui_v2.ask"] ? (ctx) => (
+            <Suspense fallback={null}>
+              <div className="el-root el-embedded">
+                <ProjectsListV2 projects={ctx.projects} error={ctx.error} onRetry={ctx.onReload} items={ctx.items} expanded={ctx.expanded} onToggle={ctx.onToggle}
+                  onOpen={ctx.onOpenProject} onNew={ctx.onNew} onRequest={ctx.onRequest} />
+              </div>
+            </Suspense>
+          ) : null}
+          renderNameDialog={ui.flags["ui_v2.ask"] ? (props) => (
+            <Suspense fallback={null}><div className="el-root el-embedded"><NameDialogV2 {...props} /></div></Suspense>
+          ) : null}
           renderPage={ui.flags["ui_v2.ask"] ? (ctx) => (
             <Suspense fallback={null}>
               <div className="el-root el-embedded">
                 <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name, ai_notes: ctx.project.ai_notes }} parent={ctx.parent} folders={ctx.folders}
                   menu={ctx.menu} onShare={ctx.onShare ?? undefined} rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
                   onMoveRecordings={ctx.onMoveRecordings} onProjectChanged={ctx.onProjectChanged} notify={notify}
-                  onBack={() => openProject(ctx.parent?.id ?? null)} onOpenProject={(id) => openProject(id)}
+                  onBack={() => openProject(ctx.parent?.id ?? null)} onProjects={() => openProject(null)} onOpenProject={(id) => openProject(id)}
                   onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
               </div>
             </Suspense>
@@ -803,8 +864,10 @@ export default function MainApp() {
               onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
               onReadyCheck={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
               onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} onPlan={() => openAccount("plan")}
+              run={run} onImport={canRecord ? () => void pickImport() : undefined} notifications={activityItems.filter(needsActionItem).length}
               onAction={(a) => {
-                if (a === "failed") openLibraryView("failed");
+                if (a === "notifications") goTo("activity");
+                else if (a === "failed") openLibraryView("failed");
                 else if (a === "waiting") openLibraryView("waiting");
                 else if (a === "missed") goTo("activity");
                 else {
@@ -859,7 +922,11 @@ export default function MainApp() {
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
                 ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
-                  ? <HelpV2 platform={status.platform} onBack={onHome} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })} />
+                  ? <HelpV2 platform={status.platform} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
+                    start={helpStart} onSettings={openAccount}
+                    {...(helpStart?.from && settingsSection?.seq === helpStart.seq
+                      ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
+                      : { onBack: onHome })} />
                   : hasV2Page(section.id)
                     ? <SettingsPagesV2 section={section} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
@@ -876,22 +943,29 @@ export default function MainApp() {
         <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo} look={ui.flags["ui_v2.shell"] ? "v2" : "classic"}
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok, target) => void run(fn, ok, target)} pages={pages}
-          extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet(true),
+          extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet({ projectId: null }),
             invite: () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true),
             upgrade: entitlements && (upgradeOpen || plansAbove(entitlements).length > 0) ? { open: upgradeOpen, run: () => (upgradeOpen ? openUpgradeSheet(null, { step: "status" }) : openUpgradeSheet(null, { plan: plansAbove(entitlements)[0]?.key ?? null })) } : undefined }}
           settings={findSettings}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}
-      {dragging && !importPaths && (
+      {dragging && !importPaths && !ui.flags["ui_v2.shell"] && (
         <div className="drop-hint" aria-hidden="true"><div className="drop-hint-card">Drop voice notes, audio or video files to import them</div></div>
       )}
-      {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
+      {importPaths && !ui.flags["ui_v2.shell"] && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
+      {/* The new design's drop hint and import sheet: the same drop handler, its own look. */}
+      {dragging && !importPaths && ui.flags["ui_v2.shell"] && <Suspense fallback={null}><div className="el-root el-embedded"><DropHintV2 /></div></Suspense>}
+      {importPaths && ui.flags["ui_v2.shell"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded"><ImportSheetV2 paths={importPaths} notify={notify} onClose={closeImport} /></div>
+        </Suspense>
+      )}
       {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onSettings={openAccount} />}
       {requestSheet && !ui.flags["ui_v2.shell"] && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       {requestSheet && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <RequestLinkSheetV2 projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} onShowLinks={() => openShared("requests")} />
+            <RequestLinkSheetV2 projects={projects ?? []} projectId={requestSheet.projectId} notify={notify} onClose={() => setRequestSheet(false)} onShowLinks={() => openShared("requests")} />
           </div>
         </Suspense>
       )}
@@ -907,12 +981,14 @@ export default function MainApp() {
       <>
         <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
         <Suspense fallback={null}>
-          <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}
+            rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
+            workspace={shellWorkspace} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
             projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned }))}
             shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
-            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={() => setHelp(true)}
+            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet({ projectId: null })} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={openHelp}
             places={{
               // Classic's sidebar form: no All, the places that hold something, the Inbox always (it takes drops). Shared
               // with me is Shared's own, under Library.
@@ -965,7 +1041,7 @@ export default function MainApp() {
           onAdmin={() => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true))}
           onWorkspaces={() => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true))}
           onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
-          onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
+          onRequestLink={() => setRequestSheet({ projectId: null })} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
         <main ref={contentRef} className={`content page-${tab}`}>
           {banners}
           {page}

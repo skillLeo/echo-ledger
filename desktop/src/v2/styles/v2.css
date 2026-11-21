@@ -567,7 +567,7 @@
 
 .el-sidebar {
   display: flex; flex-direction: column; gap: var(--el-space-2);
-  inline-size: calc(var(--el-space-64) * 3.5);
+  inline-size: var(--el-sidebar-width, calc(var(--el-space-64) * 3.5));
   flex: none;
   padding: var(--el-space-16) var(--el-space-8);
   background: var(--el-role-bg-subtle);
@@ -619,6 +619,7 @@
    ring that turns, still with reduced motion; "Couldn't convert" with Try again when it could not be written. */
 .el-converting { display: inline-flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
 .el-converting--failed { color: var(--el-role-text-secondary); }
+.el-converting .el-progress { inline-size: calc(var(--el-space-64) * 2); flex: none; }
 .el-converting--danger { color: var(--el-role-danger-default); }
 .el-spinner {
   flex: none; inline-size: var(--el-space-12); block-size: var(--el-space-12); border-radius: var(--el-radius-full);
@@ -846,27 +847,53 @@ button.el-step__head { cursor: pointer; }
    Media queries cannot read variables: the width mirrors --el-breakpoint-rail and AUTO_RAIL_BELOW (tokens/test/tokens.test.mjs checks both). */
 @media (width < 780px) {
   .el-sidebar { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
+  /* Opened in a narrow window (its Expand button or "["): its own width and names, until the window is wide again. */
+  .el-sidebar[data-rail="off"] { inline-size: var(--el-sidebar-width, calc(var(--el-space-64) * 3.5)); align-items: stretch; }
   /* The rail keeps the brand's end control (Search) at its top; the name goes. */
-  .el-sidebar__brand { justify-content: center; padding-inline: 0; }
-  .el-sidebar__brand-name { display: none; }
-  .el-sidebar__brand-end { margin-inline-start: 0; }
+  .el-sidebar:not([data-rail="off"]) .el-sidebar__brand { justify-content: center; padding-inline: 0; }
+  .el-sidebar:not([data-rail="off"]) .el-sidebar__brand-name { display: none; }
+  .el-sidebar:not([data-rail="off"]) .el-sidebar__brand-end { margin-inline-start: 0; }
   /* Sub-items (Shared with me, a project) are reached through their page in the rail; Record shows its icon alone,
      its menu under it, both 40 px squares. */
-  .el-sidebar .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
-  .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
-  .el-shell__record > .el-button, .el-shell__record > .el-menu-anchor > .el-button {
+  .el-sidebar:not([data-rail="off"]) .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
+  .el-sidebar:not([data-rail="off"]) .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
+  .el-sidebar:not([data-rail="off"]) .el-shell__record > .el-button, .el-sidebar:not([data-rail="off"]) .el-shell__record > .el-menu-anchor > .el-button {
     inline-size: var(--el-space-40); min-inline-size: 0; justify-content: center; padding-inline: 0; border-radius: var(--el-radius-sm);
   }
-  .el-shell__record > .el-button > span:not(.el-icon) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__record > .el-button > span:not(.el-icon) {
     position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
-  .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
-  .el-shell__me { justify-content: center; padding-inline: 0; }
-  .el-nav-item__label, .el-nav-item__count, .el-sidebar .el-status > span:last-child, .el-shell__me-text {
+  .el-sidebar:not([data-rail="off"]) .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
+  .el-sidebar:not([data-rail="off"]) .el-shell__me { justify-content: center; padding-inline: 0; }
+  .el-sidebar:not([data-rail="off"]) .el-nav-item__label, .el-sidebar:not([data-rail="off"]) .el-nav-item__count, .el-sidebar:not([data-rail="off"]) .el-status > span:last-child, .el-sidebar:not([data-rail="off"]) .el-shell__me-text {
     position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
+}
+/* The rail chosen in the sidebar (its Collapse button or "["): the same, at any window width. A sidebar opened
+   in a narrow window (data-rail="off") keeps its names. */
+.el-sidebar[data-rail="on"] { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
+/* The rail keeps the brand's end control (Search) at its top; the name goes. */
+.el-sidebar[data-rail="on"] .el-sidebar__brand { justify-content: center; padding-inline: 0; }
+.el-sidebar[data-rail="on"] .el-sidebar__brand-name { display: none; }
+.el-sidebar[data-rail="on"] .el-sidebar__brand-end { margin-inline-start: 0; }
+/* Sub-items (Shared with me, a project) are reached through their page in the rail; Record shows its icon alone,
+   its menu under it, both 40 px squares. */
+.el-sidebar[data-rail="on"] .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
+.el-sidebar[data-rail="on"] .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
+.el-sidebar[data-rail="on"] .el-shell__record > .el-button, .el-sidebar[data-rail="on"] .el-shell__record > .el-menu-anchor > .el-button {
+  inline-size: var(--el-space-40); min-inline-size: 0; justify-content: center; padding-inline: 0; border-radius: var(--el-radius-sm);
+}
+.el-sidebar[data-rail="on"] .el-shell__record > .el-button > span:not(.el-icon) {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.el-sidebar[data-rail="on"] .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
+.el-sidebar[data-rail="on"] .el-shell__me { justify-content: center; padding-inline: 0; }
+.el-sidebar[data-rail="on"] .el-nav-item__label, .el-sidebar[data-rail="on"] .el-nav-item__count, .el-sidebar[data-rail="on"] .el-status > span:last-child, .el-sidebar[data-rail="on"] .el-shell__me-text {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 
 /* ---- Skeleton, Loading, Progress ---------------------------------------------------------------------------- */
@@ -1414,3 +1441,118 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 /* What the plan leaves out on a recording, with the plan that has it (parity DT-REC-043, 073, 083). */
 .el-recording__locked { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
 .el-recording__locked:empty { display: none; }
+
+/* The recording page's progress steps (Upload · Transcribe · Improve) and Notify me when ready. */
+.el-rec-steps-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-16); margin-block: var(--el-space-8); }
+.el-rec-steps { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-16); margin: 0; padding: 0; list-style: none; }
+.el-rec-step { display: inline-flex; align-items: center; gap: var(--el-space-8); color: var(--el-role-text-secondary); }
+.el-rec-step__dot { inline-size: var(--el-space-8); block-size: var(--el-space-8); border-radius: var(--el-radius-full); border: var(--el-border-hairline) solid var(--el-role-border-strong); }
+.el-rec-step--done .el-rec-step__dot { background: var(--el-role-success-default); border-color: var(--el-role-success-default); }
+.el-rec-step--active { color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); }
+.el-rec-step--active .el-rec-step__dot { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
+.el-rec-step--failed { color: var(--el-role-danger-default); }
+.el-rec-step--failed .el-rec-step__dot { border-color: var(--el-role-danger-default); }
+@media (prefers-reduced-motion: no-preference) {
+  .el-rec-step--active .el-rec-step__dot { animation: el-pulse var(--el-motion-pulse) ease-in-out infinite; }
+}
+
+/* The backup engine's line, and the offers after an edit (always write it this way, add to the vocabulary). */
+.el-recording__note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-recording__offer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block-end: var(--el-space-8); padding: var(--el-space-8) var(--el-space-12); border-radius: var(--el-radius-sm); background: var(--el-role-accent-soft); }
+
+/* A speaker's turn: the avatar and name once at its start; the lines after it sit close under it. */
+.el-segment__name { display: inline-flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-segment--cont { padding-block-start: 0; }
+.el-segment:has(+ .el-segment--cont) { border-block-end-color: transparent; }
+
+/* The Record page's recording section: the state with its controls and levels, captions and voice notes side by side,
+   the drop card and the uploads waiting to retry. */
+.el-record { display: flex; flex-direction: column; gap: var(--el-space-12); }
+.el-record__now { display: flex; flex-direction: column; gap: var(--el-space-12); }
+.el-record__controls, .el-record__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-record__meters { display: grid; gap: var(--el-space-8); }
+.el-rec-level { display: flex; align-items: center; gap: var(--el-space-12); }
+.el-rec-level__label { inline-size: var(--el-space-48); flex: none; color: var(--el-role-text-secondary); }
+.el-rec-level .el-meter { flex: 1; }
+.el-record__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
+.el-record__card, .el-record__drop, .el-record__errors { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; }
+.el-record__drop { border-style: dashed; }
+.el-record__error-list { margin: 0; padding-inline-start: var(--el-space-16); display: grid; gap: var(--el-space-4); }
+
+/* The sidebar's edge (drag to resize, 200 to 320 px) and the uploads line at its foot; the rail has neither. */
+.el-shell { position: relative; }
+.el-shell__edge {
+  position: absolute; inset-block: 0; inset-inline-start: calc(var(--el-sidebar-width, calc(var(--el-space-64) * 3.5)) - var(--el-space-4));
+  inline-size: var(--el-space-8); cursor: col-resize; touch-action: none;
+}
+.el-shell__edge:hover, .el-shell__edge:focus-visible { background: var(--el-role-accent-soft); }
+.el-shell__edge:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+body.resizing-sidebar { cursor: col-resize; user-select: none; }
+.el-shell__uploads { display: flex; align-items: center; gap: var(--el-space-8); margin: 0; padding-inline: var(--el-space-8); min-inline-size: 0; }
+.el-sidebar[data-rail="on"] .el-shell__uploads { display: none; }
+@media (width < 780px) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__uploads { display: none; }
+  .el-shell:not(:has(> .el-sidebar[data-rail="off"])) > .el-shell__edge { display: none; }
+}
+
+/* Help › Shortcuts: each key beside what it does, then the screenshot and support tip. */
+.el-help-keys { display: flex; flex-direction: column; gap: var(--el-space-12); align-items: flex-start; }
+.el-keys { display: grid; gap: var(--el-space-8); margin: 0; inline-size: 100%; }
+.el-keys__row { display: grid; grid-template-columns: minmax(calc(var(--el-space-64) * 2), max-content) 1fr; gap: var(--el-space-12); align-items: baseline; }
+.el-keys__row > dd { margin: 0; }
+.el-help-keys__tip { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; inline-size: 100%; }
+.el-sidebar[data-rail="on"] .el-shell__time { display: none; }
+@media (width < 780px) { .el-sidebar:not([data-rail="off"]) .el-shell__time { display: none; } }
+
+/* The workspace menu at the sidebar's foot: its name and role; the rail keeps its icon. */
+.el-shell__workspace > .el-menu-anchor, .el-shell__workspace .el-button { inline-size: 100%; justify-content: flex-start; min-inline-size: 0; }
+.el-shell__workspace .el-button > span:not(.el-icon) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: start; }
+.el-sidebar[data-rail="on"] .el-shell__workspace .el-button > span:not(.el-icon) {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+@media (width < 780px) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__workspace .el-button > span:not(.el-icon) {
+    position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+
+/* Breadcrumbs above a page's title, and the count after a tab's name. */
+.el-crumbs__list { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-4); margin: 0 0 var(--el-space-4); padding: 0; list-style: none; }
+.el-crumbs__step { display: inline-flex; align-items: center; gap: var(--el-space-4); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
+.el-crumbs__link { border: 0; padding: 0; background: transparent; font: inherit; color: var(--el-role-accent-text); cursor: pointer; }
+.el-crumbs__link:hover { text-decoration: underline; }
+.el-crumbs__here { color: var(--el-role-text-primary); }
+.el-tab__count { margin-inline-start: var(--el-space-4); color: var(--el-role-text-secondary); }
+
+/* A Library group's header stays at the top while its group scrolls (classic's); while recordings are being picked
+   the selection bar holds the top instead. */
+[data-v2="library"]:not(:has(.el-selectbar)) .el-list > .el-list-section {
+  position: sticky; inset-block-start: 0; z-index: var(--el-layer-sticky); background: var(--el-role-bg-canvas);
+}
+
+/* The import sheet's files, and the hint over the window while files are dragged over it. */
+.el-import__files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-8); max-block-size: calc(var(--el-space-64) * 3); overflow-y: auto; }
+.el-import__file { display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: 0; }
+.el-import__file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-import__file--no { color: var(--el-role-text-secondary); }
+.el-drop-hint {
+  position: fixed; inset: 0; z-index: var(--el-layer-overlay); display: flex; align-items: center; justify-content: center;
+  background: var(--el-role-accent-soft); pointer-events: none;
+}
+.el-drop-hint__card {
+  display: inline-flex; align-items: center; gap: var(--el-space-12); padding: var(--el-space-24) var(--el-space-32);
+  border: var(--el-border-hairline) dashed var(--el-role-accent-default); border-radius: var(--el-radius-md);
+  background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight);
+}
+
+/* The Projects page's tree: a project's folders under it, indented by level; the fold button before each name. */
+.el-projects__row { gap: var(--el-space-8); padding-inline-start: calc(var(--el-space-12) + var(--el-tree-depth, 0) * var(--el-space-24)); }
+.el-projects__fold { display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-24); block-size: var(--el-space-24); flex: none; border: 0; padding: 0; background: transparent; color: var(--el-role-text-secondary); border-radius: var(--el-radius-sm); cursor: pointer; }
+span.el-projects__fold { cursor: default; }
+.el-projects__open { flex: 1; display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: 0; border: 0; padding: var(--el-space-4) 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.el-projects__open:hover .el-body-strong { text-decoration: underline; }
+.el-projects__text { display: flex; flex-direction: column; min-inline-size: 0; }
+.el-projects__text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-app-toast--error .el-toast { border-color: var(--el-role-danger-default); }
+.el-toast__open { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.el-toast__open:hover { text-decoration: underline; }
