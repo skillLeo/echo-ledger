@@ -13,6 +13,13 @@ namespace App\Services\ClientAi;
  */
 interface ClientAi
 {
+    /** Ask's scopes (since 2.0.0-o): a project, one recording, or a person's own recordings. */
+    public const ASK_PROJECT = 'project';
+
+    public const ASK_RECORDING = 'recording';
+
+    public const ASK_RECORDINGS = 'recordings';
+
     /**
      * The notes of one call: only sections with content, each item with the indexes of the lines it comes from.
      *
@@ -40,14 +47,15 @@ interface ClientAi
     public function pdfText(string $pdf, string $name): array;
 
     /**
-     * A short answer from the passages only, with what it cites: the passage and its block (line or paragraph).
+     * A short answer from the passages only, with what it cites: the passage and its block (line or paragraph). The
+     * scope (since 2.0.0-o) picks the prompt: a project's brief and memory, one recording's notes, or many recordings.
      *
      * @param  array<string, mixed>  $brief
      * @param  list<string>  $memory  memory lines as text
      * @param  list<array{title: string, blocks: list<string>}>  $passages
      * @return array{answer: string, citations: list<array{passage: int, block: int, quote: string}>, input_tokens: int, output_tokens: int, model: string}
      */
-    public function ask(string $clientName, array $brief, array $memory, array $passages, string $question, string $language): array;
+    public function ask(string $clientName, array $brief, array $memory, array $passages, string $question, string $language, string $scope = self::ASK_PROJECT): array;
 
     /**
      * Words the speech engine likely misheard, judged against the client's vocabulary ("La ravel" → "Laravel").

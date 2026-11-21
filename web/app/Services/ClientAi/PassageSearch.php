@@ -9,6 +9,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientFile;
 use App\Services\SettingsRepository;
+use Closure;
 
 /**
  * The passages of a client's transcripts and files that best match a question (v1.4, Ask): windows of 8 transcript
@@ -27,6 +28,12 @@ final class PassageSearch
     private const STEP = 6;
 
     private const PARAGRAPH_CHARS = 1200;
+
+    /** Since 2.0.0-o: how many recordings Ask across recordings reads at a time. */
+    public const BATCH = 10;
+
+    /** The transcript columns the search reads (never the text, meta or anything else of a large row). */
+    public const TRANSCRIPT_COLUMNS = ['id', 'capture_session_id', 'kind', 'status', 'segments'];
 
     private const STOP = ['the', 'and', 'for', 'was', 'what', 'when', 'did', 'does', 'are', 'with', 'that', 'this', 'from', 'have', 'has',
         'how', 'which', 'who', 'about', 'they', 'there', 'their', 'kya', 'hai', 'tha', 'thi', 'ki', 'ka', 'ke', 'ko', 'aur', 'mein', 'se'];
@@ -55,6 +62,44 @@ final class PassageSearch
     }
 
     /**
+     * The same search over many recordings, read [$batch] at a time (since 2.0.0-o, Ask across recordings): only the
+     * best [$count] passages are kept from one batch to the next, so memory stays that of one batch however many
+     * recordings, and however long, an account has. The answer is the one [topOfRecordings] gives for all of them.
+     *
+     * @param  list<string>  $sessionIds  newest first, already limited to the person's own recordings
+     * @param  Closure(list<string>): iterable<CaptureSession>  $load  one batch of them with their final transcript
+     *                                                                 (TRANSCRIPT_COLUMNS), in any order
+     * @return list<Passage>
+     */
+    public function topOfManyRecordings(array $sessionIds, Closure $load, string $question, int $count, int $batch = self::BATCH): array
+    {
+        $words = self::words($question);
+        $matching = [];
+        $starts = [];
+        foreach (array_chunk($sessionIds, max(1, $batch)) as $n => $ids) {
+            $position = array_flip($ids);
+            $sessions = [];
+            foreach ($load($ids) as $session) {
+                $sessions[$position[$session->id] ?? count($ids)] = $session;
+            }
+            ksort($sessions);
+            foreach ($this->calls(array_values($sessions), $n * max(1, $batch)) as $passage) {
+                $passage['score'] = self::score($words, implode("\n", $passage['blocks']));
+                if ($passage['score'] > 0) {
+                    $matching[] = $passage;
+                } elseif ($matching === [] && $passage['where'] !== [] && $passage['order'] % 1000 === 0) {
+                    $starts[] = $passage;
+                }
+            }
+            unset($sessions);
+            $matching = self::ranked($matching, $count);
+            $starts = $matching === [] ? self::ranked($starts, $count) : [];
+        }
+
+        return $matching !== [] ? $matching : $starts;
+    }
+
+    /**
      * @param  list<Passage>  $passages
      * @return list<Passage>
      */
@@ -70,20 +115,32 @@ final class PassageSearch
         if ($matching === []) {
             $matching = array_values(array_filter($passages, fn (array $p): bool => $p['kind'] === 'call' && $p['where'] !== [] && $p['order'] % 1000 === 0));
         }
-        usort($matching, fn (array $a, array $b): int => [$b['score'], $a['order']] <=> [$a['score'], $b['order']]);
 
-        return array_slice($matching, 0, $count);
+        return self::ranked($matching, $count);
     }
 
     /**
-     * @param  iterable<CaptureSession>  $sessions
+     * The best [$count], most recent first among equals.
+     *
+     * @param  list<Passage>  $passages
      * @return list<Passage>
      */
-    private function calls(iterable $sessions): array
+    private static function ranked(array $passages, int $count): array
+    {
+        usort($passages, fn (array $a, array $b): int => [$b['score'], $a['order']] <=> [$a['score'], $b['order']]);
+
+        return array_slice($passages, 0, $count);
+    }
+
+    /**
+     * @param  iterable<CaptureSession>  $sessions  newest first; the first is ranked [$firstRank]
+     * @return list<Passage>
+     */
+    private function calls(iterable $sessions, int $firstRank = 0): array
     {
         $zone = $this->settings->displayTimezone();
         $out = [];
-        $rank = -1;
+        $rank = $firstRank - 1;
         foreach ($sessions as $session) {
             $rank++;
             $transcript = $session->finalTranscript;

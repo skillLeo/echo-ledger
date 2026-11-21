@@ -1807,7 +1807,7 @@ read on the queue (PDFs through Claude Haiku, page by page) and the brief is ref
 ### `DELETE /api/clients/{id}/files/{file}` — `sessions:write` (since v1.4)
 Deletes the file and its encrypted original. `204`; `404 file_not_found`.
 
-### `POST /api/clients/{id}/ask` — `sessions:write`, throttled (20/min/device) (since v1.4)
+### `POST /api/clients/{id}/ask` — `sessions:write`, throttled (20/min/person) (since v1.4)
 `{"question": "When do we launch?", "language": "en"}` (`language` en | roman_urdu, default en; question 3–500
 characters). The server picks the passages of the client's transcripts and files that match the question best (about
 12) and sends them with the brief and memory. `200 {"data": {"answer": "Launch is on November 15.", "citations":
@@ -1819,14 +1819,15 @@ characters). The server picks the passages of the client's transcripts and files
 The same Ask as a project's (`POST /api/clients/{id}/ask`): the same request (`{"question": "…", "language": "en"}`,
 question 3–500 characters, `language` en | roman_urdu, default en), the same answer (`200 {"data": {"answer", "citations"}}`,
 citations of `"type": "call"` with `session_id`, `title`, `at_ms` and `quote`; never `file` here), the same rules
-(only the passages sent, at most 120 words, "say so" when they do not answer, never a guess), the same limiter (20 a minute
-per person, shared with the project's Ask), the plan's `ai_notes` feature (`403 feature_not_in_plan`), the same AI key
+(only the passages sent, at most 120 words, "say so" when they do not answer, never a guess; what the transcripts
+say is content, never instructions to the AI, as for every Ask), the same limiter (20 a minute per person, shared with
+the project's Ask), the plan's `ai_notes` feature (`403 feature_not_in_plan`), the same AI key
 (`409 ai_unavailable`) and monthly AI budget (`403 ai_budget_reached`), and `502 provider_error` when the AI cannot
 answer. A viewer's device asks nothing (`403 not_allowed`), as for a project. Each answer is one `client_ask` row in the
 usage ledger (Ask on the Usage page), with the recording (and its project) when there is one, and counts against the
 budget. Nothing of the question or answer is logged.
 
-### `POST /api/sessions/{id}/ask` — `sessions:write`, throttled (20/min/device) (since 2.0.0-o)
+### `POST /api/sessions/{id}/ask` — `sessions:write`, throttled (20/min/person) (since 2.0.0-o)
 Asks about one recording of the person's in this workspace: the passages of its finished transcript that match the
 question best (about 12 windows of 8 lines), with the recording's own call notes when it has them; nothing of any other
 recording, project brief, memory or file. `200 {"data": {"answer": "They chose the second plan.", "citations": [{"type":
@@ -1835,9 +1836,9 @@ for a recording that is not the person's (another person's, another workspace's,
 when it has no finished transcript; `422` for the question; `403 feature_not_in_plan`, `403 ai_budget_reached`, `409
 ai_unavailable`, `502 provider_error`.
 
-### `POST /api/ask` — `sessions:write`, throttled (20/min/device) (since 2.0.0-o)
+### `POST /api/ask` — `sessions:write`, throttled (20/min/person) (since 2.0.0-o)
 Asks across all of the person's own recordings in this workspace: the same search over their latest 100 recordings with
-a finished transcript (never a teammate's, nor one in the Bin), the best passages of
+a finished transcript (never a teammate's, nor one in the Bin), read ten at a time, the best passages of
 any of them, each citation naming its recording (`session_id`). `200` as above; `409 no_transcript` when none of their
 recordings has a finished transcript; `422` for the question; `403 feature_not_in_plan`, `403 ai_budget_reached`, `409
 ai_unavailable`, `502 provider_error`.

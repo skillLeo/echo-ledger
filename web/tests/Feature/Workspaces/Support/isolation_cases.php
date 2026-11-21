@@ -265,8 +265,10 @@ function isoApiCases(array $b): array
         'api.clients.files.store' => ['POST', "/api/clients/{$b['client']->id}/files", ['text' => 'hijacked'], 404],
         'api.clients.files.destroy' => ['DELETE', "/api/clients/{$b['client']->id}/files/{$b['client']->id}", [], 404],
         'api.clients.ask' => ['POST', "/api/clients/{$b['client']->id}/ask", ['question' => 'What was agreed?'], 404],
-        // Since 2.0.0-o: the other side's recording is none of this person's to ask about; Ask across recordings reads
-        // only the caller's own (AskEverywhereTest checks what reaches the AI). Without an AI key here it answers 409.
+        // Since 2.0.0-o: the other side's recording is none of this person's to ask about. Ask across recordings has no
+        // id to try: without an AI key here it answers 409 (or 403 on a plan without AI notes) and the leak check below
+        // still reads the answer. What reaches the AI is covered by AskEverywhereTest ("never reads another workspace's,
+        // a teammate's, the person's other workspace's or a binned recording"), with a fake AI that keeps every passage.
         'api.sessions.ask' => ['POST', "/api/sessions/{$s}/ask", ['question' => 'What was agreed?'], 404],
         'api.ask' => ['POST', '/api/ask', ['question' => 'What was agreed?'], fn (TestResponse $r): bool => in_array($r->status(), [403, 409], true)],
         'api.sessions.notes' => ['GET', "/api/sessions/{$s}/notes", [], 404],

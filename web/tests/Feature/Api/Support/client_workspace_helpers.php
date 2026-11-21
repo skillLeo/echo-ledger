@@ -54,9 +54,9 @@ function fakeClientAi(): object
             return ['text' => "=== Page 1 ===\nScope\n\n=== Page 2 ===\nPayment: 50% upfront", 'pages' => 2, 'input_tokens' => 2_000, 'output_tokens' => 400, 'model' => 'claude-haiku-5-5'];
         }
 
-        public function ask(string $clientName, array $brief, array $memory, array $passages, string $question, string $language): array
+        public function ask(string $clientName, array $brief, array $memory, array $passages, string $question, string $language, string $scope = ClientAi::ASK_PROJECT): array
         {
-            $this->calls[] = ['ask', ['passages' => $passages, 'language' => $language, 'memory' => $memory]];
+            $this->calls[] = ['ask', ['passages' => $passages, 'language' => $language, 'memory' => $memory, 'scope' => $scope, 'name' => $clientName]];
 
             return ['answer' => 'Launch is on November 15.', 'citations' => [['passage' => 0, 'block' => 3, 'quote' => 'We launch on November 15']],
                 'input_tokens' => 3_000, 'output_tokens' => 100, 'model' => 'claude-sonnet-5-5'];

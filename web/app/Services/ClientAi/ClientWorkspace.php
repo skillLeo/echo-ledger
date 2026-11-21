@@ -705,7 +705,7 @@ final class ClientWorkspace
         }
         $note = CallNote::query()->withoutGlobalScopes()->where('capture_session_id', $session->id)->where('status', 'ready')->first();
         $memory = $note instanceof CallNote ? [$this->noteText($note->setRelation('captureSession', $session))] : [];
-        [$answer, $usage] = $this->answer($session->displayTitle(), ClientBrief::emptySections(), $memory, $passages, $question, $language);
+        [$answer, $usage] = $this->answer($session->displayTitle(), ClientBrief::emptySections(), $memory, $passages, $question, $language, ClientAi::ASK_RECORDING);
         $this->charge($session->user_id, $session->workspace_id, $session->client_id, 'ask', $usage, $session->id);
 
         return $answer;
@@ -713,22 +713,29 @@ final class ClientWorkspace
 
     /**
      * Since 2.0.0-o: answers a question across a person's own recordings in one workspace (their latest
-     * [ASK_ALL_RECORDINGS] with a finished transcript; never a teammate's, never one in the Bin).
+     * [ASK_ALL_RECORDINGS] with a finished transcript; never a teammate's, never one in the Bin). Their ids come first;
+     * then the transcripts are read a batch at a time, only the columns the search uses, so a heavy account never holds
+     * all of them at once.
      *
      * @return array{answer: string, citations: list<array<string, mixed>>}
      */
     public function askAll(int $workspaceId, int $userId, string $question, string $language): array
     {
         $this->assertCanWriteNotes($workspaceId);
-        $sessions = CaptureSession::query()->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class])
-            ->where('workspace_id', $workspaceId)->where('user_id', $userId)
-            ->whereHas('finalTranscript', fn (Builder $q) => $q->where('status', TranscriptStatus::Completed->value))
-            ->with('finalTranscript')->latest('started_at')->limit(self::ASK_ALL_RECORDINGS)->get();
-        $passages = (new PassageSearch($this->settings))->topOfRecordings($sessions, $question, self::PASSAGES);
+        $mine = fn (): Builder => CaptureSession::query()->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class])
+            ->where('workspace_id', $workspaceId)->where('user_id', $userId);
+        $ids = $mine()->whereHas('finalTranscript', fn (Builder $q) => $q->where('status', TranscriptStatus::Completed->value))
+            ->latest('started_at')->orderByDesc('id')->limit(self::ASK_ALL_RECORDINGS)->pluck('id')->all();
+        $passages = (new PassageSearch($this->settings))->topOfManyRecordings(
+            array_values(array_map('strval', $ids)),
+            fn (array $batch): iterable => $mine()->whereKey($batch)->with(['finalTranscript' => fn ($q) => $q->select(PassageSearch::TRANSCRIPT_COLUMNS)])->get(),
+            $question,
+            self::PASSAGES,
+        );
         if ($passages === []) {
             throw new ApiError(409, 'no_transcript', 'None of your recordings has a transcript to ask about yet.');
         }
-        [$answer, $usage] = $this->answer('your recordings', ClientBrief::emptySections(), [], $passages, $question, $language);
+        [$answer, $usage] = $this->answer('your recordings', ClientBrief::emptySections(), [], $passages, $question, $language, ClientAi::ASK_RECORDINGS);
         $this->charge($userId, $workspaceId, null, 'ask', $usage);
 
         return $answer;
@@ -742,7 +749,7 @@ final class ClientWorkspace
      * @param  list<array<string, mixed>>  $passages
      * @return array{0: array{answer: string, citations: list<array<string, mixed>>}, 1: array{input_tokens: int, output_tokens: int, model: string}}
      */
-    private function answer(string $name, array $brief, array $memory, array $passages, string $question, string $language): array
+    private function answer(string $name, array $brief, array $memory, array $passages, string $question, string $language, string $scope = ClientAi::ASK_PROJECT): array
     {
         try {
             $result = $this->ai->ask(
@@ -752,6 +759,7 @@ final class ClientWorkspace
                 array_map(fn (array $p): array => ['title' => $p['title'], 'blocks' => $p['blocks']], $passages),
                 $question,
                 $language,
+                $scope,
             );
         } catch (Throwable $e) {
             throw new ApiError(502, 'provider_error', 'The AI could not answer right now. Try again in a minute.');
