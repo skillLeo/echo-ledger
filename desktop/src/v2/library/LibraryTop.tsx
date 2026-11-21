@@ -27,9 +27,11 @@ export type LibraryTopProps = {
   onReadyCheck: () => void;
   onRecord?: () => void;
   onAction: (id: NeedsAction["id"]) => void;
+  /** What the queue under it already shows with its own Review (waiting calls, uploads that need you): left out here. */
+  covered?: { waiting: boolean; failed: boolean };
 };
 
-export function LibraryTop({ status, items, onSetup, onReadyCheck, onRecord, onAction }: LibraryTopProps) {
+export function LibraryTop({ status, items, onSetup, onReadyCheck, onRecord, onAction, covered }: LibraryTopProps) {
   const [report] = useReadyReport();
   const [permissions] = usePermissions();
   const [skipped, setSkipped] = useState<SkippedItem[]>([]);
@@ -42,7 +44,12 @@ export function LibraryTop({ status, items, onSetup, onReadyCheck, onRecord, onA
   const permissionsOk = permissions ? kinds.every((k) => accessOf(permissions, k) === "allowed") : null;
   const known = permissions !== null && (report !== null || status.callsReady != null) && items !== null;
   const steps = known && !hidden ? checklist({ permissionsOk, ready: report?.ready ?? status.callsReady ?? null, recordings: live.length }) : null;
-  const actions = needsAction({ failed: status.failedUploads, waiting: status.pendingDecisions, untranscribed: live.filter(isUntranscribed).length, missed: skipped.length });
+  const actions = needsAction({
+    failed: covered?.failed ? 0 : status.failedUploads,
+    waiting: covered?.waiting ? 0 : status.pendingDecisions,
+    untranscribed: live.filter(isUntranscribed).length,
+    missed: skipped.length,
+  });
   const run = (id: ChecklistItem["id"]) => (id === "permissions" ? onSetup() : id === "ready" ? onReadyCheck() : onRecord?.());
   const hide = () => {
     setHidden(true);
