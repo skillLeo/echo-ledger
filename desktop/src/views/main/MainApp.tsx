@@ -803,6 +803,7 @@ export default function MainApp() {
               onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
               onReadyCheck={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
               onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} onPlan={() => openAccount("plan")}
+              run={run} onImport={canRecord ? () => void pickImport() : undefined}
               onAction={(a) => {
                 if (a === "failed") openLibraryView("failed");
                 else if (a === "waiting") openLibraryView("waiting");

@@ -23,7 +23,7 @@ const LiveAssistClassic = lazy(() => import("../../v2/app").then((m) => ({ defau
  * The Bluetooth microphone a recording would use (v1.5), or null. Read when the page shows and again when a recording
  * starts (a headset may have been connected since); the choice follows Settings.
  */
-function useBluetoothMic(recordingRef: string | null): InputDevice | null {
+export function useBluetoothMic(recordingRef: string | null): InputDevice | null {
   const [devices, setDevices] = useState<InputDevice[]>([]);
   const [chosen, setChosen] = useState<string | null>(null);
   const shown = useWindowShown();

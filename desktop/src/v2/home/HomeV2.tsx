@@ -12,6 +12,7 @@ import { shellStatus } from "../shell/status";
 import { isUntranscribed, rowModel } from "../library/model";
 import { minutesLine } from "../settings/AccountCard";
 import { isViewer, viewerSentence } from "../../lib/plan";
+import { RecordSection, type Run } from "./RecordSection";
 
 export type ChecklistItem = { id: "permissions" | "ready" | "first"; title: string; done: boolean; action: string };
 
@@ -49,9 +50,13 @@ export type HomeV2Props = {
   onLibrary: () => void;
   onAction: (id: NeedsAction["id"]) => void;
   onPlan: () => void;
+  /** Runs a core command and says how it went (MainApp's run); without it the Record section isn't shown. */
+  run?: Run;
+  /** Upload: the file picker, then the import sheet. */
+  onImport?: () => void;
 };
 
-export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpenRecording, onLibrary, onAction, onPlan }: HomeV2Props) {
+export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpenRecording, onLibrary, onAction, onPlan, run, onImport }: HomeV2Props) {
   const [report] = useReadyReport();
   const [permissions] = usePermissions();
   const entitlements = useEntitlements();
@@ -86,7 +91,10 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
 
   return (
     <div className="el-page el-page--narrow" data-v2="home">
-      <header className="el-page__head"><h1 className="el-title-l">Home</h1></header>
+      <header className="el-page__head">
+        <h1 className="el-title-l">Home</h1>
+        {onImport && !isViewer(status) && <div className="el-page__actions"><Button icon={Icons.ShareIcon} onClick={onImport}>Upload</Button></div>}
+      </header>
 
       <Card className="el-home-strip" label="Status">
         <Status kind={strip.kind} live>{strip.text}</Status>
@@ -103,6 +111,8 @@ export function HomeV2({ status, onRecord, onStop, onSetup, onReadyCheck, onOpen
           </Card>
         </div>
       )}
+
+      {run && (!isViewer(status) || status.recording) && <RecordSection status={status} run={run} onImport={onImport} />}
 
       {list && (
         <section className="el-group" aria-label="Get started">
