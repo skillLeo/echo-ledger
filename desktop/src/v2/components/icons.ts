@@ -49,6 +49,7 @@ export {
   LucideLifeBuoyIcon as LifeBuoyIcon,
   LucideUserRoundPenIcon as UserRoundPenIcon,
   LucideFingerprintIcon as FingerprintIcon,
+  LucideCommandIcon as CommandIcon,
 } from "../../components/Icons";
 export {
   SourceAppIcon,
