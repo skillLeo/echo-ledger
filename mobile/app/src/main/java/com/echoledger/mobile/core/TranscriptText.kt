@@ -69,9 +69,14 @@ object TranscriptText {
         threshold: Double,
         noteOn: Boolean,
         forAi: Boolean = false,
-        screens: List<com.echoledger.mobile.data.ScreenDto> = emptyList()
+        screens: List<com.echoledger.mobile.data.ScreenDto> = emptyList(),
+        /**
+         * False: the lines only, without the note line, and Copy for AI keeps the console's style (marks off stays
+         * off). Several recordings copied at once have one note at the top ([com.echoledger.mobile.ui.v2.library.RecordingCopy.forAiMany]).
+         */
+        withNote: Boolean = true
     ): String {
-        val used = if (forAi && style == "off") "brackets" else style
+        val used = if (forAi && style == "off" && withNote) "brackets" else style
         val withMarks = segments.mapIndexed { i, s -> s.copy(text = markedLine(s, inView(i), threshold, used)) }
         // Since v1.5 Copy for AI puts "[Screen 7 at 14:32: …]" after the line it belongs to, so "this page" has a picture.
         val after = if (forAi) ScreenMoments.byLine(segments, screens) else emptyMap()
@@ -81,6 +86,7 @@ object TranscriptText {
         }
             .joinToString("\n")
         val marked = MARKED.containsMatchIn(body) || body.contains("[unclear") || body.contains("(?)")
+        if (!withNote) return body
         return if (forAi || (noteOn && used != "off" && marked)) note(used) + "\n\n" + body else body
     }
 

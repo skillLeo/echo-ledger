@@ -75,6 +75,14 @@ class LibraryRepository(
         save(Cache(since, updated))
     }
 
+    /** Puts the server's answer for one recording ([item]) in the Library now, before the next sync brings it. */
+    suspend fun upsertLocally(item: LibraryItem) = lock.withLock {
+        val current = _items.value
+        val updated = if (current.any { it.id == item.id }) current.map { if (it.id == item.id) item else it } else listOf(item) + current
+        _items.value = updated
+        save(Cache(since, updated))
+    }
+
     /** True once a sync has completed (the server time of the last sync is known). */
     fun hasSynced(): Boolean = since != null
 

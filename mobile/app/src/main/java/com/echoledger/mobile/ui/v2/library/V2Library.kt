@@ -179,6 +179,7 @@ fun V2LibraryScreen(
     // The lists are read on opening and again after each sync (another device may have changed them).
     LaunchedEffect(syncing) { if (!syncing) vm.loadLists() }
     var addingToList by remember { mutableStateOf(false) }
+    var asking by remember { mutableStateOf<TranscribeAsk?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var filters by remember(initialViews) {
         mutableStateOf(
@@ -204,6 +205,7 @@ fun V2LibraryScreen(
         val chipped = com.echoledger.mobile.core.LibraryLists.filter(library, chip, lists)
         com.echoledger.mobile.core.LibraryQuery.apply(chipped, filters.base, query, choice.sortBy, opened = settings.libraryOpened)
             .filter { !filters.untranscribed || LibraryModel.status(it).let { s -> s == RowStatus.Untranscribed || s == RowStatus.Failed } }
+            .filter { !filters.audioOnly || LibraryModel.audioOnly(it) }
     }
     val groupNames = groupNames()
     val groups = remember(visible, choice, text, locale, groupNames) {
@@ -337,6 +339,16 @@ fun V2LibraryScreen(
             onDismiss = { addingToList = false }
         )
     }
+    asking?.let { ask ->
+        TranscribeDialog(ask, onDismiss = { asking = null }) {
+            asking = null
+            scope.launch {
+                val outcome = vm.transcribeMany(ask.ids)
+                if (outcome is MainViewModel.TranscribeOutcome.Started) picked = emptySet()
+                toasts.show(transcribeWords(res, outcome))
+            }
+        }
+    }
     fun act(action: SelectionAction) {
         val ids = ticked.toList()
         val items = visible.filter { it.id in ticked }
@@ -358,8 +370,24 @@ fun V2LibraryScreen(
 
                 is SelectionAction.Rename -> ids.singleOrNull()?.let { vm.organise(it, title = action.title) }
 
+                SelectionAction.Transcribe -> {
+                    val audio = items.filter { LibraryModel.audioOnly(it) }.map { it.id }
+                    val estimate = vm.transcribeEstimate(audio)
+                    when {
+                        estimate == null -> toasts.show(res.getString(R.string.v2_tx_failed))
+                        estimate.items.isEmpty() -> toasts.show(res.getString(R.string.v2_tx_none))
+                        else -> asking = TranscribeAsk(estimate.items.map { it.id }, estimate)
+                    }
+                }
+
                 SelectionAction.CopyForAi -> {
-                    val copied = copyForAi(vm, context, items, settings)
+                    // "Copying…" while the transcripts are read; it gives way to the outcome.
+                    val copying = if (items.size > 1) scope.launch { toasts.show(res.getString(R.string.v2_lib_copying)) } else null
+                    val copied = try {
+                        copyForAi(vm, context, items, settings)
+                    } finally {
+                        copying?.cancel()
+                    }
                     toasts.show(
                         when {
                             copied == 0 -> res.getString(R.string.v2_lib_copy_ai_none)
@@ -371,7 +399,9 @@ fun V2LibraryScreen(
 
                 SelectionAction.Delete -> deleteRows(items)
             }
-            if (action !is SelectionAction.Export && action !is SelectionAction.CopyForAi) picked = emptySet()
+            if (action !is SelectionAction.Export && action !is SelectionAction.CopyForAi && action !is SelectionAction.Transcribe) {
+                picked = emptySet()
+            }
         }
     }
     if (sortOpen) {
@@ -438,7 +468,8 @@ fun V2LibraryScreen(
                     },
                     onAction = ::act,
                     choices = OrganiseChoices.of(visible.filter { it.id in ticked }),
-                    onAddToList = { addingToList = true }
+                    onAddToList = { addingToList = true },
+                    canTranscribe = visible.any { it.id in ticked && LibraryModel.audioOnly(it) }
                 )
             },
             filterRow = { LibraryFilterRow(filters, folders, labels, tags, languages) { filters = it } },

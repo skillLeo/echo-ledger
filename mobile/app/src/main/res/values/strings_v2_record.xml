@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 voice note screen and import. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_vn_title">Voice note</string>
+    <string name="v2_vn_not_recording">Not recording</string>
+    <string name="v2_vn_recording">Recording</string>
+    <string name="v2_vn_paused">Paused</string>
+    <string name="v2_vn_record">Record</string>
+    <string name="v2_vn_stop">Stop</string>
+    <string name="v2_vn_pause">Pause</string>
+    <string name="v2_vn_resume">Resume</string>
+    <string name="v2_vn_discard">Discard</string>
+    <string name="v2_vn_undo">Undo</string>
+    <string name="v2_vn_level">Sound level</string>
+    <string name="v2_vn_import">Import files</string>
+    <string name="v2_vn_bluetooth">A Bluetooth headset is connected. Accuracy is lower with Bluetooth mics.</string>
+    <string name="v2_vn_never_auto">Voice notes are never recorded automatically — share them to EchoLedger from WhatsApp.</string>
+    <string name="v2_vn_retry_now">Retry now</string>
+    <string name="v2_vn_will_retry">Will retry: %1$s</string>
+    <string name="v2_vn_viewer">You are a viewer in %1$s: you can open what is shared with you, not record.</string>
+    <string name="v2_imp_for_all">For all of them</string>
+    <string name="v2_imp_no_project">No project</string>
+    <string name="v2_imp_help">Each file becomes its own recording, named after the file. Files already in your Library are skipped.</string>
+    <string name="v2_imp_importing">Importing…</string>
+    <string name="v2_imp_nothing">Nothing to import.</string>
+    <plurals name="v2_vn_uploading">
+        <item quantity="one">Uploading %1$d recording…</item>
+        <item quantity="other">Uploading %1$d recordings…</item>
+    </plurals>
+    <plurals name="v2_imp_heading">
+        <item quantity="one">Import %1$d file</item>
+        <item quantity="other">Import %1$d files</item>
+    </plurals>
+    <plurals name="v2_imp_done">
+        <item quantity="one">Importing %1$d file.</item>
+        <item quantity="other">Importing %1$d files.</item>
+    </plurals>
+    <plurals name="v2_imp_dupes">
+        <item quantity="one">%1$d file already in your Library.</item>
+        <item quantity="other">%1$d files already in your Library.</item>
+    </plurals>
+    <plurals name="v2_imp_unreadable">
+        <item quantity="one">%1$d file could not be read.</item>
+        <item quantity="other">%1$d files could not be read.</item>
+    </plurals>
+    <string name="v2_vn_this_workspace">this workspace</string>
+</resources>

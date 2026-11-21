@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
@@ -108,6 +110,7 @@ fun V2ActivityScreen(vm: MainViewModel, actions: ActivityActions, modifier: Modi
         alreadySome = stringResource(R.string.v2_home_some_already_deleted)
     )
     val shown = library.filter { !it.deleted }
+    val clients by vm.clients.collectAsState()
     V2ActivityContent(
         load = { vm.activity() },
         markRead = { vm.markActivityRead(it) },
@@ -120,6 +123,9 @@ fun V2ActivityScreen(vm: MainViewModel, actions: ActivityActions, modifier: Modi
         actions = actions,
         onKeep = { vm.decide(it.id, keep = true) },
         onDiscard = { batch.discard(it.id) },
+        clients = clients,
+        onRename = { rec, title -> vm.setPendingTitle(rec.id, title) },
+        onProject = { rec, clientId -> vm.setPendingClient(rec.id, clientId) },
         // Classic's Retry: each upload that failed, sent again (retryPending only nudges the queued ones).
         onRetryUploads = { pending.filter { it.state == "failed" }.forEach { vm.retryUpload(it.id) } },
         onRestore = { vm.restoreSkipped(it) },
@@ -151,7 +157,13 @@ fun V2ActivityContent(
     onMissedDismiss: (String) -> Unit,
     modifier: Modifier = Modifier,
     today: LocalDate = LocalDate.now(),
-    scrollToTop: Int = 0
+    scrollToTop: Int = 0,
+    /** The projects a waiting call can be filed under before Keep. */
+    clients: List<com.echoledger.mobile.data.ClientDto> = emptyList(),
+    /** A waiting call's title, typed before Keep (blank: the server names it). */
+    onRename: (LocalRecording, String) -> Unit = { _, _ -> },
+    /** A waiting call's project before Keep (null: no project). */
+    onProject: (LocalRecording, String?) -> Unit = { _, _ -> }
 ) {
     val c = EchoV2.colors
     val res = LocalContext.current.resources
@@ -279,7 +291,7 @@ fun V2ActivityContent(
                         }
                     }
                 }
-                items(waiting, key = { "w-" + it.id }) { rec -> WaitingCall(rec, res, onKeep, onDiscard) }
+                items(waiting, key = { "w-" + it.id }) { rec -> WaitingCall(rec, res, onKeep, onDiscard, clients, onRename, onProject) }
                 if (failedUploads.isNotEmpty()) {
                     item(key = "uploads") {
                         EchoSettingRow(
@@ -618,22 +630,83 @@ private fun SkippedLine(skipped: List<LocalRecording>, onRestore: (String) -> Un
     }
 }
 
-/** A call waiting for Keep or Discard: who and how long, then Discard and Keep (as Home had it). */
+/**
+ * A call waiting for Keep or Discard (classic's card): who and how long; a tap on it renames it (Rename), Project ▾ files
+ * it, then Discard and Keep. The title and project are kept on the phone and go with the upload.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun WaitingCall(rec: LocalRecording, res: Resources, onKeep: (LocalRecording) -> Unit, onDiscard: (LocalRecording) -> Unit) {
+private fun WaitingCall(
+    rec: LocalRecording,
+    res: Resources,
+    onKeep: (LocalRecording) -> Unit,
+    onDiscard: (LocalRecording) -> Unit,
+    clients: List<com.echoledger.mobile.data.ClientDto>,
+    onRename: (LocalRecording, String) -> Unit,
+    onProject: (LocalRecording, String?) -> Unit
+) {
     val c = EchoV2.colors
+    var renaming by remember { mutableStateOf(false) }
+    var filing by remember { mutableStateOf(false) }
+    val project = clients.firstOrNull { it.id == rec.clientId }?.name
+    val title = afterCallTitle(res, rec)
+    if (renaming) {
+        var words by remember { mutableStateOf(rec.title.orEmpty()) }
+        com.echoledger.mobile.ui.v2.components.EchoBottomSheet(onDismiss = {
+            renaming = false
+        }, title = stringResource(R.string.v2_lib_rename)) {
+            Column(
+                Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
+                verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+            ) {
+                com.echoledger.mobile.ui.v2.components.EchoTextField(
+                    words,
+                    { words = it.take(200) },
+                    stringResource(R.string.v2_lib_title),
+                    placeholder = title
+                )
+                EchoButton(stringResource(R.string.v2_lib_save), {
+                    renaming = false
+                    onRename(rec, words.trim())
+                }, Modifier.fillMaxWidth())
+            }
+        }
+    }
+    if (filing) {
+        com.echoledger.mobile.ui.v2.components.EchoBottomSheet(onDismiss = {
+            filing = false
+        }, title = stringResource(R.string.v2_lib_project)) {
+            com.echoledger.mobile.ui.v2.components.EchoRadio(rec.clientId == null, {
+                filing = false
+                onProject(rec, null)
+            }, stringResource(R.string.v2_lib_no_project))
+            clients.forEach { p ->
+                com.echoledger.mobile.ui.v2.components.EchoRadio(rec.clientId == p.id, {
+                    filing = false
+                    onProject(rec, p.id)
+                }, p.name)
+            }
+        }
+    }
     Column {
         EchoListRow(
-            title = afterCallTitle(res, rec),
-            meta = stringResource(R.string.v2_home_waiting_decision),
+            title = title,
+            meta = listOfNotNull(stringResource(R.string.v2_home_waiting_decision), project).joinToString(" · "),
             metaEnd = { Text(formatClock(rec.durationMs + 500), style = EchoV2.type.mono, color = c.textSecondary) },
             leading = { EchoAvatar(icon = LibraryModel.icon(SourceApp.from(rec.sourceApp))) },
-            tall = true
+            tall = true,
+            onClickLabel = stringResource(R.string.v2_lib_rename),
+            onClick = { renaming = true }
         )
-        Row(
+        FlowRow(
             Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.End)
         ) {
+            if (clients.isNotEmpty()) {
+                EchoButton(project ?: stringResource(R.string.v2_lib_project), {
+                    filing = true
+                }, kind = EchoButtonKind.Quiet, icon = EchoIcons.Folder)
+            }
             EchoButton(stringResource(R.string.v2_home_discard), { onDiscard(rec) }, kind = EchoButtonKind.Plain, icon = EchoIcons.Delete)
             EchoButton(stringResource(R.string.v2_home_keep), { onKeep(rec) }, kind = EchoButtonKind.Secondary)
         }

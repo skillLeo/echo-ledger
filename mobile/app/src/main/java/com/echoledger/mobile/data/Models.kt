@@ -385,7 +385,14 @@ data class CreateSessionRequest(
     /** Imports (since 1.4): skip a file the Library already has (`409 duplicate_recording`). Left out when false. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    @SerialName("skip_duplicate") val skipDuplicate: Boolean = false
+    @SerialName("skip_duplicate") val skipDuplicate: Boolean = false,
+    /**
+     * Audio only (2.0.0-j): false keeps it as audio, with no transcript started (Save audio after a call); left out
+     * when null, so the server transcribes as before.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val transcribe: Boolean? = null
 )
 
 @Serializable
@@ -436,7 +443,14 @@ data class FinishSessionRequest(
     /** Who the call was with, when the phone saw it (since v1.2). */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val caller: CallerDto? = null
+    val caller: CallerDto? = null,
+    /**
+     * Audio only (2.0.0-j): false keeps it as audio, with no transcript started (Save audio after a call); left out
+     * when null, so the server transcribes as before.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val transcribe: Boolean? = null
 )
 
 /** Caller names (since v1.2): who a recording was with and where the phone saw the name. */
@@ -504,7 +518,9 @@ data class LibraryItem(
     /** The colours of its labels that have one, `{label: "#rrggbb"}` (contract 2.0.0-i). */
     @SerialName("label_colors") val labelColors: Map<String, String> = emptyMap(),
     /** When retention moves it to Trash (contract 2.0.0-i); null when kept forever or still recording. */
-    @SerialName("expires_at") val expiresAt: String? = null
+    @SerialName("expires_at") val expiresAt: String? = null,
+    /** An audio-only recording (2.0.0-j): the plan minutes its transcript would use and the month's minutes left. */
+    @SerialName("transcribe_estimate") val transcribeEstimate: TranscribeEstimateDto? = null
 )
 
 @Serializable
@@ -1017,6 +1033,45 @@ data class ClientResponse(val data: ClientDto)
 
 @Serializable
 data class BulkAnswer(val changed: Int = 0)
+
+/** A Library item's `transcribe_estimate` (2.0.0-j); [minutesLeft] null: no limit. */
+@Serializable
+data class TranscribeEstimateDto(val minutes: Long = 0, @SerialName("minutes_left") val minutesLeft: Long? = null)
+
+/** The transcript `POST /api/sessions/{id}/transcribe` started. */
+@Serializable
+data class StartedTranscriptDto(
+    val id: String,
+    val kind: String? = null,
+    val provider: String? = null,
+    val status: String? = null,
+    val language: String? = null
+)
+
+@Serializable
+data class SessionTranscribeAnswer(val session: LibraryItem, val transcript: StartedTranscriptDto)
+
+@Serializable
+data class TranscribeEstimateItem(val id: String, val minutes: Long = 0)
+
+/** `POST /api/sessions/transcribe-estimate`: only the person's audio-only recordings among the ids are in [items]. */
+@Serializable
+data class TranscribeEstimateAnswer(
+    val minutes: Long = 0,
+    @SerialName("minutes_left") val minutesLeft: Long? = null,
+    val items: List<TranscribeEstimateItem> = emptyList()
+)
+
+@Serializable
+data class TranscribeSkipped(val id: String, val code: String? = null)
+
+/** `POST /api/sessions/transcribe`: the ones started, the ones skipped (and why), the minutes they use. */
+@Serializable
+data class TranscribeManyAnswer(
+    val started: List<String> = emptyList(),
+    val skipped: List<TranscribeSkipped> = emptyList(),
+    val minutes: Long = 0
+)
 
 /** `GET /api/activity` (since v1.1, B18): the activity centre. */
 @Serializable

@@ -74,6 +74,9 @@ sealed interface SelectionAction {
 
     /** Copy for AI: every selected recording's transcript for an AI chat, the note once. */
     data object CopyForAi : SelectionAction
+
+    /** Transcribe the audio-only ones (2.0.0-j): the minutes are shown first. */
+    data object Transcribe : SelectionAction
     data class Rename(val title: String) : SelectionAction
     data object Delete : SelectionAction
 }
@@ -144,7 +147,9 @@ fun SelectionBar(
     onAction: (SelectionAction) -> Unit,
     choices: OrganiseChoices = OrganiseChoices.ALL,
     /** ⋮ › Add to list (D14 §3), when the person's lists are known. */
-    onAddToList: (() -> Unit)? = null
+    onAddToList: (() -> Unit)? = null,
+    /** ⋮ › Transcribe…, when some of the selection is kept as audio only. */
+    canTranscribe: Boolean = false
 ) {
     val c = EchoV2.colors
     var sheet by remember { mutableStateOf<String?>(null) }
@@ -203,6 +208,12 @@ fun SelectionBar(
                     MenuItem(EchoIcons.Share, stringResource(R.string.v2_lib_share)) {
                         close()
                         sheet = "export"
+                    }
+                    if (canTranscribe) {
+                        MenuItem(EchoIcons.Transcribe, stringResource(R.string.v2_tx_menu)) {
+                            close()
+                            onAction(SelectionAction.Transcribe)
+                        }
                     }
                     MenuHeader(stringResource(R.string.v2_lib_organise))
                     onAddToList?.let { add ->
@@ -445,8 +456,13 @@ private fun SelectionRenameSheet(title: String, onDismiss: () -> Unit, onSave: (
 }
 
 /** Library's filters beyond classic's chips: the saved views (Untranscribed) the classic filters don't have. */
-data class V2Filters(val base: LibraryFilters = LibraryFilters(), val untranscribed: Boolean = false) {
-    val count: Int get() = base.count + if (untranscribed) 1 else 0
+data class V2Filters(
+    val base: LibraryFilters = LibraryFilters(),
+    val untranscribed: Boolean = false,
+    /** Audio only (2.0.0-j): recordings kept as audio, waiting for Transcribe. */
+    val audioOnly: Boolean = false
+) {
+    val count: Int get() = base.count + (if (untranscribed) 1 else 0) + (if (audioOnly) 1 else 0)
 }
 
 /** The chip a filter sheet belongs to. */
@@ -475,7 +491,7 @@ fun LibraryFilterRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         fun count(chip: FilterChip): Int = when (chip) {
-            FilterChip.Views -> (if (filters.untranscribed) 1 else 0) + f.views.count { it in VIEWS }
+            FilterChip.Views -> (if (filters.untranscribed) 1 else 0) + (if (filters.audioOnly) 1 else 0) + f.views.count { it in VIEWS }
             FilterChip.Source -> f.devices.size
             FilterChip.Date -> f.views.count { it in DATES }
             FilterChip.Project -> f.folders.size
@@ -570,6 +586,7 @@ private fun FilterSheet(
         when (chip) {
             FilterChip.Views -> {
                 EchoCheckbox(draft.untranscribed, { draft = draft.copy(untranscribed = it) }, v2TextUntranscribed())
+                EchoCheckbox(draft.audioOnly, { draft = draft.copy(audioOnly = it) }, stringResource(R.string.v2_lib_audio_only))
                 VIEWS.forEach { v -> EchoCheckbox(v in f.views, { base { b -> b.copy(views = b.views.toggle(v)) } }, smartViewName(v)) }
             }
 
@@ -631,7 +648,7 @@ fun deviceName(d: SourceDevice): String = stringResource(
 
 /** The filters with one chip's choices cleared. */
 fun clearChip(chip: FilterChip, f: V2Filters): V2Filters = when (chip) {
-    FilterChip.Views -> f.copy(untranscribed = false, base = f.base.copy(views = f.base.views - VIEWS))
+    FilterChip.Views -> f.copy(untranscribed = false, audioOnly = false, base = f.base.copy(views = f.base.views - VIEWS))
     FilterChip.Date -> f.copy(base = f.base.copy(views = f.base.views - DATES))
     FilterChip.Status -> f.copy(base = f.base.copy(views = f.base.views - STATUSES))
     FilterChip.Source -> f.copy(base = f.base.copy(devices = emptySet()))

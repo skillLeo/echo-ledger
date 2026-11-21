@@ -34,6 +34,9 @@ data class V2Row(
 
 /** Turns the library into rows and applies the saved views and the search; no Android or Compose state. */
 object LibraryModel {
+    /** Kept as audio, waiting for Transcribe (2.0.0-j `status: audio_only`). */
+    fun audioOnly(item: LibraryItem): Boolean = item.status == "audio_only"
+
     fun status(item: LibraryItem): RowStatus {
         val t = item.transcript
         return when {

@@ -242,6 +242,8 @@ class MainActivity : FragmentActivity() {
         var showSetup by rememberSaveable { mutableStateOf(false) }
         // Waiting for you (since 1.3.2): every call waiting for Keep or Discard on one screen.
         var showWaiting by rememberSaveable { mutableStateOf(false) }
+        // In the v2 shell the calls waiting for Keep or Discard are in Activity (with Rename and Project there).
+        var shellActivity by rememberSaveable { mutableIntStateOf(0) }
 
         // The tab a Record page was opened from through the New sheet: Back goes there (since v1.8.1, bug P-026).
         var recordReturnTab by rememberSaveable { mutableStateOf<String?>(null) }
@@ -485,6 +487,12 @@ class MainActivity : FragmentActivity() {
         }
         val shellOn = flags.shell
         var shellPlans by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(showWaiting, shellOn) {
+            if (showWaiting && shellOn) {
+                showWaiting = false
+                shellActivity++
+            }
+        }
 
         LaunchedEffect(message) {
             // The v2 shell shows the messages as its own toasts.
@@ -786,7 +794,7 @@ class MainActivity : FragmentActivity() {
 
                         showSetup -> SetupScreen(vm, caps, onBack = { showSetup = false }, onRecheck = { recheck++ })
 
-                        showWaiting -> WaitingScreen(vm, onBack = { showWaiting = false })
+                        showWaiting && !shellOn -> WaitingScreen(vm, onBack = { showWaiting = false })
 
                         // A row opens its recording with a shared transition (since v1.3): the app tile and the title
                         // move into place; the rest fades.
@@ -896,7 +904,8 @@ class MainActivity : FragmentActivity() {
                             onReadyCheck = { turnOn ->
                                 readyFix = if (turnOn) ReadyFix.TURN_ON else null
                                 showReady = true
-                            }
+                            },
+                            openActivity = shellActivity
                         )
                     }
                 }
@@ -921,8 +930,8 @@ class MainActivity : FragmentActivity() {
             com.echoledger.mobile.ui.v2.live.LiveEntry.Record ->
                 RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.CALLS, onReviewWaiting = onReviewWaiting)
 
-            com.echoledger.mobile.ui.v2.live.LiveEntry.VoiceNote ->
-                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.VOICE, onReviewWaiting = onReviewWaiting)
+            // The voice note on the v2 components (Record, Pause, Stop, Discard with Undo, Import files).
+            com.echoledger.mobile.ui.v2.live.LiveEntry.VoiceNote -> com.echoledger.mobile.ui.v2.live.V2VoiceNoteScreen(vm, onBack)
 
             com.echoledger.mobile.ui.v2.live.LiveEntry.LiveTranslate ->
                 RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.GAME, onReviewWaiting = onReviewWaiting)

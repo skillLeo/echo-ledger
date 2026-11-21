@@ -151,7 +151,7 @@ object DecisionPopup {
                             onDelete = actions.onDelete,
                             onUndo = actions.onUndo,
                             onTitle = actions.onTitle,
-                            onTranscribe = null
+                            onTranscribe = actions.onTranscribe
                         )
                     }
                     return@setContent
@@ -229,9 +229,9 @@ object DecisionPopup {
         showingV2 = false
     }
 
-    private fun decide(context: Context, id: String, keep: Boolean) {
+    private fun decide(context: Context, id: String, keep: Boolean, transcribe: Boolean? = null) {
         hide()
-        CoroutineScope(Dispatchers.IO).launch { Decisions.apply(context, id, keep) }
+        CoroutineScope(Dispatchers.IO).launch { Decisions.apply(context, id, keep, transcribe) }
     }
 
     /** The chip's Discard: "Discarded · … · Undo" at once; the file goes only when that is over. */
@@ -272,10 +272,18 @@ object DecisionPopup {
     }
 
     /** What the v2 card's buttons do: the chip's own decisions, Delete through the delayed discard. */
-    internal class CardActions(val onSave: () -> Unit, val onDelete: () -> Unit, val onUndo: () -> Unit, val onTitle: () -> Unit)
+    internal class CardActions(
+        val onSave: () -> Unit,
+        val onTranscribe: () -> Unit,
+        val onDelete: () -> Unit,
+        val onUndo: () -> Unit,
+        val onTitle: () -> Unit
+    )
 
     internal fun v2Actions(app: Context, rec: LocalRecording, themeMode: String, mode: Mode, onTitle: () -> Unit) = CardActions(
-        onSave = { decide(app, rec.id, keep = true) },
+        // Save audio (2.0.0-j): kept as audio only, transcribed later from the Library; Transcribe: kept and transcribed.
+        onSave = { decide(app, rec.id, keep = true, transcribe = false) },
+        onTranscribe = { decide(app, rec.id, keep = true, transcribe = true) },
         // Delete is the delayed discard: "Deleted · Undo", the file only after that.
         onDelete = { discard(app, rec, themeMode, v2 = true) },
         onUndo = {

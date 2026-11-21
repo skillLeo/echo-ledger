@@ -128,6 +128,32 @@ class PostCallPromptTest : AppTest() {
         assertEquals(WorkInfo.State.ENQUEUED, discardWork("call-1").single().state)
     }
 
+    private fun v2Card(rec: com.echoledger.mobile.data.LocalRecording) {
+        PostCallPrompt.show(
+            app,
+            rec,
+            PostCallPrompt.ASK,
+            "dark",
+            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
+        )
+        assertTrue("the v2 card", DecisionPopup.showingV2)
+    }
+
+    @Test
+    fun `the v2 card's Save audio keeps the call as audio only and Transcribe keeps it to be transcribed`() {
+        overlayAllowed(true)
+        v2Card(call(state = "pending_decision"))
+        compose.onNodeWithText("Save audio").performClick()
+        pumpUntil("kept") { app.peekRecording("call-1")?.state == "queued" }
+        assertEquals("audio only (2.0.0-j)", false, app.peekRecording("call-1")?.transcribe)
+        assertFalse(DecisionPopup.isShowing)
+
+        v2Card(call(id = "call-2", state = "pending_decision"))
+        compose.onNodeWithText("Transcribe").performClick()
+        pumpUntil("kept") { app.peekRecording("call-2")?.state == "queued" }
+        assertEquals(true, app.peekRecording("call-2")?.transcribe)
+    }
+
     @Test
     fun `without the flag the after-call chip is the classic one`() {
         overlayAllowed(true)

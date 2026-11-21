@@ -38,7 +38,10 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withPermit
 
 /** The Copy ▾ menu's choices. */
 enum class CopyKind { Text, WithTimestamps, WithoutTimestamps, ForAi }
@@ -58,7 +61,9 @@ object RecordingCopy {
         screens: List<ScreenDto>,
         speakerNames: Map<String, String> = emptyMap(),
         /** The view on screen ("roman"…), null for the original words: Copy for AI's Language line names it. */
-        view: String? = null
+        view: String? = null,
+        /** False: no note line (several recordings copied at once have one, [forAiMany]). */
+        withNote: Boolean = true
     ): String {
         val body = TranscriptText.copied(
             segments,
@@ -68,18 +73,19 @@ object RecordingCopy {
             threshold = settings.unsureThreshold,
             noteOn = settings.unsureNote,
             forAi = kind == CopyKind.ForAi,
-            screens = screens
+            screens = screens,
+            withNote = withNote
         )
         return if (kind == CopyKind.ForAi) aiHeader(item, segments, speakerNames, view) + "\n\n" + body else body
     }
 
     /**
-     * Copy for AI of several recordings (Library's selection): the note once, then each recording's header and lines
-     * ([text] without its note), a rule between them.
+     * Copy for AI of several recordings (Library's selection): the note on unsure words once (none when the console
+     * turned the marks off), then each recording's header and lines ([text] with `withNote = false`), a rule between.
      */
     fun forAiMany(parts: List<String>, settings: AppSettings): String {
-        val note = TranscriptText.note(if (settings.unsureStyle == "off") "brackets" else settings.unsureStyle)
-        return note + "\n\n" + parts.joinToString("\n\n---\n\n") { it.replaceFirst(note + "\n\n", "") }
+        val body = parts.joinToString("\n\n---\n\n")
+        return if (settings.unsureStyle == "off") body else TranscriptText.note(settings.unsureStyle) + "\n\n" + body
     }
 
     /** "Title: …", "Date: …", "People: …", "Language: …" (the view's when the text is in one): only the lines it has. */
@@ -280,10 +286,25 @@ fun sourceLabel(item: LibraryItem): String = item.sourceAppLabel ?: SourceApp.fr
  * of them had a transcript, nothing is copied).
  */
 internal suspend fun copyForAi(vm: MainViewModel, context: Context, items: List<LibraryItem>, settings: AppSettings): Int {
-    val parts = items.mapNotNull { item ->
-        val summary = item.transcript ?: return@mapNotNull null
-        val id = summary.finalTranscriptId?.takeIf { summary.finalStatus == "completed" } ?: return@mapNotNull null
-        val transcript = vm.transcript(id)?.takeIf { it.segments.isNotEmpty() } ?: return@mapNotNull null
+    // A few read at once (each needs its transcript, maybe its view and screens), in the selection's order.
+    val reads = kotlinx.coroutines.sync.Semaphore(COPY_AT_ONCE)
+    val parts = kotlinx.coroutines.coroutineScope {
+        items.map { item -> async { reads.withPermit { copyPart(vm, item, settings) } } }.awaitAll()
+    }.filterNotNull()
+    if (parts.isEmpty()) return 0
+    copyToClipboard(context, "Transcript", RecordingCopy.forAiMany(parts, settings))
+    return parts.size
+}
+
+/** How many recordings Copy for AI reads at the same time. */
+internal const val COPY_AT_ONCE = 4
+
+/** One recording's part of Copy for AI (header and lines, no note); null without a finished transcript. */
+private suspend fun copyPart(vm: MainViewModel, item: LibraryItem, settings: AppSettings): String? {
+    run {
+        val summary = item.transcript ?: return null
+        val id = summary.finalTranscriptId?.takeIf { summary.finalStatus == "completed" } ?: return null
+        val transcript = vm.transcript(id)?.takeIf { it.segments.isNotEmpty() } ?: return null
         val view = summary.views?.takeIf { it.status == "ready" }?.default?.takeIf { it != "original" }
         val shown = view?.let { key ->
             vm.transcriptViews(id)?.let { v ->
@@ -296,9 +317,15 @@ internal suspend fun copyForAi(vm: MainViewModel, context: Context, items: List<
             }
         }
         val screens = if ((item.screenCount ?: 0) > 0) vm.screens(item.id) else emptyList()
-        RecordingCopy.text(CopyKind.ForAi, item, transcript.segments, shown, settings, screens, view = view.takeIf { shown != null })
+        return RecordingCopy.text(
+            CopyKind.ForAi,
+            item,
+            transcript.segments,
+            shown,
+            settings,
+            screens,
+            view = view.takeIf { shown != null },
+            withNote = false
+        )
     }
-    if (parts.isEmpty()) return 0
-    copyToClipboard(context, "Transcript", RecordingCopy.forAiMany(parts, settings))
-    return parts.size
 }

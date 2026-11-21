@@ -396,7 +396,15 @@ private fun V2RecordingPage(
             findQuery = ""
         },
         top = transcriptTop(vm, page, scope),
-        instead = transcriptInstead(vm, page, settings, onCaptureTest, onOpenSettings) { sheet = RecordingSheet.Delete }
+        instead = transcriptInstead(
+            vm,
+            page,
+            settings,
+            onCaptureTest,
+            onOpenSettings,
+            current = library.firstOrNull { it.id == item.id } ?: item,
+            scope = scope
+        ) { sheet = RecordingSheet.Delete }
     )
 
     // The page keeps showing the recording as the Library has it now (its labels, pin and project change here).
@@ -501,6 +509,9 @@ private fun transcriptInstead(
     settings: com.echoledger.mobile.data.AppSettings,
     onCaptureTest: () -> Unit,
     onOpenSettings: (String) -> Unit,
+    /** The recording as the Library has it now (audio only, then transcribing). */
+    current: com.echoledger.mobile.data.LibraryItem = page.item,
+    scope: kotlinx.coroutines.CoroutineScope? = null,
     onDelete: () -> Unit
 ): (@Composable () -> Unit)? {
     val t = page.transcript
@@ -508,6 +519,9 @@ private fun transcriptInstead(
     val item = page.item
     return when {
         page.noAudio -> ({ NoAudioCard(onCaptureTest, onDelete) })
+
+        // Kept as audio (2.0.0-j): Transcribe starts it here, with what it uses.
+        LibraryModel.audioOnly(current) && t == null && scope != null -> ({ AudioOnlyCard(vm, current, scope) { page.retry() } })
 
         !page.loaded -> null
 
