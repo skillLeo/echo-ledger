@@ -47,6 +47,7 @@ use App\Services\Retranscriber;
 use App\Services\SettingsRepository;
 use App\Services\Sharing\WhatsAppMessage;
 use App\Services\TextReplacements;
+use App\Services\TranscribeLater;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
 use App\Services\Views\TranscriptViews;
@@ -1040,8 +1041,23 @@ class ViewCaptureSession extends ViewRecord
                 Select::make('language')->label('Language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false),
             ])
             ->action(function (array $data, CaptureSession $record, FinalTranscriptCoordinator $coordinator): void {
+                $before = $record->language;
                 $record->update(['language' => LanguageChoice::normalize($data['language'] ?? null)]);
-                $coordinator->start($record, $record->finalTranscript);
+                // Since v1.8 (contract 1.8.0-e): an audio-only recording starts as the apps' "Transcribe" does, the
+                // person's own only, with its budget and key; the language is kept only when it starts.
+                if ($record->status === SessionStatus::AudioOnly) {
+                    $person = auth()->user();
+                    try {
+                        app(TranscribeLater::class)->startFor($person instanceof User ? $person : throw new ApiError(403, 'not_allowed', 'Sign in again.'), (int) $record->workspace_id, $record->id);
+                    } catch (ApiError $e) {
+                        $record->update(['language' => $before]);
+                        Notification::make()->title('Not transcribed')->body($e->getMessage())->danger()->send();
+
+                        return;
+                    }
+                } else {
+                    $coordinator->start($record, $record->finalTranscript);
+                }
                 Notification::make()->title('Transcription queued')->success()->send();
             });
     }
@@ -1067,7 +1083,9 @@ class ViewCaptureSession extends ViewRecord
             ])
             ->action(function (array $data, CaptureSession $record): void {
                 try {
-                    $run = app(Retranscriber::class)->startAs($record, $data['language'] ?? null);
+                    // An audio-only recording starts as the person's own "Transcribe" (startFor: role, budget, key).
+                    $person = auth()->user();
+                    $run = app(Retranscriber::class)->startAs($record, $data['language'] ?? null, $person instanceof User ? $person : null);
                 } catch (RuntimeException $e) {
                     Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
