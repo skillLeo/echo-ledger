@@ -92,7 +92,7 @@ function Panel({ kind, title, description, onClose, closeLabel, actions, childre
         <div className="el-dialog__head">
           <div className="el-dialog__titles">
             <h2 className="el-title-s" id={`${id}-title`}>{title}</h2>
-            {description && <p className="el-secondary" id={`${id}-desc`}>{description}</p>}
+            {description && <p className="el-secondary" id={`${id}-desc`} dir="auto">{description}</p>}
           </div>
           <Button variant="quiet" icon={CloseIcon} aria-label={closeLabel} data-close="true" onClick={onClose} />
         </div>
