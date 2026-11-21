@@ -17,14 +17,17 @@ import org.robolectric.annotation.Config
 class SystemBarsThemeTest : AppTest() {
     /**
      * Whether the bars draw dark-on-light icons once the saved theme is applied. The theme arrives with the settings, a
-     * moment after the window shows the phone's own (P-103): it waits for [expected] (up to 5 s, the looper idled each
-     * time) instead of a fixed number of idles, and returns what the bars show then, so a theme never applied fails.
+     * moment after the window shows the phone's own (P-103): after the five idles the test always had, it waits for
+     * [expected] (up to 5 s, the looper idled each time) and returns what the bars show then, so a theme never applied fails.
      */
     private fun barsAreLight(themeMode: String, expected: Boolean): Boolean {
         runBlocking { app.graph.settings.update { it.copy(themeMode = themeMode, onboardingDone = true) } }
         val activity = buildActivity(MainActivity::class.java).setup().get()
         val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
         val light = { controller.isAppearanceLightStatusBars && controller.isAppearanceLightNavigationBars }
+        // As before, first: the window settles. Only then wait, so a value the window happens to start with (dark bars)
+        // can't answer before the saved theme had its chance to apply.
+        repeat(5) { shadowOf(activity.mainLooper).idle() }
         val until = System.nanoTime() + 5_000_000_000L
         while (true) {
             shadowOf(activity.mainLooper).idle()
