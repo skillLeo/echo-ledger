@@ -69,7 +69,10 @@ final class AccountProfileController extends Controller
         $email = $change->validated($user, $request->input('email'));
         $this->proof->check($user, $request->only(['password', 'otp', 'email_code']));
 
-        return response()->json($change->request($user, $email), 202);
+        // Proven with the account's two-step code: the old address is told without a restore link (EmailChange).
+        $byTwoStep = $user->hasTwoFactor() && is_string($request->input('otp')) && $request->input('otp') !== '';
+
+        return response()->json($change->request($user, $email, $byTwoStep), 202);
     }
 
     /** POST /api/account/email/confirm {"code"} — 5 code attempts an hour; the fifth wrong one ends the change. */

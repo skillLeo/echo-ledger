@@ -20,6 +20,15 @@ final class ConfirmEmailChangeRequest extends EmailChangeVerificationRequest
     {
         $user = $this->user();
         $old = $user instanceof User ? $user->email : null;
+        try {
+            $new = decrypt($this->route('email'));
+        } catch (\Throwable) {
+            return false;
+        }
+        // An address reserved for another account's restore window is nobody's (EmailChange).
+        if (is_string($new) && EmailChange::isReserved($new, $user instanceof User ? $user->id : null)) {
+            return false;
+        }
         $changed = parent::fulfill();
         if ($changed && $user instanceof User && $old !== null && $user->email !== $old) {
             $user->forceFill(['remember_token' => Str::random(60)])->saveQuietly();

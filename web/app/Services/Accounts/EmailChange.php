@@ -7,7 +7,7 @@ namespace App\Services\Accounts;
 use App\Exceptions\ApiError;
 use App\Mail\EmailChangedMail;
 use App\Mail\EmailCodeMail;
-use App\Models\AuditEvent;
+use App\Mail\EmailRestoreNoticeMail;
 use App\Models\Passkey;
 use App\Models\User;
 use App\Services\AuditLog;
@@ -20,6 +20,7 @@ use Filament\Facades\Filament;
 use Filament\Panel;
 use Illuminate\Auth\Passwords\PasswordBroker;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -48,15 +49,17 @@ final class EmailChange
     public function __construct(private readonly AuditLog $audit, private readonly WebSessions $browsers, private readonly AccountSessions $sessions) {}
 
     /**
-     * Starts a change to [$email] (the proof was checked already); answers `pending_email` and its expiry.
+     * Starts a change to [$email] (the proof was checked already); answers `pending_email` and its expiry. [$byTwoStep]:
+     * the proof was a two-step code of the account (on before the change): then the old address is told, without a
+     * restore link (tellOldAddress()).
      *
      * @return array{pending_email: string, pending_email_expires_at: string}
      */
-    public function request(User $user, mixed $email): array
+    public function request(User $user, mixed $email, bool $byTwoStep = false): array
     {
         $this->assertNotLocked($user);
         $email = $this->validated($user, $email);
-        if (User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [$email])->exists()) {
+        if (User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [$email])->exists() || self::isReserved($email, $user->id)) {
             throw new ApiError(422, 'email_taken', 'Another account uses that address.');
         }
         $this->forget($user);
@@ -70,7 +73,7 @@ final class EmailChange
         Cache::put(self::filamentKey($signature), true, $expires);
         $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
         Cache::put(self::key($user), ['email' => $email, 'signature' => $signature, 'expires_at' => $expires->getTimestamp(),
-            'hash' => self::hash($user, $code), 'tries' => 0], $expires);
+            'hash' => self::hash($user, $code), 'tries' => 0, 'two_step' => $byTwoStep], $expires);
 
         $user->notify(app(NoticeOfEmailChangeRequest::class, [
             'blockVerificationUrl' => $panel->getBlockEmailChangeVerificationUrl($user, $email, $signature),
@@ -103,7 +106,7 @@ final class EmailChange
     /**
      * The change waiting for its confirmation, or null: none, expired, blocked, or confirmed by the link.
      *
-     * @return array{email: string, signature: string, expires_at: int, hash: string, tries: int}|null
+     * @return array{email: string, signature: string, expires_at: int, hash: string, tries: int, two_step?: bool}|null
      */
     public function pending(User $user): ?array
     {
@@ -118,7 +121,7 @@ final class EmailChange
             return null;
         }
 
-        /** @var array{email: string, signature: string, expires_at: int, hash: string, tries: int} $held */
+        /** @var array{email: string, signature: string, expires_at: int, hash: string, tries: int, two_step?: bool} $held */
         return $held;
     }
 
@@ -146,7 +149,7 @@ final class EmailChange
     {
         $code = is_string($code) ? trim($code) : '';
         try {
-            $email = Cache::lock(self::key($user).':lock', 5)->block(3, function () use ($user, $code): string {
+            [$email, $byTwoStep] = Cache::lock(self::key($user).':lock', 5)->block(3, function () use ($user, $code): array {
                 $pending = $this->pending($user);
                 if ($pending === null) {
                     throw new ApiError(410, 'expired', 'This change has ended. Ask for it again.');
@@ -163,12 +166,12 @@ final class EmailChange
                 }
                 $this->forget($user);
 
-                return $pending['email'];
+                return [$pending['email'], (bool) ($pending['two_step'] ?? false)];
             });
         } catch (LockTimeoutException) {
             throw new ApiError(422, 'invalid_code', 'That code is wrong. Check the email sent to your new address.');
         }
-        if (User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [$email])->exists()) {
+        if (User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [$email])->exists() || self::isReserved($email, $user->id)) {
             throw new ApiError(422, 'email_taken', 'Another account uses that address.');
         }
         $old = $user->email;
@@ -176,90 +179,146 @@ final class EmailChange
         $user->forceFill(['email' => $email, 'remember_token' => Str::random(60)])->save();
         $user->markEmailAsVerified();
         $this->browsers->revokeOthers($user->id, null);
-        $this->tellOldAddress($user, $old);
+        $this->tellOldAddress($user, $old, $byTwoStep);
     }
 
     /**
-     * After a change (by an app's code or the console's link): the restore window opens, or stays as it is when one is
-     * open already, so it stays anchored to the address before the FIRST change and keeps its 7 days (a chain A→B→C
-     * still lets A undo it all). That address hears of it with a link that needs no sign-in (whoever changed it may
-     * hold the account now): restore() puts it back.
+     * After a change (by an app's code or the console's link). The address before it hears of it, and so does the new
+     * one. Unless the change was proven with the account's two-step code ([$byTwoStep]: on before the change, so the old
+     * mailbox alone could not have made it), a 7-day restore window opens, or stays as it is when one is open already:
+     * anchored to the address before the FIRST change, which stays reserved (nobody can be given it) and gets the
+     * "Put my address back" link that needs no sign-in (restore()). Proven with two-step, the old address is told to
+     * contact support instead, so a mailbox someone else reads cannot take the account back.
      */
-    public function tellOldAddress(User $user, string $old): void
+    public function tellOldAddress(User $user, string $old, bool $byTwoStep = false): void
     {
         $window = self::window($user);
+        if ($window === null && $byTwoStep) {
+            Mail::to($old)->queue(new EmailChangedMail(AccountRules::maskEmail($user->email), null, self::RESTORE_DAYS));
+
+            return;
+        }
         if ($window === null) {
             $window = ['to' => $old, 'changed_at' => now()->getTimestamp(), 'until' => now()->addDays(self::RESTORE_DAYS)->getTimestamp(), 'nonce' => Str::random(40)];
-            $user->forceFill(['email_restore' => $window])->saveQuietly();
+            $user->forceFill(['email_restore' => $window, 'email_restore_hash' => self::addressHash($old),
+                'email_restore_until' => Carbon::createFromTimestamp($window['until'])])->saveQuietly();
         }
         $until = Carbon::createFromTimestamp($window['until']);
         $url = URL::temporarySignedRoute('account.email.restore', $until, ['user' => $user->id, 'n' => $window['nonce']]);
         Mail::to($window['to'])->queue(new EmailChangedMail(AccountRules::maskEmail($user->email), $url, self::RESTORE_DAYS));
+        Mail::to($user->email)->queue(new EmailRestoreNoticeMail(EmailRestoreNoticeMail::LINK_SENT, AccountRules::maskEmail($window['to'])));
     }
 
     /**
-     * The open restore window of the person's address, or null (none, or its 7 days are over).
+     * The open restore window of the person's address, or null (none, used, or its 7 days are over).
      *
      * @return array{to: string, changed_at: int, until: int, nonce: string}|null
      */
     public static function window(User $user): ?array
     {
         $window = $user->email_restore;
-        if (! is_array($window) || ! is_string($window['to'] ?? null) || ! is_string($window['nonce'] ?? null) || (int) ($window['until'] ?? 0) <= now()->getTimestamp()) {
+        if (! is_array($window) || isset($window['restored_at']) || ! is_string($window['to'] ?? null) || ! is_string($window['nonce'] ?? null)
+            || (int) ($window['until'] ?? 0) <= now()->getTimestamp()) {
             return null;
         }
 
         return ['to' => $window['to'], 'changed_at' => (int) ($window['changed_at'] ?? 0), 'until' => (int) $window['until'], 'nonce' => $window['nonce']];
     }
 
-    /** `409 email_change_locked` while a restore window is open: the address cannot be changed again from the apps. */
-    public function assertNotLocked(User $user): void
+    /**
+     * Whether [$email] is reserved for another account's open restore window ([$exceptUserId]'s own does not count).
+     * Read from the indexed hash, so every sign-up and change can ask.
+     */
+    public static function isReserved(string $email, ?int $exceptUserId = null): bool
     {
-        $window = self::window($user);
-        if ($window !== null) {
-            $until = Carbon::createFromTimestamp($window['until']);
-
-            throw new ApiError(409, 'email_change_locked', 'Your email address was changed recently. It can be changed again after '.$until->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, Y').'.',
-                ['until' => $until->toAtomString()]);
+        try {
+            return User::query()->where('email_restore_hash', self::addressHash($email))->where('email_restore_until', '>', now())
+                ->when($exceptUserId !== null, fn ($q) => $q->whereKeyNot($exceptUserId))->exists();
+        } catch (QueryException) {
+            // A schema from before 2.0.0-l (the migration tests' older steps): nothing can be reserved there.
+            return false;
         }
     }
 
     /**
-     * The original address's link was used ([$nonce] is the open window's): the address goes back to it, confirmed,
-     * and whatever whoever changed it may hold is cut: the password stops working (a reset link goes to the address),
-     * two-step, passkeys and Google links added since the change go, and every device, browser, code and connected
-     * app is signed out. Nothing happens once the window is closed or used, or when another account has the address.
-     * Returns whether it was put back.
+     * `409 email_change_locked {"until"}`: the apps cannot change the address while its restore window is open, nor
+     * after a restore until the new password is chosen or 24 hours have passed, whichever is later.
+     */
+    public function assertNotLocked(User $user): void
+    {
+        $window = self::window($user);
+        $until = null;
+        if ($window !== null) {
+            $until = Carbon::createFromTimestamp($window['until']);
+        } elseif (is_array($user->email_restore) && isset($user->email_restore['restored_at'])) {
+            $lockUntil = Carbon::createFromTimestamp((int) ($user->email_restore['lock_until'] ?? 0));
+            if (($user->email_restore['awaiting_reset'] ?? false) === true || $lockUntil->isFuture()) {
+                $until = $lockUntil;
+            }
+        }
+        if ($until !== null) {
+            throw new ApiError(409, 'email_change_locked', 'Your email address was changed or put back recently. It can be changed again after '
+                .$until->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, Y').'.', ['until' => $until->toAtomString()]);
+        }
+    }
+
+    /** The new password after a restore was chosen (Laravel's PasswordReset): the lock ends at its 24 hours. */
+    public static function resetCompleted(User $user): void
+    {
+        if (is_array($user->email_restore) && ($user->email_restore['awaiting_reset'] ?? false) === true) {
+            $user->forceFill(['email_restore' => [...$user->email_restore, 'awaiting_reset' => false]])->saveQuietly();
+        }
+    }
+
+    /**
+     * The original address's link was used ([$nonce] is the open window's; once, under a lock of the account's row):
+     * the address goes back to it, confirmed, and every way in is reset, as anything may be the changer's: the password
+     * stops working (a reset link goes to the address), every passkey, the Google link and two-step go, and every
+     * device, browser, code and connected app is signed out. The owner secures the account again from the reset. The
+     * address the account had is told. Returns whether it was put back.
      */
     public function restore(User $user, string $nonce): bool
     {
-        $window = self::window($user);
-        if ($window === null || ! hash_equals($window['nonce'], $nonce)
-            || User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [Str::lower($window['to'])])->exists()) {
+        $done = DB::transaction(function () use ($user, $nonce): ?array {
+            $fresh = User::query()->whereKey($user->id)->lockForUpdate()->first();
+            $window = $fresh instanceof User ? self::window($fresh) : null;
+            if (! $fresh instanceof User || $window === null || ! hash_equals($window['nonce'], $nonce)
+                || User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [Str::lower($window['to'])])->exists()) {
+                return null;
+            }
+            $was = $fresh->email;
+            $fresh->forceFill([
+                'email' => $window['to'], 'password' => Str::password(64), 'has_password' => false, 'google_id' => null,
+                'app_authentication_secret' => null, 'app_authentication_recovery_codes' => null,
+                'email_restore' => ['to' => $window['to'], 'restored_at' => now()->getTimestamp(), 'lock_until' => now()->addDay()->getTimestamp(), 'awaiting_reset' => true],
+                'email_restore_hash' => null, 'email_restore_until' => null,
+            ])->save();
+            $fresh->markEmailAsVerified();
+            Passkey::query()->where('user_id', $fresh->id)->delete();
+
+            return [$fresh, $window, $was];
+        });
+        if ($done === null) {
             return false;
         }
-        $since = Carbon::createFromTimestamp($window['changed_at']);
-        $this->forget($user);
-        DB::transaction(function () use ($user, $window, $since): void {
-            $user->forceFill(['email' => $window['to'], 'email_restore' => null, 'password' => Str::password(64), 'has_password' => false])->save();
-            $user->markEmailAsVerified();
-            // Ways in added since the change, by whoever made it.
-            if ($user->hasTwoFactor() && AuditEvent::query()->where('user_id', $user->id)->where('event', 'mfa_enabled')->where('created_at', '>=', $since)->exists()) {
-                $user->forceFill(['app_authentication_secret' => null, 'app_authentication_recovery_codes' => null])->save();
-            }
-            Passkey::query()->where('user_id', $user->id)->where('created_at', '>=', $since)->delete();
-            if ($user->google_id !== null && AuditEvent::query()->where('user_id', $user->id)->where('event', 'google_linked')->where('created_at', '>=', $since)->exists()) {
-                $user->forceFill(['google_id' => null])->save();
-            }
-        });
-        $this->sessions->signOutEverywhere($user);
+        [$fresh, $window, $was] = $done;
+        $this->forget($fresh);
+        $this->sessions->signOutEverywhere($fresh);
         $broker = Password::broker();
         if ($broker instanceof PasswordBroker) {
-            $user->sendPasswordResetNotification($broker->createToken($user));
+            $fresh->sendPasswordResetNotification($broker->createToken($fresh));
         }
-        $this->audit->record('email_change_reverted', $user->id, $user, 'Email put back to '.AccountRules::maskEmail($window['to']));
+        Mail::to($was)->queue(new EmailRestoreNoticeMail(EmailRestoreNoticeMail::RESTORED, AccountRules::maskEmail($window['to'])));
+        $this->audit->record('email_change_reverted', $fresh->id, $fresh, 'Email put back to '.AccountRules::maskEmail($window['to']));
+        $user->setRawAttributes($fresh->getAttributes(), true);
 
         return true;
+    }
+
+    /** A keyed hash of an address (lower case), for the reservation and for links that name no address. */
+    public static function addressHash(string $email): string
+    {
+        return hash_hmac('sha256', 'email-restore|'.Str::lower(trim($email)), (string) config('app.key'));
     }
 
     /** DELETE /api/account/email: ends a change waiting for its confirmation; nothing to do is not an error. */

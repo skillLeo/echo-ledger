@@ -6,6 +6,7 @@ use App\Mail\DeletionCancelledMail;
 use App\Mail\DeletionScheduledMail;
 use App\Mail\EmailChangedMail;
 use App\Mail\EmailCodeMail;
+use App\Mail\EmailRestoreNoticeMail;
 use App\Mail\ExportReadyMail;
 use App\Mail\InvitationMail;
 use App\Mail\LoginAlertMail;
@@ -48,6 +49,9 @@ function everyMail(): array
         'passkey added' => new SecurityChangeMail(SecurityChangeMail::PASSKEY_ADDED, 'S25 Ultra', "$u/app/settings/security", 'Phone'),
         'recovery codes' => new SecurityChangeMail(SecurityChangeMail::RECOVERY_CODES, 'S25 Ultra', "$u/app/settings/security"),
         'email changed' => new EmailChangedMail('n…@example.test', "$u/account/email/restore/1?signature=x", 7),
+        'email changed, two-step' => new EmailChangedMail('n…@example.test', null, 7),
+        'restore link sent' => new EmailRestoreNoticeMail(EmailRestoreNoticeMail::LINK_SENT, 'f…@example.test'),
+        'restored' => new EmailRestoreNoticeMail(EmailRestoreNoticeMail::RESTORED, 'f…@example.test'),
         'password changed' => new SecurityChangeMail(SecurityChangeMail::PASSWORD_CHANGED, 'S25 Ultra', "$u/app/settings/security"),
         'passkey removed' => new SecurityChangeMail(SecurityChangeMail::PASSKEY_REMOVED, 'S25 Ultra', "$u/app/settings/security", 'Phone'),
         'two-step off' => new SecurityChangeMail(SecurityChangeMail::TWO_FACTOR_OFF, 'S25 Ultra', "$u/app/settings/security"),

@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Mail\ResetPasswordMail;
 use App\Mail\VerifyEmailMail;
+use App\Services\Accounts\EmailChange;
 use App\Services\Staff\StaffAccess;
 use Database\Factories\UserFactory;
 use Filament\Auth\MultiFactor\App\Concerns\InteractsWithAppAuthentication;
@@ -26,6 +27,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 use Laravel\Passport\Contracts\OAuthenticatable;
 use Laravel\Passport\HasApiTokens;
 
@@ -61,6 +63,8 @@ use Laravel\Passport\HasApiTokens;
  * @property bool $ui_classic the person's "Switch back to classic" (since 2.0.0-a: every ui_v2.* interface flag off)
  * @property string|null $ui_design since 2.0.0-g: classic | v2 | null (never chose); ui_classic is kept equal to "classic"
  * @property int|null $staff_role_id since v1.6 (P2.5): the person's staff role on the admin panel; null = not staff (the super admin needs none)
+ * @property string|null $email_restore_hash the reserved address of the open window, hashed (EmailChange::addressHash)
+ * @property Carbon|null $email_restore_until until when it is reserved
  * @property array<string, mixed>|null $email_restore since 2.0.0-l: the open "Put my address back" window (EmailChange), encrypted
  * @property int|null $avatar_version since 2.0.0-l: the profile picture's version (App\Services\Accounts\Avatars); null = initials
  * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
@@ -78,6 +82,13 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     protected static function booted(): void
     {
         // What was confirmed is the old address (the profile page changes it at once).
+        // Since the security review of 2.0.0-l: an address reserved for another account's restore window is nobody's,
+        // however it would be given (sign-up, a member added, staff, the console's change).
+        static::saving(function (User $user): void {
+            if (($user->isDirty('email') || ! $user->exists) && EmailChange::isReserved((string) $user->email, $user->exists ? $user->id : null)) {
+                throw ValidationException::withMessages(['email' => __('That address is not available. Use another one.')]);
+            }
+        });
         static::updating(function (User $user): void {
             if ($user->isDirty('email') && ! $user->isDirty('email_verified_at')) {
                 $user->email_verified_at = null;
@@ -184,6 +195,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'has_password' => 'boolean',
             'avatar_version' => 'integer',
             'email_restore' => 'encrypted:array',
+            'email_restore_until' => 'datetime',
             'entitlement_overrides' => 'array',
             'transcription_key' => 'encrypted',
             'transcription_key_checked_at' => 'datetime',

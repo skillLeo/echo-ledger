@@ -8,14 +8,14 @@ use App\Support\Brand;
 
 /**
  * To the old address once an email change is done (since the security review of 2.0.0-l): the new address, masked,
- * and a link that needs no sign-in to put the old one back and sign out everywhere. Encrypted while queued, as the
- * link is a key.
+ * and a link that needs no sign-in to put the old one back and reset every way in; without the link (a change proven
+ * with the account's two-step code) "contact support". Encrypted while queued, as the link is a key.
  */
 final class EmailChangedMail extends AccountMail
 {
     public function __construct(
         public readonly string $maskedNew,
-        public readonly string $restoreUrl,
+        public readonly ?string $restoreUrl,
         public readonly int $days,
     ) {}
 

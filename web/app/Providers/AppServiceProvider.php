@@ -22,6 +22,7 @@ use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\Accounts\AccountSessions;
+use App\Services\Accounts\EmailChange;
 use App\Services\Accounts\KnownBrowsers;
 use App\Services\ActivityFeed;
 use App\Services\Assist\AssistAskAi;
@@ -194,6 +195,8 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(PasswordReset::class, function (PasswordReset $event): void {
             if ($event->user instanceof User) {
                 app(AccountSessions::class)->signOutEverywhere($event->user);
+                // Since the security review of 2.0.0-l: the reset after "Put my address back" ends its lock (at 24 hours).
+                EmailChange::resetCompleted($event->user);
             }
         });
         // The account emails carry text people typed (a note, a title, a workspace or device name): with secured

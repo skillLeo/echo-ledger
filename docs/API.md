@@ -1927,17 +1927,21 @@ show initials), `"has_password": true`, `"pending_email": "new@example.com" | nu
 2. `POST /api/account/email/confirm {"code"}` → `200`, with the account carrying the new `email` and
    `pending_email: null`.
    - The change is audited, other browsers are signed out and "remember me" is renewed.
-   - The change opens a 7-day **restore window**, anchored to the address before the first change. That address gets
-     "Your email address was changed" with **Put my address back**: a signed link for the whole window that needs no
-     sign-in (whoever changed it may hold the account). It opens a page whose button puts the address back
-     (confirmed), makes the password stop working and emails a reset link there, removes two-step, passkeys and Google
-     links added since the change, and signs out everywhere (audited as `email_change_reverted`). It works once, and
-     not when another account has the address meanwhile. The console's own link confirmation does the same; a change
-     made in the console during the window keeps the window and its first address.
-   - While the window is open, `POST /api/account/email` answers `409 email_change_locked {"until"}` before any proof,
-     so a chain of changes cannot move the restore link to an address the changer controls.
-   - Errors: `422 invalid_code` (the fifth wrong code ends the change), `422 email_taken` when the address was taken
-     meanwhile, and `410 expired` when the change has expired, ended or was blocked.
+   - The change opens a 7-day **restore window**, anchored to the address before the first change (A). A change made
+     in the console during the window keeps the window and A. A gets "Your email address was changed" with **Put my
+     address back**: a signed link for the whole window that needs no sign-in (whoever changed it may hold the
+     account). The new address (B) is told that A got it. The link opens a page whose button puts A back (confirmed)
+     and **resets every way in**: every passkey, the Google link and two-step (with its recovery codes) are removed,
+     the password stops working and a reset link goes to A, and everything is signed out (audited as
+     `email_change_reverted`). B is told of the restore too. The link works once (under a lock of the account's row).
+   - **A is reserved during the window:** no account can be given it or changed to it (sign-up, a member added with a
+     password, staff, the console's change, an app's change answer `email_not_allowed`, `email_taken` or a field error),
+     so nothing can block the restore.
+   - **A change proven with the account's two-step code** (on before the change) opens no window and sends no link: A
+     is told of the change and to contact support, so a mailbox someone else reads cannot take the account back.
+   - While the window is open, and after a restore until the new password is chosen or 24 hours have passed (whichever
+     is later), `POST /api/account/email` answers `409 email_change_locked {"until"}` before any proof, so a chain of
+     changes cannot move the restore link to an address the changer controls.
 3. `DELETE /api/account/email` → `204` cancels a pending change.
 4. Noticing a confirmation made by link in a browser: there is no push for it. While the "Check your new
    address" screen is open, the app reads `GET /api/account` every 10 s until `pending_email` is `null` or the change
