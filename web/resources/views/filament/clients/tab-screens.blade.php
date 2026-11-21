@@ -6,8 +6,8 @@
     $shots = [];
     foreach ($groups as $group) {
         foreach ($group['screens'] as $screen) {
-            $shots[] = ['label' => 'Screen '.$screen['index'].' · '.$screen['clock'], 'image' => $screen['image'], 'description' => $screen['description'],
-                'url' => $screen['url'], 'title' => $group['title'], 'clock' => $screen['clock']];
+            $shots[] = ['label' => __('Screen :n', ['n' => $screen['index']]).' · '.$screen['clock'], 'image' => $screen['image'], 'description' => $screen['description'],
+                'url' => $screen['url'], 'title' => $group['title'], 'clock' => $screen['clock'], 'play' => __('Play from :clock', ['clock' => $screen['clock']])];
         }
     }
 @endphp
@@ -40,16 +40,16 @@
     {{-- Since v1.6.2: without screen moments in the plan, the plan's badge and the upgrade sheet (screens kept before stay). --}}
     @if ($screensLocked ?? false)
         <div class="el-card" role="note" data-screens-locked style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3)">
-            <p style="margin: 0; font-size: 14px">{!! $screensBadge?->toHtml() !!} Screen moments are not in your plan: what was on the screen during a meeting, next to the words that were said.</p>
-            <button type="button" class="el-text-btn" wire:click="mountAction('upgradeScreens')">See plans</button>
+            <p style="margin: 0; font-size: 14px">{!! $screensBadge?->toHtml() !!} {{ __('Screen moments are not in your plan: what was on the screen during a meeting, next to the words that were said.') }}</p>
+            <button type="button" class="el-text-btn" wire:click="mountAction('upgradeScreens')">{{ __('See plans') }}</button>
         </div>
     @endif
 
     @if ($groups === [])
         <div class="el-empty">
             <span class="el-empty-icon">@svg('heroicon-o-computer-desktop', ['aria-hidden' => 'true'])</span>
-            <p class="el-empty-title">No screens yet</p>
-            <p class="el-empty-text">When a meeting filed under {{ $client->name }} shares a screen, the desktop app keeps what was shown at each moment, and it shows here.</p>
+            <p class="el-empty-title">{{ __('No screens yet') }}</p>
+            <p class="el-empty-text">{{ __('When a meeting filed under :name shares a screen, the desktop app keeps what was shown at each moment, and it shows here.', ['name' => $client->name]) }}</p>
         </div>
     @else
         @php($k = 0)
@@ -57,14 +57,14 @@
             <section aria-label="{{ $group['title'] }}" wire:key="screens-{{ $loop->index }}">
                 <div class="el-group-head">
                     <h3 class="el-card-title"><a href="{{ $group['url'] }}" wire:navigate dir="auto">{{ $group['title'] }}</a></h3>
-                    <span class="el-group-when">{{ $group['when'] }} · {{ count($group['screens']) === 1 ? '1 screen' : count($group['screens']).' screens' }}</span>
+                    <span class="el-group-when">{{ $group['when'] }} · {{ count($group['screens']) === 1 ? __(':n screen', ['n' => 1]) : __(':n screens', ['n' => count($group['screens'])]) }}</span>
                 </div>
                 <div class="el-screen-grid">
                     @foreach ($group['screens'] as $screen)
-                        <button type="button" class="el-screen" x-on:click="open({{ $k }})" aria-label="Open Screen {{ $screen['index'] }} at {{ $screen['clock'] }}">
+                        <button type="button" class="el-screen" x-on:click="open({{ $k }})" aria-label="{{ __('Open Screen :n at :clock', ['n' => $screen['index'], 'clock' => $screen['clock']]) }}">
                             <img src="{{ $screen['thumb'] }}" alt="" loading="lazy">
                             <span class="el-screen-cap">
-                                <strong>Screen {{ $screen['index'] }} · {{ $screen['clock'] }}</strong>
+                                <strong>{{ __('Screen :n', ['n' => $screen['index']]) }} · {{ $screen['clock'] }}</strong>
                                 @if ($screen['description'] !== null)<span>{{ $screen['description'] }}</span>@endif
                             </span>
                         </button>
@@ -74,10 +74,10 @@
             </section>
         @endforeach
         @if (count($groups) >= $limit)
-            <p class="el-empty-text">The screens of the newest {{ $limit }} recordings. Older ones are on each recording's page.</p>
+            <p class="el-empty-text">{{ __('The screens of the newest :n recordings. Older ones are on each recording\'s page.', ['n' => $limit]) }}</p>
         @endif
 
-        <div class="el-shot" x-show="shot !== null" x-cloak role="dialog" aria-modal="true" aria-label="Screen" x-on:click.self="shot = null">
+        <div class="el-shot" x-show="shot !== null" x-cloak role="dialog" aria-modal="true" aria-label="{{ __('Screen') }}" x-on:click.self="shot = null">
             <template x-if="shot !== null && shots[shot]">
                 <figure class="el-shot-box">
                     <img :src="shots[shot].image" :alt="shots[shot].label + (shots[shot].description ? ': ' + shots[shot].description : '')">
@@ -86,13 +86,13 @@
                         <span x-show="shots[shot].description" x-text="shots[shot].description"></span>
                     </figcaption>
                     <div class="el-shot-tools">
-                        <x-filament::button color="gray" size="sm" x-bind:disabled="shot === 0" x-on:click="move(-1)">Previous</x-filament::button>
-                        <x-filament::button color="gray" size="sm" x-bind:disabled="shot === shots.length - 1" x-on:click="move(1)">Next</x-filament::button>
+                        <x-filament::button color="gray" size="sm" x-bind:disabled="shot === 0" x-on:click="move(-1)">{{ __('Previous') }}</x-filament::button>
+                        <x-filament::button color="gray" size="sm" x-bind:disabled="shot === shots.length - 1" x-on:click="move(1)">{{ __('Next') }}</x-filament::button>
                         <x-filament::button tag="a" color="gray" size="sm" icon="heroicon-o-play" x-bind:href="shots[shot].url">
-                            <span x-text="'Play from ' + shots[shot].clock"></span>
+                            <span x-text="shots[shot].play"></span>
                         </x-filament::button>
                         <span style="flex: 1"></span>
-                        <x-filament::button color="gray" size="sm" x-ref="close" x-on:click="shot = null">Close</x-filament::button>
+                        <x-filament::button color="gray" size="sm" x-ref="close" x-on:click="shot = null">{{ __('Close') }}</x-filament::button>
                     </div>
                 </figure>
             </template>
