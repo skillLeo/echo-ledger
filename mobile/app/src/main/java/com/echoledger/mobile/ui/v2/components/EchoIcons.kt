@@ -32,10 +32,12 @@ import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.FolderShared
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Forward10
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Image
@@ -46,6 +48,7 @@ import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardVoice
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Laptop
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Mic
@@ -62,6 +65,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.Replay10
 import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.material.icons.outlined.Search
@@ -73,6 +77,7 @@ import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Spellcheck
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.StopScreenShare
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Support
@@ -205,4 +210,25 @@ object EchoIcons {
 
     /** A recording made on the web (the source mark's device badge). */
     val DeviceWeb: ImageVector get() = Icons.Outlined.Language
+
+    /** The Inbox smart folder: recordings in no project. */
+    val Inbox: ImageVector get() = Icons.Outlined.Inbox
+
+    /** The Imported smart folder. */
+    val Imported: ImageVector get() = Icons.Outlined.FileDownload
+
+    /** Shared with me: what teammates sent. */
+    val SharedWithMe: ImageVector get() = Icons.Outlined.FolderShared
+
+    /** A request link (Request files). */
+    val Link: ImageVector get() = Icons.Outlined.Link
+
+    /** A group meeting app (Teams). */
+    val Groups: ImageVector get() = Icons.Outlined.Groups
+
+    /** Shrink the recording pill to a dot. */
+    val Shrink: ImageVector get() = Icons.Outlined.RemoveCircleOutline
+
+    /** Hide EchoLedger's floating windows (before a screen share). */
+    val HideWindows: ImageVector get() = Icons.Outlined.StopScreenShare
 }

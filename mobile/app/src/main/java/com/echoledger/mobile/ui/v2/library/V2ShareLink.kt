@@ -50,7 +50,7 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 
 /** How long a new link works: Never, a day, a week, a month (classic's [LinkExpiry.CHOICES]). */
-private val LINK_DAYS = listOf(
+internal val LINK_DAYS = listOf(
     0 to R.string.v2_share_never,
     1 to R.string.v2_share_1_day,
     7 to R.string.v2_share_7_days,
@@ -83,7 +83,7 @@ fun sentMeta(res: Resources, item: SentItemDto, locale: Locale): String = listOf
 ).joinToString(" · ")
 
 /** "29 Nov 2026" in the screen's locale, with 0-9 digits; the server's text when it is not a date. */
-private fun shareDate(at: String, locale: Locale): String = runCatching {
+internal fun shareDate(at: String, locale: Locale): String = runCatching {
     LibraryModel.latinDigits(OffsetDateTime.parse(at).format(DateTimeFormatter.ofPattern("d MMM yyyy", locale)))
 }.getOrElse { at.take(10) }
 

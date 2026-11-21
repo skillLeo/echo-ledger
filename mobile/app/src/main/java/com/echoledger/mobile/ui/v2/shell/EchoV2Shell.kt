@@ -88,11 +88,25 @@ sealed interface V2Route {
     data class ClassicPage(val id: String) : V2Route
     data class Live(val entry: LiveEntry) : V2Route
 
-    /** A recording; Back goes to [from] (the tabs, or the project page it was opened from); [atMs] plays from there. */
-    data class Recording(val id: String, val from: V2Route = Tabs, val atMs: Long? = null) : V2Route
+    /**
+     * A recording; Back goes to [from] (the tabs, or the project page it was opened from); [atMs] plays from there.
+     * [item] is one that is not in this phone's Library (a teammate's, from Shared with me).
+     */
+    data class Recording(
+        val id: String,
+        val from: V2Route = Tabs,
+        val atMs: Long? = null,
+        val item: com.echoledger.mobile.data.LibraryItem? = null
+    ) : V2Route
     data object Projects : V2Route
     data class Project(val id: String) : V2Route
     data object ClassicProjects : V2Route
+
+    /** A smart folder of Projects (Inbox, an app, Imported, Shared with me); Back goes to [from]. */
+    data class Folder(val key: String, val from: V2Route = Tabs) : V2Route
+
+    /** Request files; Back goes to [from]. */
+    data class Requests(val from: V2Route = Tabs) : V2Route
 }
 
 /**
@@ -233,11 +247,25 @@ private fun ShellBody(
     val readiness = remember(setup) { Readiness.evaluate(setup.ready) }
     // The bell's server part: unread problems as the last Activity answer had them.
     LaunchedEffect(Unit) { vm.activity()?.let { serverUnread = ActivityBadge.server(it.data, vm.missed.value) } }
+    // A project, Shared with me or request link opened in the app lands on the new pages while Projects is v2.
+    val projectsTarget by vm.projectsTarget.collectAsState()
+    LaunchedEffect(projectsTarget) {
+        val t = projectsTarget ?: return@LaunchedEffect
+        if (!flags.isOn(UiFlags.ASK)) return@LaunchedEffect
+        route = when (t) {
+            is com.echoledger.mobile.ui.ProjectsTarget.Project -> V2Route.Project(t.id)
+            is com.echoledger.mobile.ui.ProjectsTarget.Folder -> V2Route.Folder(t.key)
+            com.echoledger.mobile.ui.ProjectsTarget.Requests -> V2Route.Requests()
+        }
+        vm.openInProjects(null)
+    }
     BackHandler(enabled = route != V2Route.Tabs) {
         route = when (val r = route) {
             V2Route.ClassicSettings -> V2Route.Settings
             is V2Route.Recording -> r.from
             is V2Route.Project -> V2Route.Projects
+            is V2Route.Folder -> r.from
+            is V2Route.Requests -> r.from
             V2Route.ClassicProjects -> if (flags.isOn(UiFlags.ASK)) V2Route.Tabs else V2Route.Projects
             else -> V2Route.Tabs
         }
@@ -358,12 +386,28 @@ private fun ShellBody(
                     V2Route.Projects -> V2WorkspacesScreen(
                         vm,
                         onOpen = { route = V2Route.Project(it) },
-                        onSharedAndImported = { route = V2Route.ClassicProjects },
+                        onFolder = { route = V2Route.Folder(it.key, from = V2Route.Projects) },
+                        onRequests = { route = V2Route.Requests(from = V2Route.Projects) },
                         onBack = { route = V2Route.Tabs }
                     )
 
-                    // Shared with me, imported and requests stay on today's Projects page.
                     V2Route.ClassicProjects -> classic.ask()
+
+                    is V2Route.Folder -> {
+                        val folder = com.echoledger.mobile.ui.SmartFolder.of(r.key)
+                        if (folder == null) {
+                            LaunchedEffect(r.key) { route = r.from }
+                        } else {
+                            com.echoledger.mobile.ui.v2.workspace.V2FolderPage(
+                                vm,
+                                folder,
+                                onBack = { route = r.from },
+                                onOpenRecording = { item -> route = V2Route.Recording(item.id, from = r, item = item) }
+                            )
+                        }
+                    }
+
+                    is V2Route.Requests -> com.echoledger.mobile.ui.v2.workspace.V2RequestsPage(vm, onBack = { route = r.from })
 
                     is V2Route.Project -> V2WorkspaceScreen(
                         vm,
@@ -380,7 +424,7 @@ private fun ShellBody(
                     V2Route.Trash -> V2TrashScreen(vm, configKeepHours = settings.trashKeepHours, onBack = { route = V2Route.Tabs })
 
                     is V2Route.Recording -> {
-                        val item = library.firstOrNull { it.id == r.id }
+                        val item = library.firstOrNull { it.id == r.id } ?: r.item
                         if (item == null) {
                             LaunchedEffect(r.id) { route = V2Route.Tabs }
                         } else {
@@ -496,7 +540,8 @@ private fun ShellBody(
                             V2WorkspacesScreen(
                                 vm,
                                 onOpen = { route = V2Route.Project(it) },
-                                onSharedAndImported = { route = V2Route.ClassicProjects },
+                                onFolder = { route = V2Route.Folder(it.key) },
+                                onRequests = { route = V2Route.Requests() },
                                 onBack = null
                             )
                         } else {

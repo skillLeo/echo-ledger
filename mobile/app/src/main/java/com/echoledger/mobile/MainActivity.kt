@@ -753,6 +753,30 @@ class MainActivity : FragmentActivity() {
 
                         !settings.paired -> PairingScreen(vm)
 
+                        // The new design's page for the notes when its Library is on (parity.csv PH-OTH-038).
+                        sharedNotes != null && shellOn && flags.library ->
+                            com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                                com.echoledger.mobile.ui.v2.live.V2SharedNotesScreen(
+                                    vm,
+                                    sharedNotes.orEmpty().split(',').filter { it.isNotBlank() },
+                                    onLeave = {
+                                        sharedNotes = null
+                                        showItem(null)
+                                        tab = TAB_LIBRARY
+                                    },
+                                    sourceApp = sharedFrom?.let { pkg ->
+                                        runCatching {
+                                            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                                        }.getOrNull()
+                                    },
+                                    onBackToSource = {
+                                        sharedNotes = null
+                                        tab = TAB_LIBRARY
+                                        moveTaskToBack(true)
+                                    }
+                                )
+                            }
+
                         sharedNotes != null -> SharedNotesScreen(
                             vm,
                             sharedNotes.orEmpty().split(',').filter {

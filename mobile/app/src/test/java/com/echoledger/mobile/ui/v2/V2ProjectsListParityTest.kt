@@ -43,7 +43,7 @@ class V2ProjectsListParityTest : ScreenTest() {
         val opened = mutableListOf<String>()
         show {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
-                V2WorkspacesContent(projects, library, onOpen = { opened += it }, onSharedAndImported = {}, onNew = {}, onBack = {})
+                V2WorkspacesContent(projects, library, onOpen = { opened += it }, onNew = {}, onBack = {})
             }
         }
         val day = newest.format(DateTimeFormatter.ofPattern("MMM d", java.util.Locale.ENGLISH)) +
