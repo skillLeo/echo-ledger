@@ -1083,6 +1083,25 @@ async fn the_bearer_token_is_not_forwarded_to_a_different_origin_on_redirect() {
     );
 }
 
+#[tokio::test]
+async fn a_picture_link_that_redirects_is_refused_and_nothing_is_fetched_from_elsewhere() {
+    let picture = vec![0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3];
+    let served = Reply { status: 200, headers: vec![("Content-Type".into(), "image/jpeg".into())], body: picture.clone() };
+    let elsewhere = MockServer::start(Router::new().fixed("GET", "/evil.jpg", served.clone()));
+    let target = format!("{}/evil.jpg", elsewhere.base_url());
+    let origin = MockServer::start(
+        Router::new()
+            .route("GET", "/api/avatars/1/1795276846", move |_, _| Action::Reply(Reply::empty(302).header("Location", &target)))
+            .fixed("GET", "/api/avatars/2/1795276846", served),
+    );
+    let api = client(&origin);
+    let redirected = api.avatar_bytes(&format!("{}/api/avatars/1/1795276846?signature=a", origin.base_url())).await;
+    assert!(matches!(redirected, Ok(None)), "{redirected:?}");
+    assert!(elsewhere.requests().is_empty(), "the redirect was followed");
+    let direct = api.avatar_bytes(&format!("{}/api/avatars/2/1795276846?signature=a", origin.base_url())).await.unwrap();
+    assert_eq!(direct, Some(picture));
+}
+
 // ---- Save audio ------------------------------------------------------------------------------------------------
 
 #[tokio::test]

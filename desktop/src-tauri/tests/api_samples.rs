@@ -48,6 +48,20 @@ fn the_desktop_reads_every_real_answer_it_has_a_model_for() {
 }
 
 #[test]
+fn the_account_carries_its_picture_password_and_pending_email_since_2_0_0_l() {
+    let account: AccountDto = serde_json::from_str(&sample("account")).unwrap();
+    assert_eq!(account.has_password, Some(true));
+    assert_eq!((account.avatar_url.as_deref(), account.avatar_version, account.pending_email.as_deref()), (None, None, None));
+    assert_eq!(account.passkeys_available, Some(true));
+    let avatar: serde_json::Value = serde_json::from_str(&sample("account_avatar")).unwrap();
+    assert!(avatar["avatar_version"].as_u64().is_some() && avatar["avatar_url"].as_str().is_some());
+    let options: desktop_lib::net::models::AuthOptions = serde_json::from_str(&sample("auth_options")).unwrap();
+    assert_eq!(options.password_rules.map(|r| r.min), Some(12));
+    let two_step: serde_json::Value = serde_json::from_str(&sample("account_two_factor")).unwrap();
+    assert!(desktop_lib::my_account::qr_rows(two_step["otpauth_uri"].as_str().unwrap()).is_some());
+}
+
+#[test]
 fn the_account_names_staff_and_lists_the_workspaces_as_the_server_sends_them() {
     // v1.6 (P4): the switcher's list and the avatar menu's Admin panel come from this answer.
     let account: desktop_lib::net::models::AccountDto = serde_json::from_str(&sample("account")).expect("account.json");
