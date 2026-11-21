@@ -63,7 +63,9 @@ final class AccountProfileController extends Controller
     public function email(Request $request, EmailChange $change): JsonResponse
     {
         $user = $this->owner($request);
-        // The address first, so a one-time code is not used up by a mistyped address.
+        // A change made in the last 7 days locks it (its restore window), then the address, so a one-time code is not
+        // used up by either.
+        $change->assertNotLocked($user);
         $email = $change->validated($user, $request->input('email'));
         $this->proof->check($user, $request->only(['password', 'otp', 'email_code']));
 

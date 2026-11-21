@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Mail\EmailChangedMail;
 use App\Mail\EmailCodeMail;
+use App\Mail\ResetPasswordMail;
 use App\Mail\SecurityChangeMail;
 use App\Models\AuditEvent;
 use App\Models\ConnectedApp;
@@ -48,11 +49,14 @@ function reviewChangeEmail(object $test, string $token, string $to = 'new@exampl
     return (string) Mail::queued(EmailChangedMail::class)->last()->restoreUrl;
 }
 
-describe('the old address can undo an email change (major 1)', function () {
-    it('mails the old address a no-sign-in link that puts it back and signs out everywhere', function () {
+describe('the old address can undo an email change (major 1, and the review of the restore link)', function () {
+    it('mails the old address a no-sign-in link that puts it back and cuts what the changer may hold', function () {
         $user = Fx::user(['email' => 'farah@example.test']);
         [, $token] = $this->enroll($user);
         $remember = $user->fresh()->remember_token;
+        $this->travel(1)->minutes();
+        $old = Passkey::query()->create(['user_id' => $user->id, 'name' => 'Mine from before', 'credential_id' => 'b2xk', 'credential' => '{}']);
+        $this->travel(1)->minutes();
 
         $url = reviewChangeEmail($this, $token);
         $mail = Mail::queued(EmailChangedMail::class)->last();
@@ -60,47 +64,82 @@ describe('the old address can undo an email change (major 1)', function () {
             ->and($mail->render())->toContain('Put my address back')->not->toContain('new@example.test')
             ->and($user->fresh()->remember_token)->not->toBe($remember);
 
+        // Whoever changed it adds their own ways in: two-step, a passkey, Google.
+        $this->travel(1)->minutes();
+        $user = $user->fresh();
+        accountsEnrolTotp($user);
+        $theirs = Passkey::query()->create(['user_id' => $user->id, 'name' => 'Theirs', 'credential_id' => 'dGhlaXJz', 'credential' => '{}']);
+        $user->forceFill(['google_id' => 'attacker-sub'])->save();
+        AuditEvent::query()->create(['user_id' => $user->id, 'event' => 'google_linked', 'actor' => 'web', 'summary' => 'Google account linked']);
+
         // Opening the link (a mail scanner does) changes nothing; the button does, without a sign-in.
         app('auth')->forgetGuards();
         $this->get($url)->assertOk()->assertSee('Put it back and sign out everywhere');
         expect($user->fresh()->email)->toBe('new@example.test');
         $this->post($url)->assertOk()->assertSee('Your address is back');
 
-        expect($user->fresh()->email)->toBe('farah@example.test')->and($user->fresh()->hasVerifiedEmail())->toBeTrue()
-            ->and(AuditEvent::query()->where('event', 'email_change_undone')->where('user_id', $user->id)->exists())->toBeTrue()
+        $user = $user->fresh();
+        expect($user->email)->toBe('farah@example.test')->and($user->hasVerifiedEmail())->toBeTrue()
+            ->and($user->has_password)->toBeFalse()->and(Hash::check('password', $user->password))->toBeFalse()
+            ->and($user->hasTwoFactor())->toBeFalse()->and($user->google_id)->toBeNull()
+            ->and(Passkey::query()->find($theirs->id))->toBeNull()->and(Passkey::query()->find($old->id))->not->toBeNull()
+            ->and($user->email_restore)->toBeNull()
+            ->and(AuditEvent::query()->where('event', 'email_change_reverted')->where('user_id', $user->id)->exists())->toBeTrue()
             ->and(AuditEvent::query()->where('event', 'signed_out_everywhere')->where('user_id', $user->id)->exists())->toBeTrue();
+        Mail::assertQueued(ResetPasswordMail::class, fn ($m): bool => $m->hasTo('farah@example.test'));
         $this->asToken($token)->getJson('/api/account')->assertUnauthorized();
 
         // Once only.
         $this->post($url)->assertStatus(410);
     });
 
-    it('refuses a changed, expired or reused link, and one after the address changed again', function () {
+    it('locks further changes from the apps for the window, and keeps the link anchored to the first address', function () {
         $user = Fx::user(['email' => 'farah@example.test']);
         [, $token] = $this->enroll($user);
         $url = reviewChangeEmail($this, $token);
-        app('auth')->forgetGuards();
 
-        $this->post(str_replace('to=', 'to=x', $url))->assertForbidden();
-        $this->travel(61)->minutes();
-        $second = reviewChangeEmail($this, $token, 'third@example.test');
-        app('auth')->forgetGuards();
-        // The first link was for the address before; the address changed again since.
-        $this->post($url)->assertStatus(410);
-        expect($user->fresh()->email)->toBe('third@example.test');
+        // The chain A→B→C is refused from the apps: 409 email_change_locked with until, before any proof is used.
+        $this->travel(2)->hours();
+        $locked = $this->asToken($token)->postJson('/api/account/email', ['email' => 'third@example.test', 'password' => 'password'])->assertStatus(409);
+        expect($locked->json('code'))->toBe('email_change_locked')
+            ->and($locked->json('until'))->toBe(now()->subHours(2)->addDays(7)->toAtomString());
+        expect($user->fresh()->email)->toBe('new@example.test');
 
-        $this->travel(8)->days();
-        $this->post($second)->assertForbidden();
-        expect($user->fresh()->email)->toBe('third@example.test');
+        // A change by the console's link meanwhile keeps the window: the link goes to the FIRST address again.
+        $user = $user->fresh();
+        app(EmailChange::class)->tellOldAddress($user->forceFill(['email' => 'via-console@example.test']), 'new@example.test');
+        $user->save();
+        Mail::assertQueued(EmailChangedMail::class, fn (EmailChangedMail $m): bool => $m->hasTo('farah@example.test') && $m->restoreUrl === $url);
+        Mail::assertNotQueued(EmailChangedMail::class, fn (EmailChangedMail $m): bool => $m->hasTo('new@example.test'));
+
+        // The first link still works for the whole window, and puts back the first address.
+        $this->travel(6)->days();
+        app('auth')->forgetGuards();
+        $this->post($url)->assertOk();
+        expect($user->fresh()->email)->toBe('farah@example.test');
     });
 
-    it('puts nothing back over another account that took the old address meanwhile', function () {
+    it('opens the apps again and ends the link once the window is over', function () {
         $user = Fx::user(['email' => 'farah@example.test']);
         [, $token] = $this->enroll($user);
         $url = reviewChangeEmail($this, $token);
-        Fx::user(['email' => 'farah@example.test']);
+
+        $this->travel(7)->days();
+        $this->travel(2)->minutes();
+        app('auth')->forgetGuards();
+        $this->post($url)->assertForbidden();
+        expect($user->fresh()->email)->toBe('new@example.test');
+        $this->asToken($token)->postJson('/api/account/email', ['email' => 'later@example.test', 'password' => 'password'])->assertStatus(202);
+    });
+
+    it('refuses a link with another key, and puts nothing back over another account that took the old address', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        [, $token] = $this->enroll($user);
+        $url = reviewChangeEmail($this, $token);
         app('auth')->forgetGuards();
 
+        $this->post(preg_replace('/n=[^&]+/', 'n=forged', $url))->assertForbidden();
+        Fx::user(['email' => 'farah@example.test']);
         $this->post($url)->assertStatus(410);
         expect($user->fresh()->email)->toBe('new@example.test');
     });
@@ -114,7 +153,9 @@ describe('the old address can undo an email change (major 1)', function () {
         $this->actingAs($user, 'web')->get($link)->assertRedirect();
         expect($user->fresh()->email)->toBe('linked@example.test');
         Mail::assertQueued(EmailChangedMail::class, fn (EmailChangedMail $m): bool => $m->hasTo('farah@example.test'));
-        expect(app(EmailChange::class)->restore($user->fresh(), 'farah@example.test', EmailChange::addressHash('linked@example.test')))->toBeTrue()
+        $window = EmailChange::window($user->fresh());
+        expect($window['to'] ?? null)->toBe('farah@example.test')
+            ->and(app(EmailChange::class)->restore($user->fresh(), (string) $window['nonce']))->toBeTrue()
             ->and($user->fresh()->email)->toBe('farah@example.test');
     });
 });

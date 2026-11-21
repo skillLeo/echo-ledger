@@ -7,19 +7,24 @@ namespace App\Services\Accounts;
 use App\Exceptions\ApiError;
 use App\Mail\EmailChangedMail;
 use App\Mail\EmailCodeMail;
+use App\Models\AuditEvent;
+use App\Models\Passkey;
 use App\Models\User;
 use App\Services\AuditLog;
+use App\Services\SettingsRepository;
 use App\Services\WebSessions;
 use App\Support\Api\AccountRules;
 use App\Support\Api\FieldErrors;
 use Filament\Auth\Notifications\NoticeOfEmailChangeRequest;
 use Filament\Facades\Filament;
 use Filament\Panel;
+use Illuminate\Auth\Passwords\PasswordBroker;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
@@ -49,6 +54,7 @@ final class EmailChange
      */
     public function request(User $user, mixed $email): array
     {
+        $this->assertNotLocked($user);
         $email = $this->validated($user, $email);
         if (User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [$email])->exists()) {
             throw new ApiError(422, 'email_taken', 'Another account uses that address.');
@@ -174,42 +180,86 @@ final class EmailChange
     }
 
     /**
-     * The old address hears that the change happened, with a link that needs no sign-in (whoever changed it may hold
-     * the account now): for 7 days it puts the old address back and signs out everywhere (restore()). Since the
-     * security review of 2.0.0-l, for a change confirmed by code in an app and by the console's link.
+     * After a change (by an app's code or the console's link): the restore window opens, or stays as it is when one is
+     * open already, so it stays anchored to the address before the FIRST change and keeps its 7 days (a chain A→B→C
+     * still lets A undo it all). That address hears of it with a link that needs no sign-in (whoever changed it may
+     * hold the account now): restore() puts it back.
      */
     public function tellOldAddress(User $user, string $old): void
     {
-        $url = URL::temporarySignedRoute('account.email.restore', now()->addDays(self::RESTORE_DAYS), [
-            'user' => $user->id, 'to' => Crypt::encryptString($old), 'from' => self::addressHash($user->email),
-        ]);
-        Mail::to($old)->queue(new EmailChangedMail(AccountRules::maskEmail($user->email), $url, self::RESTORE_DAYS));
+        $window = self::window($user);
+        if ($window === null) {
+            $window = ['to' => $old, 'changed_at' => now()->getTimestamp(), 'until' => now()->addDays(self::RESTORE_DAYS)->getTimestamp(), 'nonce' => Str::random(40)];
+            $user->forceFill(['email_restore' => $window])->saveQuietly();
+        }
+        $until = Carbon::createFromTimestamp($window['until']);
+        $url = URL::temporarySignedRoute('account.email.restore', $until, ['user' => $user->id, 'n' => $window['nonce']]);
+        Mail::to($window['to'])->queue(new EmailChangedMail(AccountRules::maskEmail($user->email), $url, self::RESTORE_DAYS));
     }
 
     /**
-     * The old address's link was used: the address goes back to [$old], confirmed, and every device, browser, code and
-     * connected app is signed out. Nothing happens when the address changed again since ([$fromHash] is not the
-     * account's address now) or another account has the old one. Returns whether it was put back.
+     * The open restore window of the person's address, or null (none, or its 7 days are over).
+     *
+     * @return array{to: string, changed_at: int, until: int, nonce: string}|null
      */
-    public function restore(User $user, string $old, string $fromHash): bool
+    public static function window(User $user): ?array
     {
-        if (! hash_equals(self::addressHash($user->email), $fromHash) || Str::lower($user->email) === Str::lower($old)
-            || User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [Str::lower($old)])->exists()) {
-            return false;
+        $window = $user->email_restore;
+        if (! is_array($window) || ! is_string($window['to'] ?? null) || ! is_string($window['nonce'] ?? null) || (int) ($window['until'] ?? 0) <= now()->getTimestamp()) {
+            return null;
         }
-        $this->forget($user);
-        $user->forceFill(['email' => $old])->save();
-        $user->markEmailAsVerified();
-        $this->sessions->signOutEverywhere($user);
-        $this->audit->record('email_change_undone', $user->id, $user, 'Email put back to '.AccountRules::maskEmail($old));
 
-        return true;
+        return ['to' => $window['to'], 'changed_at' => (int) ($window['changed_at'] ?? 0), 'until' => (int) $window['until'], 'nonce' => $window['nonce']];
     }
 
-    /** A keyed hash of an address, so a link can say which address it undoes without naming it. */
-    public static function addressHash(string $email): string
+    /** `409 email_change_locked` while a restore window is open: the address cannot be changed again from the apps. */
+    public function assertNotLocked(User $user): void
     {
-        return hash_hmac('sha256', 'email-restore|'.Str::lower($email), (string) config('app.key'));
+        $window = self::window($user);
+        if ($window !== null) {
+            $until = Carbon::createFromTimestamp($window['until']);
+
+            throw new ApiError(409, 'email_change_locked', 'Your email address was changed recently. It can be changed again after '.$until->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, Y').'.',
+                ['until' => $until->toAtomString()]);
+        }
+    }
+
+    /**
+     * The original address's link was used ([$nonce] is the open window's): the address goes back to it, confirmed,
+     * and whatever whoever changed it may hold is cut: the password stops working (a reset link goes to the address),
+     * two-step, passkeys and Google links added since the change go, and every device, browser, code and connected
+     * app is signed out. Nothing happens once the window is closed or used, or when another account has the address.
+     * Returns whether it was put back.
+     */
+    public function restore(User $user, string $nonce): bool
+    {
+        $window = self::window($user);
+        if ($window === null || ! hash_equals($window['nonce'], $nonce)
+            || User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [Str::lower($window['to'])])->exists()) {
+            return false;
+        }
+        $since = Carbon::createFromTimestamp($window['changed_at']);
+        $this->forget($user);
+        DB::transaction(function () use ($user, $window, $since): void {
+            $user->forceFill(['email' => $window['to'], 'email_restore' => null, 'password' => Str::password(64), 'has_password' => false])->save();
+            $user->markEmailAsVerified();
+            // Ways in added since the change, by whoever made it.
+            if ($user->hasTwoFactor() && AuditEvent::query()->where('user_id', $user->id)->where('event', 'mfa_enabled')->where('created_at', '>=', $since)->exists()) {
+                $user->forceFill(['app_authentication_secret' => null, 'app_authentication_recovery_codes' => null])->save();
+            }
+            Passkey::query()->where('user_id', $user->id)->where('created_at', '>=', $since)->delete();
+            if ($user->google_id !== null && AuditEvent::query()->where('user_id', $user->id)->where('event', 'google_linked')->where('created_at', '>=', $since)->exists()) {
+                $user->forceFill(['google_id' => null])->save();
+            }
+        });
+        $this->sessions->signOutEverywhere($user);
+        $broker = Password::broker();
+        if ($broker instanceof PasswordBroker) {
+            $user->sendPasswordResetNotification($broker->createToken($user));
+        }
+        $this->audit->record('email_change_reverted', $user->id, $user, 'Email put back to '.AccountRules::maskEmail($window['to']));
+
+        return true;
     }
 
     /** DELETE /api/account/email: ends a change waiting for its confirmation; nothing to do is not an error. */

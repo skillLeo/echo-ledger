@@ -61,6 +61,7 @@ use Laravel\Passport\HasApiTokens;
  * @property bool $ui_classic the person's "Switch back to classic" (since 2.0.0-a: every ui_v2.* interface flag off)
  * @property string|null $ui_design since 2.0.0-g: classic | v2 | null (never chose); ui_classic is kept equal to "classic"
  * @property int|null $staff_role_id since v1.6 (P2.5): the person's staff role on the admin panel; null = not staff (the super admin needs none)
+ * @property array<string, mixed>|null $email_restore since 2.0.0-l: the open "Put my address back" window (EmailChange), encrypted
  * @property int|null $avatar_version since 2.0.0-l: the profile picture's version (App\Services\Accounts\Avatars); null = initials
  * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
  * @property Carbon|null $created_at
@@ -68,7 +69,7 @@ use Laravel\Passport\HasApiTokens;
  * @property-read StaffRole|null $staffRole
  */
 #[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides'])]
+#[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides', 'email_restore'])]
 class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery, MustVerifyEmail, OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -182,6 +183,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'assist_settings' => 'array',
             'has_password' => 'boolean',
             'avatar_version' => 'integer',
+            'email_restore' => 'encrypted:array',
             'entitlement_overrides' => 'array',
             'transcription_key' => 'encrypted',
             'transcription_key_checked_at' => 'datetime',

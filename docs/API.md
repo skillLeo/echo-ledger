@@ -1927,10 +1927,15 @@ show initials), `"has_password": true`, `"pending_email": "new@example.com" | nu
 2. `POST /api/account/email/confirm {"code"}` → `200`, with the account carrying the new `email` and
    `pending_email: null`.
    - The change is audited, other browsers are signed out and "remember me" is renewed.
-   - The old address then gets "Your email address was changed" with **Put my address back**: a signed link for 7 days
-     that needs no sign-in (whoever changed it may hold the account). It opens a page whose button puts the old address
-     back (confirmed) and signs out everywhere (audited as `email_change_undone`). It does nothing once the address
-     changed again or another account has the old one. The console's own link confirmation sends the same email.
+   - The change opens a 7-day **restore window**, anchored to the address before the first change. That address gets
+     "Your email address was changed" with **Put my address back**: a signed link for the whole window that needs no
+     sign-in (whoever changed it may hold the account). It opens a page whose button puts the address back
+     (confirmed), makes the password stop working and emails a reset link there, removes two-step, passkeys and Google
+     links added since the change, and signs out everywhere (audited as `email_change_reverted`). It works once, and
+     not when another account has the address meanwhile. The console's own link confirmation does the same; a change
+     made in the console during the window keeps the window and its first address.
+   - While the window is open, `POST /api/account/email` answers `409 email_change_locked {"until"}` before any proof,
+     so a chain of changes cannot move the restore link to an address the changer controls.
    - Errors: `422 invalid_code` (the fifth wrong code ends the change), `422 email_taken` when the address was taken
      meanwhile, and `410 expired` when the change has expired, ended or was blocked.
 3. `DELETE /api/account/email` → `204` cancels a pending change.
@@ -2058,7 +2063,7 @@ it. The fix is in sign-in:
 These are new: `name_changed`, `email_change_requested`, `email_changed`, `email_change_cancelled`,
 `email_change_blocked`, `avatar_changed`, `avatar_removed`, `recovery_codes_regenerated`, `passkey_renamed`.
 
-`email_change_undone` is new too: the old address's "Put my address back". `email_changed` is written for every change of address (the console's link, an app's code, staff).
+`email_change_reverted` is new too: the original address's "Put my address back". `email_changed` is written for every change of address (the console's link, an app's code, staff).
 
 These already exist and are now also written from the apps: `password_changed`, `mfa_enabled`, `mfa_disabled`,
 `passkey_added`, `passkey_removed`, `web_session_revoked`, `google_unlinked`, `account_deletion_cancelled` ("Keep my
