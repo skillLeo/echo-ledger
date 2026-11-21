@@ -19,7 +19,7 @@
     $shows = fn (float $c): bool => round($c, 2) > 0;
 @endphp
 
-<div style="display:flex;flex-direction:column;gap:1.5rem">
+<div class="el-usage" style="display:flex;flex-direction:column;gap:1.5rem">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem">
         @foreach ([
             [$ownOnly ? 'Your billable minutes' : 'Billable minutes', $min($t['minutes']), 'Streaming '.$min($t['streaming_minutes']).' · final '.$min($t['final_minutes'])],

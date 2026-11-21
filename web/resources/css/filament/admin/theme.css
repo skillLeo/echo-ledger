@@ -2880,6 +2880,49 @@ textarea.el-field-input {
     min-width: 0;
 }
 
+/*
+ * W-203: Usage and a project's pages are still in English inside the Urdu (right-to-left) frame. Each piece of their
+ * text takes its own direction from its first letter ("68.0 B", "0.0 min · no limit", a sentence's full stop at its end)
+ * and stays on the frame's start side. Only these pages: elsewhere the frame's words are Urdu and keep its direction.
+ * The alignment has no specificity, so an element's own alignment still wins.
+ */
+[dir='rtl'] :is(.el-usage, .fi-resource-clients) :is(p, span, div, td, th, h2, h3, h4, li, a, dt, dd, label, strong, small) {
+    unicode-bidi: plaintext;
+}
+
+:where([dir='rtl'] :is(.el-usage, .fi-resource-clients) :is(p, span, div, td, th, h2, h3, h4, li, a, dt, dd, label, strong, small)) {
+    text-align: -webkit-match-parent;
+    text-align: match-parent;
+}
+
+/*
+ * W-202: the toolbar needs about 750 px. Where it gets less (768-1024 px windows with the sidebar), List and Table show
+ * their icons only (their words stay for screen readers, and each keeps its tooltip), and if that is still not enough
+ * whole controls go onto a second row: nothing is cut at the edge ("Sort by" was) and List / Table never stack.
+ */
+.el-library-toolbar {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+    overflow-x: visible;
+    container-type: inline-size;
+}
+
+.el-library-toolbar .el-layout-switch {
+    flex: none;
+    flex-wrap: nowrap;
+}
+
+@container (max-width: 780px) {
+    .el-library-toolbar .el-layout-switch .el-tool-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
+
 .el-tool {
     display: inline-flex;
     flex: none;
