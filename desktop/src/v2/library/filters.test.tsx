@@ -287,3 +287,57 @@ describe("Find in the Library", () => {
     expect(rows()[0]).toBe("d");
   });
 });
+
+describe("combining Today and Pinned (DT-LIB-022)", () => {
+  const LIST: LibraryItem[] = [
+    makeItem("tp", { title: "Today pinned", started_at: at(18, 10), pinned: true }),
+    makeItem("t", { title: "Today only", started_at: at(18, 9) }),
+    makeItem("p", { title: "Pinned last week", started_at: at(10, 9), pinned: true }),
+    makeItem("bm", { title: "Bookmarked today", started_at: at(18, 8), marker_count: 1 }),
+  ];
+
+  it("DT-LIB-022: When and Marked are chips of their own: ticks in one add up, the two narrow each other", () => {
+    expect(applyFilters(LIST, { when: ["today"] }, NOW).map((i) => i.id)).toEqual(["tp", "t", "bm"]);
+    expect(applyFilters(LIST, { marked: ["pinned"] }, NOW).map((i) => i.id)).toEqual(["tp", "p"]);
+    // Two chips: pinned recordings made today.
+    expect(applyFilters(LIST, { when: ["today"], marked: ["pinned"] }, NOW).map((i) => i.id)).toEqual(["tp"]);
+    // Inside one chip the ticks add up: pinned or bookmarked.
+    expect(applyFilters(LIST, { marked: ["pinned", "bookmarked"] }, NOW).map((i) => i.id)).toEqual(["tp", "p", "bm"]);
+    expect(applyFilters(LIST, { when: ["today"], marked: ["pinned", "bookmarked"] }, NOW).map((i) => i.id)).toEqual(["tp", "bm"]);
+    // Their values are always offered, with how many each has.
+    expect(filterOptions(LIST, "when", NOW)).toEqual([{ value: "today", label: "Today", count: 3 }, { value: "this_week", label: "This week", count: 3 }]);
+    expect(filterOptions(LIST, "marked", NOW)).toEqual([{ value: "pinned", label: "Pinned", count: 2 }, { value: "bookmarked", label: "Bookmarked", count: 1 }]);
+  });
+
+  it("DT-LIB-022: in the Library, ticking When › Today and Marked › Pinned shows only today's pinned recordings; Views ▾ stays one choice", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    try {
+      resetTauriMock();
+      respond("library_list", LIST);
+      respond("library_refresh", LIST);
+      respond("bin_list", { data: [] });
+      render(<LibraryV2 />);
+      await act(flushAsync);
+      expect(rows()).toEqual(["tp", "t", "bm", "p"]);
+      tick(/^When$/, /^Today/);
+      expect(rows()).toEqual(["tp", "t", "bm"]);
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      tick(/^Marked$/, /^Pinned/);
+      expect(rows()).toEqual(["tp"]);
+      fireEvent.keyDown(document.body, { key: "Escape" });
+      expect(chip(/^When: Today/)).toBeInTheDocument();
+      expect(chip(/^Marked: Pinned/)).toBeInTheDocument();
+      // Views ▾ is one choice at a time (radio items).
+      fireEvent.click(chip(/^Views/));
+      const views = within(screen.getByRole("menu", { name: "Views" }));
+      expect(views.getAllByRole("menuitemradio").length).toBeGreaterThan(1);
+      expect(views.queryAllByRole("menuitemcheckbox")).toEqual([]);
+      fireEvent.click(chip(/^Views/));
+      fireEvent.click(screen.getByRole("button", { name: "Clear Marked" }));
+      expect(rows()).toEqual(["tp", "t", "bm"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
