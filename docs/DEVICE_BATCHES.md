@@ -307,3 +307,36 @@ Urdu title (rename one to "ادائیگی کا منصوبہ اور قرض کی �
    (2.0.2 is before the half-screen fix; this is the baseline for 2.0.3 on Windows).
 
 After each part, the lead turns every "fail" into a bug with an ID (EL-Fix triages within the hour).
+
+### F6 — WhatsApp Text and voice (the build with F6), Mac 10 min, Windows 10 min
+Use a recording with audio and a transcript, in the classic design. Send to a test chat (your own number or a test
+group), never to a client.
+
+**Mac, WhatsApp installed**
+1. Library › open the recording › Send to WhatsApp › Text and voice. Pass: only that button changes to "Saving the
+   voice…"; Text only and Link look as before, and clicking them does nothing while it runs.
+2. WhatsApp 26.40 for Mac has no share extension, so expect the fallback: WhatsApp opens with the text in a new
+   message, and the sheet says "Saved in Downloads: …" and "The voice file is copied: in the chat, press ⌘V to attach
+   it." Choose the chat, press ⌘V. Pass: the voice file is attached (with the text), and sends and plays.
+3. If a WhatsApp version with a share extension is installed (WhatsApp appears under Finder › right-click a file ›
+   Share): step 1 instead shows WhatsApp's share on the window with the text and the file. Choose the chat and send.
+   Pass: the sheet closes with "Text and voice sent to WhatsApp". Repeat and close the share with Cancel: the sheet
+   stays open and nothing is said.
+
+**Mac, WhatsApp not installed** (or on another Mac without it)
+4. Same click. Pass: the browser opens WhatsApp Web with the text; the sheet says to press ⌘V. In the chat, ⌘V
+   attaches the file.
+
+**Windows, WhatsApp installed (Microsoft Store app)**
+5. Same click. Pass: the Windows Share window opens over EchoLedger titled "Send to WhatsApp"; WhatsApp is in its
+   list. Choose WhatsApp, then the chat, and send. Pass: the voice and the text arrive; the sheet closes with "Text
+   and voice sent to WhatsApp".
+6. Repeat and close the Share window without choosing (Esc or click outside). Pass: the sheet stays open, quietly.
+
+**Windows, WhatsApp not installed**
+7. Same click. Pass: no Share window; the browser opens WhatsApp Web with the text; the sheet says "press Ctrl+V to
+   attach it". In the chat, Ctrl+V attaches the file.
+
+**Both, a long transcript** (an hour-long recording)
+8. In the fallback, the sheet also says "The message has the start of the text" with "Copy the whole text". Attach
+   the voice first (⌘V / Ctrl+V), then click Copy the whole text and paste it. Pass: the whole text arrives.

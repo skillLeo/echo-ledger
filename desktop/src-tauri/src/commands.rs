@@ -1496,10 +1496,14 @@ pub async fn save_audio(app: AppHandle, id: String) -> AppResult<Option<String>>
 /// a dialog, so the person can attach it in WhatsApp; returns its path.
 #[tauri::command]
 pub async fn save_audio_downloads(app: AppHandle, id: String) -> AppResult<String> {
+    audio_to_downloads(&app, &id).await
+}
+
+async fn audio_to_downloads(app: &AppHandle, id: &str) -> AppResult<String> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
     let api = state.api()?;
-    let detail = api.session(&id).await?;
+    let detail = api.session(id).await?;
     let Some(url) = detail.get("playback_url").and_then(serde_json::Value::as_str).filter(|u| !u.is_empty()).map(str::to_string) else {
         return Err(AppError::msg("The audio of this recording is not on the server, so there is nothing to save yet."));
     };
@@ -1520,6 +1524,24 @@ pub fn whatsapp_open(app: AppHandle, text: String) -> AppResult<bool> {
     let (url, cut) = crate::whatsapp::whatsapp_url(&text);
     app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))?;
     Ok(cut)
+}
+
+/// Send to WhatsApp → Text and voice (F6): the audio saved in Downloads (as `save_audio_downloads`), then the text and
+/// the file handed to the system's share (WhatsApp's share on the Mac, the Share window on Windows). When that cannot
+/// be used: wa.me with the text as before, and the file on the clipboard to paste into the chat (`share_sheet`).
+#[tauri::command]
+pub async fn whatsapp_share_voice(app: AppHandle, id: String, text: String) -> AppResult<crate::share_sheet::ShareOutcome> {
+    use crate::share_sheet::{self, ShareOutcome};
+    if text.trim().is_empty() {
+        return Err(AppError::msg("There is nothing to send yet."));
+    }
+    let path = audio_to_downloads(&app, &id).await?;
+    if let Some(outcome) = share_sheet::settled(&share_sheet::share(&app, text.trim(), &path).await) {
+        return Ok(outcome);
+    }
+    let file_on_clipboard = share_sheet::file_to_clipboard(&app, &path).await;
+    let text_cut = whatsapp_open(app, text)?;
+    Ok(ShareOutcome::Fallback { path, file_on_clipboard, text_cut, paste_keys: share_sheet::paste_keys(std::env::consts::OS).into() })
 }
 
 // ---- Settings export / import (B19) -----------------------------------------------------------------------------

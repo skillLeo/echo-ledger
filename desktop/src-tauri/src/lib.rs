@@ -40,6 +40,7 @@ pub mod recovery;
 pub mod refusal;
 pub mod screens;
 pub mod settings;
+pub mod share_sheet;
 pub mod sharing;
 pub mod shortcuts;
 pub mod skipped;
@@ -642,6 +643,7 @@ pub fn run() {
             commands::save_audio,
             commands::save_audio_downloads,
             commands::whatsapp_open,
+            commands::whatsapp_share_voice,
             commands::copy_last_minutes,
             commands::library_list,
             commands::library_refresh,
