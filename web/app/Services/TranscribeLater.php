@@ -21,6 +21,8 @@ use App\Services\Entitlements\TranscriptionKeys;
 use App\Services\Usage\UsageLedger;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
+use Illuminate\Cache\ArrayStore;
+use Illuminate\Cache\NullStore;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -134,6 +136,12 @@ final class TranscribeLater
      */
     private function alone(int $workspaceId, callable $work): mixed
     {
+        // A cache that holds nothing between requests (array, null) cannot keep two requests apart: refuse to start
+        // rather than spend the same minutes twice.
+        $store = Cache::getStore();
+        if (! app()->runningUnitTests() && ($store instanceof ArrayStore || $store instanceof NullStore)) {
+            throw new ApiError(503, 'server_busy', 'Transcription cannot start right now. Try again later.', [], ['Retry-After' => '60']);
+        }
         try {
             return Cache::lock('transcribe-later:'.$workspaceId, 30)->block(self::$lockWaitSeconds, $work);
         } catch (LockTimeoutException) {
@@ -225,6 +233,8 @@ final class TranscribeLater
      */
     public function estimateManyFor(User $person, int $workspaceId, array $ids): array
     {
+        app(Workspaces::class)->assertMay($person, $workspaceId, 'ownContent');
+
         return $this->estimateIn($workspaceId, (int) $person->id, $ids);
     }
 
@@ -247,7 +257,15 @@ final class TranscribeLater
             $started = [];
             $spent = 0;
             foreach ($eligible as $session) {
-                if ($this->claimAndStart($session) !== null) {
+                try {
+                    $transcript = $this->claimAndStart($session);
+                } catch (Throwable) {
+                    // This one could not start (and went back to audio only); the others still do.
+                    $skipped[] = ['id' => $session->id, 'code' => 'not_started'];
+
+                    continue;
+                }
+                if ($transcript !== null) {
                     $started[] = $session->id;
                     $spent += $this->minutes($session);
                 } else {
@@ -325,10 +343,18 @@ final class TranscribeLater
             return null;
         }
         $session->refresh();
+        $existing = $session->finalTranscript()->first();
         try {
-            return $this->coordinator->start($session, $session->finalTranscript()->first());
+            return $this->coordinator->start($session, $existing);
         } catch (Throwable $e) {
-            // Never left in processing with nothing running: it goes back to audio only, to be started again.
+            // Never left half started: the recording goes back to audio only, and its final transcript leaves the running
+            // statuses (deleted if this start made it, failed otherwise), so nothing requeues it later (stt:reconcile) to
+            // transcribe and charge a recording shown as audio only, and its minutes stop counting as in flight.
+            $final = Transcript::query()->where('capture_session_id', $session->id)->where('kind', TranscriptKind::Final->value)
+                ->where('status', TranscriptStatus::Pending->value)->whereNull('provider_job_id');
+            $existing === null
+                ? $final->delete()
+                : $final->update(['status' => TranscriptStatus::Failed->value, 'error_code' => TranscriptErrorCode::Interrupted->value]);
             CaptureSession::query()->whereKey($session->id)->where('status', SessionStatus::Processing->value)
                 ->update(['status' => SessionStatus::AudioOnly->value, 'transcribe' => false]);
 

@@ -181,7 +181,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->middleware($own)->name('api.sessions.restore');
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->middleware($own)->name('api.bin.destroy');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->middleware($own)->name('api.sessions.markers.store');
-            Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->middleware($own)->name('api.sessions.retranscribe');
+            // Since 2.0.0-j throttled like "Transcribe": on an audio-only recording it starts the first transcript.
+            Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->middleware([$own, 'throttle:transcribe'])->name('api.sessions.retranscribe');
             // Since v1.8 (contract 1.8.0-e): audio only and "Transcribe later", one recording or many.
             Route::post('sessions/transcribe', [TranscribeLaterController::class, 'many'])->middleware([$own, 'throttle:transcribe'])->name('api.sessions.transcribe.many');
             Route::post('sessions/{id}/transcribe', [TranscribeLaterController::class, 'one'])->middleware([$own, 'throttle:transcribe'])->name('api.sessions.transcribe');

@@ -18,6 +18,7 @@ use App\Services\Sharing\Teammates;
 use App\Services\TranscribeLater;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
+use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
@@ -360,15 +361,26 @@ describe('the review of 2356ca5c', function () {
             ->and(collect($this->getJson('/api/library')->json('data'))->firstWhere('id', $copy->id)['transcribe_estimate'])->not->toBeNull();
     });
 
-    it('puts a recording back to audio only when its transcript cannot start', function () {
+    it('puts a recording back to audio only when its transcript cannot start, with no transcript left to run', function () {
         $id = audioOnlyCall($this);
+        minutesLimit($this->owner, 100);
+        $left = fn (): int => $this->postJson('/api/sessions/transcribe-estimate', ['ids' => [$id]])->json('minutes_left');
+        expect($left())->toBe(100);
+        $real = app(Dispatcher::class);
         // The transcript row is made, then handing its job to the queue fails.
         Bus::shouldReceive('dispatch')->andThrow(new RuntimeException('queue down'));
 
         $this->postJson("/api/sessions/{$id}/transcribe")->assertServerError();
 
         $session = CaptureSession::query()->findOrFail($id);
-        expect($session->status)->toBe(SessionStatus::AudioOnly)->and($session->transcribe)->toBeFalse();
+        expect($session->status)->toBe(SessionStatus::AudioOnly)->and($session->transcribe)->toBeFalse()
+            // Nothing for stt:reconcile to requeue, and no minutes held for it.
+            ->and(Transcript::query()->where('capture_session_id', $id)->count())->toBe(0)
+            ->and($left())->toBe(100);
+
+        Bus::swap($real);
+        $this->postJson("/api/sessions/{$id}/transcribe")->assertStatus(202);
+        expect(CaptureSession::query()->findOrFail($id)->status)->toBe(SessionStatus::Processing)->and($left())->toBe(98);
     });
 
     it('lists 6 audio-only recordings in the same queries as 1', function () {
@@ -442,5 +454,89 @@ describe('the review of 2356ca5c', function () {
         app('auth')->forgetGuards();
 
         expect($this->getJson("/api/sessions/{$sent->id}")->assertOk()->json('transcribe_estimate'))->toBeNull();
+    });
+});
+
+describe('the review of 5f74e162', function () {
+    it('fails a final transcript that was there before the start, rather than leaving it to run', function () {
+        $id = audioOnlyCall($this);
+        $before = Transcript::query()->create(['capture_session_id' => $id, 'kind' => 'final', 'provider' => 'assemblyai', 'status' => 'failed', 'language' => 'en']);
+        Bus::shouldReceive('dispatch')->andThrow(new RuntimeException('queue down'));
+
+        $this->postJson("/api/sessions/{$id}/transcribe")->assertServerError();
+
+        expect($before->fresh()->status->value)->toBe('failed')->and(CaptureSession::query()->findOrFail($id)->status)->toBe(SessionStatus::AudioOnly);
+    });
+
+    it('starts the others of many when one cannot start, listing it as skipped', function () {
+        [$first, $second] = [audioOnlyCall($this), audioOnlyCall($this)];
+        $calls = 0;
+        Bus::shouldReceive('dispatch')->andReturnUsing(function () use (&$calls) {
+            if ($calls++ === 0) {
+                throw new RuntimeException('queue down');
+            }
+
+            return null;
+        });
+
+        $this->postJson('/api/sessions/transcribe', ['ids' => [$first, $second]])->assertStatus(202)
+            ->assertJson(['started' => [$second], 'skipped' => [['id' => $first, 'code' => 'not_started']], 'minutes' => 2]);
+        expect(CaptureSession::query()->findOrFail($first)->status)->toBe(SessionStatus::AudioOnly)
+            ->and(CaptureSession::query()->findOrFail($second)->status)->toBe(SessionStatus::Processing);
+    });
+
+    it('estimates nothing for a viewer from the console', function () {
+        $workspace = Workspace::query()->findOrFail($this->device->workspace_id);
+        $viewer = User::factory()->create();
+        app(Workspaces::class)->addMember($workspace, $viewer, WorkspaceRole::Viewer);
+        app('auth')->forgetGuards();
+
+        expect(fn () => app(TranscribeLater::class)->estimateManyFor($viewer, $workspace->id, [audioOnlyCall($this)]))->toThrow(ApiError::class, 'viewer');
+    });
+
+    it('refuses to start outside tests when the cache keeps no locks between requests', function () {
+        $id = audioOnlyCall($this);
+        config(['cache.default' => 'array']);
+        $env = app()['env'];
+        app()['env'] = 'production';
+        try {
+            expect(fn () => app(TranscribeLater::class)->startFor($this->owner, (int) $this->device->workspace_id, $id))
+                ->toThrow(fn (ApiError $e) => expect([$e->getStatusCode(), $e->apiCode()])->toBe([503, 'server_busy']));
+        } finally {
+            app()['env'] = $env;
+        }
+        expect(CaptureSession::query()->findOrFail($id)->status)->toBe(SessionStatus::AudioOnly);
+    });
+
+    it('keeps the language of an audio-only recording when "Re-transcribe as" cannot start it', function () {
+        $id = audioOnlyCall($this, ['language' => 'en']);
+        minutesLimit($this->owner, 1);
+
+        $this->postJson("/api/sessions/{$id}/retranscribe", ['language' => 'ur'])->assertForbidden();
+
+        expect(CaptureSession::query()->findOrFail($id)->language)->toBe('en');
+    });
+
+    it('throttles "Re-transcribe as" like Transcribe', function () {
+        foreach (range(1, 30) as $_) {
+            $this->postJson('/api/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV/retranscribe', ['language' => 'ur'])->assertNotFound();
+        }
+        $this->postJson('/api/sessions/01ARZ3NDEKTSV4RRFFQ69G5FAV/retranscribe', ['language' => 'ur'])->assertStatus(429);
+    });
+
+    it('starts an audio-only recording from the console\'s "Re-transcribe as" with the person\'s checks', function () {
+        Filament::setCurrentPanel('app');
+        $id = audioOnlyCall($this, ['language' => 'en']);
+        $this->actingAs($this->owner, 'web');
+        minutesLimit($this->owner, 1);
+
+        Livewire::test(ViewCaptureSession::class, ['record' => $id])->callAction('retranscribe_as', data: ['language' => 'ur'])->assertNotified();
+        $session = CaptureSession::query()->findOrFail($id);
+        expect($session->status)->toBe(SessionStatus::AudioOnly)->and($session->language)->toBe('en');
+
+        minutesLimit($this->owner, null);
+        Livewire::test(ViewCaptureSession::class, ['record' => $id])->callAction('retranscribe_as', data: ['language' => 'ur'])->assertNotified();
+        $session = CaptureSession::query()->findOrFail($id);
+        expect($session->status)->toBe(SessionStatus::Processing)->and($session->language)->toBe('ur');
     });
 });

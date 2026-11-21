@@ -11,10 +11,12 @@ use App\Enums\TranscriptStatus;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Models\User;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Throwable;
 
 /**
  * Re-transcribe and compare (since v1.1, console): a second engine transcribes a finished recording, both versions
@@ -55,18 +57,29 @@ final class Retranscriber
      * the transcript (newest is the default) and the old one stays as the other version. Without a finished
      * transcript (failed or never made) the final one simply runs again in the new language.
      */
-    public function startAs(CaptureSession $session, ?string $language): Transcript
+    public function startAs(CaptureSession $session, ?string $language, ?User $actor = null): Transcript
     {
         $language = LanguageChoice::normalize($language);
         if ($session->recordings()->where('role', 'primary')->first()?->isReady() !== true) {
             throw new RuntimeException('The recording is not on the server any more, so it cannot be transcribed again.');
         }
-        $session->update(['language' => $language]);
         // Since v1.8 (contract 1.8.0-e): an audio-only recording starts like "Transcribe" does, with its budget, key and
-        // claim, in the language just chosen.
+        // claim, in the language just chosen; the console's [$actor] is checked as Transcribe checks them. The language is
+        // kept only when it starts.
         if ($session->status === SessionStatus::AudioOnly) {
-            return app(TranscribeLater::class)->start($session->refresh());
+            $before = $session->language;
+            $session->update(['language' => $language]);
+            try {
+                $later = app(TranscribeLater::class);
+
+                return $actor !== null ? $later->startFor($actor, (int) $session->workspace_id, $session->id) : $later->start($session->refresh());
+            } catch (Throwable $e) {
+                CaptureSession::query()->whereKey($session->id)->update(['language' => $before]);
+
+                throw $e;
+            }
         }
+        $session->update(['language' => $language]);
         $final = $session->finalTranscript;
         if (! $final instanceof Transcript || $final->status !== TranscriptStatus::Completed) {
             return app(FinalTranscriptCoordinator::class)->start($session->refresh(), $final);

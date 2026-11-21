@@ -1532,6 +1532,9 @@ ready (`kind` `alternate`); then the new one becomes the `final` transcript and 
 `alternate`. Two versions are kept, the newest and the one before it; a new request replaces a run that is still
 going. A failed or unfinished transcript is simply run again in the new language (`kind` `final`).
 `409 cannot_retranscribe` when the recording's audio is not on the server (not uploaded yet, or erased).
+(Since 2.0.0-j:) on an `audio_only` recording it starts the first transcript exactly as `POST /sessions/{id}/transcribe`
+does (budget, key, the same errors) and is throttled like it (30/min/device); the new language is kept only when the
+transcript starts.
 
 ### Audio only and "Transcribe later" (since v1.8, contract 1.8.0-e; served since 2.0.0-j)
 v1.8 P1: when Ready, a call is always recorded as audio, but transcribed only with the person's permission (the
@@ -1560,9 +1563,13 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
   nothing starts. Ids of another workspace are skipped as `not_found`. (Since 2.0.0-j:) so are a teammate's, as only
   the person's own recordings are theirs to transcribe; an id sent twice counts once; on Free without an own key the
   answer is `403 needs_transcription_key` and nothing starts. Throttled like the one-recording call (30/min/device).
+  A recording whose transcript cannot be handed to the engine stays `audio_only` and is skipped as `not_started`;
+  the others still start (try it again later).
 - (Since 2.0.0-j, for every start:) the minutes left count the transcripts already started and not finished at their
   estimate (the month's usage counts a transcript only when it completes), and starts of one workspace run one at a
-  time: a start that waits more than a few seconds for another is `429 rate_limited` with `Retry-After`.
+  time: a start that waits more than a few seconds for another is `429 rate_limited` with `Retry-After`. A server
+  that cannot keep starts apart answers `503 server_busy` (`Retry-After: 60`) and starts nothing. A start that fails
+  inside the server (`5xx`) leaves the recording `audio_only` with no transcript running, to be started again.
 - `POST /api/sessions/transcribe-estimate` — `library:read`: `{"ids": ["…"]}` (1–50) → `200 {"minutes": 42,
   "minutes_left": 120, "items": [{"id": "…", "minutes": 5}]}` (no side effects). `items` lists the person's
   audio-only recordings among the ids, the ones bulk would start (since 2.0.0-j), and `minutes` is their sum.
