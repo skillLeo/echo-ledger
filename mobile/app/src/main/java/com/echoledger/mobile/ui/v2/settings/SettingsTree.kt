@@ -59,7 +59,7 @@ object SettingsTree {
         "games" to EchoIcons.Games,
         "videos" to EchoIcons.Videos,
         "lock" to EchoIcons.Lock,
-        "privacy" to com.echoledger.mobile.ui.v2.shell.PendingIcons.Policy,
+        "privacy" to EchoIcons.SettingsPolicy,
         "storage" to EchoIcons.Storage,
         "notifications" to EchoIcons.Bell,
         "appearance" to EchoIcons.Palette,
