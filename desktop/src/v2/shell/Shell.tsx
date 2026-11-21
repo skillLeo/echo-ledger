@@ -112,7 +112,8 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
       if (e.defaultPrevented || !searchRef.current || typing(e.target)) return;
       e.preventDefault();
-      if (isConfirmOpen() || document.querySelector('[role="alertdialog"]')) return;
+      // Nothing opens behind a question, a dialog or a sheet.
+      if (isConfirmOpen() || document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
       searchRef.current();
     };
     window.addEventListener("keydown", onKey);

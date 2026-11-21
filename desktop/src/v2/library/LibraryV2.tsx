@@ -337,9 +337,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const none = (test: (i: LibraryItem) => boolean) => !chosen.some(test);
     const list: (MenuItem & { key: string })[] = [];
     const add = (key: string, item: MenuItem) => { if (!without.has(key)) list.push({ key, ...item }); };
-    if (one) add("open", { label: "Open", onPick: () => setOpenId(one.id) });
+    if (one) add("open", { label: "Open", icon: Icons.TranscriptIcon, onPick: () => setOpenId(one.id) });
     // The same selection mode X and Select start, with this recording ticked.
-    if (one && !selecting) add("select", { label: "Select", shortcut: "X", onPick: () => startSelecting(one.id) });
+    if (one && !selecting) add("select", { label: "Select", icon: Icons.SelectIcon, shortcut: "X", onPick: () => startSelecting(one.id) });
     if (one) add("rename", { label: "Rename…", icon: Icons.RenameIcon, group: "Organise", onPick: () => setOrganise({ kind: "rename", item: one }) });
     add("move", { label: "Move to project…", icon: Icons.MoveIcon, group: "Organise",
       onPick: () => setOrganise({ kind: "move", ids: [...ids], title: one?.title, current: one ? one.client?.id ?? null : undefined }) });

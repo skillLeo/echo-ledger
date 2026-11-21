@@ -270,6 +270,8 @@ describe("the row ⋮ and the right-click menu", () => {
       "Open", "SelectX", "Rename…", "Move to project…", "Label…", "Unpin", "Keep forever", "Export", "Copy for AI", "Send to WhatsApp…", "DeleteDel",
     ]);
     expect(menuItem("Select")).toHaveAttribute("aria-keyshortcuts", "X");
+    // Every item has its icon, Open and Select too.
+    expect(within(menu).getAllByRole("menuitem").filter((m) => !m.querySelector("svg")).map((m) => m.textContent)).toEqual([]);
     expect([...menu.querySelectorAll(".el-menu__group")].map((g) => g.textContent)).toEqual(["Organise", "Export", "Danger"]);
     expect(menuItem("Delete")).toHaveClass("el-menu__option--danger");
     expect(menuItem("Delete")).toHaveAttribute("aria-keyshortcuts", "Delete");

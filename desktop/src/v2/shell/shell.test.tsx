@@ -110,6 +110,16 @@ describe("the shell", () => {
     expect(onSearch).toHaveBeenCalledTimes(2);
   });
 
+  it("Cmd/Ctrl+F does not open search behind an open dialog or sheet", () => {
+    const onSearch = vi.fn();
+    const { rerender } = render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K"><div aria-modal="true" /></Shell>);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    expect(onSearch).not.toHaveBeenCalled();
+    rerender(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K"><p /></Shell>);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    expect(onSearch).toHaveBeenCalledTimes(1);
+  });
+
   it("in the collapsed rail the Search icon stays", () => {
     const width = window.innerWidth;
     try {
@@ -144,6 +154,25 @@ describe("the shell", () => {
     expect(onSearch).not.toHaveBeenCalled();
     fireEvent.click(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Search" }));
     expect(onSearch).toHaveBeenCalled();
+  });
+
+  it("on a recording with no transcript (nothing to find) Cmd+F opens app search", async () => {
+    const item = makeItem("s2", { title: "Voice note", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } });
+    respond("library_list", [item]);
+    respond("library_refresh", [item]);
+    respond("session_detail", { playback_url: "https://ledger.example.com/b.m4a", speaker_names: {} });
+    respond("skipped_list", []);
+    Element.prototype.scrollIntoView = vi.fn();
+    const onSearch = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K">
+      <LibraryV2 openRequest={{ id: "s2", seq: 1 }} />
+    </Shell>);
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { name: "Voice note" })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    expect(screen.queryByRole("searchbox", { name: "Find in this transcript" })).toBeNull();
+    expect(onSearch).toHaveBeenCalledTimes(1);
   });
 
   it("the sub-lists: pinned projects under Projects and Shared's places under Library, each opening its page", () => {

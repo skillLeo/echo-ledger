@@ -5,6 +5,10 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeItem, makePendingItem, makeStatus } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
+import { dismissedKey } from "./LibraryTop";
+import type { Account } from "../../lib/ipc";
+
+const account = (email: string): Account => ({ name: "Ayesha Khan", email, email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -23,6 +27,7 @@ describe("the top of the Library", () => {
     respond("ready_last", { ready: false, checkedAt: "2026-11-17T10:00:00Z", checks: [] });
     respond("permissions_status", { microphone: "allowed", systemAudio: "unknown", screen: "allowed", browserAutomation: true, platform: "macos" });
     respond("skipped_list", []);
+    respond("account_get", account("ayesha@example.com"));
   });
   const show = async (status = makeStatus({ platform: "macos", pendingDecisions: 2 })) => {
     const top = { status, onSetup: vi.fn(), onReadyCheck: vi.fn(), onRecord: vi.fn(), onActivity: vi.fn() };
@@ -66,7 +71,7 @@ describe("the top of the Library", () => {
   });
 
   describe("the banner's × (Dismiss)", () => {
-    const KEY = "echoledger-library-needs-action-dismissed";
+    const KEY = dismissedKey("https://ledger.example.test", "ayesha@example.com");
     const dismiss = () => fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" }));
     // Starts with 2 waiting calls and 1 untranscribed recording.
     const again = (status: Parameters<typeof makeStatus>[0]) => show(makeStatus({ platform: "macos", ...status }));
@@ -124,6 +129,19 @@ describe("the top of the Library", () => {
       await again({ pendingDecisions: 2 });
       expect(screen.queryByTestId("needs-action")).toBeNull();
       expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 2, untranscribed: 1 });
+    });
+
+    it("is kept per account: another account on this computer still sees the banner the first one dismissed", async () => {
+      const first = await again({ pendingDecisions: 2 });
+      dismiss();
+      first.unmount();
+      respond("account_get", account("bilal@example.com"));
+      const other = await again({ pendingDecisions: 2 });
+      expect(screen.getByTestId("needs-action")).toBeInTheDocument();
+      other.unmount();
+      respond("account_get", account("Ayesha@Example.com"));
+      await again({ pendingDecisions: 2 });
+      expect(screen.queryByTestId("needs-action")).toBeNull();
     });
 
     it("shows when storage is unavailable", async () => {
