@@ -193,11 +193,7 @@ class EchoV2Type(private val family: FontFamily, val latin: FontFamily, private 
      * The style in this face. In Urdu each role takes its Nastaliq size and line from the type tokens [urduRole]
      * (D4: title.l 24/44, title.m 20/40, title.s 16/30, body 16/30, caption and meta 14/28: Urdu is never under 14 sp).
      */
-    private fun TextStyle.face(urduRole: TextStyle? = null): TextStyle = when {
-        !urdu -> copy(fontFamily = family)
-        urduRole != null -> copy(fontFamily = family, fontSize = urduRole.fontSize, lineHeight = urduRole.lineHeight)
-        else -> copy(fontFamily = family).nastaliqLine()
-    }
+    private fun TextStyle.face(urduRole: TextStyle? = null): TextStyle = if (urdu) copy(fontFamily = family).inUrdu(urduRole) else copy(fontFamily = family)
 
     val titleL = EchoTokens.Type.titleL.face(EchoTokens.Type.urduTitleL)
     val titleM = EchoTokens.Type.titleM.face(EchoTokens.Type.urduTitleM)
@@ -250,13 +246,26 @@ class EchoV2Type(private val family: FontFamily, val latin: FontFamily, private 
                 else -> style.copy(fontFamily = latin)
             }
 
-            script == Script.Urdu && !urdu -> style.copy(fontFamily = UrduNastaliq).nastaliqLine()
+            script == Script.Urdu && !urdu -> style.copy(fontFamily = UrduNastaliq).inUrdu(urduRoleOf(style))
 
             script == Script.Arabic -> style.copy(fontFamily = ArabicNaskh)
 
             else -> style
         }
         return base.copy(textDirection = TextDirection.Content)
+    }
+
+    /**
+     * The Urdu type token for one of this type's roles (D4 2), compared by identity: [caption] and [meta] may be equal
+     * styles yet are different roles. A style that isn't a role (a one-off) gets none and keeps its size.
+     */
+    private fun urduRoleOf(style: TextStyle): TextStyle? = when {
+        style === titleL -> EchoTokens.Type.urduTitleL
+        style === titleM -> EchoTokens.Type.urduTitleM
+        style === titleS -> EchoTokens.Type.urduTitleS
+        style === body || style === bodyStrong -> EchoTokens.Type.urduBody
+        style === meta || style === label || style === caption || style === captionStrong -> EchoTokens.Type.urduCaption
+        else -> null
     }
 
     /** Transcript text in Urdu (urdu.body). */
@@ -488,9 +497,13 @@ internal fun scriptOf(text: String): Script {
 }
 
 /**
- * Nastaliq needs the taller line of urdu.body (16/30) at every size, and is never under urdu.caption's 14 sp (D4 2):
- * an Urdu title in an English list's 12 sp caption still reads.
+ * This style in Nastaliq: the size and line of its Urdu role's token when it has one ([role]), else the taller line of
+ * urdu.body (16/30) at its own size, never under urdu.caption's 14 sp (D4 2).
  */
+private fun TextStyle.inUrdu(role: TextStyle?): TextStyle =
+    if (role != null) copy(fontSize = role.fontSize, lineHeight = role.lineHeight) else nastaliqLine()
+
+/** The taller line of urdu.body (16/30) at this size, never under urdu.caption's 14 sp. */
 private fun TextStyle.nastaliqLine(): TextStyle {
     val ratio = EchoTokens.Type.urduBody.lineHeight.value / EchoTokens.Type.urduBody.fontSize.value
     val least = EchoTokens.Type.urduCaption.fontSize
