@@ -108,6 +108,10 @@
     <string name="v2_up_s_current">current</string>
     <string name="v2_up_s_not_yet">not yet</string>
     <string name="v2_up_done">Done</string>
+    <string name="v2_up_plans">Plans</string>
+    <string name="v2_up_member">%1$s is on %2$s. Its owner manages the plan.</string>
+    <string name="v2_up_your_workspace">Your workspace</string>
+    <string name="v2_up_managed_outside">Your plan is managed outside this app.</string>
     <plurals name="v2_up_promo_off">
         <item quantity="one">%1$s: %2$d%% off %3$s for %4$d month</item>
         <item quantity="other">%1$s: %2$d%% off %3$s for %4$d months</item>

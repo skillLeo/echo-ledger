@@ -122,11 +122,19 @@ fun V2UpgradeFlow(
     feature: String?,
     startAt: FlowStep?,
     given: PlanState? = null,
+    /** This build sells plans by bank transfer (classic's manualPayments: the Google Play build does not). */
+    canPay: Boolean = com.echoledger.mobile.ui.manualPayments,
     onDismiss: () -> Unit
 ) {
     val settings by vm.settings.collectAsState()
     val live = settings.plan
     val plan = if (live.offers.isEmpty() && given != null) given.copy(upgrade = live.upgrade ?: given.upgrade) else live
+    // As classic's canBuy: a team member or viewer, or the Google Play build, sees the plans without prices and buys nothing.
+    val member = plan.role == "member" || plan.role == "viewer"
+    if (!canPay || member) {
+        PlansWithoutPrices(plan, feature, member, onDismiss)
+        return
+    }
     val request = plan.upgrade
     var chosen by remember { mutableStateOf<FlowStep?>(null) }
     val step = chosen ?: when {
@@ -181,6 +189,69 @@ fun V2UpgradeFlow(
             FlowStep.Status -> request?.let { StatusStep(vm, it, planName, go) } ?: Missing(onDismiss)
 
             FlowStep.Approved -> ApprovedStep(plan, request, onDismiss)
+        }
+    }
+}
+
+/**
+ * The plans as a team member, a viewer or the Google Play build sees them (classic's rule): which plan this is and who
+ * manages it, then the plans above it with what each adds, never a price or anything to buy.
+ */
+@Composable
+private fun PlansWithoutPrices(plan: PlanState, feature: String?, member: Boolean, onDismiss: () -> Unit) {
+    val c = EchoV2.colors
+    BackHandler(onBack = onDismiss)
+    val pad = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
+    Column(Modifier.fillMaxSize().background(c.bgCanvas).navigationBarsPadding()) {
+        EchoTopBar(stringResource(R.string.v2_up_plans), onBack = onDismiss)
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(vertical = EchoTokens.Space.s8),
+            verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
+        ) {
+            Text(
+                if (member) {
+                    stringResource(R.string.v2_up_member, plan.workspace ?: stringResource(R.string.v2_up_your_workspace), plan.displayName)
+                } else {
+                    stringResource(R.string.v2_up_you_are_on, plan.displayName)
+                },
+                style = EchoV2.type.body,
+                color = c.textSecondary,
+                modifier = pad
+            )
+            feature?.let { f ->
+                plan.higherPlans.firstOrNull()?.let {
+                    Text(
+                        stringResource(R.string.v2_up_feature_in, f, it.name),
+                        style = EchoV2.type.body,
+                        color = c.textPrimary,
+                        modifier = pad
+                    )
+                }
+            }
+            val offers = plan.higherPlans
+            offers.forEachIndexed { i, offer ->
+                EchoCard(pad) {
+                    Column(verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
+                        Text(offer.name, style = EchoV2.type.bodyStrong, color = c.textPrimary)
+                        if (i > 0) {
+                            Text(
+                                stringResource(R.string.v2_up_everything_in, offers[i - 1].name),
+                                style = EchoV2.type.meta,
+                                color = c.textSecondary
+                            )
+                        }
+                        highlights(plan, offer).forEach { Text(it, style = EchoV2.type.body, color = c.textPrimary) }
+                    }
+                }
+            }
+            if (!member) {
+                Text(
+                    stringResource(R.string.v2_up_managed_outside),
+                    style = EchoV2.type.meta,
+                    color = c.textSecondary,
+                    modifier = pad
+                )
+            }
         }
     }
 }
@@ -362,7 +433,11 @@ private fun ChooseStep(vm: MainViewModel, plan: PlanState, startPlan: String?, f
         if (chosen != null) {
             val full = chosen.pricePkr
             val free = promoFits && promo?.free == true
-            val due = if (promoFits) promo?.finalPrice?.replace(" / month", "")?.replace(" a month", "") else null
+            // What the code leaves to pay, from the plan's price in rupees (the server's words only without one).
+            val due = promo?.takeIf { promoFits }?.let { p ->
+                full?.let { PlanFormat.rupees(Math.round(it * (100 - p.percent) / 100.0)) }
+                    ?: p.finalPrice?.substringBefore(" /")?.substringBefore(" a month")
+            }
             BottomBar(
                 caption = if (free) null else stringResource(R.string.v2_up_bank_next),
                 error = error,

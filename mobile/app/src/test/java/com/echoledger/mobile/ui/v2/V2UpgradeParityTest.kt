@@ -99,7 +99,13 @@ class V2UpgradeParityTest : ScreenTest() {
 
     private var dismissed = 0
 
-    private fun open(latest: UpgradeRequestDto? = null, startAt: FlowStep? = null, language: EchoLanguage = EchoLanguage.English) {
+    private fun open(
+        latest: UpgradeRequestDto? = null,
+        startAt: FlowStep? = null,
+        language: EchoLanguage = EchoLanguage.English,
+        role: String? = null,
+        canPay: Boolean = true
+    ) {
         runBlocking { app.pairLocally(server) }
         server.on("*", ".*", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
         server.on(
@@ -107,14 +113,21 @@ class V2UpgradeParityTest : ScreenTest() {
             "/api/upgrade-requests/latest",
             latest?.let { FakeServer.json(200, json(it)) } ?: FakeServer.json(404, """{"code":"not_found"}""")
         )
-        vm.updateSettings { it.copy(plan = free.copy(upgrade = latest)) }
+        vm.updateSettings { it.copy(plan = free.copy(upgrade = latest, role = role, workspace = "Bilal Traders")) }
         pumpUntil("the plan") { runBlocking { app.graph.settings.current().plan.key == "free" } }
         show {
             EchoV2Theme(darkTheme = false, language = language) {
                 val toasts = rememberEchoToastState()
                 CompositionLocalProvider(LocalEchoToasts provides toasts) {
                     androidx.compose.foundation.layout.Box {
-                        V2UpgradeFlow(vm, "pro", "Roman Urdu and English views", startAt, given = free) { dismissed++ }
+                        V2UpgradeFlow(
+                            vm,
+                            "pro",
+                            "Roman Urdu and English views",
+                            startAt,
+                            given = free.copy(role = role, workspace = "Bilal Traders"),
+                            canPay = canPay
+                        ) { dismissed++ }
                         EchoToastHost(toasts)
                     }
                 }
@@ -277,5 +290,34 @@ class V2UpgradeParityTest : ScreenTest() {
         await("ادائیگی کا انتظار")
         assertTrue(seen("درخواست منسوخ کریں"))
         assertTrue(seen("ادائیگی کی تفصیلات"))
+    }
+
+    /** Plans without a price or anything to buy, and nothing asked of the server's payments. */
+    private fun nothingToBuy() {
+        await("Pro")
+        assertTrue(seen("Ultra") && seen("900 transcription minutes a month"))
+        listOf("Rs 2,999", "Rs 12,499", "Request Pro", "Promo code").forEach { assertTrue(it, !seen(it)) }
+        assertTrue(server.requestsTo("GET", "/api/upgrade-requests/latest").isEmpty())
+    }
+
+    @Test
+    fun theGooglePlayBuildShowsThePlansWithoutPrices() {
+        open(canPay = false)
+        await("Your plan is managed outside this app.")
+        nothingToBuy()
+    }
+
+    @Test
+    fun aTeamMemberSeesThePlansWithoutPricesAndWhoManagesThem() {
+        open(role = "member")
+        await("Bilal Traders is on Free. Its owner manages the plan.")
+        nothingToBuy()
+    }
+
+    @Test
+    fun aViewerSeesThePlansWithoutPricesToo() {
+        open(role = "viewer")
+        await("Bilal Traders is on Free. Its owner manages the plan.")
+        nothingToBuy()
     }
 }

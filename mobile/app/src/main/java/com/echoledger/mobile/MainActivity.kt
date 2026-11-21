@@ -874,7 +874,8 @@ class MainActivity : FragmentActivity() {
                         // The v2 shell (behind `ui_v2.shell`, contract 2.0.0-a): its own navigation and toasts; every area whose own
                         // flag is off shows the classic screen here.
                         // Upgrade in the new design when its Settings is on (parity.csv PH-OTH-041); an open request
-                        // opens where it stands.
+                        // opens where it stands. As classic's canBuy, the Google Play build and a team member or viewer
+                        // get the plans without prices and nothing to buy.
                         shellPlans && flags.settings -> com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
                             com.echoledger.mobile.ui.v2.plan.V2UpgradeFlow(vm, startPlan = null, feature = null, startAt = null) {
                                 shellPlans = false

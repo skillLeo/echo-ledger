@@ -107,6 +107,10 @@
     <string name="v2_up_s_current">جاری</string>
     <string name="v2_up_s_not_yet">ابھی نہیں</string>
     <string name="v2_up_done">ہو گیا</string>
+    <string name="v2_up_plans">پلان</string>
+    <string name="v2_up_member">%1$s، %2$s پر ہے۔ پلان اس کا مالک سنبھالتا ہے۔</string>
+    <string name="v2_up_your_workspace">آپ کی ورک اسپیس</string>
+    <string name="v2_up_managed_outside">آپ کا پلان اس ایپ کے باہر سنبھالا جاتا ہے۔</string>
     <plurals name="v2_up_promo_off">
         <item quantity="one">%1$s: %3$s پر %4$d مہینے کے لیے %2$d%% رعایت</item>
         <item quantity="other">%1$s: %3$s پر %4$d مہینوں کے لیے %2$d%% رعایت</item>
