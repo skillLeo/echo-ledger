@@ -74,7 +74,7 @@ use Laravel\Passport\HasApiTokens;
  * @property-read StaffRole|null $staffRole
  */
 #[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides', 'email_restore'])]
+#[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides', 'email_restore', 'email_restore_address'])]
 class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery, MustVerifyEmail, OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
