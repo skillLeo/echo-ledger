@@ -25,3 +25,32 @@ What changed:
 
 The machine was shared with other work while measuring, so single runs varied by up to 2×. The medians above come from
 one sitting.
+
+## After the U9 chain review: 2,004 recordings, and the list grown to 500
+
+Measured again on the review's fixes, in the same parity world with 2,004 recordings in the Library, on a local server
+with a scratch SQLite file, a browser at 1280 px. The machine was heavily shared (load average 80 to 120), so single
+runs varied by up to 6×. Each figure is the median of the runs given.
+
+| | 2,004 recordings, first render (8 runs) | Grown to 500 rows (3 runs) |
+|---|---|---|
+| Server, request to first byte | 309 ms | |
+| DOM ready | 553 ms | |
+| Rows drawn | 50 | 500 (the most it grows to) |
+| DOM nodes | 4,894 | 36,623 |
+| HTML | 1,327 KB | |
+| Load more, 50 → 100 | | 633 ms |
+| Load more, 450 → 500 | | 3,024 ms, 9.5 MB of update |
+| The poll while a row on screen moves, nothing changed | | 3 KB a poll, no redraw |
+
+What changed:
+- **A cap.** The list grows to 500 rows. Past that, "Refine your search to see more" takes the place of Show more. How
+  many rows show is kept on the server's side (`#[Locked]`): the browser can't ask for more.
+- **Lighter rows.** Each row reads only a few columns of its final transcript: its status, the first 600 characters of its
+  text (for the snippet) and, only while a Show as view is being made, its meta. Never its lines.
+- **A quiet poll.** While a row on screen is uploading or being transcribed, the new Library asks every 5 seconds how
+  those rows stand (a few columns of those rows only). It draws the list again only when one of them changed. Before,
+  each poll drew the whole list again: about 9.5 MB at 500 rows.
+
+Still heavy: each Load more sends the whole list again, as Livewire draws a table. That is about 19 KB a row, so 9.5 MB
+by row 500. That is why the list stops at 500.

@@ -13,6 +13,9 @@
     /** Swipes only at phone width, as the apps' list does; a computer's rows keep their clicks. */
     const PHONE_MAX = 720;
 
+    /** How long after a swipe its own click is held back (the browser sends it at once, or not at all). */
+    const CLICK_HOLD_MS = 400;
+
     function enabled(viewportWidth) {
         return viewportWidth > 0 && viewportWidth <= PHONE_MAX;
     }
@@ -63,5 +66,5 @@
         record.setAttribute('data-swipe-label', side === 'delete' ? words.delete : (pinned ? words.unpin : words.pin));
     }
 
-    return { PHONE_MAX, enabled, threshold, intent, action, reveal, paint };
+    return { PHONE_MAX, CLICK_HOLD_MS, enabled, threshold, intent, action, reveal, paint };
 });

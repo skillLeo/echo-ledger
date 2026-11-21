@@ -48,6 +48,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Livewire;
@@ -393,15 +394,53 @@ class ListCaptureSessions extends ListRecords
     /** The new Library's rows come in chunks of this many (WEB-LIB-033): the first ones, then Load more. */
     public const V2_CHUNK = 50;
 
+    /** The new Library grows to this many rows at most; past it, the person narrows the list ("Refine your search"). */
+    public const V2_MAX = 500;
+
     /** How many rows the new Library shows now; Load more adds a chunk, and a new search, filter or order starts over. */
+    #[Locked]
     public int $v2Shown = self::V2_CHUNK;
+
+    /**
+     * The rows on screen that are still moving (uploading, being transcribed, a view being made) when the list was last
+     * drawn, and how they stood then: the quiet poll draws the list again only once one of them changed.
+     *
+     * @var list<string>
+     */
+    #[Locked]
+    public array $v2Moving = [];
+
+    #[Locked]
+    public string $v2MovingPrint = '';
 
     /** Load more (also when its button scrolls into view): the next chunk of the list, the counts unchanged. */
     public function v2LoadMore(): void
     {
         if (ConsoleV2::library()) {
-            $this->v2Shown += self::V2_CHUNK;
+            $this->v2Shown = min(self::V2_MAX, $this->v2Shown + self::V2_CHUNK);
         }
+    }
+
+    /**
+     * The new Library's poll while a row on screen is moving: a few columns of those rows only, and no redraw of the
+     * list (up to 500 rows) unless one of them changed.
+     */
+    public function v2Poll(): void
+    {
+        if (! ConsoleV2::library() || ($this->v2Moving !== [] && $this->v2Print($this->v2Moving) === $this->v2MovingPrint)) {
+            $this->skipRender();
+        }
+    }
+
+    /** @param  list<string>  $ids */
+    private function v2Print(array $ids): string
+    {
+        $rows = CaptureSession::query()->whereIn('id', $ids)->orderBy('id')
+            ->with(['finalTranscript' => fn ($final) => $final->select(['id', 'capture_session_id', 'kind', 'status', 'updated_at'])])
+            ->get(['id', 'status', 'updated_at']);
+
+        return md5((string) json_encode($rows->map(fn (CaptureSession $r): array => [(string) $r->id, $r->status?->value, (string) $r->updated_at,
+            $r->finalTranscript?->status?->value, (string) $r->finalTranscript?->updated_at])->all()));
     }
 
     /**
@@ -415,7 +454,9 @@ class ListCaptureSessions extends ListRecords
             return parent::paginateTableQuery($query);
         }
         $total = (clone $query)->toBase()->getCountForPagination();
-        $items = (clone $query)->limit(max(1, $this->v2Shown))->get();
+        $items = (clone $query)->limit(max(1, min(self::V2_MAX, $this->v2Shown)))->get();
+        $this->v2Moving = $items->filter(fn (CaptureSession $r): bool => CaptureSessionsTable::isMoving($r))->map(fn (CaptureSession $r): string => (string) $r->getKey())->values()->all();
+        $this->v2MovingPrint = $this->v2Moving === [] ? '' : $this->v2Print($this->v2Moving);
 
         return new LengthAwarePaginator($items, $total, max(1, $total), 1, ['pageName' => $this->getTablePaginationPageName()]);
     }
@@ -455,10 +496,13 @@ class ListCaptureSessions extends ListRecords
         }
         $back = 0;
         $policy = app(RetentionPolicy::class);
-        foreach (CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', array_slice(array_map('strval', $ids), 0, 200))->get() as $session) {
-            if ($session->restorable() && Gate::allows('restore', $session)) {
-                $policy->restore($session);
-                $back++;
+        // Every one of the batch, however many select all picked, a few hundred at a time.
+        foreach (array_chunk(array_map('strval', $ids), 200) as $chunk) {
+            foreach (CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', $chunk)->get() as $session) {
+                if ($session->restorable() && Gate::allows('restore', $session)) {
+                    $policy->restore($session);
+                    $back++;
+                }
             }
         }
         $notice = Notification::make()->title($back === 1 ? __('1 recording is back') : __(':count recordings are back', ['count' => $back]));

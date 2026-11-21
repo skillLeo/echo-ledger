@@ -192,3 +192,27 @@ it('starts another place, folder or search of the list with nothing selected', f
     Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->call('chooseFolder', 'whatsapp')->assertDispatched('deselectAllTableRecords');
     Livewire::test(ListCaptureSessions::class)->selectTableRecords($ids)->set('tableSearch', 'Call 1')->assertDispatched('deselectAllTableRecords');
 });
+
+it('brings every recording of a big Delete back with Undo, not only the first 200, and changes every one of a big selection', function () {
+    $device = \App\Models\Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    $ids = collect(range(1, 230))->map(fn (int $i): string => (string) Fx::session($this->owner, $device, ['title' => "Bulk {$i}"])->id)->all();
+
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('trash', $ids);
+    preg_match('/"token":"([A-Za-z0-9]{32})"/', selectionNotices(), $m);
+    expect(CaptureSession::onlyTrashed()->whereIn('id', $ids)->count())->toBe(230);
+    Livewire::test(ListCaptureSessions::class)->dispatch('el-library-undo-delete', token: $m[1] ?? '')->assertNotified('230 recordings are back');
+    expect(CaptureSession::query()->whereIn('id', $ids)->count())->toBe(230);
+
+    // The bulk path takes 200 at a time: the selection goes through in turns, none dropped.
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('pinInMenu', $ids);
+    expect(selectionNotices())->toContain('230 recordings updated');
+    expect(CaptureSession::query()->whereIn('id', $ids)->where('pinned', true)->count())->toBe(230);
+
+    // Export takes the first 200 into its zip and says so.
+    foreach (CaptureSession::query()->whereIn('id', $ids)->get() as $session) {
+        $session->transcripts()->create(['kind' => \App\Enums\TranscriptKind::Final, 'provider' => 'assemblyai',
+            'status' => \App\Enums\TranscriptStatus::Completed, 'text' => 'Line', 'segments' => [['speaker' => 'A', 'start_ms' => 0, 'end_ms' => 500, 'text' => 'Line', 'words' => []]]]);
+    }
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('exportTxt', $ids, data: ['view' => null]);
+    expect(selectionNotices())->toContain('Exported the first 200 of 230');
+});

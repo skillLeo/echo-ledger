@@ -528,5 +528,11 @@
     ":app, on a phone": ":app، فون پر",
     ":app, on a computer": ":app، کمپیوٹر پر",
     ":app, on the web": ":app، ویب پر",
-    "Show :count more|Show :count more": ":count مزید دکھائیں|:count مزید دکھائیں"
+    "Show :count more|Show :count more": ":count مزید دکھائیں|:count مزید دکھائیں",
+    ":count could not start|:count could not start": ":count شروع نہیں ہو سکی|:count شروع نہیں ہو سکیں",
+    "the first :max of :count": ":count میں سے پہلی :max",
+    "Exported the first :max of :count": ":count میں سے پہلی :max ایکسپورٹ ہو گئیں",
+    "Pick fewer recordings to export the rest.": "باقی ایکسپورٹ کرنے کے لیے کم ریکارڈنگز چنیں۔",
+    "Refine your search to see more": "مزید دیکھنے کے لیے تلاش محدود کریں",
+    "Your browser did not let the page copy by itself. Press Copy.": "آپ کے براؤزر نے صفحے کو خود کاپی کرنے نہیں دیا۔ کاپی دبائیں۔"
 }

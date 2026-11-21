@@ -1,8 +1,8 @@
 {{--
     The v2.0 Library's swipe at phone width (U9b, WEB-LIB-024), only under ui_v2.library: on a row, swipe left to Delete
     (the row's own Delete, which asks first) and right to Pin or Unpin; right to left mirrors both. The row follows the
-    finger; resources/js/library-swipe-core.cjs decides. Nothing above 720 px, and keyboard and screen-reader users keep
-    the row's menu and the recording's page.
+    finger; resources/js/library-swipe-core.cjs decides. Nothing above 720 px, nothing in a read-only console (it can't
+    delete or pin), and keyboard and screen-reader users keep the row's menu and the recording's page.
 --}}
 <script>
     {!! file_get_contents(resource_path('js/library-swipe-core.cjs')) !!}
@@ -55,8 +55,11 @@
             row.style.transition = '';
             reset(row);
             if (! swiping) return;
-            // A swipe is not a click: the row does not open.
-            row.addEventListener('click', (c) => { c.preventDefault(); c.stopImmediatePropagation(); }, { capture: true, once: true });
+            // A swipe is not a click: the row does not open. Only the click this very touch makes is held back: the
+            // blocker goes after a moment, so a later real tap (when the browser sent no click for the swipe) opens.
+            const block = (c) => { c.preventDefault(); c.stopImmediatePropagation(); };
+            row.addEventListener('click', block, { capture: true, once: true });
+            setTimeout(() => row.removeEventListener('click', block, { capture: true }), core.CLICK_HOLD_MS);
             const act = core.action(dx, dy, row.getBoundingClientRect().width, document.documentElement.dir === 'rtl');
             const id = row.dataset.recording;
             const host = row.closest('[wire\\:id]');

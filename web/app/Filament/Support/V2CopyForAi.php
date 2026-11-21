@@ -10,6 +10,7 @@ use App\Models\Transcript;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptEditor;
 use App\Stt\LanguageChoice;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use App\Support\UnsureMarkers;
 
 /**
@@ -37,8 +38,15 @@ final class V2CopyForAi
         $style = $unsure['style'] === 'off' ? 'brackets' : $unsure['style'];
         $parts = [];
         $skipped = 0;
+        // Every transcript and project of the recordings in two queries, not a few for each recording.
+        $sessions = new EloquentCollection(is_array($sessions) ? $sessions : iterator_to_array($sessions, false));
+        $sessions->loadMissing('client');
+        $transcripts = Transcript::query()->whereIn('capture_session_id', $sessions->modelKeys())
+            ->whereIn('kind', [TranscriptKind::Final->value, TranscriptKind::Live->value])->get()->groupBy('capture_session_id');
         foreach ($sessions as $session) {
-            $lines = self::lines($session, $unsure['threshold']);
+            $own = $transcripts->get($session->getKey(), collect());
+            $session->setRelation('finalTranscript', $own->first(fn (Transcript $t): bool => $t->kind === TranscriptKind::Final));
+            $lines = self::lines($session, $unsure['threshold'], $own);
             if ($lines === []) {
                 $skipped++;
 
@@ -82,10 +90,14 @@ final class V2CopyForAi
      *
      * @return list<array{name: string, start_ms: int, text: string, words: list<array{t: string, u: bool}>}>
      */
-    public static function lines(CaptureSession $session, float $threshold): array
+    public static function lines(CaptureSession $session, float $threshold, ?iterable $transcripts = null): array
     {
-        $final = $session->transcripts()->where('kind', TranscriptKind::Final->value)->first();
-        $live = $session->transcripts()->where('kind', TranscriptKind::Live->value)->first();
+        // The recording's transcripts when they are already loaded (forMany), else asked for.
+        $pick = fn (TranscriptKind $kind): ?Transcript => $transcripts !== null
+            ? collect($transcripts)->first(fn (Transcript $t): bool => $t->kind === $kind)
+            : $session->transcripts()->where('kind', $kind->value)->first();
+        $final = $pick(TranscriptKind::Final);
+        $live = $pick(TranscriptKind::Live);
         /** @var Transcript|null $shown */
         $shown = ($final !== null && $final->segments) ? $final : ($live ?? $final);
         if ($shown === null || ! $shown->segments) {

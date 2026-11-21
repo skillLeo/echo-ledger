@@ -19,6 +19,7 @@ use Filament\Facades\Filament;
 use Filament\Notifications\Livewire\Notifications;
 use Filament\Notifications\NotificationMailbox;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Queue\CallQueuedClosure;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
@@ -56,6 +57,24 @@ beforeEach(function () {
     $this->actingAs($this->owner->fresh(), 'web');
 });
 
+/** Puts the person's workspace on [$plan] with [$minutes] transcription minutes a month (Pro: transcription on EchoLedger). */
+function selectionPlan(object $test, string $plan, ?int $minutes): void
+{
+    Plan::query()->where('key', $plan)->update(['monthly_minutes' => $minutes]);
+    Workspace::query()->whereKey($test->owner->current_workspace_id)->update(['plan_id' => Plan::query()->where('key', $plan)->value('id'),
+        'plan_expires_at' => $plan === 'free' ? null : now()->addDays(30)]);
+    app(\App\Services\Entitlements\Entitlements::class)->forget();
+}
+
+/** Runs the starts Transcribe… put on the queue (Queue::fake holds them), as a worker would. */
+function selectionRunQueuedStarts(): int
+{
+    $jobs = Queue::pushed(CallQueuedClosure::class);
+    $jobs->each(fn (CallQueuedClosure $job) => $job->handle(app()));
+
+    return $jobs->count();
+}
+
 /** The notices sent so far, as JSON. */
 function selectionMoreNotices(): string
 {
@@ -92,26 +111,28 @@ it('offers Mark and Unmark important by the apps\' rule, read from the rows (the
 })->skip(fn (): bool => trim((string) shell_exec('command -v node')) === '', 'Node is not installed here');
 
 it('says the minutes and the minutes left before Transcribe starts, then starts what can be transcribed', function () {
-    Plan::personal()->update(['monthly_minutes' => 120]);
+    selectionPlan($this, 'pro', 120);
     Queue::fake();
     $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereIn('id', [$this->done->id, $this->waiting->id])->get());
-    // 2:30 rounds up to 3 minutes; the transcribed one is not counted.
-    expect($plan['minutes'])->toBe(3)->and($plan['left'])->toBe(120)->and($plan['can'])->toBeTrue()
-        ->and($plan['words'])->toBe('About 3 minutes of the 120 minutes left this month.')
+    // 2:30 on the recording's two channels is billed as 5 minutes (rounded up); the transcribed one is not counted.
+    expect($plan['minutes'])->toBe(5)->and($plan['left'])->toBe(120)->and($plan['can'])->toBeTrue()
+        ->and($plan['words'])->toBe('About 5 minutes of the 120 minutes left this month.')
         ->and(array_map(fn (CaptureSession $r): string => (string) $r->id, $plan['ready']))->toBe([(string) $this->waiting->id]);
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$this->done->id, $this->waiting->id]);
     expect(selectionMoreNotices())->toContain('Transcribing 1 recording · 1 skipped (already transcribed or no audio)');
+    // The start is queued, never run inside the web request; the worker starts it as the recording page does.
+    expect($this->waiting->fresh()->finalTranscript)->toBeNull()->and(selectionRunQueuedStarts())->toBe(1);
     expect($this->waiting->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Pending)
         ->and($this->waiting->fresh()->status)->toBe(SessionStatus::Processing);
 });
 
 it('will not start Transcribe when the month can\'t cover it, nor more than 50 at a time', function () {
-    Plan::personal()->update(['monthly_minutes' => 2]);
+    selectionPlan($this, 'pro', 2);
     Queue::fake();
     $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereKey($this->waiting->id)->get());
     expect($plan['can'])->toBeFalse()
-        ->and($plan['words'])->toBe('About 3 minutes of the 2 minutes left this month. That is more than is left, so nothing will start. Pick fewer recordings.');
+        ->and($plan['words'])->toBe('About 5 minutes of the 2 minutes left this month. That is more than is left, so nothing will start. Pick fewer recordings.');
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$this->waiting->id]);
     expect($this->waiting->fresh()->finalTranscript)->toBeNull();
@@ -121,7 +142,10 @@ it('will not start Transcribe when the month can\'t cover it, nor more than 50 a
     expect($none['can'])->toBeFalse()->and($none['words'])->toBe('Nothing here can be transcribed: each one is already transcribed or has no audio.');
 
     $many = collect(range(1, 51))->map(fn (int $i): CaptureSession => Fx::session($this->owner, $this->device, ['title' => "Call {$i}"]));
-    expect(CaptureSessionsTable::transcribePlan(new Collection($many->all()))['words'])->toBe('Up to 50 at a time: pick fewer recordings.');
+    $tooMany = new Collection($many->all());
+    expect(CaptureSessionsTable::transcribePlan($tooMany)['words'])->toBe('Up to 50 at a time: pick fewer recordings.')
+        // Said before anything of them is loaded.
+        ->and($tooMany->first()->relationLoaded('primaryRecording'))->toBeFalse();
 });
 
 it('copies for AI what the apps copy: the note once, each recording\'s header and its lines, and leaves out what has no transcript', function () {
@@ -146,7 +170,7 @@ it('puts the text on the clipboard with the apps\' notice, or says there is noth
     $page = Livewire::test(ListCaptureSessions::class)->callTableBulkAction('copyForAiInMenu', [$this->done->id, $this->waiting->id]);
     $js = collect($page->effects['xjs'] ?? [])->map(fn ($e): string => is_array($e) ? (string) ($e['expression'] ?? '') : (string) $e)->implode("\n");
     expect($js)->toContain('window.elV2Selection.copy(')->toContain('# Kick-off')->toContain('Copied 1 for AI · 1 without a transcript left out')
-        ->toContain('Could not access the clipboard');
+        ->toContain("'Copy failed'")->not->toContain('Could not access the clipboard');
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('copyForAiInMenu', [$this->waiting->id]);
     expect(selectionMoreNotices())->toContain('This recording has no transcript to copy yet');
@@ -211,9 +235,88 @@ it('starts and marks only the person\'s own recordings in a mixed selection, and
         ->and(CaptureSessionsTable::viewable($mixed)->modelKeys())->toBe([$this->waiting->id]);
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$this->waiting->id, $theirs->id]);
-    expect($this->waiting->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Pending)
+    expect(selectionRunQueuedStarts())->toBe(1)->and($this->waiting->fresh()->finalTranscript?->status)->toBe(TranscriptStatus::Pending)
         ->and($theirs->fresh()->finalTranscript)->toBeNull();
 
     Livewire::test(ListCaptureSessions::class)->callTableBulkAction('importantInMenu', [$this->waiting->id, $theirs->id]);
     expect($this->waiting->fresh()->important)->toBeTrue()->and($theirs->fresh()->important)->toBeFalse();
+});
+
+it('starts recordings on Free with the person\'s own Groq key: they are not charged to the month, so its 0 minutes don\'t stop them', function () {
+    selectionPlan($this, 'free', 0);
+    $this->owner->forceFill(['transcription_key' => 'gsk_'.str_repeat('a', 40).'WXYZ', 'transcription_key_provider' => 'groq'])->save();
+    Queue::fake();
+    $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereKey($this->waiting->id)->get());
+    // Nothing of it counts against the month (the job uses the person's own key); the window says the length only.
+    expect($plan['minutes'])->toBe(0)->and($plan['left'])->toBe(0)->and($plan['can'])->toBeTrue()
+        ->and($plan['words'])->toBe('About 3 minutes.');
+
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$this->waiting->id]);
+    expect(selectionMoreNotices())->toContain('Transcribing 1 recording');
+    expect(selectionRunQueuedStarts())->toBe(1)
+        ->and($this->waiting->fresh()->finalTranscript?->meta['own_key'] ?? null)->toBeTrue();
+});
+
+it('counts the recording\'s channels as the usage ledger bills them (length × channels)', function () {
+    selectionPlan($this, 'pro', 120);
+    $this->waiting->primaryRecording->forceFill(['channels' => 1])->save();
+    $plan = CaptureSessionsTable::transcribePlan(CaptureSession::query()->whereKey($this->waiting->id)->get());
+    // 2:30 on one channel is 3 billed minutes; on two (above) it is 5.
+    expect($plan['minutes'])->toBe(3)->and($plan['words'])->toBe('About 3 minutes of the 120 minutes left this month.');
+});
+
+it('starts each one on its own and says honestly how many could not start', function () {
+    selectionPlan($this, 'pro', null);
+    $second = Fx::session($this->owner, $this->device, ['title' => 'Second call', 'duration_ms' => 30_000, 'status' => SessionStatus::Completed]);
+    Fx::readyRecording($second, 'audio of the second call');
+    Queue::fake();
+    // The queue refuses the second start (it is down for a moment): that one alone fails, and the first still starts.
+    $this->app->extend(\Illuminate\Bus\Dispatcher::class, fn ($bus, $app) => new class($app, fn ($connection = null) => $app['queue']->connection($connection)) extends \Illuminate\Bus\Dispatcher
+    {
+        private int $closures = 0;
+
+        public function dispatchToQueue($command)
+        {
+            if ($command instanceof CallQueuedClosure && ++$this->closures === 2) {
+                throw new RuntimeException('The queue is not reachable');
+            }
+
+            return parent::dispatchToQueue($command);
+        }
+    });
+
+    Livewire::test(ListCaptureSessions::class)->callTableBulkAction('transcribeInMenu', [$this->waiting->id, $second->id]);
+    expect(selectionMoreNotices())->toContain('Transcribing 1 recording · 1 could not start');
+    expect(Queue::pushed(CallQueuedClosure::class))->toHaveCount(1);
+});
+
+it('says "the first 200 of N" when Copy for AI gets more than it takes', function () {
+    $many = collect(range(1, 201))->map(fn (int $i): string => (string) Fx::session($this->owner, $this->device, ['title' => "Copy {$i}"])->id)->all();
+    $page = Livewire::test(ListCaptureSessions::class)->callTableBulkAction('copyForAiInMenu', [$this->done->id, ...$many]);
+    $js = collect($page->effects['xjs'] ?? [])->map(fn ($e): string => is_array($e) ? (string) ($e['expression'] ?? '') : (string) $e)->implode("\n");
+    expect($js)->toContain('the first 200 of 202');
+});
+
+it('copies 200 recordings for AI in a few queries, not a few for each recording', function () {
+    $ids = collect(range(1, 40))->map(function (int $i): string {
+        $s = Fx::session($this->owner, $this->device, ['title' => "Q {$i}"]);
+        $s->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed,
+            'text' => 'Line', 'segments' => [['speaker' => 'A', 'start_ms' => 0, 'end_ms' => 500, 'text' => 'Line', 'words' => []]]]);
+
+        return (string) $s->id;
+    });
+    $sessions = CaptureSession::query()->whereIn('id', $ids)->get();
+    \Illuminate\Support\Facades\DB::enableQueryLog();
+    $result = V2CopyForAi::forMany($sessions);
+    $queries = count(\Illuminate\Support\Facades\DB::getQueryLog());
+    expect($result['copied'])->toBe(40)->and($queries)->toBeLessThan(10);
+});
+
+it('shows the text with its own Copy button when the browser refuses a copy made after the round trip (Safari)', function () {
+    $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($html)->toContain('this.offer(text, done, failed);')->toContain('box.showModal();')
+        ->toContain('Your browser did not let the page copy by itself. Press Copy.')
+        ->toContain("box.querySelector('[data-copy-now]').onclick = async () => {");
+    // The Copy button's own click writes the clipboard (a fresh user gesture), and one failure wording is used.
+    expect(substr_count($html, 'Could not access the clipboard'))->toBe(0);
 });

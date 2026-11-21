@@ -40,3 +40,43 @@ it('decides swipes as the Node test says (phone width only, left Delete, right P
     $result = Process::path(base_path())->timeout(60)->run(['node', '--test', 'tests/js/library-swipe-core.test.mjs']);
     expect($result->successful())->toBeTrue($result->output().$result->errorOutput());
 })->skip(fn (): bool => trim((string) shell_exec('command -v node')) === '', 'Node is not installed here');
+
+it('opens the row\'s Delete confirmation when a swipe asks for it, and deletes nothing until it is confirmed', function () {
+    foreach (InterfaceFlags::UI_V2 as $flag) {
+        app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
+    }
+    $session = \App\Models\CaptureSession::query()->where('title', 'Payment terms')->firstOrFail();
+    $page = \Livewire\Livewire::test(\App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions::class)
+        ->mountTableAction('delete', $session->id);
+    // The confirmation is open on that row, and nothing is gone yet.
+    expect(collect($page->get('mountedActions'))->only([0])->map(fn (array $a): array => [$a['name'], $a['context']['recordKey'] ?? null])->all())->toBe([['delete', (string) $session->id]]);
+    expect(\App\Models\CaptureSession::query()->whereKey($session->id)->exists())->toBeTrue();
+
+    $page->callMountedTableAction();
+    expect(\App\Models\CaptureSession::query()->whereKey($session->id)->exists())->toBeFalse()
+        ->and(\App\Models\CaptureSession::withTrashed()->whereKey($session->id)->exists())->toBeTrue();
+});
+
+it('gives a read-only console no swipe (it can\'t delete or pin there)', function () {
+    foreach (InterfaceFlags::UI_V2 as $flag) {
+        app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
+    }
+    $workspace = \App\Models\Workspace::query()->findOrFail($this->owner->current_workspace_id);
+    $member = Fx::user(['name' => 'Sana Malik']);
+    app(\App\Services\Workspaces\Workspaces::class)->addMember($workspace, $member, \App\Enums\WorkspaceRole::Member);
+    $member->forceFill(['current_workspace_id' => $workspace->id])->save();
+    $this->actingAs($member->fresh(), 'web');
+    expect(\App\Services\Workspaces\ConsoleAccess::readOnly())->toBeTrue();
+
+    $response = $this->get('/app/sessions');
+    expect((string) $response->getContent())->not->toContain('elV2LibrarySwipe');
+});
+
+it('lets go of a swipe\'s own click after a moment, so the next real tap still opens the row', function () {
+    foreach (InterfaceFlags::UI_V2 as $flag) {
+        app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
+    }
+    $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($html)->toContain("setTimeout(() => row.removeEventListener('click', block, { capture: true }), core.CLICK_HOLD_MS)")
+        ->toContain('CLICK_HOLD_MS = 400');
+});

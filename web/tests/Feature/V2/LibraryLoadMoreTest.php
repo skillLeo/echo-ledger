@@ -66,3 +66,56 @@ it('keeps classic\'s pages and per-page choice', function () {
     $page->call('v2LoadMore');
     expect($page->get('v2Shown'))->toBe(ListCaptureSessions::V2_CHUNK);
 });
+
+it('keeps how many rows show on the server\'s side (the browser can\'t set it) and grows to 500 at most, then asks to refine', function () {
+    loadMoreV2();
+    $page = Livewire::test(ListCaptureSessions::class);
+    expect(fn () => $page->set('v2Shown', 5000))->toThrow(\Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException::class);
+
+    $device = App\Models\Device::query()->where('user_id', $this->owner->id)->firstOrFail();
+    foreach (range(121, 560) as $i) {
+        Fx::session($this->owner, $device, ['title' => "Call {$i}", 'started_at' => now()->subHours($i)]);
+    }
+    $page = Livewire::test(ListCaptureSessions::class);
+    foreach (range(1, 12) as $ignored) {
+        $page->call('v2LoadMore');
+    }
+    expect($page->get('v2Shown'))->toBe(ListCaptureSessions::V2_MAX)
+        ->and(substr_count($page->html(), 'class="v2-lib-row"'))->toBe(500)
+        ->and($page->html())->toContain('Refine your search to see more')->toContain('data-load-more-cap')->not->toContain('data-load-more data-shown');
+});
+
+it('reads only the row\'s columns of each transcript: its status and the start of its text, never its lines', function () {
+    loadMoreV2();
+    $session = App\Models\CaptureSession::query()->where('title', 'Call 1')->firstOrFail();
+    $session->transcripts()->create(['kind' => App\Enums\TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => App\Enums\TranscriptStatus::Completed,
+        'text' => 'Assalam o alaikum. '.str_repeat('The proforma is ready. ', 200), 'meta' => ['views' => ['status' => 'ready']],
+        'segments' => [['speaker' => 'A', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'Assalam o alaikum.', 'words' => []]]]);
+    $page = Livewire::test(ListCaptureSessions::class);
+    $row = $page->instance()->getTableRecords()->first(fn ($r) => $r->id === $session->id);
+
+    expect($row->finalTranscript->getAttributes())->not->toHaveKey('segments')
+        ->and(mb_strlen((string) $row->finalTranscript->text))->toBe(600)
+        ->and($row->finalTranscript->meta)->toBeNull()
+        ->and($page->html())->toContain('Assalam o alaikum. The proforma is ready.');
+});
+
+it('polls quietly while a row is moving: the list is drawn again only once that row changed', function () {
+    loadMoreV2();
+    $moving = App\Models\CaptureSession::query()->where('title', 'Call 1')->firstOrFail();
+    $moving->forceFill(['status' => App\Enums\SessionStatus::Processing])->save();
+    $page = Livewire::test(ListCaptureSessions::class);
+    expect($page->get('v2Moving'))->toBe([(string) $moving->id])->and($page->html())->toContain('wire:poll.5s="v2Poll"')
+        ->and($page->html())->not->toMatch('~wire:poll\.5s(?!="v2Poll")~');
+
+    // Nothing moved: no redraw (no HTML goes back).
+    $page->call('v2Poll');
+    expect($page->effects['html'] ?? null)->toBeNull();
+
+    // It finished: the list is drawn again, and the poll stops.
+    Carbon::setTestNow(now()->addSeconds(10));
+    $moving->forceFill(['status' => App\Enums\SessionStatus::Completed])->save();
+    $page->call('v2Poll');
+    expect($page->effects['html'] ?? null)->not->toBeNull()->and($page->get('v2Moving'))->toBe([])
+        ->and($page->html())->not->toContain('v2Poll');
+});

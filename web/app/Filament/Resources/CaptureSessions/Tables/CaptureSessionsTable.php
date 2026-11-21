@@ -7,6 +7,7 @@ namespace App\Filament\Resources\CaptureSessions\Tables;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
+use App\Enums\SttProviderKey;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
@@ -25,10 +26,12 @@ use App\Models\Client;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
+use App\Services\Usage\UsageLedger;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
+use App\Stt\LanguageRouter;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
@@ -50,16 +53,19 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\CallQueuedClosure;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 final class CaptureSessionsTable
 {
@@ -83,7 +89,7 @@ final class CaptureSessionsTable
             ->groupingDirectionSettingHidden()
             // The new Library's rows also show the unread dot: whether this person opened each one (U9).
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(ConsoleV2::library()
-                ? ['labels', 'finalTranscript', 'client', 'device', 'opens' => fn ($opens) => $opens->where('user_id', (int) auth()->id())]
+                ? ['labels', 'finalTranscript' => fn ($final) => self::rowTranscriptColumns($final), 'client', 'device', 'opens' => fn ($opens) => $opens->where('user_id', (int) auth()->id())]
                 : 'labels'))
             // The phone's list: one row per recording (tile, title, time, a second line, a status only when needed).
             // Since v1.6 (P4.4) the Library's List/Table switch shows a table instead, its columns chosen in Columns.
@@ -139,7 +145,9 @@ final class CaptureSessionsTable
                 ->label(fn (): string => 'Filters ('.$table->getActiveFiltersCount().' active)'))
             // Live status: the list refreshes every few seconds while it shows a recording that is uploading or being
             // transcribed, and stops by itself once none is.
-            ->poll(fn (HasTable $livewire): ?string => self::showsPending($livewire->getTableRecords()) ? self::LIVE_POLL : null)
+            // The new Library polls through its own quiet check instead (ListCaptureSessions::v2Poll): the list is drawn
+            // again only when one of its moving rows moved.
+            ->poll(fn (HasTable $livewire): ?string => ! ConsoleV2::library() && self::showsPending($livewire->getTableRecords()) ? self::LIVE_POLL : null)
             // Since v1.5 members and viewers only open their recordings here (a read-only console).
             ->recordActions(ConsoleAccess::readOnly() ? [ViewAction::make()->label('Open')] : [
                 // Since v1.6 (P5.3): in Failed uploads, Retry where something here can fix it, and Delete.
@@ -492,15 +500,33 @@ final class CaptureSessionsTable
 
                     return;
                 }
+                // Each one on its own: one that can't start doesn't stop the others, and is counted. The starts go on the
+                // queue (never the upload's fast path, which would run up to 50 of them inside this one web request).
+                $started = 0;
+                $failed = 0;
                 foreach ($plan['ready'] as $record) {
-                    $coordinator->start($record, $record->finalTranscript);
+                    try {
+                        self::engineFor($record);
+                        $id = (string) $record->getKey();
+                        app(Dispatcher::class)->dispatch(CallQueuedClosure::create(function () use ($id): void {
+                            $session = CaptureSession::query()->with(['finalTranscript', 'client'])->find($id);
+                            if ($session !== null && in_array($session->finalTranscript?->status, [null, TranscriptStatus::Failed], true)) {
+                                app(FinalTranscriptCoordinator::class)->start($session, $session->finalTranscript);
+                            }
+                        }));
+                        $started++;
+                    } catch (Throwable $e) {
+                        report($e);
+                        $failed++;
+                    }
                 }
-                $started = count($plan['ready']);
-                $skipped = $records->count() - $started;
-                $rest = $skipped > 0 ? ' · '.trans_choice(':count skipped (already transcribed or no audio)|:count skipped (already transcribed or no audio)', $skipped, ['count' => $skipped]) : '';
-                Notification::make()->title(($started > 0
+                $skipped = $records->count() - count($plan['ready']);
+                $rest = ($failed > 0 ? ' · '.trans_choice(':count could not start|:count could not start', $failed, ['count' => $failed]) : '')
+                    .($skipped > 0 ? ' · '.trans_choice(':count skipped (already transcribed or no audio)|:count skipped (already transcribed or no audio)', $skipped, ['count' => $skipped]) : '');
+                $notice = Notification::make()->title(($started > 0
                     ? trans_choice('Transcribing 1 recording|Transcribing :count recordings', $started, ['count' => $started])
-                    : __('Nothing to transcribe')).$rest)->success()->send();
+                    : __('Nothing to transcribe')).$rest);
+                ($failed > 0 ? $notice->warning() : $notice->success())->send();
             })
             ->deselectRecordsAfterCompletion();
     }
@@ -515,27 +541,68 @@ final class CaptureSessionsTable
      */
     public static function transcribePlan(Collection $records): array
     {
-        $records->loadMissing(['primaryRecording', 'finalTranscript']);
+        // Too many is said before anything is loaded.
+        if ($records->count() > self::MAX_TRANSCRIBE) {
+            return ['ready' => [], 'minutes' => 0, 'left' => null, 'can' => false, 'words' => __('Up to :max at a time: pick fewer recordings.', ['max' => self::MAX_TRANSCRIBE])];
+        }
+        $records->loadMissing(['primaryRecording', 'finalTranscript', 'client']);
         // Only what the person may change starts; the rest is skipped like a transcribed one.
         $ready = self::changeable($records)->filter(fn (CaptureSession $r): bool => $r->primaryRecording?->isReady() === true && ! $r->hasNoAudio()
             && in_array($r->finalTranscript?->status, [null, TranscriptStatus::Failed], true))->values()->all();
-        // Worked out here for now (each recording's length rounded up). Once be/B7 brings POST /api/sessions/transcribe-estimate,
-        // use its shared estimate instead (the billed channels of the engine the routing would pick), as the apps will.
-        $minutes = array_sum(array_map(fn (CaptureSession $r): int => max(1, (int) ceil(((int) $r->duration_ms) / 60000)), $ready));
+        // Worked out here for now. Once be/B7 brings POST /api/sessions/transcribe-estimate, use its shared estimate
+        // instead, as the apps will. Only what the job would charge counts against the month (not a recording that
+        // goes to the person's own key, nor an engine that costs nothing), as the usage ledger bills it: the length ×
+        // the recording's channels, rounded up.
+        $billed = fn (CaptureSession $r): int => max(1, (int) ceil(((int) $r->duration_ms) * max(1, (int) ($r->primaryRecording->channels ?? 1)) / 60000));
+        $charged = array_values(array_filter($ready, fn (CaptureSession $r): bool => self::charges($r)));
+        $minutes = array_sum(array_map($billed, $charged));
+        $length = array_sum(array_map(fn (CaptureSession $r): int => max(1, (int) ceil(((int) $r->duration_ms) / 60000)), $ready));
         $workspace = (int) CurrentWorkspace::id();
         $limits = app(PlanLimits::class);
         $limit = $limits->limit($workspace, 'monthly_minutes', (int) CurrentWorkspace::userId());
         $left = $limit === null ? null : max(0, (int) floor((float) $limit - $limits->minutesUsed($workspace)));
         $count = fn (int $n): string => trans_choice('1 minute|:count minutes', $n, ['count' => $n]);
-        $tooMany = $records->count() > self::MAX_TRANSCRIBE;
         $over = $left !== null && $minutes > $left;
-        $none = ! $tooMany && $ready === [];
-        $words = $tooMany ? __('Up to :max at a time: pick fewer recordings.', ['max' => self::MAX_TRANSCRIBE])
-            : ($none ? __('Nothing here can be transcribed: each one is already transcribed or has no audio.') : ($left === null ? __('About :minutes.', ['minutes' => $count($minutes)])
+        $none = $ready === [];
+        $words = $none ? __('Nothing here can be transcribed: each one is already transcribed or has no audio.')
+            : (($left === null || $minutes === 0) ? __('About :minutes.', ['minutes' => $count($left === null ? $minutes : $length)])
                 : __('About :minutes of the :left left this month.', ['minutes' => $count($minutes), 'left' => $count($left)]))
-                .($over ? ' '.__('That is more than is left, so nothing will start. Pick fewer recordings.') : ''));
+                .($over ? ' '.__('That is more than is left, so nothing will start. Pick fewer recordings.') : '');
 
-        return ['ready' => $ready, 'minutes' => $minutes, 'left' => $left, 'can' => ! $tooMany && ! $over && ! $none, 'words' => $words];
+        return ['ready' => $ready, 'minutes' => $minutes, 'left' => $left, 'can' => ! $over && ! $none, 'words' => $words];
+    }
+
+    /** The engine a start would pick for [$record], as FinalTranscriptCoordinator::start picks it. */
+    private static function engineFor(CaptureSession $record): SttProviderKey
+    {
+        $router = app(LanguageRouter::class);
+        $language = $router->languageFor($record);
+
+        return $language === null ? app(FinalTranscriptCoordinator::class)->providerFor($record)
+            : $router->final($language, FinalTranscriptCoordinator::useCaseFor($record), $record)->provider;
+    }
+
+    /** Whether the job would charge [$record] to the month: a billable engine, not the person's own key. */
+    private static function charges(CaptureSession $record): bool
+    {
+        try {
+            $engine = self::engineFor($record);
+        } catch (Throwable) {
+            return false; // it can't start: Transcribe counts it as "could not start"
+        }
+
+        return UsageLedger::isBillable($engine) && ! FinalTranscriptCoordinator::needsOwnKey($record, $engine);
+    }
+
+    /**
+     * The new Library's rows read only a few columns of each final transcript: its status, the start of its text (the
+     * snippet) and, while a Show as view is being made, its meta (the poll's "still moving"). Never its lines.
+     */
+    private static function rowTranscriptColumns(mixed $final): mixed
+    {
+        return $final->select(['id', 'capture_session_id', 'kind', 'status', 'language', 'provider', 'edited_at', 'updated_at'])
+            ->selectRaw('SUBSTR(text, 1, 600) AS text')
+            ->selectRaw("CASE WHEN meta LIKE '%\"making\"%' THEN meta ELSE NULL END AS meta");
     }
 
     /**
@@ -546,7 +613,8 @@ final class CaptureSessionsTable
     {
         return BulkAction::make($name)->label(__('Copy for AI'))->icon(Heroicon::OutlinedSparkles)
             ->action(function (Collection $records, HasTable $livewire): void {
-                ['text' => $text, 'copied' => $copied, 'skipped' => $skipped] = V2CopyForAi::forMany(self::viewable($records)->take(V2CopyForAi::MAX));
+                $open = self::viewable($records);
+                ['text' => $text, 'copied' => $copied, 'skipped' => $skipped] = V2CopyForAi::forMany($open->take(V2CopyForAi::MAX));
                 if ($copied === 0) {
                     Notification::make()->title($records->count() === 1 ? __('This recording has no transcript to copy yet') : __('None of these has a transcript to copy yet'))->warning()->send();
 
@@ -554,7 +622,11 @@ final class CaptureSessionsTable
                 }
                 $done = $copied === 1 && $skipped === 0 ? __('Copied for AI')
                     : __('Copied :count for AI', ['count' => $copied]).($skipped > 0 ? ' · '.__(':count without a transcript left out', ['count' => $skipped]) : '');
-                $livewire->js('window.elV2Selection.copy('.Js::from($text).', '.Js::from($done).', '.Js::from(__('Could not access the clipboard')).')');
+                // Never fewer than were picked without saying so.
+                if ($open->count() > V2CopyForAi::MAX) {
+                    $done .= ' · '.__('the first :max of :count', ['max' => V2CopyForAi::MAX, 'count' => $open->count()]);
+                }
+                $livewire->js('window.elV2Selection.copy('.Js::from($text).', '.Js::from($done).', '.Js::from(__('Copy failed')).')');
             });
     }
 
@@ -601,7 +673,12 @@ final class CaptureSessionsTable
     {
         $run = function (Collection $records, string $action, ?string $client = null, ?string $label = null): void {
             try {
-                $changed = app(LibraryOrganiser::class)->bulk((int) CurrentWorkspace::id(), self::ids($records), $action, $client, $label, auth()->user());
+                // The new Library's select all can pick more than the bulk path takes at once: it goes in turns of that
+                // many, so none is dropped. Classic stays as it was.
+                $changed = 0;
+                foreach (ConsoleV2::library() ? array_chunk(self::ids($records), LibraryOrganiser::MAX_BULK) : [self::ids($records)] as $ids) {
+                    $changed += app(LibraryOrganiser::class)->bulk((int) CurrentWorkspace::id(), $ids, $action, $client, $label, auth()->user());
+                }
                 Notification::make()->title($changed === 1 ? '1 recording updated' : "{$changed} recordings updated")->success()->send();
             } catch (ApiError $e) {
                 Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
@@ -662,6 +739,11 @@ final class CaptureSessionsTable
         $view = is_string($view) && array_key_exists($view, TranscriptViews::VIEWS) ? $view : null;
         try {
             $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), $format, $view);
+            // The new Library says when the zip holds fewer than were picked (it takes the first ones only).
+            if (ConsoleV2::library() && $records->count() > LibraryOrganiser::MAX_BULK) {
+                Notification::make()->title(__('Exported the first :max of :count', ['max' => LibraryOrganiser::MAX_BULK, 'count' => $records->count()]))
+                    ->body(__('Pick fewer recordings to export the rest.'))->warning()->send();
+            }
         } catch (ApiError $e) {
             Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
 
