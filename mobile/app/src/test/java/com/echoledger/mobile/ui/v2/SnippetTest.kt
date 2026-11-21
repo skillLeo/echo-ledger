@@ -36,4 +36,12 @@ class SnippetTest {
         )
         assertEquals("ہم کل بات کریں گے۔", firstSentence("مقرر: ٹھیک ہے۔ مقرر: ہم کل بات کریں گے۔ اور کچھ"))
     }
+
+    @Test
+    fun dropsNumberedSpeakerLabels() {
+        assertEquals(
+            "Can you send the estimate by Monday?",
+            firstSentence("Speaker 1: Can you send the estimate by Monday? Speaker 2: Yes.")
+        )
+    }
 }

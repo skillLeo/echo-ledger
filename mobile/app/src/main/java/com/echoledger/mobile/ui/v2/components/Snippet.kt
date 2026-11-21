@@ -30,6 +30,6 @@ private val SENTENCE_END = Regex("""[.?!…۔؟](?=\s|$)""")
  * anywhere, the known ones the transcripts use (Speaker, Client, Me, You, Caller and Urdu's مقرر).
  */
 private val SPEAKER_LABEL = Regex(
-    """(?:^|(?<=[.?!…۔؟]))\s*[\p{L}\p{M}]+(?:\s[\p{L}\p{M}]+)?(?:\s\([^)]{1,24}\))?\s?:\s*""" +
-        """|\s(?i:speaker|client|me|you|caller|مقرر)\s?:\s*"""
+    """(?:^|(?<=[.?!…۔؟]))\s*[\p{L}\p{M}]+(?:\s[\p{L}\p{M}\p{N}]+)?(?:\s\([^)]{1,24}\))?\s?:\s*""" +
+        """|\s(?i:speaker|client|me|you|caller|مقرر)(?:\s\p{N}+)?\s?:\s*"""
 )
