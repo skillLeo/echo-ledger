@@ -51,6 +51,7 @@ use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
 use App\Support\Brand;
+use App\Support\Translation\IsolatingTranslator;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Filament\Support\Facades\FilamentTimezone;
@@ -74,6 +75,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Translation\Translator;
 use Illuminate\Validation\Rules\Password;
 use League\Flysystem\Filesystem;
 use RuntimeException;
@@ -85,6 +87,9 @@ class AppServiceProvider extends ServiceProvider
         // Since v1.9 (L0) the product's name has one place (config/echoledger.php `brand`): what reads `app.name` (Laravel
         // and its packages) reads it too. Cookie and cache names come from APP_NAME in the .env file and do not change.
         config(['app.name' => Brand::name()]);
+        // Since 2.0 (B8): in Urdu and Arabic every :replacement of a translated line is a Unicode isolate, so names and
+        // numbers inside right-to-left sentences keep their direction (IsolatingTranslator). Other languages unchanged.
+        $this->app->extend('translator', fn (Translator $translator): IsolatingTranslator => IsolatingTranslator::from($translator));
         // Since v1.6.1 every toast is a Notice: a target to open, Dismiss, the timer bar, swipe (docs/DESIGN_SYSTEM.md
         // "Notices"). Filament makes its notifications through the container, so every Notification::make() is one.
         $this->app->bind(FilamentNotification::class, Notice::class);
