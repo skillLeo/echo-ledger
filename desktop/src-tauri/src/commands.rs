@@ -520,11 +520,93 @@ pub fn account_export_open(app: AppHandle, url: String) -> AppResult<()> {
     app.opener().open_url(url.trim(), None::<&str>).map_err(|e| AppError::msg(e.to_string()))
 }
 
+// ---- Your account from the app (contract 2.0.0-l) ------------------------------------------------------------------
+
+/// One account action (`my_account::ACTIONS`) with its body (a proof, a name, a code…), answered whole so the window
+/// can say each refusal in its own words. Only a signed-out computer is an error.
+#[tauri::command]
+pub async fn account_call(app: AppHandle, action: String, id: Option<String>, body: Option<serde_json::Value>) -> AppResult<crate::my_account::AccountReply> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let (method, path) = crate::my_account::route(&action, id.as_deref())?;
+    let body = body.unwrap_or(serde_json::Value::Null);
+    if !body.is_null() && !body.is_object() {
+        return Err(AppError::msg("That is not something this app can change."));
+    }
+    let reply = state.api()?.account_request(method, &path, &body).await?;
+    // The name, the picture or the email changed: the shell's avatar and name follow.
+    if reply.ok && matches!(action.as_str(), "name" | "avatar_remove" | "email_confirm") {
+        let _ = app.emit("account:changed", ());
+    }
+    Ok(reply)
+}
+
+/// Change picture…: the person picks a photo here; it is made ready (a JPEG, PNG or WebP of at most 5 MB, with no
+/// place or camera details; HEIC turned into a JPEG on a Mac) and sent. `None` when they cancel the picker.
+#[tauri::command]
+pub async fn account_avatar_choose(app: AppHandle) -> AppResult<Option<crate::my_account::AccountReply>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let Some(path) = crate::files::pick_avatar(&app).await else { return Ok(None) };
+    let bytes = tokio::fs::read(&path).await?;
+    let picture = tokio::task::spawn_blocking(move || crate::my_account::prepare_avatar(bytes, crate::my_account::heif_to_jpeg))
+        .await
+        .map_err(|e| AppError::msg(e.to_string()))?
+        .map_err(AppError::msg)?;
+    let reply = state.api()?.upload_avatar(&picture).await?;
+    if reply.ok {
+        let _ = app.emit("account:changed", ());
+    }
+    Ok(Some(reply))
+}
+
+/// A person's picture as a `data:` URL for the window (its pictures come from the app only), kept on this computer by
+/// its version so it still shows offline. `None` when there is none to show (the window draws the initials).
+#[tauri::command]
+pub async fn account_avatar_image(app: AppHandle, url: Option<String>, version: u64) -> AppResult<Option<String>> {
+    use base64::Engine as _;
+    let state = app.state::<AppState>();
+    let cached = crate::my_account::avatar_cache_path(&state.data_dir, version);
+    let to_url = |bytes: &[u8]| {
+        let mime = crate::receipts::sniff(bytes).map(|k| k.mime()).unwrap_or("image/webp");
+        format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
+    };
+    if let Ok(bytes) = tokio::fs::read(&cached).await {
+        return Ok(Some(to_url(&bytes)));
+    }
+    let Some(url) = url else { return Ok(None) };
+    let server = state.settings().server_url.ok_or(AppError::NotPaired)?;
+    if !crate::account::on_server(&url, &server) {
+        return Ok(None);
+    }
+    let Ok(Some(bytes)) = state.api()?.avatar_bytes(&url).await else { return Ok(None) };
+    if crate::receipts::sniff(&bytes).is_none() {
+        return Ok(None);
+    }
+    if let Some(dir) = cached.parent() {
+        let _ = tokio::fs::create_dir_all(dir).await;
+        let _ = tokio::fs::write(&cached, &bytes).await;
+    }
+    Ok(Some(to_url(&bytes)))
+}
+
+/// Save the recovery codes as a text file where the person chooses; `None` when they cancel.
+#[tauri::command]
+pub async fn account_recovery_codes_save(app: AppHandle, codes: Vec<String>, email: String) -> AppResult<Option<String>> {
+    if codes.is_empty() || codes.len() > 32 || codes.iter().any(|c| c.len() > 64) {
+        return Err(AppError::msg("There are no recovery codes to save."));
+    }
+    let Some(path) = crate::files::ask_save_path(&app, "EchoLedger recovery codes.txt", "Text").await else { return Ok(None) };
+    tokio::fs::write(&path, crate::my_account::recovery_codes_text(&codes, &email)).await?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 /// The server's public pages the app links to (docs/API.md "Public pages and app downloads"), opened in the browser.
 /// The server's pages the apps open in the browser (v1.6): the staff's admin panel (`admin`, the avatar menu, only for
 /// the super admin) and the customer app's workspace and profile pages (`app/…`, the workspace switcher and Account →
-/// Password & sign-in methods; the console moved them from `/admin` to `/app`, and old links redirect).
-const SERVER_PAGES: [&str; 7] = ["terms", "privacy", "account/delete", "downloads", "admin", "app/workspace", "app/profile"];
+/// Password & sign-in methods; the console moved them from `/admin` to `/app`, and old links redirect), and since
+/// 2.0.0-l the passkeys page (the desktop adds passkeys on the website).
+const SERVER_PAGES: [&str; 8] = ["terms", "privacy", "account/delete", "downloads", "admin", "app/workspace", "app/profile", "app/settings/security/passkeys"];
 
 /// `server_url` is the server the sign-in screen talks to (Terms and Privacy before signing in, v1.6); without it the
 /// signed-in server.

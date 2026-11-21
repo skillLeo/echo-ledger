@@ -24,6 +24,7 @@ pub mod lock;
 pub mod mac_check;
 mod main_thread;
 pub mod material;
+pub mod my_account;
 pub mod net;
 pub mod notifications;
 pub mod overlay;
@@ -586,6 +587,10 @@ pub fn run() {
             commands::sign_in_browser_cancel,
             commands::unpair,
             commands::account_get,
+            commands::account_call,
+            commands::account_avatar_choose,
+            commands::account_avatar_image,
+            commands::account_recovery_codes_save,
             commands::account_sign_out_everywhere,
             commands::account_delete,
             commands::account_export_start,

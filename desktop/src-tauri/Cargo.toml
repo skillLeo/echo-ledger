@@ -53,6 +53,10 @@ webp = { version = "0.3.1", default-features = false }
 # apps' versions from their Info.plist (both already in the tree through Tauri).
 regex = { version = "1.13.1", default-features = false, features = ["std", "unicode-case", "unicode-perl"] }
 plist = "1.10.3"
+# Your account (contract 2.0.0-l): a profile picture in another format is turned into a JPEG here before upload (the
+# image crate is already in the tree through Tauri), and two-step sign-in's QR code is drawn from its otpauth link.
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "bmp", "tiff"] }
+qrcodegen = "1.8.0"
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 # The native open and save dialogs, used from the core only (the webview never picks a path). Not through

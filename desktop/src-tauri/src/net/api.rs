@@ -535,6 +535,53 @@ impl ApiClient {
         }
     }
 
+    /// One of the account routes of 2.0.0-l (`my_account::ACTIONS`), answered whole: the status, the body and
+    /// `Retry-After`, refusals included, so the window can say each in its own words. Only `401` is an error (this
+    /// computer is signed out). `body` is sent as JSON when it is not `null` (a proof goes with a `DELETE` too).
+    pub async fn account_request(&self, method: &str, path: &str, body: &serde_json::Value) -> AppResult<crate::my_account::AccountReply> {
+        let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| AppError::msg("That is not something this app can change."))?;
+        let mut request = self.http.request(method, self.url(path));
+        if !body.is_null() {
+            request = request.json(body);
+        }
+        let resp = self.authed(request)?.send().await?;
+        Self::account_reply(resp).await
+    }
+
+    async fn account_reply(resp: reqwest::Response) -> AppResult<crate::my_account::AccountReply> {
+        let status = resp.status().as_u16();
+        if status == 401 {
+            return Err(AppError::NotPaired);
+        }
+        let retry_after = resp.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok());
+        let text = resp.text().await.unwrap_or_default();
+        let body = if text.trim().is_empty() { serde_json::Value::Null } else { serde_json::from_str(&text).unwrap_or(serde_json::Value::Null) };
+        Ok(crate::my_account::AccountReply::from_answer(status, body, retry_after))
+    }
+
+    /// `POST /api/account/avatar` (since 2.0.0-l): the picture as multipart `image`, already made ready here.
+    pub async fn upload_avatar(&self, picture: &crate::my_account::AvatarFile) -> AppResult<crate::my_account::AccountReply> {
+        let boundary = format!("echoledger-{}", uuid::Uuid::new_v4().simple());
+        let body = multipart_file(&boundary, "image", picture.name, picture.mime, &picture.bytes);
+        let resp = self
+            .authed(self.http.post(self.url("account/avatar")))?
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
+            .body(body)
+            .send()
+            .await?;
+        Self::account_reply(resp).await
+    }
+
+    /// A person's picture from its signed link (no token: the signature is the key). `None` for an expired or replaced
+    /// link (`403`, `404`), which the window answers with the copy it has or the initials.
+    pub async fn avatar_bytes(&self, url: &str) -> AppResult<Option<Vec<u8>>> {
+        let resp = self.http.get(url).send().await?;
+        if !resp.status().is_success() {
+            return Ok(None);
+        }
+        Ok(Some(resp.bytes().await?.to_vec()))
+    }
+
     /// `POST /api/account/sign-out-everywhere` (since v1.5): every device and console session of the account, this
     /// computer's token included.
     pub async fn sign_out_everywhere(&self) -> AppResult<()> {
