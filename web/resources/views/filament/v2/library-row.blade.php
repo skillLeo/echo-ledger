@@ -13,8 +13,7 @@
     <span class="v2-row-main">
         <span class="v2-lib-line">
             @if ($row['unread'])
-                <span role="img" aria-label="{{ __('Not opened yet') }}" title="{{ __('Not opened yet') }}" data-unread
-                    style="flex: none; width: var(--el-space-8); height: var(--el-space-8); border-radius: var(--el-radius-full); background-color: var(--el-role-accent-default)"></span>
+                <span class="v2-unread-dot" role="img" aria-label="{{ __('Not opened yet') }}" title="{{ __('Not opened yet') }}" data-unread></span>
             @endif
             <span class="v2-row-title" dir="auto">{{ $row['title'] }}</span>
         </span>
@@ -26,8 +25,8 @@
             @endif
             <span class="v2-row-meta"><bdi>{{ $row['line'] }}</bdi></span>
             @foreach ($row['labels'] as $label)
-                <span role="img" aria-label="{{ __('Label: :name', ['name' => $label['name']]) }}" title="{{ $label['name'] }}" data-label-dot="{{ $label['name'] }}"
-                    style="flex: none; width: var(--el-space-8); height: var(--el-space-8); border-radius: var(--el-radius-full); {{ $label['style'] }}"></span>
+                <span class="v2-label-dot {{ $label['class'] }}" role="img" aria-label="{{ __('Label: :name', ['name' => $label['name']]) }}" title="{{ $label['name'] }}"
+                    data-label-dot="{{ $label['name'] }}" @if ($label['own'] !== null) style="--label-own: {{ $label['own'] }}" @endif></span>
             @endforeach
         </span>
         {{-- A line of its own, so on a phone the days stay whole beside the status; the snippet follows and ends in "…". --}}

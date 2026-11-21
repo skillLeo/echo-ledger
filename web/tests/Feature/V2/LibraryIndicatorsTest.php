@@ -47,7 +47,7 @@ function indicatorRow(string $html, string $id): string
 
 it('dots a recording this person has not opened, and takes the dot away once they open it', function () {
     $row = fn (): string => indicatorRow(Livewire::test(ListCaptureSessions::class)->html(), (string) $this->call->id);
-    expect($row())->toContain('data-unread')->toContain('aria-label="Not opened yet"');
+    expect($row())->toContain('<span class="v2-unread-dot" role="img" aria-label="Not opened yet"');
 
     SessionOpen::mark((string) $this->call->id, $this->owner->id);
     expect($row())->not->toContain('data-unread');
@@ -73,16 +73,22 @@ it('draws each label\'s colour dot by the design\'s rules: the eight by their to
     $organiser->setLabelColor((int) $this->call->workspace_id, $this->owner->id, 'Urgent', '#123abc');
 
     $row = indicatorRow(Livewire::test(ListCaptureSessions::class)->html(), (string) $this->call->id);
-    preg_match_all('~data-label-dot="([^"]+)"\s+style="([^"]+)"~', $row, $dots, PREG_SET_ORDER);
-    $style = collect($dots)->mapWithKeys(fn (array $d): array => [$d[1] => $d[2]]);
-    // One of the eight, whatever its case: its role token (neutral until the label tokens are merged).
-    expect($style['Invoice'])->toContain('background-color: var(--el-role-label-green-dot, var(--el-role-text-secondary))')->not->toContain('#')
-        // Any other colour: only the dot, in that colour, with a hairline ring.
-        ->and($style['Urgent'])->toContain('background-color: #123abc')->toContain('var(--el-role-border-strong)')
-        // No colour: the neutral dot with the ring.
-        ->and($style['Later'])->toContain('background-color: var(--el-role-bg-subtle)')->toContain('var(--el-role-border-strong)')
+    preg_match_all('~<span class="v2-label-dot ([^"]+)"[^>]*data-label-dot="([^"]+)"\s*(?:style="([^"]*)")?~', $row, $dots, PREG_SET_ORDER);
+    $look = collect($dots)->mapWithKeys(fn (array $d): array => [$d[2] => ['class' => $d[1], 'style' => $d[3] ?? '']]);
+    // One of the eight, whatever its case: its class, and no colour of its own.
+    expect($look['Invoice'])->toBe(['class' => 'v2-label-dot--green', 'style' => ''])
+        // Any other #rrggbb: only the dot, through --label-own (the class rings it).
+        ->and($look['Urgent'])->toBe(['class' => 'v2-label-dot--other', 'style' => '--label-own: #123abc'])
+        // No colour: the neutral ringed dot.
+        ->and($look['Later'])->toBe(['class' => 'v2-label-dot--other', 'style' => ''])
         // At most three dots on a row, in the labels' order.
-        ->and($style->keys()->all())->toBe(['Invoice', 'Later', 'Urgent']);
+        ->and($look->keys()->all())->toBe(['Invoice', 'Later', 'Urgent']);
+    // A stored value that isn't #rrggbb never reaches the page.
+    expect(V2RecordingRow::dotLook('red; background: url(x)'))->toBe(['class' => 'v2-label-dot--other', 'own' => null])
+        ->and(V2RecordingRow::dotLook('#D7609C'))->toBe(['class' => 'v2-label-dot--pink', 'own' => null]);
+    // The eight keys are the design's (--el-label-<name> in tokens.css).
+    preg_match_all('/--el-label-([a-z]+):\s*(#[0-9A-Fa-f]{6});/', (string) file_get_contents(resource_path('css/tokens.css')), $tokens, PREG_SET_ORDER);
+    expect(collect($tokens)->mapWithKeys(fn (array $t): array => [$t[1] => strtolower($t[2])])->all())->toBe(V2RecordingRow::LABEL_COLOURS);
     expect($row)->toContain('aria-label="Label: Invoice"');
 });
 

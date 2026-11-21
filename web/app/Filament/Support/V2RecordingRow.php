@@ -40,7 +40,7 @@ final class V2RecordingRow
     /**
      * @return array{id: string, title: string, icon: string, source: string, line: string, device: string|null, pinned: bool,
      *     time: string, full_time: string, iso: string, length: string, status: array{label: string, tone: string, icon: string}|null,
-     *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, style: string}>, left: array{text: string, days: int, soon: bool}|null}
+     *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, class: string, own: string|null}>, left: array{text: string, days: int, soon: bool}|null}
      */
     public static function for(CaptureSession $session): array
     {
@@ -110,12 +110,12 @@ final class V2RecordingRow
     }
 
     /**
-     * Each label's dot (at most three), by the design's label colour rules: one of the eight draws with its role token;
-     * any other stored colour only as the dot, with a hairline ring; no colour, the neutral dot with the ring. The
-     * stored value is matched ignoring case and is never used as text or fill elsewhere.
+     * Each label's dot (at most three), by the design's label colour rules (EL-Design's .v2-label-dot classes): one of
+     * the eight takes its class; any other stored #rrggbb draws only as the dot, through --label-own, with a hairline
+     * ring; no colour, or a value that isn't #rrggbb, the neutral ringed dot. The stored value is never text or fill.
      *
      * @param  list<string>  $labels
-     * @return list<array{name: string, style: string}>
+     * @return list<array{name: string, class: string, own: string|null}>
      */
     public static function labelDots(CaptureSession $session, array $labels): array
     {
@@ -125,27 +125,27 @@ final class V2RecordingRow
         $colours = array_change_key_case(LibraryItemResource::labelColors($session), CASE_LOWER);
         $dots = [];
         foreach (array_slice($labels, 0, self::MAX_LABEL_DOTS) as $label) {
-            $dots[] = ['name' => $label, 'style' => self::dotStyle($colours[mb_strtolower($label)] ?? null)];
+            $dots[] = ['name' => $label, ...self::dotLook($colours[mb_strtolower($label)] ?? null)];
         }
 
         return $dots;
     }
 
-    /** The dot's look for a stored colour: a role token for one of the eight, else the colour itself with a ring. */
-    public static function dotStyle(?string $stored): string
+    /**
+     * A stored colour's dot: "v2-label-dot--<name>" for one of the eight (matched ignoring case), else
+     * "v2-label-dot--other" with the colour as --label-own when it is a valid #rrggbb, or none.
+     *
+     * @return array{class: string, own: string|null}
+     */
+    public static function dotLook(?string $stored): array
     {
         $value = strtolower(trim((string) $stored));
         $name = array_search($value, self::LABEL_COLOURS, true);
-        $ring = 'box-shadow: 0 0 0 var(--el-border-hairline) var(--el-role-border-strong)';
         if (is_string($name)) {
-            // Until the label tokens arrive (design/D6), the dot falls back to the neutral text colour.
-            return 'background-color: var(--el-role-label-'.$name.'-dot, var(--el-role-text-secondary))';
-        }
-        if (preg_match('/^#[0-9a-f]{6}$/', $value) === 1) {
-            return 'background-color: '.$value.'; '.$ring;
+            return ['class' => 'v2-label-dot--'.$name, 'own' => null];
         }
 
-        return 'background-color: var(--el-role-bg-subtle); '.$ring;
+        return ['class' => 'v2-label-dot--other', 'own' => preg_match('/^#[0-9a-f]{6}$/', $value) === 1 ? $value : null];
     }
 
     /** Today's recordings show the time, older ones the day; in the console's language. */
