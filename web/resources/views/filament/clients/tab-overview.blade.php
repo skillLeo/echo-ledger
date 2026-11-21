@@ -1,3 +1,7 @@
+{{-- W-209: a name or value inside a translated sentence is isolated in right to left, so the sentence keeps the page's direction (D4 §4). --}}
+@php
+    $iso = fn (mixed $value): string => \App\Filament\Support\ConsoleV2::rtl() ? "\u{2068}".$value."\u{2069}" : (string) $value;
+@endphp
 @php
     $sections = \App\Models\ClientBrief::clean($brief->sections);
     $briefEmpty = $sections['goal'] === '' && collect(array_slice(\App\Models\ClientBrief::SECTIONS, 1))->every(fn ($k) => $sections[$k] === []);
@@ -163,7 +167,7 @@
                     @endif
                 </article>
             @empty
-                <p class="el-muted" style="font-size: 15px">{{ $client->ai_notes ? __('Notes are written after each call filed under :name.', ['name' => $client->name]) : __('Notes are written after each call filed under :name once AI notes are on.', ['name' => $client->name]) }}</p>
+                <p class="el-muted" style="font-size: 15px">{{ $client->ai_notes ? __('Notes are written after each call filed under :name.', ['name' => $iso($client->name)]) : __('Notes are written after each call filed under :name once AI notes are on.', ['name' => $iso($client->name)]) }}</p>
             @endforelse
         </section>
     </div>

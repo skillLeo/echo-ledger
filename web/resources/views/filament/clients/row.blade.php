@@ -1,3 +1,7 @@
+{{-- W-209: a name or value inside a translated sentence is isolated in right to left, so the sentence keeps the page's direction (D4 §4). --}}
+@php
+    $iso = fn (mixed $value): string => \App\Filament\Support\ConsoleV2::rtl() ? "\u{2068}".$value."\u{2069}" : (string) $value;
+@endphp
 {{-- One project, as the phone lists it: initials (or its emoji) on its colour, the name, its subfolders and recordings. --}}
 @php
     $client = $getRecord();
@@ -19,6 +23,6 @@
     <span class="el-avatar" style="--tile: {{ $color }}" aria-hidden="true">{{ $initials }}</span>
     <span class="el-row-main">
         <span class="el-row-title">{{ $client->name }}</span>
-        <span class="el-row-sub"><span class="el-row-meta">@if ($parent){{ __('In :folder', ['folder' => $parent]) }} · @endif{{ $line }}</span></span>
+        <span class="el-row-sub"><span class="el-row-meta">@if ($parent){{ __('In :folder', ['folder' => $iso($parent)]) }} · @endif{{ $line }}</span></span>
     </span>
 </div>

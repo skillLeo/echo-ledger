@@ -1,3 +1,7 @@
+{{-- W-209: a name or value inside a translated sentence is isolated in right to left, so the sentence keeps the page's direction (D4 §4). --}}
+@php
+    $iso = fn (mixed $value): string => \App\Filament\Support\ConsoleV2::rtl() ? "\u{2068}".$value."\u{2069}" : (string) $value;
+@endphp
 {{--
     The project's Screens tab (v1.5): what was on the shared screen in its meetings (and its subfolders'), newest
     recording first, each recording's screens in time order. A screen opens large with the ones before and after it.
@@ -49,7 +53,7 @@
         <div class="el-empty">
             <span class="el-empty-icon">@svg('heroicon-o-computer-desktop', ['aria-hidden' => 'true'])</span>
             <p class="el-empty-title">{{ __('No screens yet') }}</p>
-            <p class="el-empty-text">{{ __('When a meeting filed under :name shares a screen, the desktop app keeps what was shown at each moment, and it shows here.', ['name' => $client->name]) }}</p>
+            <p class="el-empty-text">{{ __('When a meeting filed under :name shares a screen, the desktop app keeps what was shown at each moment, and it shows here.', ['name' => $iso($client->name)]) }}</p>
         </div>
     @else
         @php($k = 0)
