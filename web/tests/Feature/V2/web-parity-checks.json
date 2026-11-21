@@ -1022,7 +1022,7 @@
   "type": "control",
   "page": "recording",
   "scope": "main",
-  "key": "menuitem|more › find and replace"
+  "key": "menuitem|more › edit text"
  },
  "WEB-HOM-001": {
   "type": "html",

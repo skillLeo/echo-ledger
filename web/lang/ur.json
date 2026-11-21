@@ -534,5 +534,11 @@
     "Exported the first :max of :count": ":count میں سے پہلی :max ایکسپورٹ ہو گئیں",
     "Pick fewer recordings to export the rest.": "باقی ایکسپورٹ کرنے کے لیے کم ریکارڈنگز چنیں۔",
     "Refine your search to see more": "مزید دیکھنے کے لیے تلاش محدود کریں",
-    "Your browser did not let the page copy by itself. Press Copy.": "آپ کے براؤزر نے صفحے کو خود کاپی کرنے نہیں دیا۔ کاپی دبائیں۔"
+    "Your browser did not let the page copy by itself. Press Copy.": "آپ کے براؤزر نے صفحے کو خود کاپی کرنے نہیں دیا۔ کاپی دبائیں۔",
+    "Previous recording": "پچھلی ریکارڈنگ",
+    "Next recording": "اگلی ریکارڈنگ",
+    "Needs action": "توجہ چاہیے",
+    ":count waiting for a decision|:count waiting for a decision": ":count فیصلے کی منتظر|:count فیصلے کی منتظر",
+    "1 failed upload|:count failed uploads": "1 ناکام اپ لوڈ|:count ناکام اپ لوڈز",
+    "1 not transcribed|:count not transcribed": "1 ٹرانسکرائب نہیں ہوئی|:count ٹرانسکرائب نہیں ہوئیں"
 }

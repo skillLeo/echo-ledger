@@ -531,7 +531,8 @@ class ViewCaptureSession extends ViewRecord
     protected function getHeaderActions(): array
     {
         if (ConsoleAccess::readOnly()) {
-            return [];
+            // Since U9b part 2: a read-only console still goes from one recording to the next (it only opens pages).
+            return ConsoleV2::library() ? $this->v2NeighbourActions() : [];
         }
         // Since v2.0 (ui_v2.library): Share, Move and Delete, as the apps; everything else in More.
         if (ConsoleV2::library()) {
@@ -544,6 +545,7 @@ class ViewCaptureSession extends ViewRecord
                     ->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
                 ActionGroup::make([
                     ActionGroup::make([
+                        $this->editTextAction(),
                         $this->speakersAction(),
                         $this->replaceAction(),
                         $this->historyAction(),
@@ -569,6 +571,7 @@ class ViewCaptureSession extends ViewRecord
                         $this->clearReferenceAction(),
                     ])->dropdown(false),
                 ])->label(__('More'))->icon(Heroicon::OutlinedEllipsisHorizontal)->color('gray'),
+                ...$this->v2NeighbourActions(),
             ];
         }
 
@@ -601,6 +604,55 @@ class ViewCaptureSession extends ViewRecord
                 DeleteAction::make()->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
             ])->icon(Heroicon::OutlinedEllipsisVertical)->color('gray'),
         ];
+    }
+
+    /**
+     * Edit text in the new page's More (U9b part 2, WEB-REC-015): it turns on the player's own line editing (the same as
+     * its Edit text button, classic's), saved line by line through saveSegment; the player's Done editing ends it.
+     */
+    private function editTextAction(): Action
+    {
+        return Action::make('editText')->label(__('Edit text'))->icon(Heroicon::OutlinedPencil)
+            ->alpineClickHandler('window.elV2EditText()');
+    }
+
+    /**
+     * Previous / Next recording on the new page (U9b part 2, WEB-REC-007): the recordings above and below this one in
+     * the Library's default order (pinned first, then newest first), among the person's own. The Library keeps its
+     * filters and order in the page itself, so the recording page can't know them: it always walks the default order.
+     *
+     * @return list<Action>
+     */
+    private function v2NeighbourActions(): array
+    {
+        [$previous, $next] = $this->v2Neighbours();
+        $link = fn (string $name, string $label, Heroicon $icon, ?string $id): Action => Action::make($name)->label(__($label))->icon($icon)
+            ->iconButton()->color('gray')->tooltip(__($label))
+            ->url($id !== null ? CaptureSessionResource::getUrl('view', ['record' => $id]) : null)->disabled($id === null);
+
+        return [
+            $link('previousRecording', 'Previous recording', Heroicon::OutlinedChevronUp, $previous),
+            $link('nextRecording', 'Next recording', Heroicon::OutlinedChevronDown, $next),
+        ];
+    }
+
+    /** @return array{0: string|null, 1: string|null} the ids of the recordings before and after this one */
+    private function v2Neighbours(): array
+    {
+        $session = $this->session();
+        $pinned = $session->pinned ? 1 : 0;
+        $at = $session->started_at;
+        $id = (string) $session->getKey();
+        $query = fn () => CaptureSessionResource::getEloquentQuery()->withoutEagerLoads();
+        // Before it in the list: pinned while it is not, or the same and newer (the id breaks a tie, as the list's order).
+        $previous = $query()->where(fn ($q) => $q->where('pinned', '>', $pinned)->orWhere(fn ($q) => $q->where('pinned', $pinned)
+            ->where(fn ($q) => $q->where('started_at', '>', $at)->orWhere(fn ($q) => $q->where('started_at', $at)->where('id', '>', $id)))))
+            ->orderBy('pinned')->orderBy('started_at')->orderBy('id')->value('id');
+        $next = $query()->where(fn ($q) => $q->where('pinned', '<', $pinned)->orWhere(fn ($q) => $q->where('pinned', $pinned)
+            ->where(fn ($q) => $q->where('started_at', '<', $at)->orWhere(fn ($q) => $q->where('started_at', $at)->where('id', '<', $id)))))
+            ->orderByDesc('pinned')->orderByDesc('started_at')->orderByDesc('id')->value('id');
+
+        return [$previous !== null ? (string) $previous : null, $next !== null ? (string) $next : null];
     }
 
     /**

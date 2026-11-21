@@ -3,6 +3,7 @@
     same player as classic, unchanged) for its text, exactly as classic's own buttons do. text: Copy text, without
     timestamps (who said what, unsure words marked, the note line when there are marks); times: with timestamps; ai:
     Copy for AI after a short header (title, date, people, language). tests/js/v2-copy.test.mjs holds it to classic.
+    Also More › Edit text (WEB-REC-015): the player's own line editing, turned on as its Edit text button does.
 --}}
 <script>
     window.elV2Copy = window.elV2Copy || (async (mode, header) => {
@@ -16,5 +17,16 @@
         } catch (e) {
             new FilamentNotification().title(@js(__('Copy failed'))).danger().send();
         }
+    });
+    // More › Edit text (WEB-REC-015): the player's own line editing, as its Edit text button; Done editing ends it.
+    window.elV2EditText = window.elV2EditText || (() => {
+        const root = document.querySelector('.el-player');
+        const p = root && window.Alpine ? window.Alpine.$data(root) : null;
+        if (! p || ! p.d || ! p.d.editable) return;
+        if (p.view !== 'original') p.pickView('original');
+        p.panel = 'transcript';
+        p.editing = true;
+        root.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        setTimeout(() => { const first = root.querySelector('textarea.el-edit'); if (first) first.focus({ preventScroll: true }); }, 50);
     });
 </script>
