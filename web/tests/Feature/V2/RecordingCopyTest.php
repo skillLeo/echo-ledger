@@ -35,6 +35,23 @@ it('offers Copy ▾ beside Share with the three copies, and the header for AI', 
     expect(strpos($html, '>Share<'))->toBeLessThan(strpos($html, "window.elV2Copy('text'"));
 });
 
+it('keeps the header for AI free of isolate marks in Urdu, where the page has them', function () {
+    foreach (InterfaceFlags::UI_V2 as $flag) {
+        app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
+    }
+    $this->owner->forceFill(['console_preferences' => ['shell' => ['app_language' => 'ur']]])->save();
+    app('auth')->forgetGuards();
+    $this->actingAs($this->owner->fresh(), 'web');
+
+    $html = (string) $this->get('/app/sessions/'.$this->recording->id)->assertOk()->getContent();
+
+    $start = strpos($html, "window.elV2Copy('ai', ");
+    expect($start)->not->toBeFalse();
+    $header = substr($html, $start, (int) strpos($html, ')', $start) - $start);
+    expect($header)->toContain('Payment terms')->toContain('Ahmed')
+        ->not->toContain('\u2068')->not->toContain('\u2069')->not->toContain("\u{2068}")->not->toContain("\u{2069}");
+});
+
 it('leaves the classic recording page as it was', function () {
     $html = (string) $this->get('/app/sessions/'.$this->recording->id)->assertOk()->getContent();
 
