@@ -4,7 +4,8 @@ import { Suspense, lazy, useState } from "react";
 import MainApp from "../../views/main/MainApp";
 import type { MainTab } from "../../lib/mainView";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeEntitlements, makeItem, makeNavigate, makePendingItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeEntitlements, makeItem, makeNavigate, makePendingItem, makeSettings, makeStatus, makeTranscript } from "../../test/fixtures";
+import { LibraryV2 } from "../library/LibraryV2";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { Shell, moduleOf } from "./Shell";
 import { shellStatus } from "./status";
@@ -70,21 +71,79 @@ describe("the shell", () => {
     expect(screen.getByRole("menuitem", { name: "Record page" })).not.toHaveAttribute("aria-checked");
   });
 
-  it("Search (with its keys), Upload files in Record's menu, and Help & shortcuts at the foot, as classic's sidebar had", () => {
+  it("Search (with its keys) as an icon at the end of the header, Upload files in Record's menu, and Help & shortcuts at the foot", () => {
     const onSearch = vi.fn();
     const onUpload = vi.fn();
     const onHelp = vi.fn();
     render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onRecord={() => undefined} onSearch={onSearch} searchKeys="⌘K" onUpload={onUpload} onHelp={onHelp}><p /></Shell>);
     const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["Record", "", "Search⌘K", "Library", "Projects", "Live", "Ask", "Activity", "Settings", "Help & shortcuts"]);
-    fireEvent.click(within(nav).getByRole("button", { name: /^Search/ }));
+    expect(within(nav).getAllByRole("button").map((b) => b.textContent)).toEqual(["", "Record", "", "Library", "Projects", "Live", "Ask", "Activity", "Settings", "Help & shortcuts"]);
+    // The full-width Search row is gone: the icon sits right after the name.
+    expect(document.querySelector(".el-shell__search")).toBeNull();
+    const brand = nav.querySelector(".el-sidebar__brand")!;
+    expect(brand).toHaveTextContent("EchoLedger");
+    const search = within(nav).getByRole("button", { name: "Search" });
+    expect(brand.lastElementChild).toBe(search);
+    expect(search).toHaveAttribute("title", "Search · ⌘F");
+    expect(search).toHaveAttribute("aria-keyshortcuts", "Meta+F Meta+K");
+    fireEvent.click(search);
     expect(onSearch).toHaveBeenCalled();
-    expect(within(nav).getByRole("button", { name: /^Search/ })).toHaveAttribute("aria-keyshortcuts", "Meta+K");
     fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Upload files…" }));
     expect(onUpload).toHaveBeenCalled();
     fireEvent.click(within(nav).getByRole("button", { name: "Help & shortcuts" }));
     expect(onHelp).toHaveBeenCalled();
+  });
+
+  it("Search's tooltip says Ctrl+F on Windows; Cmd+F and Ctrl+F open search, never while typing in a field", () => {
+    const onSearch = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="Ctrl+K"><input aria-label="Name" /></Shell>);
+    const search = within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Search" });
+    expect(search).toHaveAttribute("title", "Search · Ctrl+F");
+    expect(search).toHaveAttribute("aria-keyshortcuts", "Control+F Control+K");
+    fireEvent.keyDown(document.body, { key: "f", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "F", metaKey: true });
+    expect(onSearch).toHaveBeenCalledTimes(2);
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Name" }), { key: "f", ctrlKey: true });
+    fireEvent.keyDown(document.body, { key: "f", ctrlKey: true, shiftKey: true });
+    fireEvent.keyDown(document.body, { key: "f" });
+    expect(onSearch).toHaveBeenCalledTimes(2);
+  });
+
+  it("in the collapsed rail the Search icon stays", () => {
+    const width = window.innerWidth;
+    try {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 700 });
+      const onSearch = vi.fn();
+      render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K"><p /></Shell>);
+      const nav = screen.getByRole("navigation", { name: "Main" });
+      expect(nav.querySelector(".el-sidebar__brand")).toBeNull();
+      fireEvent.click(within(nav).getByRole("button", { name: "Search" }));
+      expect(onSearch).toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    }
+  });
+
+  it("on an open recording Cmd+F stays Find in this transcript; the icon still opens app search", async () => {
+    const item = makeItem("s1", { title: "Kick-off", transcript: { final_status: "completed", final_transcript_id: "tr-1", live_available: false, preview: "Hello" } });
+    respond("library_list", [item]);
+    respond("library_refresh", [item]);
+    respond("session_detail", { playback_url: "https://ledger.example.com/a.m4a", speaker_names: {} });
+    respond("transcript_detail", makeTranscript({ id: "tr-1" }));
+    respond("skipped_list", []);
+    Element.prototype.scrollIntoView = vi.fn();
+    const onSearch = vi.fn();
+    render(<Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} onSearch={onSearch} searchKeys="⌘K">
+      <LibraryV2 openRequest={{ id: "s1", seq: 1 }} />
+    </Shell>);
+    await act(flushAsync);
+    await act(flushAsync);
+    fireEvent.keyDown(document.body, { key: "f", metaKey: true });
+    expect(screen.getByRole("searchbox", { name: "Find in this transcript" })).toHaveFocus();
+    expect(onSearch).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Search" }));
+    expect(onSearch).toHaveBeenCalled();
   });
 
   it("the sub-lists: pinned projects under Projects and Shared's places under Library, each opening its page", () => {
@@ -431,11 +490,31 @@ describe("the app with the flags", () => {
     fireEvent.keyDown(window, { key: "k", ctrlKey: true, metaKey: true });
     await act(flushAsync);
     const again = screen.getByRole("dialog", { name: "Command palette" });
+    expect(within(again).getByRole("combobox")).toHaveFocus();
     fireEvent.change(within(again).getByRole("combobox"), { target: { value: "x" } });
     expect(within(again).getByRole("status")).toHaveTextContent("Type one more letter to search recordings.");
     fireEvent.keyDown(again, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull();
   });
+
+  for (const [platform, key] of [["macos", { metaKey: true }], ["windows", { ctrlKey: true }]] as const) {
+    it(`in the app, ${platform === "macos" ? "Cmd" : "Ctrl"}+F opens search with the cursor in its field, as ${platform === "macos" ? "⌘K" : "Ctrl+K"} does`, async () => {
+      backend({ "ui_v2.shell": true });
+      respond("app_status", makeStatus({ platform }));
+      render(<MainApp />);
+      await act(flushAsync);
+      await act(flushAsync);
+      const nav = await screen.findByRole("navigation", { name: "Main" });
+      expect(within(nav).getByRole("button", { name: "Search" })).toHaveAttribute("title", platform === "macos" ? "Search · ⌘F" : "Search · Ctrl+F");
+      fireEvent.keyDown(document.body, { key: "f", ...key });
+      await act(flushAsync);
+      expect(within(screen.getByRole("dialog", { name: "Command palette" })).getByRole("combobox")).toHaveFocus();
+      fireEvent.keyDown(screen.getByRole("dialog", { name: "Command palette" }), { key: "Escape" });
+      fireEvent.keyDown(window, { key: "k", ...key });
+      await act(flushAsync);
+      expect(within(screen.getByRole("dialog", { name: "Command palette" })).getByRole("combobox")).toHaveFocus();
+    });
+  }
 
   it("the profile sits at the sidebar's foot and opens Settings; with only part of the new design on, classic Appearance offers the way back", async () => {
     backend({ "ui_v2.shell": true });

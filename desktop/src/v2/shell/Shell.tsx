@@ -2,14 +2,27 @@
 // Library, Projects, Live and Ask; at the foot Activity (with how many need you), Settings, the account and the status
 // line. Record opens the page where recording starts (today's Home and its Live Assist card). Modules not rebuilt yet
 // show today's page inside the new frame; Live and Ask, without their page yet, say where to find them meanwhile.
-import { useEffect, useState, type ReactNode } from "react";
-import { Avatar, Badge, Button, EmptyState, Icon, Icons, NavItem, Sidebar, Status } from "../components";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Avatar, Badge, Button, EmptyState, Icons, NavItem, Sidebar, Status } from "../components";
 import { Menu } from "../components/Menu";
 import { initials } from "../settings/initials";
 import type { MainTab } from "../../lib/mainView";
+import { isConfirmOpen } from "../../lib/confirm";
+import { AUTO_RAIL_BELOW } from "../../lib/shell";
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
 const PRESS_HOLD_MS = 3000;
+
+/** A key typed into a field, a select, editable text or an open dialog or menu is theirs, never app search's. */
+const typing = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+    || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'));
+
+/** Search's keys in the sidebar tooltip: ⌘F on a Mac, Ctrl+F on Windows (⌘K / Ctrl+K open it too). */
+export function searchHint(paletteKeys?: string): { title: string; keys: string } {
+  const mac = paletteKeys?.startsWith("⌘") ?? false;
+  return { title: `Search · ${mac ? "⌘F" : "Ctrl+F"}`, keys: mac ? "Meta+F Meta+K" : "Control+F Control+K" };
+}
 
 export type Module = "record" | "library" | "projects" | "live" | "ask" | "activity" | "settings";
 
@@ -90,6 +103,30 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
     void Promise.resolve(onRecord()).catch(() => setPressing(null));
   };
   const stops = !!onRecord && !!recording;
+  // Cmd/Ctrl+F opens search, as Cmd/Ctrl+K does (MainApp). An open recording or shared transcript keeps it for Find in
+  // this transcript: they listen on the document, so they have answered (and prevented it) before this, on the window.
+  const searchRef = useRef(onSearch);
+  searchRef.current = onSearch;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== "f") return;
+      if (e.defaultPrevented || !searchRef.current || typing(e.target)) return;
+      e.preventDefault();
+      if (isConfirmOpen() || document.querySelector('[role="alertdialog"]')) return;
+      searchRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const hint = searchHint(searchKeys);
+  // Under the rail breakpoint the sidebar hides its name (v2.css): Search then stands alone at the top of the rail.
+  const [rail, setRail] = useState(() => window.innerWidth < AUTO_RAIL_BELOW);
+  useEffect(() => {
+    const onResize = () => setRail(window.innerWidth < AUTO_RAIL_BELOW);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const search = onSearch && <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label="Search" title={hint.title} aria-keyshortcuts={hint.keys} onClick={onSearch} />;
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   // Anything that opens a page of the app (a notice, the palette, a link) leaves Live or Ask. Worked out while
@@ -113,7 +150,8 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
   );
   return (
     <div className="el-root el-shell" data-shell="v2">
-      <Sidebar label="Main" brand={<span>EchoLedger</span>}
+      {/* The name, and Search at its end (the start in RTL). */}
+      <Sidebar label="Main" brand={rail ? undefined : <><span className="el-menu__label">EchoLedger</span>{search}</>}
         footer={
           <div className="el-shell__foot">
             {item("activity", "Activity", Icons.BellIcon, activity ? activity : undefined)}
@@ -139,6 +177,7 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
             </div>
           </div>
         }>
+        {rail && search}
         {/* ● Record: one press records (or stops); its menu has a voice note and the Record page (calls ready, Live
             Assist), the sheet the phone opens on a long press. */}
         <div className="el-shell__record" role="group" aria-label="Record" aria-current={current === "record" ? "page" : undefined}>
@@ -152,13 +191,6 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
             { label: "Record page", icon: Icons.HomeIcon, onPick: () => go("record") },
           ]} />
         </div>
-        {onSearch && (
-          <button type="button" className="el-nav-item el-shell__search" onClick={onSearch} aria-keyshortcuts={searchKeys === "⌘K" ? "Meta+K" : "Control+K"}>
-            <Icon icon={Icons.SearchIcon} size="md" />
-            <span className="el-nav-item__label">Search</span>
-            {searchKeys && <kbd className="el-caption el-shell__keys" aria-hidden="true">{searchKeys}</kbd>}
-          </button>
-        )}
         {item("library", "Library", Icons.LibraryIcon)}
         {shared && shared.tabs.length > 0 && (
           <ul className="el-nav-sub" aria-label="Shared">
