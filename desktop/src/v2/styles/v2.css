@@ -79,6 +79,13 @@
   direction: ltr;
   unicode-bidi: isolate;
 }
+/* A date or time with words in it ("Today · 8:45 AM", "Nov 19 · 2:00 PM") keeps its order inside right-to-left text, in
+   the text's own face: only bare numbers, durations and clocks take the numeric face (.el-num). D4 5. */
+.el-ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+}
 .el-visually-hidden {
   position: absolute !important;
   inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
@@ -287,6 +294,13 @@
 .el-row__tick--on { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
 .el-row__actions { position: relative; flex: none; display: flex; align-items: center; opacity: 0; }
 .el-row--actions:hover .el-row__actions, .el-row--actions:focus-within .el-row__actions, .el-row__actions:has([aria-expanded="true"]) { opacity: 1; }
+/* Always on screen, quiet: where the ⋮ is the only way to a row's actions (never hover-only there). */
+.el-row--actions-always .el-row__actions { opacity: 1; color: var(--el-role-text-secondary); }
+/* The meta line takes two lines before it is cut, so a time at its end stays readable in a narrow window. */
+.el-row--meta-2 .el-row__meta-text {
+  white-space: normal; overflow-wrap: break-word;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+}
 
 /* ---- Chip and FilterBar ------------------------------------------------------------------------------------- */
 .el-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
