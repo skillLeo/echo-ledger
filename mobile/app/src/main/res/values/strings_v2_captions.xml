@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Captions settings page. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_cap_on">Live captions while recording</string>
+    <string name="v2_cap_on_help">A floating window over the call; needs Display over other apps</string>
+    <string name="v2_cap_size">Text size</string>
+    <string name="v2_cap_small">Small</string>
+    <string name="v2_cap_medium">Medium</string>
+    <string name="v2_cap_large">Large</string>
+    <string name="v2_cap_lines">Lines</string>
+    <string name="v2_cap_position">Position</string>
+    <string name="v2_cap_top">Top</string>
+    <string name="v2_cap_bottom">Bottom</string>
+    <string name="v2_cap_hide">Hide when nobody speaks</string>
+    <string name="v2_cap_never">Never</string>
+    <string name="v2_cap_seconds">%1$d s</string>
+    <string name="v2_cap_opacity">Background opacity %1$d%%</string>
+    <string name="v2_cap_compact">Compact captions</string>
+    <string name="v2_cap_compact_help">Speakers are shown by colour instead of the Me / Client labels.</string>
+    <string name="v2_cap_colour_me">Colour for Me</string>
+    <string name="v2_cap_colour_client">Colour for Client</string>
+    <string name="v2_cap_colour_theme">Theme colour</string>
+    <string name="v2_cap_colour_violet">Violet</string>
+    <string name="v2_cap_colour_cyan">Cyan</string>
+    <string name="v2_cap_colour_green">Green</string>
+    <string name="v2_cap_colour_amber">Amber</string>
+    <string name="v2_cap_colour_rose">Rose</string>
+    <string name="v2_cap_colour_white">White</string>
+</resources>

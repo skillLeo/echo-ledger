@@ -579,6 +579,38 @@ class MainActivityTest : AppTest() {
     }
 
     @Test
+    fun `in the v2 shell open=pending (the after-call card's title) opens Activity with the call waiting, not the classic list`() {
+        serve()
+        server.on("GET", "/api/activity.*", FakeServer.json(200, """{"data":[],"unread_count":0}"""))
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.settings.update { it.copy(uiFlags = mapOf("ui_v2.shell" to true, "ui_v2.library" to true)) }
+            app.graph.library.refresh()
+        }
+        app.storeRecording(id = "call-1", state = "pending_decision", sourceApp = "whatsapp")
+        val controller = buildActivity(MainActivity::class.java, pendingIntent()).create()
+        controller.get().simulateBiometrics(false)
+        controller.start().postCreate(null).resume().visible()
+        // v2 Activity: the waiting call with its Keep, Discard and Rename; the classic "Waiting for you" never shows.
+        awaitText("Keep")
+        awaitText("Discard")
+        val renamable = androidx.compose.ui.test.SemanticsMatcher("can be renamed") { node ->
+            node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.OnClick) { null }?.label == "Rename"
+        }
+        assertTrue(compose.onAllNodes(renamable).fetchSemanticsNodes().isNotEmpty())
+        assertFalse(present("Waiting for you"))
+        // Opened again while the app is open: Activity again.
+        controller.get().onBackPressedDispatcher.onBackPressed()
+        pumpUntil("back in Library") {
+            compose.waitForIdle()
+            !present("Keep")
+        }
+        controller.newIntent(pendingIntent())
+        awaitText("Keep")
+        assertFalse(present("Waiting for you"))
+    }
+
+    @Test
     fun `system Back on Waiting for you goes back to the tab, not out of the app`() {
         val controller = launch(preload = true)
         awaitText("Weekly sync")

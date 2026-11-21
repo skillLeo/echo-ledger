@@ -79,7 +79,7 @@ class TranscriptTextTest {
     }
 
     @Test
-    fun `copy for AI always starts with the note, copy only when the note is on and there are marks`() {
+    fun `copy for AI starts with the note while marks are on, copy only when the note is on and there are marks`() {
         val lines = listOf(unsureLine, unsureLine.copy(speaker = "Client", startMs = 1_000, text = "Fine", words = emptyList()))
         val note = TranscriptText.note("brackets")
         val marked = "Me: Send the [?invoice], [unclear].\nClient: Fine"
@@ -87,6 +87,12 @@ class TranscriptTextTest {
         assertEquals("$note\n\n$marked", TranscriptText.copied(lines, noLines, false, "brackets", 0.5, true))
         assertEquals(marked, TranscriptText.copied(lines, noLines, false, "brackets", 0.5, false))
         assertEquals("Me: Send the invoice, [unclear].\nClient: Fine", TranscriptText.copied(lines, noLines, false, "off", 0.5, true))
-        assertEquals("$note\n\n$marked", TranscriptText.copied(lines, noLines, false, "off", 0.5, true, forAi = true))
+        // Marks turned off in the console stay off for Copy for AI too, with no note about them (the lead's rule, parity 5).
+        assertEquals(
+            "Me: Send the invoice, [unclear].\nClient: Fine",
+            TranscriptText.copied(lines, noLines, false, "off", 0.5, true, forAi = true)
+        )
+        // With marks on, Copy for AI has the note even when the console's note is off.
+        assertEquals("$note\n\n$marked", TranscriptText.copied(lines, noLines, false, "brackets", 0.5, false, forAi = true))
     }
 }

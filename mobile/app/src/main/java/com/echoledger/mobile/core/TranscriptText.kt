@@ -58,8 +58,9 @@ object TranscriptText {
     }
 
     /**
-     * What Copy puts on the clipboard: the note line first for Copy for AI (always, with "[?word]" marks even when the
-     * console turned marks off), or when the console has the note on and the text has marks.
+     * What Copy puts on the clipboard. Unsure words are marked in the console's style; marks turned off in the console
+     * stay off, for Copy for AI too (one recording or many: the same rule). The note line comes first for Copy for AI
+     * whenever the marks are on, and for a plain copy when the console has the note on and the text has marks.
      */
     fun copied(
         segments: List<SegmentDto>,
@@ -71,12 +72,12 @@ object TranscriptText {
         forAi: Boolean = false,
         screens: List<com.echoledger.mobile.data.ScreenDto> = emptyList(),
         /**
-         * False: the lines only, without the note line, and Copy for AI keeps the console's style (marks off stays
-         * off). Several recordings copied at once have one note at the top ([com.echoledger.mobile.ui.v2.library.RecordingCopy.forAiMany]).
+         * False: the lines only, without the note line. Several recordings copied at once have one note at the top
+         * ([com.echoledger.mobile.ui.v2.library.RecordingCopy.forAiMany]).
          */
         withNote: Boolean = true
     ): String {
-        val used = if (forAi && style == "off" && withNote) "brackets" else style
+        val used = style
         val withMarks = segments.mapIndexed { i, s -> s.copy(text = markedLine(s, inView(i), threshold, used)) }
         // Since v1.5 Copy for AI puts "[Screen 7 at 14:32: …]" after the line it belongs to, so "this page" has a picture.
         val after = if (forAi) ScreenMoments.byLine(segments, screens) else emptyMap()
@@ -87,7 +88,8 @@ object TranscriptText {
             .joinToString("\n")
         val marked = MARKED.containsMatchIn(body) || body.contains("[unclear") || body.contains("(?)")
         if (!withNote) return body
-        return if (forAi || (noteOn && used != "off" && marked)) note(used) + "\n\n" + body else body
+        val noted = if (forAi) used != "off" else noteOn && used != "off" && marked
+        return if (noted) note(used) + "\n\n" + body else body
     }
 
     /** "Transcribing… part 3 of 8" while a long recording is transcribed in parts; "Transcribing…" otherwise. */

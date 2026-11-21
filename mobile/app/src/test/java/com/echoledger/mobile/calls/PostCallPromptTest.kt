@@ -155,6 +155,29 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
+    fun `the v2 card says Saved with Undo for six seconds when calls are kept automatically, and Undo is the delayed discard`() {
+        overlayAllowed(true)
+        val rec = call()
+        PostCallPrompt.show(
+            app,
+            rec,
+            PostCallPrompt.KEEP,
+            "dark",
+            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
+        )
+        assertTrue(DecisionPopup.showingV2)
+        assertEquals(DecisionPopup.Mode.SAVED, DecisionPopup.showingMode)
+        compose.onNodeWithText("Saved").assertExists()
+        // The upload waits out the card's six seconds (the same timer as classic's chip, tested above).
+        assertTrue(DecisionPopup.isShowing)
+        assertEquals(DecisionPopup.SAVED_MS, 6_000L)
+        compose.onNodeWithText("Undo").performClick()
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertEquals("Deleted · Undo", DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
+        assertTrue("nothing deleted by the tap", app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
+    @Test
     fun `without the flag the after-call chip is the classic one`() {
         overlayAllowed(true)
         PostCallPrompt.show(app, call(state = "pending_decision"), PostCallPrompt.ASK, "dark")

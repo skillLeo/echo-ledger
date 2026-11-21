@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.R
@@ -703,9 +704,16 @@ private fun WaitingCall(
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.End)
         ) {
             if (clients.isNotEmpty()) {
-                EchoButton(project ?: stringResource(R.string.v2_lib_project), {
-                    filing = true
-                }, kind = EchoButtonKind.Quiet, icon = EchoIcons.Folder)
+                // TalkBack hears "Project: Acme Holdings" (or "Project" before one is chosen), not the name alone.
+                val projectWords =
+                    project?.let { stringResource(R.string.v2_act_project_named, it) } ?: stringResource(R.string.v2_lib_project)
+                EchoButton(
+                    project ?: stringResource(R.string.v2_lib_project),
+                    { filing = true },
+                    Modifier.semantics { contentDescription = projectWords },
+                    kind = EchoButtonKind.Quiet,
+                    icon = EchoIcons.Folder
+                )
             }
             EchoButton(stringResource(R.string.v2_home_discard), { onDiscard(rec) }, kind = EchoButtonKind.Plain, icon = EchoIcons.Delete)
             EchoButton(stringResource(R.string.v2_home_keep), { onKeep(rec) }, kind = EchoButtonKind.Secondary)

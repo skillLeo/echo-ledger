@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Captions settings page. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_cap_on">ریکارڈنگ کے دوران لائیو کیپشنز</string>
+    <string name="v2_cap_on_help">کال کے اوپر ایک تیرتی کھڑکی؛ دوسری ایپس کے اوپر دکھانے کی اجازت چاہیے</string>
+    <string name="v2_cap_size">متن کا سائز</string>
+    <string name="v2_cap_small">چھوٹا</string>
+    <string name="v2_cap_medium">درمیانہ</string>
+    <string name="v2_cap_large">بڑا</string>
+    <string name="v2_cap_lines">لائنیں</string>
+    <string name="v2_cap_position">جگہ</string>
+    <string name="v2_cap_top">اوپر</string>
+    <string name="v2_cap_bottom">نیچے</string>
+    <string name="v2_cap_hide">جب کوئی نہ بولے تو چھپائیں</string>
+    <string name="v2_cap_never">کبھی نہیں</string>
+    <string name="v2_cap_seconds">%1$d سیکنڈ</string>
+    <string name="v2_cap_opacity">پس منظر کی دھندلاہٹ %1$d%%</string>
+    <string name="v2_cap_compact">مختصر کیپشنز</string>
+    <string name="v2_cap_compact_help">بولنے والے میں / کلائنٹ کے لیبل کی بجائے رنگ سے دکھائے جاتے ہیں۔</string>
+    <string name="v2_cap_colour_me">میرا رنگ</string>
+    <string name="v2_cap_colour_client">کلائنٹ کا رنگ</string>
+    <string name="v2_cap_colour_theme">تھیم کا رنگ</string>
+    <string name="v2_cap_colour_violet">بنفشی</string>
+    <string name="v2_cap_colour_cyan">فیروزی</string>
+    <string name="v2_cap_colour_green">سبز</string>
+    <string name="v2_cap_colour_amber">کہربائی</string>
+    <string name="v2_cap_colour_rose">گلابی</string>
+    <string name="v2_cap_colour_white">سفید</string>
+</resources>
