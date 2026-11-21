@@ -45,7 +45,7 @@ class V2NeedsActionWidget extends Widget
     {
         $user = auth()->user();
         if ($user instanceof User) {
-            V2DismissedBanners::dismiss($user, 'home', self::counts());
+            V2DismissedBanners::dismiss($user, (int) CurrentWorkspace::id(), 'home', self::counts());
         }
     }
 
@@ -54,7 +54,7 @@ class V2NeedsActionWidget extends Widget
     {
         $user = auth()->user();
 
-        return V2DismissedBanners::hidden($user instanceof User ? $user : null, 'home', self::counts());
+        return V2DismissedBanners::hidden($user instanceof User ? $user : null, (int) CurrentWorkspace::id(), 'home', self::counts());
     }
 
     /**

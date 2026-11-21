@@ -341,11 +341,11 @@ class ListCaptureSessions extends ListRecords
     }
 
     /** Whether the person closed the quiet line and nothing has risen since (V2DismissedBanners); also for a read-only console. */
-    public function v2WaitingDismissed(): bool
+    public function v2WaitingDismissed(int $waiting): bool
     {
         $user = auth()->user();
 
-        return V2DismissedBanners::hidden($user instanceof User ? $user : null, 'library', ['waiting' => $this->v2Waiting()]);
+        return V2DismissedBanners::hidden($user instanceof User ? $user : null, (int) CurrentWorkspace::id(), 'library', ['waiting' => $waiting]);
     }
 
     /** The quiet line's ×: hidden until more calls wait than now (the server's count, never the page's). */
@@ -353,7 +353,7 @@ class ListCaptureSessions extends ListRecords
     {
         $user = auth()->user();
         if ($user instanceof User) {
-            V2DismissedBanners::dismiss($user, 'library', ['waiting' => $this->v2Waiting()]);
+            V2DismissedBanners::dismiss($user, (int) CurrentWorkspace::id(), 'library', ['waiting' => $this->v2Waiting()]);
         }
     }
 

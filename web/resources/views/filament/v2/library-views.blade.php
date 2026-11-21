@@ -3,7 +3,7 @@
     recordings, Today, This week, Waiting for decision, Bookmarked, Failed uploads, Pinned, Untranscribed), then the
     most used as chips; the one you are on is marked. While calls wait for a decision one quiet line says so, with
     Review (parity plan 2: "Needs action" as one quiet banner in the Library), and × to close it until more calls wait
-    (App\Filament\Support\V2DismissedBanners).
+    (App\Filament\Support\V2DismissedBanners); focus then goes to "Views", which stays.
 --}}
 @php
     $menu = $this->v2ViewMenu();
@@ -37,12 +37,12 @@
         </button>
     @endforeach
 </div>
-@if ($waiting > 0 && $place !== 'waiting' && ! $this->v2WaitingDismissed())
+@if ($waiting > 0 && $place !== 'waiting' && ! $this->v2WaitingDismissed($waiting))
     <p class="v2-lib-waiting" role="status" data-waiting="{{ $waiting }}">
         <x-el.v2.icon name="clock" />
         <span>{{ trans_choice(':count call waiting for a decision|:count calls waiting for a decision', $waiting, ['count' => \Illuminate\Support\Number::format($waiting)]) }}</span>
         <button type="button" class="v2-link" wire:click="openPlace('waiting')">{{ __('Review') }}</button>
         <span class="v2-tb-spacer" aria-hidden="true"></span>
-        <button type="button" class="v2-icon-btn" wire:click="dismissV2Waiting" aria-label="{{ __('Dismiss') }}" title="{{ __('Dismiss') }}" data-dismiss="library"><x-el.v2.icon name="close" /></button>
+        <button type="button" class="v2-icon-btn" x-on:click="$wire.dismissV2Waiting().then(() => document.querySelector('[data-menu=views]')?.focus())" aria-label="{{ __('Dismiss') }}" title="{{ __('Dismiss') }}" data-dismiss="library"><x-el.v2.icon name="close" /></button>
     </p>
 @endif
