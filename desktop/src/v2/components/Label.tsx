@@ -45,10 +45,15 @@ function look(colour: string | null | undefined): { className: string; style?: C
   return STORED.test(colour.trim()) ? { className: "el-label--other", style: { ["--label-own" as string]: colour.trim() } } : { className: "el-label--other" };
 }
 
-/** A label's colour dot alone (a row's labels when there is no room for chips); named by the label for assistive tools. */
-export function LabelDot({ name, colour }: { name: string; colour: string | null | undefined }) {
+/**
+ * A label's colour dot alone (a row's labels when there is no room for chips); named by the label for assistive tools.
+ * `decorative` hides it from them where the label's name is already written next to it (a list chip, a menu row).
+ */
+export function LabelDot({ name, colour, decorative = false, className: extra }: { name: string; colour: string | null | undefined; decorative?: boolean; className?: string }) {
   const { className, style } = look(colour);
-  return <span className={`el-label-dot ${className}`} style={style} role="img" aria-label={name} />;
+  const cls = ["el-label-dot", className, extra].filter(Boolean).join(" ");
+  if (decorative) return <span className={cls} style={style} aria-hidden="true" />;
+  return <span className={cls} style={style} role="img" aria-label={name} title={name} />;
 }
 
 /**
