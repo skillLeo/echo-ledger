@@ -336,4 +336,13 @@ class ComponentBehaviourTest {
         compose.waitForIdle()
         assertEquals(EchoTokens.Light.accentDefault, accent)
     }
+
+    @Test
+    fun arabicWordsTakeTheArabicTypeTokensForTheirRole() {
+        val english = EchoV2Type.of(EchoLanguage.English, phoneFont = false)
+        val words = "اجتماع الغد"
+        assertEquals(EchoTokens.Type.arabicBody.lineHeight, english.content(words, english.body).lineHeight)
+        assertEquals(EchoTokens.Type.arabicCaption.fontSize, english.content(words, english.caption).fontSize)
+        assertEquals(EchoTokens.Type.arabicTitleM.lineHeight, english.content(words, english.titleM).lineHeight)
+    }
 }

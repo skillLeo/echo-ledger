@@ -249,7 +249,7 @@ class EchoV2Type(private val family: FontFamily, val latin: FontFamily, private 
 
             script == Script.Urdu && !urdu -> style.copy(fontFamily = UrduNastaliq).inUrdu(urduRoleOf(style))
 
-            script == Script.Arabic -> style.copy(fontFamily = ArabicNaskh)
+            script == Script.Arabic -> style.copy(fontFamily = ArabicNaskh).inArabic(arabicRoleOf(style))
 
             else -> style
         }
@@ -266,6 +266,16 @@ class EchoV2Type(private val family: FontFamily, val latin: FontFamily, private 
         style === titleS -> EchoTokens.Type.urduTitleS
         style === body || style === bodyStrong -> EchoTokens.Type.urduBody
         style === meta || style === label || style === caption || style === captionStrong -> EchoTokens.Type.urduCaption
+        else -> null
+    }
+
+    /** The Arabic type token for one of this type's roles (Naskh, a little tighter than Nastaliq), by identity. */
+    private fun arabicRoleOf(style: TextStyle): TextStyle? = when {
+        style === titleL -> EchoTokens.Type.arabicTitleL
+        style === titleM -> EchoTokens.Type.arabicTitleM
+        style === titleS -> EchoTokens.Type.arabicTitleS
+        style === body || style === bodyStrong -> EchoTokens.Type.arabicBody
+        style === meta || style === label || style === caption || style === captionStrong -> EchoTokens.Type.arabicCaption
         else -> null
     }
 
@@ -503,6 +513,16 @@ internal fun scriptOf(text: String): Script {
  */
 private fun TextStyle.inUrdu(role: TextStyle?): TextStyle =
     if (role != null) copy(fontSize = role.fontSize, lineHeight = role.lineHeight) else nastaliqLine()
+
+/**
+ * This style in Naskh: the size and line of its Arabic role's token when it has one ([role]), else arabic.body's line
+ * (15/26) at its own size.
+ */
+private fun TextStyle.inArabic(role: TextStyle?): TextStyle {
+    if (role != null) return copy(fontSize = role.fontSize, lineHeight = role.lineHeight)
+    val ratio = EchoTokens.Type.arabicBody.lineHeight.value / EchoTokens.Type.arabicBody.fontSize.value
+    return copy(lineHeight = TextUnit(fontSize.value * ratio, fontSize.type))
+}
 
 /** The taller line of urdu.body (16/30) at this size, never under urdu.caption's 14 sp. */
 private fun TextStyle.nastaliqLine(): TextStyle {
