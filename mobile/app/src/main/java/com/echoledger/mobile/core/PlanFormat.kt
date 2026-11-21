@@ -1,5 +1,6 @@
 package com.echoledger.mobile.core
 
+import com.echoledger.mobile.util.AppClock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -84,14 +85,14 @@ object PlanFormat {
     fun parse(iso: String?): Instant? = iso?.takeIf { it.isNotBlank() }?.let {
         runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull()
             ?: runCatching { Instant.parse(it) }.getOrNull()
-            ?: runCatching { LocalDate.parse(it.take(10)).atStartOfDay(ZoneId.systemDefault()).toInstant() }.getOrNull()
+            ?: runCatching { LocalDate.parse(it.take(10)).atStartOfDay(AppClock.zone()).toInstant() }.getOrNull()
     }
 
     /**
      * The calendar day of [iso]: a time with an offset ("2026-12-09T00:00:00+05:00", a plan's end or the minutes reset)
      * keeps the day the server meant; a UTC instant ("…Z") is shown in the phone's time zone.
      */
-    fun calendarDay(iso: String?, zone: ZoneId = ZoneId.systemDefault()): LocalDate? {
+    fun calendarDay(iso: String?, zone: ZoneId = AppClock.zone()): LocalDate? {
         val text = iso?.takeIf { it.isNotBlank() } ?: return null
         if (!text.endsWith("Z") && text.length > 10) {
             runCatching { return OffsetDateTime.parse(text).toLocalDate() }
@@ -100,19 +101,19 @@ object PlanFormat {
     }
 
     /** A row's date: "9 Dec" this year, else "9 Dec 2026". */
-    fun shortDate(iso: String?, zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone)): String? {
+    fun shortDate(iso: String?, zone: ZoneId = AppClock.zone(), today: LocalDate = AppClock.today(zone)): String? {
         val d = calendarDay(iso, zone) ?: return null
         return if (d.year == today.year) d.format(day) else d.format(dayYear)
     }
 
     /** A row's date with the year always: "9 Dec 2026". */
-    fun dateWithYear(iso: String?, zone: ZoneId = ZoneId.systemDefault()): String? = calendarDay(iso, zone)?.format(dayYear)
+    fun dateWithYear(iso: String?, zone: ZoneId = AppClock.zone()): String? = calendarDay(iso, zone)?.format(dayYear)
 
     /** A sentence's date: "9 December 2026". */
-    fun longDate(iso: String?, zone: ZoneId = ZoneId.systemDefault()): String? = calendarDay(iso, zone)?.format(long)
+    fun longDate(iso: String?, zone: ZoneId = AppClock.zone()): String? = calendarDay(iso, zone)?.format(long)
 
     /** A time of day in the phone's clock format: "3:42 pm" or "15:42". */
-    fun time(iso: String?, is24: Boolean, zone: ZoneId = ZoneId.systemDefault()): String? {
+    fun time(iso: String?, is24: Boolean, zone: ZoneId = AppClock.zone()): String? {
         val t = parse(iso)?.atZone(zone) ?: return null
         return if (is24) {
             t.format(
@@ -124,7 +125,7 @@ object PlanFormat {
     }
 
     /** Whole days from now until [iso] (0 today, negative once past), or null. */
-    fun daysUntil(iso: String?, zone: ZoneId = ZoneId.systemDefault(), today: LocalDate = LocalDate.now(zone)): Long? {
+    fun daysUntil(iso: String?, zone: ZoneId = AppClock.zone(), today: LocalDate = AppClock.today(zone)): Long? {
         val d = calendarDay(iso, zone) ?: return null
         return java.time.temporal.ChronoUnit.DAYS.between(today, d)
     }
