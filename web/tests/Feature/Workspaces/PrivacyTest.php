@@ -71,7 +71,8 @@ it('answers the owner of the workspace 404 for a member\'s content on every API 
     $b = privacyWorld();
     expect($b['session']->workspace_id)->toBe($b['aliceDevice']->workspace_id);
     $failures = [];
-    foreach (isoApiCases($b) as $name => [$method, $uri, $body, $expect]) {
+    foreach (isoApiCases($b) as $name => $case) {
+        [$method, $uri, $body, $expect, $echoes] = $case + [4 => []];
         $response = $this->api(Fx::token($b['aliceDevice']))->json($method, $uri, $body);
         $ok = match (true) {
             $expect === 404 => $response->status() === 404,
@@ -81,7 +82,7 @@ it('answers the owner of the workspace 404 for a member\'s content on every API 
         if (! $ok) {
             $failures[] = "{$name}: unexpected {$response->status()} ".mb_substr((string) $response->getContent(), 0, 160);
         }
-        if (($leaks = isoLeaks((string) $response->getContent(), $b)) !== []) {
+        if (($leaks = isoLeaksBut((string) $response->getContent(), $b, $echoes)) !== []) {
             $failures[] = "{$name}: leaked ".implode(', ', $leaks);
         }
     }

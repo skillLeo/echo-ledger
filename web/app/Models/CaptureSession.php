@@ -64,6 +64,7 @@ use Illuminate\Support\Carbon;
  * @property bool $pinned kept at the top of the library (B15)
  * @property bool $keep_forever never deleted by the retention rules (B17)
  * @property bool $important flagged by the person (contract 2.0.0-i); changes nothing else
+ * @property bool $transcribe the person's choice at create or finish (contract 1.8.0-e): false keeps it audio only
  * @property Carbon|null $media_erased_at when a deleted recording's audio and text were erased (end of the undo bin)
  * @property-read Collection<int, SessionLabel> $labels
  * @property-read Collection<int, Screen> $screens
@@ -94,9 +95,12 @@ class CaptureSession extends Model
 
     public const ORIGIN_SAVED = 'saved';
 
+    /** A recording is transcribed unless the person chose Save audio (contract 1.8.0-e), also before it is saved. */
+    protected $attributes = ['transcribe' => true];
+
     protected $fillable = [
         'workspace_id', 'user_id', 'device_id', 'client_id', 'filed_by', 'origin', 'client_ref', 'source_device', 'source_app', 'title', 'title_auto', 'language',
-        'started_at', 'ended_at', 'duration_ms', 'pauses', 'language_marks', 'speaker_names', 'status', 'pinned', 'keep_forever', 'important', 'final_provider',
+        'started_at', 'ended_at', 'duration_ms', 'pauses', 'language_marks', 'speaker_names', 'status', 'pinned', 'keep_forever', 'important', 'transcribe', 'final_provider',
     ];
 
     /** @return BelongsTo<User, $this> */
@@ -385,6 +389,7 @@ class CaptureSession extends Model
             'title_auto' => 'boolean',
             'keep_forever' => 'boolean',
             'important' => 'boolean',
+            'transcribe' => 'boolean',
             'media_erased_at' => 'datetime',
         ];
     }

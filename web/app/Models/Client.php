@@ -40,7 +40,7 @@ class Client extends Model
     /** Projects nest at most this many levels (docs/API.md "Projects", `too_deep`). */
     public const MAX_DEPTH = 4;
 
-    protected $fillable = ['workspace_id', 'user_id', 'parent_id', 'name', 'color', 'avatar', 'pinned', 'language', 'retention_days', 'notes', 'speaker_names', 'replacements', 'ai_notes', 'screens'];
+    protected $fillable = ['workspace_id', 'user_id', 'parent_id', 'name', 'color', 'avatar', 'pinned', 'language', 'retention_days', 'notes', 'speaker_names', 'replacements', 'ai_notes', 'screens', 'transcribe_calls'];
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo

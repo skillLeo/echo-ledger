@@ -63,7 +63,8 @@ it('has an isolation case for every API route and a reason for every route witho
 it('never lets workspace A read, change or delete workspace B through the API', function () {
     $b = isoWorld();
     $failures = [];
-    foreach (isoApiCases($b) as $name => [$method, $uri, $body, $expect]) {
+    foreach (isoApiCases($b) as $name => $case) {
+        [$method, $uri, $body, $expect, $echoes] = $case + [4 => []];
         $response = $this->api(Fx::token($b['aliceDevice']))->json($method, $uri, $body);
         $ok = match (true) {
             $expect === 404 => $response->status() === 404,
@@ -73,7 +74,7 @@ it('never lets workspace A read, change or delete workspace B through the API', 
         if (! $ok) {
             $failures[] = "{$name}: unexpected {$response->status()} ".mb_substr((string) $response->getContent(), 0, 160);
         }
-        if (($leaks = isoLeaks((string) $response->getContent(), $b)) !== []) {
+        if (($leaks = isoLeaksBut((string) $response->getContent(), $b, $echoes)) !== []) {
             $failures[] = "{$name}: leaked ".implode(', ', $leaks);
         }
     }

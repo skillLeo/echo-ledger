@@ -11,6 +11,7 @@ use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Services\LibraryOrganiser;
 use App\Services\RetentionPolicy;
+use App\Services\TranscribeLater;
 use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
@@ -118,6 +119,8 @@ final class LibraryItemResource extends JsonResource
             'important' => (bool) $session->important,
             'label_colors' => (object) self::labelColors($session),
             'expires_at' => app(RetentionPolicy::class)->expiresAt($session)?->toAtomString(),
+            // Since v1.8 (contract 1.8.0-e): what transcribing an audio-only recording would use; null otherwise.
+            'transcribe_estimate' => app(TranscribeLater::class)->estimate($session),
             'updated_at' => $session->updated_at->toAtomString(),
         ];
     }

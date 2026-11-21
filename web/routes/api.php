@@ -37,6 +37,7 @@ use App\Http\Controllers\Api\ShareController;
 use App\Http\Controllers\Api\SttTokenController;
 use App\Http\Controllers\Api\SttWebhookController;
 use App\Http\Controllers\Api\TeammateController;
+use App\Http\Controllers\Api\TranscribeLaterController;
 use App\Http\Controllers\Api\TranscriptEditController;
 use App\Http\Controllers\Api\TranscriptViewsController;
 use App\Http\Controllers\Api\UpgradeRequestController;
@@ -181,6 +182,9 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->middleware($own)->name('api.bin.destroy');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->middleware($own)->name('api.sessions.markers.store');
             Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->middleware($own)->name('api.sessions.retranscribe');
+            // Since v1.8 (contract 1.8.0-e): audio only and "Transcribe later", one recording or many.
+            Route::post('sessions/transcribe', [TranscribeLaterController::class, 'many'])->middleware($own)->name('api.sessions.transcribe.many');
+            Route::post('sessions/{id}/transcribe', [TranscribeLaterController::class, 'one'])->middleware([$own, 'throttle:transcribe'])->name('api.sessions.transcribe');
             Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->middleware($own)->name('api.sessions.markers.destroy');
             // Screen moments (v1.5): a screen comes off the recording's timeline (sending one is an upload route below).
             Route::delete('sessions/{id}/screens/{screen}', [ScreenController::class, 'destroy'])->middleware($own)->name('api.sessions.screens.destroy');
@@ -210,6 +214,7 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::middleware('abilities:library:read')->group(function (): void {
             Route::get('library', [LibraryController::class, 'index'])->name('api.library');
             Route::get('library/views', [OrganiseController::class, 'views'])->name('api.library.views');
+            Route::post('sessions/transcribe-estimate', [TranscribeLaterController::class, 'estimate'])->name('api.sessions.transcribe.estimate');
             Route::get('bin', [BinController::class, 'index'])->name('api.bin');
             Route::get('storage', [BinController::class, 'storage'])->name('api.storage');
             Route::get('activity', [ActivityController::class, 'index'])->name('api.activity');

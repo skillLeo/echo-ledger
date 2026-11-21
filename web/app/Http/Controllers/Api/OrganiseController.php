@@ -207,6 +207,8 @@ final class OrganiseController extends Controller
             'ai_notes' => ['sometimes', 'boolean'],
             // Since v1.5: whether the desktop keeps screen moments of its meetings.
             'screens' => ['sometimes', 'boolean'],
+            // Since v1.8 (contract 1.8.0-e): "Always transcribe calls in this project".
+            'transcribe_calls' => ['sometimes', Rule::in(['ask', 'always'])],
         ];
     }
 
@@ -234,6 +236,9 @@ final class OrganiseController extends Controller
         }
         if (array_key_exists('screens', $data)) {
             $values['screens'] = (bool) $data['screens'];
+        }
+        if (array_key_exists('transcribe_calls', $data)) {
+            $values['transcribe_calls'] = (string) $data['transcribe_calls'];
         }
         if (array_key_exists('language', $data)) {
             $values['language'] = LanguageChoice::normalize($data['language']);

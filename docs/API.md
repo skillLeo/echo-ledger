@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-i (2026-11-21, accepted by the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-j (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-j (proposed 2026-11-21, accepted when merged): "Audio only and Transcribe later" (1.8.0-e) is served: the three endpoints, `audio_only`, `transcribe_estimate` and projects' `transcribe_calls`. Clarified where the server had to decide: minutes are plan minutes (0 on the person's own key or an on-device engine); the estimate lists only the person's audio-only recordings among the ids (what bulk would start); bulk on Free without an own key is `403 needs_transcription_key` and nothing starts; the open create takes `transcribe` too.
 2.0.0-i (accepted 2026-11-21): the parity plan's row indicators (docs/PLAN_V2_PARITY.md section 3). Library items carry
 `important`, `label_colors` and `expires_at`; `PATCH /api/sessions/{id}` takes `important` and answers with `opened`;
 `POST /api/sessions/bulk` takes `important` and `unimportant`; `GET /api/library` takes `important=1|0`; `GET
@@ -1532,18 +1533,20 @@ ready (`kind` `alternate`); then the new one becomes the `final` transcript and 
 going. A failed or unfinished transcript is simply run again in the new language (`kind` `final`).
 `409 cannot_retranscribe` when the recording's audio is not on the server (not uploaded yet, or erased).
 
-### Audio only and "Transcribe later" (since v1.8, contract 1.8.0-e)
+### Audio only and "Transcribe later" (since v1.8, contract 1.8.0-e; served since 2.0.0-j)
 v1.8 P1: when Ready, a call is always recorded as audio, but transcribed only with the person's permission (the
 after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Save audio).
 - `POST /api/sessions` (one-shot create) and `POST /api/sessions/{id}/finish` take `"transcribe": true | false`.
   Absent = `true`, so older apps keep today's behaviour. With `false` the recording and its screens upload as usual,
   no transcript is started, and when the upload completes the session's status is `audio_only`. A repeated create or
-  finish (idempotency) never changes the stored choice.
+  finish (idempotency) never changes the stored choice. (Since 2.0.0-j:) the open create (`POST /api/sessions` without
+  `artifacts`) takes it too; a `transcribe` sent with the finish replaces it.
 - Audio-only recordings count for storage, never for minutes; minutes are counted only when a transcript runs.
 - Every Library item carries `transcribe_estimate`: `null` unless the status is `audio_only`, then
   `{"minutes": 5, "minutes_left": 120}` — the minutes a transcript would use (the recording's length rounded up, times
   the billed channels of the engine the routing would pick) and the minutes left this month for this workspace
-  (`null` = no limit).
+  (`null` = no limit). These are plan minutes: `0` when it would run on the person's own key (Free) or an on-device
+  engine, which count for none (since 2.0.0-j).
 - `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter).
 - `POST /api/sessions/{id}/transcribe` — `sessions:write`, throttled (30/min/device): starts the transcript of an
   `audio_only` session with the usual routing → `202 {"session": { …status "processing"… }, "transcript": {"id",
@@ -1553,9 +1556,12 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
 - `POST /api/sessions/transcribe` — `sessions:write`: bulk "Transcribe selected", `{"ids": ["…"]}` (1–50) →
   `202 {"started": ["…"], "skipped": [{"id": "…", "code": "not_audio_only"}], "minutes": 42}`. All or nothing for the
   budget: when the total exceeds what's left, `403 budget_exceeded` with `minutes_needed` and `minutes_left`, and
-  nothing starts. Ids of another workspace are skipped as `not_found`.
+  nothing starts. Ids of another workspace are skipped as `not_found`. (Since 2.0.0-j:) so are a teammate's, as only
+  the person's own recordings are theirs to transcribe; an id sent twice counts once; on Free without an own key the
+  answer is `403 needs_transcription_key` and nothing starts.
 - `POST /api/sessions/transcribe-estimate` — `library:read`: `{"ids": ["…"]}` (1–50) → `200 {"minutes": 42,
-  "minutes_left": 120, "items": [{"id": "…", "minutes": 5}]}` (no side effects).
+  "minutes_left": 120, "items": [{"id": "…", "minutes": 5}]}` (no side effects). `items` lists the person's
+  audio-only recordings among the ids, the ones bulk would start (since 2.0.0-j), and `minutes` is their sum.
 - Projects: `transcribe_calls` = `"ask"` (default) | `"always"` on the project (`GET /api/clients`, `PATCH
   /api/clients/{id}`): "Always transcribe calls in this project". An app that files a call into such a project sends
   `"transcribe": true` without asking.

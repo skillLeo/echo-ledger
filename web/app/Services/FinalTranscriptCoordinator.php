@@ -18,6 +18,7 @@ use App\Models\Transcript;
 use App\Services\Entitlements\Entitlements;
 use App\Services\Usage\UsageLedger;
 use App\Stt\LanguageRouter;
+use App\Stt\RouteDecision;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 
@@ -72,6 +73,15 @@ final class FinalTranscriptCoordinator
 
             return $existing; // already started (idempotent)
         }
+        // Since v1.8 (contract 1.8.0-e): the person chose Save audio. It stays audio only, counting for storage and
+        // never for minutes, until they ask (POST /api/sessions/{id}/transcribe, App\Services\TranscribeLater).
+        if ($existing === null && $session->transcribe === false) {
+            if ($session->status !== SessionStatus::AudioOnly) {
+                $session->update(['status' => SessionStatus::AudioOnly]);
+            }
+
+            return null;
+        }
 
         return $this->start($session, $existing, $sync);
     }
@@ -82,20 +92,30 @@ final class FinalTranscriptCoordinator
         return 'final-transcript-queued:'.$transcript->id;
     }
 
-    /** (Re)starts transcription, e.g. from the admin "Retry" action. */
-    public function start(CaptureSession $session, ?Transcript $existing = null, bool $sync = false): Transcript
+    /**
+     * The engine a final transcript of [$session] runs on if it starts now, as start() picks it, and whether that is
+     * the person's own key: the language decides (manual choice > client > console default, App\Stt\LanguageRouter);
+     * Automatic keeps the engine chosen when the session was created; without transcription on EchoLedger (the Free
+     * plan, since v1.6) a server engine becomes the person's own Groq key. Since v1.8 the estimate of an audio-only
+     * recording (App\Services\TranscribeLater) asks the same.
+     *
+     * @return array{provider: SttProviderKey, own_key: bool, language: ?string, route: RouteDecision}
+     */
+    public function plan(CaptureSession $session): array
     {
-        // The language decides the engine (manual choice > client > console default), see App\Stt\LanguageRouter.
         $router = app(LanguageRouter::class);
         $language = $router->languageFor($session);
         $route = $router->final($language, self::useCaseFor($session), $session);
-        // Automatic keeps the engine chosen when the session was created (the device uploaded the files it needs).
         $provider = $language === null ? $this->providerFor($session) : $route->provider;
-        // Since v1.6 (the Free plan): without transcription on EchoLedger, a server engine is the person's own Groq key.
         $ownKey = self::needsOwnKey($session, $provider);
-        if ($ownKey) {
-            $provider = SttProviderKey::Groq;
-        }
+
+        return ['provider' => $ownKey ? SttProviderKey::Groq : $provider, 'own_key' => $ownKey, 'language' => $language, 'route' => $route];
+    }
+
+    /** (Re)starts transcription, e.g. from the admin "Retry" action. */
+    public function start(CaptureSession $session, ?Transcript $existing = null, bool $sync = false): Transcript
+    {
+        ['provider' => $provider, 'own_key' => $ownKey, 'language' => $language, 'route' => $route] = $this->plan($session);
         // A retry starts a new provider job: the copy kept by the provider for the previous attempt is deleted.
         $oldJob = $existing?->provider_job_id;
         $oldProvider = $existing?->providerKey();
