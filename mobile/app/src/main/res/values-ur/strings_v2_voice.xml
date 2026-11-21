@@ -29,7 +29,7 @@
     <string name="v2_vc_recent">حالیہ ڈکٹیشنز</string>
     <string name="v2_vc_recent_help">آخری %1$d، صرف اسی فون پر محفوظ۔</string>
     <string name="v2_vc_recent_none">ابھی کچھ نہیں لکھوایا۔</string>
-    <string name="v2_vc_clear_history">تاریخ صاف کریں</string>
+    <string name="v2_vc_clear_history">ہسٹری صاف کریں</string>
     <string name="v2_vc_clear_title">حالیہ ڈکٹیشنز صاف کریں؟</string>
     <string name="v2_vc_clear_body">یہ صرف اسی فون پر محفوظ ہیں اور واپس نہیں لائی جا سکتیں۔</string>
     <string name="v2_vc_clear">صاف کریں</string>

@@ -195,6 +195,20 @@ fun V2SettingsScreen(
 
                 "captions" -> CaptionsPage(settings, vm::updateSettings, r.highlight, back)
 
+                "mic" -> {
+                    val helper by vm.helper.collectAsState()
+                    val live by com.echoledger.mobile.recording.RecordingService.live.collectAsState()
+                    MicPage(
+                        settings,
+                        vm::updateSettings,
+                        r.highlight,
+                        back,
+                        helperConnected = helper.connected,
+                        recording = live.active,
+                        onSetup = { route = SettingsRoute.Page(SettingsTree.SETUP) }
+                    )
+                }
+
                 "voice" -> {
                     val context = androidx.compose.ui.platform.LocalContext.current
                     VoicePage(
