@@ -193,7 +193,8 @@ class EchoV2Type(private val family: FontFamily, val latin: FontFamily, private 
      * The style in this face. In Urdu each role takes its Nastaliq size and line from the type tokens [urduRole]
      * (D4: title.l 24/44, title.m 20/40, title.s 16/30, body 16/30, caption and meta 14/28: Urdu is never under 14 sp).
      */
-    private fun TextStyle.face(urduRole: TextStyle? = null): TextStyle = if (urdu) copy(fontFamily = family).inUrdu(urduRole) else copy(fontFamily = family)
+    private fun TextStyle.face(urduRole: TextStyle? = null): TextStyle =
+        if (urdu) copy(fontFamily = family).inUrdu(urduRole) else copy(fontFamily = family)
 
     val titleL = EchoTokens.Type.titleL.face(EchoTokens.Type.urduTitleL)
     val titleM = EchoTokens.Type.titleM.face(EchoTokens.Type.urduTitleM)
