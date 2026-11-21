@@ -55,7 +55,7 @@
                             <span class="el-row-main">
                                 <span class="el-row-top">
                                     <span class="el-row-title">{{ $file->name }}</span>
-                                    <time class="el-row-time">{{ $file->created_at->copy()->setTimezone($zone)->format('M j') }}</time>
+                                    <time class="el-row-time">{{ \App\Filament\Support\ConsoleDates::day($file->created_at->copy()->setTimezone($zone)) }}</time>
                                 </span>
                                 <span class="el-row-sub">
                                     <span class="el-row-meta">{{ $type($file) }} · {{ $size($file->size_bytes) }}@if ($file->pages) · {{ $file->pages === 1 ? __(':n page', ['n' => 1]) : __(':n pages', ['n' => $file->pages]) }}@endif</span>

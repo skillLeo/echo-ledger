@@ -6,6 +6,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\Admin\Pages\ServerUsage;
 use App\Filament\Admin\Pages\Settings;
+use App\Filament\Support\ConsoleDates;
 use App\Models\User;
 use App\Services\SettingsRepository;
 use App\Services\Usage\UsageBreakdown;
@@ -71,7 +72,7 @@ class Usage extends Page
     public function content(Schema $schema): Schema
     {
         return $schema->components([
-            Select::make('month')->hiddenLabel()->options(fn (): array => app(UsageReport::class)->months())
+            Select::make('month')->hiddenLabel()->options(fn (): array => self::monthOptions())
                 ->selectablePlaceholder(false)->live()->extraAttributes(['style' => 'max-width: 16rem']),
             View::make('filament.pages.usage')->viewData(fn (): array => $this->viewData()),
         ])->statePath('filters');
@@ -139,8 +140,12 @@ class Usage extends Page
         // The costs as the ledger stored them, like the tile and Totals (UsageReport): one cost source on the page.
         $breakdown = app(UsageBreakdown::class)->stored();
 
+        // The months' names in the console's language (W-212): "November 2026", "نومبر 2026".
+        $report = app(UsageReport::class)->forMonth($workspaceId, $month, $own);
+        $report['label'] = ConsoleDates::month($report['month']);
+
         return [
-            'report' => app(UsageReport::class)->forMonth($workspaceId, $month, $own),
+            'report' => $report,
             'plan' => app(PlanLimits::class)->summary($workspaceId),
             'server' => $server,
             'isCurrentMonth' => $month === array_key_first($months),
@@ -148,7 +153,15 @@ class Usage extends Page
             'ownOnly' => $own !== null,
             // Owners and admins: the workspace per person. Everyone with this page: their trend.
             'people' => $own === null ? $breakdown->report($from, $to, $workspaceId)['people'] : null,
-            'trend' => $breakdown->trend($workspaceId, $own),
+            'trend' => array_map(fn (array $m): array => array_replace($m, ['label' => ConsoleDates::shortMonth($m['month'])]), $breakdown->trend($workspaceId, $own)),
         ];
+    }
+
+    /** @return array<string, string> `Y-m` => the month's name in the console's language, newest first */
+    private static function monthOptions(): array
+    {
+        $months = array_keys(app(UsageReport::class)->months());
+
+        return array_combine($months, array_map(fn (string $month): string => ConsoleDates::month($month), $months));
     }
 }

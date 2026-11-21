@@ -6,24 +6,24 @@
     $mac = str_contains((string) request()->userAgent(), 'Mac OS X');
     $inApp = \App\Filament\Support\Shell::inApp();
     $keys = [
-        'Everywhere' => [
-            [$mac ? '⌘ K' : 'Ctrl K', 'Search recordings, transcripts, pages and settings, or type a command'],
-            ['/', 'Search the list on this page'],
-            ['[', 'Fold the sidebar to icons, and back'],
-            ['?', 'This list'],
-            ['Esc', 'Close a panel, a menu or this list'],
+        __('Everywhere') => [
+            [$mac ? '⌘ K' : 'Ctrl K', __('Search recordings, transcripts, pages and settings, or type a command')],
+            ['/', __('Search the list on this page')],
+            ['[', __('Fold the sidebar to icons, and back')],
+            ['?', __('This list')],
+            ['Esc', __('Close a panel, a menu or this list')],
         ],
     ];
     if ($inApp) {
-        $keys['In the Library'] = [
-            ['J  K', 'Next and previous recording'],
-            ['Enter', 'Open it'],
-            ['X', 'Select it'],
-            ['Esc', 'Close the recording on the right, or clear the selection'],
+        $keys[__('In the Library')] = [
+            ['J  K', __('Next and previous recording')],
+            ['Enter', __('Open it')],
+            ['X', __('Select it')],
+            ['Esc', __('Close the recording on the right, or clear the selection')],
         ];
-        $keys['On a recording'] = [
-            ['Space', 'Play or pause'],
-            ['←  →', 'Back or forward 5 seconds (Shift: 10)'],
+        $keys[__('On a recording')] = [
+            ['Space', __('Play or pause')],
+            ['←  →', __('Back or forward 5 seconds (Shift: 10)')],
         ];
     }
 @endphp
@@ -32,8 +32,8 @@
         <div class="el-help-backdrop" x-on:click.self="open = false">
             <div class="el-help" role="dialog" aria-modal="true" aria-labelledby="el-help-title" x-init="$nextTick(() => $el.querySelector('button')?.focus())">
                 <header class="el-help-head">
-                    <h2 id="el-help-title">Help &amp; shortcuts</h2>
-                    <button type="button" class="el-icon-btn" x-on:click="open = false" aria-label="Close">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
+                    <h2 id="el-help-title">{{ __('Help & shortcuts') }}</h2>
+                    <button type="button" class="el-icon-btn" x-on:click="open = false" aria-label="{{ __('Close') }}">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
                 </header>
                 @foreach ($keys as $section => $rows)
                     <section class="el-help-section">
@@ -48,15 +48,15 @@
                 @if ($inApp)
                     <footer class="el-help-foot">
                         {{-- Since v1.8 P6.4: the guide, What's new and Contact support. --}}
-                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}" class="el-text-btn">Search the guide</a>
+                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}" class="el-text-btn">{{ __('Search the guide') }}</a>
                         <span aria-hidden="true">·</span>
-                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}#whats-new" class="el-text-btn">What's new</a>
+                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}#whats-new" class="el-text-btn">@lang("What's new")</a>
                         <span aria-hidden="true">·</span>
-                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}?contact=1" class="el-text-btn">Contact support</a>
+                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}?contact=1" class="el-text-btn">{{ __('Contact support') }}</a>
                         <span aria-hidden="true">·</span>
-                        <a href="{{ \App\Filament\Pages\GetTheApps::getUrl() }}" class="el-text-btn">Get the apps</a>
+                        <a href="{{ \App\Filament\Pages\GetTheApps::getUrl() }}" class="el-text-btn">{{ __('Get the apps') }}</a>
                         <span aria-hidden="true">·</span>
-                        <a href="{{ \App\Filament\Auth\EditProfile::settingsUrl() }}" class="el-text-btn">Settings</a>
+                        <a href="{{ \App\Filament\Auth\EditProfile::settingsUrl() }}" class="el-text-btn">{{ __('Settings') }}</a>
                     </footer>
                 @endif
             </div>

@@ -13,6 +13,7 @@ use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\ConsoleDates;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
@@ -141,7 +142,7 @@ class ViewClient extends ViewRecord
         return match (true) {
             $count === 0 => __('No recordings yet'),
             default => ($count === 1 ? __(':n recording', ['n' => 1]) : __(':n recordings', ['n' => $count])).' · '
-                .__('Last call :date', ['date' => Carbon::parse((string) $last, 'UTC')->setTimezone($zone)->format('M j')]),
+                .__('Last call :date', ['date' => ConsoleDates::day(Carbon::parse((string) $last, 'UTC')->setTimezone($zone))]),
         };
     }
 
@@ -282,7 +283,7 @@ class ViewClient extends ViewRecord
         $this->validate([
             'memoryKind' => ['required', 'in:'.implode(',', ClientMemoryItem::KINDS)],
             'memoryText' => ['required', 'string', 'max:500'],
-        ], [], ['memoryText' => 'line', 'memoryKind' => 'kind']);
+        ], [], self::fieldNames(['memoryText' => 'line', 'memoryKind' => 'kind']));
         $client = $this->client();
         if (! app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes')) {
             Notification::make()->title(Entitlements::lockedMessage('ai_notes'))->url(EditProfile::settingsUrl('plan'))->warning()->send();
@@ -323,7 +324,7 @@ class ViewClient extends ViewRecord
     /** A document dropped or chosen: stored encrypted, its text read on the queue. */
     public function updatedUpload(): void
     {
-        $this->validate(['upload' => ['required', 'file', 'max:'.(ClientWorkspace::MAX_FILE_BYTES / 1024)]], [], ['upload' => 'file']);
+        $this->validate(['upload' => ['required', 'file', 'max:'.(ClientWorkspace::MAX_FILE_BYTES / 1024)]], [], self::fieldNames(['upload' => 'file']));
         $upload = $this->upload;
         if (! $upload instanceof TemporaryUploadedFile) {
             return;
@@ -344,7 +345,7 @@ class ViewClient extends ViewRecord
         $this->validate([
             'instructions' => ['required', 'string', 'max:100000'],
             'instructionsName' => ['nullable', 'string', 'max:200'],
-        ], [], ['instructions' => 'instructions', 'instructionsName' => 'name']);
+        ], [], self::fieldNames(['instructions' => 'instructions', 'instructionsName' => 'name']));
         app(ClientWorkspace::class)->addInstructions($this->client(), $this->instructions, $this->instructionsName ?: null, (int) auth()->id());
         $this->instructions = '';
         $this->instructionsName = '';
@@ -378,7 +379,7 @@ class ViewClient extends ViewRecord
         $this->validate([
             'question' => ['required', 'string', 'min:3', 'max:500'],
             'askLanguage' => ['required', 'in:en,roman_urdu'],
-        ], [], ['question' => 'question']);
+        ], [], self::fieldNames(['question' => 'question']));
         $this->askError = null;
         try {
             $this->answer = app(ClientWorkspace::class)->ask($this->client(), trim($this->question), $this->askLanguage);
@@ -395,7 +396,7 @@ class ViewClient extends ViewRecord
         $this->validate([
             'ruleKind' => ['required', 'in:'.implode(',', FilingRule::KINDS)],
             'ruleValue' => ['required', 'string', 'max:120'],
-        ], [], ['ruleValue' => 'value', 'ruleKind' => 'kind']);
+        ], [], self::fieldNames(['ruleValue' => 'value', 'ruleKind' => 'kind']));
         try {
             ['created' => $created] = app(FilingRules::class)->add($this->client(), $this->ruleKind, $this->ruleValue);
         } catch (ApiError $e) {
@@ -405,6 +406,18 @@ class ViewClient extends ViewRecord
         }
         $this->ruleValue = '';
         Notification::make()->title($created ? __('Rule added') : __('This project already has that rule'))->success()->send();
+    }
+
+    /**
+     * The fields' names in an error ("The line field is required."), in the console's language from
+     * lang/<locale>/validation.php's attributes, or as written.
+     *
+     * @param  array<string, string>  $names
+     * @return array<string, string>
+     */
+    private static function fieldNames(array $names): array
+    {
+        return array_map(fn (string $name): string => trans()->has('validation.attributes.'.$name) ? (string) __('validation.attributes.'.$name) : $name, $names);
     }
 
     public function removeRule(int $id): void
@@ -548,7 +561,7 @@ class ViewClient extends ViewRecord
 
             return [
                 'title' => $session->displayTitle(),
-                'when' => $session->started_at->copy()->setTimezone($zone)->format('M j, Y · g:i A'),
+                'when' => ConsoleDates::dateTime($session->started_at->copy()->setTimezone($zone), 'g:i A'),
                 'url' => $url,
                 'screens' => array_values(($screens[$session->id] ?? collect())->values()->map(fn (Screen $s, int $i): array => [
                     'id' => $s->id,
