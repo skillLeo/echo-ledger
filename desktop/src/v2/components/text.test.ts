@@ -53,4 +53,7 @@ describe("firstSentence: a row's snippet is the first meaningful sentence (D12)"
     expect(firstSentence("Client: The time is 5:30 for the call today. Me: Fine.")).toBe("The time is 5:30 for the call today.");
     expect(firstSentence("Client: We need three things: a price, a date and a truck.")).toBe("We need three things: a price, a date and a truck.");
   });
+  it("drops numbered speaker labels too", () => {
+    expect(firstSentence("Speaker 1: Can you send the estimate by Monday? Speaker 2: Yes.")).toBe("Can you send the estimate by Monday?");
+  });
 });

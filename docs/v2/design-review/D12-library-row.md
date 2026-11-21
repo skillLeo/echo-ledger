@@ -31,7 +31,7 @@ The components and tokens change in my folders; EL-UX switches the screens to th
 
 ## The snippet: the first meaningful sentence
 One rule, implemented once per platform (`firstSentence(preview)`):
-1. Split the preview into utterances at speaker labels. A label is up to 24 letters, spaces or brackets followed by ": " at the start or after a sentence end ("Client:", "Me:", "Speaker:", "Sara (Acme):", "مقرر:").
+1. Split the preview into utterances at speaker labels. A label is up to 24 letters, digits, spaces or brackets (starting with a letter) followed by ": " at the start or after a sentence end ("Client:", "Me:", "Speaker:", "Sara (Acme):", "مقرر:").
 2. Drop the labels. Never show "Speaker:", "Client:" or "Me:" in a row.
 3. Skip utterances that are empty, only punctuation, or under 3 words ("the time.", "Hello.", "Yeah").
 4. Take the first remaining utterance and cut it at its first sentence end (. ? ! ۔ ؟). If it's longer than the line, the ellipsis does the rest.

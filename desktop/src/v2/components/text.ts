@@ -4,7 +4,8 @@
 /** A sentence ends at one of these: the Latin marks and the Urdu full stop and question mark. */
 const ENDS = ".?!۔؟";
 /** A label: up to 24 letters, spaces or brackets, starting with a letter or a bracket ("Client", "Sara (Acme)", "مقرر"). */
-const LABEL = String.raw`[\p{L}\p{M}()\[\]][\p{L}\p{M}()\[\] ]{0,23}`;
+// Letters, then letters, digits, spaces or brackets ("Speaker 1:", "Sara (Acme):"), up to 24 in all.
+const LABEL = String.raw`[\p{L}\p{M}()\[\]][\p{L}\p{M}\p{N}()\[\] ]{0,23}`;
 /** A label at the start, or after a sentence end, followed by ": " (or the colon ending the preview). */
 const OPENING = new RegExp(String.raw`(^|[${ENDS}]\s*)(${LABEL}):(?=\s|$)`, "gu");
 /** The app's own speaker words: never shown in a row, wherever they stand. */
