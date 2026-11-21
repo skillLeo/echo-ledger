@@ -9,6 +9,9 @@
 //!
 //! Whether the clipboard still holds the text is its own change counter (Windows' sequence number, the pasteboard's
 //! change count), read when the text was put there: anything copied since, even the same text, leaves it alone.
+//!
+//! It is also emptied at once when the app locks, signs out or quits ([`clear_now`], [`clear_now_on_main_thread`]),
+//! with the same rule: only while it still holds what was put there.
 
 use tauri::AppHandle;
 
@@ -33,15 +36,54 @@ pub fn clear_if_unchanged(board: &mut impl Board, put: u64) -> bool {
     }
 }
 
+/// The counter read after the last copy, while that copy may still be on the clipboard: the one a lock, a sign-out or
+/// a quit empties.
+static PENDING: std::sync::Mutex<Option<u64>> = std::sync::Mutex::new(None);
+
+/// Remembers `put` as the copy to empty.
+pub fn remember(put: u64) {
+    *PENDING.lock().unwrap_or_else(|p| p.into_inner()) = Some(put);
+}
+
+/// The copy to empty now, forgotten once taken; with `only`, only when it is that one (the 60 s wait of an older copy
+/// leaves a newer one to its own wait).
+pub fn take(only: Option<u64>) -> Option<u64> {
+    let mut pending = PENDING.lock().unwrap_or_else(|p| p.into_inner());
+    match (*pending, only) {
+        (Some(put), Some(wanted)) if put != wanted => None,
+        (put, _) => {
+            *pending = None;
+            put
+        }
+    }
+}
+
 /// Puts `text` on the clipboard, concealed, and empties it after [`CLEAR_AFTER`] if nothing was copied since.
 pub async fn copy_concealed(app: &AppHandle, text: String) -> Result<(), String> {
     let put = platform::put(app, text).await?;
+    remember(put);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(CLEAR_AFTER).await;
-        platform::clear_if_unchanged(&app, put).await;
+        if let Some(put) = take(Some(put)) {
+            platform::clear_if_unchanged(&app, put).await;
+        }
     });
     Ok(())
+}
+
+/// The app locked or signed out: copied codes still on the clipboard go now, not after the wait.
+pub async fn clear_now(app: &AppHandle) {
+    if let Some(put) = take(None) {
+        platform::clear_if_unchanged(app, put).await;
+    }
+}
+
+/// The app quits: the same, from the run loop on the main thread (nothing may wait on it there).
+pub fn clear_now_on_main_thread(app: &AppHandle) {
+    if let Some(put) = take(None) {
+        platform::clear_on_main_thread(app, put);
+    }
 }
 
 #[cfg(windows)]
@@ -69,16 +111,21 @@ mod platform {
 
     pub async fn clear_if_unchanged(app: &AppHandle, put: u64) {
         let owner = owner(app);
-        let _ = tauri::async_runtime::spawn_blocking(move || {
-            let owner = owner.map(|h| HWND(h as *mut _));
-            if open_clipboard(owner).is_err() {
-                return;
-            }
-            super::clear_if_unchanged(&mut Clipboard, put);
-            // SAFETY: opened above.
-            let _ = unsafe { CloseClipboard() };
-        })
-        .await;
+        let _ = tauri::async_runtime::spawn_blocking(move || clear_blocking(owner, put)).await;
+    }
+
+    pub fn clear_on_main_thread(app: &AppHandle, put: u64) {
+        clear_blocking(owner(app), put);
+    }
+
+    fn clear_blocking(owner: Option<isize>, put: u64) {
+        let owner = owner.map(|h| HWND(h as *mut _));
+        if open_clipboard(owner).is_err() {
+            return;
+        }
+        super::clear_if_unchanged(&mut Clipboard, put);
+        // SAFETY: opened above.
+        let _ = unsafe { CloseClipboard() };
     }
 
     /// The open clipboard.
@@ -215,6 +262,11 @@ mod platform {
         }
     }
 
+    /// On the main thread already (the run loop's exit): AppKit is called here directly.
+    pub fn clear_on_main_thread(_app: &AppHandle, put: u64) {
+        super::clear_if_unchanged(&mut Pasteboard(NSPasteboard::generalPasteboard()), put);
+    }
+
     struct Pasteboard(objc2::rc::Retained<NSPasteboard>);
 
     impl super::Board for Pasteboard {
@@ -245,6 +297,10 @@ mod platform {
     }
 
     pub async fn clear_if_unchanged(app: &AppHandle, put: u64) {
+        super::clear_if_unchanged(&mut Clipboard(app), put);
+    }
+
+    pub fn clear_on_main_thread(app: &AppHandle, put: u64) {
         super::clear_if_unchanged(&mut Clipboard(app), put);
     }
 
@@ -311,6 +367,37 @@ mod tests {
         assert_eq!(board.text.as_deref(), Some("codes"));
         assert!(clear_if_unchanged(&mut board, second));
         assert_eq!(board.text, None);
+    }
+
+    #[test]
+    fn a_lock_sign_out_or_quit_takes_the_last_copy_once_and_an_older_wait_leaves_a_newer_copy() {
+        let _ = take(None);
+        assert_eq!(take(None), None, "nothing copied: nothing to empty");
+        remember(10);
+        remember(11);
+        // The first copy's wait ends: the newer copy is left to its own wait.
+        assert_eq!(take(Some(10)), None);
+        // A lock, a sign-out or a quit takes it, once.
+        assert_eq!(take(None), Some(11));
+        assert_eq!(take(None), None);
+        assert_eq!(take(Some(11)), None, "its wait then finds nothing to do");
+        remember(12);
+        assert_eq!(take(Some(12)), Some(12));
+    }
+
+    #[test]
+    fn locking_signing_out_and_quitting_empty_the_copied_codes() {
+        let commands = include_str!("commands.rs");
+        let body = |start: &str| {
+            let at = commands.find(start).unwrap_or_else(|| panic!("{start}"));
+            &commands[at..at + commands[at..].find("\n}\n").unwrap()]
+        };
+        assert!(body("pub fn lock_now(").contains("clear_copied_codes(&app)"), "Lock now");
+        assert!(body("pub fn spawn_idle_lock(").contains("crate::secret_copy::clear_now(&app).await"), "the idle lock");
+        assert!(body("pub async fn unpair(").contains("crate::secret_copy::clear_now(&app).await"), "sign-out");
+        let lib = include_str!("lib.rs");
+        let exit = &lib[lib.find("if let RunEvent::Exit = &event {").expect("the run loop hears the exit")..];
+        assert!(exit[..exit.find("\n        }").unwrap()].contains("secret_copy::clear_now_on_main_thread(handle)"), "quitting");
     }
 
     #[test]

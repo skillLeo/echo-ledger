@@ -823,6 +823,10 @@ pub fn run() {
         if let RunEvent::Reopen { .. } = &event {
             actions::show_main_from_outside(handle, &[]);
         }
+        // Quitting: recovery codes copied a moment ago leave the clipboard with the app.
+        if let RunEvent::Exit = &event {
+            secret_copy::clear_now_on_main_thread(handle);
+        }
         if let RunEvent::ExitRequested { code, api, .. } = &event {
             // The last window closed (no code): EchoLedger keeps running. A Quit (app.exit) or the updater's restart exits.
             if app_life::keep_running(*code) {
