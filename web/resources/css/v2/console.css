@@ -38,6 +38,9 @@ html[lang='ur'] .fi-body {
 /*
  * Right to left: a line written in English (a name, an email, a page not yet in Urdu, model output) keeps its own
  * order, and a number with its unit stays one run ("1 min", "$0.00"). The shortcut chips read left to right.
+ * plaintext takes each line's direction from its first strong letter. So a translated sentence must never start with
+ * a bare value: every value put into an Urdu sentence (a name, a file, a month, the search text) is isolated
+ * (U+2068…U+2069 or <bdi>), so its first strong letter is Urdu and the line stays right to left (D4 4, D11).
  */
 html[dir='rtl'] .fi-body :is(p, h1, h2, h3, h4, li, dt, dd, td, th, label, .fi-wi-stats-overview-stat-value,
     .fi-wi-stats-overview-stat-description, .fi-wi-stats-overview-stat-label, .fi-section-header-description, .fi-ta-text-item-label) {

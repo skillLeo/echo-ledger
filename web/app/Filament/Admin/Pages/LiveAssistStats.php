@@ -4,24 +4,33 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Pages;
 
+use App\Livewire\Admin\LiveAssistNow;
+use App\Models\AssistRelayCheck;
 use App\Models\User;
+use App\Services\Assist\AssistMonitor;
 use App\Services\Assist\AssistStats;
+use App\Services\Assist\RelayHealth;
 use App\Services\SettingsRepository;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Livewire;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\RateLimiter;
 use UnitEnum;
 
 /**
  * Live Assist's numbers for the super admin (v1.9 L8, App\Services\Assist\AssistStats): cost and calls per model and per
  * sold plan (with its tier), cost per assist-hour by mode, the prompt cache's share of the input, how calls ended, and
- * p50 / p95 of each latency stage, overall and per model. Numbers only: never a word anyone said.
+ * p50 / p95 of each latency stage, overall and per model; since B4 also the relay's state (up or down, uptime, outages,
+ * last contact) and the sessions and speed right now. Numbers only: never a word anyone said.
  */
 class LiveAssistStats extends Page
 {
@@ -71,9 +80,38 @@ class LiveAssistStats extends Page
         $this->filters['to'] = $to->toDateString();
     }
 
+    /** "Check the relay now": one check, kept like the scheduled ones, 6 a minute at most. */
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('checkRelay')->label('Check the relay now')->icon(Heroicon::OutlinedSignal)
+                ->visible(fn (): bool => app(RelayHealth::class)->host() !== null)
+                ->action(function (): void {
+                    $key = 'check-relay:'.auth()->id();
+                    if (RateLimiter::tooManyAttempts($key, 6)) {
+                        Notification::make()->title('Wait a moment')->body('Check the relay again in '.RateLimiter::availableIn($key).' seconds.')->warning()->send();
+
+                        return;
+                    }
+                    RateLimiter::hit($key, 60);
+                    $result = app(AssistMonitor::class)->checkNow(AssistRelayCheck::MANUAL);
+                    if ($result === null) {
+                        return;
+                    }
+                    $this->dispatch('relay-checked');
+                    $result['ok']
+                        ? Notification::make()->title('The relay is up')->body("{$result['host']} answered in {$result['ms']} ms.")->success()->send()
+                        : Notification::make()->title('The relay is down')->body("{$result['host']}: {$result['error']}")->danger()->send();
+                }),
+        ];
+    }
+
     public function content(Schema $schema): Schema
     {
         return $schema->components([
+            // Since B4: the relay and the sessions right now, above the period's numbers. Its own component refreshes
+            // every 30 s by itself; the period's numbers are worked out only when the filters change.
+            Livewire::make(LiveAssistNow::class),
             Grid::make(['default' => 1, 'sm' => 3])->schema([
                 Select::make('preset')->label('Period')->selectablePlaceholder(false)->live()
                     ->options(array_intersect_key(ServerUsage::PRESETS, array_flip(['this_month', 'last_month', 'last_7', 'last_30', 'custom'])))

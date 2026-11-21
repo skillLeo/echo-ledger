@@ -5,6 +5,8 @@
   --el-shadow-1: 0px 2px 8px 0px #0000001F;
   --el-shadow-2: 0px 8px 24px 0px #00000029;
   --el-shadow-3: 0px 12px 32px 0px #00000033;
+  --el-elevation-floating: 8px;
+  --el-elevation-modal: 16px;
   --el-label-grey: #8E8A80;
   --el-label-red: #E15F56;
   --el-label-orange: #DC6718;
@@ -33,10 +35,12 @@
   --el-icon-lg: 24px;
   --el-icon-xl: 40px;
   --el-breakpoint-compact: 720px;
+  --el-breakpoint-rail: 780px;
   --el-breakpoint-medium: 1024px;
   --el-breakpoint-wide: 1440px;
   --el-layer-base: 0;
   --el-layer-sticky: 10;
+  --el-layer-dock: 15;
   --el-layer-menu: 20;
   --el-layer-toast: 30;
   --el-layer-dialog: 40;

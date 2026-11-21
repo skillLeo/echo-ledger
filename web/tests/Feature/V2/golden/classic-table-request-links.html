@@ -1790,7 +1790,7 @@
                                         <!--[if ENDBLOCK]><![endif]-->                                                                            <!--[if BLOCK]><![endif]-->                                            
                                             <th
                                                                                                 scope="col"
-                                                class="fi-ta-header-cell fi-ta-header-cell-created-at"
+                                                class="fi-ta-header-cell fi-ta-header-cell-created-at   xl:fi-visible"
                                             >
                                                 <!--[if BLOCK]><![endif]-->                                                    <!--[if BLOCK]><![endif]-->                                                        Made
                                                     <!--[if ENDBLOCK]><![endif]-->                                                <!--[if ENDBLOCK]><![endif]-->                                            </th>
@@ -1835,7 +1835,13 @@
                                                         <div
                                                                                                                         class="fi-ta-col"
                                                         >
-                                                            <div class="fi-ta-text fi-ta-text-item fi-size-sm">Send me the March samples</div>
+                                                            
+            <div class="fi-ta-text-item  fi-size-sm  fi-ta-text fi-wrapped">
+                
+                                Send me the March samples                
+                            </div>
+
+            
                                                         </div>
                                                         
                                                     </td>
@@ -1901,14 +1907,28 @@
                                                         <div
                                                                                                                         class="fi-ta-col"
                                                         >
-                                                            <div class="fi-ta-text fi-ta-text-item fi-size-sm">Nov 24, 2026 · 11:42 AM</div>
+                                                            
+            <div class="fi-ta-text fi-ta-text-has-descriptions">
+                
+                                    
+                    <p class="fi-ta-text-item  fi-size-sm">
+                        
+                                                Nov 24, 2026                        
+                                            </p>
+                
+                
+                                    <p class="fi-ta-text-description">
+                        11:42 AM                    </p>
+                            </div>
+
+            
                                                         </div>
                                                         
                                                     </td>
                                                                                                     
                                                     <td
                                                         wire:key="KEY"
-                                                        class="fi-ta-cell fi-ta-cell-created-at"
+                                                        class="fi-ta-cell fi-ta-cell-created-at    xl:fi-visible"
                                                     >
                                                         
                                                         <div
@@ -1923,13 +1943,40 @@
                                                         <div
                                                             class="fi-ta-actions "
                                                         >
-                                                            <!--[if BLOCK]><![endif]-->                                                                <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:click="mountAction('revoke', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" wire:key="KEY" class="fi-ac-link-action fi-link fi-size-sm fi-color fi-color-danger fi-text-color-500 dark:fi-text-color-400"><svg wire:loading.remove.delay.default="1" wire:target="mountAction('revoke', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-size-sm" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+                                                            <!--[if BLOCK]><![endif]-->                                                                
+        <div
+            x-data="filamentDropdown"
+            class="fi-dropdown"        >
+            <div
+                x-on:mousedown="if ($event.button === 0) toggle($event)"
+                class="fi-dropdown-trigger"
+            >
+                
+        
+        <button                                                title="Actions" aria-label="Actions" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-group fi-icon-btn fi-size-md fi-color fi-color-primary fi-text-color-600 hover:fi-text-color-500 dark:fi-text-color-400 dark:hover:fi-text-color-300"        >
+            <svg class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path d="M10 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM10 8.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM11.5 15.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Z"/>
+</svg>            
+                    </button>
+
+        
+                    </div>
+
+            <div
+                x-cloak
+                x-float.placement.bottom-end.flip.teleport.offset="{ offset: 8 }"
+                x-ref="panel"
+                x-transition:enter-start="fi-opacity-0"
+                x-transition:leave-end="fi-opacity-0"
+                class="fi-dropdown-panel"            >
+                                    <div class="fi-dropdown-list">
+                                                    <button type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" wire:click="mountAction('revoke', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" wire:key="KEY" class="fi-dropdown-list-item fi-ac-grouped-action fi-color fi-color-danger fi-text-color-600 hover:fi-text-color-600 dark:fi-text-color-400 dark:hover:fi-text-color-400"><svg wire:loading.remove.delay.default="1" wire:target="mountAction('revoke', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-color fi-color-danger fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
   <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636"/>
 </svg>    <svg
         fill="none"
         viewBox="0 0 24 24"
         xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true" wire:loading.delay.default="" wire:target="mountAction('revoke', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-loading-indicator fi-size-sm"
+        aria-hidden="true" wire:loading.delay.default="" wire:target="mountAction('revoke', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-loading-indicator fi-size-md"
     >
         <path
             clip-rule="evenodd"
@@ -1942,7 +1989,11 @@
             d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z"
             fill="currentColor"
         ></path>
-    </svg><span class="fi-link-label">Revoke</span></button>
+    </svg><span class="fi-dropdown-list-item-label">Revoke</span></button>                                            </div>
+                            </div>
+        </div>
+
+        
                                                             <!--[if ENDBLOCK]><![endif]-->                                                        </div>
                                                     </td>
                                                 <!--[if ENDBLOCK]><![endif]-->

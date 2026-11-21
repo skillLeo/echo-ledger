@@ -137,7 +137,7 @@ export function QueueV2({ say, reviewRequest, onShown }: {
                       control={<span className="el-page__actions" role="group" aria-label={title} data-testid={`pending-${item.id}`}>
                         <Menu label={`More for ${title}`} items={() => more(item)} button={{ size: "sm", variant: "quiet", icon: Icons.MoreIcon, disabled: isBusy }} />
                         <Button size="sm" disabled={isBusy} onClick={() => void q.discard(item)}>Discard</Button>
-                        <Button size="sm" variant="primary" disabled={isBusy} onClick={() => void q.keep(item)}>Keep</Button>
+                        <Button size="sm" disabled={isBusy} onClick={() => void q.keep(item)}>Keep</Button>
                       </span>} />
                   );
                 })}

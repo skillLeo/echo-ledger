@@ -52,7 +52,10 @@ Nastaliq has tall ascenders, deep descenders and a sloping baseline. At the same
   - Web/desktop: `dir="auto"` on the element that holds the text. For a paragraph mixing sentences, `unicode-bidi: plaintext`.
   - Android: `TextDirection.Content` in Compose (`style.copy(textDirection = TextDirection.Content)`), or `BidiFormatter.unicodeWrap` for text joined into a string.
   - This is the fix for D-163. An English sentence in an RTL window currently takes the window's direction, so its full stop jumps to the start: ".console to try the next engine".
-- **UI strings in the app language take the page direction.** They need nothing extra.
+- **UI strings in the app language take the page direction.** They need nothing extra, except for the values put into them.
+- **Every value put into a translated sentence is isolated** (D11). This covers names, file and project names, months, the search text, counts with units, and links. Use U+2068 … U+2069 around the value, or `<bdi>` in markup.
+  - **Why:** the web console sets `unicode-bidi: plaintext` on text elements in RTL, so English lines keep their own order. plaintext takes a line's direction from its first strong letter, and a sentence that starts with a Latin value ("Qureshi Textiles میں تلاش کریں") would turn LTR.
+  - **Where to do it:** once, in the translator. When the locale is ur or ar, wrap each `:replacement` before it goes into the sentence. Then no view has to remember. Until then, views isolate their own values, as W-209b does.
 
 ## 5. Things that stay left-to-right inside RTL
 Wrap each of these in an LTR isolate (LRI U+2066 … PDI U+2069): web/desktop `<bdi dir="ltr">` or the `.el-num` class (`direction: ltr; unicode-bidi: isolate`); Android `BidiFormatter.getInstance(true).unicodeWrap(s, TextDirectionHeuristicsCompat.LTR)` or `⁦…⁩`.

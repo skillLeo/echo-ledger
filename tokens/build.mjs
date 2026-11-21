@@ -133,6 +133,11 @@ ${dims('focus')}
 ${dims('icon')}
     }
 
+    /** Shadow depth of the floating layers (DESIGN_SYSTEM: shadows only on floating layers). */
+    object Elevation {
+${dims('elevation')}
+    }
+
     object Component {
 ${comp}
     }

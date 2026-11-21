@@ -2,6 +2,10 @@
 # Runs the built Mac app's smoke test (src-tauri/src/smoke.rs): the app starts against a temporary folder with no
 # account, opens its windows, waits until they are ready, quits and exits 0. The test fails on a non-zero exit, on a
 # hang past the limit, and on a new EchoLedger crash report in ~/Library/Logs/DiagnosticReports.
+# Outside CI (a build about to be installed) the app must first pass check-mac-signature.sh --pinned (D-168): macOS
+# keeps the microphone, system audio and Screen Recording for the pinned certificate's app only, and gives any other
+# build silent buffers while EchoLedger still thinks it may record. CI checks its own builds' signatures in their own step
+# (branch builds are ad hoc on purpose), so there GITHUB_ACTIONS=true skips this.
 #   sh desktop/scripts/smoke-mac.sh path/to/EchoLedger.app [seconds]
 set -u
 APP=${1:?usage: smoke-mac.sh path/to/EchoLedger.app [seconds]}
@@ -10,6 +14,13 @@ REPORTS="$HOME/Library/Logs/DiagnosticReports"
 BINARY="$APP/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Contents/Info.plist")"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
+
+if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
+  if ! sh "$(dirname "$0")/check-mac-signature.sh" "$APP" --pinned; then
+    echo "Smoke test failed: $APP is not signed with the pinned EchoLedger certificate, so macOS would give it silence from the microphone and system audio (docs/SIGNING.md). Build it with scripts/release-mac.sh, or check it with: sh scripts/check-mac-signature.sh <app> --pinned"
+    exit 1
+  fi
+fi
 
 mkdir -p "$REPORTS"
 ls -1 "$REPORTS" | sort > "$WORK/before"

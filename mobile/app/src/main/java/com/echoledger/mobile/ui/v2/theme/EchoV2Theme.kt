@@ -38,8 +38,7 @@ import java.util.Locale
 
 /**
  * The colour roles of the v2 design system (docs/v2/DESIGN_SYSTEM.md) for one theme. Components read these, never the
- * raw palette. With Wallpaper colours on (Settings › Appearance) only the accent follows the wallpaper ([withWallpaper]);
- * the surfaces stay neutral and Record, success, warning and danger keep their fixed colours.
+ * raw palette. They are fixed: Wallpaper colours (Settings › Appearance) changes the classic screens only.
  */
 @Immutable
 data class EchoV2Colors(
@@ -190,25 +189,30 @@ enum class EchoLanguage(val rtl: Boolean) {
  */
 @Immutable
 class EchoV2Type(private val family: FontFamily, val latin: FontFamily, private val urdu: Boolean) {
-    private fun TextStyle.face(): TextStyle = if (urdu) copy(fontFamily = family).nastaliqLine() else copy(fontFamily = family)
+    /**
+     * The style in this face. In Urdu each role takes its Nastaliq size and line from the type tokens [urduRole]
+     * (D4: title.l 24/44, title.m 20/40, title.s 16/30, body 16/30, caption and meta 14/28: Urdu is never under 14 sp).
+     */
+    private fun TextStyle.face(urduRole: TextStyle? = null): TextStyle =
+        if (urdu) copy(fontFamily = family).inUrdu(urduRole) else copy(fontFamily = family)
 
-    val titleL = EchoTokens.Type.titleL.face()
-    val titleM = EchoTokens.Type.titleM.face()
-    val titleS = EchoTokens.Type.titleS.face()
+    val titleL = EchoTokens.Type.titleL.face(EchoTokens.Type.urduTitleL)
+    val titleM = EchoTokens.Type.titleM.face(EchoTokens.Type.urduTitleM)
+    val titleS = EchoTokens.Type.titleS.face(EchoTokens.Type.urduTitleS)
 
     /** Default text on the phone: body.mobile, 16/24. */
-    val body = EchoTokens.Type.bodyMobile.face()
+    val body = EchoTokens.Type.bodyMobile.face(EchoTokens.Type.urduBody)
 
     /** Row titles and emphasis on the phone: 16 sp, strong. */
-    val bodyStrong = EchoTokens.Type.bodyMobile.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight).face()
+    val bodyStrong = EchoTokens.Type.bodyMobile.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight).face(EchoTokens.Type.urduBody)
 
     /** Meta lines and supporting text: 14 sp. */
-    val meta = EchoTokens.Type.body.face()
+    val meta = EchoTokens.Type.body.face(EchoTokens.Type.urduCaption)
 
     /** Buttons, labels and chips: 14 sp, strong. */
-    val label = EchoTokens.Type.bodyStrong.face()
-    val caption = EchoTokens.Type.caption.face()
-    val captionStrong = EchoTokens.Type.caption.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight).face()
+    val label = EchoTokens.Type.bodyStrong.face(EchoTokens.Type.urduCaption)
+    val caption = EchoTokens.Type.caption.face(EchoTokens.Type.urduCaption)
+    val captionStrong = EchoTokens.Type.caption.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight).face(EchoTokens.Type.urduCaption)
 
     /** Durations and clocks; always the Latin face with tabular digits. */
     val mono = EchoTokens.Type.mono.copy(fontFamily = latin, fontFeatureSettings = "tnum")
@@ -243,13 +247,36 @@ class EchoV2Type(private val family: FontFamily, val latin: FontFamily, private 
                 else -> style.copy(fontFamily = latin)
             }
 
-            script == Script.Urdu && !urdu -> style.copy(fontFamily = UrduNastaliq).nastaliqLine()
+            script == Script.Urdu && !urdu -> style.copy(fontFamily = UrduNastaliq).inUrdu(urduRoleOf(style))
 
-            script == Script.Arabic -> style.copy(fontFamily = ArabicNaskh)
+            script == Script.Arabic -> style.copy(fontFamily = ArabicNaskh).inArabic(arabicRoleOf(style))
 
             else -> style
         }
         return base.copy(textDirection = TextDirection.Content)
+    }
+
+    /**
+     * The Urdu type token for one of this type's roles (D4 2), compared by identity: [caption] and [meta] may be equal
+     * styles yet are different roles. A style that isn't a role (a one-off) gets none and keeps its size.
+     */
+    private fun urduRoleOf(style: TextStyle): TextStyle? = when {
+        style === titleL -> EchoTokens.Type.urduTitleL
+        style === titleM -> EchoTokens.Type.urduTitleM
+        style === titleS -> EchoTokens.Type.urduTitleS
+        style === body || style === bodyStrong -> EchoTokens.Type.urduBody
+        style === meta || style === label || style === caption || style === captionStrong -> EchoTokens.Type.urduCaption
+        else -> null
+    }
+
+    /** The Arabic type token for one of this type's roles (Naskh, a little tighter than Nastaliq), by identity. */
+    private fun arabicRoleOf(style: TextStyle): TextStyle? = when {
+        style === titleL -> EchoTokens.Type.arabicTitleL
+        style === titleM -> EchoTokens.Type.arabicTitleM
+        style === titleS -> EchoTokens.Type.arabicTitleS
+        style === body || style === bodyStrong -> EchoTokens.Type.arabicBody
+        style === meta || style === label || style === caption || style === captionStrong -> EchoTokens.Type.arabicCaption
+        else -> null
     }
 
     /** Transcript text in Urdu (urdu.body). */
@@ -344,8 +371,8 @@ fun systemEchoLanguage(): EchoLanguage =
 
 /**
  * The v2 theme: EchoTokens mapped onto Material 3. Light or dark follows the system unless [darkTheme] says otherwise.
- * [wallpaperColours] (Settings › Appearance, Android 12 and later; off by default) takes the wallpaper's accent; the
- * surfaces stay neutral and Record, success, warning and danger keep their fixed colours.
+ * [wallpaperColours] (Settings › Appearance) changes the classic screens only: the redesigned screens keep EchoLedger's
+ * own colours (DESIGN_SYSTEM "Colour roles"; a wallpaper's accent can be purple, which the brand rules forbid).
  * [language] sets the text face, the components' own words and the layout direction (Urdu is right to left).
  */
 @Composable
@@ -354,16 +381,11 @@ fun EchoV2Theme(
     language: EchoLanguage = systemEchoLanguage(),
     /** "Use the phone's font" (Settings › Appearance; off by default): the phone's own Latin face, not Inter. */
     phoneFont: Boolean = false,
-    wallpaperColours: Boolean = false,
+    // Passed through by the shell; the redesigned screens don't use it (the accent stays teal).
+    @Suppress("UNUSED_PARAMETER") wallpaperColours: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val base = if (darkTheme) EchoV2Colors.Dark else EchoV2Colors.Light
-    val context = LocalContext.current
-    val colors = if (wallpaperColours && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-        remember(base, context) { base.withWallpaper(context) }
-    } else {
-        base
-    }
+    val colors = if (darkTheme) EchoV2Colors.Dark else EchoV2Colors.Light
     val type = EchoV2Type.of(language, phoneFont)
     val direction = if (language.rtl) LayoutDirection.Rtl else LayoutDirection.Ltr
     ProvideLanguage(language) {
@@ -378,24 +400,6 @@ fun EchoV2Theme(
             MaterialTheme(colorScheme = colors.toMaterial(), typography = type.material(), shapes = EchoV2Shapes, content = content)
         }
     }
-}
-
-/** The wallpaper's accent (Android 12 and later) in place of the teal one; everything else stays. */
-@androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.S)
-fun EchoV2Colors.withWallpaper(context: android.content.Context): EchoV2Colors {
-    val m = if (isDark) {
-        androidx.compose.material3.dynamicDarkColorScheme(context)
-    } else {
-        androidx.compose.material3.dynamicLightColorScheme(context)
-    }
-    return copy(
-        accent = m.primary,
-        accentSoft = m.primaryContainer,
-        accentText = m.primary,
-        accentFocus = m.primary,
-        textOnAccent = m.onPrimary,
-        inverseAccent = m.inversePrimary
-    )
 }
 
 /** The locale whose values-* folder holds [this] language's words. */
@@ -503,8 +507,27 @@ internal fun scriptOf(text: String): Script {
     return if (text.any { it in URDU_LETTERS }) Script.Urdu else Script.Arabic
 }
 
-/** Nastaliq needs the taller line of urdu.body (16/30) at every size. */
+/**
+ * This style in Nastaliq: the size and line of its Urdu role's token when it has one ([role]), else the taller line of
+ * urdu.body (16/30) at its own size, never under urdu.caption's 14 sp (D4 2).
+ */
+private fun TextStyle.inUrdu(role: TextStyle?): TextStyle =
+    if (role != null) copy(fontSize = role.fontSize, lineHeight = role.lineHeight) else nastaliqLine()
+
+/**
+ * This style in Naskh: the size and line of its Arabic role's token when it has one ([role]), else arabic.body's line
+ * (15/26) at its own size.
+ */
+private fun TextStyle.inArabic(role: TextStyle?): TextStyle {
+    if (role != null) return copy(fontSize = role.fontSize, lineHeight = role.lineHeight)
+    val ratio = EchoTokens.Type.arabicBody.lineHeight.value / EchoTokens.Type.arabicBody.fontSize.value
+    return copy(lineHeight = TextUnit(fontSize.value * ratio, fontSize.type))
+}
+
+/** The taller line of urdu.body (16/30) at this size, never under urdu.caption's 14 sp. */
 private fun TextStyle.nastaliqLine(): TextStyle {
     val ratio = EchoTokens.Type.urduBody.lineHeight.value / EchoTokens.Type.urduBody.fontSize.value
-    return copy(lineHeight = TextUnit(fontSize.value * ratio, fontSize.type))
+    val least = EchoTokens.Type.urduCaption.fontSize
+    val size = if (fontSize.type == least.type && fontSize.value < least.value) least else fontSize
+    return copy(fontSize = size, lineHeight = TextUnit(size.value * ratio, size.type))
 }

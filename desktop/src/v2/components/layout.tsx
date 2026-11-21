@@ -11,11 +11,23 @@ export function Avatar({ initials, size = "md" }: { initials: string; size?: "sm
   return <span className={`el-avatar${size === "sm" ? " el-avatar--sm" : ""}`} aria-hidden="true">{initials}</span>;
 }
 
-/** The app's primary navigation; below the compact breakpoint it keeps its icons only. */
-export function Sidebar({ label, brand, children, footer }: { label: string; brand?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+/** The app's primary navigation; below the rail breakpoint (780 px window) it keeps its icons only. */
+export function Sidebar({ label, brand, brandEnd, children, footer }: {
+  label: string;
+  brand?: ReactNode;
+  /** A control at the brand's end (Search): it stays at the top of the rail when the name hides. */
+  brandEnd?: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
   return (
     <nav className="el-sidebar" aria-label={label}>
-      {brand && <div className="el-sidebar__brand">{brand}</div>}
+      {(brand || brandEnd) && (
+        <div className="el-sidebar__brand">
+          {brand && <span className="el-sidebar__brand-name">{brand}</span>}
+          {brandEnd && <span className="el-sidebar__brand-end">{brandEnd}</span>}
+        </div>
+      )}
       {children}
       {footer}
     </nav>

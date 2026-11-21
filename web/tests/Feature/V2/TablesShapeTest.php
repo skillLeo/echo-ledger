@@ -24,8 +24,9 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
  * W-201, the tables' shape: in the new frame the four wide tables (a recording's Share links, My links, Devices,
  * Request links) have the row's actions in one ⋮ menu under Filament's own "Actions" label (the same actions, labels,
  * colours, confirmations and order as classic, the red ones last), and the columns that made them too wide are hidden
- * at first but stay under Columns; their words and dates are in the console's language, English or Urdu. Classic keeps
- * its buttons and every column shown (ClassicTablesGoldenTest holds its HTML byte for byte). The widths themselves are
+ * at first but stay under Columns; their words and dates are in the console's language, English or Urdu. Since W-201
+ * classic has the same ⋮ menu and shows those columns from 1280 px only, with no Columns menu (ClassicTablesGoldenTest
+ * holds its HTML byte for byte). The widths themselves are
  * measured in a browser by Support/table-widths.mjs (docs/v2/design-review/W201/widths.md).
  */
 
@@ -127,12 +128,17 @@ it('puts the row\'s actions in one ⋮ menu and hides the wide columns at first 
     }
 })->with('wide tables');
 
-it('keeps classic\'s buttons on the row, every column shown, no Columns menu and its English words', function (string $which, array $actions, array $urduActions, array $hidden, array $headers) {
+// W-201 classic: the same tables scrolled sideways at 1024-1280 px and cut off their row actions in classic too. Classic
+// fits them with the row's actions in one ⋮ menu and the same wide columns shown only on a wide window (from 1280 px),
+// with no Columns menu: Filament draws that menu's labels with x-html, which the classic pages never contain.
+it('fits classic\'s tables: the row\'s actions in one ⋮ menu, the wide columns only on a wide window, no Columns menu, its English words', function (string $which, array $actions, array $urduActions, array $hidden, array $headers) {
     $classic = shapeTable($this, $which, false);
     [$group, $shown] = shapeActions($classic);
     [$hiddenAtFirst, $inColumns, $labels] = shapeColumns($classic);
-    expect($group)->toBeNull()->and($shown)->toBe($actions)
+    $wideOnly = collect($classic->getColumns())->filter(fn ($c): bool => $c->getVisibleFrom() !== null)->keys()->values()->all();
+    expect($group)->toBe('Actions')->and($shown)->toBe($actions)
         ->and($hiddenAtFirst)->toBe([])->and($inColumns)->toBe([])
+        ->and($wideOnly)->toBe($hidden)
         ->and($labels)->toBe($headers);
 })->with('wide tables');
 
@@ -148,8 +154,8 @@ it('dates the four tables by one rule in the new frame: "24 Nov 2026" in the con
         return (string) $this->actingAs($this->owner->fresh(), 'web')->get($this->pages[$page])->assertOk()->getContent();
     };
 
-    // Classic as it was.
-    expect($get('request-links', false))->toContain('Nov 24, 2026 · 11:42 AM')
+    // Classic keeps its own date ("Nov 24, 2026"), with the hour on a second line since W-201 (one line was too wide).
+    expect($get('request-links', false))->toContain('Nov 24, 2026')->toContain('11:42 AM')->not->toContain('Nov 24, 2026 · 11:42 AM')
         ->and($get('shares', false))->toContain('Nov 24, 2026');
     foreach (['request-links', 'shares', 'recording'] as $page) {
         $en = $get($page, true);

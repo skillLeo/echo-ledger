@@ -225,7 +225,7 @@ it('shows this month\'s billable minutes and cost on the dashboard', function ()
 
     $stat = adminStatsByLabel()['This month'];
 
-    expect($stat->getValue())->toBe('0.0 min · $0.00')
+    expect($stat->getValue())->toBe("0.0 min ·\u{00A0}\$0.00")
         ->and($stat->getDescription())->toBe('No monthly limit')
         ->and($stat->getColor())->toBe('gray');
     $this->panelComponent(SourceStatsOverview::class)->assertSee('This month');
@@ -238,8 +238,17 @@ it('describes the limit and colours the month by the warning and limit flags', f
         ->and($stat->getDescription())->toBe($description)
         ->and($stat->getColor())->toBe($colour);
 })->with([
-    'no limit' => [[], '812.5 min · $6.42', 'No monthly limit', 'gray'],
-    'minutes limit' => [['limit_minutes' => 3000], '812.5 min · $6.42', 'of 3,000 min', 'gray'],
-    'dollar limit, warning' => [['limit_usd' => 7.5, 'warn' => true], '812.5 min · $6.42', 'of $7.50', 'warning'],
-    'both limits, reached' => [['limit_minutes' => 800, 'limit_usd' => 6, 'warn' => true, 'limit_reached' => true], '812.5 min · $6.42', 'of 800 min · $6.00', 'danger'],
+    'no limit' => [[], "812.5 min ·\u{00A0}\$6.42", 'No monthly limit', 'gray'],
+    'minutes limit' => [['limit_minutes' => 3000], "812.5 min ·\u{00A0}\$6.42", 'of 3,000 min', 'gray'],
+    'dollar limit, warning' => [['limit_usd' => 7.5, 'warn' => true], "812.5 min ·\u{00A0}\$6.42", 'of $7.50', 'warning'],
+    'both limits, reached' => [['limit_minutes' => 800, 'limit_usd' => 6, 'warn' => true, 'limit_reached' => true], "812.5 min ·\u{00A0}\$6.42", "of 800 min ·\u{00A0}\$6.00", 'danger'],
 ]);
+
+// W-204: "0.0 min · $0.00" wrapped after its "·" in a narrow card (Urdu, 720 px), leaving the dot alone at the end of
+// the first line. The dot is tied to the amount after it, so a break can only come before it.
+it('keeps This month\'s "·" with the amount after it, so a narrow card never ends a line on the dot', function () {
+    $usage = ['minutes' => 0, 'cost_usd' => 0, 'limit_minutes' => 3000, 'limit_usd' => 25];
+    $value = (string) SourceStatsOverview::monthStat($usage)->getValue();
+    expect($value)->toContain("·\u{00A0}\$0.00")->not->toContain(' · $')
+        ->and((string) SourceStatsOverview::monthStat($usage)->getDescription())->toContain("·\u{00A0}\$25.00");
+});

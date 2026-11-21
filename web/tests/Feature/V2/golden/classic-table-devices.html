@@ -2092,7 +2092,7 @@
                                         <!--[if ENDBLOCK]><![endif]-->                                                                            <!--[if BLOCK]><![endif]-->                                            
                                             <th
                                                                                                 scope="col"
-                                                class="fi-ta-header-cell fi-ta-header-cell-app-version"
+                                                class="fi-ta-header-cell fi-ta-header-cell-app-version   xl:fi-visible"
                                             >
                                                 <!--[if BLOCK]><![endif]-->                                                    <!--[if BLOCK]><![endif]-->                                                        App
                                                     <!--[if ENDBLOCK]><![endif]-->                                                <!--[if ENDBLOCK]><![endif]-->                                            </th>
@@ -2113,7 +2113,7 @@
                                         <!--[if ENDBLOCK]><![endif]-->                                                                            <!--[if BLOCK]><![endif]-->                                            
                                             <th
                                                                                                 scope="col"
-                                                class="fi-ta-header-cell fi-ta-header-cell-created-at"
+                                                class="fi-ta-header-cell fi-ta-header-cell-created-at   xl:fi-visible"
                                             >
                                                 <!--[if BLOCK]><![endif]-->                                                    <!--[if BLOCK]><![endif]-->                                                        Signed in
                                                     <!--[if ENDBLOCK]><![endif]-->                                                <!--[if ENDBLOCK]><![endif]-->                                            </th>
@@ -2221,14 +2221,28 @@
                                                         <div
                                                                                                                         class="fi-ta-col"
                                                         >
-                                                            <div class="fi-ta-text fi-ta-text-item fi-size-sm">Android</div>
+                                                            
+            <div class="fi-ta-text fi-ta-text-has-descriptions">
+                
+                                    
+                    <p class="fi-ta-text-item  fi-size-sm">
+                        
+                                                Android                        
+                                            </p>
+                
+                
+                                    <p class="fi-ta-text-description">
+                        <span class="xl:hidden">App 1.0.0</span>                    </p>
+                            </div>
+
+            
                                                         </div>
                                                         
                                                     </td>
                                                                                                     
                                                     <td
                                                         wire:key="KEY"
-                                                        class="fi-ta-cell fi-ta-cell-app-version"
+                                                        class="fi-ta-cell fi-ta-cell-app-version    xl:fi-visible"
                                                     >
                                                         
                                                         <div
@@ -2267,7 +2281,7 @@
                                                                                                     
                                                     <td
                                                         wire:key="KEY"
-                                                        class="fi-ta-cell fi-ta-cell-created-at"
+                                                        class="fi-ta-cell fi-ta-cell-created-at    xl:fi-visible"
                                                     >
                                                         
                                                         <div
@@ -2283,15 +2297,42 @@
                                                             class="fi-ta-actions "
                                                         >
                                                             <!--[if BLOCK]><![endif]-->                                                                
+        <div
+            x-data="filamentDropdown"
+            class="fi-dropdown"        >
+            <div
+                x-on:mousedown="if ($event.button === 0) toggle($event)"
+                class="fi-dropdown-trigger"
+            >
+                
         
-        <button                                                type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-link-action fi-link fi-size-sm" wire:click="mountAction('rename', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" wire:key="KEY"        >
-                            <svg wire:loading.remove.delay.default="1" wire:target="mountAction('rename', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-size-sm" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+        <button                                                title="Actions" aria-label="Actions" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-icon-btn-group fi-icon-btn fi-size-md fi-color fi-color-primary fi-text-color-600 hover:fi-text-color-500 dark:fi-text-color-400 dark:hover:fi-text-color-300"        >
+            <svg class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path d="M10 3a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM10 8.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3ZM11.5 15.5a1.5 1.5 0 1 0-3 0 1.5 1.5 0 0 0 3 0Z"/>
+</svg>            
+                    </button>
+
+        
+                    </div>
+
+            <div
+                x-cloak
+                x-float.placement.bottom-end.flip.teleport.offset="{ offset: 8 }"
+                x-ref="panel"
+                x-transition:enter-start="fi-opacity-0"
+                x-transition:leave-end="fi-opacity-0"
+                class="fi-dropdown-panel"            >
+                                    <div class="fi-dropdown-list">
+                                                    
+        
+        <button                                                role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-grouped-action fi-dropdown-list-item" wire:click="mountAction('rename', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" wire:key="KEY"        >
+            <svg wire:loading.remove.delay.default="1" wire:target="mountAction('rename', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
   <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"/>
-</svg>                    <svg
+</svg>                <svg
         fill="none"
         viewBox="0 0 24 24"
         xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true" wire:loading.delay.default="" wire:target="mountAction('rename', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-loading-indicator fi-size-sm"
+        aria-hidden="true" wire:loading.delay.default="" wire:target="mountAction('rename', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-loading-indicator fi-size-md"
     >
         <path
             clip-rule="evenodd"
@@ -2304,25 +2345,23 @@
             d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z"
             fill="currentColor"
         ></path>
-    </svg>            
-                            <span class="fi-link-label">
-                    Rename                </span>
-            
-            
+    </svg>
+            <span class="fi-dropdown-list-item-label">
+                Rename            </span>
+
                     </button>
 
         
+                                                            
         
-                                                                                                                            
-        
-        <button                                                type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-link-action fi-link fi-size-sm  fi-color fi-color-danger fi-text-color-500 dark:fi-text-color-400" wire:click="mountAction('signOut', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" wire:key="KEY"        >
-                            <svg wire:loading.remove.delay.default="1" wire:target="mountAction('signOut', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-size-sm" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+        <button                                                role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-grouped-action fi-dropdown-list-item fi-color fi-color-danger fi-text-color-600 hover:fi-text-color-600 dark:fi-text-color-400 dark:hover:fi-text-color-400" wire:click="mountAction('signOut', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" wire:key="KEY"        >
+            <svg wire:loading.remove.delay.default="1" wire:target="mountAction('signOut', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-color fi-color-danger fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
   <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9"/>
-</svg>                    <svg
+</svg>                <svg
         fill="none"
         viewBox="0 0 24 24"
         xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true" wire:loading.delay.default="" wire:target="mountAction('signOut', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-loading-indicator fi-size-sm"
+        aria-hidden="true" wire:loading.delay.default="" wire:target="mountAction('signOut', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-loading-indicator fi-size-md"
     >
         <path
             clip-rule="evenodd"
@@ -2335,27 +2374,25 @@
             d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z"
             fill="currentColor"
         ></path>
-    </svg>            
-                            <span class="fi-link-label">
-                    Sign out                </span>
-            
-            
+    </svg>
+            <span class="fi-dropdown-list-item-label">
+                Sign out            </span>
+
                     </button>
 
         
-        
-                                                                                                                            
+                                                            
         
         <button                                        x-bind:id="$id('key-bindings')"
                 x-mousetrap.global.mod-d="document.getElementById($el.id)?.click()"
-                                    type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-link-action fi-link fi-size-sm  fi-color fi-color-danger fi-text-color-500 dark:fi-text-color-400" wire:click="mountAction('delete', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" wire:key="KEY"        >
-                            <svg wire:loading.remove.delay.default="1" wire:target="mountAction('delete', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-size-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" data-slot="icon">
-  <path fill-rule="evenodd" d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.3l.815 8.15A1.5 1.5 0 0 0 5.357 15h5.285a1.5 1.5 0 0 0 1.493-1.35l.815-8.15h.3a.75.75 0 0 0 0-1.5H11v-.75A2.25 2.25 0 0 0 8.75 1h-1.5A2.25 2.25 0 0 0 5 3.25Zm2.25-.75a.75.75 0 0 0-.75.75V4h3v-.75a.75.75 0 0 0-.75-.75h-1.5ZM6.05 6a.75.75 0 0 1 .787.713l.275 5.5a.75.75 0 0 1-1.498.075l-.275-5.5A.75.75 0 0 1 6.05 6Zm3.9 0a.75.75 0 0 1 .712.787l-.275 5.5a.75.75 0 0 1-1.498-.075l.275-5.5a.75.75 0 0 1 .786-.711Z" clip-rule="evenodd"/>
-</svg>                    <svg
+                                    role="menuitem" tabindex="-1" type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-grouped-action fi-dropdown-list-item fi-color fi-color-danger fi-text-color-600 hover:fi-text-color-600 dark:fi-text-color-400 dark:hover:fi-text-color-400" wire:click="mountAction('delete', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" wire:key="KEY"        >
+            <svg wire:loading.remove.delay.default="1" wire:target="mountAction('delete', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-color fi-color-danger fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" data-slot="icon">
+  <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/>
+</svg>                <svg
         fill="none"
         viewBox="0 0 24 24"
         xmlns="http://www.w3.org/2000/svg"
-        aria-hidden="true" wire:loading.delay.default="" wire:target="mountAction('delete', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-loading-indicator fi-size-sm"
+        aria-hidden="true" wire:loading.delay.default="" wire:target="mountAction('delete', {}, JSON.parse('{\u0022recordKey\u0022:\u0022ULID\u0022,\u0022table\u0022:true}'))" class="fi-icon fi-loading-indicator fi-size-md"
     >
         <path
             clip-rule="evenodd"
@@ -2368,14 +2405,17 @@
             d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z"
             fill="currentColor"
         ></path>
-    </svg>            
-                            <span class="fi-link-label">
-                    Remove from list                </span>
-            
-            
+    </svg>
+            <span class="fi-dropdown-list-item-label">
+                Remove from list            </span>
+
                     </button>
 
         
+                                                    </div>
+                            </div>
+        </div>
+
         
                                                             <!--[if ENDBLOCK]><![endif]-->                                                        </div>
                                                     </td>

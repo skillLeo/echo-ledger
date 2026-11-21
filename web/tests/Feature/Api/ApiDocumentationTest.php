@@ -91,7 +91,8 @@ const SERVED_BEFORE_DOCUMENTED = [
     'POST /api/assist/sessions/{}/live',
 ];
 
-const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate'];
+// Since 2.0.0-j the audio-only endpoints of 1.8.0-e are served: nothing documented waits for the router.
+const NOT_SERVED_YET = [];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();

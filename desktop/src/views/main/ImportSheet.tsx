@@ -70,15 +70,15 @@ export function ImportSheet({ paths, notify, onClose }: {
         <div className="row organise-field">
           <label htmlFor={clientField} className="small muted">Project</label>
           <select id={clientField} className="select" value={clientId} disabled={busy} onChange={(e) => setClientId(e.target.value)}>
-            <option value="">No project</option>
-            {sortFolders(clients).map((c) => <option key={c.id} value={c.id}>{`${folderBadge(c)} · ${c.name}`}</option>)}
+            <option dir="auto" value="">No project</option>
+            {sortFolders(clients).map((c) => <option dir="auto" key={c.id} value={c.id}>{`${folderBadge(c)} · ${c.name}`}</option>)}
           </select>
         </div>
         <div className="row organise-field">
           <label htmlFor={languageField} className="small muted">Language</label>
           <select id={languageField} className="select" value={language} disabled={busy} onChange={(e) => setLanguage(e.target.value)}>
-            {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
-            <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}</optgroup>
+            {MAIN_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
+            <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option dir="auto" key={o.chip} value={o.value ?? ""}>{o.label}</option>)}</optgroup>
           </select>
         </div>
         <p className="small muted">The project and language apply to every file. Files already in your Library are skipped.</p>

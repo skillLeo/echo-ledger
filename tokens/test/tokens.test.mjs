@@ -80,3 +80,15 @@ test('the settings icon map gives every page one glyph, unlike its group and its
     }
   }
 });
+
+test('the desktop rail breakpoint is the same width in tokens, lib/shell.ts and the v2 sidebar rule', () => {
+  const rail = json('global/size.json').breakpoint.rail.$value;
+  const repo = (p) => readFileSync(resolve(here, '../..', p), 'utf8');
+  const shell = repo('desktop/src/lib/shell.ts').match(/export const AUTO_RAIL_BELOW = (\d+);/);
+  assert.ok(shell, 'AUTO_RAIL_BELOW in desktop/src/lib/shell.ts');
+  assert.equal(`${shell[1]}px`, rail);
+  const css = repo('desktop/src/v2/styles/v2.css');
+  const sidebarRule = css.match(/@media \(width < (\d+px)\) \{\s*\.el-sidebar \{/);
+  assert.ok(sidebarRule, 'the v2 sidebar media query');
+  assert.equal(sidebarRule[1], rail);
+});

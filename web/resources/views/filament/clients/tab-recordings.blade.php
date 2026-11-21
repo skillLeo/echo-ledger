@@ -1,8 +1,12 @@
+{{-- W-209: a name or value inside a translated sentence is isolated in right to left, so the sentence keeps the page's direction (D4 §4). --}}
+@php
+    $iso = fn (mixed $value): string => \App\Filament\Support\ConsoleV2::rtl() ? "\u{2068}".$value."\u{2069}" : (string) $value;
+@endphp
 {{-- The project's subfolders, then its recordings (search and sort since v1.5), as Library rows. --}}
 <div style="display: flex; flex-direction: column; gap: var(--space-4); max-width: 880px">
     @if ($subfolders->isNotEmpty())
-        <section aria-label="Subfolders">
-            <h3 class="el-card-title" style="margin-bottom: var(--space-2)">Subfolders</h3>
+        <section aria-label="{{ __('Subfolders') }}">
+            <h3 class="el-card-title" style="margin-bottom: var(--space-2)">{{ __('Subfolders') }}</h3>
             <div class="el-chips" role="list">
                 @foreach ($subfolders as $folder)
                     <a role="listitem" class="el-chip" href="{{ \App\Filament\Resources\Clients\ClientResource::getUrl('view', ['record' => $folder]) }}" wire:navigate wire:key="subfolder-{{ $folder->id }}">
@@ -16,13 +20,13 @@
     @endif
 
     <div style="display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center">
-        <label class="el-sr" for="project-search">Search in this project</label>
-        <input id="project-search" type="search" class="el-field-input" style="flex: 1 1 14rem" placeholder="Search in {{ $client->name }}"
+        <label class="el-sr" for="project-search">{{ __('Search in this project') }}</label>
+        <input id="project-search" type="search" class="el-field-input" style="flex: 1 1 14rem" placeholder="{{ __('Search in :name', ['name' => $iso($client->name)]) }}"
             wire:model.live.debounce.400ms="search">
-        <label class="el-sr" for="project-sort">Sort</label>
+        <label class="el-sr" for="project-sort">{{ __('Sort') }}</label>
         <select id="project-sort" class="el-field-input" style="flex: 0 0 auto" wire:model.live="sort">
             @foreach ($sorts as $value => $label)
-                <option value="{{ $value }}">{{ $label }}</option>
+                <option value="{{ $value }}">{{ __($label) }}</option>
             @endforeach
         </select>
     </div>
@@ -31,11 +35,11 @@
         <div class="el-empty">
             <span class="el-empty-icon">@svg('heroicon-o-film', ['aria-hidden' => 'true'])</span>
             @if (trim($this->search) !== '')
-                <p class="el-empty-title">No recordings match “{{ $this->search }}”</p>
-                <p class="el-empty-text">Try other words: titles, callers and transcripts are searched.</p>
+                <p class="el-empty-title">{{ __('No recordings match “:search”', ['search' => $iso($this->search)]) }}</p>
+                <p class="el-empty-text">{{ __('Try other words: titles, callers and transcripts are searched.') }}</p>
             @else
-                <p class="el-empty-title">No recordings yet</p>
-                <p class="el-empty-text">Recordings filed under {{ $client->name }} show here, from the phone, the computer or Upload.</p>
+                <p class="el-empty-title">{{ __('No recordings yet') }}</p>
+                <p class="el-empty-text">{{ __('Recordings filed under :name show here, from the phone, the computer or Upload.', ['name' => $iso($client->name)]) }}</p>
             @endif
         </div>
     @else
@@ -62,7 +66,7 @@
             @endforeach
         </ul>
         @if (count($recordings) >= 100)
-            <a class="el-text-btn" href="{{ $libraryUrl }}" style="margin-top: var(--space-3)">See them all in the Library</a>
+            <a class="el-text-btn" href="{{ $libraryUrl }}" style="margin-top: var(--space-3)">{{ __('See them all in the Library') }}</a>
         @endif
     @endif
 </div>

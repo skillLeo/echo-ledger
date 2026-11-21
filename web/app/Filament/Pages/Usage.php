@@ -44,6 +44,12 @@ class Usage extends Page
 
     protected static ?string $title = 'Usage';
 
+    /** In the console's language (W-209). */
+    public function getTitle(): string
+    {
+        return __('Usage');
+    }
+
     /** @var array{month: string} */
     public array $filters = ['month' => ''];
 
@@ -74,7 +80,7 @@ class Usage extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('exportCsv')->label('Download CSV')->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
+            Action::make('exportCsv')->label(__('Download CSV'))->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
                 ->action(function (): StreamedResponse {
                     [$from, $to] = $this->range();
                     // Per use, never per provider (since v1.8.1, W-001): the provider breakdown is the admin panel's.
@@ -82,7 +88,7 @@ class Usage extends Page
 
                     return self::csvResponse($rows, 'usage-'.$from->format('Y-m').'.csv');
                 }),
-            Action::make('serverUsage')->label('Whole server')->icon(Heroicon::OutlinedServerStack)->color('gray')
+            Action::make('serverUsage')->label(__('Whole server'))->icon(Heroicon::OutlinedServerStack)->color('gray')
                 ->visible(fn (): bool => ServerUsage::canAccess())->url(fn (): string => ServerUsage::getUrl(panel: 'admin')),
         ];
     }
