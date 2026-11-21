@@ -2091,12 +2091,16 @@ html[dir='rtl'] .v2-row-title {
  * the person's lists · +. A list chip is its colour dot (.v2-label-dot--<name>) and its name; the selected chip takes
  * the accent's tint with a check. The row scrolls sideways under 1280 px and wraps from there.
  */
+/* The padding keeps the focus ring inside the scroller, which would otherwise cut it; the negative margin gives the
+   room back, as on desktop. */
 .v2-lists {
     display: flex;
     align-items: center;
     gap: var(--el-space-8);
     overflow-x: auto;
     scrollbar-width: none;
+    padding: calc(var(--el-focus-width) + var(--el-focus-offset));
+    margin: calc(-1 * (var(--el-focus-width) + var(--el-focus-offset)));
 }
 
 @media (min-width: 1280px) {
@@ -2117,14 +2121,21 @@ html[dir='rtl'] .v2-row-title {
     border-radius: var(--el-radius-full);
     background-color: var(--el-role-bg-surface);
     color: var(--el-role-text-primary);
-    font-weight: var(--el-text-body-strong-weight);
+    font-weight: var(--el-text-body-weight);
     white-space: nowrap;
 }
 
+.v2-list-chip:hover {
+    background-color: var(--el-role-bg-subtle);
+}
+
+/* The chip being shown: the row shows one list at a time, so it is aria-current, as on desktop. */
+.v2-list-chip[aria-current='true'],
 .v2-list-chip[aria-pressed='true'] {
     border-color: var(--el-role-accent-default);
     background-color: var(--el-role-accent-soft);
     color: var(--el-role-accent-text);
+    font-weight: var(--el-text-body-strong-weight);
 }
 
 .v2-list-chip:focus-visible {
@@ -2145,9 +2156,32 @@ html[dir='rtl'] .v2-row-title {
     justify-content: center;
     width: var(--el-component-chip-height);
     height: var(--el-component-chip-height);
-    border: var(--el-border-hairline) dashed var(--el-role-border-strong);
+    padding: 0;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
     border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
     color: var(--el-role-text-secondary);
+    cursor: pointer;
+}
+
+.v2-list-add:hover {
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-primary);
+}
+
+.v2-list-add:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+/* Urdu chips are taller (D4: the Urdu caption line plus room); "+" stays round at the same height. */
+:lang(ur) .v2-list-chip {
+    min-height: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
+}
+
+:lang(ur) .v2-list-add {
+    width: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
+    height: calc(var(--el-text-urdu-caption-line) + var(--el-space-8));
 }
 
 /* The eight label colours as one radio group: 32 px dots in 44 px targets, the chosen one ringed and ticked. */
@@ -2158,6 +2192,7 @@ html[dir='rtl'] .v2-row-title {
 }
 
 .v2-colour-picker label {
+    position: relative;
     display: inline-flex;
     align-items: center;
     justify-content: center;
