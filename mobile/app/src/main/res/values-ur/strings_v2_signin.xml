@@ -50,4 +50,12 @@
     <string name="v2_in_confirm_text">%1$s
 
 اس فون کی ریکارڈنگز اور ٹرانسکرپٹ صرف اسی سرور کو بھیجے جائیں گے۔</string>
+    <string name="v2_in_e_closed">یہ سرور صرف دعوت پر ہے۔ اس کے مالک سے دعوت مانگیں، پھر اسی ای میل سے سائن ان کریں۔</string>
+    <string name="v2_in_e_invalid_code">یہ کوڈ درست نہیں۔ ای میل دیکھیں اور دوبارہ کوشش کریں۔</string>
+    <string name="v2_in_e_expired">اس کوڈ کی مدت ختم ہو گئی۔ نئے کوڈ کے لیے دوبارہ بھیجیں دبائیں۔</string>
+    <string name="v2_in_e_too_soon">ابھی ایک کوڈ بھیجا گیا ہے۔ دوسرا مانگنے سے پہلے تھوڑا انتظار کریں۔</string>
+    <string name="v2_in_e_too_many">بہت زیادہ کوششیں۔ چند منٹ انتظار کریں، پھر دوبارہ کوشش کریں۔</string>
+    <string name="v2_in_e_sign_up_limit">آج اس نیٹ ورک سے بہت زیادہ نئے اکاؤنٹ بنے ہیں۔ کل دوبارہ کوشش کریں۔</string>
+    <string name="v2_in_e_email_not_allowed">یہ ای میل یہاں استعمال نہیں ہو سکتی۔ کوئی اور استعمال کریں۔</string>
+    <string name="v2_in_e_invalid_otp">دو مرحلوں والا کوڈ درست نہیں۔</string>
 </resources>

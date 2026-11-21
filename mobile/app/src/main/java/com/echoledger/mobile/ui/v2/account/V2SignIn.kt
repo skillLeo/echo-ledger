@@ -219,7 +219,8 @@ fun V2SignInScreen(vm: MainViewModel) {
             }
 
             Step.CODE -> {
-                var code by remember { mutableStateOf("") }
+                // Kept across a rotation or a trip to the email app; a password never is.
+                var code by rememberSaveable { mutableStateOf("") }
                 var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
                 LaunchedEffect(state.resendAtMs) {
                     while (SignInFlow.resendIn(state, now) > 0) {
@@ -274,9 +275,9 @@ fun V2SignInScreen(vm: MainViewModel) {
             }
 
             Step.OTP -> {
-                var otp by remember { mutableStateOf("") }
+                var otp by rememberSaveable { mutableStateOf("") }
                 var password by remember { mutableStateOf("") }
-                var code by remember { mutableStateOf("") }
+                var code by rememberSaveable { mutableStateOf("") }
                 val afterPassword = state.otpAfter == Step.PASSWORD
                 // The step before is sent again with the two-step code: keep what it needs.
                 if (afterPassword) {
@@ -298,7 +299,7 @@ fun V2SignInScreen(vm: MainViewModel) {
         }
         state.error?.let {
             Text(
-                VmMessages.localize(res, it),
+                signInWords(res, it),
                 style = EchoV2.type.body,
                 color = c.danger,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
@@ -309,6 +310,19 @@ fun V2SignInScreen(vm: MainViewModel) {
         }
         Text(stringResource(R.string.v2_in_encrypted), style = EchoV2.type.caption, color = c.textSecondary)
     }
+}
+
+/** A refused sign-in step's words (SignInFlow's sentences) in the screen's language; anything else as the view model says it. */
+internal fun signInWords(res: android.content.res.Resources, english: String): String = when (english) {
+    SignInFlow.SIGN_UP_CLOSED -> res.getString(R.string.v2_in_e_closed)
+    SignInFlow.message("invalid_code", null) -> res.getString(R.string.v2_in_e_invalid_code)
+    SignInFlow.message("code_expired", null) -> res.getString(R.string.v2_in_e_expired)
+    SignInFlow.message("resend_too_soon", null) -> res.getString(R.string.v2_in_e_too_soon)
+    SignInFlow.message("too_many_attempts", null) -> res.getString(R.string.v2_in_e_too_many)
+    SignInFlow.message("sign_up_limit", null) -> res.getString(R.string.v2_in_e_sign_up_limit)
+    SignInFlow.message("email_not_allowed", null) -> res.getString(R.string.v2_in_e_email_not_allowed)
+    SignInFlow.message("invalid_otp", null) -> res.getString(R.string.v2_in_e_invalid_otp)
+    else -> VmMessages.localize(res, english)
 }
 
 /** The QR code and the one-time code (the console's "Sign in a device"), and the browser sign-in for passkeys. */

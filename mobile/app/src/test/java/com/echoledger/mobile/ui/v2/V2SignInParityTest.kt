@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import com.echoledger.mobile.core.SignInFlow
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
@@ -172,5 +173,45 @@ class V2SignInParityTest : ScreenTest() {
         page(EchoLanguage.Urdu)
         assertTrue(seen("سائن ان کریں یا اکاؤنٹ بنائیں"))
         assertTrue(seen("سائن ان کے دوسرے طریقے"))
+    }
+
+    @Test
+    fun anEmailedCodeThenTheTwoStepCodeSignsInAndAWrongOneSaysSo() {
+        server.on("POST", "/api/auth/start", json(200, """{"account":"existing","methods":["code"],"sign_up":true}"""))
+        server.on("POST", "/api/auth/code", json(202, """{"resend_after":60,"expires_in":600}"""))
+        server.on("POST", "/api/auth/code/verify", json(401, """{"message":"Two-factor code needed.","code":"otp_required"}"""))
+        serveLibrary()
+        page()
+        field("Email").performTextInput("ana@example.com")
+        press("Continue")
+        pumpUntil("the code") { server.requestsTo("POST", "/api/auth/code").isNotEmpty() }
+        field("6-digit code").performTextInput("123456")
+        press("Continue")
+        step(SignInFlow.Step.OTP)
+        assertTrue(seen("Two-step sign-in"))
+        // A wrong two-step code says so, in the screen's words.
+        server.on("POST", "/api/auth/code/verify", json(422, """{"message":"Invalid code.","code":"invalid_otp"}"""))
+        field("6-digit code from the email").performTextInput("123456")
+        field("Code from your authenticator app").performTextInput("000000")
+        press("Sign in")
+        pumpUntil("the error") { seen("That two-step code is not right.") }
+        server.on("POST", "/api/auth/code/verify", registered())
+        compose.onAllNodes(hasText("000000") and hasSetTextAction()).onFirst().performTextReplacement("654321")
+        press("Sign in")
+        pumpUntil("signed in") { runBlocking { app.graph.settings.current().paired } }
+        val body = lastBody("/api/auth/code/verify")
+        assertEquals("123456", body["code"]!!.jsonPrimitive.content)
+        assertEquals("654321", body["otp"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun inUrduARefusedStepIsSaidInUrdu() {
+        server.on("POST", "/api/auth/start", json(200, """{"account":"new","methods":[],"sign_up":false}"""))
+        page(EchoLanguage.Urdu)
+        field("ای میل").performTextInput("new@example.com")
+        press("جاری رکھیں")
+        pumpUntil("the Urdu message") { seen("یہ سرور صرف دعوت پر ہے۔") }
+        assertTrue(!seen("This server is invite only."))
+        assertTrue(server.requestsTo("POST", "/api/auth/code").isEmpty())
     }
 }
