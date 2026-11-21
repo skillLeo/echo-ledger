@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ClosedCaption
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Description
@@ -231,4 +232,7 @@ object EchoIcons {
 
     /** Hide EchoLedger's floating windows (before a screen share). */
     val HideWindows: ImageVector get() = Icons.Outlined.StopScreenShare
+
+    /** Copy one detail (a payment detail, a reference). */
+    val Copy: ImageVector get() = Icons.Outlined.ContentCopy
 }

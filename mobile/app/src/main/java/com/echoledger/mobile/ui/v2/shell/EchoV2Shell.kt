@@ -30,6 +30,7 @@ import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.MissedFix
 import com.echoledger.mobile.core.Readiness
 import com.echoledger.mobile.recording.RecordingService
+import com.echoledger.mobile.translate.TranslateMode
 import com.echoledger.mobile.ui.ActivityBadge
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.v2.activity.ActivityActions
@@ -381,7 +382,21 @@ private fun ShellBody(
 
                     is V2Route.ClassicPage -> classic.settingsPage(r.id) { route = V2Route.Tabs }
 
-                    is V2Route.Live -> classic.liveEntry(r.entry) { route = V2Route.Tabs }
+                    // Game and Watch translate on the new components; the other entries open their screens.
+                    is V2Route.Live -> when (r.entry) {
+                        LiveEntry.LiveTranslate, LiveEntry.WatchTranslate -> {
+                            val game = r.entry == LiveEntry.LiveTranslate
+                            com.echoledger.mobile.ui.v2.live.V2LiveTranslatePage(
+                                vm,
+                                if (game) TranslateMode.GAME else TranslateMode.WATCH,
+                                onBack = { route = V2Route.Tabs },
+                                onSetup = { route = V2Route.Setup },
+                                onSettings = { route = V2Route.SettingsPage(if (game) "games" else "videos") }
+                            )
+                        }
+
+                        else -> classic.liveEntry(r.entry) { route = V2Route.Tabs }
+                    }
 
                     V2Route.Projects -> V2WorkspacesScreen(
                         vm,
