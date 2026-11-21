@@ -19,8 +19,8 @@ use Throwable;
 /**
  * Automatic titles (since v1.5, Phase 1C; docs/API.md "Easy, trustworthy, clear"): when a recording's final transcript
  * is ready and nobody gave it a title, it gets a short one from what was said (Claude Haiku; the first words when no
- * key is set), marked `title_auto`. A title set by a person is never replaced. A call whose caller or meeting name is
- * known keeps showing that name ("Call with Omar Khan"), so it gets none.
+ * key is set), marked `title_auto`. A title set by a person is never replaced. A call whose person is known (a name,
+ * a meeting's name or a number) shows them ("Call with Omar Khan"), so it gets none (docs/API.md "Title from the person").
  */
 final class AutoTitles
 {
@@ -37,7 +37,8 @@ final class AutoTitles
      */
     public static function wanted(CaptureSession $session): bool
     {
-        return GenericTitles::is($session->title) && ($session->caller_name === null || trim($session->caller_name) === '');
+        // Since 2.0.0-k: never where a person is known (a name, or a number), as the title is theirs.
+        return ! $session->title_by_person && GenericTitles::is($session->title) && $session->personTitle() === null;
     }
 
     /** Queues the title of [$transcript]'s recording when it is a finished final transcript of an untitled one. Never throws. */
@@ -91,6 +92,8 @@ final class AutoTitles
         // Only while still untitled (or still the title nobody chose): a person who named it meanwhile wins.
         $before = $session->title;
         $saved = CaptureSession::withTrashed()->withoutGlobalScopes()->whereKey($session->id)
+            // Since 2.0.0-k: never over a title a person gave by renaming meanwhile, even the same generic words.
+            ->where('title_by_person', false)
             ->where(function ($q) use ($before): void {
                 $q->whereNull('title')->orWhere('title', '');
                 if ($before !== null && $before !== '') {

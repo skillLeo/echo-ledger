@@ -74,7 +74,10 @@ final class LibraryItemResource extends JsonResource
             'filed_by' => $session->client !== null ? $session->filed_by : null,
             'title' => $session->displayTitle(),
             // Since v1.5 (Phase 1C): the title was written by the server from what was said; a person's title is false.
-            'title_auto' => (bool) $session->title_auto,
+            // Since 2.0.0-k: where the title shown comes from (own | person | auto | app); `title_auto` keeps its v1.5
+            // meaning, written from what was said, so older apps badge only those.
+            'title_auto' => ($source = $session->titleSource()) === 'auto',
+            'title_source' => $source,
             // Since v1.2: who the recording was with (name, number, where the device saw it), or null.
             'caller' => SessionController::caller($session),
             'started_at' => $session->started_at->toAtomString(),

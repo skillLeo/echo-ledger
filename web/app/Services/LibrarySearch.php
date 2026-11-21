@@ -10,6 +10,7 @@ use App\Models\CaptureSession;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\Screen;
 use App\Models\Transcript;
+use App\Services\Titles\TitleSql;
 use App\Support\UrduText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
@@ -63,12 +64,12 @@ final class LibrarySearch
         $matching = (clone $base)->where(fn (Builder $q) => $q
             ->whereHas('transcripts', fn (Builder $t) => $this->likeAll($t, 'search_text', $folded))
             ->orWhereHas('screens', fn (Builder $s) => $this->likeAll($s, 'search_text', $folded))
-            ->orWhere(fn (Builder $title) => $this->likeAll($title, 'title', $terms)));
+            ->orWhere(fn (Builder $title) => $this->likeShown($title, $terms)));
         if ($this->fulltextUsable($folded)) {
             $fulltext = (clone $base)->where(fn (Builder $q) => $q
                 ->whereHas('transcripts', fn (Builder $t) => $t->whereFullText('search_text', self::booleanQuery($folded), ['mode' => 'boolean']))
                 ->orWhereHas('screens', fn (Builder $s) => $s->whereFullText('search_text', self::booleanQuery($folded), ['mode' => 'boolean']))
-                ->orWhere(fn (Builder $title) => $this->likeAll($title, 'title', $terms)));
+                ->orWhere(fn (Builder $title) => $this->likeShown($title, $terms)));
             // The engine is chosen for the whole query, never per page, so paging stays consistent.
             try {
                 if ((clone $fulltext)->exists()) {
@@ -318,6 +319,19 @@ final class LibrarySearch
     private function page(Builder $query, int $limit, int $page): Collection
     {
         return $query->orderByDesc('started_at')->orderByDesc('id')->skip(($page - 1) * $limit)->take($limit + 1)->get();
+    }
+
+    /**
+     * Every term in the title shown (since 2.0.0-k, TitleSql): the person's own, the person called, or the stored one.
+     *
+     * @param  Builder<CaptureSession>  $query
+     * @param  list<string>  $terms
+     */
+    private function likeShown(Builder $query, array $terms): void
+    {
+        foreach ($terms as $term) {
+            TitleSql::whereShownLike($query, '%'.mb_strtolower(str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term)).'%');
+        }
     }
 
     /**

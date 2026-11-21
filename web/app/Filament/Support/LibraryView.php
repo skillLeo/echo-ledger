@@ -10,6 +10,7 @@ use App\Models\Client;
 use App\Models\Device;
 use App\Models\User;
 use App\Services\SettingsRepository;
+use App\Services\Titles\TitleSql;
 use App\Stt\LanguageChoice;
 use Closure;
 use DateTimeImmutable;
@@ -255,7 +256,8 @@ final class LibraryView
             'oldest' => $query->orderBy($started),
             'longest' => $query->orderByRaw("CASE WHEN {$length} IS NULL THEN 1 ELSE 0 END")->orderByDesc($length)->orderByDesc($started),
             'shortest' => $query->orderByRaw("CASE WHEN {$length} IS NULL THEN 1 ELSE 0 END")->orderBy($length)->orderByDesc($started),
-            'name' => $query->orderByRaw('LOWER(COALESCE(NULLIF('.$query->qualifyColumn('title').", ''), ".$query->qualifyColumn('caller_name').', '.$query->qualifyColumn('source_app').'))')->orderByDesc($started),
+            // Since 2.0.0-k by the title shown (TitleSql): the person's own, the person called, the stored title, the app.
+            'name' => TitleSql::orderByShown($query)->orderByDesc($started),
             'opened' => $query->orderByRaw('CASE WHEN (SELECT MAX(opened_at) FROM session_opens WHERE session_opens.capture_session_id = capture_sessions.id AND session_opens.user_id = ?) IS NULL THEN 1 ELSE 0 END', [(int) $userId])
                 ->orderByRaw('(SELECT MAX(opened_at) FROM session_opens WHERE session_opens.capture_session_id = capture_sessions.id AND session_opens.user_id = ?) DESC', [(int) $userId])
                 ->orderByDesc($started),

@@ -65,7 +65,7 @@ final class PassageSearch
                 continue;
             }
             $segments = $transcript->segments ?? [];
-            $label = ($session->title ?: 'Call').' · '.$session->started_at->copy()->setTimezone($zone)->format('M j');
+            $label = $session->displayTitle().' · '.$session->started_at->copy()->setTimezone($zone)->format('M j');
             for ($start = 0, $window = 0; $start < count($segments); $start += self::STEP, $window++) {
                 $slice = array_slice($segments, $start, self::WINDOW);
                 $out[] = [

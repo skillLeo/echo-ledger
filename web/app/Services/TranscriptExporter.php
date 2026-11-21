@@ -102,7 +102,7 @@ final class TranscriptExporter
     /** `Acme kickoff 2026-10-24.docx`: the title without characters file systems refuse, and the start date. */
     public static function filename(CaptureSession $session, string $format): string
     {
-        $title = preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]+/u', ' ', $session->displayTitle()) ?? '';
+        $title = preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]+/u', ' ', $session->outsideTitle()) ?? '';
         $title = trim(preg_replace('/\s+/u', ' ', $title) ?? '');
         $title = mb_substr($title === '' ? 'Transcript' : $title, 0, 80);
 
@@ -148,7 +148,7 @@ final class TranscriptExporter
     /** @param list<array<string, mixed>> $lines */
     private function markdown(CaptureSession $session, array $lines, bool $timestamps, bool $speakers): string
     {
-        $out = '# '.self::mdEscape($session->displayTitle())."\n\n*".implode(' · ', $this->facts($session))."*\n\n";
+        $out = '# '.self::mdEscape($session->outsideTitle())."\n\n*".implode(' · ', $this->facts($session))."*\n\n";
         if ($this->noteLine !== null) {
             $out .= '> '.self::mdEscape($this->noteLine)."\n\n";
         }
@@ -200,7 +200,7 @@ final class TranscriptExporter
         return (string) json_encode([
             'session' => [
                 'id' => $session->id,
-                'title' => $session->displayTitle(),
+                'title' => $session->outsideTitle(),
                 'source_app' => $session->source_app->value,
                 'client' => $session->client?->name,
                 'started_at' => $session->started_at->toAtomString(),
@@ -241,7 +241,7 @@ final class TranscriptExporter
 
             return '<w:r>'.($props !== '' ? '<w:rPr>'.$props.'</w:rPr>' : '').'<w:t xml:space="preserve">'.htmlspecialchars($text, ENT_XML1 | ENT_QUOTES, 'UTF-8').'</w:t></w:r>';
         };
-        $body = $p($r($session->displayTitle(), true), false, 'Title').$p($r(implode(' · ', $this->facts($session)), false, false, '666666'));
+        $body = $p($r($session->outsideTitle(), true), false, 'Title').$p($r(implode(' · ', $this->facts($session)), false, false, '666666'));
         if ($this->noteLine !== null) {
             $body .= $p($r($this->noteLine, false, false, '666666'));
         }
@@ -307,12 +307,12 @@ final class TranscriptExporter
         }
 
         return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-            .'<meta name="robots" content="noindex"><title>'.$e($session->displayTitle()).'</title><style>'
+            .'<meta name="robots" content="noindex"><title>'.$e($session->outsideTitle()).'</title><style>'
             .'body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans","Noto Nastaliq Urdu","Noto Sans Devanagari",sans-serif;color:#111;max-width:760px;margin:32px auto;padding:0 20px}'
             .'h1{font-size:22px;margin:0 0 4px}.facts{color:#666;margin:0 0 24px}p{margin:0 0 10px}'
             .'.at{color:#888;font-variant-numeric:tabular-nums;margin-inline-end:10px}.who{font-weight:600;margin-inline-end:6px}'
             .'.spk-1{color:#5b21b6}.spk-2{color:#0e7490}@media print{body{margin:0;max-width:none}.noprint{display:none}}'
-            .'</style></head><body><h1 dir="auto">'.$e($session->displayTitle()).'</h1><p class="facts">'.$e(implode(' · ', $this->facts($session))).'</p>'
+            .'</style></head><body><h1 dir="auto">'.$e($session->outsideTitle()).'</h1><p class="facts">'.$e(implode(' · ', $this->facts($session))).'</p>'
             ."\n".($this->noteLine !== null ? '<p class="facts">'.$e($this->noteLine).'</p>'."\n" : '').$rows.'</body></html>';
     }
 
