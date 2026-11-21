@@ -1371,3 +1371,30 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-recording__title:hover { background: var(--el-role-bg-subtle); }
 .el-recording__title:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
 .el-recording__title-field { inline-size: 100%; border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm); background: transparent; color: inherit; font: inherit; padding-inline: var(--el-space-4); }
+
+/* What the engine was not sure of, kept as heard (parity DT-REC-111), and suggested fixes (DT-REC-106, 107). */
+.el-word { all: unset; cursor: pointer; }
+.el-word--unsure { text-decoration: underline dotted; text-decoration-color: var(--el-role-text-secondary); text-underline-offset: var(--el-space-2); }
+.el-word:focus-visible, .el-suggest:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-segment__text--unsure { text-decoration: underline dotted; text-decoration-color: var(--el-role-border-strong); }
+.el-segment__check { display: block; margin-block-start: var(--el-space-4); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); }
+.el-suggest { all: unset; cursor: pointer; text-decoration: underline wavy; text-decoration-color: var(--el-role-accent); text-underline-offset: var(--el-space-2); }
+.el-suggest[aria-expanded="true"] { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); }
+.el-suggest-pop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block: var(--el-space-8); padding: var(--el-space-8); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); }
+.el-suggestions { display: flex; align-items: center; gap: var(--el-space-8); }
+
+/* The word being heard now, on the line being played (parity DT-REC-110). */
+.el-word--on { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); box-shadow: 0 0 0 var(--el-space-2) var(--el-role-accent-soft); }
+@media (prefers-reduced-motion: no-preference) { .el-word--on { transition: background-color var(--el-motion-fast); } }
+
+/* The player's waveform (parity DT-REC-129, DT-REC-053): who speaks when, the bookmarks, how far it has played. */
+.el-wave { position: relative; display: flex; align-items: center; gap: var(--el-border-hairline); block-size: var(--el-space-40); padding-inline: var(--el-space-16); cursor: pointer; }
+.el-wave__bar { flex: 1; min-inline-size: var(--el-border-hairline); block-size: var(--el-wave-level); border-radius: var(--el-radius-sm); background: var(--el-role-label-teal-dot); opacity: 0.45; }
+.el-wave__bar--2 { background: var(--el-role-label-amber-dot); }
+.el-wave__bar--played { opacity: 1; }
+.el-wave__mark { position: absolute; inset-block: 0; inset-inline-start: calc(var(--el-space-16) + (100% - var(--el-space-16) * 2) * var(--el-wave-at)); inline-size: var(--el-border-hairline); background: var(--el-role-text-primary); pointer-events: none; }
+
+/* Moving recordings by dragging them (parity DT-LIB-082, 083, DT-PRJ-014): the drop targets in the sidebar. */
+.el-nav-drop { display: none; align-items: center; gap: var(--el-space-8); margin-inline: var(--el-space-8); padding: var(--el-space-8); border: var(--el-border-hairline) dashed var(--el-role-border-strong); border-radius: var(--el-radius-sm); color: var(--el-role-text-secondary); }
+.dragging-recordings .el-nav-drop { display: flex; }
+.el-shell [data-drop-project].drop-over { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); outline: var(--el-focus-width) solid var(--el-role-accent-focus); }

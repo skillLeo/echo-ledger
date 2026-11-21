@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { Suspense, lazy, useState } from "react";
 import MainApp from "../../views/main/MainApp";
 import type { MainTab } from "../../lib/mainView";
@@ -408,6 +408,41 @@ describe("the app with the flags", () => {
     expect(document.querySelector("[data-shell=v2]")).not.toBeNull();
     expect(document.querySelector(".sidebar")).toBeNull();
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("in the app, the super admin's account has Admin panel at the sidebar's foot (the website's admin page); any other has none (DT-NAV-036)", async () => {
+    const account = (superAdmin: boolean) => ({ name: "Ayesha", email: "ayesha@example.test", email_verified: true, two_factor: false, google: false, created_at: null,
+      workspace: null, deletes_at: null, super_admin: superAdmin });
+    backend({ "ui_v2.shell": true });
+    respond("account_get", account(true));
+    respond("server_page_open", null);
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.click(await within(nav).findByRole("button", { name: "Admin panel" }));
+    await act(flushAsync);
+    expect(callsOf("server_page_open")).toEqual([{ page: "admin", serverUrl: null }]);
+    cleanup();
+    resetTauriMock();
+    backend({ "ui_v2.shell": true });
+    respond("account_get", account(false));
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("navigation", { name: "Main" });
+    expect(screen.queryByRole("button", { name: "Admin panel" })).toBeNull();
+  });
+
+  it("in the app, the ? key opens Help & shortcuts (DT-NAV-032)", async () => {
+    backend({ "ui_v2.shell": true });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    await screen.findByRole("navigation", { name: "Main" });
+    fireEvent.keyDown(document.body, { key: "?" });
+    await act(flushAsync);
+    expect(await screen.findByRole("dialog", { name: "Help & shortcuts" })).toBeInTheDocument();
   });
 
   it("in the app, Activity opens the new design's Activity page, and its Review opens the Library with the waiting calls", async () => {

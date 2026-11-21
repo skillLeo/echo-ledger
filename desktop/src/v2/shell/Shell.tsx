@@ -3,11 +3,12 @@
 // line. Record opens the page where recording starts (today's Home and its Live Assist card). Modules not rebuilt yet
 // show today's page inside the new frame; Live and Ask, without their page yet, say where to find them meanwhile.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Avatar, Badge, Button, EmptyState, Icons, NavItem, Sidebar, Status } from "../components";
+import { Avatar, Badge, Button, EmptyState, Icon, Icons, NavItem, Sidebar, Status } from "../components";
 import { Menu } from "../components/Menu";
 import { initials } from "../settings/initials";
 import type { MainTab } from "../../lib/mainView";
 import { isConfirmOpen } from "../../lib/confirm";
+import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
 const PRESS_HOLD_MS = 3000;
@@ -196,10 +197,15 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
           </ul>
         )}
         {item("projects", "Projects", Icons.FolderIcon)}
+        {/* While recordings are dragged (lib/dragMove.ts): the Inbox takes them out of their project. Pinned projects
+            below take them too. Hidden otherwise; Move to project… is the way for the keyboard. */}
+        <div className="el-nav-drop" aria-hidden="true" {...{ [DROP_ATTRIBUTE]: "" }}>
+          <Icon icon={Icons.InboxIcon} /><span>Inbox (no project)</span>
+        </div>
         {onProject && pinnedProjects.length > 0 && (
           <ul className="el-nav-sub" aria-label="Pinned projects">
             {pinnedProjects.map((p) => (
-              <li key={p.id}><button type="button" className="el-nav-item el-nav-item--sub" dir="auto" aria-current={current === "projects" && projectId === p.id ? "page" : undefined}
+              <li key={p.id} {...{ [DROP_ATTRIBUTE]: p.id }}><button type="button" className="el-nav-item el-nav-item--sub" dir="auto" aria-current={current === "projects" && projectId === p.id ? "page" : undefined}
                 onClick={() => { setOwn(null); onProject(p.id); }}>{p.name}</button></li>
             ))}
           </ul>

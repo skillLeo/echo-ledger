@@ -12,7 +12,7 @@ import { makeItem, makeScreen, makeSettings, makeStatus } from "../../test/fixtu
 import { ClientWorkspace as ClientWorkspacePage } from "../../views/main/ClientWorkspace";
 import { RulesSection } from "../../views/main/FilingRules";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
-import { WorkspaceV2, memoryGroups } from "./WorkspaceV2";
+import { WorkspaceV2, latestStart, memoryGroups } from "./WorkspaceV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 // The accessible-name library Testing Library itself loads (the same version, so the same names as its ByRole queries).
@@ -510,5 +510,7 @@ describe("the project's header (parity DT-PRJ-006)", () => {
     await show();
     expect(screen.getByTestId("project-summary")).toHaveTextContent(/^2 recordings · Last call /);
     expect(screen.getByTestId("project-summary").textContent).toContain(formatWhen("2026-11-17T06:42:00Z").split(" · ")[0]);
+    // By the instant, not the text: 10:00 at +05:00 is before 06:42 UTC.
+    expect(latestStart([{ started_at: "2026-11-17T10:00:00+05:00" }, { started_at: "2026-11-17T06:42:00Z" }, { started_at: null }, { started_at: "soon" }])).toBe("2026-11-17T06:42:00Z");
   });
 });

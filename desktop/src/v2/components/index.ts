@@ -18,7 +18,7 @@ export { Skeleton, SkeletonRow, Loading, Progress } from "./Skeleton";
 export { HealthCheckRow, SetupStep, Steps, type HealthState } from "./health";
 export { Tabs, Segmented } from "./Tabs";
 export { Card, Avatar, Sidebar, NavItem } from "./layout";
-export { Player, Transcript, clock, type Segment } from "./media";
+export { Player, Transcript, Waveform, clock, type Segment, type WaveBar, type WaveMark } from "./media";
 export { Menu, ContextMenu, menuPointFor, type MenuItem } from "./Menu";
 export { SelectionBar, SELECTION_MAIN_MAX, type SelectionAction, type SelectionBarProps, type SelectionWords } from "./SelectionBar";
 export {

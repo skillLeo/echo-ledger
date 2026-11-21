@@ -94,12 +94,16 @@ describe("the recording page (parity batch 1)", () => {
 
   it("DT-REC-045: the labels are on the page, each with its ×", async () => {
     respondWith("session_organise", (args) => ({ data: { ...item(), labels: (args as { patch: { labels: string[] } }).patch.labels } }));
-    await open(item({ labels: ["Invoice", "Follow up"] }));
+    await open(item({ labels: ["Invoice", "Follow up"], label_colors: { Invoice: "#2d9a63" } }));
     const labels = screen.getByRole("list", { name: "Labels" });
     expect(within(labels).getAllByRole("listitem").map((l) => l.textContent)).toEqual(["Invoice", "Follow up"]);
+    // Each chip in its list's colour (none: the neutral one).
+    expect(within(labels).getByText("Invoice").closest(".el-label-chip")).toHaveClass("el-label--green");
     fireEvent.click(within(labels).getByRole("button", { name: "Remove label: Invoice" }));
     await act(flushAsync);
     expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { labels: ["Follow up"] } }]);
+    // Gone from the page at once, without waiting for the next sync.
+    expect(within(screen.getByRole("list", { name: "Labels" })).getAllByRole("listitem").map((l) => l.textContent)).toEqual(["Follow up"]);
   });
 });
 

@@ -29,6 +29,15 @@ import { RulesV2 } from "./Rules";
 import { RecordingsTab } from "./RecordingsTab";
 import { FilesTab, fileLine } from "./FilesTab";
 
+/** When the latest of these was recorded, by the instant itself (offsets differ from one device to another). */
+export function latestStart(items: readonly Pick<LibraryItem, "started_at">[]): string | undefined {
+  let best: string | undefined;
+  for (const { started_at: at } of items) {
+    if (at && !Number.isNaN(Date.parse(at)) && (best === undefined || Date.parse(at) > Date.parse(best))) best = at;
+  }
+  return best;
+}
+
 type Tab = "recordings" | "files" | "ask" | "memory" | "notes" | "screens";
 
 export const MEMORY_KINDS: readonly { value: MemoryKind; label: string; heading: string }[] = [
@@ -122,7 +131,7 @@ export function WorkspaceV2({
   const own = useMemo(() => (items ? items.filter((i) => !i.deleted && i.client?.id === project.id) : null), [items, project.id]);
   const ownCount = own ? own.length : null;
   // Classic's summary: how many, and when the last call was.
-  const lastCall = useMemo(() => own?.map((i) => i.started_at).filter((at): at is string => !!at).sort().pop(), [own]);
+  const lastCall = useMemo(() => (own ? latestStart(own) : undefined), [own]);
   // AI notes while they are on for the project and in the plan; a plan without them keeps memory and the brief.
   const aiNotes = aiNotesInPlan && (ws ? ws.client.ai_notes : project.ai_notes !== false);
   const tabs: { value: Tab; label: string }[] = [

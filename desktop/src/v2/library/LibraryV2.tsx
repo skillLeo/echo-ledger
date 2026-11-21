@@ -3,7 +3,7 @@
 // feedback system: the Toast, one at a time, with Undo after a delete. Selection mode (Select, a Cmd/Ctrl- or Shift-click,
 // Cmd/Ctrl+A or X) picks several; the row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
 // Lists (D14, lists.tsx): the chip row under the search shows All, Unread, Important or one of the person's lists.
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult } from "../../lib/ipc";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
@@ -23,6 +23,7 @@ import {
 } from "./filters";
 import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { recordingName, searchItems, type SortKey } from "../../lib/library";
+import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type Density, type Preferences } from "../../lib/shell";
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
@@ -45,8 +46,11 @@ type Organise =
   | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null }
   | { kind: "rename" | "whatsapp"; item: LibraryItem };
 
-/** How often the list syncs while something uploads or is transcribed (classic's). */
+/** How often the list syncs while something uploads or is transcribed (classic's)… */
 export const RESYNC_MS = 5000;
+/** …for this long; something still under way after it (a transcript stuck waiting) is asked about once a minute. */
+export const RESYNC_FAST_FOR_MS = 10 * 60_000;
+export const RESYNC_SLOW_MS = 60_000;
 /** A transcript is being made for it. */
 const isUnderWay = (i: LibraryItem) => ["pending", "submitted", "processing"].includes(i.transcript?.final_status ?? "");
 
@@ -204,10 +208,16 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const busyItems = (items ?? []).some((i) => !i.deleted && (i.status === "uploading" || isUnderWay(i)));
   useEffect(() => {
     if (!busyItems) return;
-    const timer = window.setInterval(() => {
-      api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e)));
-    }, RESYNC_MS);
-    return () => window.clearInterval(timer);
+    const started = Date.now();
+    let timer = 0;
+    const next = () => {
+      timer = window.setTimeout(() => {
+        api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e)));
+        next();
+      }, Date.now() - started < RESYNC_FAST_FOR_MS ? RESYNC_MS : RESYNC_SLOW_MS);
+    };
+    next();
+    return () => window.clearTimeout(timer);
   }, [busyItems]);
   useEffect(() => {
     if (view === "trash") void loadBin();
@@ -507,7 +517,33 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     setSelecting(true);
     setPicked(new Set(shownIds));
   };
+  /**
+   * Dragging rows onto a project or the Inbox in the sidebar (classic's, lib/dragMove.ts): the row pressed, or every
+   * picked row when it is one of them; the same move as Move to project….
+   */
+  const rowDrag = (item: LibraryItem, e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (view === "trash") return;
+    beginRecordingDrag(e, () => {
+      const ids = selecting && picked.has(item.id) ? pickedIds : [item.id];
+      const titles = (items ?? []).filter((i) => ids.includes(i.id)).map((i) => i.title);
+      return { ids, label: dragLabel(titles) };
+    }, (ids, projectId) => void dropMove(ids, projectId));
+  };
+  const dropMove = async (ids: string[], projectId: string | null) => {
+    if (ids.length > MAX_BULK) return say(`Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`);
+    try {
+      const changed = await api.bulkSessions(ids, "move", projectId);
+      const name = projectId ? (await api.clients().catch(() => null))?.data.find((c) => c.id === projectId)?.name ?? "the project" : "the Inbox";
+      say(ids.length === 1 ? `Moved to ${name}` : `${recordingsWord(changed)} moved to ${name}`);
+      endSelection();
+      await load();
+    } catch (e) {
+      say(errorMessage(e));
+    }
+  };
   const rowClick = (item: LibraryItem, e: ReactMouseEvent<HTMLButtonElement>) => {
+    // The press that ended a drag never opens or ticks the row.
+    if (dragJustEnded()) return;
     if (e.shiftKey && anchor.current && shownIds.includes(anchor.current)) {
       // A range from the last ticked row to this one, added to what is picked.
       const [a, b] = [shownIds.indexOf(anchor.current), shownIds.indexOf(item.id)].sort((x, y) => x - y);
@@ -617,7 +653,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
-      onRenamed={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
+      onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
       menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
@@ -851,7 +887,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             action={<Button onClick={clearAll}>{query && !filtersOn ? "Clear search" : filtersOn ? "Clear filters" : "Show all"}</Button>} />
         ) : layout === "table" ? (
           <LibraryTable viewsOf={rowViews.summaryFor} groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
-            onRow={rowClick} onRowMenu={rowMenu} recovered={recovered}
+            onRow={rowClick} onRowMenu={rowMenu} onRowPointerDown={rowDrag} recovered={recovered}
             rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
         ) : (
           <List label="Recordings">
@@ -880,7 +916,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
                       {(item.labels ?? []).slice(0, 3).map((l) => [<span key={l} className="el-row__label" dir="auto">{l}</span>, " "])}
                     </> : undefined}
                     endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
-                    rowId={item.id} onClick={(e) => rowClick(item, e)} onContextMenu={(e) => rowMenu(item, e)}
+                    rowId={item.id} onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
                     checked={selecting ? picked.has(item.id) : undefined}
                     actions={selecting ? undefined : <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
                 );
