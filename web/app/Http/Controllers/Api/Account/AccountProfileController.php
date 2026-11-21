@@ -69,8 +69,9 @@ final class AccountProfileController extends Controller
         $email = $change->validated($user, $request->input('email'));
         $this->proof->check($user, $request->only(['password', 'otp', 'email_code']));
 
-        // Proven with the account's two-step code: the old address is told without a restore link (EmailChange).
-        $byTwoStep = $user->hasTwoFactor() && is_string($request->input('otp')) && $request->input('otp') !== '';
+        // Proven with two-step on for at least the restore window's 7 days (recovery codes not made again since): the old
+        // address is told without a restore link (EmailChange::twoStepIsOld()). Otherwise the usual link.
+        $byTwoStep = EmailChange::twoStepIsOld($user) && is_string($request->input('otp')) && $request->input('otp') !== '';
 
         return response()->json($change->request($user, $email, $byTwoStep), 202);
     }

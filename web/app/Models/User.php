@@ -63,7 +63,7 @@ use Laravel\Passport\HasApiTokens;
  * @property bool $ui_classic the person's "Switch back to classic" (since 2.0.0-a: every ui_v2.* interface flag off)
  * @property string|null $ui_design since 2.0.0-g: classic | v2 | null (never chose); ui_classic is kept equal to "classic"
  * @property int|null $staff_role_id since v1.6 (P2.5): the person's staff role on the admin panel; null = not staff (the super admin needs none)
- * @property string|null $email_restore_hash the reserved address of the open window, hashed (EmailChange::addressHash)
+ * @property string|null $email_restore_address the reserved address of the open window (users.email's collation)
  * @property Carbon|null $email_restore_until until when it is reserved
  * @property array<string, mixed>|null $email_restore since 2.0.0-l: the open "Put my address back" window (EmailChange), encrypted
  * @property int|null $avatar_version since 2.0.0-l: the profile picture's version (App\Services\Accounts\Avatars); null = initials

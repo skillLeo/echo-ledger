@@ -190,6 +190,8 @@ class AppServiceProvider extends ServiceProvider
         });
         // Since v1.5: a console sign-in from a browser the account has not used before emails the account.
         Event::listen(Login::class, [KnownBrowsers::class, 'handle']);
+        // Since the security review of 2.0.0-l: signing in again after "Put my address back" ends its lock at 24 hours.
+        Event::listen(Login::class, fn (Login $event) => $event->user instanceof User ? EmailChange::resetCompleted($event->user) : null);
         // "Forgot password?" is how someone takes an account back (Filament's reset page fires this): whoever else was in
         // it is out, on browsers, devices and connected apps. Changing the password on the profile keeps the rest.
         Event::listen(PasswordReset::class, function (PasswordReset $event): void {

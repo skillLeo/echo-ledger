@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
@@ -89,7 +90,7 @@ describe('the old address can undo an email change (major 1, and the reviews of 
             // Every way in, the owner's own from before too: the owner secures it again from the reset.
             ->and($user->hasTwoFactor())->toBeFalse()->and($user->app_authentication_recovery_codes)->toBeNull()->and($user->google_id)->toBeNull()
             ->and(Passkey::query()->where('user_id', $user->id)->count())->toBe(0)
-            ->and($user->email_restore_hash)->toBeNull()
+            ->and($user->email_restore_address)->toBeNull()
             ->and(AuditEvent::query()->where('event', 'email_change_reverted')->where('user_id', $user->id)->exists())->toBeTrue()
             ->and(AuditEvent::query()->where('event', 'signed_out_everywhere')->where('user_id', $user->id)->exists())->toBeTrue()
             ->and($user->remember_token)->not->toBe($remember);
@@ -187,9 +188,10 @@ describe('the old address can undo an email change (major 1, and the reviews of 
         expect(EmailChange::isReserved('farah@example.test'))->toBeFalse();
     });
 
-    it('gives no restore link for a change proven with the account\'s two-step code: the old address is told to contact support', function () {
+    it('gives no restore link for a change proven with two-step on for 7 days: the old address is told to contact support', function () {
         $user = Fx::user(['email' => 'farah@example.test']);
         [, $recovery] = accountsEnrolTotp($user);
+        $this->travel(8)->days();
         [, $token] = $this->enroll($user->fresh());
 
         $this->asToken($token)->postJson('/api/account/email', ['email' => 'new@example.test', 'otp' => $recovery[0]])->assertStatus(202);
@@ -200,6 +202,107 @@ describe('the old address can undo an email change (major 1, and the reviews of 
             ->and($mail->render())->toContain('contact support')->not->toContain('Put my address back')
             ->and(EmailChange::window($user->fresh()))->toBeNull()->and(EmailChange::isReserved('farah@example.test'))->toBeFalse();
         Mail::assertNotQueued(EmailRestoreNoticeMail::class);
+    });
+
+    it('gives the usual restore link when two-step is newer than 7 days, or its recovery codes were made again since', function () {
+        $recent = Fx::user(['email' => 'recent@example.test']);
+        [, $recovery] = accountsEnrolTotp($recent);
+        $this->travel(2)->days();
+        [, $token] = $this->enroll($recent->fresh());
+        $this->asToken($token)->postJson('/api/account/email', ['email' => 'recent.new@example.test', 'otp' => $recovery[0]])->assertStatus(202);
+        $this->asToken($token)->postJson('/api/account/email/confirm', ['code' => (string) Mail::queued(EmailCodeMail::class)->last()->code])->assertOk();
+        expect(Mail::queued(EmailChangedMail::class)->last()->restoreUrl)->not->toBeNull()
+            ->and(EmailChange::window($recent->fresh()))->not->toBeNull();
+
+        $regenerated = Fx::user(['email' => 'regen@example.test']);
+        [, $codes] = accountsEnrolTotp($regenerated);
+        $this->travel(10)->days();
+        [, $token] = $this->enroll($regenerated->fresh());
+        $fresh = $this->asToken($token)->postJson('/api/account/two-factor/recovery-codes', ['otp' => $codes[0]])->assertOk()->json('recovery_codes');
+        expect(EmailChange::twoStepIsOld($regenerated->fresh()))->toBeFalse();
+        $this->asToken($token)->postJson('/api/account/email', ['email' => 'regen.new@example.test', 'otp' => $fresh[0]])->assertStatus(202);
+        $this->asToken($token)->postJson('/api/account/email/confirm', ['code' => (string) Mail::queued(EmailCodeMail::class)->last()->code])->assertOk();
+        expect(Mail::queued(EmailChangedMail::class)->last()->restoreUrl)->not->toBeNull();
+
+        // Two-step turned off and on again restarts the 7 days.
+        $again = Fx::user(['email' => 'again@example.test']);
+        accountsEnrolTotp($again);
+        $this->travel(10)->days();
+        $again->fresh()->forceFill(['app_authentication_secret' => null])->save();
+        accountsEnrolTotp($again->fresh());
+        expect(EmailChange::twoStepIsOld($again->fresh()))->toBeFalse();
+    });
+
+    it('reserves an accented or upper-case lookalike too: the database compares it as it compares addresses', function () {
+        // A stand-in for MySQL's utf8mb4_unicode_ci on SQLite: case and accents do not count.
+        $pdo = DB::connection()->getPdo();
+        $fold = fn (string $v): string => mb_strtolower((string) preg_replace('/\p{Mn}+/u', '', (string) Normalizer::normalize($v, Normalizer::FORM_D)));
+        $pdo->sqliteCreateCollation('el_unicode_ci', fn (string $a, string $b): int => strcmp($fold($a), $fold($b)));
+        Schema::table('users', function ($table): void {
+            $table->dropIndex(['email_restore_address']);
+            $table->dropColumn('email_restore_address');
+        });
+        DB::statement('ALTER TABLE users ADD COLUMN email_restore_address varchar(255) COLLATE el_unicode_ci');
+
+        $user = Fx::user(['email' => 'john@example.test']);
+        [, $token] = $this->enroll($user);
+        $url = reviewChangeEmail($this, $token);
+        app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+
+        expect(EmailChange::isReserved('jóhn@example.test'))->toBeTrue()->and(EmailChange::isReserved('JÖHN@example.test'))->toBeTrue()
+            ->and(EmailChange::isReserved('jon@example.test'))->toBeFalse();
+        expect(fn () => Fx::user(['email' => 'jóhn@example.test']))->toThrow(ValidationException::class);
+        $this->postJson('/api/auth/start', ['email' => 'jóhn@example.test'])->assertStatus(422)->assertJsonPath('code', 'email_not_allowed');
+
+        app('auth')->forgetGuards();
+        $this->post($url)->assertOk();
+        expect($user->fresh()->email)->toBe('john@example.test');
+    });
+
+    it('lets a lookalike account made after the change not block the restore, while one from before does', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        [, $token] = $this->enroll($user);
+        $url = reviewChangeEmail($this, $token);
+        $window = EmailChange::window($user->fresh());
+        // Made after the change, past the reservation (written straight into the table).
+        $this->travel(1)->minutes();
+        DB::table('users')->insert(['name' => 'Lookalike', 'email' => 'farah@example.test', 'password' => 'x', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('users')->where('email', 'farah@example.test')->where('name', 'Lookalike')->update(['email' => 'farah@example.test ']);
+
+        app('auth')->forgetGuards();
+        expect(User::query()->where('email', 'farah@example.test ')->value('created_at'))->not->toBeNull()
+            ->and($window)->not->toBeNull();
+        $this->post($url)->assertOk();
+        expect($user->fresh()->email)->toBe('farah@example.test');
+    });
+
+    it('errors, never allows, when the reservation column is missing', function () {
+        Schema::table('users', function ($table): void {
+            $table->dropIndex(['email_restore_address']);
+            $table->dropColumn('email_restore_address');
+        });
+
+        expect(fn () => EmailChange::isReserved('anyone@example.test'))->toThrow(RuntimeException::class)
+            ->and(fn () => Fx::user(['email' => 'anyone@example.test']))->toThrow(RuntimeException::class);
+    });
+
+    it('ends the lock after a restore at 24 hours once the owner signs in again', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        [, $token] = $this->enroll($user);
+        $url = reviewChangeEmail($this, $token);
+        app('auth')->forgetGuards();
+        $this->post($url)->assertOk();
+
+        // Signed in again with an email code (the password was made unusable).
+        $this->postJson('/api/auth/code', ['email' => 'farah@example.test'])->assertStatus(202);
+        $signedIn = $this->postJson('/api/auth/code/verify', ['email' => 'farah@example.test', 'code' => (string) Mail::queued(EmailCodeMail::class)->last()->code,
+            'name' => 'S25', 'platform' => 'android'])->assertCreated();
+        expect($user->fresh()->email_restore['awaiting_reset'] ?? null)->toBeFalse();
+
+        $this->travel(25)->hours();
+        $token = (string) $signedIn->json('token');
+        $this->asToken($token)->postJson('/api/account/proof-code')->assertStatus(202);
+        $this->asToken($token)->postJson('/api/account/email', ['email' => 'later@example.test', 'email_code' => (string) Mail::queued(EmailCodeMail::class)->last()->code])->assertStatus(202);
     });
 
     it('uses a link once even when two clicks arrive together', function () {

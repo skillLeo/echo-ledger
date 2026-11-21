@@ -343,6 +343,8 @@ final class DeviceSignIn
             Mail::to($user->email)->queue(new DeletionCancelledMail);
         }
         $this->alerts->deviceSignedIn($device);
+        // Signed in again after "Put my address back": its lock ends at its 24 hours (EmailChange).
+        EmailChange::resetCompleted($user);
 
         return [$device, $token];
     }

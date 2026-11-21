@@ -1936,11 +1936,14 @@ show initials), `"has_password": true`, `"pending_email": "new@example.com" | nu
      `email_change_reverted`). B is told of the restore too. The link works once (under a lock of the account's row).
    - **A is reserved during the window:** no account can be given it or changed to it (sign-up, a member added with a
      password, staff, the console's change, an app's change answer `email_not_allowed`, `email_taken` or a field error),
-     so nothing can block the restore.
-   - **A change proven with the account's two-step code** (on before the change) opens no window and sends no link: A
-     is told of the change and to contact support, so a mailbox someone else reads cannot take the account back.
-   - While the window is open, and after a restore until the new password is chosen or 24 hours have passed (whichever
-     is later), `POST /api/account/email` answers `409 email_change_locked {"until"}` before any proof, so a chain of
+     so nothing can block the restore. The database compares it as it compares addresses (a column of users.email's own
+     collation), so another case or an accented lookalike is the same address. At the restore only an account with A
+     made before the change can block it.
+   - **A change proven with the account's two-step code**, when two-step has been on for at least 7 days and its recovery
+     codes were not made again since, opens no window and sends no link: A is told of the change and to contact
+     support, so a mailbox someone else reads cannot take the account back. Any other change gets the link.
+   - While the window is open, and after a restore until the new password is chosen (or the owner signs in again) or
+     24 hours have passed, whichever is later, `POST /api/account/email` answers `409 email_change_locked {"until"}` before any proof, so a chain of
      changes cannot move the restore link to an address the changer controls.
 3. `DELETE /api/account/email` → `204` cancels a pending change.
 4. Noticing a confirmation made by link in a browser: there is no push for it. While the "Check your new

@@ -8,6 +8,7 @@ use App\Exceptions\ApiError;
 use App\Mail\EmailChangedMail;
 use App\Mail\EmailCodeMail;
 use App\Mail\EmailRestoreNoticeMail;
+use App\Models\AuditEvent;
 use App\Models\Passkey;
 use App\Models\User;
 use App\Services\AuditLog;
@@ -20,14 +21,15 @@ use Filament\Facades\Filament;
 use Filament\Panel;
 use Illuminate\Auth\Passwords\PasswordBroker;
 use Illuminate\Contracts\Cache\LockTimeoutException;
-use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 /**
  * Changing the account's email from the apps (since 2.0.0-l, docs/API.md "Account and security from the apps" › 4),
@@ -200,7 +202,7 @@ final class EmailChange
         }
         if ($window === null) {
             $window = ['to' => $old, 'changed_at' => now()->getTimestamp(), 'until' => now()->addDays(self::RESTORE_DAYS)->getTimestamp(), 'nonce' => Str::random(40)];
-            $user->forceFill(['email_restore' => $window, 'email_restore_hash' => self::addressHash($old),
+            $user->forceFill(['email_restore' => $window, 'email_restore_address' => $old,
                 'email_restore_until' => Carbon::createFromTimestamp($window['until'])])->saveQuietly();
         }
         $until = Carbon::createFromTimestamp($window['until']);
@@ -227,17 +229,37 @@ final class EmailChange
 
     /**
      * Whether [$email] is reserved for another account's open restore window ([$exceptUserId]'s own does not count).
-     * Read from the indexed hash, so every sign-up and change can ask.
+     * Compared by the database with `=` on a column of users.email's own collation, so an address the database takes
+     * for the same one (another case, an accented lookalike) is reserved too. A schema without the column errors: it
+     * never lets an address through.
      */
     public static function isReserved(string $email, ?int $exceptUserId = null): bool
     {
-        try {
-            return User::query()->where('email_restore_hash', self::addressHash($email))->where('email_restore_until', '>', now())
-                ->when($exceptUserId !== null, fn ($q) => $q->whereKeyNot($exceptUserId))->exists();
-        } catch (QueryException) {
-            // A schema from before 2.0.0-l (the migration tests' older steps): nothing can be reserved there.
+        // SQLite would read an unknown column's quoted name as a string and answer "not reserved": ask first.
+        if (! Schema::hasColumn('users', 'email_restore_address')) {
+            throw new RuntimeException('users.email_restore_address is missing: run the migrations of 2.0.0-l.');
+        }
+
+        return User::query()->where('email_restore_address', Str::lower(trim($email)))->where('email_restore_until', '>', now())
+            ->when($exceptUserId !== null, fn ($q) => $q->whereKeyNot($exceptUserId))->exists();
+    }
+
+    /**
+     * Whether a change proven with [$user]'s two-step code may skip the restore link: two-step has been on for at least
+     * RESTORE_DAYS (since its last mfa_enabled) and its recovery codes were not made again since, so a code is not one
+     * whoever changed the address could have set up.
+     */
+    public static function twoStepIsOld(User $user): bool
+    {
+        if (! $user->hasTwoFactor()) {
             return false;
         }
+        $enabled = AuditEvent::query()->where('user_id', $user->id)->where('event', 'mfa_enabled')->latest('id')->first();
+        if (! $enabled instanceof AuditEvent || $enabled->created_at->gt(now()->subDays(self::RESTORE_DAYS))) {
+            return false;
+        }
+
+        return ! AuditEvent::query()->where('user_id', $user->id)->where('event', 'recovery_codes_regenerated')->where('id', '>', $enabled->id)->exists();
     }
 
     /**
@@ -262,7 +284,10 @@ final class EmailChange
         }
     }
 
-    /** The new password after a restore was chosen (Laravel's PasswordReset): the lock ends at its 24 hours. */
+    /**
+     * The new password after a restore was chosen (Laravel's PasswordReset), or the owner signed in again after it (an
+     * email code, Google, a passkey): the lock ends at its 24 hours.
+     */
     public static function resetCompleted(User $user): void
     {
         if (is_array($user->email_restore) && ($user->email_restore['awaiting_reset'] ?? false) === true) {
@@ -282,8 +307,10 @@ final class EmailChange
         $done = DB::transaction(function () use ($user, $nonce): ?array {
             $fresh = User::query()->whereKey($user->id)->lockForUpdate()->first();
             $window = $fresh instanceof User ? self::window($fresh) : null;
+            // An account with the address made before the change blocks it (it was not reserved then); one made after it
+            // can only be a lookalike that slipped past the reservation, and does not.
             if (! $fresh instanceof User || $window === null || ! hash_equals($window['nonce'], $nonce)
-                || User::query()->whereKeyNot($user->id)->whereRaw('lower(email) = ?', [Str::lower($window['to'])])->exists()) {
+                || User::query()->whereKeyNot($user->id)->where('email', $window['to'])->where('created_at', '<=', Carbon::createFromTimestamp($window['changed_at']))->exists()) {
                 return null;
             }
             $was = $fresh->email;
@@ -291,7 +318,7 @@ final class EmailChange
                 'email' => $window['to'], 'password' => Str::password(64), 'has_password' => false, 'google_id' => null,
                 'app_authentication_secret' => null, 'app_authentication_recovery_codes' => null,
                 'email_restore' => ['to' => $window['to'], 'restored_at' => now()->getTimestamp(), 'lock_until' => now()->addDay()->getTimestamp(), 'awaiting_reset' => true],
-                'email_restore_hash' => null, 'email_restore_until' => null,
+                'email_restore_address' => null, 'email_restore_until' => null,
             ])->save();
             $fresh->markEmailAsVerified();
             Passkey::query()->where('user_id', $fresh->id)->delete();
@@ -313,12 +340,6 @@ final class EmailChange
         $user->setRawAttributes($fresh->getAttributes(), true);
 
         return true;
-    }
-
-    /** A keyed hash of an address (lower case), for the reservation and for links that name no address. */
-    public static function addressHash(string $email): string
-    {
-        return hash_hmac('sha256', 'email-restore|'.Str::lower(trim($email)), (string) config('app.key'));
     }
 
     /** DELETE /api/account/email: ends a change waiting for its confirmation; nothing to do is not an error. */
