@@ -145,7 +145,7 @@ class ClientResource extends Resource
                     ->helperText(fn (): string => PlanLock::allows('screen_moments')
                         ? __('The desktop app keeps what was on the shared screen at each moment. Off for projects whose screens should not be kept.')
                         : __('Screen moments are not in your plan: the desktop app keeps no screens until you upgrade.')),
-                Select::make('language')->label(__('Language'))->options(LanguageChoice::OFFERED)->selectablePlaceholder(false)
+                Select::make('language')->label(__('Language'))->options(LanguageChoice::offered())->selectablePlaceholder(false)
                     ->formatStateUsing(fn (?string $state): string => LanguageChoice::normalize($state) ?? '')
                     ->dehydrateStateUsing(fn (?string $state): ?string => LanguageChoice::normalize($state))
                     ->helperText(__('Used for this project’s recordings unless a recording chooses its own. Automatic suits mixed-language calls.')),
@@ -156,7 +156,7 @@ class ClientResource extends Resource
             ]),
             Section::make(__('Corrections'))->description(__('Applied to every new final transcript of this project, before the general ones in Settings.'))
                 ->collapsible()->schema([
-                    Repeater::make('replacements')->hiddenLabel()
+                    Repeater::make('replacements')->label(__('Replacements'))->hiddenLabel()
                         ->schema([
                             TextInput::make('from')->label(__('When the transcript says'))->required()->maxLength(TextReplacements::MAX_CHARS),
                             TextInput::make('to')->label(__('Write instead'))->maxLength(TextReplacements::MAX_CHARS),
@@ -181,7 +181,7 @@ class ClientResource extends Resource
                 Split::make([
                     ViewColumn::make('name')->label(__('Name'))->view('filament.clients.row')->searchable()->sortable(),
                     TextColumn::make('language')->placeholder(__('Automatic'))->grow(false)->visibleFrom('md')->color('gray')
-                        ->formatStateUsing(fn (?string $state): string => LanguageChoice::OFFERED[(string) $state] ?? (string) $state),
+                        ->formatStateUsing(fn (?string $state): string => LanguageChoice::offered()[(string) $state] ?? (string) $state),
                     IconColumn::make('pinned')->label(__('Pinned'))->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)->trueColor('warning')->falseColor('gray')
                         ->grow(false)->tooltip(fn (Client $record): string => $record->pinned ? __('Unpin') : __('Pin to the top'))
                         ->extraAttributes(fn (Client $record): array => ['class' => $record->pinned ? 'el-pin el-on' : 'el-pin'])

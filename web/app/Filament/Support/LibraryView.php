@@ -49,10 +49,10 @@ final class LibraryView
 
     public const DEFAULT_GROUP = 'date';
 
-    /** A group title in the console's language under the new Library; classic reads exactly as before. */
+    /** A group title in the console's language (since W-213 the classic Library's too; English reads exactly as before). */
     private static function words(string $title): string
     {
-        return ConsoleV2::library() ? __($title) : $title;
+        return __($title);
     }
 
     /**
@@ -86,15 +86,13 @@ final class LibraryView
                 $at = $r->started_at->copy()->setTimezone($zone());
                 $now = Carbon::now($zone());
 
-                // Since v2.0 the day in the console's language (English stays exactly as before).
-                $v2 = ConsoleV2::library();
-
+                // Since v2.0 the day in the console's language, since W-213 in the classic Library too ("اتوار، 15 نومبر";
+                // English stays exactly as before: "Sunday, Nov 15").
                 return match (true) {
-                    $at->isSameDay($now) => $v2 ? __('Today') : 'Today',
-                    $at->isSameDay($now->copy()->subDay()) => $v2 ? __('Yesterday') : 'Yesterday',
-                    $v2 => $at->locale(app()->getLocale())->translatedFormat($at->year === $now->year ? 'l, j F' : 'l, j F Y'),
-                    $at->year === $now->year => $at->format('l, M j'),
-                    default => $at->format('l, M j, Y'),
+                    $at->isSameDay($now) => __('Today'),
+                    $at->isSameDay($now->copy()->subDay()) => __('Yesterday'),
+                    ConsoleV2::library() => $at->locale(app()->getLocale())->translatedFormat($at->year === $now->year ? 'l, j F' : 'l, j F Y'),
+                    default => ConsoleDates::dayHeading($at, $now),
                 };
             }, function (Builder $q, string $key) use ($zone, $v2Pinned): Builder {
                 if ($v2Pinned() && $key === self::PINNED) {
@@ -144,7 +142,7 @@ final class LibraryView
     private static function group(string $id, Closure $key, Closure $title, Closure $scope, Closure $order): Group
     {
         return Group::make($id)
-            ->label(self::GROUPS[$id])
+            ->label(__(self::GROUPS[$id]))
             // Since v2.0 the v2.0 Library's group headers are the day alone ("Today"), as in the apps.
             ->titlePrefixedWithLabel(! ConsoleV2::library())
             ->collapsible()
@@ -154,11 +152,7 @@ final class LibraryView
             ->getDescriptionFromRecordUsing(function (CaptureSession $record, HasTable $livewire) use ($id, $key): string {
                 $count = count(self::buckets($id, $livewire)[$key($record)] ?? []);
 
-                if (ConsoleV2::library()) {
-                    return trans_choice(':count recording|:count recordings', $count, ['count' => number_format($count)]);
-                }
-
-                return $count === 1 ? '1 recording' : number_format($count).' recordings';
+                return trans_choice(':count recording|:count recordings', $count, ['count' => number_format($count)]);
             })
             ->scopeQueryByKeyUsing(fn (Builder $query, ?string $key): Builder => $scope($query, (string) $key))
             ->orderQueryUsing(fn (Builder $query, string $direction): Builder => $order($query, $direction));

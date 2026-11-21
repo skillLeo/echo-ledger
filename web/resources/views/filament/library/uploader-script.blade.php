@@ -1,5 +1,6 @@
 {{-- Library → Upload (resources/views/filament/library/uploader.blade.php): hashing, chunked upload, resume and cancel. --}}
 @include('partials.sha256')
+@php /* W-213: the words in the console's language (English writes the same script as before). */ $w = \App\Filament\Support\ScriptWords::class; @endphp
 <script>
     window.elUploader = window.elUploader || (() => {
         // The streaming SHA-256 (partials.sha256) for files the browser cannot hash in one go.
@@ -129,9 +130,9 @@
                 for (const file of Array.from(list || [])) {
                     const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
                     const known = this.cfg.extensions.includes(extension) || /^audio\//.test(file.type) || /^video\/(mp4|webm)$/.test(file.type);
-                    const problem = !known ? @js('Not a sound or video file '.\App\Support\Brand::name().' can read.')
-                        : file.size === 0 ? 'This file is empty.'
-                        : file.size > this.cfg.maxBytes ? 'This file is larger than the ' + this.size(this.cfg.maxBytes) + ' limit.' : '';
+                    const problem = !known ? @js(__('Not a sound or video file :brand can read.', ['brand' => \App\Support\Brand::name()]))
+                        : file.size === 0 ? {!! $w::say('This file is empty.') !!}
+                        : file.size > this.cfg.maxBytes ? {!! $w::say('This file is larger than the :size limit.', ['size' => 'this.size(this.cfg.maxBytes)']) !!} : '';
                     this.files.push({
                         key: ++this.seq, file, name: file.name, size: file.size, type: file.type || '', duration: undefined,
                         state: problem ? 'refused' : 'waiting', message: problem, clientId: null, language: null,
@@ -177,7 +178,7 @@
                     if (f.cancelled) throw cancelled();
                     // The same file twice in the list goes up once.
                     if (!f.id && this.files.some((o) => o.key !== f.key && o.sha === f.sha && ['starting', 'uploading', 'finishing', 'paused', 'done'].includes(o.state))) {
-                        Object.assign(f, { state: 'duplicate', message: 'Already in this list' });
+                        Object.assign(f, { state: 'duplicate', message: {!! $w::say('Already in this list') !!} });
                         return;
                     }
                     if (f.id) {
@@ -190,11 +191,11 @@
                     await this.finish(f);
                 } catch (e) {
                     if (e && e.name === 'AbortError') {
-                        Object.assign(f, { state: 'cancelled', message: 'Cancelled' });
+                        Object.assign(f, { state: 'cancelled', message: {!! $w::say('Cancelled') !!} });
                     } else if (e instanceof Offline) {
-                        Object.assign(f, { state: 'paused', message: 'Connection lost. The upload carries on when you are back online.' });
+                        Object.assign(f, { state: 'paused', message: {!! $w::say('Connection lost. The upload carries on when you are back online.') !!} });
                     } else {
-                        Object.assign(f, { state: e && e.final ? 'refused' : 'failed', message: (e && e.message) || 'The upload failed.' });
+                        Object.assign(f, { state: e && e.final ? 'refused' : 'failed', message: (e && e.message) || {!! $w::say('The upload failed.') !!} });
                     }
                 }
             },
@@ -207,7 +208,7 @@
                     client_id: f.clientId, language: f.language,
                 }), { 'Content-Type': 'application/json' });
                 if (res.status === 409 && res.json.code === 'duplicate_recording') {
-                    Object.assign(f, { state: 'duplicate', message: res.json.message || 'Already in your Library', url: res.json.url || null });
+                    Object.assign(f, { state: 'duplicate', message: res.json.message || {!! $w::say('Already in your Library') !!}, url: res.json.url || null });
                     return;
                 }
                 if (res.status !== 200 && res.status !== 201) throw this.failure(res);
@@ -257,7 +258,7 @@
                     if (res.status === 202 || res.status === 200) {
                         Object.assign(f, {
                             state: 'done', url: res.json.url || f.url,
-                            message: res.json.status === 'ready' ? 'Uploaded. The transcript is on its way.' : 'Uploaded. The server is finishing the file.',
+                            message: res.json.status === 'ready' ? {!! $w::say('Uploaded. The transcript is on its way.') !!} : {!! $w::say('Uploaded. The server is finishing the file.') !!},
                         });
                         this.refresh();
                         return;
@@ -275,7 +276,7 @@
                     }
                     throw this.failure(res);
                 }
-                throw new Error('The upload could not be finished. Try again.');
+                throw new Error({!! $w::say('The upload could not be finished. Try again.') !!});
             },
 
             // Network failures and busy servers are tried again with growing pauses; offline waits for the connection.
@@ -299,8 +300,8 @@
 
             failure(res) {
                 const signedOut = res.status === 401 || res.status === 419;
-                const message = signedOut ? 'You were signed out. Reload the page, sign in and add the file again.'
-                    : (res.json && res.json.message) || 'The upload failed (' + res.status + ').';
+                const message = signedOut ? {!! $w::say('You were signed out. Reload the page, sign in and add the file again.') !!}
+                    : (res.json && res.json.message) || {!! $w::say('The upload failed (:status).', ['status' => 'res.status']) !!};
                 return Object.assign(new Error(message), { final: FINAL_CODES.includes(res.json && res.json.code) });
             },
 
@@ -308,11 +309,11 @@
                 if (f.state === 'waiting' || f.state === 'refused') return this.dismiss(f);
                 f.cancelled = true;
                 if (f.abort) f.abort.abort();
-                Object.assign(f, { state: 'cancelled', message: 'Cancelled' });
+                Object.assign(f, { state: 'cancelled', message: {!! $w::say('Cancelled') !!} });
                 if (!f.id) return;
                 const res = await request('DELETE', this.url(f), { csrf: this.cfg.csrf });
                 if (res.status === 409) {
-                    Object.assign(f, { state: 'done', message: res.json.message || 'Already uploaded.' });
+                    Object.assign(f, { state: 'done', message: res.json.message || {!! $w::say('Already uploaded.') !!} });
                 } else {
                     f.id = null;
                 }
@@ -349,12 +350,12 @@
 
             status(f) {
                 switch (f.state) {
-                    case 'waiting': return 'Ready to upload';
-                    case 'queued': return 'Waiting for the files before it';
-                    case 'hashing': return f.hashed === null ? 'Checking the file…' : 'Checking the file… ' + this.percent(f) + '%';
-                    case 'starting': return 'Starting…';
-                    case 'uploading': return 'Uploading ' + this.size(f.sent + f.inflight) + ' of ' + this.size(f.size);
-                    case 'finishing': return 'Finishing…';
+                    case 'waiting': return {!! $w::say('Ready to upload') !!};
+                    case 'queued': return {!! $w::say('Waiting for the files before it') !!};
+                    case 'hashing': return f.hashed === null ? {!! $w::say('Checking the file…') !!} : {!! $w::say('Checking the file… :percent%', ['percent' => 'this.percent(f)']) !!};
+                    case 'starting': return {!! $w::say('Starting…') !!};
+                    case 'uploading': return {!! $w::say('Uploading :sent of :size', ['sent' => 'this.size(f.sent + f.inflight)', 'size' => 'this.size(f.size)']) !!};
+                    case 'finishing': return {!! $w::say('Finishing…') !!};
                     default: return f.message;
                 }
             },
@@ -366,15 +367,15 @@
                 if (this.busy()) return '';
                 const count = (states) => this.files.filter((f) => states.includes(f.state)).length;
                 return [
-                    [count(['done']), 'uploaded'],
-                    [count(['duplicate']), 'already in your Library'],
-                    [count(['failed', 'refused']), 'not uploaded'],
+                    [count(['done']), {!! $w::say('uploaded') !!}],
+                    [count(['duplicate']), {!! $w::say('already in your Library') !!}],
+                    [count(['failed', 'refused']), {!! $w::say('not uploaded') !!}],
                 ].filter(([n]) => n > 0).map(([n, text]) => this.plural(n) + ' ' + text).join(' · ');
             },
 
-            plural(n) { return n === 1 ? '1 file' : n + ' files'; },
+            plural(n) { return n === 1 ? {!! $w::say('1 file') !!} : {!! $w::say(':count files', ['count' => 'n']) !!}; },
             size(bytes) {
-                const units = ['bytes', 'KB', 'MB', 'GB'];
+                const units = [{!! $w::say('bytes') !!}, 'KB', 'MB', 'GB'];
                 let value = bytes, unit = 0;
                 while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
                 return (unit === 0 ? value : value.toFixed(value < 10 ? 1 : 0)) + ' ' + units[unit];

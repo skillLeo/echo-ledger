@@ -44,6 +44,18 @@ class CaptureSessionResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'title';
 
+    /** In the console's language (W-213; English reads exactly as before). */
+    public static function getModelLabel(): string
+    {
+        return __('recording');
+    }
+
+    /** Its own plural, lowercase as Filament's own (W-213: the list's name for screen readers was "recordings" in Urdu). */
+    public static function getPluralModelLabel(): string
+    {
+        return __('recordings');
+    }
+
     /** Every console has the library: since v1.5 the small one (members and viewers) reads it only. */
     public static function canAccess(): bool
     {
