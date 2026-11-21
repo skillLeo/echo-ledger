@@ -1324,7 +1324,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         UploadWorker.cancel(getApplication(), id)
         Decisions.apply(getApplication(), id, keep = false)
         reloadLocal()
-        _message.value = RECORDING_DELETED
+        _message.value = "Recording deleted"
     }
 
     /** Removes a row that only reported something (an import the Library already had). */
@@ -1930,8 +1930,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         /** The production server from the build (BuildConfig.DEFAULT_SERVER); tests set it to "" so nothing reaches it. */
         @Volatile var defaultServer: String = BuildConfig.DEFAULT_SERVER
-
-        const val RECORDING_DELETED = "Recording deleted"
 
         /** `409 ai_unavailable`: the server has no AI provider set up (call notes, the brief and Ask). */
         const val AI_NOT_SET_UP = "The AI assistant is not set up on the server yet."

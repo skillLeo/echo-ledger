@@ -112,6 +112,19 @@ fun transcribingLine(res: Resources, progress: ProgressDto?): String {
 }
 
 /**
+ * A Library row's words beside its Transcribing badge: "part 2 of 3 · about 1 min left" (classic's row line after its
+ * first word); null when the server has no part count or time left yet.
+ */
+fun transcribingDetails(res: Resources, progress: ProgressDto?): String? {
+    val total = progress?.total ?: 0
+    val done = progress?.done ?: 0
+    return listOfNotNull(
+        if (total > 1) res.getString(R.string.v2_rec_part, (done + 1).coerceAtMost(total), total) else null,
+        progress?.etaSeconds?.let { res.getString(R.string.v2_rec_left, timeLeft(res, it)) }
+    ).joinToString(" · ").ifEmpty { null }
+}
+
+/**
  * The line under the steps, in the screen's language, from the same facts as classic's ([RecordingSteps.Steps.line]):
  * "Transcribing · part 2 of 3 · about 20 s left", "Improving Roman Urdu… 60%", "Transcription failed", "Uploading";
  * waiting for the engine keeps classic's words (with its time).

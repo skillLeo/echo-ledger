@@ -121,7 +121,8 @@ object VmMessages {
         "The suggestion could not be saved." to R.string.v2_vm_ws_the_suggestion_could_not_be_saved,
         "The text could not be made." to R.string.v2_vm_ws_the_text_could_not_be_made,
         "Project deleted" to R.string.v2_vm_ws_project_deleted,
-        "Welcome to EchoLedger" to R.string.v2_vm_welcome
+        "Welcome to EchoLedger" to R.string.v2_vm_welcome,
+        "Recording deleted" to R.string.v2_deleted
     )
 
     /**

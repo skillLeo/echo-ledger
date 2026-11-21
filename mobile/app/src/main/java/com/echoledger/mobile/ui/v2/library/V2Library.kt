@@ -64,14 +64,24 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.ZonedDateTime
 import kotlinx.coroutines.launch
 
-/** A recording still on the phone (queued, uploading or failed to upload), shown above the library. */
+/**
+ * A recording still on the phone (waiting to upload, uploading, failed to upload, or an import the Library already
+ * had), shown above the library.
+ */
 data class UploadRow(
     val id: String,
     val title: String,
     val duration: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val failed: Boolean
-)
+    val failed: Boolean,
+    /** "queued" | "uploading" | "failed" | "duplicate" (classic's upload states). */
+    val state: String = if (failed) "failed" else "uploading",
+    /** While uploading: how much of it was sent (0-100), null before the first part went. */
+    val percent: Int? = null
+) {
+    /** Classic's rule: one waiting or failed can be deleted (after a question); not one being sent right now. */
+    val deletable: Boolean get() = state == "queued" || state == "failed"
+}
 
 /** What Library shows, worked out from the view model's state. */
 sealed interface LibraryState {
@@ -80,8 +90,9 @@ sealed interface LibraryState {
     data class Ready(val rows: List<V2Row>, val uploads: List<UploadRow>, val offline: Boolean, val anyAtAll: Boolean) : LibraryState
 }
 
-fun uploadRows(pending: List<LocalRecording>, text: V2Text): List<UploadRow> = pending
-    .filter { it.state == "queued" || it.state == "uploading" || it.state == "failed" }
+/** [sent]: parts sent of all parts per recording uploading now (the upload worker's [com.echoledger.mobile.core.RowProgress.uploads]). */
+fun uploadRows(pending: List<LocalRecording>, text: V2Text, sent: Map<String, Pair<Int, Int>> = emptyMap()): List<UploadRow> = pending
+    .filter { it.state == "queued" || it.state == "uploading" || it.state == "failed" || it.state == "duplicate" }
     .map {
         val app = SourceApp.from(it.sourceApp)
         UploadRow(
@@ -91,7 +102,10 @@ fun uploadRows(pending: List<LocalRecording>, text: V2Text): List<UploadRow> = p
             } ?: it.callerName ?: text.sourceName(it.sourceApp),
             formatClock(it.durationMs + 500),
             LibraryModel.icon(app),
-            it.state == "failed"
+            it.state == "failed",
+            it.state,
+            sent[it.id]?.takeIf { _ -> it.state == "uploading" }
+                ?.let { (done, total) -> com.echoledger.mobile.core.RowProgress.uploading(done, total).percent }
         )
     }
 
@@ -189,7 +203,8 @@ fun V2LibraryScreen(
         }
     }
     val rows = remember(groups) { groups.flatMap { it.rows } }
-    val uploads = remember(pending, text) { uploadRows(pending, text) }
+    val sending by com.echoledger.mobile.core.RowProgress.uploads.collectAsState()
+    val uploads = remember(pending, text, sending) { uploadRows(pending, text, sending) }
     val folders = remember(library, clients) { com.echoledger.mobile.core.Organise.folders(library, clients) }
     val labels = remember(library) { com.echoledger.mobile.core.Organise.labels(library) }
     val tags = remember(library) { com.echoledger.mobile.core.Bookmarks.tags(library) }
@@ -314,16 +329,35 @@ fun V2LibraryScreen(
         scope.launch {
             when (action) {
                 is SelectionAction.Move -> vm.bulk(ids, "move", clientId = action.clientId ?: "")
+
                 is SelectionAction.NewProject -> vm.createClient(action.name)?.let { vm.bulk(ids, "move", clientId = it.id) }
+
                 is SelectionAction.Label -> vm.bulk(ids, if (action.add) "label" else "unlabel", label = action.label)
+
                 is SelectionAction.Pin -> vm.bulk(ids, if (action.on) "pin" else "unpin")
+
                 is SelectionAction.Keep -> vm.bulk(ids, if (action.on) "keep" else "unkeep")
+
                 is SelectionAction.Important -> vm.bulk(ids, if (action.on) "important" else "unimportant")
+
                 is SelectionAction.Export -> vm.exportSelected(ids, action.format)?.let { com.echoledger.mobile.ui.shareFile(context, it) }
+
                 is SelectionAction.Rename -> ids.singleOrNull()?.let { vm.organise(it, title = action.title) }
+
+                SelectionAction.CopyForAi -> {
+                    val copied = copyForAi(vm, context, items, settings)
+                    toasts.show(
+                        when {
+                            copied == 0 -> res.getString(R.string.v2_lib_copy_ai_none)
+                            copied == items.size -> res.getString(R.string.v2_rec_copied_ai)
+                            else -> res.getQuantityString(R.plurals.v2_lib_copy_ai_some, copied, copied, items.size)
+                        }
+                    )
+                }
+
                 SelectionAction.Delete -> deleteRows(items)
             }
-            if (action !is SelectionAction.Export) picked = emptySet()
+            if (action !is SelectionAction.Export && action !is SelectionAction.CopyForAi) picked = emptySet()
         }
     }
     if (sortOpen) {
@@ -357,6 +391,8 @@ fun V2LibraryScreen(
         },
         onDelete = { row -> deleteRows(listOf(row.item)) },
         onRetryUpload = { vm.retryUpload(it) },
+        onDismissUpload = { vm.dismissLocal(it) },
+        onDeleteUpload = { vm.deleteNotUploaded(it) },
         onRetry = { vm.refresh() },
         onTrash = onTrash,
         onAccount = onAccount,
@@ -411,6 +447,7 @@ fun V2LibraryScreen(
             onClearFilters = { filters = V2Filters() },
             onSortGroup = { sortOpen = true },
             compact = choice.densityOf == com.echoledger.mobile.core.Density.COMPACT,
+            swipes = settings.librarySwipes,
             refreshing = syncing && vm.hasSynced(),
             onSync = { vm.refresh() },
             onSelect = { visible.firstOrNull()?.let { picked = setOf(it.id) } },
@@ -465,7 +502,9 @@ class LibraryTools(
     /** The last five searches on this phone (classic's), offered while the search field is focused and empty. */
     val recent: List<String> = emptyList(),
     /** Keeps a search among [recent]: on the keyboard's Search, on leaving search, on opening what it found. */
-    val onKeepSearch: (String) -> Unit = {}
+    val onKeepSearch: (String) -> Unit = {},
+    /** Rows swipe (right Pin, left Delete); Settings › Appearance › Swipe actions turns them off. */
+    val swipes: Boolean = true
 )
 
 /** LibraryGrouping's fixed English names in the screen's language. */
@@ -505,7 +544,11 @@ fun V2LibraryContent(
     modifier: Modifier = Modifier,
     onProjects: (() -> Unit)? = null,
     tools: LibraryTools? = null,
-    extras: LibraryExtras? = null
+    extras: LibraryExtras? = null,
+    /** An import the Library already had: a tap removes its row. */
+    onDismissUpload: (String) -> Unit = {},
+    /** A recording that never uploaded, deleted after the question (this phone has the only copy). */
+    onDeleteUpload: (String) -> Unit = {}
 ) {
     val c = EchoV2.colors
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -513,6 +556,8 @@ fun V2LibraryContent(
     LaunchedEffect(scrollToTop) { if (scrollToTop > 0) listState.animateScrollToItem(0) }
     val text = v2Text
     var actionsFor by remember { mutableStateOf<V2Row?>(null) }
+    var uploadMenu by remember { mutableStateOf<UploadRow?>(null) }
+    var deletingUpload by remember { mutableStateOf<UploadRow?>(null) }
     var menu by remember { mutableStateOf(false) }
     val selecting = tools != null && tools.selected.isNotEmpty()
     var searchFocused by remember { mutableStateOf(false) }
@@ -650,15 +695,11 @@ fun V2LibraryContent(
                         }
                     }
                     items(state.uploads, key = { "local-" + it.id }) { up ->
-                        EchoListRow(
-                            title = up.title,
-                            meta = if (up.failed) null else text.uploading,
-                            metaEnd = { Text(up.duration, style = EchoV2.type.mono, color = c.textSecondary) },
-                            status = if (up.failed) ({ EchoStatus(text.failed, EchoStatusKind.Danger) }) else null,
-                            leading = { EchoAvatar(icon = up.icon) },
-                            tall = true,
-                            onClickLabel = if (up.failed) text.tryAgain else null,
-                            onClick = if (up.failed) ({ onRetryUpload(up.id) }) else null
+                        UploadingRow(
+                            up,
+                            onRetry = { onRetryUpload(up.id) },
+                            onDismiss = { onDismissUpload(up.id) },
+                            onMenu = { uploadMenu = up }
                         )
                     }
                     if (state.rows.isEmpty() && state.uploads.isEmpty()) {
@@ -713,7 +754,7 @@ fun V2LibraryContent(
                             }
                             if (!showHeader || g.key !in tools.folded) {
                                 items(g.rows, key = { it.id }) { row ->
-                                    SwipeRow(row.item.pinned, enabled = !selecting, onPin = {
+                                    SwipeRow(row.item.pinned, enabled = !selecting && tools.swipes, onPin = {
                                         tools.onPin(row)
                                     }, onDelete = { onDelete(row) }) {
                                         LibraryRow(
@@ -745,6 +786,35 @@ fun V2LibraryContent(
             }
         }
     }
+    uploadMenu?.let { up ->
+        EchoBottomSheet(onDismiss = { uploadMenu = null }, title = up.title) {
+            if (up.failed) {
+                MenuRow(EchoIcons.Sync, stringResource(R.string.v2_lib_upload_retry), {
+                    uploadMenu = null
+                    onRetryUpload(up.id)
+                })
+            }
+            MenuRow(EchoIcons.Delete, stringResource(R.string.v2_lib_upload_delete), {
+                uploadMenu = null
+                deletingUpload = up
+            }, danger = true)
+        }
+    }
+    deletingUpload?.let { up ->
+        // It was never uploaded: this phone has its only copy (classic's question, bugs P-002 and P-004).
+        com.echoledger.mobile.ui.v2.components.EchoDialog(
+            title = stringResource(R.string.v2_lib_upload_delete_title),
+            text = stringResource(R.string.v2_lib_upload_delete_body),
+            confirmLabel = text.delete,
+            onConfirm = {
+                deletingUpload = null
+                onDeleteUpload(up.id)
+            },
+            dismissLabel = text.cancel,
+            onDismiss = { deletingUpload = null },
+            destructive = true
+        )
+    }
     actionsFor?.let { row ->
         EchoBottomSheet(onDismiss = { actionsFor = null }, title = row.title) {
             EchoSettingRow(text.delete, icon = EchoIcons.Delete, onClick = {
@@ -757,6 +827,49 @@ fun V2LibraryContent(
 
 @Composable
 private fun SearchHeader(words: String) = EchoSectionHeader(words)
+
+/**
+ * A recording on its way to the server (classic's UploadingRow): "Waiting to upload", "Uploading 40%", Failed (a tap
+ * retries) or "Already in your Library · Tap to dismiss" (a tap removes the row). One that can be deleted has ⋮ and a
+ * long press for Retry upload and Delete recording….
+ */
+@Composable
+private fun UploadingRow(up: UploadRow, onRetry: () -> Unit, onDismiss: () -> Unit, onMenu: () -> Unit) {
+    val c = EchoV2.colors
+    val text = v2Text
+    val duplicate = up.state == "duplicate"
+    val more = stringResource(R.string.v2_lib_upload_more, up.title)
+    EchoListRow(
+        title = up.title,
+        meta = when {
+            up.failed -> null
+            duplicate -> stringResource(R.string.v2_lib_upload_duplicate)
+            up.state == "queued" -> text.waitingToUpload
+            else -> up.percent?.let { stringResource(R.string.v2_lib_uploading_pct, it) } ?: text.uploading
+        },
+        metaEnd = { Text(up.duration, style = EchoV2.type.mono, color = c.textSecondary) },
+        status = when {
+            up.failed -> ({ EchoStatus(text.failed, EchoStatusKind.Danger) })
+            up.state == "uploading" -> ({ com.echoledger.mobile.ui.v2.components.EchoProgressRing(up.percent) })
+            else -> null
+        },
+        leading = { EchoAvatar(icon = up.icon) },
+        trailing = if (up.deletable) ({ EchoIconButton(EchoIcons.More, more, onMenu, tint = c.textSecondary) }) else null,
+        tall = true,
+        onClickLabel = when {
+            up.failed -> text.tryAgain
+            duplicate -> stringResource(R.string.v2_lib_upload_dismiss)
+            else -> null
+        },
+        onClick = when {
+            up.failed -> onRetry
+            duplicate -> onDismiss
+            else -> null
+        },
+        onLongClickLabel = if (up.deletable) more else null,
+        onLongClick = if (up.deletable) onMenu else null
+    )
+}
 
 /**
  * One recording's row: its source, title, the transcript's first line or project, time, length, status, the screens
@@ -773,6 +886,8 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
     val converting = stage?.step == com.echoledger.mobile.core.RowProgress.Step.IMPROVING
     val conversion = stage?.let { conversionWords(res, row.item) }
     val problem = rowProblem(row)
+    // Beside the Transcribing badge: "part 2 of 3 · about 1 min left" (classic's row line).
+    val transcribing = if (row.status == RowStatus.Transcribing) transcribingDetails(res, row.item.transcript?.finalProgress) else null
     // Audio kept without a transcript says how long it stays: "Audio · 18 days left".
     val daysLeft = if (row.status == RowStatus.Untranscribed) LibraryModel.daysLeft(row.item.expiresAt) else null
     val important = stringResource(R.string.v2_lib_important_mark)
@@ -785,6 +900,7 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
         meta = when {
             problem != null -> null
             conversion != null -> conversion
+            transcribing != null -> transcribing
             daysLeft != null -> pluralStringResource(R.plurals.v2_lib_audio_days_left, daysLeft, daysLeft)
             else -> row.meta
         },

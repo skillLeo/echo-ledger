@@ -124,6 +124,8 @@ data class AppSettings(
     val textSize: String = "system",
     /** The new design's language (since 2.0): `system` (the phone's), `en` or `ur`. */
     val appLanguage: String = "system",
+    /** Library rows swipe (right Pin, left Delete with Undo) in the new design; off, a row only taps and long-presses. */
+    val librarySwipes: Boolean = true,
     /** The setup card at the top of the new design's Library was hidden (since 2.0); Setup & health still has it all. */
     val setupCardHidden: Boolean = false,
     /** The last five Library searches (since v1.3), newest first; this phone only. */

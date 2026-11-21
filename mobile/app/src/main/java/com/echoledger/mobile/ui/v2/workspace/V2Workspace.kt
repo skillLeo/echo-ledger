@@ -103,7 +103,7 @@ private val MENU = listOf(
  * - Memory & instructions: the AI notes switch and the month's AI use, the brief (Edit, Save brief, Write again),
  *   memory (open the call, pin, remove, add), the pasted instructions;
  * - Call notes (while AI notes are on) and Screens;
- * and Share, Copy for AI and the project menu, whose dialogs stay today's (ProjectMenuDialogs).
+ * and Share (the v2 Share link sheet), Copy for AI and the project menu, whose dialogs stay today's (ProjectMenuDialogs).
  */
 @Composable
 fun V2WorkspaceScreen(
@@ -247,7 +247,13 @@ fun V2WorkspaceScreen(
             }
         }
     }
-    sheet?.let { key -> ProjectMenuDialogs(vm, project, all, key, onClose = { sheet = null }, onOpenProject = onOpenProject) }
+    sheet?.let { key ->
+        if (key == "share") {
+            com.echoledger.mobile.ui.v2.library.V2ShareLinkSheet(vm, sessionId = null, clientId = project.id, onDismiss = { sheet = null })
+        } else {
+            ProjectMenuDialogs(vm, project, all, key, onClose = { sheet = null }, onOpenProject = onOpenProject)
+        }
+    }
 }
 
 private const val WORKING_POLL_MS = 5_000L

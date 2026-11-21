@@ -22,7 +22,7 @@
     <string name="v2_no_match_body">کوئی اور لفظ آزمائیں، یا فلٹر ہٹا دیں۔</string>
     <string name="v2_load_error_title">ریکارڈنگز لوڈ نہیں ہو سکیں</string>
     <string name="v2_load_error_body">انٹرنیٹ کنکشن چیک کریں۔ اس فون پر موجود ریکارڈنگز محفوظ ہیں۔</string>
-    <string name="v2_offline_banner">آف لائن۔ آخری بار سنک ہونے والی لائبریری دکھائی جا رہی ہے۔</string>
+    <string name="v2_offline_banner">آپ آف لائن ہیں۔ آخری بار سنک ہونے والی لائبریری دکھائی جا رہی ہے۔</string>
     <string name="v2_try_again">دوبارہ کوشش کریں</string>
     <string name="v2_deleted">ریکارڈنگ حذف ہو گئی</string>
     <string name="v2_restored">واپس آ گئی</string>
