@@ -1795,6 +1795,57 @@ html[dir='rtl'] .v2-row-title {
     color: var(--el-role-accent-text);
 }
 
+/* A recording's source mark (filament/v2/components/source-logo.blade.php) with the device it came from in a small
+   badge on the end side, as on the phone and the desktop app. The mark draws itself; only its frame is ours. */
+.v2-source {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    inline-size: var(--el-space-32);
+    block-size: var(--el-space-32);
+}
+
+.v2-source--sm {
+    inline-size: var(--el-space-24);
+    block-size: var(--el-space-24);
+}
+
+.v2-source-mark {
+    inline-size: 100%;
+    block-size: 100%;
+}
+
+.v2-source-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-source-device {
+    position: absolute;
+    inset-block-end: calc(-1 * var(--el-space-2));
+    inset-inline-end: calc(-1 * var(--el-space-2));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-space-16);
+    block-size: var(--el-space-16);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-source-device svg {
+    inline-size: var(--el-space-12);
+    block-size: var(--el-space-12);
+}
+
 /* A recording row's marks (U9): the unread dot before the title, and its labels' colour dots (DESIGN_SYSTEM "Label
    colours"). A label whose stored colour is one of the eight takes .v2-label-dot--<name>; any other colour comes in
    as --label-own on .v2-label-dot--other and draws the dot alone, with a hairline ring, never as text or fill. */
@@ -1823,4 +1874,18 @@ html[dir='rtl'] .v2-row-title {
 .v2-label-dot--other {
     border: var(--el-border-hairline) solid var(--el-role-border-strong);
     background-color: var(--label-own, var(--el-role-bg-subtle));
+}
+
+/* Selection on the Library list (U9): a selected row is tinted, never marked with a coloured start bar (anti-template
+   rule 4), and Filament's red "Clear" link goes: the selection bar's × already clears it, and red is for deleting. */
+.v2-library .fi-ta-record.fi-selected::before {
+    content: none;
+}
+
+.v2-library .fi-ta-record.fi-selected {
+    background-color: var(--el-role-accent-soft);
+}
+
+.v2-library .fi-ta-selection-indicator-actions-ctn .fi-link.fi-color-danger {
+    display: none;
 }
