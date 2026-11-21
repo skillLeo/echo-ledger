@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Account\AccountSecurityController;
 use App\Http\Controllers\Api\Account\AvatarController;
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\ActivityController;
+use App\Http\Controllers\Api\AskController;
 use App\Http\Controllers\Api\Assist\AssistLiveController;
 use App\Http\Controllers\Api\Assist\AssistPrepController;
 use App\Http\Controllers\Api\Assist\AssistSessionController;
@@ -176,6 +177,9 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::post('clients/{id}/files', [ClientWorkspaceController::class, 'storeFile'])->middleware($own)->name('api.clients.files.store');
             Route::delete('clients/{id}/files/{file}', [ClientWorkspaceController::class, 'destroyFile'])->middleware($own)->name('api.clients.files.destroy');
             Route::post('clients/{id}/ask', [ClientWorkspaceController::class, 'ask'])->middleware([$own, 'throttle:ask'])->name('api.clients.ask');
+            // Since 2.0.0-o: Ask about one recording, and across the person's own recordings, as a project's Ask.
+            Route::post('sessions/{id}/ask', [AskController::class, 'recording'])->middleware([$own, 'throttle:ask'])->name('api.sessions.ask');
+            Route::post('ask', [AskController::class, 'all'])->middleware([$own, 'throttle:ask'])->name('api.ask');
             Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->middleware($own)->name('api.sessions.notes.make');
             Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->middleware($own)->name('api.transcripts.suggestions');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');

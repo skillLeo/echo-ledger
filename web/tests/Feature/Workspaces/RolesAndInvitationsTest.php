@@ -188,6 +188,7 @@ describe('a viewer\'s device', function () {
             ['PUT', "{$c}/brief", ['sections' => ['goal' => 'x']]], ['POST', "{$c}/brief/refresh", []],
             ['POST', "{$c}/memory", ['kind' => 'decision', 'text' => 'x']], ['PATCH', "{$c}/memory/{$x}", ['pinned' => true]], ['DELETE', "{$c}/memory/{$x}", []],
             ['POST', "{$c}/files", []], ['DELETE', "{$c}/files/{$x}", []], ['POST', "{$c}/ask", ['question' => 'What was agreed?']],
+            ['POST', "{$s}/ask", ['question' => 'What was agreed?']], ['POST', '/api/ask', ['question' => 'What was agreed?']],
             ['POST', "{$c}/shares", []], ['POST', "{$c}/send", ['to' => ['someone@example.test']]],
             ['POST', '/api/vocabulary/keyterms', ['term' => 'Acme', 'client_id' => $project->id]],
             ['POST', '/api/vocabulary/replacements', ['from' => 'acme', 'to' => 'Acme', 'client_id' => $project->id]],

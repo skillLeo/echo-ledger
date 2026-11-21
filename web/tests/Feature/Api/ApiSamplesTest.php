@@ -296,6 +296,10 @@ it('keeps the shape of every answer the apps read', function () {
     unscoped(function () use ($session, $transcript): void {
         $session->update(['pauses' => [['at_ms' => 1000, 'resumed_at_ms' => 2000]], 'language_marks' => [['at_ms' => 0, 'language' => 'ur']]]);
         $transcript->update(['meta' => array_merge($transcript->meta ?? [], ['suggestions' => [['line' => 0, 'from' => 'Omer', 'to' => 'Omar', 'reason' => 'name', 'status' => 'open']]])]);
+        // Since 2.0.0-o: the engine named the first line's language (the demo's other lines are from before, so null).
+        $segments = $transcript->segments ?? [];
+        $segments[0]['language'] = 'en';
+        $transcript->update(['segments' => $segments]);
         Screen::query()->create([
             'workspace_id' => $session->workspace_id, 'capture_session_id' => $session->id, 'at_ms' => 5000, 'width' => 1280, 'height' => 720,
             'trigger' => 'change', 'sha256' => str_repeat('a', 64), 'mime' => 'image/jpeg', 'image_path' => 'screens/sample.jpg', 'thumb_path' => 'screens/sample-thumb.jpg', 'bytes' => 1000, 'stored_bytes' => 1000, 'ocr_text' => 'A slide', 'description' => 'A slide with a price.', 'described_at' => now(),
@@ -348,6 +352,9 @@ it('keeps the shape of every answer the apps read', function () {
     $api()->patchJson("/api/sessions/{$session->id}", ['client_id' => $projectId])->assertSuccessful();
     $record('client_workspace', $api()->getJson("/api/clients/{$projectId}/workspace"));
     $record('client_ask', $api()->postJson("/api/clients/{$projectId}/ask", ['question' => 'What did they choose?', 'language' => 'en']));
+    // Since 2.0.0-o: Ask about one recording, and across the person's recordings.
+    $record('session_ask', $api()->postJson("/api/sessions/{$session->id}/ask", ['question' => 'What did they choose?', 'language' => 'en']));
+    $record('ask', $api()->postJson('/api/ask', ['question' => 'What did they choose?', 'language' => 'roman_urdu']));
     $record('client_bundle', $api()->getJson("/api/clients/{$projectId}/bundle?notes=10"));
 
     // Sharing.

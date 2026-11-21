@@ -145,6 +145,10 @@ function produceError(object $test, string $code): TestResponse
             return $test->postJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/ask', ['question' => 'When?']);
         case 'ai_unavailable':
             return $test->postJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/ask', ['question' => 'When?']);
+        case 'no_transcript':
+            app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+
+            return $test->postJson('/api/sessions/'.$test->makeReadySession($test->device, $test->bytes)->id.'/ask', ['question' => 'When?']);
         case 'notes_not_found':
             return $test->getJson('/api/sessions/'.$test->makeReadySession($test->device, $test->bytes)->id.'/notes');
         case 'no_client':
@@ -323,7 +327,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(57);
+        ->and(count(documentedErrorCodes()))->toBe(58);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

@@ -273,7 +273,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
         }
 
         return new Segment($segment->channel, $segment->speaker, $words[0]->startMs, $segment->endMs,
-            trim(implode(' ', array_map(fn (Word $w): string => trim($w->text), $words))), $words, $segment->uncertain);
+            trim(implode(' ', array_map(fn (Word $w): string => trim($w->text), $words))), $words, $segment->uncertain, $segment->language);
     }
 
     /**
@@ -457,6 +457,8 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     {
         $speaker = TranscriptNormalizer::speakerFor($channel, $sides);
         $urdu = $language === 'ur';
+        // Since 2.0.0-o: each line keeps the language its chunk was heard (or forced) in.
+        $heard = LanguageChoice::fromDetected($language);
         $out = [];
         foreach ($kept as $segment) {
             $start = (float) ($segment['start'] ?? 0);
@@ -475,6 +477,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
                     (int) round(($offsetS + (float) $w['end']) * 1000),
                 ), $inside),
                 (bool) ($segment['uncertain'] ?? false),
+                $heard,
             );
         }
 

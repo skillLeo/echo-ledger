@@ -165,6 +165,26 @@ it('labels diarized speakers of a single stereo job and joins word pieces into w
     ]);
 });
 
+it('gives each line the language most of its words were heard in, and none when Soniox names none (since 2.0.0-o)', function () {
+    $tokens = [
+        ['text' => 'Hel', 'start_ms' => 0, 'end_ms' => 100, 'speaker' => '1', 'language' => 'en'],
+        ['text' => 'lo', 'start_ms' => 100, 'end_ms' => 200, 'speaker' => '1', 'language' => 'en'],
+        ['text' => ' جی', 'start_ms' => 250, 'end_ms' => 400, 'speaker' => '1', 'language' => 'ur'],
+        ['text' => ' ok', 'start_ms' => 450, 'end_ms' => 600, 'speaker' => '1', 'language' => 'en'],
+        ['text' => 'ٹھیک', 'start_ms' => 3000, 'end_ms' => 3400, 'speaker' => '2', 'language' => 'hi'],
+        ['text' => ' ہے', 'start_ms' => 3400, 'end_ms' => 3700, 'speaker' => '2', 'language' => 'ur'],
+        ['text' => ' Silence', 'start_ms' => 9000, 'end_ms' => 9400, 'speaker' => '1'],
+    ];
+
+    $result = app(SonioxDriver::class)->normalize([['text' => 'x', 'tokens' => $tokens]]);
+
+    expect(array_map(fn ($s) => [$s->text, $s->language], $result->segments))->toBe([
+        ['Hello جی ok', 'en'],
+        ['ٹھیک ہے', 'ur'],
+        ['Silence', null],
+    ])->and($result->segmentsArray()[2])->not->toHaveKey('language');
+});
+
 it('waits until every job is done and reports a failed one', function () {
     $log = [];
     fakeSoniox($log, 'processing');

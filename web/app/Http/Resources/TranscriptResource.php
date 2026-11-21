@@ -43,7 +43,8 @@ final class TranscriptResource extends JsonResource
             // retry_reason).
             ...EngineWait::fields($transcript),
             'text' => $transcript->text,
-            'segments' => $transcript->segments ?? [],
+            // Since 2.0.0-o every segment carries `language`: the line's language when the engine knew it, else null.
+            'segments' => self::segments($transcript->segments ?? []),
             ...self::failure($transcript),
             'created_at' => $transcript->created_at->toAtomString(),
             'completed_at' => $transcript->completed_at?->toAtomString(),
@@ -85,6 +86,18 @@ final class TranscriptResource extends JsonResource
         $done = is_array($p) ? max(0, min($total, (int) ($p['chunks_done'] ?? 0))) : 0;
 
         return ['done' => $done, 'total' => $total, 'eta_seconds' => app(TranscriptionSpeed::class)->etaSeconds($transcript, $done, $total)];
+    }
+
+    /**
+     * The stored segments with `language` on each one (since 2.0.0-o): what the engine heard the line in, or null for
+     * a line it gave none (every line before 2.0.0-o).
+     *
+     * @param  array<int, mixed>  $segments
+     * @return list<mixed>
+     */
+    public static function segments(array $segments): array
+    {
+        return array_map(fn (mixed $s): mixed => is_array($s) ? $s + ['language' => null] : $s, array_values($segments));
     }
 
     public static function model(Transcript $transcript): ?string

@@ -238,6 +238,8 @@ final class GeminiDriver implements ClipTranscriber, SttProvider
                 (int) round(($chunk['start'] + $start) * 1000),
                 (int) round(($chunk['start'] + $end) * 1000),
                 $language === 'ur' ? UrduText::normaliseUrdu($text) : $text,
+                // Since 2.0.0-o: the language this chunk was heard (or forced) in.
+                language: LanguageChoice::fromDetected($language),
             );
         }
 

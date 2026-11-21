@@ -172,6 +172,8 @@ describe('features on their routes', function () {
 
         foreach ([
             ['POST', "/api/clients/{$client->id}/ask", ['question' => 'When is it?']],
+            ['POST', "/api/sessions/{$session->id}/ask", ['question' => 'When is it?']],
+            ['POST', '/api/ask', ['question' => 'When is it?']],
             ['POST', "/api/clients/{$client->id}/brief/refresh", []],
             ['POST', "/api/clients/{$client->id}/memory", ['kind' => 'decision', 'text' => 'Ship it']],
             ['POST', "/api/sessions/{$session->id}/notes", []],

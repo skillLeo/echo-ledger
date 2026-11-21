@@ -56,6 +56,8 @@ function secDeviceGuardedRoutes(): array
         'POST clients/{id}/files' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/files', 'sessions:write'],
         'DELETE clients/{id}/files/{file}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID.'/files/'.Fx::MISSING_ID, 'sessions:write'],
         'POST clients/{id}/ask' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/ask', 'sessions:write'],
+        'POST sessions/{id}/ask' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/ask', 'sessions:write'],
+        'POST ask' => ['POST', '/api/ask', 'sessions:write'],
         'GET sessions/{id}/notes' => ['GET', '/api/sessions/'.Fx::MISSING_ID.'/notes', 'library:read'],
         'POST sessions/{id}/notes' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/notes', 'sessions:write'],
         'POST transcripts/{id}/suggestions/{suggestion}' => ['POST', '/api/transcripts/'.Fx::MISSING_ID.'/suggestions/0', 'sessions:write'],
@@ -254,8 +256,8 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes.
-    expect($guarded)->toBe(166);
+    // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes; 2.0.0-o: the two Ask routes.
+    expect($guarded)->toBe(168);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {
