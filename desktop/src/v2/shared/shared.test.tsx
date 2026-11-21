@@ -426,6 +426,26 @@ describe("a shared recording, open read-only", () => {
   }
   const player = () => screen.getByTestId("player") as HTMLAudioElement;
 
+  it("Cmd/Ctrl+F opens Find in a transcript, and with no transcript leaves the key to app search", async () => {
+    respond("transcript_detail", makeTranscript({ segments: [] }));
+    await openReader();
+    const empty = new KeyboardEvent("keydown", { key: "f", metaKey: true, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(empty);
+    await act(flushAsync);
+    expect(empty.defaultPrevented).toBe(false);
+    expect(screen.queryByRole("searchbox", { name: "Find in this transcript" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Shared" }));
+    respond("transcript_detail", makeTranscript({ segments: CALL_SEGMENTS }));
+    fireEvent.click(rowButton("Call a"));
+    await act(flushAsync);
+    const full = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(full);
+    await act(flushAsync);
+    expect(full.defaultPrevented).toBe(true);
+    expect(screen.getByRole("searchbox", { name: "Find in this transcript" })).toBeInTheDocument();
+  });
+
   it("head: the source and device, the title, when it was recorded with its length and project, and Transcribed in", async () => {
     await openReader({ transcript: { final_status: "completed", final_transcript_id: "tr-s-a", live_available: false, preview: null, final_language: "ur" } as never });
     expect(screen.getByTestId("source-line")).toHaveTextContent("Zoom · Desktop");
