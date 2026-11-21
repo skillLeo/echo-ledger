@@ -86,8 +86,9 @@ describe("the Library's places", () => {
     fireEvent.click(within(list).getByRole("button", { name: "Pinned, 1" }));
     await act(flushAsync);
     await act(flushAsync);
-    // Pinned is one of the Library's own views: Views ▾ says so.
-    expect(within(screen.getByRole("group", { name: "Filter recordings" })).getByRole("button", { name: /^Pinned/ })).toHaveAttribute("aria-haspopup", "menu");
+    // Pinned opens as the Marked chip with Pinned ticked (Views ▾ no longer has it), and the crumbs say Pinned.
+    expect(within(screen.getByRole("group", { name: "Filter recordings" })).getByRole("button", { name: /^Marked: Pinned/ })).toHaveAttribute("aria-haspopup", "menu");
+    expect(within(screen.getByRole("navigation", { name: "Breadcrumbs" })).getByText("Pinned")).toHaveAttribute("aria-current", "page");
   });
 
   it("in the app, pressing Library after a folder shows every recording again", async () => {

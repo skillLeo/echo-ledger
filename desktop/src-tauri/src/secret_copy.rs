@@ -233,8 +233,11 @@ mod platform {
 
     pub async fn put(app: &AppHandle, text: String) -> Result<u64, String> {
         let owner = owner(app);
-        // The clipboard is opened and filled with the copies' lock released (put_remembered): a quit taking the lock on
-        // the main thread meanwhile is never waited on by this write, nor this write by it.
+        // Why a blocking thread here and the main thread on macOS: opening the Windows clipboard retries for up to
+        // 200 ms while another app holds it (open_clipboard), which must not freeze the window; AppKit's pasteboard is
+        // only safe on the main thread and never waits. Off the main thread, emptying the clipboard can wait on its last
+        // owner, our main window, so the write takes no lock the main thread takes (put_remembered), and a quit waits for
+        // it only so long (clear_on_quit's QUIT_WAIT) before emptying the clipboard whatever it holds.
         tauri::async_runtime::spawn_blocking(move || super::put_remembered(|| put_now(owner, &text), |put| clear_blocking(owner, put)).map_err(|e| e.to_string()))
             .await
             .map_err(|e| e.to_string())?

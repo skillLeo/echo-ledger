@@ -4,21 +4,33 @@
 import type { LibraryItem } from "../../lib/ipc";
 import { itemState, sortItems, type SortKey } from "../../lib/library";
 import { groupBy, sourceLabel, type GroupKey, type ItemGroup } from "../../lib/libraryGroups";
+import { inSmartView } from "../../lib/organise";
 
-export type FilterKey = "source" | "device" | "project" | "language" | "status" | "label" | "tag";
+export type FilterKey = "when" | "marked" | "source" | "device" | "project" | "language" | "status" | "label" | "tag";
 export type Filters = Partial<Record<FilterKey, readonly string[]>>;
 
 /** The chips' names, in the chip row's order. */
 export const FILTER_NAMES: Record<FilterKey, string> = {
-  source: "Source", device: "Recorded on", project: "Project", language: "Language", status: "Status", label: "Label", tag: "Bookmark tag",
+  when: "When", marked: "Marked", source: "Source", device: "Recorded on", project: "Project", language: "Language", status: "Status", label: "Label", tag: "Bookmark tag",
 };
 export const FILTER_KEYS = Object.keys(FILTER_NAMES) as FilterKey[];
+
+/**
+ * When and Marked (classic's Show boxes) as chips of their own: Today and Pinned are two chips, so they narrow each
+ * other (pinned recordings made today), while Views ▾ stays one choice at a time. Their values are always offered.
+ */
+const FIXED: Partial<Record<FilterKey, readonly { value: "today" | "this_week" | "pinned" | "bookmarked"; label: string }[]>> = {
+  when: [{ value: "today", label: "Today" }, { value: "this_week", label: "This week" }],
+  marked: [{ value: "pinned", label: "Pinned" }, { value: "bookmarked", label: "Bookmarked" }],
+};
 
 const DEVICE_NAMES: Record<string, string> = { phone: "Phone", desktop: "Desktop", web: "Web" };
 const STATUS_ORDER = ["Needs you", "Transcribing", "Ready"];
 
 /** A recording's values for one filter: its value ids and the words the menu shows for each. */
-function valuesOf(item: LibraryItem, key: FilterKey): { value: string; label: string }[] {
+function valuesOf(item: LibraryItem, key: FilterKey, now: Date = new Date()): { value: string; label: string }[] {
+  const fixed = FIXED[key];
+  if (fixed) return fixed.filter((v) => inSmartView(item, v.value, now));
   switch (key) {
     case "source":
       return [{ value: item.source_app ?? "other", label: sourceLabel(item) }];
@@ -42,11 +54,15 @@ function valuesOf(item: LibraryItem, key: FilterKey): { value: string; label: st
       return (item.labels ?? []).map((l) => ({ value: l.toLowerCase(), label: l }));
     case "tag":
       return (item.tags ?? []).map((t) => ({ value: t.toLowerCase(), label: t }));
+    default:
+      return [];
   }
 }
 
 /** What a filter offers for these recordings, with how many have each; "No project" and the like last. */
-export function filterOptions(items: readonly LibraryItem[], key: FilterKey): { value: string; label: string; count: number }[] {
+export function filterOptions(items: readonly LibraryItem[], key: FilterKey, now: Date = new Date()): { value: string; label: string; count: number }[] {
+  const fixed = FIXED[key];
+  if (fixed) return fixed.map((v) => ({ ...v, count: items.filter((i) => valuesOf(i, key, now).some((x) => x.value === v.value)).length }));
   const found = new Map<string, { value: string; label: string; count: number }>();
   for (const item of items) {
     for (const v of valuesOf(item, key)) {
@@ -62,10 +78,10 @@ export function filterOptions(items: readonly LibraryItem[], key: FilterKey): { 
 }
 
 /** The recordings that pass every filter that has a tick. */
-export function applyFilters(items: readonly LibraryItem[], filters: Filters): LibraryItem[] {
+export function applyFilters(items: readonly LibraryItem[], filters: Filters, now: Date = new Date()): LibraryItem[] {
   const on = FILTER_KEYS.filter((k) => (filters[k]?.length ?? 0) > 0);
   if (!on.length) return [...items];
-  return items.filter((item) => on.every((k) => valuesOf(item, k).some((v) => filters[k]!.includes(v.value))));
+  return items.filter((item) => on.every((k) => valuesOf(item, k, now).some((v) => filters[k]!.includes(v.value))));
 }
 
 /** How many ticks are on, across every filter. */

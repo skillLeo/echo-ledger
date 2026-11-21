@@ -103,16 +103,17 @@ describe("LibraryV2", () => {
     expect(callsOf("library_refresh")).toHaveLength(1);
   });
 
-  it("the saved views Today and Untranscribed, with their counts, from Views ▾", async () => {
+  it("the saved view Untranscribed from Views ▾, and Today from the When chip, with their counts", async () => {
     await show();
-    const pick = (name: RegExp) => {
-      fireEvent.click(screen.getByRole("button", { name: /^(Views|Today|Untranscribed)$/ }));
-      fireEvent.click(screen.getByRole("menuitemradio", { name }));
-    };
-    pick(/^Untranscribed/);
+    fireEvent.click(screen.getByRole("button", { name: /^Views$/ }));
+    expect(screen.queryByRole("menuitemradio", { name: /^Today/ })).toBeNull();
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^Untranscribed/ }));
     const list = screen.getByRole("list", { name: "Recordings" });
     expect(rowButtons(list)).toHaveLength(2);
-    pick(/^Today/);
+    fireEvent.click(screen.getByRole("button", { name: /^Untranscribed$/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^All recordings/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^When$/ }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /^Today/ }));
     expect(rowButtons(screen.getByRole("list", { name: "Recordings" }))).toHaveLength(3);
   });
 

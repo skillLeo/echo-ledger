@@ -2,7 +2,7 @@
 // closes it; a message hides by itself with a thin bar showing the time left, paused while the pointer, a finger or the
 // keyboard is on it; a swipe left or right (finger, mouse drag or trackpad) closes it, following the drag and springing
 // back when it was not far or quick enough; a drag is never a click; Esc on it closes it. Toasts and banners both use it.
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Countdown, dragOpacity, SwipeTracker, WHEEL_END_MS, type SwipeEnd } from "../lib/notice";
 import { reducedMotion } from "../lib/motion";
 import { CloseIcon } from "./Icons";
@@ -10,7 +10,7 @@ import { CloseIcon } from "./Icons";
 type PauseReason = "hover" | "focus" | "touch" | "drag";
 
 /** The timer of a notice: pauses for any reason given, resumes when none is left, calls `onEnd` when it runs out. */
-function useNoticeTimer(ms: number | null, onEnd: () => void): { paused: boolean; pause: (r: PauseReason) => void; resume: (r: PauseReason) => void } {
+function useNoticeTimer(ms: number | null, onEnd: () => void, restart?: unknown): { paused: boolean; pause: (r: PauseReason) => void; resume: (r: PauseReason) => void } {
   const countdown = useRef<Countdown | null>(null);
   const reasons = useRef(new Set<PauseReason>());
   const timer = useRef(0);
@@ -30,7 +30,7 @@ function useNoticeTimer(ms: number | null, onEnd: () => void): { paused: boolean
     setPaused(false);
     schedule();
     return () => window.clearTimeout(timer.current);
-  }, [ms, schedule]);
+  }, [ms, schedule, restart]);
   const pause = useCallback((reason: PauseReason) => {
     const c = countdown.current;
     reasons.current.add(reason);
@@ -50,7 +50,56 @@ function useNoticeTimer(ms: number | null, onEnd: () => void): { paused: boolean
   return { paused, pause, resume };
 }
 
-export function Notice({ kind, tone = "neutral", icon, children, onOpen, openLabel, onDismiss, timeoutMs = null, actions, details, role, className = "", testId, timerKey }: {
+/**
+ * How the main window's banners are drawn: classic's, or the new design's (inside its shell). Only the look changes:
+ * the words, Open, the buttons, ×, Esc and the one-at-a-time slot (BannerSlot) are the same.
+ */
+export const NoticeLook = createContext<"classic" | "v2">("classic");
+
+const V2_TONE: Record<string, "info" | "warning" | "danger"> = { warn: "warning", danger: "danger", error: "danger" };
+/** Classic's look-only classes (its banner box and tone colours): the new look leaves them out and keeps the rest. */
+const CLASSIC_LOOK = new Set(["banner", "warn", "info", "danger", "error", "quiet", "accent", "neutral"]);
+const ownClasses = (className: string) => className.split(/\s+/).filter((c) => c && !CLASSIC_LOOK.has(c)).join(" ");
+
+/**
+ * A banner in the new design's look (its .el-banner, with the classic banner's parts): the same timer (paused while
+ * the pointer or the keyboard is on it, started again by a new `timerKey`), classes, Open, buttons, × and Esc. Its words
+ * are read out by the live region around the banners (MainApp's .el-app-banners, always in the page); a danger banner
+ * is an alert of its own.
+ */
+function BannerV2({ tone, icon, children, onOpen, openLabel, onDismiss, actions, details, role, testId, timeoutMs = null, className = "", timerKey }: {
+  tone: string; icon?: ReactNode; children: ReactNode; onOpen?: () => void; openLabel?: string; onDismiss: () => void;
+  actions?: ReactNode; details?: ReactNode; role?: "status" | "alert"; testId?: string; timeoutMs?: number | null; className?: string; timerKey?: unknown;
+}) {
+  const v2Tone = V2_TONE[tone] ?? "info";
+  const timer = useNoticeTimer(timeoutMs, onDismiss, timerKey);
+  return (
+    <div className={`el-banner el-banner--${v2Tone} el-banner--app ${ownClasses(className)}`.trim()} role={role === "alert" || v2Tone === "danger" ? "alert" : undefined} data-testid={testId}
+      onMouseEnter={() => timer.pause("hover")} onMouseLeave={() => timer.resume("hover")}
+      onFocus={() => timer.pause("focus")}
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) timer.resume("focus"); }}
+      onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onDismiss(); } }}>
+      {icon && <span className="el-banner__icon" aria-hidden="true">{icon}</span>}
+      <span className="el-banner__text" dir="auto">
+        {onOpen ? <button type="button" className="el-banner__open" aria-label={openLabel} onClick={() => { onOpen(); onDismiss(); }}>{children}</button> : children}
+        {details && <span className="el-banner__details">{details}</span>}
+      </span>
+      {actions && <span className="el-banner__actions">{actions}</span>}
+      <button type="button" className="el-button el-button--quiet el-button--sm el-button--icon" aria-label="Dismiss" title="Dismiss (Esc)" onClick={onDismiss}>
+        {/* Sized by the new design's icon token (.el-icon), not a number. */}
+        <span className="el-icon" aria-hidden="true"><CloseIcon /></span>
+      </button>
+    </div>
+  );
+}
+
+export function Notice(props: Parameters<typeof NoticeClassic>[0]) {
+  const look = useContext(NoticeLook);
+  if (look === "v2" && props.kind === "banner") return <BannerV2 {...props} tone={props.tone ?? "neutral"} />;
+  return <NoticeClassic {...props} />;
+}
+
+function NoticeClassic({ kind, tone = "neutral", icon, children, onOpen, openLabel, onDismiss, timeoutMs = null, actions, details, role, className = "", testId, timerKey }: {
   kind: "toast" | "banner";
   tone?: "neutral" | "error" | "warn" | "danger" | "info" | "quiet" | "accent";
   icon?: ReactNode;
