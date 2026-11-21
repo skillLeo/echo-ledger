@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
-import { folderLabel, inFolderHere } from "../../lib/folders";
+import { folderKnownHere, folderLabel, inFolderHere } from "../../lib/folders";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
@@ -264,17 +264,31 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   }, [viewRequest]);
   // A smart folder: what this computer can tell (the Inbox, an app's calls), else the server's list (Imported).
   const [folderIds, setFolderIds] = useState<ReadonlySet<string> | null>(null);
+  // The server's list of the folder didn't come: said above the list, with Try again (what this computer can tell
+  // shows meanwhile).
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [folderTry, setFolderTry] = useState(0);
+  const [folderTrying, setFolderTrying] = useState(false);
   useEffect(() => {
     setFolderIds(null);
+    setFolderError(null);
     if (!folder) return;
     setOpenId(null);
     setView("all");
+  }, [folder]);
+  useEffect(() => {
+    if (!folder) return;
     let live = true;
-    api.libraryFolder(folder).then((list) => live && setFolderIds(new Set(list.filter((i) => !i.deleted).map((i) => i.id)))).catch(() => undefined);
+    setFolderTrying(true);
+    api.libraryFolder(folder).then((list) => {
+      if (!live) return;
+      setFolderIds(new Set(list.filter((i) => !i.deleted).map((i) => i.id)));
+      setFolderError(null);
+    }).catch((e) => live && setFolderError(errorMessage(e))).finally(() => live && setFolderTrying(false));
     return () => {
       live = false;
     };
-  }, [folder]);
+  }, [folder, folderTry]);
   const inFolder = (i: LibraryItem) => {
     if (!folder) return true;
     if (folderIds) return folderIds.has(i.id);
@@ -787,6 +801,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
             action={<Button size="sm" loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Retry</Button>}>
             Couldn't sync with the server. Showing what is saved on this computer.
+          </Banner>
+        )}
+        {view !== "trash" && folder && folderError && (
+          <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-folder-error"
+            action={<Button size="sm" loading={folderTrying} loadingLabel="Trying…" onClick={() => setFolderTry((n) => n + 1)}>Try again</Button>}>
+            {`${folderLabel(folder)} didn't load from the server: ${folderError}${folderKnownHere(folder) ? " Showing what this computer knows meanwhile." : ""}`}
           </Banner>
         )}
         {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} onShown={setQueueShows} />}

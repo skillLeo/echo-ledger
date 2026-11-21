@@ -94,6 +94,30 @@ describe("dragging recordings onto the sidebar", () => {
     expect(callsOf("sessions_bulk")).toEqual([]);
   });
 
+  it("DT-LIB-116: a row dropped on the Inbox in the Library's places leaves its project", async () => {
+    const inProject = [makeItem("a", { title: "Kick-off", started_at: "2026-11-17T06:00:00Z", client: { id: "p1", name: "Qureshi Textiles" } as LibraryItem["client"] }), ...ITEMS.slice(1)];
+    respond("library_list", inProject);
+    respond("library_refresh", inProject);
+    respond("bin_list", { data: [] });
+    respond("list_clients", { data: [{ id: "p1", name: "Qureshi Textiles" }] });
+    respondWith("sessions_bulk", (args) => (args as { ids: string[] }).ids.length);
+    render(
+      <Shell tab="library" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }}
+        places={{ places: [{ key: "pinned", label: "Pinned", count: 0 }, { key: "inbox", label: "Inbox", count: 2, drop: true }], current: null, open: () => undefined }}>
+        <LibraryV2 />
+      </Shell>,
+    );
+    await act(flushAsync);
+    const placesInbox = within(screen.getByRole("list", { name: "Library places" })).getByRole("button", { name: "Inbox, 2" });
+    // The places' Inbox is the one target: no second Inbox shows while dragging.
+    expect(document.querySelector(".el-nav-drop")).toBeNull();
+    await drag(row("Kick-off"), placesInbox);
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["a"], action: "move", clientId: null, label: null }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Moved to the Inbox");
+    // Pinned is a place, not a target: nothing there takes a drop.
+    expect(within(screen.getByRole("list", { name: "Library places" })).getByRole("button", { name: "Pinned, 0" }).closest("[data-drop-project]")).toBeNull();
+  });
+
   it("DT-PRJ-014: the sidebar's targets are the pinned projects and, while dragging, the Inbox", () => {
     render(<Shell tab="projects" onGo={() => undefined} status={{ kind: "ready", text: "Ready" }} pinnedProjects={[{ id: "p1", name: "Qureshi Textiles" }]} onProject={() => undefined}><p /></Shell>);
     expect(project()).toHaveAttribute("data-drop-project", "p1");

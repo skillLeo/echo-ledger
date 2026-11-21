@@ -66,6 +66,18 @@ pub fn remember(put: u64) {
     }
 }
 
+/// Writes to the clipboard and remembers the copy under the one lock [`take_all`] takes: a lock, a sign-out or a quit
+/// that comes while the codes are being copied finds them remembered (it waits for the write), never on the clipboard
+/// and forgotten.
+pub fn put_remembered<E>(write: impl FnOnce() -> Result<u64, E>) -> Result<u64, E> {
+    let mut all = pending();
+    let put = write()?;
+    if !all.contains(&put) {
+        all.push(put);
+    }
+    Ok(put)
+}
+
 /// Every copy still to empty, taken all at once (a lock, a sign-out, a quit).
 pub fn take_all() -> Vec<u64> {
     std::mem::take(&mut *pending())
@@ -81,25 +93,63 @@ pub fn settle(put: u64, outcome: Outcome) {
     }
 }
 
+/// How many times the wait's clear is tried when another app holds the clipboard, and how far apart.
+pub const CLEAR_TRIES: u32 = 4;
+pub const CLEAR_RETRY_GAP: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Puts `text` on the clipboard, concealed, and empties it after [`CLEAR_AFTER`] if nothing was copied since.
 pub async fn copy_concealed(app: &AppHandle, text: String) -> Result<(), String> {
     let put = platform::put(app, text).await?;
-    remember(put);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(CLEAR_AFTER).await;
         // Its own copy only: the counter leaves anything copied since (a newer copy of the codes too) alone.
-        settle(put, platform::clear_if_unchanged(&app, put).await);
+        clear_with_retries(put, CLEAR_TRIES, CLEAR_RETRY_GAP, |p| platform::clear_if_unchanged(&app, p)).await;
     });
     Ok(())
+}
+
+/// The wait's clear of one copy: tried again a few times, a little apart, while the clipboard is busy (another app
+/// holds it), so a moment's hold doesn't leave the codes there until the next lock. Still busy after the last try, the
+/// copy stays pending for the next lock, sign-out or quit.
+pub async fn clear_with_retries<F, Fut>(put: u64, tries: u32, gap: std::time::Duration, mut clear: F) -> Outcome
+where
+    F: FnMut(u64) -> Fut,
+    Fut: std::future::Future<Output = Outcome>,
+{
+    let mut outcome = Outcome::Failed;
+    for attempt in 0..tries.max(1) {
+        if attempt > 0 {
+            tokio::time::sleep(gap).await;
+            // A lock or a sign-out meanwhile already settled it: nothing left for the wait to do.
+            if !pending().contains(&put) {
+                return outcome;
+            }
+        }
+        outcome = clear(put).await;
+        settle(put, outcome);
+        if outcome != Outcome::Failed {
+            break;
+        }
+    }
+    outcome
+}
+
+/// Every pending copy, emptied with `clear` (one try each); a copy it couldn't be emptied of stays pending.
+pub async fn clear_pending<F, Fut>(mut clear: F)
+where
+    F: FnMut(u64) -> Fut,
+    Fut: std::future::Future<Output = Outcome>,
+{
+    for put in take_all() {
+        settle(put, clear(put).await);
+    }
 }
 
 /// The app locked or signed out: copied codes still on the clipboard go now, not after the wait. A copy the clipboard
 /// could not be emptied of (busy) stays pending for the next try.
 pub async fn clear_now(app: &AppHandle) {
-    for put in take_all() {
-        settle(put, platform::clear_if_unchanged(app, put).await);
-    }
+    clear_pending(|put| platform::clear_if_unchanged(app, put)).await;
 }
 
 /// The app quits: the same, from the run loop on the main thread (nothing may wait on it there).
@@ -127,7 +177,7 @@ mod platform {
 
     pub async fn put(app: &AppHandle, text: String) -> Result<u64, String> {
         let owner = owner(app);
-        tauri::async_runtime::spawn_blocking(move || put_now(owner, &text).map_err(|e| e.to_string()))
+        tauri::async_runtime::spawn_blocking(move || super::put_remembered(|| put_now(owner, &text)).map_err(|e| e.to_string()))
             .await
             .map_err(|e| e.to_string())?
     }
@@ -262,13 +312,16 @@ mod platform {
     pub async fn put(app: &AppHandle, text: String) -> Result<u64, String> {
         let (tx, rx) = oneshot::channel();
         app.run_on_main_thread(move || {
-            let pasteboard = NSPasteboard::generalPasteboard();
-            pasteboard.clearContents();
-            // SAFETY: an AppKit constant, read only.
-            let string_type = unsafe { NSPasteboardTypeString };
-            let written = pasteboard.setString_forType(&NSString::from_str(&text), string_type)
-                && pasteboard.setString_forType(&NSString::from_str(""), &NSString::from_str(CONCEALED));
-            let _ = tx.send(written.then(|| pasteboard.changeCount() as u64));
+            let put = super::put_remembered(|| {
+                let pasteboard = NSPasteboard::generalPasteboard();
+                pasteboard.clearContents();
+                // SAFETY: an AppKit constant, read only.
+                let string_type = unsafe { NSPasteboardTypeString };
+                let written = pasteboard.setString_forType(&NSString::from_str(&text), string_type)
+                    && pasteboard.setString_forType(&NSString::from_str(""), &NSString::from_str(CONCEALED));
+                if written { Ok(pasteboard.changeCount() as u64) } else { Err(()) }
+            });
+            let _ = tx.send(put.ok());
         })
         .map_err(|e| e.to_string())?;
         rx.await.ok().flatten().ok_or_else(|| "The clipboard did not take the codes.".to_string())
@@ -317,8 +370,7 @@ mod platform {
     }
 
     pub async fn put(app: &AppHandle, text: String) -> Result<u64, String> {
-        app.clipboard().write_secret(text.clone()).map_err(|e| e.to_string())?;
-        Ok(digest(&text))
+        super::put_remembered(|| app.clipboard().write_secret(text.clone()).map(|_| digest(&text)).map_err(|e| e.to_string()))
     }
 
     pub async fn clear_if_unchanged(app: &AppHandle, put: u64) -> super::Outcome {
@@ -460,6 +512,134 @@ mod tests {
         let lib = include_str!("lib.rs");
         let exit = &lib[lib.find("if let RunEvent::Exit = &event {").expect("the run loop hears the exit")..];
         assert!(exit[..exit.find("\n        }").unwrap()].contains("secret_copy::clear_now_on_main_thread(handle)"), "quitting");
+    }
+
+    /// A fake clipboard shared by the clears below, as the system's is; `busy` refuses that many opens first.
+    struct Shared {
+        board: std::cell::RefCell<Fake>,
+        busy: std::cell::Cell<u32>,
+        tries: std::cell::Cell<u32>,
+    }
+
+    impl Shared {
+        fn new() -> Self {
+            Shared { board: std::cell::RefCell::new(Fake { counter: 0, text: None }), busy: 0.into(), tries: 0.into() }
+        }
+
+        /// A copy of the codes, written and remembered the way copy_concealed does it.
+        fn copy_codes(&self, text: &str) -> u64 {
+            put_remembered(|| Ok::<u64, ()>(self.board.borrow_mut().copy(text))).unwrap()
+        }
+
+        async fn clear(&self, put: u64) -> Outcome {
+            self.tries.set(self.tries.get() + 1);
+            if self.busy.get() > 0 {
+                self.busy.set(self.busy.get() - 1);
+                return Outcome::Failed;
+            }
+            clear_if_unchanged(&mut *self.board.borrow_mut(), put)
+        }
+
+        fn text(&self) -> Option<String> {
+            self.board.borrow().text.clone()
+        }
+    }
+
+    #[test]
+    fn clear_now_empties_the_codes_leaves_a_later_copy_and_keeps_a_busy_one_for_next_time() {
+        let _turn = PENDING_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = take_all();
+        let clip = Shared::new();
+        // Codes copied, then the app locks: the clipboard is empty and nothing is left to do.
+        clip.copy_codes("aaaa-bbbb");
+        tauri::async_runtime::block_on(clear_pending(|p| clip.clear(p)));
+        assert_eq!(clip.text(), None);
+        assert_eq!(take_all(), Vec::<u64>::new());
+
+        // Codes copied, then a link: the lock leaves the link, and forgets the codes' copy.
+        clip.copy_codes("aaaa-bbbb");
+        clip.board.borrow_mut().copy("https://example.test/link");
+        tauri::async_runtime::block_on(clear_pending(|p| clip.clear(p)));
+        assert_eq!(clip.text().as_deref(), Some("https://example.test/link"));
+        assert_eq!(take_all(), Vec::<u64>::new());
+
+        // Another app holds the clipboard at the lock: the codes stay there and pending; the next lock empties them.
+        let put = clip.copy_codes("cccc-dddd");
+        clip.busy.set(1);
+        tauri::async_runtime::block_on(clear_pending(|p| clip.clear(p)));
+        assert_eq!(clip.text().as_deref(), Some("cccc-dddd"));
+        assert_eq!(take_all(), vec![put]);
+        remember(put);
+        tauri::async_runtime::block_on(clear_pending(|p| clip.clear(p)));
+        assert_eq!(clip.text(), None);
+        assert_eq!(take_all(), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn the_waits_clear_is_tried_again_while_the_clipboard_is_busy() {
+        let _turn = PENDING_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = take_all();
+        let clip = Shared::new();
+        let put = clip.copy_codes("aaaa-bbbb");
+        // Busy for the first two tries: the third empties it, and it is no longer pending.
+        clip.busy.set(2);
+        let outcome = tauri::async_runtime::block_on(clear_with_retries(put, 4, std::time::Duration::ZERO, |p| clip.clear(p)));
+        assert_eq!(outcome, Outcome::Cleared);
+        assert_eq!(clip.tries.get(), 3);
+        assert_eq!(clip.text(), None);
+        assert_eq!(take_all(), Vec::<u64>::new());
+
+        // Busy for every try: it stops after the last one and stays pending for the next lock.
+        let put = clip.copy_codes("cccc-dddd");
+        clip.tries.set(0);
+        clip.busy.set(10);
+        let outcome = tauri::async_runtime::block_on(clear_with_retries(put, 4, std::time::Duration::ZERO, |p| clip.clear(p)));
+        assert_eq!(outcome, Outcome::Failed);
+        assert_eq!(clip.tries.get(), 4);
+        assert_eq!(clip.text().as_deref(), Some("cccc-dddd"));
+        assert_eq!(take_all(), vec![put]);
+
+        // A lock settles it while the wait sleeps between two tries: the wait stops there, and tries no more.
+        let put = clip.copy_codes("eeee-ffff");
+        clip.tries.set(0);
+        clip.busy.set(10);
+        let (tried_tx, tried_rx) = std::sync::mpsc::channel::<()>();
+        let lock = std::thread::spawn(move || {
+            tried_rx.recv().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(60));
+            take_all()
+        });
+        let shared = &clip;
+        let outcome = tauri::async_runtime::block_on(clear_with_retries(put, 4, std::time::Duration::from_millis(400), |p| {
+            let _ = tried_tx.send(());
+            shared.clear(p)
+        }));
+        assert_eq!(lock.join().unwrap(), vec![put], "the lock took the busy copy");
+        assert_eq!(outcome, Outcome::Failed);
+        assert_eq!(clip.tries.get(), 1);
+        assert_eq!(take_all(), Vec::<u64>::new());
+    }
+
+    #[test]
+    fn a_lock_while_the_codes_are_being_copied_finds_them_remembered() {
+        let _turn = PENDING_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let _ = take_all();
+        let (writing_tx, writing_rx) = std::sync::mpsc::channel();
+        let copier = std::thread::spawn(move || {
+            put_remembered(|| {
+                writing_tx.send(()).unwrap();
+                // The clipboard takes a moment (another app held it): the lock comes in now.
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                Ok::<u64, ()>(42)
+            })
+        });
+        writing_rx.recv().unwrap();
+        // The lock takes the pending copies while the write is on its way: it waits, and gets this one.
+        assert_eq!(take_all(), vec![42]);
+        assert_eq!(copier.join().unwrap(), Ok(42));
+        // A write the clipboard refused remembers nothing.
+        assert_eq!(put_remembered(|| Err::<u64, &str>("busy")), Err("busy"));
+        assert_eq!(take_all(), Vec::<u64>::new());
     }
 
     #[test]

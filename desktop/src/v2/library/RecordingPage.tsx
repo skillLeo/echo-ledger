@@ -54,7 +54,8 @@ export const UNSURE_LINE = "The engine was not sure of this line. Click to hear 
  * without the line's commas and full stops): only then are they drawn one by one.
  */
 export function wordsMatch(words: readonly { text: string }[], text: string): boolean {
-  const squash = (t: string) => t.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
+  // An apostrophe joins its word ("don't" is one word whether an engine sends "don't" or "dont"); other marks split.
+  const squash = (t: string) => t.toLowerCase().replace(/['’‘`ʼ]/g, "").replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
   return squash(words.map((w) => w.text).join(" ")) === squash(text);
 }
 
