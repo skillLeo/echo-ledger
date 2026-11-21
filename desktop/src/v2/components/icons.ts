@@ -45,6 +45,10 @@ export {
   LucideArrowUpDownIcon as SortIcon,
   LucideRotateCcwIcon as BackIcon,
   LucideRotateCwIcon as ForwardIcon,
+  LucideRadioIcon as RadioIcon,
+  LucideLifeBuoyIcon as LifeBuoyIcon,
+  LucideUserRoundPenIcon as UserRoundPenIcon,
+  LucideFingerprintIcon as FingerprintIcon,
 } from "../../components/Icons";
 export {
   SourceAppIcon,
