@@ -104,7 +104,8 @@ describe("library layout down to the minimum window (A6.DU5)", () => {
     // Regression: below 1030 px .content scrolls with 24 px padding, so the sticky bars stopped 24 px in and transcript
     // lines showed above the find bar and below the player.
     expect(prop(".app.narrow .content", "padding")).toBe("var(--space-5) var(--space-5)");
-    expect(prop(".app.narrow .detail .find-bar", "top")).toBe("calc(-1 * var(--space-5))");
+    // Under the recording's item bar (D-165), which is 0 px on a page without it.
+    expect(prop(".app.narrow .detail .find-bar", "top")).toBe("calc(var(--item-bar-h, 0px) - var(--space-5))");
     expect(prop(".app.narrow .detail .player-dock", "bottom")).toBe("calc(-1 * var(--space-5))");
     expect(prop(".find-bar", "top")).toBe("0px");
     expect(prop(".player-dock", "bottom")).toBe("0px");

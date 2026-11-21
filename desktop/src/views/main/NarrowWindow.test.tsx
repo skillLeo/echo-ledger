@@ -128,6 +128,35 @@ describe("a recording on a narrow page (the half-screen window)", () => {
     expect(openButton).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("keeps Back in a bar that sticks under the top bar, with the title once the header has scrolled under it (D-165)", async () => {
+    const list = await renderNarrow();
+    await open(list, "Zoom with Acme");
+    const bar = document.querySelector(".item-bar")!;
+    expect(within(bar as HTMLElement).getByRole("button", { name: "Back" })).toBeInTheDocument();
+    const title = bar.querySelector(".item-bar-title")!;
+    expect(title).toHaveTextContent("Zoom with Acme");
+    expect(title).toHaveAttribute("dir", "auto");
+    expect(bar).not.toHaveClass("titled");
+    // The header's title scrolls up past the bar's bottom edge: the bar shows the title.
+    vi.spyOn(bar, "getBoundingClientRect").mockReturnValue({ top: 0, bottom: 48, height: 48 } as DOMRect);
+    vi.spyOn(document.querySelector(".detail .detail-title")!, "getBoundingClientRect").mockReturnValue({ top: -20, bottom: 10, height: 30 } as DOMRect);
+    fireEvent.scroll(document.querySelector(".content")!);
+    await flushAsync();
+    expect(bar).toHaveClass("titled");
+    expect(prop(".app.narrow .library.has-open .item-bar", "position")).toBe("sticky");
+    expect(prop(".app.narrow .library.has-open .item-bar", "background")).toBe("var(--surface)");
+  });
+
+  it("gives the bar's height to the page's scroll padding and stacks the find bar under it", async () => {
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ height: 44.2 } as DOMRect);
+    const list = await renderNarrow();
+    await open(list, "Zoom with Acme");
+    expect(document.documentElement.style.getPropertyValue("--item-bar-h")).toBe("45px");
+    expect(prop(".app.narrow .content.page-library", "scroll-padding-block-start")).toContain("var(--item-bar-h");
+    expect(prop(".app.narrow .detail .find-bar", "top")).toContain("var(--item-bar-h");
+    rect.mockRestore();
+  });
+
   it("pulls Back to the start edge in either direction (right in Urdu), not always to the left", () => {
     expect(prop(".app.narrow .library.has-open .detail-back", "margin-inline-start")).toBe("calc(-1 * var(--space-2))");
     expect(prop(".app.narrow .library.has-open .detail-back", "margin-left")).toBe("");

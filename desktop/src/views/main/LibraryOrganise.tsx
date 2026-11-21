@@ -63,9 +63,9 @@ export function FolderPicker({ label, value, clients, onPick, onCreated, notify,
         <span className="chip-key" aria-hidden="true">{label}</span>
         <select id={id} className="select" aria-label={label} value={value} disabled={disabled}
           onChange={(e) => (e.target.value === NEW_CLIENT ? setCreating(true) : onPick(e.target.value || null))}>
-          <option value="">Inbox</option>
-          {visibleRows(projectTree(clients), "all").map(({ project }) => <option key={project.id} value={project.id}>{projectLabel(clients, project.id)}</option>)}
-          <option value={NEW_CLIENT}>New project…</option>
+          <option dir="auto" value="">Inbox</option>
+          {visibleRows(projectTree(clients), "all").map(({ project }) => <option dir="auto" key={project.id} value={project.id}>{projectLabel(clients, project.id)}</option>)}
+          <option dir="auto" value={NEW_CLIENT}>New project…</option>
         </select>
       </label>
       {creating && (
@@ -234,7 +234,7 @@ export function OrganisePanel({ item, clients, knownLabels, notify, onClientCrea
             <label htmlFor={labelId} className="sr-only">Add a label</label>
             <input id={labelId} placeholder="Add label" list={listId} maxLength={MAX_LABEL_CHARS} value={label} disabled={busy}
               onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void addLabel(); }} />
-            <datalist id={listId}>{knownLabels.filter((k) => !labels.includes(k)).map((k) => <option key={k} value={k} />)}</datalist>
+            <datalist id={listId}>{knownLabels.filter((k) => !labels.includes(k)).map((k) => <option dir="auto" key={k} value={k} />)}</datalist>
           </span>
         </span>
       </span>
@@ -313,7 +313,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
             <div className="bulk-pop card">
               <label htmlFor={labelId} className="sr-only">Label</label>
               <input id={labelId} className="input small" placeholder="Label" list={listId} maxLength={MAX_LABEL_CHARS} value={label} disabled={busy} onChange={(e) => setLabel(e.target.value)} />
-              <datalist id={listId}>{knownLabels.map((k) => <option key={k} value={k} />)}</datalist>
+              <datalist id={listId}>{knownLabels.map((k) => <option dir="auto" key={k} value={k} />)}</datalist>
               <div className="row">
                 <button type="button" className="btn ghost small" disabled={busy || !label.trim()} onClick={() => void run("label", null, label)}>Add label</button>
                 <button type="button" className="btn ghost small" disabled={busy || !label.trim()} onClick={() => void run("unlabel", null, label)}>Remove label</button>
@@ -330,7 +330,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
               <div className="row">
                 <label htmlFor={formatId} className="sr-only">Export format</label>
                 <select id={formatId} className="select" value={format} disabled={busy} onChange={(e) => setFormat(e.target.value as BulkExportFormat)}>
-                  {EXPORT_FORMATS.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+                  {EXPORT_FORMATS.map(([v, text]) => <option dir="auto" key={v} value={v}>{text}</option>)}
                 </select>
                 <button type="button" className="btn ghost small" disabled={busy} onClick={() => void exportZip()}>Export transcripts</button>
               </div>
