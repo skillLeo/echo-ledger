@@ -270,9 +270,9 @@ fn the_cargo_tauri_and_npm_versions_agree() {
 }
 
 #[test]
-fn this_release_is_version_2_0_2() {
-    assert_eq!(env!("CARGO_PKG_VERSION"), "2.0.2");
-    assert_eq!(tauri_conf()["version"], "2.0.2");
+fn this_release_is_version_2_0_3() {
+    assert_eq!(env!("CARGO_PKG_VERSION"), "2.0.3");
+    assert_eq!(tauri_conf()["version"], "2.0.3");
 }
 
 #[test]
