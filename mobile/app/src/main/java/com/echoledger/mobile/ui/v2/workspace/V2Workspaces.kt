@@ -55,9 +55,9 @@ fun V2WorkspacesScreen(
     val library by vm.library.collectAsState()
     val scope = rememberCoroutineScope()
     var naming by remember { mutableStateOf(false) }
-    // The server's folder counts (imported, shared), looked up again whenever the library changes.
+    // The server's folder counts (imported, shared), read once as the list opens; this phone's folders follow the Library.
     var serverCounts by remember { mutableStateOf<Map<String, Int>?>(null) }
-    LaunchedEffect(library) { vm.folderCounts()?.let { serverCounts = it } }
+    LaunchedEffect(Unit) { vm.folderCounts()?.let { serverCounts = it } }
     V2WorkspacesContent(
         all,
         library,
@@ -119,7 +119,10 @@ fun V2WorkspacesContent(
             roots.forEach { project ->
                 val mine = ProjectTree.recordings(all, library, project.id, nested = true)
                 // As classic: when the project's last call was ("Last call 10:42", "Yesterday", "Oct 20").
-                val last = mine.filter { !it.startedAt.isNullOrBlank() }.maxByOrNull { it.startedAt.orEmpty() }
+                // The newest by the moment it began, whatever offset each was written with.
+                val last = mine.mapNotNull { item ->
+                    runCatching { java.time.OffsetDateTime.parse(item.startedAt).toInstant() }.getOrNull()?.let { item to it }
+                }.maxByOrNull { it.second }?.first
                 ProjectRow(
                     project,
                     recordings = if (mine.isNotEmpty()) mine.size else project.sessionCount,

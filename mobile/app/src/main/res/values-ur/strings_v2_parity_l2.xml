@@ -64,4 +64,8 @@
     <string name="v2_shared_no_audio">اس وائس نوٹ میں کوئی آواز نہیں</string>
     <string name="v2_shared_failed">ٹرانسکرپشن نہیں ہو سکی۔ دوبارہ کوشش کے لیے اسے کھولیں۔</string>
     <string name="v2_shared_upload_failed">اپ لوڈ نہیں ہو سکا۔ EchoLedger کا ریکارڈ ٹیب کھولیں اور دوبارہ کوشش کریں دبائیں۔</string>
+    <string name="v2_fold_open_named">%1$s کھولیں</string>
+    <string name="v2_fold_save_named">%1$s میری لائبریری میں محفوظ کریں</string>
+    <string name="v2_fold_remove_named">%1$s ہٹائیں</string>
+    <string name="v2_req_turn_off_named">%1$s بند کریں</string>
 </resources>

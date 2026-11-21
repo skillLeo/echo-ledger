@@ -56,8 +56,9 @@ data class LibraryFilters(
     val count: Int get() = views.size + devices.size + folders.size + labels.size + tags.size + languages.size
 
     fun matches(item: LibraryItem, now: ZonedDateTime = ZonedDateTime.now()): Boolean = !item.deleted &&
-        // A date and a mark narrow each other (Today and Pinned: pinned recordings from today); choices of one kind widen.
-        views.partition { it in DATE_VIEWS }.toList().all { kind -> kind.isEmpty() || kind.any { Organise.inView(item, it, now) } } &&
+        // A date, a mark and a state narrow each other (Today and Pinned: pinned recordings from today; Pinned and Failed:
+        // pinned ones that failed); choices of one kind widen (Today or This week).
+        VIEW_KINDS.all { kind -> (views intersect kind).let { on -> on.isEmpty() || on.any { Organise.inView(item, it, now) } } } &&
         (devices.isEmpty() || SourceDevice.from(item.sourceDevice) in devices) &&
         (folders.isEmpty() || folders.any { Organise.inFolder(item, it) }) &&
         (labels.isEmpty() || labels.any { Organise.hasLabel(item, it) }) &&
@@ -67,6 +68,15 @@ data class LibraryFilters(
     companion object {
         /** The saved views that are a date (the Date chip) rather than a mark or a state. */
         val DATE_VIEWS: Set<SmartView> = setOf(SmartView.TODAY, SmartView.THIS_WEEK)
+
+        /** The marks a recording carries (the Views chip). */
+        val MARK_VIEWS: Set<SmartView> = setOf(SmartView.PINNED, SmartView.BOOKMARKED)
+
+        /** Where a recording stands (the Status chip). */
+        val STATE_VIEWS: Set<SmartView> = setOf(SmartView.WAITING, SmartView.FAILED)
+
+        /** Each chip's kind of view; [SmartView.ALL] is no filter at all. */
+        private val VIEW_KINDS = listOf(DATE_VIEWS, MARK_VIEWS, STATE_VIEWS)
 
         fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value
     }

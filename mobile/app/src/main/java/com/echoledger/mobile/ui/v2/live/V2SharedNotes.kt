@@ -8,16 +8,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.RowProgress
 import com.echoledger.mobile.core.SharedNotes
@@ -123,9 +123,18 @@ fun V2SharedNotesScreen(
                     meta = words,
                     leading = { EchoAvatar(icon = EchoIcons.VoiceNote) },
                     status = if (!SharedNotes.done(note.status.stage)) ({ EchoProgressRing(null) }) else null,
-                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     onClick = if (canOpen) ({ opened = note.item?.id }) else null
                 )
+                // TalkBack hears the new stage when it changes ("Transcribing…"), not the whole row again.
+                val view = LocalView.current
+                var said by remember { mutableStateOf(words) }
+                LaunchedEffect(words) {
+                    if (words != said) {
+                        said = words
+                        @Suppress("DEPRECATION")
+                        view.announceForAccessibility(words)
+                    }
+                }
             }
             if (localIds.size == 1 && !allDone) {
                 Text(

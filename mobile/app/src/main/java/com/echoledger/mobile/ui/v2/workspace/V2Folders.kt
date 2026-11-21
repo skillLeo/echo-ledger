@@ -25,6 +25,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDirection
 import com.echoledger.mobile.R
 import com.echoledger.mobile.data.ClientDto
@@ -232,9 +234,25 @@ private fun SharedRow(item: SharedItemDto, onOpen: (LibraryItem) -> Unit, onSave
         Text(title, style = EchoV2.type.content(title, EchoV2.type.bodyStrong), color = c.textPrimary)
         Text(meta, style = EchoV2.type.content(meta, EchoV2.type.meta), color = c.textSecondary)
         Row(horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
-            item.session?.let { s -> EchoButton(stringResource(R.string.v2_fold_open), { onOpen(s) }, kind = EchoButtonKind.Quiet) }
+            // Each action is named with what it acts on, so TalkBack never hears three bare "Remove"s.
+            val openLabel = stringResource(R.string.v2_fold_open_named, title)
+            val saveLabel = stringResource(R.string.v2_fold_save_named, title)
+            val removeLabel = stringResource(R.string.v2_fold_remove_named, title)
+            item.session?.let { s ->
+                EchoButton(
+                    stringResource(R.string.v2_fold_open),
+                    { onOpen(s) },
+                    Modifier.semantics { contentDescription = openLabel },
+                    kind = EchoButtonKind.Quiet
+                )
+            }
             if (item.savedAt == null) {
-                EchoButton(stringResource(R.string.v2_fold_save), onSave, kind = EchoButtonKind.Quiet)
+                EchoButton(
+                    stringResource(R.string.v2_fold_save),
+                    onSave,
+                    Modifier.semantics { contentDescription = saveLabel },
+                    kind = EchoButtonKind.Quiet
+                )
             } else {
                 Text(
                     stringResource(R.string.v2_fold_saved),
@@ -243,7 +261,12 @@ private fun SharedRow(item: SharedItemDto, onOpen: (LibraryItem) -> Unit, onSave
                     modifier = Modifier.padding(vertical = EchoTokens.Space.s12, horizontal = EchoTokens.Space.s8)
                 )
             }
-            EchoButton(stringResource(R.string.v2_fold_remove), onRemove, kind = EchoButtonKind.Quiet)
+            EchoButton(
+                stringResource(R.string.v2_fold_remove),
+                onRemove,
+                Modifier.semantics { contentDescription = removeLabel },
+                kind = EchoButtonKind.Quiet
+            )
         }
     }
 }
@@ -285,7 +308,12 @@ fun V2RequestsPage(vm: MainViewModel, onBack: () -> Unit) {
     var working by remember { mutableStateOf(false) }
     var made by remember { mutableStateOf<RequestLinkDto?>(null) }
     var turningOff by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(reload) { links = vm.requestLinks() ?: links.orEmpty() }
+    var failed by remember { mutableStateOf(false) }
+    LaunchedEffect(reload) {
+        val answer = vm.requestLinks()
+        failed = answer == null
+        if (answer != null) links = answer
+    }
     turningOff?.let { id ->
         EchoDialog(
             title = stringResource(R.string.v2_req_turn_off_title),
@@ -365,6 +393,14 @@ fun V2RequestsPage(vm: MainViewModel, onBack: () -> Unit) {
             }
             val list = links
             when {
+                // Could not be read: say so with Retry, never "No request links".
+                failed && list == null -> EchoErrorState(
+                    stringResource(R.string.v2_fold_failed_title, stringResource(R.string.v2_req_title)),
+                    stringResource(R.string.v2_fold_failed_body),
+                    actionLabel = stringResource(R.string.v2_fold_retry),
+                    onAction = { reload++ }
+                )
+
                 list == null -> EchoSkeletonList(2, avatar = false)
 
                 list.isEmpty() && !creating -> EchoEmptyState(
@@ -381,7 +417,18 @@ fun V2RequestsPage(vm: MainViewModel, onBack: () -> Unit) {
                         meta = requestMeta(link, projects),
                         leading = { EchoAvatar(icon = EchoIcons.Link) },
                         trailing = if (link.revokedAt == null) {
-                            { EchoButton(stringResource(R.string.v2_req_turn_off), { turningOff = link.id }, kind = EchoButtonKind.Quiet) }
+                            {
+                                val named = stringResource(
+                                    R.string.v2_req_turn_off_named,
+                                    link.title ?: stringResource(R.string.v2_req_link)
+                                )
+                                EchoButton(
+                                    stringResource(R.string.v2_req_turn_off),
+                                    { turningOff = link.id },
+                                    Modifier.semantics { contentDescription = named },
+                                    kind = EchoButtonKind.Quiet
+                                )
+                            }
                         } else {
                             null
                         }

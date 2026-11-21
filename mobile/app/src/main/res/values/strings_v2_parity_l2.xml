@@ -65,4 +65,8 @@
     <string name="v2_shared_no_audio">No audio in this voice note</string>
     <string name="v2_shared_failed">Transcription failed. Open it to retry.</string>
     <string name="v2_shared_upload_failed">The upload failed. Open EchoLedger\'s Record tab and tap Retry.</string>
+    <string name="v2_fold_open_named">Open %1$s</string>
+    <string name="v2_fold_save_named">Save %1$s to my library</string>
+    <string name="v2_fold_remove_named">Remove %1$s</string>
+    <string name="v2_req_turn_off_named">Turn off %1$s</string>
 </resources>

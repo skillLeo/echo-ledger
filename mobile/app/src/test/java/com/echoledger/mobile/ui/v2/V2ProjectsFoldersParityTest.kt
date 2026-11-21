@@ -130,30 +130,57 @@ class V2ProjectsFoldersParityTest : ScreenTest() {
     fun sharedWithMeOpensSavesAndRemovesWhatATeammateSent() {
         seed()
         val session = ServerFixtures.libraryItem("01JT", title = "Ayesha's call with Omar")
-        server.on(
-            "GET",
-            "/api/shared-with-me",
-            FakeServer.json(
-                200,
-                """{"data":[{"id":"sh1","kind":"session","from":{"name":"Ayesha"},"note":"Have a look","title":"Omar pricing",
-                    "sent_at":"2026-10-20T10:00:00+00:00","saved_at":null,"session":$session}]}"""
-            )
-        )
-        server.on("POST", "/api/shared-with-me/sh1/save", FakeServer.json(200, """{"session_id":"01JS"}"""))
-        server.on("DELETE", "/api/shared-with-me/sh1", FakeServer.empty(204))
+        fun shared(savedAt: String?) =
+            """{"data":[{"id":"sh1","kind":"session","from":{"name":"Ayesha"},"note":"Have a look","title":"Omar pricing",
+                "sent_at":"2026-10-20T10:00:00+00:00","saved_at":${savedAt?.let { "\"$it\"" } ?: "null"},"session":$session}]}"""
+        // What the server holds: sent, then saved, then removed.
+        var holds = shared(null)
+        server.on("GET", "/api/shared-with-me") { FakeServer.json(200, holds) }
+        server.on("POST", "/api/shared-with-me/sh1/save") {
+            holds = shared("2026-10-21T09:00:00+00:00")
+            FakeServer.json(200, """{"session_id":"01JS"}""")
+        }
+        server.on("DELETE", "/api/shared-with-me/sh1") {
+            holds = """{"data":[]}"""
+            FakeServer.empty(204)
+        }
         projects()
         await("Shared with me")
         press("Shared with me")
         await("Omar pricing")
         assertTrue(seen("From Ayesha"))
         assertTrue(seen("Have a look"))
+        // Each action names what it acts on.
+        listOf("Open Omar pricing", "Save Omar pricing to my library", "Remove Omar pricing").forEach {
+            assertTrue(it, compose.onAllNodes(hasContentDescription(it) and hasClickAction()).fetchSemanticsNodes().isNotEmpty())
+        }
         press("Save to my library")
         pumpUntil("saved") { server.requestsTo("POST", "/api/shared-with-me/sh1/save").isNotEmpty() }
-        press("Remove")
-        pumpUntil("removed") { server.requestsTo("DELETE", "/api/shared-with-me/sh1").isNotEmpty() }
-        // Open shows the teammate's recording, which is not in this phone's Library.
+        pumpUntil("it says Saved") { seen("Saved") && !seen("Save to my library") }
+        // Open shows the teammate's recording, which is not in this phone's Library; Back returns to the folder.
         press("Open")
         await("Hi, thanks for calling.")
+        androidx.test.espresso.Espresso.pressBack()
+        await("Omar pricing")
+        press("Remove")
+        pumpUntil("removed") { server.requestsTo("DELETE", "/api/shared-with-me/sh1").isNotEmpty() }
+        await("Nothing shared with you")
+        assertTrue(!seen("Omar pricing"))
+    }
+
+    @Test
+    fun requestLinksThatCouldNotBeLoadedSaySoAndRetryAsksAgain() {
+        seed()
+        var answer = FakeServer.json(500, """{"message":"boom"}""")
+        server.on("GET", "/api/request-links") { answer }
+        projects()
+        press("Request files")
+        await("Couldn't load Request files")
+        assertTrue(!seen("No request links"))
+        answer = FakeServer.json(200, """{"data":[{"id":"rl1","title":"Send me the invoices","received":0}]}""")
+        press("Retry")
+        await("Send me the invoices")
+        assertEquals(2, server.requestsTo("GET", "/api/request-links").size)
     }
 
     @Test
@@ -177,6 +204,11 @@ class V2ProjectsFoldersParityTest : ScreenTest() {
         press("Request files")
         await("Send me the invoices")
         assertTrue(seen("Inbox · 3 files received"))
+        assertTrue(
+            compose.onAllNodes(
+                hasContentDescription("Turn off Send me the invoices") and hasClickAction()
+            ).fetchSemanticsNodes().isNotEmpty()
+        )
         press("New request link")
         compose.onAllNodes(hasText("Title they see") and androidx.compose.ui.test.hasSetTextAction()).onFirst()
             .performTextInput("Voice notes please")
@@ -185,7 +217,10 @@ class V2ProjectsFoldersParityTest : ScreenTest() {
         pumpUntil("made") { server.requestsTo("POST", "/api/request-links").isNotEmpty() }
         val body = Json.parseToJsonElement(server.requestsTo("POST", "/api/request-links").single().bodyText()).jsonObject
         assertEquals("Voice notes please", body["title"]?.jsonPrimitive?.content)
-        assertTrue(body.toString(), body["expires_at"]?.jsonPrimitive?.content?.isNotBlank() == true)
+        // 7 days from now, as chosen.
+        val until = java.time.Instant.parse(body["expires_at"]!!.jsonPrimitive.content)
+        val days = java.time.Duration.between(java.time.Instant.now(), until).toHours() / 24.0
+        assertTrue("about 7 days ahead: $until", days in 6.9..7.01)
         await("https://echo.test/r/abc123")
         assertTrue(seen("Copy it now: it is shown only once."))
         press("Copy")
