@@ -63,6 +63,10 @@ function secDeviceGuardedRoutes(): array
         'POST usage' => ['POST', '/api/usage', 'stt:token'],
         'POST live-translate/token' => ['POST', '/api/live-translate/token', 'stt:token'],
         'POST sessions/{id}/opened' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/opened', 'library:read'],
+        // Since 2.0.0-j: audio only and "Transcribe later".
+        'POST sessions/{id}/transcribe' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/transcribe', 'sessions:write'],
+        'POST sessions/transcribe' => ['POST', '/api/sessions/transcribe', 'sessions:write'],
+        'POST sessions/transcribe-estimate' => ['POST', '/api/sessions/transcribe-estimate', 'library:read'],
         // Since 2.0.0-i: a label's colour.
         'PUT labels/color' => ['PUT', '/api/labels/color', 'sessions:write'],
         'POST sessions' => ['POST', '/api/sessions', 'sessions:write'],
@@ -220,7 +224,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(137);
+    expect($guarded)->toBe(140);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

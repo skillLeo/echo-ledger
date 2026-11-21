@@ -38,7 +38,8 @@ final class RecordingProgress
      */
     public static function for(CaptureSession $session): ?array
     {
-        if (in_array($session->status, [SessionStatus::Recording, SessionStatus::Failed], true) || $session->hasNoAudio()) {
+        // Audio only (since v1.8): nothing is under way until the person asks for the transcript.
+        if (in_array($session->status, [SessionStatus::Recording, SessionStatus::Failed, SessionStatus::AudioOnly], true) || $session->hasNoAudio()) {
             return null;
         }
         $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();

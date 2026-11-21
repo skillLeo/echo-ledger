@@ -35,6 +35,22 @@ final class UsageLedger
     public function __construct(private readonly SettingsRepository $settings, private readonly StreamingGrants $grants) {}
 
     /** Self-hosted and on-device engines cost nothing per minute, so they never count against the monthly limit. */
+    /**
+     * The channels [$provider] would bill for a recording of [$recordingChannels] before it runs, as recordFinal()
+     * counts them after (it may learn the exact number from the engine's answer): every channel at full length, two at
+     * most where the engine sends one job per side, and Groq and Gemini each side. Since v1.8 (contract 1.8.0-e,
+     * App\Services\TranscribeLater's estimate).
+     */
+    public static function estimatedChannels(SttProviderKey $provider, int $recordingChannels): int
+    {
+        $channels = max(1, $recordingChannels);
+
+        return match ($provider) {
+            SttProviderKey::AzureMai, SttProviderKey::Soniox => min(2, $channels),
+            default => $channels,
+        };
+    }
+
     public static function isBillable(SttProviderKey $provider): bool
     {
         return ! in_array($provider, [SttProviderKey::WhisperCppLocal, SttProviderKey::ParakeetLocal], true);

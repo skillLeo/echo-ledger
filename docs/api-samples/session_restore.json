@@ -1,7 +1,7 @@
 {
     "data": {
-        "id": "01m7xfb6jh5gn4c9razwyqb7v3",
-        "client_ref": "d30342ed-ddb5-4ebb-9c5e-6e5fb2063166",
+        "id": "01m7xxrxb5ghkccma0wa73pr5w",
+        "client_ref": "2b72303a-0923-4d16-81e6-176e8259b28f",
         "deleted": false,
         "source_device": "phone",
         "source_device_label": "Phone",
@@ -9,11 +9,11 @@
         "source_app": "whatsapp",
         "source_app_label": "WhatsApp",
         "device": {
-            "id": "01m7xfb6fkees8mv060swzmvns",
+            "id": "01m7xxrxa7wkrcb1xej2mmtr8e",
             "name": "Galaxy S25 Ultra"
         },
         "client": {
-            "id": "01m7xfba5acp9t29w18vqdbr11",
+            "id": "01m7xxs43sj0qacdjc1s7sq92p",
             "name": "Sample project, renamed",
             "color": "#8b5cf6",
             "avatar": null
@@ -22,15 +22,15 @@
         "title": "Retainer check-in, renamed",
         "title_auto": false,
         "caller": null,
-        "started_at": "2026-11-19T10:15:00+00:00",
-        "ended_at": "2026-11-19T10:15:19+00:00",
+        "started_at": "2026-11-20T10:15:00+00:00",
+        "ended_at": "2026-11-20T10:15:19+00:00",
         "duration_ms": 19375,
         "status": "completed",
         "language": null,
         "language_chip": "EN",
         "transcript": {
             "final_status": "completed",
-            "final_transcript_id": "01m7xfb7qtmzgj5n5ngnmpcs1k",
+            "final_transcript_id": "01m7xxrz96dkn245s6t018bqb8",
             "live_available": false,
             "live_transcript_id": null,
             "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
@@ -63,7 +63,8 @@
         ],
         "important": false,
         "label_colors": {},
-        "expires_at": "2026-12-20T21:56:02+00:00",
-        "updated_at": "2026-11-20T21:56:06+00:00"
+        "expires_at": "2026-12-21T02:08:11+00:00",
+        "transcribe_estimate": null,
+        "updated_at": "2026-11-21T02:08:19+00:00"
     }
 }

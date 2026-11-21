@@ -224,6 +224,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('assist-relay', fn (Request $request) => Limit::perMinute(3000)->by('assist-relay:'.$request->ip()));
         RateLimiter::for('uploads', fn (Request $request) => Limit::perMinute(600)->by('upload:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('stt-token', fn (Request $request) => Limit::perMinute(30)->by('stt:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Since v1.8 (contract 1.8.0-e): "Transcribe" on one audio-only recording, 30 a minute per device.
+        RateLimiter::for('transcribe', fn (Request $request) => Limit::perMinute(30)->by('transcribe:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // A device check is sent by hand; ten an hour is plenty for one device.
         // Since v1.8 P6.3: invitations and invite links from the apps, per person, as the console's 20 an hour.
         RateLimiter::for('invites', fn (Request $request) => Limit::perHour(20)->by('invites:'.(($u = $request->user()) instanceof Device ? 'u'.$u->user_id : ($u?->getAuthIdentifier() ?? $request->ip()))));

@@ -106,6 +106,8 @@ final class SessionController extends Controller
             'language' => ['nullable', 'string', 'max:16'],
             'artifacts' => ['sometimes', 'array', 'min:1', 'max:3'],
             'skip_duplicate' => ['sometimes', 'boolean'],
+            // Since v1.8 (contract 1.8.0-e): false = keep it as audio only; absent = transcribe, as before.
+            'transcribe' => ['sometimes', 'boolean'],
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),
             ...CallerMatcher::rules(),
@@ -194,6 +196,7 @@ final class SessionController extends Controller
             'client_id' => ['nullable', 'string', 'size:26'],
             'language' => ['nullable', 'string', 'max:16'],
             'artifacts' => ['required', 'array', 'min:1', 'max:3'],
+            'transcribe' => ['sometimes', 'boolean'],
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),
             ...CallerMatcher::rules(),
@@ -356,6 +359,9 @@ final class SessionController extends Controller
         $data = $request->validate(['language' => ['present', 'nullable', 'string', 'max:16']]);
         try {
             $run = app(Retranscriber::class)->startAs($session, $data['language']);
+        } catch (ApiError $e) {
+            // Since 2.0.0-j an audio-only recording answers as "Transcribe" does (budget_exceeded, needs_transcription_key).
+            throw $e;
         } catch (RuntimeException $e) {
             throw new ApiError(409, 'cannot_retranscribe', $e->getMessage());
         }
