@@ -1,5 +1,5 @@
 {{--
-    One v2.0 Library row: the source's glyph on a neutral circle, the unread dot and the title, then one status (only
+    One v2.0 Library row: the source's own mark with the device it came from, the unread dot and the title, then one status (only
     what needs you), the second line (the source, the device, the project or caller) and its labels' colour dots, then
     "Audio · N days left" and a snippet of what was said; the flag when it is important; the star pins it to the top;
     at the end the time above the length. From 1024 px a plain click opens the recording beside the list, as in the
@@ -9,7 +9,10 @@
 @php($row = \App\Filament\Support\V2RecordingRow::for($getRecord()))
 <div class="v2-lib-row" data-recording="{{ $row['id'] }}" data-important="{{ $row['important'] ? '1' : '0' }}"
     x-on:click="if (window.matchMedia('(min-width: 1024px)').matches && ! ($event.ctrlKey || $event.metaKey || $event.shiftKey || $event.button !== 0) && typeof $wire.selectRecording === 'function') { $event.preventDefault(); $wire.selectRecording('{{ $row['id'] }}') }">
-    <span class="v2-row-tile" title="{{ $row['source'] }}"><x-el.v2.icon :name="$row['icon']" /></span>
+    {{-- The app's own mark and the device badge (EL-Design's source-logo); the tile keeps its place for the select box. --}}
+    <span class="v2-row-tile" title="{{ $row['source_words'] }}" style="background-color: transparent">
+        @include('filament.v2.components.source-logo', ['app' => $row['app'], 'device' => $row['device_kind'], 'label' => $row['source_words'], 'fallback' => $row['icon']])
+    </span>
     <span class="v2-row-main">
         <span class="v2-lib-line">
             @if ($row['unread'])

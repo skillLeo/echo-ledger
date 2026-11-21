@@ -13,13 +13,22 @@
         const core = window.ElLibrarySwipeCore;
         let drag = null;
         const reset = (row) => { if (row) { row.style.transform = ''; row.style.transition = ''; } };
+        // The browser decides who owns a touch when it starts: the rows take sideways moves and leave the page its
+        // vertical scroll (marked up front, and again after each Livewire update redraws them).
+        const mark = () => {
+            const on = core.enabled(window.innerWidth);
+            document.querySelectorAll('.v2-lib-row').forEach((row) => { row.style.touchAction = on ? 'pan-y' : ''; });
+        };
+        document.addEventListener('DOMContentLoaded', mark);
+        document.addEventListener('livewire:navigated', mark);
+        window.addEventListener('resize', mark);
+        document.addEventListener('livewire:init', () => window.Livewire.hook('commit', ({ succeed }) => succeed(() => requestAnimationFrame(mark))));
 
         document.addEventListener('pointerdown', (e) => {
             const row = e.target instanceof Element ? e.target.closest('.v2-lib-row') : null;
             // The row's own controls (the star) keep their taps; the row itself sits inside the record's link.
             const control = row && e.target.closest('button, a, input, [role="menu"]');
             if (! row || e.button !== 0 || ! core.enabled(window.innerWidth) || (control && row.contains(control))) return;
-            row.style.touchAction = 'pan-y';
             drag = { row, x: e.clientX, y: e.clientY, dx: 0, dy: 0, swiping: false };
         });
         document.addEventListener('pointermove', (e) => {

@@ -524,5 +524,9 @@
     "Send to WhatsApp": "واٹس ایپ پر بھیجیں",
     "Opens WhatsApp, or WhatsApp Web, with the message ready to send to the person you choose.": "واٹس ایپ، یا واٹس ایپ ویب، کھولتا ہے، آپ کے چنے ہوئے شخص کو بھیجنے کے لیے پیغام تیار ہوتا ہے۔",
     "1 hour": "1 گھنٹہ",
-    "On a date…": "کسی تاریخ پر…"
+    "On a date…": "کسی تاریخ پر…",
+    ":app, on a phone": ":app، فون پر",
+    ":app, on a computer": ":app، کمپیوٹر پر",
+    ":app, on the web": ":app، ویب پر",
+    "Show :count more|Show :count more": ":count مزید دکھائیں|:count مزید دکھائیں"
 }

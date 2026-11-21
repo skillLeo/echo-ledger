@@ -39,7 +39,7 @@ final class V2RecordingRow
 
     /**
      * @return array{id: string, title: string, icon: string, source: string, line: string, device: string|null, pinned: bool,
-     *     time: string, full_time: string, iso: string, length: string, status: array{label: string, tone: string, icon: string}|null,
+     *     time: string, full_time: string, iso: string, app: string, device_kind: string|null, source_words: string, length: string, status: array{label: string, tone: string, icon: string}|null,
      *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, class: string, own: string|null}>, left: array{text: string, days: int, soon: bool}|null}
      */
     public static function for(CaptureSession $session): array
@@ -56,6 +56,10 @@ final class V2RecordingRow
             'id' => (string) $session->id,
             'title' => $session->displayTitle(),
             'icon' => self::glyph($session->source_app),
+            // Since U9b (WEB-LIB-020): the app's own mark with the device it came from, named as the desktop names it.
+            'app' => $session->source_app->value,
+            'device_kind' => self::deviceKind($session->source_device),
+            'source_words' => self::sourceWords($session->source_app, $session->source_device),
             'source' => $source,
             'line' => implode(' · ', array_filter([$source, $device, $with, $labels[0] ?? null])),
             'device' => $device,
@@ -180,6 +184,30 @@ final class V2RecordingRow
             in_array($final?->status, [TranscriptStatus::Pending, TranscriptStatus::Submitted, TranscriptStatus::Processing], true) => ['label' => __('Transcribing'), 'tone' => 'neutral', 'icon' => 'clock'],
             $final === null => ['label' => __('Untranscribed'), 'tone' => 'warning', 'icon' => 'transcript'],
             default => null,
+        };
+    }
+
+    /** The device badge of a source mark (filament.v2.components.source-logo): phone, computer or web. */
+    public static function deviceKind(?SourceDevice $device): ?string
+    {
+        return match ($device) {
+            SourceDevice::Phone => 'phone',
+            SourceDevice::Desktop => 'computer',
+            SourceDevice::Web => 'web',
+            default => null,
+        };
+    }
+
+    /** "WhatsApp, on a phone": what the mark stands for, in the console's language (desktop sourceWords). */
+    public static function sourceWords(SourceApp $app, ?SourceDevice $device): string
+    {
+        $name = self::source($app);
+
+        return match ($device) {
+            SourceDevice::Phone => __(':app, on a phone', ['app' => $name]),
+            SourceDevice::Desktop => __(':app, on a computer', ['app' => $name]),
+            SourceDevice::Web => __(':app, on the web', ['app' => $name]),
+            default => $name,
         };
     }
 
