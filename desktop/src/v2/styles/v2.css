@@ -53,10 +53,22 @@
 .el-caption { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); color: var(--el-role-text-secondary); }
 .el-secondary { color: var(--el-role-text-secondary); }
 /* Nastaliq is taller than Latin: Urdu titles and captions get the next line height up, from the type tokens. */
-:lang(ur) .el-title-l { line-height: calc(var(--el-text-title-l-line) + var(--el-space-12)); }
-:lang(ur) .el-title-m { line-height: calc(var(--el-text-title-m-line) + var(--el-space-12)); }
-:lang(ur) .el-title-s { line-height: var(--el-text-urdu-body-line); }
-:lang(ur) .el-caption { font-size: var(--el-text-body-size); line-height: calc(var(--el-text-body-line) + var(--el-space-8)); }
+:lang(ur) .el-title-l { font-size: var(--el-text-urdu-title-l-size); line-height: var(--el-text-urdu-title-l-line); }
+:lang(ur) .el-title-m { font-size: var(--el-text-urdu-title-m-size); line-height: var(--el-text-urdu-title-m-line); }
+:lang(ur) .el-title-s { font-size: var(--el-text-urdu-title-s-size); line-height: var(--el-text-urdu-title-s-line); }
+:lang(ur) .el-caption { font-size: var(--el-text-urdu-caption-size); line-height: var(--el-text-urdu-caption-line); }
+/* Arabic in Naskh: its own sizes, a little tighter than Nastaliq (docs/v2/design-review/D4-urdu-arabic-typography.md). */
+.el-root:lang(ar),
+.el-root [lang="ar"] {
+  font-family: var(--el-text-arabic-body-font);
+  font-size: var(--el-text-arabic-body-size);
+  line-height: var(--el-text-arabic-body-line);
+}
+:lang(ar) .el-title-l { font-size: var(--el-text-arabic-title-l-size); line-height: var(--el-text-arabic-title-l-line); }
+:lang(ar) .el-title-m { font-size: var(--el-text-arabic-title-m-size); line-height: var(--el-text-arabic-title-m-line); }
+:lang(ar) .el-title-s { font-size: var(--el-text-arabic-title-s-size); line-height: var(--el-text-arabic-title-s-line); }
+:lang(ar) .el-caption { font-size: var(--el-text-arabic-caption-size); line-height: var(--el-text-arabic-caption-line); }
+:lang(ar) .el-num { font-family: var(--el-text-mono-font); }
 
 /* Numbers, durations and times stay left-to-right inside right-to-left text. */
 .el-num {
@@ -1113,3 +1125,12 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-bookmarks { display: flex; flex-wrap: wrap; gap: var(--el-space-8); padding: 0 var(--el-space-16) var(--el-space-12); }
 .el-row__label { padding-inline: var(--el-space-4); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); white-space: nowrap; }
 .el-drawer .el-page__head { padding-inline-end: var(--el-space-40); }
+
+/* Urdu never goes below urdu.caption (14/28): Nastaliq at the 12 px caption size cannot be read (D4 §2). Numbers,
+   times and code inside keep their own LTR face and size (.el-num, .el-code). */
+:lang(ur) :is(.el-button--sm, .el-field__hint, .el-field__error, .el-badge, .el-segment__note, .el-markdown table,
+  .el-swatch--auto, .el-palette .palette-group-head, .el-palette .palette-detail, .el-palette .palette-empty,
+  .el-palette .palette-foot, .el-table thead th, .el-table__group th, .el-nav-item--sub, .el-row__label) {
+  font-size: var(--el-text-urdu-caption-size);
+  line-height: var(--el-text-urdu-caption-line);
+}
