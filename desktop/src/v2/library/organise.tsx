@@ -3,7 +3,7 @@
 // dialogs behind Move, Label, Rename and Transcribe. Selection mode, the row ⋮, the right-click menu and the recording
 // page all build from here, so an action is in the same place everywhere (PLAN_V2_PARITY 3, 4 and 7).
 import { useEffect, useId, useRef, useState } from "react";
-import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type ExportFormat, type MeetingPackFormat, type TranscribeEstimate, type TranscriptionLanguage } from "../../lib/ipc";
+import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type ExportFormat, type MeetingPackFormat, type TranscribeEstimate, type TranscriptionLanguage, type WhatsAppVoiceOutcome } from "../../lib/ipc";
 import { englishOnlyRisk, languageLabel, MAIN_LANGUAGES, menuLabel, MORE_LANGUAGES } from "../../lib/languages";
 import { transcriptText, copiedTranscript, DEFAULT_UNSURE, formatDuration, formatTime, sentenceDate, sourceAppLabel } from "../../lib/format";
 import { speakerName } from "../../lib/player";
@@ -281,9 +281,15 @@ export function knownLabels(items: readonly LibraryItem[]): string[] {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l]) => l);
 }
 
+/** "Voice copied — press ⌘V in the chat" on a Mac, Ctrl+V on Windows (the platform check LibraryV2's keys use). */
+export function voiceCopiedNote(mac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)): string {
+  return `Voice copied — press ${mac ? "⌘V" : "Ctrl+V"} in the chat`;
+}
+
 /**
  * Send to WhatsApp, as classic's sheet (views/main/WhatsAppSheet.tsx) and the phone: the text of the view being read,
- * the text with the voice (saved in Downloads to attach), or a link that works for 7 days. The text always goes on the
+ * the text with the voice (through the system's share, F6; without it WhatsApp with the text and the voice copied or
+ * saved in Downloads to attach), or a link that works for 7 days. The text always goes on the
  * clipboard too: a long one is cut in the message and the core says so. Without a transcript only the link is offered.
  * `text` and `hasAudio` come from the recording page; from a row they are read here.
  */
@@ -297,7 +303,7 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
   const [text, setText] = useState<string | null | undefined>(given);
   const [hasAudio, setHasAudio] = useState<boolean | undefined>(givenAudio);
   const [working, setWorking] = useState<"text" | "voice" | "link" | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [saved, setSaved] = useState<Extract<WhatsAppVoiceOutcome, { kind: "fallback" }> | null>(null);
   useEffect(() => {
     if (given === undefined) recordingLines(item).then((l) => setText(l?.length ? transcriptText(l, false) : null)).catch(() => setText(null));
     if (givenAudio === undefined) api.session(item.id).then((d) => setHasAudio(typeof d.playback_url === "string")).catch(() => setHasAudio(false));
@@ -315,14 +321,18 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
     if (cut) say(copied ? "WhatsApp opens with the start of the text. The whole text is copied: paste it there." : "WhatsApp opens with the start of the text.");
     return cut;
   };
+  // One way at a time: a press while another runs is ignored (a ref, so a quick second press is too).
+  const running = useRef(false);
   const run = async (kind: "text" | "voice" | "link", fn: () => Promise<void>) => {
-    if (working) return;
+    if (running.current) return;
+    running.current = true;
     setWorking(kind);
     try {
       await fn();
     } catch (e) {
       say(errorMessage(e));
     } finally {
+      running.current = false;
       setWorking(null);
     }
   };
@@ -334,9 +344,16 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
   });
   const sendVoice = () => run("voice", async () => {
     if (!text) return;
-    const path = await api.saveAudioToDownloads(item.id);
-    await open(text, await copy(text));
-    setSaved(path);
+    const outcome = await api.whatsappShareVoice(item.id, text);
+    if (outcome.kind === "shared") {
+      say("Text and voice sent to WhatsApp");
+      onClose();
+    } else if (outcome.kind === "fallback") {
+      // The clipboard holds the voice when it could be put there; otherwise the text, as before.
+      if (!outcome.fileOnClipboard) await copy(text);
+      setSaved(outcome);
+    }
+    // Cancelled: the person closed the share; the dialog stays as it was.
   });
   const sendLink = () => run("link", async () => {
     const link = await api.createShare(item.id, WHATSAPP_LINK_SECONDS, null, !!hasAudio);
@@ -347,11 +364,16 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
     onClose();
   });
   const loading = text === undefined || hasAudio === undefined;
+  // While one way runs only its button shows it; the others look as they were but take no press (run ignores them).
+  const busy = working !== null ? true : undefined;
   if (saved) {
     return (
       <Dialog open title="Send to WhatsApp" onClose={onClose} actions={<Button variant="primary" onClick={onClose}>Done</Button>}
-        description={`Saved in Downloads: ${fileName(saved)}`}>
-        <p><b>{ATTACH_NOTE}</b>: in the chat, click <b>+</b> (or the paper clip), then <b>Document</b>, and choose this file. The text is in the message, and copied too.</p>
+        description={saved.fileOnClipboard ? voiceCopiedNote() : `Saved in Downloads: ${fileName(saved.path)}`}>
+        {saved.fileOnClipboard
+          ? <p>The text is in the message. The voice is saved in Downloads too: {fileName(saved.path)}</p>
+          : <p><b>{ATTACH_NOTE}</b>: in the chat, click <b>+</b> (or the paper clip), then <b>Document</b>, and choose this file. The text is in the message, and copied too.</p>}
+        {saved.textCut && <p className="el-caption el-secondary">The message has the start of the text: it was too long to send whole. After attaching the voice, copy the whole text and paste it there.</p>}
       </Dialog>
     );
   }
@@ -360,15 +382,15 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
       description={text === null ? "There is no transcript yet: only the link can be sent." : "Opens WhatsApp, or WhatsApp Web, with the message ready to send to the person you choose."}
       actions={<Button onClick={onClose}>Cancel</Button>}>
       <div className="el-choices">
-        <Button variant="primary" disabled={!text || !!working} loading={working === "text"} loadingLabel="Opening WhatsApp…" onClick={() => void sendText()}>Text only</Button>
+        <Button variant="primary" disabled={!text} aria-disabled={busy} loading={working === "text"} loadingLabel="Opening WhatsApp…" onClick={() => void sendText()}>Text only</Button>
         <p className="el-caption el-secondary">The text of the view you are reading.</p>
         {hasAudio && (
           <>
-            <Button disabled={!text || !!working} loading={working === "voice"} loadingLabel="Saving the voice…" onClick={() => void sendVoice()}>Text and voice</Button>
-            <p className="el-caption el-secondary">The text in the message; the voice saved in Downloads to attach.</p>
+            <Button disabled={!text} aria-disabled={busy} loading={working === "voice"} loadingLabel="Sharing the voice…" onClick={() => void sendVoice()}>Text and voice</Button>
+            <p className="el-caption el-secondary">The text and the voice, sent through WhatsApp's share (also saved in Downloads).</p>
           </>
         )}
-        <Button disabled={loading || !!working} loading={working === "link"} loadingLabel="Making the link…" onClick={() => void sendLink()}>Link (works for 7 days)</Button>
+        <Button disabled={loading} aria-disabled={busy} loading={working === "link"} loadingLabel="Making the link…" onClick={() => void sendLink()}>Link (works for 7 days)</Button>
         <p className="el-caption el-secondary">Anyone with it can read{hasAudio ? " and listen" : ""} for 7 days.</p>
       </div>
     </Dialog>
