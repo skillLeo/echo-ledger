@@ -1501,16 +1501,22 @@ pub async fn save_audio_downloads(app: AppHandle, id: String) -> AppResult<Strin
 
 async fn audio_to_downloads(app: &AppHandle, id: &str) -> AppResult<String> {
     let state = app.state::<AppState>();
+    let (url, name) = audio_source(app, id).await?;
+    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+    let path = export_target(&dir, &name);
+    state.api()?.download_audio(&url, &path).await?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// The recording's audio link and its file name; an error when the audio is not on the server.
+async fn audio_source(app: &AppHandle, id: &str) -> AppResult<(String, String)> {
+    let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    let api = state.api()?;
-    let detail = api.session(id).await?;
+    let detail = state.api()?.session(id).await?;
     let Some(url) = detail.get("playback_url").and_then(serde_json::Value::as_str).filter(|u| !u.is_empty()).map(str::to_string) else {
         return Err(AppError::msg("The audio of this recording is not on the server, so there is nothing to save yet."));
     };
-    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
-    let path = export_target(&dir, &crate::files::audio_file_name(&detail));
-    api.download_audio(&url, &path).await?;
-    Ok(path.to_string_lossy().into_owned())
+    Ok((url, crate::files::audio_file_name(&detail)))
 }
 
 /// Send to WhatsApp (v1.6, P5.5): opens `wa.me` with the text (WhatsApp, else WhatsApp Web). True when the text was
@@ -1526,19 +1532,36 @@ pub fn whatsapp_open(app: AppHandle, text: String) -> AppResult<bool> {
     Ok(cut)
 }
 
-/// Send to WhatsApp → Text and voice (F6): the audio saved in Downloads (as `save_audio_downloads`), then the text and
-/// the file handed to the system's share (WhatsApp's share on the Mac, the Share window on Windows). When that cannot
-/// be used: wa.me with the text as before, and the file on the clipboard to paste into the chat (`share_sheet`).
+/// Send to WhatsApp → Text and voice (F6): the audio kept in the app's cache (one copy per recording, used again on a
+/// retry), then the text and the file handed to the system's share (WhatsApp's share on the Mac, the Share window on
+/// Windows). When that cannot be used, or `share` is false (the window's "Open WhatsApp with the text instead"): the
+/// voice in Downloads (one copy per recording), wa.me with the text as before, and the file on the clipboard to paste
+/// into the chat (`share_sheet`).
 #[tauri::command]
-pub async fn whatsapp_share_voice(app: AppHandle, id: String, text: String) -> AppResult<crate::share_sheet::ShareOutcome> {
+pub async fn whatsapp_share_voice(app: AppHandle, id: String, text: String, share: Option<bool>) -> AppResult<crate::share_sheet::ShareOutcome> {
     use crate::share_sheet::{self, ShareOutcome};
     if text.trim().is_empty() {
         return Err(AppError::msg("There is nothing to send yet."));
     }
-    let path = audio_to_downloads(&app, &id).await?;
-    if let Some(outcome) = share_sheet::settled(&share_sheet::share(&app, text.trim(), &path).await) {
+    let (url, name) = audio_source(&app, &id).await?;
+    let state = app.state::<AppState>();
+    let root = app.path().app_cache_dir().unwrap_or_else(|_| state.data_dir.clone()).join("whatsapp-share");
+    share_sheet::clear_other_shares(&root, &id);
+    let dir = root.join(share_sheet::cache_key(&id));
+    let cached = dir.join(&name);
+    if !share_sheet::is_cached(&cached) {
+        // A renamed recording's older copy goes with it.
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir)?;
+        state.api()?.download_audio(&url, &cached).await?;
+    }
+    if share.unwrap_or(true)
+        && let Some(outcome) = share_sheet::settled(&share_sheet::share(&app, text.trim(), &cached.to_string_lossy()).await)
+    {
         return Ok(outcome);
     }
+    let downloads = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+    let path = share_sheet::downloads_copy(&downloads, &name, &cached)?.to_string_lossy().into_owned();
     let file_on_clipboard = share_sheet::file_to_clipboard(&app, &path).await;
     let text_cut = whatsapp_open(app, text)?;
     Ok(ShareOutcome::Fallback { path, file_on_clipboard, text_cut, paste_keys: share_sheet::paste_keys(std::env::consts::OS).into() })

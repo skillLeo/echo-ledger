@@ -289,6 +289,15 @@ const commands: Record<string, (args: Args) => unknown> = {
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
   whatsapp_open: () => false,
   save_audio_downloads: () => "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
+  // Text and voice (F6): no share here, so the fallback: the voice in Downloads and on the clipboard, pasted with the
+  // system's keys ("-mac": ⌘V).
+  whatsapp_share_voice: () => ({
+    kind: "fallback",
+    path: mac ? "/Users/ayesha/Downloads/Kick-off Contoso website 2026-11-06.ogg" : "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
+    fileOnClipboard: true,
+    textCut: false,
+    pasteKeys: mac ? "⌘V" : "Ctrl+V",
+  }),
   update_status: () =>
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }

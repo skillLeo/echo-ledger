@@ -40,6 +40,7 @@ describe("Send to WhatsApp on the computer (v1.6, P5.5)", () => {
     renderSheet();
     expect(screen.getByRole("dialog", { name: "Send to WhatsApp" })).toBeInTheDocument();
     for (const name of ["Text only", "Text and voice", "Link (works for 7 days)"]) expect(screen.getByRole("button", { name })).toBeEnabled();
+    expect(screen.getByText("The text and the voice, ready for WhatsApp.")).toBeInTheDocument();
   });
 
   it("Text only: copies the text and opens WhatsApp with it", async () => {
@@ -60,14 +61,37 @@ describe("Send to WhatsApp on the computer (v1.6, P5.5)", () => {
   });
 
   it("Text and voice: hands the text and the voice to WhatsApp's share and closes once it is shared (F6)", async () => {
-    respond("whatsapp_share_voice", { kind: "shared" });
+    respond("whatsapp_share_voice", { kind: "shared", toWhatsApp: true });
     const props = renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Text and voice" }));
     await waitFor(() => expect(props.onClose).toHaveBeenCalled());
-    expect(callsOf("whatsapp_share_voice")).toEqual([{ id: "s1", text: TEXT }]);
+    expect(callsOf("whatsapp_share_voice")).toEqual([{ id: "s1", text: TEXT, share: true }]);
     expect(callsOf("save_audio_downloads")).toHaveLength(0);
     expect(callsOf("whatsapp_open")).toHaveLength(0);
     expect(props.notify).toHaveBeenCalledWith("Text and voice sent to WhatsApp", false, anyTarget);
+  });
+
+  it("says shared, not sent to WhatsApp, when another app took it in the Share window (F6 review)", async () => {
+    respond("whatsapp_share_voice", { kind: "shared", toWhatsApp: false });
+    const props = renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Text and voice" }));
+    await waitFor(() => expect(props.onClose).toHaveBeenCalled());
+    expect(props.notify).toHaveBeenCalledWith("Text and voice shared", false, anyTarget);
+  });
+
+  it("when the share's end is not known it claims nothing, stays open and offers WhatsApp with the text (F6 review)", async () => {
+    respond("whatsapp_share_voice", { kind: "opened" });
+    const props = renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Text and voice" }));
+    expect(await screen.findByTestId("whatsapp-opened")).toHaveTextContent("The Share window is open: choose WhatsApp there, then the chat.");
+    expect(props.notify).not.toHaveBeenCalled();
+    expect(props.onClose).not.toHaveBeenCalled();
+    respond("whatsapp_share_voice", { kind: "fallback", path: "C:\\Users\\me\\Downloads\\Kick-off.ogg", fileOnClipboard: true, textCut: false, pasteKeys: "Ctrl+V" });
+    fireEvent.click(screen.getByRole("button", { name: "Open WhatsApp with the text instead" }));
+    expect(await screen.findByTestId("whatsapp-paste")).toHaveTextContent("press Ctrl+V to attach it");
+    expect(callsOf("whatsapp_share_voice")).toEqual([{ id: "s1", text: TEXT, share: true }, { id: "s1", text: TEXT, share: false }]);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(props.onClose).toHaveBeenCalled();
   });
 
   it("Text and voice without the share: saved in Downloads, WhatsApp opened, the file on the clipboard to paste (F6)", async () => {
@@ -123,13 +147,17 @@ describe("Send to WhatsApp on the computer (v1.6, P5.5)", () => {
     respond("share_create", { id: "sh9", session_id: "s1", url: "https://ledger.example.test/s/tok" });
     const props = renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Text and voice" }));
-    const running = await screen.findByRole("button", { name: "Saving the voice…" });
+    const running = await screen.findByRole("button", { name: "Sending…" });
     expect(running).toHaveAttribute("aria-busy", "true");
+    expect(running).not.toHaveAttribute("aria-disabled");
     const textOnly = screen.getByRole("button", { name: "Text only" });
     const link = screen.getByRole("button", { name: "Link (works for 7 days)" });
     expect(textOnly).toBeEnabled();
     expect(link).toBeEnabled();
     expect(textOnly).not.toHaveAttribute("aria-busy");
+    // Not greyed out, but told to assistive technology that they wait.
+    expect(textOnly).toHaveAttribute("aria-disabled", "true");
+    expect(link).toHaveAttribute("aria-disabled", "true");
     fireEvent.click(textOnly);
     fireEvent.click(link);
     fireEvent.click(running);
@@ -137,7 +165,7 @@ describe("Send to WhatsApp on the computer (v1.6, P5.5)", () => {
     expect(callsOf("whatsapp_open")).toHaveLength(0);
     expect(callsOf("share_create")).toHaveLength(0);
     expect(callsOf("whatsapp_share_voice")).toHaveLength(1);
-    finish({ kind: "shared" });
+    finish({ kind: "shared", toWhatsApp: true });
     await waitFor(() => expect(props.onClose).toHaveBeenCalled());
   });
 

@@ -1,9 +1,10 @@
 // Send to WhatsApp (v1.6, P5.5), as on the phone: the text of the view being read, the text with the voice, or a link
 // that works for 7 days. The computer opens wa.me (WhatsApp, else WhatsApp Web) with the message ready, and the text
 // goes on the clipboard too (a long one is cut in the message; the core says so).
-// Text and voice (F6): the core saves the audio in Downloads and hands the text and the file to the system's share
-// (WhatsApp's). Without it, wa.me opens with the text and the file is put on the clipboard, so pasting in the chat
-// attaches it; the text is then not copied over it (it is in the message; when cut, a button copies the whole text).
+// Text and voice (F6): the core hands the text and the voice to the system's share (WhatsApp's). Without it, the voice
+// is saved in Downloads, wa.me opens with the text and the file is put on the clipboard, so pasting in the chat attaches
+// it; the text is then not copied over it (it is in the message; when cut, a button copies the whole text). A share
+// whose end is not known (Windows 10 does not say) claims nothing: the sheet stays and offers wa.me with the text.
 // While one way runs, only its button shows it; the others look as they are and a click on them is ignored.
 import { useRef, useState } from "react";
 import { api, errorMessage, type WhatsAppVoiceOutcome } from "../../lib/ipc";
@@ -46,6 +47,8 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
   const running = useRef(false);
   const [saved, setSaved] = useState<Extract<WhatsAppVoiceOutcome, { kind: "fallback" }> | null>(null);
   const [copiedWhole, setCopiedWhole] = useState(false);
+  /** The share window is open and its end is not known. */
+  const [opened, setOpened] = useState(false);
 
   const copy = async (value: string) => {
     try {
@@ -85,12 +88,15 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
     onClose();
   });
 
-  const sendVoice = () => run("voice", async () => {
+  /** `share` false: straight to wa.me with the text and the file on the clipboard (after a share whose end is unknown). */
+  const sendVoice = (share = true) => run("voice", async () => {
     if (!text) return;
-    const outcome = await api.whatsappShareVoice(sessionId, text);
+    const outcome = await api.whatsappShareVoice(sessionId, text, share);
     if (outcome.kind === "shared") {
-      notify("Text and voice sent to WhatsApp", false, NO_TARGET);
+      notify(outcome.toWhatsApp ? "Text and voice sent to WhatsApp" : "Text and voice shared", false, NO_TARGET);
       onClose();
+    } else if (outcome.kind === "opened") {
+      setOpened(true);
     } else if (outcome.kind === "fallback") {
       // The clipboard holds the file when it could be put there; otherwise the text, as before.
       if (!outcome.fileOnClipboard) await copy(text);
@@ -108,13 +114,28 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
     onClose();
   });
 
+  /** Another way runs: this button waits (said to assistive technology, not greyed out). */
+  const waits = (kind: "text" | "voice" | "link") => (working !== null && working !== kind) || undefined;
+
   const copyWhole = async () => {
     if (text && (await copy(text))) setCopiedWhole(true);
   };
 
   return (
     <Sheet title="Send to WhatsApp" onClose={onClose} busy={working !== null} className="whatsapp-sheet">
-      {saved ? (
+      {opened && !saved ? (
+        <div className="whatsapp-done" aria-live="polite">
+          <p data-testid="whatsapp-opened"><b>The Share window is open: choose WhatsApp there, then the chat.</b></p>
+          <p className="small muted">Closed it, or WhatsApp is not in the list? Open WhatsApp with the text, and paste the voice there.</p>
+          <div className="row sheet-actions">
+            <button type="button" className="btn" aria-busy={working === "voice" || undefined} onClick={() => void sendVoice(false)}>
+              {working === "voice" ? "Opening WhatsApp…" : "Open WhatsApp with the text instead"}
+            </button>
+            <span className="spacer" />
+            <button type="button" className="btn primary" onClick={onClose}>Done</button>
+          </div>
+        </div>
+      ) : saved ? (
         <div className="whatsapp-done" aria-live="polite">
           <p className="whatsapp-saved"><CheckIcon size={16} />Saved in Downloads: <b dir="auto">{fileName(saved.path)}</b></p>
           {saved.fileOnClipboard ? (
@@ -140,19 +161,19 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
           <p className="small muted">Opens WhatsApp, or WhatsApp Web, with the message ready to send to the person you choose.</p>
           {!text && <p className="small muted" data-testid="whatsapp-no-text">There is no transcript yet: only the link can be sent.</p>}
           <div className="whatsapp-options">
-            <button type="button" className="btn primary whatsapp-option" disabled={!text} aria-busy={working === "text" || undefined} onClick={() => void sendText()}>
+            <button type="button" className="btn primary whatsapp-option" disabled={!text} aria-busy={working === "text" || undefined} aria-disabled={waits("text")} onClick={() => void sendText()}>
               {working === "text" ? "Opening WhatsApp…" : "Text only"}
             </button>
             <span className="small muted">The text of the view you are reading.</span>
             {hasAudio && (
               <>
-                <button type="button" className="btn whatsapp-option" disabled={!text} aria-busy={working === "voice" || undefined} onClick={() => void sendVoice()}>
-                  {working === "voice" ? "Saving the voice…" : "Text and voice"}
+                <button type="button" className="btn whatsapp-option" disabled={!text} aria-busy={working === "voice" || undefined} aria-disabled={waits("voice")} onClick={() => void sendVoice()}>
+                  {working === "voice" ? "Sending…" : "Text and voice"}
                 </button>
-                <span className="small muted">The text and the voice, sent through WhatsApp's share (also saved in Downloads).</span>
+                <span className="small muted">The text and the voice, ready for WhatsApp.</span>
               </>
             )}
-            <button type="button" className="btn whatsapp-option" aria-busy={working === "link" || undefined} onClick={() => void sendLink()}>
+            <button type="button" className="btn whatsapp-option" aria-busy={working === "link" || undefined} aria-disabled={waits("link")} onClick={() => void sendLink()}>
               {working === "link" ? "Making the link…" : "Link (works for 7 days)"}
             </button>
             <span className="small muted">Anyone with it can read{hasAudio ? " and listen" : ""} for 7 days.</span>

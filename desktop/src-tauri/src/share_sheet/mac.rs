@@ -36,7 +36,8 @@ define_class!(
     unsafe impl NSSharingServiceDelegate for ShareDelegate {
         #[unsafe(method(sharingService:didShareItems:))]
         fn did_share(&self, _service: &NSSharingService, _items: &NSArray) {
-            self.answer(Native::Shared);
+            // The service is WhatsApp's own (found by its title).
+            self.answer(Native::Shared { to_whatsapp: true });
         }
 
         #[unsafe(method(sharingService:didFailToShareItems:error:))]

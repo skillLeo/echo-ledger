@@ -1,15 +1,23 @@
 //! Send to WhatsApp → Text and voice (F6): the voice goes to WhatsApp with the text, without the person finding the
-//! file in Downloads. The audio is saved in Downloads first (a stable place), then handed to the system's own share:
+//! file in Downloads. The audio is kept in the app's cache, one copy per recording (a retry downloads nothing again, and
+//! only the last recording's copy is kept), and handed to the system's own share:
 //! - macOS: WhatsApp's share extension (`NSSharingService`) when its WhatsApp has one (`mac`);
 //! - Windows: the Share window, where WhatsApp is a target (`DataTransferManager`, `win`).
 //!
-//! When neither can (WhatsApp not installed, no share service for it, another system, any error), the window falls back to
-//! what it did before (wa.me with the text) and puts the audio file on the clipboard, so ⌘V / Ctrl+V in the chat
-//! attaches it. The clipboard then holds the file, not the text: wa.me already puts the text in the message. When the
-//! text had to be cut to fit the address, the window says so and offers to copy the whole text after the file.
+//! Nothing goes to Downloads unless it is needed: a share that was sent or closed leaves no file behind there. When the
+//! share cannot be used (WhatsApp not installed, no share service for it, another system, any error), the window falls
+//! back to what it did before: the voice in Downloads (one copy per recording, used again on a retry) and wa.me with the
+//! text, plus the file on the clipboard, so ⌘V / Ctrl+V in the chat attaches it. The clipboard then holds the file, not
+//! the text: wa.me already puts the text in the message. When the text had to be cut to fit the address, the window says
+//! so and offers to copy the whole text after the file.
+//!
+//! A share whose end is not known is never taken as sent: Windows before build 20348 does not say when its Share window
+//! is closed, so there the command answers `Opened` as soon as the window is shown, and so does a share that gives no
+//! answer within `SHARE_WAIT`. The window then stays open and offers the fallback.
 //!
 //! The choices are small pure functions below, tested here; the native calls stay thin.
 
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -23,8 +31,14 @@ mod win;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ShareOutcome {
-    /// The system's share took the text and the voice (the person chose a chat there).
-    Shared,
+    /// The system's share took the text and the voice (the person chose a chat there); `to_whatsapp` when the target
+    /// was WhatsApp (else another app the person chose in the Share window).
+    Shared {
+        #[serde(rename = "toWhatsApp")]
+        to_whatsapp: bool,
+    },
+    /// The share was shown and its end is not known (Windows 10, or no answer in time): nothing is claimed.
+    Opened,
     /// wa.me opened with the text; the voice is saved at `path` and, when `file_on_clipboard`, on the clipboard to
     /// paste with `paste_keys`. `text_cut`: the text was too long for the address and only its start is in the message.
     Fallback { path: String, file_on_clipboard: bool, text_cut: bool, paste_keys: String },
@@ -35,8 +49,9 @@ pub enum ShareOutcome {
 /// What the native share answered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Native {
-    Shared,
+    Shared { to_whatsapp: bool },
     Cancelled,
+    Opened,
     /// It could not share; the reason is logged and the fallback runs.
     Unavailable(String),
 }
@@ -44,21 +59,22 @@ pub enum Native {
 /// The share's answer as the window's outcome, or `None` when the fallback must run.
 pub fn settled(native: &Native) -> Option<ShareOutcome> {
     match native {
-        Native::Shared => Some(ShareOutcome::Shared),
+        Native::Shared { to_whatsapp } => Some(ShareOutcome::Shared { to_whatsapp: *to_whatsapp }),
+        Native::Opened => Some(ShareOutcome::Opened),
         Native::Cancelled => Some(ShareOutcome::Cancelled),
         Native::Unavailable(_) => None,
     }
 }
 
-/// How long the share may stay open before the window stops waiting. The share window was shown, so the voice is taken
-/// as handed over; the person can still close the sheet at any time.
-pub const SHARE_WAIT: Duration = Duration::from_secs(5 * 60);
+/// How long the window waits for a share that says how it ended (WhatsApp's on the Mac, Windows from build 20348). When
+/// it runs out the share is still open somewhere: the answer is `Opened`, never `Shared`.
+pub const SHARE_WAIT: Duration = Duration::from_secs(2 * 60);
 
-/// The answer after waiting: `None` when the wait ran out (taken as shared, see `SHARE_WAIT`), `Some(None)` when the
-/// share went away without answering.
+/// The answer after waiting: `None` when the wait ran out (`Opened`, see `SHARE_WAIT`), `Some(None)` when the share
+/// went away without answering.
 pub fn after_wait(answer: Option<Option<Native>>) -> Native {
     match answer {
-        None => Native::Shared,
+        None => Native::Opened,
         Some(None) => Native::Unavailable("the share ended without an answer".into()),
         Some(Some(native)) => native,
     }
@@ -81,6 +97,56 @@ pub const MAC_WHATSAPP_BUNDLES: [&str; 2] = ["net.whatsapp.WhatsApp", "desktop.W
 pub const WINDOWS_WHATSAPP_FAMILY: &str = "5319275A.WhatsAppDesktop_cv1g1gvanyjgm";
 /// The Share window's title on Windows.
 pub const SHARE_TITLE: &str = "Send to WhatsApp";
+/// The first Windows build whose share says it was closed without sending (`DataPackage.ShareCanceled`).
+pub const SHARE_CANCELED_BUILD: u32 = 20348;
+/// What the Share window shows when the voice file could not be added.
+pub const ATTACH_FAILED: &str = "EchoLedger could not add the voice file. Close this window: EchoLedger opens WhatsApp with the text instead.";
+
+/// Windows says a closed Share window from this build on; an unknown build is taken as not saying.
+pub fn says_cancel(build: Option<u32>) -> bool {
+    build.is_some_and(|b| b >= SHARE_CANCELED_BUILD)
+}
+
+/// The Share window's chosen target is WhatsApp (its app id starts with WhatsApp's package family).
+pub fn is_whatsapp_target(app_user_model_id: &str) -> bool {
+    app_user_model_id.to_lowercase().starts_with(&format!("{}!", WINDOWS_WHATSAPP_FAMILY.to_lowercase()))
+}
+
+/// The cache folder's name for a recording: its id's letters, digits, `-` and `_` only (the id comes from the window, so
+/// it never names another folder), at most 64 of them.
+pub fn cache_key(id: &str) -> String {
+    let key: String = id.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_')).take(64).collect();
+    if key.is_empty() { "recording".into() } else { key }
+}
+
+/// Removes every recording's share copy under `root` but `keep_id`'s (only the last one shared is kept).
+pub fn clear_other_shares(root: &Path, keep_id: &str) {
+    let keep = cache_key(keep_id);
+    let Ok(entries) = std::fs::read_dir(root) else { return };
+    for entry in entries.flatten() {
+        if entry.file_name().to_string_lossy() != keep {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
+/// A finished copy of the recording is there (a download in progress is written beside it as `.part`).
+pub fn is_cached(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() > 0)
+}
+
+/// The voice in Downloads for the fallback: the file already there under `name` when it is this copy (same size),
+/// else a copy under a free name.
+pub fn downloads_copy(dir: &Path, name: &str, source: &Path) -> std::io::Result<PathBuf> {
+    let size = std::fs::metadata(source)?.len();
+    let there = dir.join(name);
+    if std::fs::metadata(&there).is_ok_and(|m| m.is_file() && m.len() == size) {
+        return Ok(there);
+    }
+    let target = crate::commands::export_target(dir, name);
+    std::fs::copy(source, &target)?;
+    Ok(target)
+}
 
 /// `NSUserCancelledError` in `NSCocoaErrorDomain`: the person closed a share without sending.
 pub fn is_cancel(domain: &str, code: isize) -> bool {
@@ -129,7 +195,7 @@ pub async fn file_to_clipboard(app: &tauri::AppHandle, path: &str) -> bool {
     #[cfg(target_os = "macos")]
     return mac::file_to_clipboard(app, path).await;
     #[cfg(windows)]
-    return win::file_to_clipboard(path).await;
+    return win::file_to_clipboard(app, path).await;
     #[cfg(not(any(windows, target_os = "macos")))]
     false
 }
@@ -155,16 +221,88 @@ mod tests {
 
     #[test]
     fn only_an_unavailable_share_falls_back() {
-        assert_eq!(settled(&Native::Shared), Some(ShareOutcome::Shared));
+        assert_eq!(settled(&Native::Shared { to_whatsapp: true }), Some(ShareOutcome::Shared { to_whatsapp: true }));
+        assert_eq!(settled(&Native::Shared { to_whatsapp: false }), Some(ShareOutcome::Shared { to_whatsapp: false }));
+        assert_eq!(settled(&Native::Opened), Some(ShareOutcome::Opened));
         assert_eq!(settled(&Native::Cancelled), Some(ShareOutcome::Cancelled));
         assert_eq!(settled(&Native::Unavailable("no WhatsApp".into())), None);
     }
 
     #[test]
-    fn a_share_left_open_counts_as_shared_and_a_lost_one_falls_back() {
-        assert_eq!(after_wait(None), Native::Shared);
+    fn a_share_left_open_is_never_taken_as_sent_and_a_lost_one_falls_back() {
+        assert_eq!(after_wait(None), Native::Opened, "no answer in time: open, its end unknown");
         assert!(matches!(after_wait(Some(None)), Native::Unavailable(_)));
         assert_eq!(after_wait(Some(Some(Native::Cancelled))), Native::Cancelled);
+    }
+
+    #[test]
+    fn windows_says_a_closed_share_window_only_from_build_20348() {
+        assert!(!says_cancel(Some(19045)), "Windows 10 22H2");
+        assert!(!says_cancel(Some(20347)));
+        assert!(says_cancel(Some(20348)));
+        assert!(says_cancel(Some(22631)), "Windows 11");
+        assert!(!says_cancel(None), "unknown: treated as not saying");
+    }
+
+    #[test]
+    fn tells_whatsapp_from_another_share_target() {
+        assert!(is_whatsapp_target("5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App"));
+        assert!(is_whatsapp_target("5319275a.whatsappdesktop_cv1g1gvanyjgm!app"));
+        assert!(!is_whatsapp_target("microsoft.windowscommunicationsapps_8wekyb3d8bbwe!microsoft.windowslive.mail"));
+        assert!(!is_whatsapp_target(""));
+    }
+
+    #[test]
+    fn a_recording_has_one_share_folder_named_safely() {
+        assert_eq!(cache_key("0b6f6a3e-1c2d-4e5f-9a8b-7c6d5e4f3a2b"), "0b6f6a3e-1c2d-4e5f-9a8b-7c6d5e4f3a2b");
+        assert_eq!(cache_key("../../etc/x"), "etcx");
+        assert_eq!(cache_key("a\\b:c"), "abc");
+        assert_eq!(cache_key(".."), "recording");
+        assert_eq!(cache_key(&"x".repeat(200)).len(), 64);
+    }
+
+    #[test]
+    fn only_the_last_recordings_share_copy_is_kept() {
+        let root = tempfile::tempdir().unwrap();
+        for id in ["old", "keep"] {
+            std::fs::create_dir_all(root.path().join(id)).unwrap();
+            std::fs::write(root.path().join(id).join("Call.ogg"), b"audio").unwrap();
+        }
+        clear_other_shares(root.path(), "keep");
+        assert!(!root.path().join("old").exists());
+        assert!(root.path().join("keep").join("Call.ogg").exists());
+        clear_other_shares(&root.path().join("missing"), "keep");
+    }
+
+    #[test]
+    fn a_kept_share_copy_is_used_again_and_a_partial_one_is_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Call.ogg");
+        assert!(!is_cached(&file));
+        std::fs::write(&file, b"").unwrap();
+        assert!(!is_cached(&file), "an empty file is not a recording");
+        std::fs::write(&file, b"audio").unwrap();
+        assert!(is_cached(&file));
+    }
+
+    #[test]
+    fn the_downloads_copy_is_made_once_per_recording() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("cache.ogg");
+        std::fs::write(&source, b"the voice").unwrap();
+        let downloads = dir.path().join("Downloads");
+        std::fs::create_dir_all(&downloads).unwrap();
+        let first = downloads_copy(&downloads, "Kick-off 2026-11-06.ogg", &source).unwrap();
+        assert_eq!(first, downloads.join("Kick-off 2026-11-06.ogg"));
+        assert_eq!(std::fs::read(&first).unwrap(), b"the voice");
+        let again = downloads_copy(&downloads, "Kick-off 2026-11-06.ogg", &source).unwrap();
+        assert_eq!(again, first, "a retry uses the same file, no (2)");
+        assert_eq!(std::fs::read_dir(&downloads).unwrap().count(), 1);
+        // Another file of that name (another recording, or changed) is left alone.
+        std::fs::write(&first, b"something else entirely").unwrap();
+        let other = downloads_copy(&downloads, "Kick-off 2026-11-06.ogg", &source).unwrap();
+        assert_eq!(other, downloads.join("Kick-off 2026-11-06 (2).ogg"));
+        assert_eq!(std::fs::read(&first).unwrap(), b"something else entirely");
     }
 
     #[test]
@@ -182,7 +320,8 @@ mod tests {
 
     #[test]
     fn the_outcome_reaches_the_window_in_camel_case() {
-        assert_eq!(serde_json::to_value(ShareOutcome::Shared).unwrap(), serde_json::json!({"kind": "shared"}));
+        assert_eq!(serde_json::to_value(ShareOutcome::Shared { to_whatsapp: true }).unwrap(), serde_json::json!({"kind": "shared", "toWhatsApp": true}));
+        assert_eq!(serde_json::to_value(ShareOutcome::Opened).unwrap(), serde_json::json!({"kind": "opened"}));
         assert_eq!(serde_json::to_value(ShareOutcome::Cancelled).unwrap(), serde_json::json!({"kind": "cancelled"}));
         let fallback = ShareOutcome::Fallback { path: "/d/Call.m4a".into(), file_on_clipboard: true, text_cut: false, paste_keys: "⌘V".into() };
         assert_eq!(
