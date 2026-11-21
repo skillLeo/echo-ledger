@@ -55,7 +55,8 @@
     <string name="v2_rec_export_pack_zip">میٹنگ پیک (ZIP)</string>
     <string name="v2_rec_export_not_ready">ٹرانسکرپٹ تیار ہونے کے بعد ایکسپورٹ ہو سکے گا۔</string>
     <string name="v2_rec_copy">کاپی کریں</string>
-    <string name="v2_rec_copy_text">متن کاپی کریں</string>
+    <string name="v2_rec_copy_main">متن وقت کے بغیر کاپی کریں</string>
+    <string name="v2_rec_copy_more">کاپی کے مزید طریقے</string>
     <string name="v2_rec_copy_with">وقت کے ساتھ کاپی کریں</string>
     <string name="v2_rec_copy_without">وقت کے بغیر کاپی کریں</string>
     <string name="v2_rec_copy_ai">AI کے لیے کاپی کریں</string>

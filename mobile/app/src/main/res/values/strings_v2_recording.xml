@@ -55,7 +55,8 @@
     <string name="v2_rec_export_pack_zip">Meeting pack (ZIP)</string>
     <string name="v2_rec_export_not_ready">Export opens once the transcript is ready.</string>
     <string name="v2_rec_copy">Copy</string>
-    <string name="v2_rec_copy_text">Copy text</string>
+    <string name="v2_rec_copy_main">Copy text without timestamps</string>
+    <string name="v2_rec_copy_more">More ways to copy</string>
     <string name="v2_rec_copy_with">Copy with timestamps</string>
     <string name="v2_rec_copy_without">Copy without timestamps</string>
     <string name="v2_rec_copy_ai">Copy for AI</string>
