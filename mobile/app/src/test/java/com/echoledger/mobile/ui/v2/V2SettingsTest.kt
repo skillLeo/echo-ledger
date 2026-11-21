@@ -101,9 +101,9 @@ class V2SettingsTest {
             val hit = SettingsSearch.search(en, words).firstOrNull { it.item.id == id }
             assertTrue("\"$words\" finds $id", hit != null)
         }
-        // Every one of v2's own caption, dictation and microphone settings (7, 7 and 3) is found by its own name.
-        val own = SettingsTree.extraItems.filter { it.page in setOf("captions", "voice", "mic") }
-        assertEquals(17, own.size)
+        // Every one of v2's own caption, dictation, microphone, game and video settings (7, 7, 3, 4 and 3) is found by its name.
+        val own = SettingsTree.extraItems.filter { it.page in setOf("captions", "voice", "mic", "games", "videos") }
+        assertEquals(24, own.size)
         for (item in own) {
             val title = SettingsSearch.itemTitle(en, item)
             assertTrue("\"$title\" finds ${item.id}", SettingsSearch.search(en, title).any { it.item.id == item.id })
@@ -132,10 +132,10 @@ class V2SettingsTest {
         val ids = SettingsSearch.items().filter { it.page in SettingsTree.nativePages && it.page != SettingsTree.SETUP }.map { it.id }
         assertEquals(emptyList<String>(), ids.filter { it !in lit })
         assertEquals(emptyList<String>(), lit.filter { id -> SettingsSearch.items().none { it.id == id } })
-        // And drawn: each caption, dictation and microphone setting search reaches lights exactly one part of its page.
-        val drawn = listOf("captions", "voice", "mic")
+        // And drawn: each caption, dictation, microphone, game and video setting search reaches lights exactly one part of its page.
+        val drawn = listOf("captions", "voice", "mic", "games", "videos")
         val each = SettingsSearch.items().filter { it.page in drawn }
-        assertEquals(listOf(9, 9, 7), drawn.map { p -> each.count { it.page == p } })
+        assertEquals(listOf(9, 9, 7, 7, 5), drawn.map { p -> each.count { it.page == p } })
         var shown by mutableStateOf<SettingsIndex.Item?>(null)
         val history = com.echoledger.mobile.dictation.DictationHistory.of(
             androidx.test.core.app.ApplicationProvider.getApplicationContext()
@@ -152,6 +152,8 @@ class V2SettingsTest {
                         "captions" -> com.echoledger.mobile.ui.v2.settings.CaptionsPage(s, {}, item.id, {})
                         "voice" -> com.echoledger.mobile.ui.v2.settings.VoicePage(s, {}, history, item.id, {})
                         "mic" -> com.echoledger.mobile.ui.v2.settings.MicPage(s, {}, item.id, {}, helperConnected = true)
+                        "games" -> com.echoledger.mobile.ui.v2.settings.GamesPage(s, {}, item.id, {})
+                        "videos" -> com.echoledger.mobile.ui.v2.settings.VideosPage(s, {}, item.id, {})
                         else -> com.echoledger.mobile.ui.v2.settings.CaptionsPage(s, {}, null, {})
                     }
                 }

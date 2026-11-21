@@ -195,6 +195,10 @@ fun V2SettingsScreen(
 
                 "captions" -> CaptionsPage(settings, vm::updateSettings, r.highlight, back)
 
+                "games" -> GamesPage(settings, vm::updateSettings, r.highlight, back)
+
+                "videos" -> VideosPage(settings, vm::updateSettings, r.highlight, back)
+
                 "mic" -> {
                     val helper by vm.helper.collectAsState()
                     val live by com.echoledger.mobile.recording.RecordingService.live.collectAsState()
