@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\SessionStatus;
 use App\Enums\WorkspaceRole;
+use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Plan;
@@ -11,6 +12,7 @@ use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\TranscribeLater;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Support\Facades\Storage;
 use Tests\Feature\Api\Support\Fixtures;
@@ -227,4 +229,30 @@ it('keeps "Always transcribe calls in this project" on the project', function ()
     $this->patchJson("/api/clients/{$client->id}", ['transcribe_calls' => 'always'])->assertOk()->assertJsonPath('data.transcribe_calls', 'always');
     $this->patchJson("/api/clients/{$client->id}", ['transcribe_calls' => 'sometimes'])->assertStatus(422);
     expect($client->fresh()->transcribe_calls)->toBe('always');
+});
+
+describe('for the web console (TranscribeLater, no device)', function () {
+    it('lets a person start only their own audio-only recordings, and never a viewer', function () {
+        $workspace = Workspace::query()->findOrFail($this->device->workspace_id);
+        $mine = audioOnlyCall($this);
+        $member = User::factory()->create();
+        app(Workspaces::class)->addMember($workspace, $member);
+        $theirs = CaptureSession::factory()->create(['user_id' => $member->id, 'workspace_id' => $workspace->id, 'status' => SessionStatus::AudioOnly, 'transcribe' => false]);
+        $viewer = User::factory()->create();
+        app(Workspaces::class)->addMember($workspace, $viewer, WorkspaceRole::Viewer);
+        $later = app(TranscribeLater::class);
+        app('auth')->forgetGuards();
+
+        // A viewer starts nothing, one or many.
+        expect(fn () => $later->startFor($viewer, $workspace->id, $mine))->toThrow(ApiError::class, 'viewer')
+            ->and(fn () => $later->startManyFor($viewer, $workspace->id, [$mine]))->toThrow(ApiError::class, 'viewer');
+        // A member starts their own only: another person's recording is not found, one or many.
+        expect(fn () => $later->startFor($member, $workspace->id, $mine))->toThrow(ApiError::class, 'Session not found.');
+        expect($later->startManyFor($member, $workspace->id, [$mine, $theirs->id]))
+            ->toMatchArray(['started' => [$theirs->id], 'skipped' => [['id' => $mine, 'code' => 'not_found']]])
+            ->and($later->estimateManyFor($member, $workspace->id, [$mine])['items'])->toBe([]);
+        expect(CaptureSession::query()->withoutGlobalScopes()->findOrFail($mine)->status)->toBe(SessionStatus::AudioOnly);
+        // The owner starts theirs.
+        expect($later->startFor($this->owner, $workspace->id, $mine)->kind->value)->toBe('final');
+    });
 });

@@ -10,10 +10,14 @@ use App\Enums\TranscriptErrorCode;
 use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Device;
+use App\Models\Scopes\OwnerScope;
+use App\Models\Scopes\WorkspaceScope;
 use App\Models\Transcript;
+use App\Models\User;
 use App\Services\Entitlements\TranscriptionKeys;
 use App\Services\Usage\UsageLedger;
 use App\Services\Workspaces\PlanLimits;
+use App\Services\Workspaces\Workspaces;
 use Illuminate\Support\Collection;
 
 /**
@@ -72,7 +76,11 @@ final class TranscribeLater
         return ['minutes' => $this->minutes($session), 'minutes_left' => $this->minutesLeft((int) $session->workspace_id, (int) $session->user_id)];
     }
 
-    /** POST /api/sessions/{id}/transcribe: the transcript of one of the person's audio-only recordings starts now. */
+    /**
+     * The transcript of an audio-only recording starts now. It checks the recording's state, key and budget, not who
+     * asks: the API reaches it only through the person's own recordings behind `ownContent`. Anything else (the web
+     * console) calls startFor(), which checks both.
+     */
     public function start(CaptureSession $session): Transcript
     {
         if ($session->status !== SessionStatus::AudioOnly) {
@@ -93,11 +101,62 @@ final class TranscribeLater
      */
     public function startMany(Device $device, array $ids): array
     {
-        [$eligible, $skipped] = $this->sort($device, $ids);
+        return $this->startManyIn((int) $device->workspace_id, (int) $device->user_id, $ids);
+    }
+
+    /**
+     * For the web console: [$person] starts the transcript of one of their own audio-only recordings in the workspace.
+     * A viewer is refused (`403 not_allowed`, as the API's `ownContent`), and anyone else's recording, a teammate's
+     * included, is `404 session_not_found`.
+     */
+    public function startFor(User $person, int $workspaceId, string $sessionId): Transcript
+    {
+        app(Workspaces::class)->assertMay($person, $workspaceId, 'ownContent');
+        $session = CaptureSession::query()->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class])
+            ->where('workspace_id', $workspaceId)->where('user_id', $person->id)->find($sessionId);
+        if (! $session instanceof CaptureSession) {
+            throw new ApiError(404, 'session_not_found', 'Session not found.');
+        }
+
+        return $this->start($session);
+    }
+
+    /**
+     * For the web console: "Transcribe selected" as [$person], checked as startFor() checks one, each id against their
+     * own recordings (anyone else's is skipped as not_found).
+     *
+     * @param  list<string>  $ids
+     * @return array{started: list<string>, skipped: list<array{id: string, code: string}>, minutes: int}
+     */
+    public function startManyFor(User $person, int $workspaceId, array $ids): array
+    {
+        app(Workspaces::class)->assertMay($person, $workspaceId, 'ownContent');
+
+        return $this->startManyIn($workspaceId, (int) $person->id, $ids);
+    }
+
+    /**
+     * For the web console: what transcribing [$person]'s own audio-only recordings among [$ids] would use.
+     *
+     * @param  list<string>  $ids
+     * @return array{minutes: int, minutes_left: int|null, items: list<array{id: string, minutes: int}>}
+     */
+    public function estimateManyFor(User $person, int $workspaceId, array $ids): array
+    {
+        return $this->estimateIn($workspaceId, (int) $person->id, $ids);
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return array{started: list<string>, skipped: list<array{id: string, code: string}>, minutes: int}
+     */
+    private function startManyIn(int $workspaceId, int $userId, array $ids): array
+    {
+        [$eligible, $skipped] = $this->sort($workspaceId, $userId, $ids);
         $minutes = (int) $eligible->sum(fn (CaptureSession $s): int => $this->minutes($s));
         if ($eligible->isNotEmpty()) {
             $this->assertKey($eligible->first());
-            $this->assertBudget((int) $device->workspace_id, (int) $device->user_id, $minutes);
+            $this->assertBudget($workspaceId, $userId, $minutes);
         }
         $started = [];
         foreach ($eligible as $session) {
@@ -121,10 +180,19 @@ final class TranscribeLater
      */
     public function estimateMany(Device $device, array $ids): array
     {
-        [$eligible] = $this->sort($device, $ids);
+        return $this->estimateIn((int) $device->workspace_id, (int) $device->user_id, $ids);
+    }
+
+    /**
+     * @param  list<string>  $ids
+     * @return array{minutes: int, minutes_left: int|null, items: list<array{id: string, minutes: int}>}
+     */
+    private function estimateIn(int $workspaceId, int $userId, array $ids): array
+    {
+        [$eligible] = $this->sort($workspaceId, $userId, $ids);
         $items = $eligible->map(fn (CaptureSession $s): array => ['id' => $s->id, 'minutes' => $this->minutes($s)])->values()->all();
 
-        return ['minutes' => array_sum(array_column($items, 'minutes')), 'minutes_left' => $this->minutesLeft((int) $device->workspace_id, (int) $device->user_id), 'items' => $items];
+        return ['minutes' => array_sum(array_column($items, 'minutes')), 'minutes_left' => $this->minutesLeft($workspaceId, $userId), 'items' => $items];
     }
 
     /**
@@ -133,10 +201,12 @@ final class TranscribeLater
      * @param  list<string>  $ids
      * @return array{0: Collection<int, CaptureSession>, 1: list<array{id: string, code: string}>}
      */
-    private function sort(Device $device, array $ids): array
+    private function sort(int $workspaceId, int $userId, array $ids): array
     {
         $ids = array_values(array_unique($ids));
-        $found = CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)
+        // Explicit ids, so the same whoever is signed in: only this person's recordings in this workspace.
+        $found = CaptureSession::query()->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class])
+            ->where('workspace_id', $workspaceId)->where('user_id', $userId)
             ->whereIn('id', $ids)->with(['recordings', 'client'])->get()->keyBy('id');
         $eligible = collect();
         $skipped = [];
