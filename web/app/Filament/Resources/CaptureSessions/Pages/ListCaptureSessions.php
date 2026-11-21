@@ -13,6 +13,7 @@ use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\PlanLimitWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\ConsoleV2;
+use App\Filament\Support\DismissedBanners;
 use App\Filament\Support\LibraryView;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SendsToWhatsApp;
@@ -337,6 +338,23 @@ class ListCaptureSessions extends ListRecords
         $tabs = $this->getCachedTabs();
 
         return isset($tabs['waiting']) && is_numeric($tabs['waiting']->getBadge()) ? (int) $tabs['waiting']->getBadge() : 0;
+    }
+
+    /** Whether the person closed the quiet line and nothing has risen since (DismissedBanners); also for a read-only console. */
+    public function v2WaitingDismissed(): bool
+    {
+        $user = auth()->user();
+
+        return DismissedBanners::hidden($user instanceof User ? $user : null, 'library', ['waiting' => $this->v2Waiting()]);
+    }
+
+    /** The quiet line's ×: hidden until more calls wait than the line said ($seen). */
+    public function dismissV2Waiting(int $seen): void
+    {
+        $user = auth()->user();
+        if ($user instanceof User) {
+            DismissedBanners::dismiss($user, 'library', ['waiting' => $seen], ['waiting' => $this->v2Waiting()]);
+        }
     }
 
     /** The empty state's "Show all recordings": no smart view and no folder. */
