@@ -45,8 +45,11 @@ type Organise =
   | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null }
   | { kind: "rename" | "whatsapp"; item: LibraryItem };
 
-/** How often the list syncs while something uploads or is transcribed (classic's). */
+/** How often the list syncs while something uploads or is transcribed (classic's)… */
 export const RESYNC_MS = 5000;
+/** …for this long; something still under way after it (a transcript stuck waiting) is asked about once a minute. */
+export const RESYNC_FAST_FOR_MS = 10 * 60_000;
+export const RESYNC_SLOW_MS = 60_000;
 /** A transcript is being made for it. */
 const isUnderWay = (i: LibraryItem) => ["pending", "submitted", "processing"].includes(i.transcript?.final_status ?? "");
 
@@ -204,10 +207,16 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const busyItems = (items ?? []).some((i) => !i.deleted && (i.status === "uploading" || isUnderWay(i)));
   useEffect(() => {
     if (!busyItems) return;
-    const timer = window.setInterval(() => {
-      api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e)));
-    }, RESYNC_MS);
-    return () => window.clearInterval(timer);
+    const started = Date.now();
+    let timer = 0;
+    const next = () => {
+      timer = window.setTimeout(() => {
+        api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e)));
+        next();
+      }, Date.now() - started < RESYNC_FAST_FOR_MS ? RESYNC_MS : RESYNC_SLOW_MS);
+    };
+    next();
+    return () => window.clearTimeout(timer);
   }, [busyItems]);
   useEffect(() => {
     if (view === "trash") void loadBin();
@@ -617,7 +626,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
-      onRenamed={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
+      onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
       menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on

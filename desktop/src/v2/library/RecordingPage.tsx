@@ -59,8 +59,8 @@ export type RecordingPageProps = {
   menu: (own: RecordingMenuParts) => MenuItem[];
   /** What the page read about the transcript's views, for the recording's row in the Library. */
   onViews?: (views: TranscriptViewsState) => void;
-  /** The recording was renamed here (its title clicked): the Library shows the new title at once. */
-  onRenamed?: (item: Partial<LibraryItem> & { id: string }) => void;
+  /** The recording changed here (renamed by its title, a label taken off): the Library shows it at once. */
+  onItemChanged?: (item: Partial<LibraryItem> & { id: string }) => void;
 };
 
 const SPEEDS = ["0.5", "0.75", "1", "1.25", "1.5", "1.75", "2"];
@@ -74,11 +74,19 @@ type ShowAs = "original" | TranscriptView;
 const inField = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"]:not(.el-drawer), [role="alertdialog"], [role="menu"], [role="listbox"]'));
 
-export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject, onViews, onRenamed }: RecordingPageProps) {
+export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject, onViews, onItemChanged }: RecordingPageProps) {
   const [sharing, setSharing] = useState(false);
   // Rename by clicking the title (classic's): Enter or leaving the field saves, Esc cancels.
   const [renaming, setRenaming] = useState<string | null>(null);
   const renameDone = useRef(false);
+  // After Enter or Esc the keyboard is back on the title it came from.
+  const titleButton = useRef<HTMLButtonElement>(null);
+  const focusTitle = useRef(false);
+  useEffect(() => {
+    if (renaming !== null || !focusTitle.current) return;
+    focusTitle.current = false;
+    titleButton.current?.focus();
+  }, [renaming]);
   const [tab, setTab] = useState<Tab>("transcript");
   const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string>; bookmarks: Bookmark[]; sizeBytes: number | null }>>({ state: "loading" });
   // An expired playback link is asked for again once (classic's); a second failure says so.
@@ -307,11 +315,12 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     if (renaming === null || renameDone.current) return;
     renameDone.current = true;
     const next = renaming.trim();
+    focusTitle.current = true;
     setRenaming(null);
     if (next === (item.title?.trim() ?? "")) return;
     try {
       const saved = await api.organiseSession(item.id, { title: next || null });
-      onRenamed?.({ id: item.id, title: saved?.data?.title ?? next, title_auto: saved?.data?.title_auto ?? false });
+      onItemChanged?.({ id: item.id, title: saved?.data?.title ?? next, title_auto: saved?.data?.title_auto ?? false });
       onMessage("Renamed");
     } catch (e) {
       onMessage(errorMessage(e));
@@ -337,7 +346,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   /** A label's × on the page: the recording keeps its other labels ("Label removed"). */
   const removeLabel = async (label: string) => {
     try {
-      await api.organiseSession(item.id, { labels: (item.labels ?? []).filter((l) => l !== label) });
+      const left = (item.labels ?? []).filter((l) => l !== label);
+      const saved = await api.organiseSession(item.id, { labels: left });
+      onItemChanged?.({ id: item.id, labels: saved?.data?.labels ?? left });
       onMessage(`Label removed: ${label}`);
     } catch (e) {
       onMessage(errorMessage(e));
@@ -512,11 +523,11 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               onChange={(e) => setRenaming(e.target.value)} onBlur={() => void saveTitle()} onFocus={(e) => e.currentTarget.select()}
               onKeyDown={(e) => {
                 if (e.key === "Enter") { e.preventDefault(); void saveTitle(); }
-                if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); renameDone.current = true; setRenaming(null); }
+                if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); renameDone.current = true; focusTitle.current = true; setRenaming(null); }
               }} />
           ) : (
             <h1 className="el-title-l" dir="auto">
-              <button type="button" className="el-recording__title" title="Click to rename" aria-describedby="el-recording-rename-hint" onClick={startRename}>
+              <button type="button" ref={titleButton} className="el-recording__title" title="Click to rename" aria-describedby="el-recording-rename-hint" onClick={startRename}>
                 {item.title?.trim() || "Recording"}
               </button>
             </h1>
@@ -535,7 +546,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           </p>
           {(item.labels?.length ?? 0) > 0 && (
             <ul className="el-recording__labels" aria-label="Labels">
-              {item.labels!.map((l) => <li key={l}><LabelChip name={l} colour={null} onRemove={() => void removeLabel(l)} /></li>)}
+              {item.labels!.map((l) => <li key={l}><LabelChip name={l} colour={item.label_colors?.[l] ?? null} onRemove={() => void removeLabel(l)} /></li>)}
             </ul>
           )}
           {engine && <p className="el-caption el-secondary">Transcribed in {engine}</p>}

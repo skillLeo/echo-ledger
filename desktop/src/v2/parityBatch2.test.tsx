@@ -8,7 +8,7 @@ import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from 
 import { makeItem, makePlan, makeStatus, makeTranscript } from "../test/fixtures";
 import { resetEntitlementsForTests } from "../lib/entitlements";
 import { loadPreferences } from "../lib/shell";
-import { LibraryV2, RESYNC_MS } from "./library/LibraryV2";
+import { LibraryV2, RESYNC_FAST_FOR_MS, RESYNC_MS, RESYNC_SLOW_MS } from "./library/LibraryV2";
 import { rowModel } from "./library/model";
 import { HomeV2 } from "./home/HomeV2";
 import { Shell } from "./shell/Shell";
@@ -61,12 +61,15 @@ describe("the recording page (parity batch 2)", () => {
     fireEvent.change(field, { target: { value: "Ignored" } });
     fireEvent.keyDown(field, { key: "Escape" });
     expect(callsOf("session_organise")).toEqual([]);
+    // The keyboard is back on the title.
+    expect(screen.getByRole("button", { name: "Bilal Qureshi" })).toHaveFocus();
     fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Recording title" }), { target: { value: "  Bilal · March shipment " } });
     fireEvent.keyDown(screen.getByRole("textbox", { name: "Recording title" }), { key: "Enter" });
     await act(flushAsync);
     expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { title: "Bilal · March shipment" } }]);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Bilal · March shipment");
+    expect(screen.getByRole("button", { name: "Bilal · March shipment" })).toHaveFocus();
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Renamed");
   });
 });
@@ -104,7 +107,7 @@ describe("the Library (parity batch 2)", () => {
   });
 
   it("DT-LIB-074: the list syncs every 5 s while something is transcribed, and stops after", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const making = item({ status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null } });
     library([making]);
     await act(flushAsync);
@@ -119,6 +122,23 @@ describe("the Library (parity batch 2)", () => {
     act(() => vi.advanceTimersByTime(RESYNC_MS * 3));
     await act(flushAsync);
     expect(callsOf("library_refresh").length).toBe(after);
+  });
+
+  it("DT-LIB-074: a transcript stuck waiting is asked about once a minute after 10 minutes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const stuck = item({ status: "processing", transcript: { final_status: "pending", final_transcript_id: null, live_available: false, preview: null } });
+    library([stuck]);
+    await act(flushAsync);
+    act(() => vi.advanceTimersByTime(RESYNC_FAST_FOR_MS + RESYNC_MS));
+    await act(flushAsync);
+    const fast = callsOf("library_refresh").length;
+    act(() => vi.advanceTimersByTime(RESYNC_SLOW_MS - RESYNC_MS));
+    await act(flushAsync);
+    expect(callsOf("library_refresh").length).toBeLessThanOrEqual(fast + 1);
+    act(() => vi.advanceTimersByTime(RESYNC_SLOW_MS * 2));
+    await act(flushAsync);
+    expect(callsOf("library_refresh").length).toBeGreaterThanOrEqual(fast + 2);
+    expect(callsOf("library_refresh").length).toBeLessThanOrEqual(fast + 3);
   });
 
   it("DT-LIB-070: a row being transcribed in parts says which part", () => {
