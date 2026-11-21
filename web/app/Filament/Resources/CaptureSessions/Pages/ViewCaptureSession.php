@@ -552,7 +552,7 @@ class ViewCaptureSession extends ViewRecord
                         $this->downloadAction(),
                         $this->wrongScriptAction(),
                         $this->showAsAction(),
-                        WhatsAppActions::send(fn (): CaptureSession => $this->session(), fn (): string => $this->readingView, copyForAi: true)->label('WhatsApp'),
+                        WhatsAppActions::send(fn (): CaptureSession => $this->session(), fn (): string => $this->readingView, copyForAi: true)->label(__('WhatsApp')),
                     ])->dropdown(false),
                     ActionGroup::make([
                         CaptureSessionsTable::renameAction(),
