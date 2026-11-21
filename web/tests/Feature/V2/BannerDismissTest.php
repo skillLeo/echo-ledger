@@ -13,14 +13,16 @@ use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * The v2.0 console's needs-action lines can be closed with × (U13, the desktop's rule): the Library's "N calls waiting
- * for a decision" and Home's "Needs action" stay hidden until a count rises or a new kind appears; a fall keeps them
- * hidden at the lower count. Kept per person in console_preferences, so a read-only console can close its own line
- * and another person still sees theirs.
+ * for a decision" and Home's "Needs action" stay hidden until a count rises above what it was when closed, or a new
+ * kind appears. The counts are the server's when × is pressed, never the page's, and drawing a page writes nothing.
+ * Kept per person in console_preferences, so a read-only console can close its own line and another person still
+ * sees theirs.
  */
 
 beforeEach(function () {
@@ -50,39 +52,70 @@ function dismissLibraryHtml(object $test, $user): string
 
 it('closes the Library\'s waiting line with ×, and it stays closed on reload while the count is the same', function () {
     $page = Livewire::test(ListCaptureSessions::class);
-    expect($page->html())->toContain('data-waiting="1"')->toContain('wire:click="dismissV2Waiting(1)"')
-        ->toMatch('~<button type="button" class="v2-icon-btn" wire:click="dismissV2Waiting\(1\)" aria-label="Dismiss" title="Dismiss" data-dismiss="library">~');
+    expect($page->html())->toContain('data-waiting="1"')
+        ->toMatch('~<button type="button" class="v2-icon-btn" wire:click="dismissV2Waiting" aria-label="Dismiss" title="Dismiss" data-dismiss="library">~');
 
-    $page->call('dismissV2Waiting', 1);
+    $page->call('dismissV2Waiting');
     expect($page->html())->not->toContain('data-waiting=')
         ->and($this->owner->fresh()->console_preferences['dismissed']['library'])->toBe(['waiting' => 1]);
     expect(dismissLibraryHtml($this, $this->owner))->not->toContain('data-waiting=')->toContain('v2-chips');
 });
 
 it('shows the line again when more calls wait than it said', function () {
-    Livewire::test(ListCaptureSessions::class)->call('dismissV2Waiting', 1);
+    Livewire::test(ListCaptureSessions::class)->call('dismissV2Waiting');
     ($this->waitingCall)($this->owner);
 
     expect(dismissLibraryHtml($this, $this->owner))->toContain('data-waiting="2"')->toContain('2 calls waiting for a decision');
     expect($this->owner->fresh()->console_preferences['dismissed'] ?? null)->toBeNull();
 });
 
-it('keeps the line closed when the count falls, at the lower count, so a later rise shows it', function () {
+it('keeps the line closed when the count falls, and shows it only when it rises above the closed count', function () {
     ($this->waitingCall)($this->owner);
-    Livewire::test(ListCaptureSessions::class)->call('dismissV2Waiting', 2);
+    Livewire::test(ListCaptureSessions::class)->call('dismissV2Waiting');
     $this->first->forceFill(['status' => SessionStatus::Completed])->save();
 
     expect(dismissLibraryHtml($this, $this->owner))->not->toContain('data-waiting=')
-        ->and($this->owner->fresh()->console_preferences['dismissed']['library'])->toBe(['waiting' => 1]);
+        ->and($this->owner->fresh()->console_preferences['dismissed']['library'])->toBe(['waiting' => 2]);
     ($this->waitingCall)($this->owner);
-    expect(dismissLibraryHtml($this, $this->owner))->toContain('data-waiting="2"');
+    expect(dismissLibraryHtml($this, $this->owner))->not->toContain('data-waiting=');
+    ($this->waitingCall)($this->owner);
+    expect(dismissLibraryHtml($this, $this->owner))->toContain('data-waiting="3"');
 });
 
-it('closes only what the line said when it was drawn: a call that arrived since still shows', function () {
-    ($this->waitingCall)($this->owner);
-    Livewire::test(ListCaptureSessions::class)->call('dismissV2Waiting', 1);
+it('writes nothing when a page is drawn: only closing and a rise are saved', function () {
+    Livewire::test(ListCaptureSessions::class)->call('dismissV2Waiting');
+    $writes = 0;
+    DB::listen(function ($query) use (&$writes): void {
+        if (preg_match('/^update\s+"?users"?/i', $query->sql) === 1) {
+            $writes++;
+        }
+    });
+    foreach (range(1, 3) as $_) {
+        expect(dismissLibraryHtml($this, $this->owner))->not->toContain('data-waiting=');
+    }
+    $this->first->forceFill(['status' => SessionStatus::Completed])->save(); // a fall
+    dismissLibraryHtml($this, $this->owner);
+    expect($writes)->toBe(0);
 
-    expect(dismissLibraryHtml($this, $this->owner))->toContain('data-waiting="2"');
+    ($this->waitingCall)($this->owner);
+    ($this->waitingCall)($this->owner);
+    dismissLibraryHtml($this, $this->owner);
+    dismissLibraryHtml($this, $this->owner);
+    expect($writes)->toBe(1);
+});
+
+it('closes at the server\'s counts when × is pressed, whatever the page sends', function () {
+    ($this->waitingCall)($this->owner);
+    // The page could send anything: a count far above, or below, the real one.
+    Livewire::test(ListCaptureSessions::class)->call('dismissV2Waiting', 99);
+    expect($this->owner->fresh()->console_preferences['dismissed']['library'])->toBe(['waiting' => 2]);
+    ($this->waitingCall)($this->owner);
+    expect(dismissLibraryHtml($this, $this->owner))->toContain('data-waiting="3"');
+
+    $this->actingAs($this->owner->fresh(), 'web');
+    request()->attributes->remove('v2.needs-action.'.$this->owner->id.'.'.$this->owner->current_workspace_id);
+    Livewire::test(V2NeedsActionWidget::class)->call('dismiss', ['waiting' => 500, 'failed' => 500]);
+    expect($this->owner->fresh()->console_preferences['dismissed']['home'])->toBe(['waiting' => 3]);
 });
 
 it('names the × Dismiss in English and in Urdu', function () {
@@ -102,7 +135,7 @@ it('lets a read-only console close its own line, and another person still sees t
 
     $page = Livewire::test(ListCaptureSessions::class);
     expect($page->html())->toContain('data-waiting="1"')->toContain('data-dismiss="library"');
-    $page->call('dismissV2Waiting', 1);
+    $page->call('dismissV2Waiting');
     expect($page->html())->not->toContain('data-waiting=');
     expect(dismissLibraryHtml($this, $member))->not->toContain('data-waiting=');
     // The owner has not closed theirs.
@@ -119,7 +152,7 @@ it('closes Home\'s Needs action line with × until a count rises or a new kind a
     })->call($this);
     expect($home())->toContain('data-needs="waiting"')->toContain('aria-label="Dismiss" title="Dismiss" data-dismiss="home"');
 
-    Livewire::test(V2NeedsActionWidget::class)->call('dismiss', ['waiting' => 1])->assertDontSeeHtml('data-needs-action');
+    Livewire::test(V2NeedsActionWidget::class)->call('dismiss')->assertDontSeeHtml('data-needs-action');
     expect($home())->not->toContain('data-needs-action')
         ->and($this->owner->fresh()->console_preferences['dismissed']['home'])->toBe(['waiting' => 1]);
 
@@ -130,7 +163,7 @@ it('closes Home\'s Needs action line with × until a count rises or a new kind a
     // Closed again; one more waiting call (a rise) shows it again. The Library's own line is apart from Home's.
     $this->actingAs($this->owner->fresh(), 'web');
     request()->attributes->remove('v2.needs-action.'.$this->owner->id.'.'.$this->owner->current_workspace_id);
-    Livewire::test(V2NeedsActionWidget::class)->call('dismiss', ['waiting' => 1, 'failed' => 1]);
+    Livewire::test(V2NeedsActionWidget::class)->call('dismiss');
     expect($home())->not->toContain('data-needs-action')
         ->and(dismissLibraryHtml($this, $this->owner))->toContain('data-waiting="1"');
     ($this->waitingCall)($this->owner);

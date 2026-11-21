@@ -40,16 +40,12 @@ class V2NeedsActionWidget extends Widget
         return ['items' => self::dismissed() ? [] : self::items()];
     }
 
-    /**
-     * The line's ×: hidden until a count rises above what it said or a new kind appears.
-     *
-     * @param  array<array-key, mixed>  $seen  each kind the line said and its count
-     */
-    public function dismiss(array $seen): void
+    /** The line's ×: hidden until a count rises above now (the server's counts, never the page's) or a new kind appears. */
+    public function dismiss(): void
     {
         $user = auth()->user();
         if ($user instanceof User) {
-            V2DismissedBanners::dismiss($user, 'home', $seen, self::counts());
+            V2DismissedBanners::dismiss($user, 'home', self::counts());
         }
     }
 

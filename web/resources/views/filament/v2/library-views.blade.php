@@ -43,6 +43,6 @@
         <span>{{ trans_choice(':count call waiting for a decision|:count calls waiting for a decision', $waiting, ['count' => \Illuminate\Support\Number::format($waiting)]) }}</span>
         <button type="button" class="v2-link" wire:click="openPlace('waiting')">{{ __('Review') }}</button>
         <span class="v2-tb-spacer" aria-hidden="true"></span>
-        <button type="button" class="v2-icon-btn" wire:click="dismissV2Waiting({{ $waiting }})" aria-label="{{ __('Dismiss') }}" title="{{ __('Dismiss') }}" data-dismiss="library"><x-el.v2.icon name="close" /></button>
+        <button type="button" class="v2-icon-btn" wire:click="dismissV2Waiting" aria-label="{{ __('Dismiss') }}" title="{{ __('Dismiss') }}" data-dismiss="library"><x-el.v2.icon name="close" /></button>
     </p>
 @endif

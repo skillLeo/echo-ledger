@@ -348,12 +348,12 @@ class ListCaptureSessions extends ListRecords
         return V2DismissedBanners::hidden($user instanceof User ? $user : null, 'library', ['waiting' => $this->v2Waiting()]);
     }
 
-    /** The quiet line's ×: hidden until more calls wait than the line said ($seen). */
-    public function dismissV2Waiting(int $seen): void
+    /** The quiet line's ×: hidden until more calls wait than now (the server's count, never the page's). */
+    public function dismissV2Waiting(): void
     {
         $user = auth()->user();
         if ($user instanceof User) {
-            V2DismissedBanners::dismiss($user, 'library', ['waiting' => $seen], ['waiting' => $this->v2Waiting()]);
+            V2DismissedBanners::dismiss($user, 'library', ['waiting' => $this->v2Waiting()]);
         }
     }
 

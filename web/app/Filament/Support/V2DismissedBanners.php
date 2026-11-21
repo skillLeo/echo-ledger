@@ -8,18 +8,19 @@ use App\Models\User;
 
 /**
  * The v2.0 console's needs-action lines that a person can close with × (the Library's "N calls waiting for a decision"
- * and Home's "Needs action"), the same rule as the desktop's Library banner: a closed line stays hidden until what it
- * says changes, a count going up or a new kind appearing. When a count falls it stays hidden and keeps the lower number,
- * so a later rise shows it again. What was closed is kept per person (`console_preferences.dismissed`), as each kind
- * and its count, so it is the same on every browser and another person still sees their own line.
+ * and Home's "Needs action"): a closed line stays hidden until a count rises above what it was when it was closed, or
+ * a new kind appears. What was closed is kept per person (`console_preferences.dismissed`), as each kind and its count,
+ * so it is the same on every browser and another person still sees their own line. The counts are always the
+ * server's own, read when × is pressed (never what the page sent), and reading the rule writes nothing: only closing
+ * and a rise (which forgets the closed line) are saved.
  */
 final class V2DismissedBanners
 {
     public const BANNERS = ['library', 'home'];
 
     /**
-     * Whether the line, with these counts now, stays hidden; it also keeps what was closed up to date (a fall keeps the
-     * lower counts, a rise or a new kind forgets it).
+     * Whether the line, with these counts now, stays hidden. A rise above a closed count, or a new kind, shows it and
+     * forgets what was closed (the only write here); a fall changes nothing.
      *
      * @param  array<string, int>  $counts  each kind and its count now (0 = not shown)
      */
@@ -29,46 +30,29 @@ final class V2DismissedBanners
         if ($user === null || $dismissed === null) {
             return false;
         }
-        $shown = self::shown($counts);
-        $quiet = true;
-        foreach ($shown as $kind => $count) {
+        foreach (self::shown($counts) as $kind => $count) {
             if (! isset($dismissed[$kind]) || $count > $dismissed[$kind]) {
-                $quiet = false;
+                self::store($user, $banner, null);
+
+                return false;
             }
-        }
-        $lower = [];
-        foreach ($shown as $kind => $count) {
-            if (isset($dismissed[$kind])) {
-                $lower[$kind] = min($dismissed[$kind], $count);
-            }
-        }
-        $next = $quiet && $lower !== [] ? $lower : null;
-        if ($next !== $dismissed) {
-            self::store($user, $banner, $next);
         }
 
-        return $quiet;
+        return true;
     }
 
     /**
-     * Closes the line as it was drawn: each kind the person saw, at the count they saw (never above the count now, so a
-     * rise since the page was drawn still shows), and nothing a kind that appeared since.
+     * Closes the line at the counts the server has now (what the line shows on a fresh draw), for each kind with any.
      *
-     * @param  array<array-key, mixed>  $seen  what the line said when × was pressed
-     * @param  array<string, int>  $counts  each kind and its count now
+     * @param  array<string, int>  $counts  each kind and its count now, from the server
      */
-    public static function dismiss(User $user, string $banner, array $seen, array $counts): void
+    public static function dismiss(User $user, string $banner, array $counts): void
     {
         if (! in_array($banner, self::BANNERS, true)) {
             return;
         }
-        $signature = [];
-        foreach (self::shown($counts) as $kind => $count) {
-            if (isset($seen[$kind]) && is_numeric($seen[$kind])) {
-                $signature[$kind] = max(0, min($count, (int) $seen[$kind]));
-            }
-        }
-        self::store($user, $banner, array_filter($signature) !== [] ? array_filter($signature) : null);
+        $shown = self::shown($counts);
+        self::store($user, $banner, $shown !== [] ? $shown : null);
     }
 
     /**

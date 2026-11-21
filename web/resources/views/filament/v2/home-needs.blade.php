@@ -11,7 +11,7 @@
                 @if ($i > 0)<span aria-hidden="true"> · </span>@endif
                 <a href="{{ $item['url'] }}" class="v2-link" data-needs="{{ $item['key'] }}">{{ $item['words'] }}</a>
             @endforeach
-            <button type="button" class="v2-icon-btn" wire:click="dismiss({{ json_encode(array_column($items, 'count', 'key')) }})" aria-label="{{ __('Dismiss') }}" title="{{ __('Dismiss') }}" data-dismiss="home"><x-el.v2.icon name="close" /></button>
+            <button type="button" class="v2-icon-btn" wire:click="dismiss" aria-label="{{ __('Dismiss') }}" title="{{ __('Dismiss') }}" data-dismiss="home"><x-el.v2.icon name="close" /></button>
         </p>
     @endif
 </x-filament-widgets::widget>
