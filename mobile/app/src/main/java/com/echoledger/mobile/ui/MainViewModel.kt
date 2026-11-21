@@ -740,6 +740,83 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return ok
     }
 
+    // ---- Lists (D14, contract 2.0.0-m) --------------------------------------------------------------------------------
+
+    private val _lists = MutableStateFlow<List<com.echoledger.mobile.data.ListDto>>(emptyList())
+
+    /** The person's lists in the chip row's order (empty until read, or offline). */
+    val lists: StateFlow<List<com.echoledger.mobile.data.ListDto>> = _lists.asStateFlow()
+
+    /** Reads the lists again (on opening the Library and after each sync). */
+    suspend fun loadLists() {
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.lists() }.getOrNull() }?.let { _lists.value = it }
+    }
+
+    /** What went wrong with a list's name, in the server's codes: the screen words them. */
+    enum class ListProblem { Reserved, Exists, Other }
+
+    private fun listProblem(e: Throwable): ListProblem = when ((e as? com.echoledger.mobile.net.ApiException)?.code) {
+        "name_reserved" -> ListProblem.Reserved
+        "list_exists" -> ListProblem.Exists
+        else -> ListProblem.Other.also { _message.value = com.echoledger.mobile.core.Problems.text(e, "The list could not be saved.") }
+    }
+
+    /** `POST /api/lists`: the new list, or what was wrong with its name. */
+    suspend fun createList(name: String, color: String?): Result<com.echoledger.mobile.data.ListDto> = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.createList(name, color) ?: error("Not signed in") }
+    }.onSuccess { made -> _lists.value = (_lists.value.filterNot { it.key == made.key } + made).sortedBy { it.position } }
+
+    fun problemOf(e: Throwable): ListProblem = listProblem(e)
+
+    /** `PATCH /api/lists/{key}`: a new name or colour; the library follows (every recording's label changed). */
+    suspend fun updateList(key: String, name: String? = null, color: String? = null): Result<com.echoledger.mobile.data.ListDto> =
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.updateList(key, name, color) ?: error("Not signed in") } }
+            .onSuccess { changed ->
+                _lists.value = _lists.value.map { if (it.key == key) changed else it }
+                if (name != null) refreshQuietly()
+            }
+
+    /** `DELETE /api/lists/{key}`: the list goes, its recordings stay. */
+    suspend fun deleteList(key: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.deleteList(key) ?: error("Not signed in") }
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The list could not be deleted.") }.isSuccess
+    }.also { ok ->
+        if (ok) {
+            _lists.value = _lists.value.filterNot { it.key == key }
+            refreshQuietly()
+        }
+    }
+
+    /** `PUT /api/lists/order`: [key] one place earlier ([delta] −1) or later (+1). */
+    suspend fun moveList(key: String, delta: Int): Boolean {
+        val keys = com.echoledger.mobile.core.LibraryLists.moved(_lists.value, key, delta) ?: return false
+        val ordered = withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.orderLists(keys) ?: error("Not signed in") }
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The lists could not be moved.") }.getOrNull()
+        } ?: return false
+        _lists.value = ordered
+        return true
+    }
+
+    /**
+     * Puts [ids] in [list] or takes them out (bulk label / unlabel, no toast of its own); the ids that changed, or null
+     * when it failed (with a message). Only those come back on Undo.
+     */
+    suspend fun label(ids: List<String>, list: com.echoledger.mobile.data.ListDto, add: Boolean): List<String>? {
+        if (ids.isEmpty()) return emptyList()
+        val ok = withContext(Dispatchers.IO) {
+            runCatching {
+                graph.api()?.bulk(ids.take(Organise.MAX_BULK), if (add) "label" else "unlabel", null, list.name)
+                    ?: error("Not signed in")
+            }
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.isSuccess
+        }
+        if (!ok) return null
+        withContext(Dispatchers.IO) { runCatching { graph.library.refresh() } }
+        loadLists()
+        return ids.take(Organise.MAX_BULK)
+    }
+
     /** One action for the selected recordings; how many changed, or null (with a message) when it failed. */
     suspend fun bulk(ids: List<String>, action: String, clientId: String? = null, label: String? = null): Int? {
         val changed = withContext(Dispatchers.IO) {

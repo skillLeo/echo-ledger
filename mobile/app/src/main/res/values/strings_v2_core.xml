@@ -121,6 +121,9 @@
     <string name="v2_vm_wrong_sign_in_link">That sign-in link is not for this sign-in. Start again.</string>
     <string name="v2_vm_audio_download_failed">The voice could not be downloaded. Check the connection and try again.</string>
     <string name="v2_vm_change_not_saved">The change could not be saved.</string>
+    <string name="v2_vm_list_not_saved">The list could not be saved.</string>
+    <string name="v2_vm_list_not_deleted">The list could not be deleted.</string>
+    <string name="v2_vm_lists_not_moved">The lists could not be moved.</string>
     <string name="v2_vm_device_not_revoked">The device could not be revoked.</string>
     <string name="v2_vm_export_failed">The export failed.</string>
     <string name="v2_vm_file_unreadable">The file could not be read.</string>

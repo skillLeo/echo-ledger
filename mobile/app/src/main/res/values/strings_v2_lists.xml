@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Library's lists (D14, contract 2.0.0-m): the chip row, its sheets and the list menu. -->
+<resources>
+    <string name="v2_lists_all">All</string>
+    <string name="v2_lists_unread">Unread</string>
+    <string name="v2_lists_important">Important</string>
+    <string name="v2_lists_add">New list</string>
+    <string name="v2_lists_new_title">New list</string>
+    <string name="v2_lists_name">List name</string>
+    <string name="v2_lists_colour">Colour</string>
+    <string name="v2_lists_create">Create</string>
+    <string name="v2_lists_duplicate">You already have a list called %1$s.</string>
+    <string name="v2_lists_reserved">%1$s is one of the Library\'s own chips. Choose another name.</string>
+    <string name="v2_lists_empty_title">Nothing in %1$s yet</string>
+    <string name="v2_lists_empty_body">Add recordings from their ⋮ menu: Add to list.</string>
+    <string name="v2_lists_rename">Rename…</string>
+    <string name="v2_lists_rename_title">Rename list</string>
+    <string name="v2_lists_save">Save</string>
+    <string name="v2_lists_recolour">Change colour…</string>
+    <string name="v2_lists_recolour_title">Change colour</string>
+    <string name="v2_lists_move_left">Move left</string>
+    <string name="v2_lists_move_right">Move right</string>
+    <string name="v2_lists_delete">Delete list…</string>
+    <string name="v2_lists_delete_title">Delete %1$s?</string>
+    <string name="v2_lists_delete_body">Its recordings stay in your Library; only the list goes.</string>
+    <string name="v2_lists_delete_confirm">Delete</string>
+    <string name="v2_lists_add_to">Add to list</string>
+    <string name="v2_lists_new_list">New list…</string>
+    <string name="v2_lists_added">Added to %1$s</string>
+    <string name="v2_lists_removed">Removed from %1$s</string>
+    <string name="v2_lists_chips">Lists</string>
+    <string name="v2_colour_grey">Grey</string>
+    <string name="v2_colour_red">Red</string>
+    <string name="v2_colour_orange">Orange</string>
+    <string name="v2_colour_amber">Amber</string>
+    <string name="v2_colour_green">Green</string>
+    <string name="v2_colour_teal">Teal</string>
+    <string name="v2_colour_blue">Blue</string>
+    <string name="v2_colour_pink">Pink</string>
+</resources>

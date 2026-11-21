@@ -124,7 +124,9 @@ fun SelectionBar(
     onClose: () -> Unit,
     onSelectAll: (Boolean) -> Unit,
     onAction: (SelectionAction) -> Unit,
-    choices: OrganiseChoices = OrganiseChoices.ALL
+    choices: OrganiseChoices = OrganiseChoices.ALL,
+    /** ⋮ › Add to list (D14 §3), when the person's lists are known. */
+    onAddToList: (() -> Unit)? = null
 ) {
     val c = EchoV2.colors
     var sheet by remember { mutableStateOf<String?>(null) }
@@ -181,6 +183,12 @@ fun SelectionBar(
                         sheet = "export"
                     }
                     MenuHeader(stringResource(R.string.v2_lib_organise))
+                    onAddToList?.let { add ->
+                        MenuItem(EchoIcons.Label, stringResource(R.string.v2_lists_add_to)) {
+                            close()
+                            add()
+                        }
+                    }
                     if (choices.pin) {
                         MenuItem(EchoIcons.Pin, stringResource(R.string.v2_lib_pin)) {
                             close()

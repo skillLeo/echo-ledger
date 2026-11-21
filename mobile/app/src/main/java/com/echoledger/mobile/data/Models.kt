@@ -498,7 +498,13 @@ data class LibraryItem(
     /** How it got its project (since v1.5): "user", "contact", "rule", or null (the Inbox). */
     @SerialName("filed_by") val filedBy: String? = null,
     /** Screen moments kept during the meeting (since v1.5); null from an older server. */
-    @SerialName("screen_count") val screenCount: Int? = null
+    @SerialName("screen_count") val screenCount: Int? = null,
+    /** The person flagged it (contract 2.0.0-i). */
+    val important: Boolean = false,
+    /** The colours of its labels that have one, `{label: "#rrggbb"}` (contract 2.0.0-i). */
+    @SerialName("label_colors") val labelColors: Map<String, String> = emptyMap(),
+    /** When retention moves it to Trash (contract 2.0.0-i); null when kept forever or still recording. */
+    @SerialName("expires_at") val expiresAt: String? = null
 )
 
 @Serializable
@@ -1232,3 +1238,22 @@ data class ConfigWorkspaceDto(val id: Long? = null, val name: String? = null, va
 /** `GET /api/library/views` (since v1.5 its `folders`): how many recordings each smart folder lists on the server. */
 @Serializable
 data class LibraryViewsDto(val folders: Map<String, Int>? = null)
+
+/**
+ * One of the person's lists (contract 2.0.0-m): a label with its name, colour and place in the Library's chip row.
+ * [key] is the name in lower case and names it in `/api/lists/{key}`; [color] is `#rrggbb` or null (made by labelling).
+ */
+@Serializable
+data class ListDto(val key: String, val name: String, val color: String? = null, val position: Int = 0, val count: Int = 0)
+
+/** `GET /api/lists` and `PUT /api/lists/order`: the lists in their order. */
+@Serializable
+data class ListsResponse(val data: List<ListDto> = emptyList())
+
+/** `POST /api/lists` and `PATCH /api/lists/{key}`: the list as it is now. */
+@Serializable
+data class ListResponse(val data: ListDto)
+
+/** `DELETE /api/lists/{key}`: the list gone and how many recordings lost its label. */
+@Serializable
+data class ListDeletedAnswer(val key: String, val changed: Int = 0)
