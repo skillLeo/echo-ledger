@@ -133,7 +133,7 @@
     <string name="v2_ws_screens_none_body">اس پروجیکٹ کی میٹنگز میں رکھی گئی اسکرینز یہاں نظر آتی ہیں۔</string>
     <string name="v2_ws_screens_failed">اسکرینز لوڈ نہیں ہوئیں۔</string>
     <string name="v2_ws_show_more">مزید دکھائیں</string>
-    <string name="v2_ws_failed_title">پروجیکٹ کی ورک اسپیس لوڈ نہیں ہوئی</string>
+    <string name="v2_ws_failed_title">پروجیکٹ لوڈ نہیں ہوا</string>
     <string name="v2_ws_failed_body">انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔</string>
     <string name="v2_ws_try_again">دوبارہ کوشش کریں</string>
 </resources>

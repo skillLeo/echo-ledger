@@ -394,7 +394,8 @@ private fun V2RecordingPage(
     V2RecordingContent(
         item = live.copy(title = page.shownTitle),
         transcript = transcriptState(item, page.transcript, page.loaded),
-        positionMs = player.positionMs,
+        // Opened at a moment (a search match, an answer's source): the player shows where it starts until it can play.
+        positionMs = page.pendingSeek ?: player.positionMs,
         durationMs = player.totalMs.takeIf { it > 0 } ?: (item.durationMs ?: 0),
         playing = player.playing,
         speed = player.speed,

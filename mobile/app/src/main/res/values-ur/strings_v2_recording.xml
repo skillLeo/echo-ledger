@@ -41,7 +41,7 @@
     <string name="v2_rec_back_to">%1$s پر واپس</string>
     <string name="v2_rec_delete">حذف کریں</string>
     <string name="v2_rec_delete_title">یہ ریکارڈنگ حذف کریں؟</string>
-    <string name="v2_rec_delete_body">یہ ہر ڈیوائس سے حذف ہو جائے گی۔ آپ اسے ٹریش سے واپس لا سکتے ہیں۔</string>
+    <string name="v2_rec_delete_body">یہ ہر ڈیوائس سے حذف ہو جائے گی۔ آپ اسے حال ہی میں حذف شدہ سے واپس لا سکتے ہیں۔</string>
     <string name="v2_rec_cancel">منسوخ کریں</string>
     <string name="v2_rec_export_pdf">PDF (پرنٹ)</string>
     <string name="v2_rec_export_docx">ورڈ (.docx)</string>

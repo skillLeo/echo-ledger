@@ -23,6 +23,19 @@ for (const theme of ['light', 'dark']) {
       }
     }
   });
+  test(`${theme}: every label colour's text reaches 4.5:1 on its fill and the backgrounds, its dot 3:1`, () => {
+    const names = Object.keys(json('global/label.json').label).filter((n) => !n.startsWith('$'));
+    assert.equal(names.length, 8);
+    for (const n of names) {
+      const l = r.label[n]; const c = (k) => hex(l[k].$value);
+      for (const bg of [c('fill'), v('bg', 'canvas'), v('bg', 'surface'), v('bg', 'subtle')]) {
+        assert.ok(ratio(c('text'), bg) >= 4.5, `label.${n}.text on ${bg}: ${ratio(c('text'), bg).toFixed(2)}`);
+      }
+      for (const bg of ['canvas', 'surface', 'subtle']) assert.ok(ratio(c('dot'), v('bg', bg)) >= 3, `label.${n}.dot on bg.${bg}`);
+      // On its own chip the dot is drawn in the text colour (v2.css .el-label-chip .el-label-dot), so that pair must hold 3:1 too.
+      assert.ok(ratio(c('text'), c('fill')) >= 3, `label.${n}.text as the chip's dot`);
+    }
+  });
   test(`${theme}: text on the accent and on the record button reaches 4.5:1`, () => {
     assert.ok(ratio(v('text', 'on-accent'), v('accent', 'default')) >= 4.5);
   });
@@ -38,5 +51,32 @@ for (const theme of ['light', 'dark']) {
 test('the generated files match the token source (run npm run build in tokens/)', async () => {
   for (const [rel, text] of Object.entries(await render())) {
     assert.equal(readFileSync(resolve(here, '../..', rel), 'utf8'), text, rel);
+  }
+});
+
+test('the settings icon map gives every page one glyph, unlike its group and its neighbours, on every platform', () => {
+  const map = json('icons/settings.json');
+  const groups = Object.entries(map.groups);
+  const pages = Object.entries(map.pages);
+  const on = (e, platform) => !e.platforms || e.platforms.includes(platform);
+  for (const [id, p] of pages) {
+    assert.ok(p.group === null || map.groups[p.group], `page ${id}: group ${p.group} exists`);
+    assert.ok(p.lucide && p.material, `page ${id}: a desktop/web glyph and a phone glyph`);
+  }
+  for (const platform of ['desktop', 'phone']) {
+    for (const [gid, g] of groups) {
+      if (!on(g, platform)) continue;
+      const mine = pages.filter(([, p]) => p.group === gid && on(p, platform));
+      assert.ok(mine.length > 0, `${platform}: group ${gid} has a page`);
+      for (const set of ['lucide', 'material']) {
+        const glyphs = mine.map(([, p]) => p[set]);
+        assert.equal(new Set(glyphs).size, glyphs.length, `${platform} ${set}: two pages of ${gid} share a glyph`);
+        if (mine.length > 1) assert.ok(!glyphs.includes(g[set]), `${platform} ${set}: group ${gid} repeats a page's glyph`);
+      }
+    }
+    for (const set of ['lucide', 'material']) {
+      const groupGlyphs = groups.filter(([, g]) => on(g, platform)).map(([, g]) => g[set]);
+      assert.equal(new Set(groupGlyphs).size, groupGlyphs.length, `${platform} ${set}: two groups share a glyph`);
+    }
   }
 });

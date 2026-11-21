@@ -72,6 +72,14 @@ surface stays neutral, so the app looks the same on every phone and the record b
 System fonts in the native apps (SF Pro, Segoe UI Variable, Roboto). The web uses one deliberate face, not the Inter
 default; chosen at Gate 3.
 
+### Label colours (contract 2.0.0-i)
+Eight per-person label colours, the same on every platform: grey, red, orange, amber, green, teal, blue, pink. There is no purple, as rule 2 requires.
+- **Stored value.** The server stores each colour as one theme-independent `#rrggbb`, the colour's key (tokens/global/label.json; `--el-label-<name>` in CSS; `EchoTokens.labelColours` on Android).
+- **Matching.** Compare a stored colour with the eight keys case-insensitively. The server accepts A–F and a–f; the tokens are uppercase.
+- **Drawing.** Apps draw a label with `role.label.<name>.fill` / `.text` / `.dot` for the current theme. Text reaches 4.5:1 on its fill and on every background. The dot reaches 3:1 on canvas, surface and subtle, but not on its own fill: inside the label's own chip, the dot takes the `.text` colour. tokens/test checks both.
+- **Other colours.** A stored colour that is not one of the eight (set by an older app or the API) shows only as a dot in that colour, on the neutral chip with primary text. It is never used as text or fill. The dot gets a hairline `border.strong` ring so any colour stays visible. Project colours are separate and may still be purple (the server's default is #8B5CF6); a label carrying one shows as such a dot.
+- **Picker.** The picker offers the eight colours only, as dots in a row with the name as the accessible label. Grey is the default.
+
 ### Spacing, radius, elevation, motion, density
 - Spacing on a 4 px base: 2, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64. Page padding 24 (desktop) / 16 (mobile). Rows 56
   comfortable / 44 compact on desktop, 64–72 on mobile.
@@ -85,6 +93,20 @@ default; chosen at Gate 3.
 ### Icons
 One outline set for web and desktop (Lucide or Phosphor, 1.5 px stroke, 16/20/24), mapped by name to SF Symbols,
 Material Symbols and Fluent icons (record, transcribe, ask, moment, shield-private…). No emoji.
+
+### Settings icons (D3)
+One map for every platform: tokens/icons/settings.json. It holds the group and page ids of docs/v2/IA.md 5, each with its Lucide name (desktop and web), its Material Outlined name (the phone) and the console's `<x-el.v2.icon>` name where one exists.
+- **One meaning, one glyph.** No two groups share a glyph, and no two pages in a group share one. A group's glyph differs from its pages' glyphs; the only exception is a group with a single page (Notifications, Appearance, Setup & health). tokens/test checks all of this on desktop and on the phone.
+- **Where they show.** Group headers use the accent colour; page rows use text-secondary. Both are 20 px on desktop and web, 24 dp on the phone.
+- **Right to left.** Two glyphs mirror: Sign out's arrow, and Help's question mark, which reads as ؟ in Urdu and Arabic. Use AutoMirrored on the phone and `directional` on desktop. No other settings glyph mirrors.
+
+What the screens change to match the map (owner EL-UX; the phone icons arrive in EchoIcons.kt with D10):
+| where | now | map |
+|---|---|---|
+| desktop GOAL_GROUPS (settings/SettingsV2.tsx:21–30) | Live & overlays: captions; About & help: circle-help | radio; life-buoy |
+| desktop ROOT_ICONS (components/Icons.tsx:435–439) | profile: user; security: shield | user-round-pen; fingerprint |
+| phone SettingsGoal (settings/SettingsTree.kt:10–18 on ui/U1-4-visual) | Recording: Mic; Transcription: Notes; Account: AccountCircle; Setup: HealthAndSafety; About: Info | RadioButtonChecked; Description; Person; CheckCircle; Support |
+| phone page icons (SettingsTree.kt:49–68) | voice: VoiceNote = Mic (three mics in a row); language: Language (globe); account: AccountCircle; plan: WorkspacePremium | GraphicEq; Translate; ManageAccounts (the map's id is profile); CreditCard |
 
 ## Components (same names and options on every platform)
 Button · TextField · Select · SearchField · FilterBar · Chip · ListRow (RecordingRow, SettingRow) · Card (mixed items

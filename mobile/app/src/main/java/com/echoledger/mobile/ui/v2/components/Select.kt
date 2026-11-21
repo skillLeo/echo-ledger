@@ -31,6 +31,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.ProvidePageLook
+import com.echoledger.mobile.ui.v2.theme.rememberPageLook
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
@@ -89,6 +91,7 @@ fun <T> EchoSelect(
                 Icon(EchoIcons.Expand, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary)
             }
         }
+        val look = rememberPageLook()
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
@@ -96,24 +99,27 @@ fun <T> EchoSelect(
             containerColor = c.bgOverlay,
             border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault)
         ) {
-            options.forEach { option ->
-                val isSelected = option == selected
-                DropdownMenuItem(
-                    text = { Text(optionLabel(option), style = type.content(optionLabel(option), type.body)) },
-                    onClick = {
-                        open = false
-                        onSelect(option)
-                    },
-                    trailingIcon = if (isSelected) {
-                        { Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.lg), tint = c.accentText) }
-                    } else {
-                        null
-                    },
-                    colors = MenuDefaults.itemColors(textColor = c.textPrimary),
-                    modifier = Modifier
-                        .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
-                        .semantics { this.selected = isSelected }
-                )
+            // The menu's window starts from the activity's: keep the page's language and text size.
+            ProvidePageLook(look) {
+                options.forEach { option ->
+                    val isSelected = option == selected
+                    DropdownMenuItem(
+                        text = { Text(optionLabel(option), style = type.content(optionLabel(option), type.body)) },
+                        onClick = {
+                            open = false
+                            onSelect(option)
+                        },
+                        trailingIcon = if (isSelected) {
+                            { Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.lg), tint = c.accentText) }
+                        } else {
+                            null
+                        },
+                        colors = MenuDefaults.itemColors(textColor = c.textPrimary),
+                        modifier = Modifier
+                            .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
+                            .semantics { this.selected = isSelected }
+                    )
+                }
             }
         }
     }

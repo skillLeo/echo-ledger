@@ -6,8 +6,8 @@
     <string name="v2_livetab_record_help">WhatsApp and phone calls, recorded as they happen</string>
     <string name="v2_livetab_voice_note">Voice note</string>
     <string name="v2_livetab_voice_note_help">Record yourself now</string>
-    <string name="v2_livetab_translate">Live Translate</string>
-    <string name="v2_livetab_translate_help">Games and videos, translated on screen</string>
+    <string name="v2_livetab_game_help">A game, translated on screen</string>
+    <string name="v2_livetab_watch_help">A video, translated on screen</string>
     <string name="v2_livetab_dictation">Dictation</string>
     <string name="v2_livetab_dictation_help">Speak instead of typing, in any app</string>
     <string name="v2_livetab_captions">Captions</string>

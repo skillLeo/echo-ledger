@@ -63,7 +63,8 @@ object LibraryModel {
         runCatching { OffsetDateTime.parse(item.startedAt).atZoneSameInstant(zone) }.getOrNull()
 
     /**
-     * The time on the row, WhatsApp style: 10:42 today, "Yesterday", the weekday within the week, then the date.
+     * The time on the row, WhatsApp style: 10:42 today, "Yesterday", the weekday within the week, then the date as
+     * classic writes it (`rowTime`, "Oct 20").
      * Digits are always Latin; names follow [locale].
      */
     fun time(item: LibraryItem, now: ZonedDateTime, text: V2Text, locale: Locale): String {
@@ -71,10 +72,14 @@ object LibraryModel {
         val days = ChronoUnit.DAYS.between(at.toLocalDate(), now.toLocalDate())
         return when {
             days <= 0L -> at.format(DateTimeFormatter.ofPattern("HH:mm", Locale.ROOT))
+
             days == 1L -> text.yesterday
+
             days < 7L -> at.format(DateTimeFormatter.ofPattern("EEE", locale))
-            at.year == now.year -> at.format(DateTimeFormatter.ofPattern("d MMM", locale))
-            else -> at.format(DateTimeFormatter.ofPattern("d MMM yyyy", locale))
+
+            // Classic's row date ("Oct 20"), the same as desktop's; another year adds the year.
+            else -> com.echoledger.mobile.ui.design.rowTime(item.startedAt, now.toLocalDate(), now.zone, locale)
+                .let { if (at.year == now.year) it else "$it ${at.year}" }
         }.let { latinDigits(it) }
     }
 

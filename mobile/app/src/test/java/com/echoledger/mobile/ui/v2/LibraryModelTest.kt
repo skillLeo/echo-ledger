@@ -34,7 +34,8 @@ class LibraryModelTest {
         assertEquals("10:42", byId.getValue("01JA").time)
         assertEquals("Yesterday", byId.getValue("01JD").time)
         assertEquals("Sat", byId.getValue("01JF").time)
-        assertEquals("2 Nov", byId.getValue("01JG").time)
+        // Before the week, the date as classic and desktop write it.
+        assertEquals("Nov 2", byId.getValue("01JG").time)
     }
 
     @Test

@@ -102,7 +102,7 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
   };
   useEffect(() => {
     if (sub !== null) return;
-    own.current?.querySelectorAll<HTMLElement>(`:scope > li > :is(${ITEM_ROLES})`)[active]?.focus();
+    own.current?.querySelectorAll<HTMLElement>(`:scope > li > :is(${ITEM_ROLES}), :scope > li > [role="group"] > li > :is(${ITEM_ROLES})`)[active]?.focus();
   }, [active, sub]);
 
   const openSub = (i: number) => {
@@ -132,38 +132,62 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
     else if (e.key === "Tab") onLeave();
   };
 
+  const row = (item: MenuItem, i: number) => {
+    const subOpen = sub === i;
+    return (
+      <li key={`${item.group ?? ""}:${item.label}`} role="none" className="el-menu__item">
+        <div role={item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={item.checked} tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
+          aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
+          aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
+          className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
+          data-active={i === active || undefined}
+          onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
+          onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
+          {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
+            : item.icon ? <Icon icon={item.icon} /> : <span className="el-menu__icon-space" aria-hidden="true" />}
+          <span className="el-menu__label">{item.label}</span>
+          {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
+          {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
+          {item.items && <Icon icon={ChevronEndIcon} directional />}
+        </div>
+        {subOpen && item.items && (
+          <MenuList label={item.label} items={item.items} className={`el-menu el-menu--sub${fit.room ? " el-menu--inline" : ""}`} initial={0}
+            inline={!!fit.room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
+        )}
+      </li>
+    );
+  };
+
   return (
     <ul className={`${className}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
       onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={fit.up || undefined}>
-      {items.map((item, i) => {
-        const header = item.group && item.group !== items[i - 1]?.group ? item.group : null;
-        const subOpen = sub === i;
-        return [
-          header && <li key={`g-${header}`} role="presentation" className="el-menu__group el-caption">{header}</li>,
-          <li key={item.label} role="none" className="el-menu__item">
-            <div role={item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={item.checked} tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
-              aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
-              aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
-              className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
-              data-active={i === active || undefined}
-              onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
-              onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
-              {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
-                : item.icon ? <Icon icon={item.icon} /> : <span className="el-menu__icon-space" aria-hidden="true" />}
-              <span className="el-menu__label">{item.label}</span>
-              {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
-              {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
-              {item.items && <Icon icon={ChevronEndIcon} directional />}
-            </div>
-            {subOpen && item.items && (
-              <MenuList label={item.label} items={item.items} className={`el-menu el-menu--sub${fit.room ? " el-menu--inline" : ""}`} initial={0}
-                inline={!!fit.room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
-            )}
-          </li>,
-        ];
+      {runs(items).map(({ group, from, to }) => {
+        const rows = items.slice(from, to).map((item, k) => row(item, from + k));
+        if (!group) return rows;
+        // A titled group is announced as one: its own role="group" named by its header, so a screen reader hears
+        // "Sort, group" and each section's ticks are a radio set of their own (Sort, Group by, Density).
+        return (
+          <li key={`g-${group}:${from}`} role="none" className="el-menu__section">
+            <ul role="group" aria-label={group}>
+              <li role="presentation" aria-hidden="true" className="el-menu__group el-caption">{group}</li>
+              {rows}
+            </ul>
+          </li>
+        );
       })}
     </ul>
   );
+}
+
+/** Consecutive items with the same `group` (none: ungrouped), as index ranges [from, to). */
+function runs(items: readonly MenuItem[]): { group?: string; from: number; to: number }[] {
+  const out: { group?: string; from: number; to: number }[] = [];
+  items.forEach((item, i) => {
+    const last = out[out.length - 1];
+    if (last && last.group === item.group) last.to = i + 1;
+    else out.push({ group: item.group, from: i, to: i + 1 });
+  });
+  return out;
 }
 
 /** "⌘A" → "Meta+A", "Del" → "Delete", for aria-keyshortcuts. */

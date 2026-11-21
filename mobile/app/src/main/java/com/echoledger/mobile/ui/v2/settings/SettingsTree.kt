@@ -1,19 +1,21 @@
 package com.echoledger.mobile.ui.v2.settings
 
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.SettingsIndex
+import com.echoledger.mobile.ui.v2.components.EchoIcons
 
-/** A goal of Settings (docs/v2/IA.md 5.1–5.9): the same groups on every platform. */
-enum class SettingsGoal(val title: Int) {
-    Recording(R.string.v2_set_group_recording),
-    Transcription(R.string.v2_set_group_transcription),
-    Live(R.string.v2_set_group_live),
-    Privacy(R.string.v2_set_group_privacy),
-    Notifications(R.string.v2_set_group_notifications),
-    Appearance(R.string.v2_set_group_appearance),
-    Account(R.string.v2_set_group_account),
-    Setup(R.string.v2_set_group_setup),
-    About(R.string.v2_set_group_about)
+/** A goal of Settings (docs/v2/IA.md 5.1–5.9): the same groups on every platform, each with its icon and one line. */
+enum class SettingsGoal(val title: Int, val description: Int, val icon: ImageVector) {
+    Recording(R.string.v2_set_group_recording, R.string.v2_set_desc_recording, EchoIcons.Mic),
+    Transcription(R.string.v2_set_group_transcription, R.string.v2_set_desc_transcription, EchoIcons.Transcribe),
+    Live(R.string.v2_set_group_live, R.string.v2_set_desc_live, EchoIcons.Live),
+    Privacy(R.string.v2_set_group_privacy, R.string.v2_set_desc_privacy, EchoIcons.Privacy),
+    Notifications(R.string.v2_set_group_notifications, R.string.v2_set_desc_notifications, EchoIcons.Bell),
+    Appearance(R.string.v2_set_group_appearance, R.string.v2_set_desc_appearance, EchoIcons.Palette),
+    Account(R.string.v2_set_group_account, R.string.v2_set_desc_account, EchoIcons.Account),
+    Setup(R.string.v2_set_group_setup, R.string.v2_set_desc_setup, EchoIcons.Health),
+    About(R.string.v2_set_group_about, R.string.v2_set_desc_about, EchoIcons.Info)
 }
 
 /**
@@ -39,8 +41,32 @@ object SettingsTree {
     /** Pages drawn with the v2 components; the rest open their classic page with the same settings and actions. */
     val nativePages = setOf("appearance", "notifications", SETUP, "calls", "language", "words", "key", "lock", "privacy", "storage")
 
-    /** Settings v2 leaves out: wallpaper colours (v2 takes no wallpaper colours; the classic screens keep the switch). */
-    val hiddenItems = setOf("appearance.wallpaper")
+    /** Settings v2 leaves out nothing of classic's (wallpaper colours came back, docs/PLAN_V2_PARITY.md section 5). */
+    val hiddenItems = emptySet<String>()
+
+    /** Each page's icon on its row (as classic had one per page). */
+    val pageIcons: Map<String, ImageVector> = mapOf(
+        "calls" to EchoIcons.PhoneCall,
+        "mic" to EchoIcons.Mic,
+        "voice" to EchoIcons.VoiceNote,
+        "language" to EchoIcons.Language,
+        "words" to EchoIcons.Words,
+        "key" to EchoIcons.Key,
+        "captions" to EchoIcons.Captions,
+        "games" to EchoIcons.Games,
+        "videos" to EchoIcons.Videos,
+        "lock" to EchoIcons.Lock,
+        "privacy" to EchoIcons.Privacy,
+        "storage" to EchoIcons.Storage,
+        "notifications" to EchoIcons.Bell,
+        "appearance" to EchoIcons.Palette,
+        "plan" to EchoIcons.Plan,
+        "account" to EchoIcons.Account,
+        "devices" to EchoIcons.Devices,
+        SETUP to EchoIcons.Health,
+        "help" to EchoIcons.Help,
+        "about" to EchoIcons.Info
+    )
 
     /** v2's own settings, on its own pages. */
     val extraItems: List<SettingsIndex.Item> = listOf(
@@ -51,7 +77,9 @@ object SettingsTree {
             "",
             "Health checks",
             "health check permissions microphone notifications battery overlay ready"
-        )
+        ),
+        SettingsIndex.Item("appearance.textsize", "appearance", "", "Text size", "font size bigger smaller large text zoom read"),
+        SettingsIndex.Item("appearance.language", "appearance", "", "App language", "language urdu english zaban")
     )
 
     fun goalOf(page: String): SettingsGoal? = goals.firstOrNull { page in it.second }?.first
@@ -103,6 +131,8 @@ object SettingsTree {
         "appearance.theme" to R.string.v2_set_item_appearance_theme,
         "appearance.wallpaper" to R.string.v2_set_item_appearance_wallpaper,
         "appearance.font" to R.string.v2_set_item_appearance_font,
+        "appearance.textsize" to R.string.v2_set_item_appearance_textsize,
+        "appearance.language" to R.string.v2_set_item_appearance_language,
         "notifications.activity" to R.string.v2_set_item_notifications_activity,
         "notifications.quiet" to R.string.v2_set_item_notifications_quiet,
         "lock.app" to R.string.v2_set_item_lock_app,

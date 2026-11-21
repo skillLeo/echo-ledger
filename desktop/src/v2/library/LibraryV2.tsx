@@ -25,6 +25,7 @@ import { recordingName, searchItems, type SortKey } from "../../lib/library";
 import { RecordingPage } from "./RecordingPage";
 import { SourceAvatar } from "./SourceAvatar";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
+import { QueueV2 } from "./QueueV2";
 import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
@@ -55,6 +56,8 @@ export type LibraryV2Props = {
   onRecord?: () => void;
   /** Open this recording (a notice, the palette, a link); `seq` makes the same one open again. */
   openRequest?: { id: string; seq: number; ms?: number } | null;
+  /** Open the waiting recordings at the top of the list (Activity's Review); `seq` makes it open again. */
+  reviewRequest?: { seq: number } | null;
   /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
   viewRequest?: { view: SavedView; seq: number } | null;
   /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
@@ -63,7 +66,7 @@ export type LibraryV2Props = {
   onOpenProject?: (id: string) => void;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, onOpenProject }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +84,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
   const knownValues = useRef<Record<string, string>>({});
   // Sort and group, remembered per view on this computer (classic's View menu).
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
+  // What the queue shows with its own Review: the banner above it leaves those out (one Review for each thing).
+  const [queueShows, setQueueShows] = useState<{ waiting: boolean; failed: boolean }>({ waiting: false, failed: false });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   // Show as List or Table, and the table's columns, kept on this computer (classic's).
@@ -620,9 +625,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
           </header>
         )}
         {top && view !== "trash" && !selecting && (
-          <LibraryTop {...top} items={items}
+          <LibraryTop {...top} items={items} covered={queueShows}
             onAction={(a) => (a === "missed" ? top.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"))} />
         )}
+        {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} onShown={setQueueShows} />}
         <div className="el-page__tools">
           {view !== "trash" && (
             <div className="el-search-row">

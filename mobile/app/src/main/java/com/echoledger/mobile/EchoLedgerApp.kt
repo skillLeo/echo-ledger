@@ -28,6 +28,8 @@ class EchoLedgerApp : Application() {
         // Screen-share privacy first (a small preference file, not the settings store): a floating window or the Quick
         // Settings tile that comes up next already knows the setting (the person's Hide lasts the session only).
         ShareGuard.restore(ShareGuardMemory(this))
+        // The person's design (classic or the new one), before any screen, overlay or notice asks the flags.
+        com.echoledger.mobile.ui.v2.shell.DesignChoice.load(this)
         // The capture journal (since v1.8): a call the last process left open was lost with it.
         com.echoledger.mobile.recording.CallJournal.processStarted(this)
         graph = AppGraph(this)
