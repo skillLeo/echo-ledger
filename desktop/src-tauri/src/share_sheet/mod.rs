@@ -99,7 +99,6 @@ pub const WINDOWS_WHATSAPP_FAMILY: &str = "5319275A.WhatsAppDesktop_cv1g1gvanyjg
 pub const SHARE_TITLE: &str = "Send to WhatsApp";
 /// The first Windows build whose share says it was closed without sending (`DataPackage.ShareCanceled`).
 pub const SHARE_CANCELED_BUILD: u32 = 20348;
-/// What the Share window shows when the voice file could not be added.
 /// What the Share window shows when the voice file could not be added: before build 20348 the sheet already shows
 /// "Open WhatsApp with the text instead" (the share answered `Opened`); from it on, the fallback runs by itself.
 pub fn attach_failed_text(says_cancel: bool) -> &'static str {
@@ -210,6 +209,12 @@ pub fn downloads_copy(dir: &Path, name: &str, source: &Path) -> std::io::Result<
 /// `NSUserCancelledError` in `NSCocoaErrorDomain`: the person closed a share without sending.
 pub fn is_cancel(domain: &str, code: isize) -> bool {
     domain == "NSCocoaErrorDomain" && code == 3072
+}
+
+/// Why a macOS share failed, as logged: the error's domain and code, never its message (which can name the file, so
+/// the recording's title).
+pub fn failed_text(domain: &str, code: isize) -> String {
+    format!("the share failed ({domain} {code})")
 }
 
 /// The keys that paste in a chat, as this system writes them.
@@ -371,6 +376,23 @@ mod tests {
         clear_all(&root);
         assert!(!root.exists());
         clear_all(&root);
+    }
+
+    #[test]
+    fn a_failed_share_is_logged_by_its_domain_and_code_only() {
+        assert_eq!(failed_text("NSCocoaErrorDomain", 4), "the share failed (NSCocoaErrorDomain 4)");
+        let mac = include_str!("mac.rs");
+        assert!(!mac.contains("localizedDescription"), "the system's message can carry the recording's title");
+    }
+
+    #[test]
+    fn sign_out_clears_the_share_copies_before_the_keychain_step() {
+        let source = include_str!("../commands.rs");
+        let at = source.find("pub async fn unpair(").unwrap();
+        let body = &source[at..at + source[at..].find("\n}\n").unwrap()];
+        let cleared = body.find("forget_whatsapp_shares(").expect("unpair clears the share copies");
+        let keychain = body.find("token_store.forget()").expect("unpair forgets the token");
+        assert!(cleared < keychain, "a failing keychain must not leave the share copies behind");
     }
 
     #[test]

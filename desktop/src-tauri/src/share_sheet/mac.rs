@@ -15,7 +15,7 @@ use objc2_foundation::{NSArray, NSError, NSString, NSURL};
 use tauri::{AppHandle, Manager};
 use tokio::sync::oneshot;
 
-use super::{MAC_WHATSAPP_BUNDLES, Native, SHARE_WAIT, after_wait, is_cancel, whatsapp_service};
+use super::{MAC_WHATSAPP_BUNDLES, Native, SHARE_WAIT, after_wait, failed_text, is_cancel, whatsapp_service};
 
 struct Ivars {
     answer: RefCell<Option<oneshot::Sender<Native>>>,
@@ -42,10 +42,12 @@ define_class!(
 
         #[unsafe(method(sharingService:didFailToShareItems:error:))]
         fn did_fail(&self, _service: &NSSharingService, _items: &NSArray, error: &NSError) {
-            let native = if is_cancel(&error.domain().to_string(), error.code()) {
+            let domain = error.domain().to_string();
+            let native = if is_cancel(&domain, error.code()) {
                 Native::Cancelled
             } else {
-                Native::Unavailable(format!("the share failed: {}", error.localizedDescription()))
+                // The domain and code only: the system's message can name the file, so the recording's title.
+                Native::Unavailable(failed_text(&domain, error.code()))
             };
             self.answer(native);
         }

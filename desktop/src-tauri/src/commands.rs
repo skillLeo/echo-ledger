@@ -445,6 +445,8 @@ pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callb
 #[tauri::command]
 pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     let state = app.state::<AppState>();
+    // First, so the share copies go even when a later step (the keychain) fails.
+    forget_whatsapp_shares(&app);
     state.token_store.forget().map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = None;
     state.api_cache.clear();
@@ -454,7 +456,6 @@ pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     })?;
     let _ = std::fs::remove_file(paths::library(&state.data_dir));
     *state.library.lock().await = LibraryCache::default();
-    forget_whatsapp_shares(&app);
     Ok(status(&app))
 }
 
