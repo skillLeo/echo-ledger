@@ -12,7 +12,8 @@ use Illuminate\Support\Carbon;
 
 /**
  * The new frame's rules for the console's wide tables (W-201): Share links, My links, Devices and Request links fit the
- * page at 1024 px. Used only inside ConsoleV2::shell() branches; classic keeps its own columns and buttons.
+ * page at 1024 px. Classic uses actions() too (the same ⋮ menu); its wide columns show from 1280 px instead of inColumns()
+ * (classic has no Columns menu), and it keeps its own dates.
  */
 final class V2Tables
 {

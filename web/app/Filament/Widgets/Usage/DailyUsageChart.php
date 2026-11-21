@@ -19,6 +19,12 @@ class DailyUsageChart extends ChartWidget
 
     protected ?string $heading = 'Billable minutes per day';
 
+    /** In the console's language (W-209). */
+    public function getHeading(): ?string
+    {
+        return __('Billable minutes per day');
+    }
+
     protected ?string $pollingInterval = null;
 
     protected int|string|array $columnSpan = 'full';
@@ -38,7 +44,7 @@ class DailyUsageChart extends ChartWidget
 
         return [
             'datasets' => [[
-                'label' => 'Minutes',
+                'label' => __('Minutes'),
                 'data' => $daily['minutes'],
                 'borderRadius' => 4,
             ]],

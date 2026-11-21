@@ -4,13 +4,13 @@
     $cell = 'padding:.5rem .75rem;border-top:1px solid var(--gray-200);';
     $num = $cell.'text-align:right;font-variant-numeric:tabular-nums;';
 @endphp
-<x-filament::section heading="By person" :description="$description ?? 'Dollars from the price table. Never what anyone recorded.'">
+<x-filament::section :heading="__('By person')" :description="$description ?? __('Dollars from the price table. Never what anyone recorded.')">
     @if ($people === [])
-        <p style="opacity:.6">Nobody has used anything in this period.</p>
+        <p style="opacity:.6">{{ __('Nobody has used anything in this period.') }}</p>
     @else
         <div style="overflow-x:auto">
             <table style="width:100%;font-size:.85rem;border-collapse:collapse">
-                <thead><tr style="text-align:left;opacity:.7"><th style="padding:.5rem .75rem">Person</th><th style="{{ $head }}">Minutes</th><th style="{{ $head }}">Tokens read</th><th style="{{ $head }}">Tokens written</th><th style="{{ $head }}">Cost</th><th style="{{ $head }}">% of plan minutes</th></tr></thead>
+                <thead><tr style="text-align:left;opacity:.7"><th style="padding:.5rem .75rem">{{ __('Person') }}</th><th style="{{ $head }}">{{ __('Minutes') }}</th><th style="{{ $head }}">{{ __('Tokens read') }}</th><th style="{{ $head }}">{{ __('Tokens written') }}</th><th style="{{ $head }}">{{ __('Cost') }}</th><th style="{{ $head }}">{{ __('% of plan minutes') }}</th></tr></thead>
                 <tbody>
                     @foreach ($people as $person)
                         <tr>
