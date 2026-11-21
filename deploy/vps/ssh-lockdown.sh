@@ -99,7 +99,15 @@ undo() {
   if [ -f "$conf.prev" ]; then mv "$conf.prev" "$conf"; else rm -f "$conf"; fi
   rm -f "$conf.new"
 }
-failed() { undo; echo "$1; nothing changed." >&2; exit 4; }
+reload_tried=0
+reload_ssh() { systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null; }
+# After a reload was tried, the file is put back and sshd reloads again, so it runs on the settings it had.
+failed() {
+  undo
+  [ "$reload_tried" = 0 ] || reload_ssh || echo "SSH did not reload the settings put back: run 'systemctl reload ssh' in this shell." >&2
+  echo "$1; nothing changed." >&2
+  exit 4
+}
 trap 'failed "Stopped by an error"' ERR
 trap 'failed "Stopped (interrupted)"' INT TERM HUP
 # 00- so these come first: sshd keeps the first value it reads (cloud-init's 50-cloud-init.conf sets passwords on).
@@ -127,9 +135,8 @@ for want in "permitrootlogin no" "passwordauthentication no" "kbdinteractiveauth
 done
 grep -qx "pubkeyauthentication yes" <<<"$as_admin" || failed "Key sign-in would be off for $admin"
 grep -Eqx "authenticationmethods (publickey|any)" <<<"$as_admin" || failed "$admin would need more than a key to sign in"
-if ! { systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null; }; then
-  failed "SSH did not reload"
-fi
+reload_tried=1
+reload_ssh || failed "SSH did not reload"
 trap - ERR INT TERM HUP
 rm -f "$conf.prev"
 echo "  SSH: keys only, root sign-in off. Open sessions are untouched."
