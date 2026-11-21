@@ -1838,6 +1838,8 @@ export const api = {
   /** Its recordings go to the Inbox and its subfolders up a level. */
   deleteClient: (id: string) => invoke<{ moved_sessions?: number; moved_projects?: number }>("client_delete", { id }),
   libraryViews: (tz: string | null = null) => invoke<LibraryViews>("library_views", { tz }),
+  /** The person opened this recording (since v1.3): no longer unread, on every device. */
+  markOpened: (id: string) => invoke<void>("session_opened", { id }),
   /** The person's lists in their order (since 2.0.0-m); null on a server without lists. */
   lists: () => invoke<ListItem[] | null>("lists_get"),
   /** "+": a new, empty list; without a colour the server picks the one fewest lists have. */

@@ -2003,8 +2003,8 @@ pub async fn list_create(app: AppHandle, name: String, color: Option<String>) ->
     }
 }
 
-/// Rename… and Change colour… on a list chip. A rename changes the label on every recording in the list, so the
-/// library is refreshed after it.
+/// Rename… and Change colour… on a list chip. A rename or a recolour changes every recording in the list: the Library
+/// syncs once afterwards (the page asks for it), not here as well.
 #[tauri::command]
 pub async fn list_update(app: AppHandle, key: String, name: Option<String>, color: Option<String>) -> AppResult<crate::net::models::ListDto> {
     let state = app.state::<AppState>();
@@ -2023,11 +2023,11 @@ pub async fn list_update(app: AppHandle, key: String, name: Option<String>, colo
         Err(e) if e.is_missing_route() => return Err(needs_newer_server("Lists")),
         other => other?,
     };
-    let _ = refresh_library_inner(&app).await;
     Ok(answer.data)
 }
 
-/// Delete list…: the label comes off its recordings (they stay); returns how many changed.
+/// Delete list…: the label comes off its recordings (they stay); returns how many changed. The page syncs the Library
+/// once afterwards.
 #[tauri::command]
 pub async fn list_delete(app: AppHandle, key: String) -> AppResult<u64> {
     let state = app.state::<AppState>();
@@ -2036,8 +2036,25 @@ pub async fn list_delete(app: AppHandle, key: String) -> AppResult<u64> {
         Err(e) if e.is_missing_route() => return Err(needs_newer_server("Lists")),
         other => other?,
     };
-    let _ = refresh_library_inner(&app).await;
     Ok(answer.changed)
+}
+
+/// The person opened a recording here (`POST /api/sessions/{id}/opened`, since v1.3): it is no longer unread, on
+/// every device. The saved Library says so at once, as the server doesn't send the recording again for it. A server
+/// before v1.3 has no unread recordings: nothing to do.
+#[tauri::command]
+pub async fn session_opened(app: AppHandle, id: String) -> AppResult<()> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.session_opened(&id).await {
+        Err(e) if e.is_missing_route() => return Ok(()),
+        other => other?,
+    }
+    let mut cache = state.library.lock().await;
+    if cache.mark_opened(&id) {
+        cache.save(&paths::library(&state.data_dir))?;
+    }
+    Ok(())
 }
 
 /// Move left / Move right on a list chip: every list's key once, in the new order.

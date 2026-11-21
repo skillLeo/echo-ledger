@@ -702,6 +702,7 @@ pub fn run() {
             commands::sessions_transcribe,
             commands::sessions_transcribe_estimate,
             commands::client_create,
+            commands::session_opened,
             commands::lists_get,
             commands::list_create,
             commands::list_update,

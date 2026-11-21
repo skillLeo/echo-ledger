@@ -4,10 +4,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { LibraryItem, ListItem } from "../../lib/ipc";
-import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
-import { inPlace, listPlace, unreadCount } from "./lists";
+import { inPlace, listPlace, placeGone, unreadCount } from "./lists";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -99,8 +99,37 @@ describe("lists in the Library", () => {
       fireEvent.change(within(dialog).getByLabelText("List name"), { target: { value: name } });
       expect(within(dialog).getByRole("button", { name: "Create" })).toBeDisabled();
     }
-    expect(dialog).toHaveTextContent("You already have a list called Unread.");
+    // A fixed chip's word is reserved, not "a list you already have".
+    expect(dialog).toHaveTextContent("Unread is one of the fixed lists. Choose another name.");
+    expect(dialog).not.toHaveTextContent("You already have a list called Unread.");
+    fireEvent.change(within(dialog).getByLabelText("List name"), { target: { value: "clients" } });
+    expect(dialog).toHaveTextContent("You already have a list called Clients.");
     expect(callsOf("list_create")).toEqual([]);
+  });
+
+  it("opening an unread recording tells the server and takes it out of Unread at once", async () => {
+    respond("session_opened", null);
+    await show();
+    fireEvent.click(chips().getByRole("button", { name: /Unread/ }));
+    expect(rowTitles()).toEqual(["bilal", "usman"]);
+    fireEvent.click(document.querySelector<HTMLButtonElement>('button[data-row-id="usman"]')!);
+    await act(flushAsync);
+    expect(callsOf("session_opened")).toEqual([{ id: "usman" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+    await act(flushAsync);
+    expect(chipNames()).toContain("Unread 1");
+    expect(rowTitles()).toEqual(["bilal"]);
+  });
+
+  it("a recording opened while offline is still read here", async () => {
+    fail("session_opened", "The server could not be reached.");
+    await show();
+    fireEvent.click(document.querySelector<HTMLButtonElement>('button[data-row-id="bilal"]')!);
+    await act(flushAsync);
+    expect(callsOf("session_opened")).toEqual([{ id: "bilal" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+    await act(flushAsync);
+    expect(chipNames()).toContain("Unread 1");
   });
 
   it("Add to list in the row ⋮ ticks the lists it is in; a tick adds it at once with Undo", async () => {
@@ -117,6 +146,28 @@ describe("lists in the Library", () => {
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await act(flushAsync);
     expect(callsOf("sessions_bulk").at(-1)).toEqual({ ids: ["usman"], action: "unlabel", clientId: null, label: "Home" });
+  });
+
+  it("Undo after Added to a list takes it off only the recordings that weren't in it already", async () => {
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    for (const id of ["bilal", "ayesha"]) fireEvent.click(document.querySelector<HTMLButtonElement>(`button[data-row-id="${id}"]`)!);
+    fireEvent.contextMenu(document.querySelector<HTMLButtonElement>('button[data-row-id="ayesha"]')!);
+    fireEvent.click(menuItem("Add to list"));
+    // Ayesha is in Home already; Bilal isn't.
+    fireEvent.click(within(screen.getByRole("menu", { name: "Add to list" })).getByRole("menuitemcheckbox", { name: "Home" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal", "ayesha"], action: "label", clientId: null, label: "Home" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk").at(-1)).toEqual({ ids: ["bilal"], action: "unlabel", clientId: null, label: "Home" });
+  });
+
+  it("Add to list takes Label…'s place in the menu", async () => {
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
+    expect(screen.getByRole("menuitem", { name: "Add to list" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Label…" })).toBeNull();
   });
 
   it("a right-click on a recording in a list shows it ticked; unticking takes it out", async () => {
@@ -249,6 +300,52 @@ describe("lists in the Library", () => {
     expect(screen.queryByRole("menu")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
     expect(screen.queryByRole("menuitem", { name: "Add to list" })).toBeNull();
+    // Without lists, Label… stays.
+    expect(screen.getByRole("menuitem", { name: "Label…" })).toBeInTheDocument();
+  });
+
+  it("a chosen list deleted on another device gives way to All, and the row is read again", async () => {
+    await show();
+    fireEvent.click(chips().getByRole("button", { name: "Clients" }));
+    expect(rowTitles()).toEqual(["bilal", "ayesha"]);
+    respond("lists_get", LISTS.slice(1));
+    await act(() => emitEvent("library:updated", 1));
+    await act(flushAsync);
+    expect(chipNames()).not.toContain("Clients");
+    expect(chips().getByRole("button", { name: "All" })).toHaveAttribute("aria-current", "true");
+    expect(rowTitles()).toEqual(["bilal", "ayesha", "usman"]);
+  });
+
+  it("a list the server no longer has (list_not_found) reads the row again and goes back to All", async () => {
+    await show();
+    fireEvent.click(chips().getByRole("button", { name: "Home" }));
+    fail("list_update", "List not found.");
+    respond("lists_get", [LISTS[0], LISTS[2]]);
+    fireEvent.contextMenu(chips().getByRole("button", { name: "Home" }));
+    fireEvent.click(menuItem("Change colour…"));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Change colour" })).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("List not found.");
+    expect(chipNames()).not.toContain("Home");
+    expect(chips().getByRole("button", { name: "All" })).toHaveAttribute("aria-current", "true");
+  });
+
+  it("a rename or a delete syncs the Library once", async () => {
+    respond("list_update", { key: "customers", name: "Customers", color: "#26978f", position: 0, count: 2 });
+    respond("list_delete", 1);
+    await show();
+    const before = callsOf("library_refresh").length;
+    fireEvent.contextMenu(chips().getByRole("button", { name: "Clients" }));
+    fireEvent.click(menuItem("Rename…"));
+    fireEvent.change(within(screen.getByRole("dialog", { name: "Rename list" })).getByLabelText("List name"), { target: { value: "Customers" } });
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Rename list" })).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(callsOf("library_refresh").length - before).toBe(1);
+    fireEvent.contextMenu(chips().getByRole("button", { name: "Home" }));
+    fireEvent.click(menuItem("Delete list…"));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Home?" })).getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    expect(callsOf("library_refresh").length - before).toBe(2);
   });
 });
 
@@ -261,5 +358,15 @@ describe("inPlace and unreadCount", () => {
     expect(inPlace(item, "important")).toBe(false);
     expect(inPlace(makeItem("b", { opened: undefined }), "unread")).toBe(false);
     expect(unreadCount([item, makeItem("c", { opened: false, deleted: true }), makeItem("d", { opened: true })])).toBe(1);
+  });
+
+  it("count a recording opened here as read before the server says so", () => {
+    const item = makeItem("a", { opened: false });
+    const read = new Set(["a"]);
+    expect(inPlace(item, "unread", read)).toBe(false);
+    expect(unreadCount([item, makeItem("b", { opened: false })], read)).toBe(1);
+    expect(placeGone(listPlace("clients"), [])).toBe(true);
+    expect(placeGone(listPlace("clients"), null)).toBe(false);
+    expect(placeGone("unread", [])).toBe(false);
   });
 });

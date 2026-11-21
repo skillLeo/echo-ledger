@@ -1037,6 +1037,12 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `POST /api/sessions/{id}/opened` (since v1.3): the person opened the recording; `204`.
+    pub async fn session_opened(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.post(self.url(&format!("sessions/{id}/opened"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
     /// `api/lists[/<key>]` with the key as one path segment (spaces, Urdu letters and "/" encoded).
     fn list_url(&self, key: Option<&str>) -> AppResult<reqwest::Url> {
         let mut url = reqwest::Url::parse(&self.url("lists")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;

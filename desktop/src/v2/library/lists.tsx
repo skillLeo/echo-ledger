@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type LibraryItem, type ListItem } from "../../lib/ipc";
 import {
-  Button, ColourPicker, ContextMenu, Dialog, Icons, LABEL_COLOURS, ListChip, ListChipRow, NewListDialog, RenameListDialog, addToListItems,
+  Button, ColourPicker, ContextMenu, Dialog, Icons, LABEL_COLOURS, ListChip, ListChipRow, NEW_LIST_WORDS, NewListDialog, RenameListDialog, addToListItems,
   deleteListWords, labelColourName, listChipMenuItems, type LabelColour,
 } from "../components";
 import type { MenuItem } from "../components/Menu";
@@ -22,17 +22,29 @@ const keyOf = (place: Place) => (place.startsWith("list:") ? place.slice(5) : nu
 /** A list's key for a label: the name in lower case, as the server keys it. */
 export const listKey = (name: string) => name.toLowerCase();
 
+/**
+ * The recording is unread: the server says it hasn't been opened, and it hasn't been opened here since (`read`, the
+ * recordings opened on this computer before the server's word comes back).
+ */
+const unread = (item: LibraryItem, read?: ReadonlySet<string>) => item.opened === false && !read?.has(item.id);
+
 /** The recording is in the place: unread (not opened yet), marked important, or carrying the list's label. */
-export function inPlace(item: LibraryItem, place: Place): boolean {
+export function inPlace(item: LibraryItem, place: Place, read?: ReadonlySet<string>): boolean {
   if (place === "all") return true;
-  if (place === "unread") return item.opened === false;
+  if (place === "unread") return unread(item, read);
   if (place === "important") return !!item.important;
   const key = keyOf(place);
   return !!key && (item.labels ?? []).some((l) => listKey(l) === key);
 }
 
 /** How many recordings are unread: the Unread chip's count. */
-export const unreadCount = (items: readonly LibraryItem[]) => items.filter((i) => !i.deleted && i.opened === false).length;
+export const unreadCount = (items: readonly LibraryItem[], read?: ReadonlySet<string>) => items.filter((i) => !i.deleted && unread(i, read)).length;
+
+/** The place is a list the person no longer has (deleted or renamed on another device, or refused as not found). */
+export const placeGone = (place: Place, lists: readonly ListItem[] | null) => {
+  const key = keyOf(place);
+  return !!key && !!lists && !lists.some((l) => l.key === key);
+};
 
 /** The place's name: a fixed chip's word or the list's name. */
 export function placeName(place: Place, lists: readonly ListItem[]): string {
@@ -90,6 +102,11 @@ export function addToListMenu({ lists, chosen, onToggle, onNew }: {
 
 type Editing = { kind: "rename" | "recolour" | "delete"; list: ListItem };
 
+/** Under the name field: a fixed chip's word is reserved, another list's name is in use (as the server words both). */
+const nameWords = (reserved: readonly string[]) => ({
+  duplicate: (name: string) => (reserved.includes(name) ? `${name} is one of the fixed lists. Choose another name.` : NEW_LIST_WORDS.duplicate(name)),
+});
+
 /**
  * The chip row with "+", and the dialogs it opens. `creating` asks for the new-list dialog from outside (Add to list ›
  * New list…): the new list comes back through `onCreating`, which puts those recordings in it.
@@ -102,7 +119,7 @@ export function ListsRow({ lists, setLists, reload, place, onPlace, unread, say,
   onPlace: (place: Place) => void;
   unread: number;
   say: (text: string) => void;
-  /** The recordings' labels changed (a rename or a delete): the Library reloads. */
+  /** The recordings' labels changed (a rename, a recolour or a delete): the Library is synced once. */
   onLibraryChanged: () => void;
   creating: { ids: string[] } | null;
   onCreating: (request: { ids: string[] } | null, made?: ListItem) => void;
@@ -114,6 +131,7 @@ export function ListsRow({ lists, setLists, reload, place, onPlace, unread, say,
   const [busy, setBusy] = useState(false);
   const names = lists.map((l) => l.name);
   const reserved = Object.values(FIXED_CHIPS);
+  const words = nameWords(reserved);
 
   const run = async (fn: () => Promise<void>) => {
     if (busy) return;
@@ -122,6 +140,9 @@ export function ListsRow({ lists, setLists, reload, place, onPlace, unread, say,
       await fn();
     } catch (e) {
       say(errorMessage(e));
+      // The list may be gone (deleted on another device: list_not_found): the row is read again, and a chosen list
+      // that is gone gives way to All.
+      await reload();
     } finally {
       setBusy(false);
     }
@@ -141,12 +162,8 @@ export function ListsRow({ lists, setLists, reload, place, onPlace, unread, say,
     const next = [...lists];
     [next[at], next[to]] = [next[to], next[at]];
     setLists(next);
-    try {
-      setLists(await api.orderLists(next.map((l) => l.key)));
-    } catch (e) {
-      await reload();
-      throw e;
-    }
+    // A refusal puts the row back as the server has it (run reads it again).
+    setLists(await api.orderLists(next.map((l) => l.key)));
   });
   const rename = (list: ListItem, name: string) => run(async () => {
     const saved = await api.updateList(list.key, { name });
@@ -175,7 +192,7 @@ export function ListsRow({ lists, setLists, reload, place, onPlace, unread, say,
     setEditing({ kind, list });
   };
 
-  const words = editing ? deleteListWords(editing.list.name) : null;
+  const asked = editing ? deleteListWords(editing.list.name) : null;
   return (
     <>
       <div ref={row}>
@@ -203,15 +220,15 @@ export function ListsRow({ lists, setLists, reload, place, onPlace, unread, say,
         );
       })()}
       <NewListDialog open={!!creating} onClose={() => onCreating(null)} existing={names} reserved={reserved} usedColours={lists.map((l) => l.color)}
-        onCreate={(name, color) => void create(name, color)} />
-      <RenameListDialog open={editing?.kind === "rename"} name={editing?.list.name ?? ""} existing={names} reserved={reserved}
+        words={words} onCreate={(name, color) => void create(name, color)} />
+      <RenameListDialog open={editing?.kind === "rename"} name={editing?.list.name ?? ""} existing={names} reserved={reserved} words={words}
         onClose={() => setEditing(null)} onRename={(name) => editing && void rename(editing.list, name)} />
       <Dialog open={editing?.kind === "recolour"} title="Change colour" onClose={() => setEditing(null)}
         actions={<><Button onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" loading={busy} loadingLabel="Saving…" onClick={() => editing && void recolour(editing.list)}>Save</Button></>}>
         <ColourPicker label="Colour" hideLabel value={colour} onChange={setColour} />
       </Dialog>
-      <Dialog open={editing?.kind === "delete"} alert title={words?.title ?? ""} description={words?.body} onClose={() => setEditing(null)}
-        actions={<><Button onClick={() => setEditing(null)}>{words?.cancel}</Button><Button variant="danger" loading={busy} loadingLabel="Deleting…" onClick={() => editing && void remove(editing.list)}>{words?.confirm}</Button></>} />
+      <Dialog open={editing?.kind === "delete"} alert title={asked?.title ?? ""} description={asked?.body} onClose={() => setEditing(null)}
+        actions={<><Button onClick={() => setEditing(null)}>{asked?.cancel}</Button><Button variant="danger" loading={busy} loadingLabel="Deleting…" onClick={() => editing && void remove(editing.list)}>{asked?.confirm}</Button></>} />
     </>
   );
 }
