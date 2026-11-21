@@ -49,7 +49,8 @@ it('keeps the header for AI free of isolate marks in Urdu, where the page has th
     $start = strpos($html, "window.elV2Copy('ai', ");
     expect($start)->not->toBeFalse();
     $header = substr($html, $start, (int) strpos($html, ')', $start) - $start);
-    expect($header)->toContain('Payment terms')->toContain('Ahmed')
+    // The header is the apps' (V2CopyForAi): title, date line, the people who speak, language.
+    expect($header)->toContain('Payment terms')->toContain('People: Me')
         ->not->toContain('\u2068')->not->toContain('\u2069')->not->toContain("\u{2068}")->not->toContain("\u{2069}");
 });
 

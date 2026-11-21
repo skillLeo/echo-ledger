@@ -128,6 +128,7 @@ it('reads its indicators in Urdu when the console is in Urdu', function () {
     app()->setLocale('ur');
 
     Carbon::setTestNow(app(RetentionPolicy::class)->expiresAt($this->call->fresh())->subDays(2));
-    $row = indicatorRow(Livewire::test(ListCaptureSessions::class)->html(), (string) $this->call->id);
+    // Read without the invisible direction marks B8 puts around the number inside the Urdu sentence.
+    $row = preg_replace('/[\x{2066}-\x{2069}]/u', '', indicatorRow(Livewire::test(ListCaptureSessions::class)->html(), (string) $this->call->id));
     expect($row)->toContain('aria-label="اہم"')->toContain('aria-label="ابھی کھولی نہیں گئی"')->toContain('آڈیو · 2 دن باقی');
 });
