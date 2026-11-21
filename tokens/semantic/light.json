@@ -114,6 +114,121 @@
         "$value": "#1A1A1A66",
         "$description": "Behind dialogs and sheets"
       }
+    },
+    "label": {
+      "grey": {
+        "fill": {
+          "$type": "color",
+          "$value": "{color.labelgrey.50}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{color.labelgrey.700}"
+        },
+        "dot": {
+          "$type": "color",
+          "$value": "{color.labelgrey.500}"
+        }
+      },
+      "red": {
+        "fill": {
+          "$type": "color",
+          "$value": "{color.labelred.50}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{color.labelred.700}"
+        },
+        "dot": {
+          "$type": "color",
+          "$value": "{color.labelred.500}"
+        }
+      },
+      "orange": {
+        "fill": {
+          "$type": "color",
+          "$value": "{color.labelorange.50}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{color.labelorange.700}"
+        },
+        "dot": {
+          "$type": "color",
+          "$value": "{color.labelorange.500}"
+        }
+      },
+      "amber": {
+        "fill": {
+          "$type": "color",
+          "$value": "{color.labelamber.50}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{color.labelamber.700}"
+        },
+        "dot": {
+          "$type": "color",
+          "$value": "{color.labelamber.500}"
+        }
+      },
+      "green": {
+        "fill": {
+          "$type": "color",
+          "$value": "{color.labelgreen.50}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{color.labelgreen.700}"
+        },
+        "dot": {
+          "$type": "color",
+          "$value": "{color.labelgreen.500}"
+        }
+      },
+      "teal": {
+        "fill": {
+          "$type": "color",
+          "$value": "{color.labelteal.50}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{color.labelteal.700}"
+        },
+        "dot": {
+          "$type": "color",
+          "$value": "{color.labelteal.500}"
+        }
+      },
+      "blue": {
+        "fill": {
+          "$type": "color",
+          "$value": "{color.labelblue.50}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{color.labelblue.700}"
+        },
+        "dot": {
+          "$type": "color",
+          "$value": "{color.labelblue.500}"
+        }
+      },
+      "pink": {
+        "fill": {
+          "$type": "color",
+          "$value": "{color.labelpink.50}"
+        },
+        "text": {
+          "$type": "color",
+          "$value": "{color.labelpink.700}"
+        },
+        "dot": {
+          "$type": "color",
+          "$value": "{color.labelpink.500}"
+        }
+      },
+      "$description": "Label colours: text on fill reaches 4.5:1, the dot 3:1 on every background."
     }
   }
 }

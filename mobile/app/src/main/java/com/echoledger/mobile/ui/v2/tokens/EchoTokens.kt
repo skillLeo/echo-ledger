@@ -34,6 +34,30 @@ object EchoTokens {
         val dangerDefault = Color(0xFFB42318)
         val dangerSoft = Color(0xFFFEF3F2)
         val scrimDefault = Color(0x661A1A1A)
+        val labelGreyFill = Color(0xFFEEEEEC)
+        val labelGreyText = Color(0xFF6C6860)
+        val labelGreyDot = Color(0xFF8E8A80)
+        val labelRedFill = Color(0xFFFAE6E5)
+        val labelRedText = Color(0xFFC32D22)
+        val labelRedDot = Color(0xFFE15F56)
+        val labelOrangeFill = Color(0xFFFCEDE3)
+        val labelOrangeText = Color(0xFFAE5113)
+        val labelOrangeDot = Color(0xFFDC6718)
+        val labelAmberFill = Color(0xFFFDF5E3)
+        val labelAmberText = Color(0xFF8E670B)
+        val labelAmberDot = Color(0xFFB3820F)
+        val labelGreenFill = Color(0xFFE7F8F0)
+        val labelGreenText = Color(0xFF247B4F)
+        val labelGreenDot = Color(0xFF2D9A63)
+        val labelTealFill = Color(0xFFE7F9F8)
+        val labelTealText = Color(0xFF1F7A74)
+        val labelTealDot = Color(0xFF26978F)
+        val labelBlueFill = Color(0xFFE5EFFA)
+        val labelBlueText = Color(0xFF226BBF)
+        val labelBlueDot = Color(0xFF458CDE)
+        val labelPinkFill = Color(0xFFF9E7F0)
+        val labelPinkText = Color(0xFFBC2F75)
+        val labelPinkDot = Color(0xFFD7609C)
     }
 
     object Dark {
@@ -61,6 +85,30 @@ object EchoTokens {
         val dangerDefault = Color(0xFFF97066)
         val dangerSoft = Color(0xFF2A0E0B)
         val scrimDefault = Color(0x99000000)
+        val labelGreyFill = Color(0xFF353431)
+        val labelGreyText = Color(0xFFA29E96)
+        val labelGreyDot = Color(0xFF726D65)
+        val labelRedFill = Color(0xFF3C1D1B)
+        val labelRedText = Color(0xFFE3675F)
+        val labelRedDot = Color(0xFFCC2F24)
+        val labelOrangeFill = Color(0xFF3E2818)
+        val labelOrangeText = Color(0xFFE8772C)
+        val labelOrangeDot = Color(0xFFAE5113)
+        val labelAmberFill = Color(0xFF403317)
+        val labelAmberText = Color(0xFFD09611)
+        val labelAmberDot = Color(0xFF8E670B)
+        val labelGreenFill = Color(0xFF1E382B)
+        val labelGreenText = Color(0xFF34B273)
+        val labelGreenDot = Color(0xFF247B4F)
+        val labelTealFill = Color(0xFF1D3A38)
+        val labelTealText = Color(0xFF2DB4AB)
+        val labelTealDot = Color(0xFF1F7A74)
+        val labelBlueFill = Color(0xFF1B2A3C)
+        val labelBlueText = Color(0xFF5294E0)
+        val labelBlueDot = Color(0xFF226DC3)
+        val labelPinkFill = Color(0xFF3A1D2B)
+        val labelPinkText = Color(0xFFD968A1)
+        val labelPinkDot = Color(0xFFC4317A)
     }
 
     object Space {
@@ -130,9 +178,6 @@ object EchoTokens {
         val listRowHeightCompact = 44.dp
         val listRowHeightMobile = 64.dp
         val listRowHeightMobileTall = 72.dp
-
-        /** The Record button in the middle of the phone's bottom bar. */
-        val recordButton = 56.dp
         const val toastDurationMs = 6000
         const val recordingDotPulseMs = 1500
         val avatarSize = 40.dp
@@ -172,4 +217,16 @@ object EchoTokens {
         val arabicTranscript = TextStyle(fontSize = 18.sp, lineHeight = 30.sp, fontWeight = FontWeight(400))
         val bodyMobile = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight(400))
     }
+
+    /** Label colour names and the #RRGGBB the server stores for each (contract 2.0.0-i); Light/Dark.label* draw them. */
+    val labelColours: Map<String, String> = linkedMapOf(
+        "grey" to "#8E8A80",
+        "red" to "#E15F56",
+        "orange" to "#DC6718",
+        "amber" to "#B3820F",
+        "green" to "#2D9A63",
+        "teal" to "#26978F",
+        "blue" to "#458CDE",
+        "pink" to "#D7609C",
+    )
 }
