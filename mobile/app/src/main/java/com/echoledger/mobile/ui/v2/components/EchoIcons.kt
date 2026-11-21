@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardVoice
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Mic
@@ -194,4 +195,10 @@ object EchoIcons {
 
     /** Auto-record calls (the Record sheet); mirrors in right to left. */
     val AutoRecordCalls: ImageVector get() = Icons.AutoMirrored.Outlined.PhoneCallback
+
+    /** A recording made on a computer (the source mark's device badge). */
+    val DeviceComputer: ImageVector get() = Icons.Outlined.Laptop
+
+    /** A recording made on the web (the source mark's device badge). */
+    val DeviceWeb: ImageVector get() = Icons.Outlined.Language
 }

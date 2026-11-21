@@ -30,6 +30,8 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
+import com.echoledger.mobile.core.SourceApp
+import com.echoledger.mobile.core.SourceDevice
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoBottomSheet
 import com.echoledger.mobile.ui.v2.components.EchoButton
@@ -41,6 +43,7 @@ import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoRadio
 import com.echoledger.mobile.ui.v2.components.EchoSearchField
 import com.echoledger.mobile.ui.v2.components.EchoSelect
+import com.echoledger.mobile.ui.v2.components.EchoSourceLogo
 import com.echoledger.mobile.ui.v2.components.EchoSwitch
 import com.echoledger.mobile.ui.v2.components.EchoToastHost
 import com.echoledger.mobile.ui.v2.components.EchoToastResult
@@ -345,4 +348,17 @@ class ComponentBehaviourTest {
         assertEquals(EchoTokens.Type.arabicCaption.fontSize, english.content(words, english.caption).fontSize)
         assertEquals(EchoTokens.Type.arabicTitleM.lineHeight, english.content(words, english.titleM).lineHeight)
     }
+
+    @Test
+    fun aSourceMarkIsNamedWhenLabelledAndShowsItsDeviceBadge() {
+        show {
+            Column {
+                EchoSourceLogo(SourceApp.VOICE_NOTE, label = "Voice note")
+                EchoSourceLogo(SourceApp.ZOOM, device = SourceDevice.DESKTOP, label = "Zoom on a computer")
+            }
+        }
+        compose.onNodeWithContentDescription("Voice note").assertExists()
+        compose.onNodeWithContentDescription("Zoom on a computer").assertExists()
+    }
 }
+
