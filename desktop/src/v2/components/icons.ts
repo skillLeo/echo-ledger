@@ -75,6 +75,6 @@ export {
   RequestFilesIcon,
 } from "../../components/Icons";
 export { PlayIcon, PauseIcon, StopIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
-// A row's "important" mark in its indicator slot (D12). The family has no flag yet, so it is the bookmark until
-// Icons.tsx gains one; a row never names the glyph, only ImportantIcon.
-export { BookmarkIcon as ImportantIcon } from "../../components/ControlIcons";
+// A row's "important" mark in its indicator slot (D12): a flag, drawn in the warning colour; a row never names the
+// glyph, only ImportantIcon.
+export { LucideFlagIcon as ImportantIcon } from "../../components/Icons";
