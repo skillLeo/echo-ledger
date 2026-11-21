@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type Ref } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type Ref } from "react";
 import { Button, Icon, type ButtonProps, type IconType } from "./Button";
 import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
 
@@ -22,6 +22,8 @@ export type MenuItem = {
   keepOpen?: boolean;
   /** A number on the end side (how many recordings a filter value has). */
   count?: number;
+  /** A hairline above this item, setting it and those after it apart without a header (Delete list…, New list…). */
+  separator?: boolean;
 };
 
 const ITEM_ROLES = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
@@ -138,7 +140,9 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
   const row = (item: MenuItem, i: number) => {
     const subOpen = sub === i;
     return (
-      <li key={`${item.group ?? ""}:${item.label}`} role="none" className="el-menu__item">
+      <Fragment key={`${item.group ?? ""}:${item.label}`}>
+      {item.separator && i > 0 && <li role="separator" className="el-menu__separator" />}
+      <li role="none" className="el-menu__item">
         <div role={item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={item.checked} tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
           aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
           aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
@@ -146,8 +150,8 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           data-active={i === active || undefined}
           onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
           onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
-          {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
-            : item.icon ? <Icon icon={item.icon} /> : <span className="el-menu__icon-space" aria-hidden="true" />}
+          {item.checked !== undefined && <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>}
+          {item.icon ? <Icon icon={item.icon} /> : item.checked === undefined && <span className="el-menu__icon-space" aria-hidden="true" />}
           <span className="el-menu__label">{item.label}</span>
           {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
           {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
@@ -158,6 +162,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
             inline={!!fit.room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
         )}
       </li>
+      </Fragment>
     );
   };
 
