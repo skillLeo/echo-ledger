@@ -76,10 +76,19 @@ it('keeps how many rows show on the server\'s side (the browser can\'t set it) a
     foreach (range(121, 560) as $i) {
         Fx::session($this->owner, $device, ['title' => "Call {$i}", 'started_at' => now()->subHours($i)]);
     }
+    // Up to 500 rows a draw (about 9 MB of HTML): each draw's leftovers are let go of before the next, so a parallel
+    // worker never holds several at once.
+    unset($page, $device);
+    gc_collect_cycles();
     $page = Livewire::test(ListCaptureSessions::class);
-    foreach (range(1, 12) as $ignored) {
+    $calls = 0;
+    while ($page->get('v2Shown') < ListCaptureSessions::V2_MAX && $calls++ < 12) {
         $page->call('v2LoadMore');
+        gc_collect_cycles();
     }
+    expect($page->get('v2Shown'))->toBe(ListCaptureSessions::V2_MAX);
+    // One more Load more at the cap stays at 500.
+    $page->call('v2LoadMore');
     expect($page->get('v2Shown'))->toBe(ListCaptureSessions::V2_MAX)
         ->and(substr_count($page->html(), 'class="v2-lib-row"'))->toBe(500)
         ->and($page->html())->toContain('Refine your search to see more')->toContain('data-load-more-cap')->not->toContain('data-load-more data-shown');

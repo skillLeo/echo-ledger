@@ -10,8 +10,8 @@ use App\Models\Transcript;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptEditor;
 use App\Stt\LanguageChoice;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use App\Support\UnsureMarkers;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 
 /**
  * Copy for AI in the new console (parity plan 3 and 4), the same text as the desktop and phone apps write
@@ -68,26 +68,27 @@ final class V2CopyForAi
     public static function header(CaptureSession $session, array $people): string
     {
         $zone = app(SettingsRepository::class)->displayTimezone();
-        $at = $session->started_at?->copy()->setTimezone($zone);
+        $at = $session->started_at->copy()->setTimezone($zone);
         $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
         $chip = LanguageChoice::chip($final->language ?? $session->language);
 
         return implode("\n", array_filter([
             '# '.(trim($session->displayTitle()) !== '' ? trim($session->displayTitle()) : 'Recording'),
             implode(' · ', array_filter([
-                $at !== null ? $at->format('j F Y').', '.$at->format(Shell::timeFormat() === 'H:i' ? 'H:i' : 'g:i a') : null,
+                $at->format('j F Y').', '.$at->format(Shell::timeFormat() === 'H:i' ? 'H:i' : 'g:i a'),
                 (string) $session->source_app->getLabel(),
                 self::length($session->duration_ms),
             ], fn (?string $part): bool => $part !== null && $part !== '')),
             $people !== [] ? 'People: '.implode(', ', $people) : null,
             filled($chip) ? 'Language: '.$chip : null,
-        ], fn (?string $line): bool => $line !== null && $line !== ''));
+        ], fn (?string $line): bool => $line !== null));
     }
 
     /**
      * The lines the player has for a recording (its final transcript when it has lines, else the live one), each with the
      * speaker's name as the page shows it and the words the engine was unsure of; empty without a transcript.
      *
+     * @param  iterable<Transcript>|null  $transcripts
      * @return list<array{name: string, start_ms: int, text: string, words: list<array{t: string, u: bool}>}>
      */
     public static function lines(CaptureSession $session, float $threshold, ?iterable $transcripts = null): array
