@@ -56,6 +56,7 @@ use App\Stt\ChannelLanguage;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use App\Stt\ScriptCheck;
+use App\Support\Translation\IsolatingTranslator;
 use App\Support\UnsureMarkers;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -608,12 +609,13 @@ class ViewCaptureSession extends ViewRecord
         $session = $this->session();
         $people = array_values(array_unique(array_filter([...array_values((array) ($session->speaker_names ?? [])), $session->caller_name])));
 
-        return implode("\n", array_filter([
+        // Copy for AI is read by a machine: no isolate marks around the values, even in Urdu (B8).
+        return IsolatingTranslator::strip(implode("\n", array_filter([
             __('Recording: :title', ['title' => $session->displayTitle()]),
             __('Date: :date', ['date' => $session->started_at->copy()->timezone(app(SettingsRepository::class)->displayTimezone())->format('j M Y, H:i')]),
             $people !== [] ? __('People: :people', ['people' => implode(', ', $people)]) : null,
             __('Language: :language', ['language' => LanguageChoice::label($session->finalTranscript->language ?? $session->language)]),
-        ]));
+        ])));
     }
 
     /** Download: the audio, and the transcript as a file in the chosen Show as view (unsure words keep their marks). */

@@ -3,10 +3,13 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
+use App\Services\InterfaceFlags;
 use App\Support\Translation\IsolatingTranslator;
+use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\HtmlString;
 use Illuminate\Translation\Translator;
+use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * B8: in Urdu and Arabic every :replacement of a translated line is a Unicode isolate (U+2068 ... U+2069), so a Latin
@@ -78,15 +81,55 @@ it('follows the line\'s locale, not only the app\'s, and Arabic and regional loc
         ->and(trans_choice(':count recording|:count recordings', 2, [], 'en'))->toBe('2 recordings');
 });
 
-it('never isolates twice, an empty value, or a <tag> closure', function () {
+it('always isolates, even a value that looks isolated, and leaves empty values and <tag> closures alone', function () {
     app()->setLocale('ur');
 
-    expect(__('Hi :name', ['name' => FSI.'Ali'.PDI]))->toBe('Hi '.FSI.'Ali'.PDI)
-        ->and(__('Hi :name', ['name' => "\u{2066}Ali".PDI]))->toBe("Hi \u{2066}Ali".PDI)
+    expect(__('Hi :name', ['name' => FSI.'Ali'.PDI]))->toBe('Hi '.FSI.FSI.'Ali'.PDI.PDI)
+        // Two isolated values joined (SourceStatsOverview's "of :limits") are isolated as one.
+        ->and(__('of :limits', ['limits' => FSI.'60 min'.PDI.' · '.FSI.'$5'.PDI]))->toBe(FSI.FSI.'60 min'.PDI.' · '.FSI.'$5'.PDI.PDI.' میں سے')
         ->and(__('Hi :name.', ['name' => '']))->toBe('Hi .')
         ->and(__('Hi :name.', ['name' => null]))->toBe('Hi .')
         ->and(__('Read <b>this</b> :name', ['name' => 'Ali', 'b' => fn (string $t): string => "<strong>{$t}</strong>"]))
         ->toBe('Read <strong>this</strong> '.FSI.'Ali'.PDI);
+});
+
+it('never lets a typed name close its isolate and flip the sentence', function () {
+    app()->setLocale('ur');
+    $rlo = "\u{202E}";
+
+    // A name that ends an isolate it never opened, then overrides the direction of everything after it.
+    $line = __('Open the menu for :name', ['name' => FSI.'x'.PDI.PDI.$rlo.'evil']);
+
+    expect($line)->toBe(FSI.FSI.'x'.PDI.$rlo.'evil'.PDI.' کا مینو کھولیں')
+        // Every opener is closed inside the value's own isolate: the Urdu words come after the last PDI.
+        ->and(mb_substr_count($line, PDI))->toBe(mb_substr_count($line, FSI));
+});
+
+it('uses the app\'s locale when the one given is empty, as Laravel does', function () {
+    app()->setLocale('ur');
+
+    expect(__('Hi :name', ['name' => 'Ali'], ''))->toBe('Hi '.FSI.'Ali'.PDI)
+        ->and(trans_choice(':count recording|:count recordings', 2, [], ''))->toBe(FSI.'2'.PDI.' ریکارڈنگز')
+        // A line Urdu has no plural for still fills in Urdu's isolates (not the English fallback's).
+        ->and(trans_choice(':count file|:count files', 2))->toBe(FSI.'2'.PDI.' files');
+});
+
+it('is the translator the validator uses', function () {
+    expect(validator([], [])->getTranslator())->toBeInstanceOf(IsolatingTranslator::class);
+});
+
+it('isolates a name on an Urdu console page', function () {
+    foreach (InterfaceFlags::UI_V2 as $flag) {
+        app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
+    }
+    $owner = Fx::user(['name' => 'Ahmed Khan']);
+    $owner->forceFill(['console_preferences' => ['shell' => ['app_language' => 'ur']]])->save();
+    Filament::setCurrentPanel('app');
+    $this->actingAs($owner->fresh(), 'web');
+
+    $html = (string) $this->get('/app')->assertOk()->getContent();
+
+    expect($html)->toContain('aria-label="'.FSI.'Ahmed Khan'.PDI.' کا مینو کھولیں"');
 });
 
 it('isolates enums and stringable objects by their value', function () {
@@ -94,4 +137,19 @@ it('isolates enums and stringable objects by their value', function () {
 
     expect(__('Status :status', ['status' => SessionStatus::Completed]))->toBe('Status '.FSI.'completed'.PDI)
         ->and(__('Hi :name', ['name' => new HtmlString('<b>Ali</b>')]))->toBe('Hi '.FSI.'<b>Ali</b>'.PDI);
+});
+
+it('never puts isolate marks in the API, even for a person whose console is in Urdu', function () {
+    $owner = Fx::user();
+    $owner->forceFill(['console_preferences' => ['shell' => ['app_language' => 'ur']]])->save();
+    $device = Fx::device($owner);
+    $session = Fx::session($owner, $device, ['title' => 'Payment terms', 'caller_name' => 'Ahmed']);
+    Fx::transcript($session, 'The proforma is ready.');
+    $token = Fx::token($device);
+
+    foreach (['/api/library', "/api/sessions/{$session->id}", '/api/activity', '/api/account', '/api/config'] as $uri) {
+        $body = (string) $this->withToken($token)->getJson($uri)->assertOk()->getContent();
+        expect($body)->not->toMatch('/\\\\u206[6-9]/i', $uri)->not->toMatch('/[\x{2066}-\x{2069}]/u', $uri);
+    }
+    expect(app()->getLocale())->toBe('en');
 });

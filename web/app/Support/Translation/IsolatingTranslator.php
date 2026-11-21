@@ -15,8 +15,11 @@ use function Illuminate\Support\enum_value;
  * DIRECTIONAL ISOLATE), so a Latin name, a number or an email address inside right-to-left text keeps its own direction
  * and does not reorder the words around it ("Call with Ahmed Khan" in an Urdu sentence). Applies to __(), trans(),
  * trans_choice() and @lang alike, wherever the line's locale is right to left; every other locale is exactly Laravel's.
- * A value already in an isolate (U+2066 to U+2068 first, U+2069 last) is left as it is; closures (`<tag>` replacements)
- * are not values and are untouched.
+ * Every value is wrapped, even one already in an isolate; closures (`<tag>` replacements) are not values and are untouched.
+ *
+ * Not covered: Laravel's validation messages fill :attribute, :min and the like with str_replace in the Validator, not
+ * through the translator, so they are not isolated. They only appear in the console (the API is always English), and
+ * the field they belong to is right beside them.
  */
 final class IsolatingTranslator extends Translator
 {
@@ -52,7 +55,7 @@ final class IsolatingTranslator extends Translator
      */
     public function get($key, array $replace = [], $locale = null, $fallback = true)
     {
-        return $this->filling($locale ?? $this->locale, fn () => parent::get($key, $replace, $locale, $fallback));
+        return $this->filling($locale ?: $this->locale, fn () => parent::get($key, $replace, $locale, $fallback));
     }
 
     /**
@@ -64,7 +67,7 @@ final class IsolatingTranslator extends Translator
      */
     public function choice($key, $number, array $replace = [], $locale = null)
     {
-        return $this->filling($this->localeForChoice($key, $locale), fn () => parent::choice($key, $number, $replace, $locale));
+        return $this->filling($locale ?: $this->locale, fn () => parent::choice($key, $number, $replace, $locale));
     }
 
     /**
@@ -100,13 +103,37 @@ final class IsolatingTranslator extends Translator
         return strtr($line, $shouldReplace);
     }
 
+    /** The text without any bidi isolate marks (U+2066 to U+2069): for text that leaves the page for a machine. */
+    public static function strip(string $text): string
+    {
+        return str_replace([...self::OPENERS, self::CLOSE], '', $text);
+    }
+
+    /**
+     * Always wraps, even a value that already looks isolated (wrapping twice is harmless). A closing mark (PDI) with no
+     * opener of its own inside the value is dropped, so a typed name cannot close this isolate early and let what
+     * follows (an override such as U+202E) flip the sentence; whatever the value leaves open is closed by the final PDI.
+     */
     public static function isolate(string $value): string
     {
-        if ($value === '' || (Str::startsWith($value, self::OPENERS) && str_ends_with($value, self::CLOSE))) {
+        if ($value === '') {
             return $value;
         }
+        $depth = 0;
+        $safe = '';
+        foreach (mb_str_split($value) as $char) {
+            if (in_array($char, self::OPENERS, true)) {
+                $depth++;
+            } elseif ($char === self::CLOSE) {
+                if ($depth === 0) {
+                    continue;
+                }
+                $depth--;
+            }
+            $safe .= $char;
+        }
 
-        return "\u{2068}{$value}".self::CLOSE;
+        return "\u{2068}{$safe}".self::CLOSE;
     }
 
     /**
