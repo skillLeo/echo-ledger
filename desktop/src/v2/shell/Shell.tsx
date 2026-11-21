@@ -4,7 +4,7 @@
 // show today's page inside the new frame; Live and Ask, without their page yet, say where to find them meanwhile.
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Avatar, Badge, Button, EmptyState, Icon, Icons, NavItem, Sidebar, Status } from "../components";
-import { Menu } from "../components/Menu";
+import { Menu, type MenuItem } from "../components/Menu";
 import { initials } from "../settings/initials";
 import type { MainTab } from "../../lib/mainView";
 import { isConfirmOpen } from "../../lib/confirm";
@@ -107,9 +107,36 @@ export type ShellProps = {
   /** "Uploading 2 recordings…" while something is on its way; `uploadsWait` while the server holds them. */
   uploading?: string | null;
   uploadsWait?: boolean;
+  /** The workspace this computer works in, the person's others, and where to invite or switch (classic's top bar). */
+  workspace?: ShellWorkspace | null;
   /** Today's page for the current tab. */
   children: ReactNode;
 };
+
+/** The sidebar's workspace menu: this computer's workspace and role, the others (said, not offered: this computer can't
+ * switch), Invite people (owners and admins; with the plan's name when the plan leaves it out) and the browser. */
+export type ShellWorkspace = {
+  name: string;
+  role: string | null;
+  others: readonly { key: string; name: string; role: string | null }[];
+  /** Invite people: shown to an owner or admin, or locked (it opens the upgrade sheet then). */
+  invite?: { locked: string | null; onPick: () => void } | null;
+  onManage: () => void;
+};
+
+function WorkspaceMenu({ workspace: w }: { workspace: ShellWorkspace }) {
+  const items: MenuItem[] = [
+    ...w.others.map((o) => ({ label: o.role ? `${o.name} · ${o.role}` : o.name, group: "Your other workspaces", disabled: true })),
+    ...(w.invite ? [{ label: w.invite.locked ? `Invite people (${w.invite.locked})` : "Invite people", icon: Icons.UsersIcon, group: `This computer works in ${w.name}`, onPick: w.invite.onPick }] : []),
+    { label: "Switch or manage in the browser", icon: Icons.WebIcon, group: `This computer works in ${w.name}`, onPick: w.onManage },
+  ];
+  return (
+    <div className="el-shell__workspace">
+      <Menu label={`Workspace: ${w.name}${w.role ? `, ${w.role}` : ""}`} items={items}
+        button={{ variant: "quiet", icon: Icons.UsersIcon, iconEnd: Icons.ChevronDownIcon, text: w.role ? `${w.name} · ${w.role}` : w.name, title: "Workspace" }} />
+    </div>
+  );
+}
 
 /** The sidebar's edge: drag it (or the arrow keys, Home and End on it) for 200 to 320 px; a double press for the usual width. */
 function ResizeEdge({ width, onWidth }: { width: number; onWidth: (width: number, done: boolean) => void }) {
@@ -239,7 +266,7 @@ function ProjectTreeNav({ projects, current, onOpen }: { projects: readonly Side
 /** A place of the Library in the sidebar: its key, words and count; `drop` takes dropped recordings (the Inbox). */
 export type SidebarPlace = { key: string; label: string; count: number; drop?: boolean };
 
-export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, onAdmin, places, projectTree, pinnedProjects = [], projectId = null, onProject, shared, rail, onRail, width, onWidth, uploading, uploadsWait = false, children }: ShellProps) {
+export function Shell({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch, searchKeys, onHelp, onAdmin, places, projectTree, pinnedProjects = [], projectId = null, onProject, shared, rail, onRail, width, onWidth, uploading, uploadsWait = false, workspace, children }: ShellProps) {
   // One press records or stops: while that is under way (the core answering, then the status saying so) more presses
   // and held-down keys do nothing, so a double click never starts and stops at once.
   const [pressing, setPressing] = useState<{ from: boolean } | null>(null);
@@ -311,6 +338,7 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
                 <span className="el-nav-item__label">{rail ? "Expand sidebar" : "Collapse sidebar"}</span>
               </button>
             )}
+            {workspace && <WorkspaceMenu workspace={workspace} />}
             {me && (
               <button type="button" className="el-shell__me" onClick={() => go("settings")} title={me.email} aria-describedby="el-shell-me-hint">
                 <Avatar initials={initials(me.name, me.email)} size="sm" />

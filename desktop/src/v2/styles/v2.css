@@ -1503,3 +1503,29 @@ body.resizing-sidebar { cursor: col-resize; user-select: none; }
 .el-help-keys__tip { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; inline-size: 100%; }
 .el-sidebar[data-rail="on"] .el-shell__time { display: none; }
 @media (width < 780px) { .el-sidebar:not([data-rail="off"]) .el-shell__time { display: none; } }
+
+/* The workspace menu at the sidebar's foot: its name and role; the rail keeps its icon. */
+.el-shell__workspace > .el-menu-anchor, .el-shell__workspace .el-button { inline-size: 100%; justify-content: flex-start; min-inline-size: 0; }
+.el-shell__workspace .el-button > span:not(.el-icon) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: start; }
+.el-sidebar[data-rail="on"] .el-shell__workspace .el-button > span:not(.el-icon) {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+@media (width < 780px) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__workspace .el-button > span:not(.el-icon) {
+    position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}
+
+/* Breadcrumbs above a page's title, and the count after a tab's name. */
+.el-crumbs__list { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-4); margin: 0 0 var(--el-space-4); padding: 0; list-style: none; }
+.el-crumbs__step { display: inline-flex; align-items: center; gap: var(--el-space-4); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
+.el-crumbs__link { border: 0; padding: 0; background: transparent; font: inherit; color: var(--el-role-accent-text); cursor: pointer; }
+.el-crumbs__link:hover { text-decoration: underline; }
+.el-crumbs__here { color: var(--el-role-text-primary); }
+.el-tab__count { margin-inline-start: var(--el-space-4); color: var(--el-role-text-secondary); }
+
+/* A Library group's header stays at the top while its group scrolls (classic's); while recordings are being picked
+   the selection bar holds the top instead. */
+[data-v2="library"]:not(:has(.el-selectbar)) .el-list > .el-list-section {
+  position: sticky; inset-block-start: 0; z-index: var(--el-layer-sticky); background: var(--el-role-bg-canvas);
+}

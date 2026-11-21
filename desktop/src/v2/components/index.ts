@@ -17,6 +17,7 @@ export { Banner } from "./Banner";
 export { Skeleton, SkeletonRow, Loading, Progress } from "./Skeleton";
 export { HealthCheckRow, SetupStep, Steps, type HealthState } from "./health";
 export { Tabs, Segmented } from "./Tabs";
+export { Breadcrumbs, type Crumb } from "./Breadcrumbs";
 export { Card, Avatar, Sidebar, NavItem } from "./layout";
 export { Player, Transcript, Waveform, clock, type Segment, type WaveBar, type WaveMark } from "./media";
 export { Menu, ContextMenu, menuPointFor, type MenuItem } from "./Menu";

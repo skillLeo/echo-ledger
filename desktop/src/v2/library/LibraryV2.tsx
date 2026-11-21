@@ -13,7 +13,7 @@ import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Banner, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Banner, Breadcrumbs, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
@@ -761,6 +761,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       onPick: () => setChoice({ ...choice, group: k }) })),
     ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
+  // The place the list shows, after "Library" in the breadcrumbs.
+  const crumb = view === "trash" ? null : folder ? folderLabel(folder) : view !== "all" ? VIEW_NAMES[view as ListView]
+    : place !== "all" ? placeName(place, lists ?? []) : null;
+  const showEverything = () => {
+    onFolder?.(null);
+    setView("all");
+    setPlace("all");
+  };
   const clearAll = () => {
     onFolder?.(null);
     setFilters({});
@@ -809,6 +817,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         ) : (
           <header className="el-page__head">
             <div className="el-page__titles">
+              {/* Library › the place shown (a smart folder, a view, a list); Library shows every recording again. */}
+              {crumb && <Breadcrumbs crumbs={[{ label: "Library", onOpen: showEverything }, { label: crumb }]} />}
               <h1 className="el-title-l">{view === "trash" ? "Trash" : "Library"}</h1>
               {subtitle && <p className="el-secondary" aria-live="polite">{subtitle}</p>}
             </div>

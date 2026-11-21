@@ -7,7 +7,7 @@ import { ActivityView, useActivityItems } from "./ActivityCentre";
 import { actionCount, needsAction as needsActionItem } from "../../lib/badge";
 import { AUTO_RAIL_BELOW, COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, paletteKeys, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL, sidebarFolded } from "../../lib/shell";
 import { Sidebar, SHARED_TABS, type SharedTab, type ShellPage } from "./Sidebar";
-import { TopBar } from "./TopBar";
+import { TopBar, workspacesOf } from "./TopBar";
 import { HelpDialog } from "./HelpDialog";
 import { LibraryColumn, ProjectsColumn } from "./SecondaryColumn";
 import { HomeView } from "./HomeView";
@@ -34,11 +34,11 @@ import { CommandPalette } from "./CommandPalette";
 import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
 import { fileDropClaim } from "../../lib/dropTarget";
-import { isViewer, viewerSentence } from "../../lib/plan";
+import { isViewer, ROLE_LABEL, viewerSentence } from "../../lib/plan";
 import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib/motion";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import type { Account, OneSided } from "../../lib/ipc";
-import { OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
+import { isLocked, lowestPlan, planName, OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
 import { isHoldMessage, ServerBanners } from "./ServerBanners";
 import { ShareNotice } from "./PrivacySettings";
@@ -147,7 +147,8 @@ export default function MainApp() {
   // `from`: the page "?" was pressed on; Help's Back goes there (Settings when it was opened from Settings).
   const [helpStart, setHelpStart] = useState<{ tab: HelpTab; seq: number; from: Tab | null } | null>(null);
   const openHelpRef = useRef<() => void>(() => setHelp(true));
-  const [requestSheet, setRequestSheet] = useState(false);
+  // Request files: the sheet, and the project new links send into (null: the Inbox).
+  const [requestSheet, setRequestSheet] = useState<false | { projectId: string | null }>(false);
   // "+ New project" from the top bar or the Projects column: the Projects page opens its dialog.
   const [projectRequest, setProjectRequest] = useState<{ kind: "new"; seq: number } | null>(null);
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
@@ -750,6 +751,21 @@ export default function MainApp() {
   const uploading = status.pendingUploads === 0 ? null
     : waitingFor ? `${status.pendingUploads === 1 ? "1 recording waits" : `${status.pendingUploads} recordings wait`}: ${waitingFor}`
       : status.pendingUploads === 1 ? "Uploading 1 recording…" : `Uploading ${status.pendingUploads} recordings…`;
+  // The new sidebar's workspace menu (classic's top bar switcher): Invite people for an owner or admin, or with the
+  // plan's name when the plan leaves teams out; the rest is in the browser.
+  const workspaceList = workspacesOf(account, status);
+  const workspaceHere = workspaceList.find((w) => w.current) ?? workspaceList[0];
+  const teamLocked = isLocked(entitlements, "team");
+  const openWorkspaces = () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true));
+  const roleWord = (role: string | null) => (role && role in ROLE_LABEL ? ROLE_LABEL[role as keyof typeof ROLE_LABEL] : null);
+  const shellWorkspace = account === undefined ? null : {
+    name: workspaceHere.name,
+    role: roleWord(workspaceHere.role),
+    others: workspaceList.filter((w) => w !== workspaceHere).map((w) => ({ key: w.key, name: w.name, role: roleWord(w.role) })),
+    invite: teamLocked ? { locked: `in ${planName(lowestPlan(entitlements, "team")) || "a paid plan"}`, onPick: () => openUpgradeSheet("team") }
+      : workspaceHere.role === "owner" || workspaceHere.role === "admin" ? { locked: null, onPick: openWorkspaces } : null,
+    onManage: openWorkspaces,
+  };
   const libraryCrumb = libraryView ? LIBRARY_VIEWS.find(([v]) => v === libraryView)?.[1] ?? null : libraryFolder ? folderLabel(libraryFolder) : null;
 
   const banners = (
@@ -800,13 +816,14 @@ export default function MainApp() {
         <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
           projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
           requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
+          onRequestLink={ui.flags["ui_v2.shell"] ? (id) => setRequestSheet({ projectId: id }) : undefined}
           renderPage={ui.flags["ui_v2.ask"] ? (ctx) => (
             <Suspense fallback={null}>
               <div className="el-root el-embedded">
                 <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name, ai_notes: ctx.project.ai_notes }} parent={ctx.parent} folders={ctx.folders}
                   menu={ctx.menu} onShare={ctx.onShare ?? undefined} rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
                   onMoveRecordings={ctx.onMoveRecordings} onProjectChanged={ctx.onProjectChanged} notify={notify}
-                  onBack={() => openProject(ctx.parent?.id ?? null)} onOpenProject={(id) => openProject(id)}
+                  onBack={() => openProject(ctx.parent?.id ?? null)} onProjects={() => openProject(null)} onOpenProject={(id) => openProject(id)}
                   onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
               </div>
             </Suspense>
@@ -899,7 +916,7 @@ export default function MainApp() {
         <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo} look={ui.flags["ui_v2.shell"] ? "v2" : "classic"}
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok, target) => void run(fn, ok, target)} pages={pages}
-          extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet(true),
+          extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet({ projectId: null }),
             invite: () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true),
             upgrade: entitlements && (upgradeOpen || plansAbove(entitlements).length > 0) ? { open: upgradeOpen, run: () => (upgradeOpen ? openUpgradeSheet(null, { step: "status" }) : openUpgradeSheet(null, { plan: plansAbove(entitlements)[0]?.key ?? null })) } : undefined }}
           settings={findSettings}
@@ -914,7 +931,7 @@ export default function MainApp() {
       {requestSheet && ui.flags["ui_v2.shell"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <RequestLinkSheetV2 projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} onShowLinks={() => openShared("requests")} />
+            <RequestLinkSheetV2 projects={projects ?? []} projectId={requestSheet.projectId} notify={notify} onClose={() => setRequestSheet(false)} onShowLinks={() => openShared("requests")} />
           </div>
         </Suspense>
       )}
@@ -931,12 +948,13 @@ export default function MainApp() {
         <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}
-            rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+            rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor}
+            workspace={shellWorkspace} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
             projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned }))}
             shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
-            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={openHelp}
+            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet({ projectId: null })} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={openHelp}
             places={{
               // Classic's sidebar form: no All, the places that hold something, the Inbox always (it takes drops). Shared
               // with me is Shared's own, under Library.
@@ -989,7 +1007,7 @@ export default function MainApp() {
           onAdmin={() => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true))}
           onWorkspaces={() => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true))}
           onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
-          onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
+          onRequestLink={() => setRequestSheet({ projectId: null })} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
         <main ref={contentRef} className={`content page-${tab}`}>
           {banners}
           {page}

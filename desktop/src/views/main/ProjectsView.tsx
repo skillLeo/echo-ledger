@@ -50,8 +50,10 @@ export function deletedText(name: string, answer: { moved_sessions?: number; mov
   return parts.join(" · ");
 }
 
-export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled, aiNotesInPlan = true, request = null, aside = null, renderPage = null }: {
+export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled, aiNotesInPlan = true, request = null, aside = null, renderPage = null, onRequestLink }: {
   notify: Notify;
+  /** The new design's Request files sheet (into a project, or the Inbox); without it this page's own sheet opens. */
+  onRequestLink?: (projectId: string | null) => void;
   /** Every project; null while they load. */
   projects: ClientFolder[] | null;
   /** Why they could not be loaded. */
@@ -211,7 +213,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       nested && { label: "Move…", onPick: () => setDialog({ kind: "move", project }) },
       nested && { label: "Share link…", onPick: () => setDialog({ kind: "share", project, start: "link" }) },
       nested && { label: "Send to a teammate…", onPick: () => setDialog({ kind: "share", project, start: "send" }) },
-      requests && { label: "Request files into it…", onPick: () => setDialog({ kind: "requests", projectId: project.id, focusId: null }) },
+      requests && { label: "Request files into it…", onPick: () => (onRequestLink ? onRequestLink(project.id) : setDialog({ kind: "requests", projectId: project.id, focusId: null })) },
       nested && { label: "Delete project…", danger: true, onPick: () => setDialog({ kind: "delete", project }) },
     ];
     const share = nested && (
@@ -259,7 +261,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
         subtitle="Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in the Inbox."
         actions={<>
           {requests && (
-            <button type="button" className="btn" onClick={() => setDialog({ kind: "requests", projectId: null, focusId: null })} title="A link anyone can use to send you voice notes and files">
+            <button type="button" className="btn" onClick={() => (onRequestLink ? onRequestLink(null) : setDialog({ kind: "requests", projectId: null, focusId: null }))} title="A link anyone can use to send you voice notes and files">
               <RequestFilesIcon size={16} />Request files
             </button>
           )}
