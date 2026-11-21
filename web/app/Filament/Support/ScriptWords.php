@@ -13,28 +13,35 @@ namespace App\Filament\Support;
 final class ScriptWords
 {
     /**
-     * A text as a JavaScript string in single quotes: "'Ready to upload'". A double quote is escaped too, so the string
-     * may also stand in an HTML attribute (x-text="…").
+     * A text as a JavaScript string in single quotes: "'Ready to upload'". It is written raw ({!! !!}) inside scripts and
+     * inside double-quoted HTML attributes (x-text="…"), so nothing in it may end the string, the attribute or the line,
+     * open a tag or start an entity: \ ' " & < > CR LF U+2028 U+2029 are escaped.
      */
     public static function quote(string $text): string
     {
-        return "'".str_replace(['\\', "'", '"', "\r", "\n", '</'], ['\\\\', "\\'", '\\x22', '\\r', '\\n', '<\\/'], $text)."'";
+        return "'".strtr($text, [
+            '\\' => '\\\\', "'" => "\\'", '"' => '\\x22', '&' => '\\x26', '<' => '\\x3c', '>' => '\\x3e',
+            "\r" => '\\r', "\n" => '\\n', "\u{2028}" => '\\u2028', "\u{2029}" => '\\u2029',
+        ])."'";
     }
 
     /**
      * The sentence [$english] in the console's language as a JavaScript expression, each `:name` replaced by the
      * expression [$values] gives for it: say('Uploading :sent of :size', ['sent' => 'a', 'size' => 'b']) is
-     * "'Uploading ' + a + ' of ' + b".
+     * "'Uploading ' + a + ' of ' + b". A placeholder in any case (:Name, :NAME) takes the value of its lowercase key.
+     *
+     * The values are written into the page as they are: only literal JavaScript expressions written in code
+     * ('waiting.length', 'this.size(f.size)'), never a user's or the server's data, which goes through @js instead.
      *
      * @param  array<string, string>  $values
      */
     public static function say(string $english, array $values = []): string
     {
-        $parts = preg_split('/:([a-z_]+)/', (string) __($english), -1, PREG_SPLIT_DELIM_CAPTURE) ?: [];
+        $parts = preg_split('/:([a-z_]+)/i', (string) __($english), -1, PREG_SPLIT_DELIM_CAPTURE) ?: [];
         $out = [];
         foreach ($parts as $i => $part) {
             if ($i % 2 === 1) {
-                $out[] = $values[$part] ?? self::quote(':'.$part);
+                $out[] = $values[strtolower($part)] ?? self::quote(':'.$part);
             } elseif ($part !== '') {
                 $out[] = self::quote($part);
             }

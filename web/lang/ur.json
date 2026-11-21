@@ -674,7 +674,7 @@
     "Add a project": "پروجیکٹ شامل کریں",
     "projects": "پروجیکٹس",
     "Open (state)": "کھلا",
-    "Mark all as read": "سب کو پڑھا ہوا نشان زد کریں",
+    "Mark all as read": "سب کو پڑھا ہوا کریں",
     "This recording is no longer in this workspace's library.": "یہ ریکارڈنگ اب اس ورک اسپیس کی لائبریری میں نہیں ہے۔",
     "Needs action": "توجہ درکار",
     "Earlier": "پہلے",
@@ -742,7 +742,7 @@
     "Failed uploads (:count)": "ناکام اپ لوڈز (:count)",
     "See why": "وجہ دیکھیں",
     "Uploaded": "اپ لوڈ ہو گئی",
-    "Transcribe": "ٹرانسکرپٹ",
+    "Transcribe": "ٹرانسکرائب کریں",
     "Improve": "بہتری",
     "Improving": "بہتر ہو رہا ہے",
     "Improved": "بہتر ہو گیا",
@@ -809,5 +809,6 @@
     "Starting…": "شروع ہو رہا ہے…",
     "Uploading :sent of :size": ":size میں سے :sent اپ لوڈ ہو گیا",
     "Finishing…": "مکمل ہو رہا ہے…",
-    "recording": "ریکارڈنگ"
+    "recording": "ریکارڈنگ",
+    "Transcribe (stage)": "ٹرانسکرپشن"
 }

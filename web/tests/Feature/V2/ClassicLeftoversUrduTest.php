@@ -43,6 +43,15 @@ function leftoverPage(object $test, bool $v2, string $language, string $page, bo
     return (string) $test->actingAs($test->owner->fresh(), 'web')->get($test->pages[$page])->assertOk()->getContent();
 }
 
+/**
+ * An attribute's text or a rendered view without the invisible direction marks around names and numbers (B8), for
+ * what leftoverWords() does not read: attribute values and views rendered on their own.
+ */
+function leftoverBare(string $text): string
+{
+    return preg_replace('/[\x{2066}-\x{2069}]/u', '', $text) ?? $text;
+}
+
 /** What the page says, without its markup and without the invisible direction marks around names and numbers (B8). */
 function leftoverWords(string $html): string
 {
@@ -102,8 +111,9 @@ it('shows the classic pages\' last English in Urdu in the new frame, with Urdu m
     $library = leftoverPage($this, true, 'ur', 'library', false);
     expect(leftoverWords($library))->toContain('اتوار، 15 نومبر')->toContain('ہفتہ، 14 نومبر')->toContain('تاریخ: آج')
         ->toContain('فائلیں یہاں چھوڑیں')->not->toMatch('/[٠-٩۰-۹]/u');
-    expect(html_entity_decode($library))->toContain('="اطلاعات، 1 آپ کی منتظر ہے"');
-    expect(html_entity_decode(leftoverPage($this, true, 'ur', 'activity')))->toContain('="17 نومبر 2026 · ');
+    expect(leftoverBare(html_entity_decode($library)))->toContain('="اطلاعات، 1 آپ کی منتظر ہے"');
+    $activity = leftoverBare(html_entity_decode(leftoverPage($this, true, 'ur', 'activity')));
+    expect($activity)->toContain('="17 نومبر 2026 · ')->toContain('سب کو پڑھا ہوا کریں')->not->toContain('نشان زد');
     $create = leftoverWords(leftoverPage($this, true, 'ur', 'project-create'));
     expect($create)->toContain('پروجیکٹ بنائیں')->toContain('بنائیں اور ایک اور بنائیں')->toContain('منسوخ کریں')->toContain('اردو (انگریزی الفاظ کے ساتھ)')
         ->not->toContain('Create')->not->toContain('Cancel');
@@ -161,7 +171,7 @@ it('titles the Projects page with its own Urdu plural, and keeps "Projects" in E
 // W-213: the bell's name says how many need the person, one or more, in the console's language.
 it('names the bell with its count, one or more, in Urdu and in English', function () {
     Filament::setCurrentPanel('app');
-    $bell = fn (int $count): string => html_entity_decode(view('filament.activity-bell-trigger', ['badge' => (string) $count, 'count' => $count])->render());
+    $bell = fn (int $count): string => leftoverBare(html_entity_decode(view('filament.activity-bell-trigger', ['badge' => (string) $count, 'count' => $count])->render()));
 
     expect($bell(1))->toContain('="Notifications, 1 needs you"')
         ->and($bell(3))->toContain('="Notifications, 3 need you"')
@@ -170,6 +180,9 @@ it('names the bell with its count, one or more, in Urdu and in English', functio
     expect($bell(1))->toContain('="اطلاعات، 1 آپ کی منتظر ہے"')
         ->and($bell(3))->toContain('="اطلاعات، 3 آپ کی منتظر ہیں"')
         ->and($bell(0))->toContain('="اطلاعات"');
+    // The bell's panel says it as the Activity page, the phone and v2 do (Filament's own Urdu: نوٹیفکیشنز, نشان لگائیں).
+    expect(__('filament-notifications::database.modal.heading'))->toBe('اطلاعات')
+        ->and(__('filament-notifications::database.modal.actions.mark_all_as_read.label'))->toBe(__('Mark all as read'))->toBe('سب کو پڑھا ہوا کریں');
 });
 
 // W-213: the languages' names are shown in Urdu; the codes kept are the same.
@@ -181,4 +194,20 @@ it('shows the offered languages in Urdu and keeps their codes', function () {
         ->and(LanguageChoice::offered()['fr'])->toBe('فرانسیسی')
         ->and(array_keys(LanguageChoice::selectOptions()))->toBe(['', 'en', 'ur', 'ar', 'مزید زبانیں'])
         ->and(array_keys(LanguageChoice::selectOptions()['مزید زبانیں']))->toBe(array_keys(LanguageChoice::MORE));
+});
+
+// W-213 visual: Transcribe as a stage beside Upload and Improve is ٹرانسکرپشن; as a button it is ٹرانسکرائب کریں (v2).
+it('names the Transcribe stage apart from the Transcribe button in Urdu, and keeps "Transcribe" in English', function () {
+    $progress = ['active' => 'upload', 'summary' => 'Uploading 40%', 'steps' => [
+        ['key' => 'upload', 'label' => 'Uploading', 'state' => 'active', 'detail' => '40%', 'percent' => 40],
+        ['key' => 'transcribe', 'label' => 'Transcribe', 'state' => 'waiting', 'detail' => null, 'percent' => null],
+        ['key' => 'improve', 'label' => 'Improve', 'state' => 'waiting', 'detail' => null, 'percent' => null],
+    ]];
+    $steps = fn (bool $compact): string => leftoverBare(html_entity_decode(view('filament.library.progress', ['progress' => $progress, 'compact' => $compact])->render()));
+
+    expect($steps(true))->toContain('Transcribe: waiting')->and($steps(false))->toContain('>Transcribe<');
+    App::setLocale('ur');
+    expect($steps(true))->toContain('ٹرانسکرپشن: انتظار میں')->not->toContain('Transcribe')
+        ->and($steps(false))->toContain('>ٹرانسکرپشن<')
+        ->and(__('Transcribe'))->toBe('ٹرانسکرائب کریں');
 });

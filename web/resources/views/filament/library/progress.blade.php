@@ -6,7 +6,7 @@
 @php($compact = $compact ?? false)
 @php($state = fn (array $s): string => __($s['state'] === 'done' ? 'done' : ($s['state'] === 'active' ? 'in progress' : 'waiting')))
 @if ($compact)
-    <span class="el-steps-compact" role="status" aria-label="{{ collect($progress['steps'])->map(fn ($s) => __($s['label']).': '.$state($s))->implode(', ') }}. {{ $progress['summary'] }}">
+    <span class="el-steps-compact" role="status" aria-label="{{ collect($progress['steps'])->map(fn ($s) => \App\Filament\Support\RecordingProgress::stageLabel($s['label']).': '.$state($s))->implode(', ') }}. {{ $progress['summary'] }}">
         <span class="el-steps-dots" aria-hidden="true">
             @foreach ($progress['steps'] as $s)
                 <span class="el-steps-dot" data-state="{{ $s['state'] }}"></span>
@@ -26,7 +26,7 @@
                         {{ $loop->iteration }}
                     @endif
                 </span>
-                <span class="el-step-label">{{ __($s['label']) }}</span>
+                <span class="el-step-label">{{ \App\Filament\Support\RecordingProgress::stageLabel($s['label']) }}</span>
                 <span class="el-sr">: {{ $state($s) }}</span>
             </li>
         @endforeach
