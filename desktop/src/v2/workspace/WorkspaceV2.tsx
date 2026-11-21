@@ -17,7 +17,7 @@ import { NO_AI_NOTES } from "../../lib/plan";
 import { BRIEF_FIELDS, budgetLine, workspaceBusy } from "../../views/main/ClientWorkspace";
 import { NotesSections } from "../../views/main/CallNotes";
 import { clientSummary } from "../../views/main/ClientAvatar";
-import { LockedChip, PlanBadge, useLocked } from "../../views/main/Upgrade";
+import { LockedChip, PlanBadge, useLocked, useLockedTag } from "../../views/main/Upgrade";
 import { ProjectScreens } from "../../views/main/ScreenMoments";
 import type { Notify } from "../../lib/notice";
 import {
@@ -101,6 +101,7 @@ export function WorkspaceV2({
   const say = useCallback((text: string, action?: { label: string; run: () => void }) => setMessage({ id: Date.now(), text, action }), []);
   const update: WorkspaceUpdate = useCallback((change) => setWs((cur) => (cur ? change(cur) : cur)), []);
   const askLocked = useLocked("ai_notes");
+  const screensLock = useLockedTag("screen_moments");
   // The brief, memory and recent call notes as one text for another AI chat, as today.
   const copyForAi = async () => {
     try {
@@ -134,13 +135,14 @@ export function WorkspaceV2({
   const lastCall = useMemo(() => (own ? latestStart(own) : undefined), [own]);
   // AI notes while they are on for the project and in the plan; a plan without them keeps memory and the brief.
   const aiNotes = aiNotesInPlan && (ws ? ws.client.ai_notes : project.ai_notes !== false);
-  const tabs: { value: Tab; label: string }[] = [
+  const tabs: { value: Tab; label: string; badge?: string | null }[] = [
     { value: "recordings", label: "Recordings" },
     { value: "files", label: "Files" },
     ...(aiNotesInPlan ? [{ value: "ask" as const, label: "Ask" }] : []),
     { value: "memory", label: "Memory & instructions" },
     ...(aiNotes ? [{ value: "notes" as const, label: "Call notes" }] : []),
-    { value: "screens", label: "Screens" },
+    // A plan without screen moments shows the tab with the plan that has them (classic's locked tab).
+    { value: "screens", label: "Screens", badge: screensLock?.tag ?? null },
   ];
   const wsPart = (body: (ws: ClientWorkspace) => ReactNode) => (
     wsFailed && !ws ? (

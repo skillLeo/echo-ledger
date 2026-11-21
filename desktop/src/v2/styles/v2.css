@@ -1411,3 +1411,6 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-nav-tree__name.el-nav-item--sub { padding-inline-start: var(--el-space-4); }
 .el-shell .el-nav-tree__row.drop-over { background: var(--el-role-accent-soft); outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
 
+/* What the plan leaves out on a recording, with the plan that has it (parity DT-REC-043, 073, 083). */
+.el-recording__locked { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
+.el-recording__locked:empty { display: none; }

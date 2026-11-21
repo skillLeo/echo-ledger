@@ -24,6 +24,7 @@ import { PLAYBACK_EXPIRED } from "../shared/SharedReader";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
 import { PDF_HINT, WAVE_BARS } from "../../views/main/TranscriptTools";
+import { LockedChip } from "../../views/main/Upgrade";
 import { screenMarker } from "../../lib/screens";
 import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
@@ -717,6 +718,14 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             </ul>
           )}
           {engine && <p className="el-caption el-secondary">Transcribed in {engine}</p>}
+          {/* What the plan leaves out here, each with the plan that has it (classic's locked chips; none when all are in). */}
+          <p className="el-recording__locked el-caption" data-testid="locked-chips">
+            {item.transcript?.final_status && <LockedChip feature="premium_engines" label="Premium engines" />}
+            {tDetail?.kind === "final" && <LockedChip feature="views" label="Roman Urdu · English · اردو" />}
+            {tDetail?.kind === "final" && <LockedChip feature="double_check" label="Double-check" />}
+            {!screens?.length && <LockedChip feature="screen_moments" label="Screens" />}
+            <LockedChip feature="connector" label="Ask an AI assistant" />
+          </p>
           {engineRetry && <p className="el-caption el-secondary" role="status" dir="auto">{engineRetry}</p>}
           {warning && <p className="el-caption el-row__error" role="status">{warning}</p>}
         </div>

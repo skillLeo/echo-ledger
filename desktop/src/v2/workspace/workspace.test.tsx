@@ -8,7 +8,7 @@ import MainApp from "../../views/main/MainApp";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { fileDropClaim } from "../../lib/dropTarget";
 import { answerConfirm } from "../../test/confirm";
-import { makeItem, makeScreen, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeEntitlements, makeItem, makeScreen, makeSettings, makeStatus } from "../../test/fixtures";
 import { ClientWorkspace as ClientWorkspacePage } from "../../views/main/ClientWorkspace";
 import { RulesSection } from "../../views/main/FilingRules";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
@@ -512,5 +512,17 @@ describe("the project's header (parity DT-PRJ-006)", () => {
     expect(screen.getByTestId("project-summary").textContent).toContain(formatWhen("2026-11-17T06:42:00Z").split(" · ")[0]);
     // By the instant, not the text: 10:00 at +05:00 is before 06:42 UTC.
     expect(latestStart([{ started_at: "2026-11-17T10:00:00+05:00" }, { started_at: "2026-11-17T06:42:00Z" }, { started_at: null }, { started_at: "soon" }])).toBe("2026-11-17T06:42:00Z");
+  });
+});
+
+describe("a locked tab (parity DT-PRJ-012)", () => {
+  it("Screens carries the plan that has screen moments when the plan leaves them out", async () => {
+    resetEntitlementsForTests(makeEntitlements());
+    try {
+      await show();
+      expect(screen.getByRole("tab", { name: /^Screens Pro$/ })).toBeInTheDocument();
+    } finally {
+      resetEntitlementsForTests(null);
+    }
   });
 });
