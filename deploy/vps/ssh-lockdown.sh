@@ -39,17 +39,28 @@ if [ ! -s "$keys" ]; then
   echo "  copied root's authorized keys to $admin"
 fi
 sudoers=/etc/sudoers.d/90-echoledger-admin
-if [ ! -f "$sudoers" ]; then
-  # The account has no password (key sign-in only), so sudo cannot ask for one.
+# The account has no password (key sign-in only), so sudo cannot ask for one. Written again when it names another account.
+want="$admin ALL=(ALL) NOPASSWD:ALL"
+if [ "$(cat "$sudoers" 2>/dev/null)" != "$want" ]; then
   tmp=$(mktemp)
-  echo "$admin ALL=(ALL) NOPASSWD:ALL" >"$tmp"
+  echo "$want" >"$tmp"
   visudo -cf "$tmp" >/dev/null
   install -m 0440 "$tmp" "$sudoers"
   rm -f "$tmp"
   echo "  $admin may use sudo"
 fi
 
+# While the key sign-in is being tested, the address this runs from is not banned for a mistyped key (which would cut
+# this very session): fail2ban's running state only, never its files, and taken back at the end of step 2. A restart
+# of fail2ban forgets it too.
+conn=${SSH_CONNECTION:-}
+tester=${conn%% *}
+[[ "$conn" != "" && "$tester" =~ ^[0-9a-fA-F:.]+$ ]] || tester=""
+
 if [ "$tested" = 0 ]; then
+  if [ -n "$tester" ] && fail2ban-client status sshd >/dev/null 2>&1; then
+    fail2ban-client set sshd addignoreip "$tester" >/dev/null && echo "  $tester is not banned while you test (until step 2 or a fail2ban restart)"
+  fi
   cat <<EOF
 
 Step 1 done. Before going on, from the Mac in a NEW terminal (keep this one open):
@@ -61,7 +72,11 @@ EOF
 fi
 
 [ -s "$keys" ] || { echo "$admin has no authorized keys: stopping." >&2; exit 3; }
+# Without root sign-in, the admin's sudo is the only way to run anything as root: prove it before changing SSH.
+su -s /bin/sh "$admin" -c 'sudo -n true' >/dev/null 2>&1 || { echo "$admin cannot use sudo without a password: stopping before any SSH change." >&2; exit 3; }
 conf=/etc/ssh/sshd_config.d/00-echoledger.conf
+# A copy left by a run that was killed half way: someone must look before anything else changes.
+[ ! -e "$conf.prev" ] || { echo "$conf.prev exists (a run stopped half way): compare it with $conf, put back the right one, delete the .prev, run again." >&2; exit 3; }
 # Put back exactly what was there before (a file from an earlier run, or none) on any failure from here to the end.
 [ -f "$conf" ] && cp -p "$conf" "$conf.prev"
 undo() {
@@ -70,6 +85,7 @@ undo() {
 }
 failed() { undo; echo "$1; nothing changed." >&2; exit 4; }
 trap 'failed "Stopped by an error"' ERR
+trap 'failed "Stopped (interrupted)"' INT TERM HUP
 # 00- so these come first: sshd keeps the first value it reads (cloud-init's 50-cloud-init.conf sets passwords on).
 # MaxAuthTries stays at sshd's 6: an agent offering a few keys before the right one must still get in.
 cat >"$conf.new" <<'EOF'
@@ -98,8 +114,11 @@ grep -Eqx "authenticationmethods (publickey|any)" <<<"$as_admin" || failed "$adm
 if ! { systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null; }; then
   failed "SSH did not reload"
 fi
-trap - ERR
+trap - ERR INT TERM HUP
 rm -f "$conf.prev"
+if [ -n "$tester" ] && fail2ban-client status sshd >/dev/null 2>&1; then
+  fail2ban-client set sshd delignoreip "$tester" >/dev/null 2>&1 || true
+fi
 echo "  SSH: keys only, root sign-in off. Open sessions are untouched."
 echo "  Check from the Mac, in a new terminal (keep this one open):"
 echo "    ssh -o IdentitiesOnly=yes -i <key> $admin@<vps> 'sudo -n true && echo OK'   must print OK"

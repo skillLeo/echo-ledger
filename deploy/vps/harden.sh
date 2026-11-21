@@ -152,13 +152,11 @@ run ufw --force enable >/dev/null
 [ "$dry" = 1 ] || ufw status verbose | sed 's/^/  /'
 
 say "fail2ban for SSH"
-# The address this is run from is never banned: a mistyped key while testing must not cut the session doing it.
-client=${conn%% *}
-ignore="127.0.0.1/8 ::1"
-[[ "$conn" != "" && "$client" =~ ^[0-9a-fA-F:.]+$ ]] && ignore="$ignore $client"
+# No address is allowed past it for good: home and mobile addresses in Pakistan change and are shared (carrier NAT),
+# so an address saved today could belong to anyone tomorrow. ssh-lockdown.sh lets the tester's address through only
+# while it runs (fail2ban's running state, never this file).
 put /etc/fail2ban/jail.d/echoledger-sshd.conf 0644 <<EOF && run systemctl restart fail2ban || true
 # EchoLedger relay VPS (deploy/vps/harden.sh): 5 failed sign-ins in 10 minutes ban the address for an hour.
-# ignoreip: the address harden.sh was last run from (run it again from a new address to change it).
 [sshd]
 enabled = true
 backend = systemd
@@ -166,7 +164,7 @@ port = $(echo "$ssh_ports" | tr ' ' ',')
 maxretry = 5
 findtime = 10m
 bantime = 1h
-ignoreip = $ignore
+ignoreip = 127.0.0.1/8 ::1
 EOF
 run systemctl enable --now fail2ban >/dev/null 2>&1 || true
 

@@ -33,7 +33,7 @@ expect "needrestart leaves the relay and nginx running" 'grep -q "assist-relay" 
 expect "upgrades move to 22:30 UTC" 'systemctl cat apt-daily-upgrade.timer | grep -q "OnCalendar=\*-\*-\* 22:30:00 UTC"'
 expect "no copy of a replaced file is left in apt.conf.d" '! ls /etc/apt/apt.conf.d | grep -q before-echoledger'
 expect "fail2ban watches the SSH port" 'grep -q "^port = 22" /etc/fail2ban/jail.d/echoledger-sshd.conf'
-expect "and never bans the address harden.sh ran from" 'grep -q "^ignoreip = 127.0.0.1/8 ::1 203.0.113.5$" /etc/fail2ban/jail.d/echoledger-sshd.conf'
+expect "and lets no outside address past it for good" 'grep -qx "ignoreip = 127.0.0.1/8 ::1" /etc/fail2ban/jail.d/echoledger-sshd.conf'
 expect "the watchdog timer fires on the minute" 'grep -q "AccuracySec=1s" /etc/systemd/system/echoledger-relay-watchdog.timer'
 expect "fail2ban guards SSH" 'fail2ban-client status sshd'
 expect "journal capped" 'grep -q SystemMaxUse=1G /etc/systemd/journald.conf.d/relay.conf'
@@ -66,6 +66,12 @@ expect "and harden.sh puts it back to root:root 0600" '[ "$(stat -c "%U:%G %a" /
 inside 'ufw allow OpenSSH >/dev/null'
 expect "check.sh fails an ALLOW that skips the SSH limit" 'bash /root/vps/check.sh | grep -q "FAIL  an ALLOW rule for SSH"'
 inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/harden.sh' >/tmp/el-harden-4.log 2>&1 || tail -5 /tmp/el-harden-4.log
+expect "and the next harden.sh run takes that ALLOW away again" '! ufw show added | grep -Eq "^ufw allow (OpenSSH|22|22/tcp)( |$)"'
+echo "== run with sudo after the lockdown (no SSH_CONNECTION)"
+inside 'env -u SSH_CONNECTION bash /root/vps/harden.sh' >/tmp/el-harden-5.log 2>&1; code=$?
+[ "$code" = 0 ] && ok "harden.sh runs without SSH_CONNECTION (exit 0)" || { no "harden.sh without SSH_CONNECTION exit $code"; tail -5 /tmp/el-harden-5.log; }
+expect "SSH still rate limited, and the jail unchanged" 'ufw status | grep -Eq "^22/tcp +LIMIT" && grep -qx "ignoreip = 127.0.0.1/8 ::1" /etc/fail2ban/jail.d/echoledger-sshd.conf'
+expect "needrestart reads our settings without an error" 'needrestart -b -r l >/tmp/nr.txt 2>&1 && ! grep -qi error /tmp/nr.txt'
 
 echo "== watchdog"
 # The installed timer runs the same check every minute: pause it, so only the test counts the misses.
@@ -82,7 +88,8 @@ expect "a relay stopped on purpose stays stopped" '[ "$(systemctl is-active assi
 inside 'touch /run/relay-healthy; systemctl start assist-relay; systemctl start echoledger-relay-watchdog.timer'
 
 echo "== check.sh finds what leaks"
-inside 'mkdir -p /var/log/nginx; echo "1.2.3.4 - - [x] \"GET /v1/assist?token=abc HTTP/1.1\" 101" >> /var/log/nginx/access.log'
+# The token first, then more than 64 KiB: a check that stops reading at its first match must still say FAIL.
+inside 'mkdir -p /var/log/nginx; echo "1.2.3.4 - - [x] \"GET /v1/assist?t=eyJhbGciOiJIUzI1NiJ9.eyJzaWQiOiJ4In0.sig HTTP/1.1\" 101" >> /var/log/nginx/access.log; for i in $(seq 1 1500); do echo "1.2.3.4 - - [x] \"GET /healthz HTTP/1.1\" 200 filler-filler-filler-filler"; done >> /var/log/nginx/access.log'
 expect "a token in nginx's access log fails" 'bash /root/vps/check.sh | grep -q "FAIL  a token appears in nginx"'
 inside ': > /var/log/nginx/access.log'
 inside 'cd /tmp && mkdir -p leak/etc/credstore.encrypted && echo s > leak/etc/credstore.encrypted/relay_secret && tar -C leak -czf /var/backups/echoledger-relay/relay-config-29990101T000000Z.tar.gz etc && touch /var/backups/echoledger-relay/relay-config-29990101T000000Z.tar.gz'
@@ -90,13 +97,25 @@ expect "an archive holding the encrypted relay secret fails" 'bash /root/vps/che
 inside 'rm -f /var/backups/echoledger-relay/relay-config-29990101T000000Z.tar.gz'
 
 echo "== ssh-lockdown.sh"
-inside 'bash /root/vps/ssh-lockdown.sh --admin elops' >/tmp/el-lock-1.log 2>&1
+inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/ssh-lockdown.sh --admin elops' >/tmp/el-lock-1.log 2>&1
+expect "step 1 lets the tester's address through fail2ban while testing, in its running state only" \
+  'fail2ban-client get sshd ignoreip | grep -q 203.0.113.5 && ! grep -q 203.0.113.5 /etc/fail2ban/jail.d/echoledger-sshd.conf'
 expect "step 1 makes elops with root's key and sudo, and changes no SSH setting" \
   'id elops && grep -q TestKeyOnly /home/elops/.ssh/authorized_keys && sudo -u elops sudo -n true && [ ! -f /etc/ssh/sshd_config.d/00-echoledger.conf ]'
 expect "the admin account has no password" '[ "$(passwd -S elops | cut -d" " -f2)" = L ] || [ "$(passwd -S elops | cut -d" " -f2)" = NP ]'
 inside 'bash /root/vps/ssh-lockdown.sh --admin root' >/dev/null 2>&1 && no "refuses root as the admin" || ok "refuses root as the admin"
-inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp/el-lock-2.log 2>&1; code=$?
+inside 'echo "elops ALL=(ALL) !ALL" > /etc/sudoers.d/99-test-deny; chmod 440 /etc/sudoers.d/99-test-deny'
+inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp/el-lock-0.log 2>&1; code=$?
+inside 'rm -f /etc/sudoers.d/99-test-deny'
+[ "$code" = 3 ] && grep -q "cannot use sudo" /tmp/el-lock-0.log && ok "step 2 stops before any SSH change when the admin cannot sudo" || no "step 2 went on without the admin's sudo (exit $code)"
+expect "and wrote nothing" '[ ! -f /etc/ssh/sshd_config.d/00-echoledger.conf ]'
+inside 'touch /etc/ssh/sshd_config.d/00-echoledger.conf.prev'
+inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/dev/null 2>&1; code=$?
+[ "$code" = 3 ] && ok "a stale .prev from a run stopped half way stops step 2" || no "a stale .prev went unnoticed (exit $code)"
+inside 'rm -f /etc/ssh/sshd_config.d/00-echoledger.conf.prev'
+inside 'SSH_CONNECTION="203.0.113.5 50000 172.17.0.2 22" bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp/el-lock-2.log 2>&1; code=$?
 [ "$code" = 0 ] && ok "step 2 runs" || { no "step 2 exit $code"; cat /tmp/el-lock-2.log; }
+expect "and takes the tester's address back" '! fail2ban-client get sshd ignoreip | grep -q 203.0.113.5'
 expect "root sign-in and passwords off, as sshd itself reads it" 'sshd -T | grep -qx "permitrootlogin no" && sshd -T | grep -qx "passwordauthentication no" && sshd -T | grep -qx "kbdinteractiveauthentication no"'
 expect "check.sh --expect-lockdown passes the SSH lines" '! bash /root/vps/check.sh --expect-lockdown | grep -Eq "FAIL  (root|passwords)"'
 inside 'printf "PasswordAuthentication yes\n" > /etc/ssh/sshd_config.d/00-aaa.conf; bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp/el-lock-3.log 2>&1; code=$?
@@ -112,8 +131,12 @@ inside 'bash /root/vps/ssh-lockdown.sh --admin elops --i-tested-key-login' >/tmp
 expect "and its file is taken back" '[ ! -f /etc/ssh/sshd_config.d/00-echoledger.conf ]'
 inside 'rm -f /usr/local/sbin/systemctl'
 
-echo "== a token past 64 KiB of the relay's journal"
-inside 'touch /etc/fake-relay-leak; systemctl restart assist-relay; sleep 2'
+echo "== a token followed by more than 64 KiB of the relay's journal"
+inside 'touch /etc/fake-relay-leak; systemctl restart assist-relay; sleep 3'
+expect "the journal holds the token and over 64 KiB after it" '[ "$(journalctl -u assist-relay -o cat | wc -c)" -gt 140000 ] && journalctl -u assist-relay -o cat | head -c 1000 | grep -q eyJ'
+# The line check.sh had before the review: under pipefail, grep -q quits at the token, journalctl gets SIGPIPE, and the
+# pipe fails, so the leak read as "none found". It must still miss it here, or this test proves nothing.
+inside 'set -o pipefail; journalctl -u assist-relay --since "-24h" -o cat 2>/dev/null | grep -Eq "Bearer |sk-[A-Za-z0-9]{10}|\"text\":|eyJ[A-Za-z0-9_-]{10,}\."' && no "the old check line saw the leak (the test would not catch the regression)" || ok "the old check line misses it (so this test catches the regression)"
 expect "check.sh fails it (the leak checks count, they never stop at the first match)" 'bash /root/vps/check.sh | grep -q "FAIL  the relay.s journal holds a token"'
 
 echo

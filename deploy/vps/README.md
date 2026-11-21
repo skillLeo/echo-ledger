@@ -50,8 +50,11 @@ left in their folders).
   `ufw allow OpenSSH`) would let every attempt past the limit, so it is removed once the limit is in. The relay's 8787
   stays closed: it listens on loopback only, behind nginx. A rule that opened 8787 by hand is removed, also while the
   firewall is still off.
-- **fail2ban** on SSH: 5 failed sign-ins in 10 minutes ban the address for an hour. The address harden.sh is run from
-  is never banned, so a mistyped key while testing cannot cut the session doing it.
+- **fail2ban** on SSH: 5 failed sign-ins in 10 minutes ban the address for an hour. No address is let past it for
+  good: home and mobile addresses in Pakistan change and are shared through carrier NAT, so an address let through
+  today could be anyone's tomorrow. `ssh-lockdown.sh` lets the tester's address through only while the key sign-in is
+  tested, in fail2ban's running state (a restart forgets it), and takes it back at the end of step 2. Running
+  `harden.sh` with `sudo` (which drops `SSH_CONNECTION`) changes nothing about this.
 - **Clock in sync** (systemd-timesyncd): assist tokens are checked against it.
 - **Journal capped** at 1 GB and 14 days (services/assist-relay/DEPLOY.md, "Logs").
 - **Relay watchdog**, every minute: systemd already restarts the relay when it exits. The watchdog catches a relay that
@@ -60,7 +63,8 @@ left in their folders).
 - **Resources**, every 5 minutes: CPU (the 5-minute load against the cores), memory (what the kernel says is available)
   and disk at **80 %**, a waiting reboot, and the relay or nginx waiting for a restart after an update. Each alert is
   sent once when it starts and once when it clears (5 points under its limit, so a value at the limit does not flap).
-- **Settings backup**, every day at 03:30: one archive of the relay's environment file and config, its systemd unit,
+- **Settings backup**, every day at 03:30 server time (UTC on the VPS, so 08:30 in Pakistan; it is a few seconds of
+  work and touches no live call): one archive of the relay's environment file and config, its systemd unit,
   nginx's sites, journald and ops settings, the firewall rules, certbot's renewal settings and the current relay binary,
   in `/var/backups/echoledger-relay/` (root only), 14 kept, each with its sha256.
   **Never in it:** the encrypted relay secret and the host key that opens it, TLS private keys, SSH keys, `alert.env`.
