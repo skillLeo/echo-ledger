@@ -36,8 +36,31 @@ final class PassageSearch
     /** @return list<Passage> the best [$count] passages, most recent first among equals */
     public function top(Client $client, string $question, int $count): array
     {
+        $sessions = CaptureSession::query()->withoutGlobalScopes()->where('client_id', $client->id)->where('user_id', $client->user_id)->with('finalTranscript')
+            ->latest('started_at')->limit(60)->get();
+
+        return self::best([...$this->calls($sessions), ...$this->files($client)], $question, $count);
+    }
+
+    /**
+     * The best [$count] passages of the given recordings' transcripts only (since 2.0.0-o: Ask about one recording, and
+     * Ask across a person's recordings), most recent first among equals. The caller decides whose recordings they are.
+     *
+     * @param  iterable<CaptureSession>  $sessions  newest first, with their final transcript loaded
+     * @return list<Passage>
+     */
+    public function topOfRecordings(iterable $sessions, string $question, int $count): array
+    {
+        return self::best($this->calls($sessions), $question, $count);
+    }
+
+    /**
+     * @param  list<Passage>  $passages
+     * @return list<Passage>
+     */
+    private static function best(array $passages, string $question, int $count): array
+    {
         $words = self::words($question);
-        $passages = [...$this->calls($client), ...$this->files($client)];
         foreach ($passages as &$passage) {
             $passage['score'] = self::score($words, implode("\n", $passage['blocks']));
         }
@@ -52,14 +75,17 @@ final class PassageSearch
         return array_slice($matching, 0, $count);
     }
 
-    /** @return list<Passage> */
-    private function calls(Client $client): array
+    /**
+     * @param  iterable<CaptureSession>  $sessions
+     * @return list<Passage>
+     */
+    private function calls(iterable $sessions): array
     {
         $zone = $this->settings->displayTimezone();
-        $sessions = CaptureSession::query()->withoutGlobalScopes()->where('client_id', $client->id)->where('user_id', $client->user_id)->with('finalTranscript')
-            ->latest('started_at')->limit(60)->get();
         $out = [];
-        foreach ($sessions as $rank => $session) {
+        $rank = -1;
+        foreach ($sessions as $session) {
+            $rank++;
             $transcript = $session->finalTranscript;
             if ($transcript === null || $transcript->status !== TranscriptStatus::Completed) {
                 continue;

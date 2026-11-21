@@ -99,6 +99,8 @@ function abilityRoutes(): array
         'add client file' => ['POST', "/api/clients/{$id}/files", 'sessions:write'],
         'remove client file' => ['DELETE', "/api/clients/{$id}/files/{$id}", 'sessions:write'],
         'ask about a client' => ['POST', "/api/clients/{$id}/ask", 'sessions:write'],
+        'ask about a recording' => ['POST', "/api/sessions/{$id}/ask", 'sessions:write'],
+        'ask across my recordings' => ['POST', '/api/ask', 'sessions:write'],
         'call notes' => ['GET', "/api/sessions/{$id}/notes", 'library:read'],
         'make call notes' => ['POST', "/api/sessions/{$id}/notes", 'sessions:write'],
         'decide suggested fix' => ['POST', "/api/transcripts/{$id}/suggestions/{$id}", 'sessions:write'],

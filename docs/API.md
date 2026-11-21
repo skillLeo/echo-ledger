@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-n (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-o (2026-11-22, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-o (proposed 2026-11-22, accepted when merged; B12, see "Ask about a recording and across recordings (since 2.0.0-o)"): Ask beyond one project. `POST /api/sessions/{id}/ask` asks about one recording of the person's (its transcript and its notes) and `POST /api/ask` across all of their own recordings in the workspace, with the request, answer, citations, throttle, plan feature and AI budget of `POST /api/clients/{id}/ask`. New code `409 no_transcript` (nothing transcribed to ask about). Every Segment carries `language` (the line's language when the engine knew it: `ur`, `en`, `ar`…; `null` otherwise and on every line before 2.0.0-o), so the apps can skip a language's lines; `POST /api/sessions/{id}/transcripts` takes it too. Only additions: older apps ignore them.
 2.0.0-n (proposed 2026-11-21, accepted when merged; U19 "Roman Urdu by default"): `views.status` (a transcript's `views`, `GET /api/transcripts/{id}/views` and a library item's `transcript.views`) is `making` from the moment a finished transcript's default view is on its way, also before its job has started (`progress` is `{}` until the job counts the lines), so apps show "Converting to Roman Urdu…" at once; a `making` that moved no line for 20 minutes, and a view that never started within 20 minutes of the transcript (until 24 hours after it, `none` then), is `failed` (`error` "Converting took too long. Try again."), never busy for ever, and `POST` starts it again. A library item's `transcript.views` counts only views made (or failed) after the transcript's last edit. A library item's `transcript.preview` is in the default view once it is `ready`, and the new `transcript.preview_view` (`"roman"` | `"urdu"` | `"english"` | `"original"`) says which, so rows need not fetch the views. A recording that opens in Roman Urdu gets its automatic title in Roman Urdu, and an automatic title in Urdu letters is written again in Roman Urdu when the view is made. No other field changes.
 2.0.0-m (proposed 2026-11-21, accepted when merged): lists (B11, see "Lists (since 2.0.0-m)"). A person's lists are their labels with a name, a colour and a place in the apps' row, kept by the server so every device shows the same ones: `GET /api/lists`, `POST /api/lists` (an empty list), `PATCH` and `DELETE /api/lists/{key}` (rename or delete changes every recording of the person in one transaction) and `PUT /api/lists/order`. Labelling a recording makes its list when it is new (never for a label spelt All, Unread or Important, which stays a plain label). `GET /api/library/views` gives the labels in list order. A label's colour is its list's (`PUT /api/labels/color` and `label_colors` answer as before). New codes `name_reserved`, `list_exists`, `list_not_found`. Only additions: older apps ignore them.
 2.0.0-l (proposed 2026-11-21, accepted by the lead and EL-UX 2026-11-21, served when merged, after 2.0.0-m): the person's account and security from the apps — name, profile picture (`avatar_url` and `avatar_version` beside every person shown), email change, password, sign-in methods, browsers and devices of every workspace, two-step setup, phone passkeys, Keep my account through sign-in (`403 deletion_scheduled`, then `"keep": true`), `error_codes` beside `errors`. Additions only, except that an app sign-in during a deletion's grace now answers `deletion_scheduled` instead of `not_allowed`. See "Account and security from the apps (since 2.0.0-l)".
@@ -121,6 +122,7 @@ Every addition below is marked **(since v1.1)**.
 | 409 | `cannot_retranscribe` | `sessions/{id}/retranscribe`: the recording's audio is not on the server (not uploaded yet, or erased; since v1.2) | Retry once the upload has finished |
 | 409 | `ai_unavailable` | Since v1.4: client notes, brief or Ask without an Anthropic key in API Credentials | Show the message; retry after the key is added |
 | 409 | `no_client` | Since v1.4: `POST sessions/{id}/notes` for a recording not filed under a project | File it under a project first |
+| 409 | `no_transcript` | Since 2.0.0-o: `POST sessions/{id}/ask` for a recording with no finished transcript, or `POST /api/ask` when none of the person's recordings has one | Say there is nothing to ask about yet; ask again once a transcript is ready |
 | 410 | `restore_expired` | `sessions/{id}/restore` after the 48-hour undo bin ended | Permanent: the recording is gone |
 | 413 | `too_large` | Body or declared size above the limit | Permanent |
 | 422 | `validation_failed` | Field errors in `errors` | Permanent for that request |
@@ -154,8 +156,15 @@ Every addition below is marked **(since v1.1)**.
 **Segment** (shared transcript shape; channel 1 = "Me" mic/left, channel 2 = "Client" system/right; mono = channel 1 "Speaker"):
 ```json
 {"channel": 1, "speaker": "Me", "start_ms": 250, "end_ms": 2600, "text": "Smoke from the north.",
- "words": [{"text": "Smoke", "start_ms": 250, "end_ms": 650, "confidence": 0.97}]}
+ "words": [{"text": "Smoke", "start_ms": 250, "end_ms": 650, "confidence": 0.97}], "language": "en"}
 ```
+`language` (since 2.0.0-o): the language this line was heard in, as one of the language codes the server offers (`ur`,
+`en`, `ar`, …; Hindi reads as `ur`), when the engine said so; `null` when it did not. Whisper on Groq and Gemini give
+the language of each piece of the recording they heard (or the language it was forced into), Soniox the language most
+of the line's words were heard in; the other engines give none yet. Lines written before 2.0.0-o are `null` (nothing is
+guessed afterwards). An edit keeps the line's language. Apps that skip a language's lines skip only lines with that
+code and always show `null` lines. A view's lines (`GET /api/transcripts/{id}/views`) are aligned with the segments, so
+a line's language is its segment's.
 
 **Transcript `error_code` messages** (since v1.1; plain words since contract 1.8.1-a). The `error` field of a failed
 transcript (in `GET /api/transcripts/{id}`, a session's `transcripts` and the session detail) is exactly the sentence for
@@ -1016,8 +1025,9 @@ session's final provider mode is `device`, e.g. `parakeet_local`).
 ```json
 {"kind": "live", "provider": "assemblyai", "language": "en", "segments": [ …Segment… ]}
 ```
-Validation: `0 ≤ start_ms ≤ end_ms ≤ duration_ms + 500`, `channel ∈ {1, 2}`, at most 20 000 segments. `201` →
-Transcript. Live caption times are on the recording timeline: paused time is not counted.
+Validation: `0 ≤ start_ms ≤ end_ms ≤ duration_ms + 500`, `channel ∈ {1, 2}`, at most 20 000 segments. Since 2.0.0-o a
+segment may carry `language` (a string of at most 16 characters): kept when it is a language the server offers, else
+`null`. `201` → Transcript. Live caption times are on the recording timeline: paused time is not counted.
 
 ### Bookmarks and pauses (since v1.1)
 Both `POST /api/sessions` (with artifacts) and `POST /api/sessions/{id}/finish` accept two optional lists. Times are
@@ -1804,6 +1814,33 @@ characters). The server picks the passages of the client's transcripts and files
 [{"type": "call", "session_id": "01JB…", "title": "Kick-off · Oct 30", "at_ms": 125000, "quote": "…"},
 {"type": "file", "file_id": "01JE…", "title": "scope.pdf", "page": 2, "quote": "…"}]}}`. `403 ai_budget_reached`,
 `409 ai_unavailable`, `502 provider_error`.
+
+### Ask about a recording and across recordings (since 2.0.0-o)
+The same Ask as a project's (`POST /api/clients/{id}/ask`): the same request (`{"question": "…", "language": "en"}`,
+question 3–500 characters, `language` en | roman_urdu, default en), the same answer (`200 {"data": {"answer", "citations"}}`,
+citations of `"type": "call"` with `session_id`, `title`, `at_ms` and `quote`; never `file` here), the same rules
+(only the passages sent, at most 120 words, "say so" when they do not answer, never a guess), the same limiter (20 a minute
+per person, shared with the project's Ask), the plan's `ai_notes` feature (`403 feature_not_in_plan`), the same AI key
+(`409 ai_unavailable`) and monthly AI budget (`403 ai_budget_reached`), and `502 provider_error` when the AI cannot
+answer. A viewer's device asks nothing (`403 not_allowed`), as for a project. Each answer is one `client_ask` row in the
+usage ledger (Ask on the Usage page), with the recording (and its project) when there is one, and counts against the
+budget. Nothing of the question or answer is logged.
+
+### `POST /api/sessions/{id}/ask` — `sessions:write`, throttled (20/min/device) (since 2.0.0-o)
+Asks about one recording of the person's in this workspace: the passages of its finished transcript that match the
+question best (about 12 windows of 8 lines), with the recording's own call notes when it has them; nothing of any other
+recording, project brief, memory or file. `200 {"data": {"answer": "They chose the second plan.", "citations": [{"type":
+"call", "session_id": "01JB…", "title": "Kick-off · Oct 30", "at_ms": 125000, "quote": "…"}]}}`. `404 session_not_found`
+for a recording that is not the person's (another person's, another workspace's, or in the Bin); `409 no_transcript`
+when it has no finished transcript; `422` for the question; `403 feature_not_in_plan`, `403 ai_budget_reached`, `409
+ai_unavailable`, `502 provider_error`.
+
+### `POST /api/ask` — `sessions:write`, throttled (20/min/device) (since 2.0.0-o)
+Asks across all of the person's own recordings in this workspace: the same search over their latest 100 recordings with
+a finished transcript (never a teammate's, nor one in the Bin), the best passages of
+any of them, each citation naming its recording (`session_id`). `200` as above; `409 no_transcript` when none of their
+recordings has a finished transcript; `422` for the question; `403 feature_not_in_plan`, `403 ai_budget_reached`, `409
+ai_unavailable`, `502 provider_error`.
 
 ### `GET /api/clients/{id}/bundle?notes=` — `library:read` (since v1.4)
 "Copy for AI": `200 {"data": {"text": "# Acme: project context\n\n## Brief\n…\n## Memory\n…\n## Recent call notes\n…"}}`
