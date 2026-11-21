@@ -119,6 +119,7 @@
     <string name="v2_rec_detail_device">ڈیوائس</string>
     <string name="v2_rec_detail_created">ریکارڈ ہوئی</string>
     <string name="v2_rec_detail_labels">لیبل</string>
+    <string name="v2_rec_detail_size">فائل کا سائز</string>
     <string name="v2_rec_detail_kept">رکھی گئی</string>
     <string name="v2_rec_detail_kept_forever">ہمیشہ کے لیے</string>
     <string name="v2_rec_detail_kept_rules">آپ کے پلان کے اصولوں کے مطابق</string>

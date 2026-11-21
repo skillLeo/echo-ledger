@@ -105,6 +105,7 @@
     <string name="v2_set_activity_help">تیار ٹرانسکرپٹس، ناکام اپ لوڈز، نئی ڈیوائسز</string>
     <string name="v2_set_quiet_help">%1$s سے %2$s تک اطلاعات خاموشی سے آئیں گی</string>
     <string name="v2_set_sign_out">سائن آؤٹ</string>
+    <string name="v2_set_audio_kept">محفوظ آڈیو: %1$s · %2$s بعد خود بخود صاف ہو جاتی ہے</string>
     <string name="v2_set_sign_out_title">اس فون سے سائن آؤٹ کریں؟</string>
     <string name="v2_set_sign_out_body">جو ریکارڈنگز ابھی اپ لوڈ نہیں ہوئیں وہ دوبارہ سائن ان تک اسی فون پر رہیں گی۔</string>
     <string name="v2_set_theme">تھیم</string>

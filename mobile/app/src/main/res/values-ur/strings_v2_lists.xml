@@ -10,7 +10,8 @@
     <string name="v2_lists_colour">رنگ</string>
     <string name="v2_lists_create">بنائیں</string>
     <string name="v2_lists_duplicate">آپ کی %1$s نام کی فہرست پہلے سے ہے۔</string>
-    <string name="v2_lists_reserved">%1$s لائبریری کا اپنا چِپ ہے۔ کوئی اور نام چنیں۔</string>
+    <string name="v2_lists_reserved">%1$s مقررہ فہرستوں میں سے ہے۔ کوئی اور نام چنیں۔</string>
+    <string name="v2_lists_options">فہرست کے اختیارات</string>
     <string name="v2_lists_empty_title">%1$s میں ابھی کچھ نہیں</string>
     <string name="v2_lists_empty_body">ریکارڈنگز ان کے ⋮ مینو سے شامل کریں: فہرست میں شامل کریں۔</string>
     <string name="v2_lists_rename">نام بدلیں…</string>

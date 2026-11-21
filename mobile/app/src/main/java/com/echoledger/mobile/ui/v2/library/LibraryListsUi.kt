@@ -139,6 +139,7 @@ fun LibraryListRow(
                     { onChip(LibraryLists.chipOf(list)) },
                     stored = list.color,
                     onMenu = { menuFor = list.key },
+                    menuLabel = stringResource(R.string.v2_lists_options),
                     menu = {
                         EchoListChipMenu(
                             expanded = menuFor == list.key,

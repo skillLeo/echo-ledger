@@ -610,6 +610,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { graph.api()?.transcriptViews(transcriptId) }.getOrNull()
     }
 
+    private val viewsRechecking = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * A row still `making` long after its transcript finished: its views are read (when the Library opens, then about
+     * 5 and 15 minutes on: [com.echoledger.mobile.ui.v2.library.LibraryModel.VIEWS_RECHECKS]), and the row takes what
+     * they say (failed after 20 minutes with nothing done, or ready), since that change does not reach a sync. One read
+     * at a time per row.
+     */
+    fun recheckViews(item: LibraryItem) {
+        val id = item.transcript?.finalTranscriptId ?: return
+        if (!viewsRechecking.add(item.id)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val now = runCatching { graph.api()?.transcriptViews(id) }.getOrNull() ?: return@launch
+                val was = item.transcript?.views ?: return@launch
+                if (now.status != was.status) graph.library.setViewsLocally(item.id, was.copy(status = now.status, progress = now.progress))
+            } finally {
+                viewsRechecking.remove(item.id)
+            }
+        }
+    }
+
     /** Show as (since v1.2): asks the server to write the views; null with a message when it cannot. */
     suspend fun makeTranscriptViews(transcriptId: String): TranscriptViewsDto? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.makeTranscriptViews(transcriptId) }
@@ -779,6 +801,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _lists.value = _lists.value.map { if (it.key == key) changed else it }
                 if (name != null) refreshQuietly()
             }
+            // Another device may have changed or removed it: read the lists again.
+            .onFailure { loadLists() }
 
     /** `DELETE /api/lists/{key}`: the list goes, its recordings stay. */
     suspend fun deleteList(key: String): Boolean = withContext(Dispatchers.IO) {
@@ -788,6 +812,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (ok) {
             _lists.value = _lists.value.filterNot { it.key == key }
             refreshQuietly()
+        } else {
+            loadLists()
         }
     }
 
@@ -797,7 +823,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val ordered = withContext(Dispatchers.IO) {
             runCatching { graph.api()?.orderLists(keys) ?: error("Not signed in") }
                 .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The lists could not be moved.") }.getOrNull()
-        } ?: return false
+        } ?: return false.also { loadLists() }
         _lists.value = ordered
         return true
     }

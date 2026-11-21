@@ -892,8 +892,14 @@ data class SessionDetailDto(
     /** Bookmarks on the recording, in time order (since v1.1). */
     val markers: List<SessionMarkerDto> = emptyList(),
     /** Renamed speakers: label in the segments → name (since v1.1). */
-    @SerialName("speaker_names") val speakerNames: Map<String, String> = emptyMap()
+    @SerialName("speaker_names") val speakerNames: Map<String, String> = emptyMap(),
+    /** The recording's files (the primary one first): their size for Details. */
+    val recordings: List<RecordingFileDto> = emptyList()
 )
+
+/** One of a recording's files in `GET /api/sessions/{id}`. */
+@Serializable
+data class RecordingFileDto(val id: String, val role: String = "primary", @SerialName("size_bytes") val sizeBytes: Long = 0)
 
 @Serializable
 data class SessionMarkerDto(val id: String, @SerialName("at_ms") val atMs: Long, val tag: String? = null, val note: String? = null)

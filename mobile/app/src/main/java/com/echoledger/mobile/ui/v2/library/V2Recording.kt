@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -439,7 +440,8 @@ private fun V2RecordingPage(
             skipSilence = player.skipSilence,
             onSkipSilence = if (hasAudio) ({ player.changeSkipSilence(it) }) else null,
             showPlayer = hasAudio,
-            showShare = !page.noAudio
+            showShare = !page.noAudio,
+            fileBytes = page.fileBytes
         )
     )
 }
@@ -631,7 +633,9 @@ fun V2RecordingContent(
     var tab by remember { mutableIntStateOf(0) }
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         val list = rememberLazyListState()
-        EchoTopBar(title = "", onBack = onBack) {
+        // The title moves into the bar once the page's head has scrolled away (classic's collapsing title).
+        val scrolled by remember { derivedStateOf { list.firstVisibleItemIndex > 0 } }
+        EchoTopBar(title = if (scrolled) row.title else "", onBack = onBack) {
             tools.onFind?.takeIf { !tools.finding }?.let { EchoIconButton(EchoIcons.Search, stringResource(R.string.v2_rec_find), it) }
         }
         if (tools.finding) {
@@ -836,6 +840,7 @@ private fun DetailRows(item: LibraryItem, row: V2Row, text: V2Text, head: Record
         item.languageChip?.let { EchoSettingRow(text.detailLanguage, value = it) }
         row.time.takeIf { it.isNotBlank() }?.let { EchoSettingRow(stringResource(R.string.v2_rec_detail_created), value = it) }
         item.client?.name?.let { EchoSettingRow(text.detailProject, value = it) }
+        head.fileBytes?.let { EchoSettingRow(stringResource(R.string.v2_rec_detail_size), value = LibraryModel.size(it)) }
         if (item.labels.isNotEmpty()) EchoSettingRow(stringResource(R.string.v2_rec_detail_labels), value = item.labels.joinToString(", "))
         EchoSettingRow(
             stringResource(R.string.v2_rec_detail_kept),
@@ -859,5 +864,7 @@ data class RecordingHead(
     /** The player shows only with audio to play (classic: a playback address, and not "no audio"). */
     val showPlayer: Boolean = true,
     /** Share shows unless nothing was heard (classic). */
-    val showShare: Boolean = true
+    val showShare: Boolean = true,
+    /** The recording file's size (Details), null until read. */
+    val fileBytes: Long? = null
 )

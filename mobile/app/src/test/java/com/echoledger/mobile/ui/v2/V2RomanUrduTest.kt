@@ -187,8 +187,21 @@ class V2RomanUrduTest : ScreenTest() {
         awaitText("Converting to Roman Urdu…")
     }
 
-    private fun library(rowViews: String, preview: String = "Hello there.", previewView: String = "original") {
-        val row = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, title = "Bilal Traders", preview = preview, client = null)
+    private fun library(
+        rowViews: String,
+        preview: String = "Hello there.",
+        previewView: String = "original",
+        updatedAt: String = java.time.OffsetDateTime.now().toString(),
+        /** False: the Library is left (another tab), true: it opens again. */
+        open: androidx.compose.runtime.State<Boolean>? = null
+    ) {
+        val row = ServerFixtures.libraryItem(
+            ServerFixtures.SESSION_ID,
+            title = "Bilal Traders",
+            preview = preview,
+            client = null,
+            updatedAt = updatedAt
+        )
             .replace("\"preview\":\"$preview\"", "\"preview\":\"$preview\",\"preview_view\":\"$previewView\",\"views\":$rowViews")
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(row))))
         runBlocking { app.graph.library.refresh() }
@@ -196,7 +209,7 @@ class V2RomanUrduTest : ScreenTest() {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
                 val toasts = rememberEchoToastState()
                 CompositionLocalProvider(LocalEchoToasts provides toasts) {
-                    V2LibraryScreen(vm, initials = "AS", onOpen = {}, onTrash = {}, onAccount = {})
+                    if (open?.value != false) V2LibraryScreen(vm, initials = "AS", onOpen = {}, onTrash = {}, onAccount = {})
                 }
             }
         }
@@ -228,7 +241,14 @@ class V2RomanUrduTest : ScreenTest() {
     fun aConvertingRowAsksAgainUntilItsRomanSnippetArrives() {
         library("""{"status":"making","default":"roman","progress":{}}""")
         awaitText("Converting to Roman Urdu…")
-        val row = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, title = "Bilal Traders", preview = "Hello ji.", client = null)
+        val later = java.time.OffsetDateTime.now().plusMinutes(1).toString()
+        val row = ServerFixtures.libraryItem(
+            ServerFixtures.SESSION_ID,
+            title = "Bilal Traders",
+            preview = "Hello ji.",
+            client = null,
+            updatedAt = later
+        )
             .replace(
                 "\"preview\":\"Hello ji.\"",
                 "\"preview\":\"Hello ji.\",\"preview_view\":\"roman\",\"views\":{\"status\":\"ready\",\"default\":\"roman\",\"progress\":{}}"
@@ -243,5 +263,71 @@ class V2RomanUrduTest : ScreenTest() {
     fun aLibraryRowWhoseViewFailedSaysSo() {
         library("""{"status":"failed","default":"roman","progress":{}}""")
         awaitText("Couldn't convert to Roman Urdu · Try again")
+    }
+
+    @Test
+    fun aRowStillConvertingTwentyMinutesOnReadsItsViewsOnceAndStopsAsking() {
+        views(
+            "failed",
+            """{"status":"failed","available":["roman","english"],"default":"roman","error":"Converting took too long. Try again."}"""
+        )
+        val old = java.time.OffsetDateTime.now().minusMinutes(30).toString()
+        library("""{"status":"making","default":"roman","progress":{}}""", updatedAt = old)
+        // The server has stopped it, which no sync brings: the row reads its views once and says so.
+        awaitText("Couldn't convert to Roman Urdu · Try again")
+        assertEquals(1, server.requestsTo("GET", "/api/transcripts/.+/views").size)
+        val asked = server.requestsTo("GET", "/api/library").size
+        repeat(12) {
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
+        }
+        assertEquals("no 5 s refresh for a stopped view", asked, server.requestsTo("GET", "/api/library").size)
+        val now = java.time.Instant.now()
+        val row = vm.library.value.single()
+        assertTrue(
+            com.echoledger.mobile.ui.v2.library.LibraryModel.viewsStale(
+                row.copy(transcript = row.transcript?.copy(views = com.echoledger.mobile.data.RowViewsDto("making", "roman"))),
+                now
+            )
+        )
+        assertTrue(
+            !com.echoledger.mobile.ui.v2.library.LibraryModel.viewsStale(
+                row.copy(
+                    updatedAt = now.toString(),
+                    transcript = row.transcript?.copy(views = com.echoledger.mobile.data.RowViewsDto("making", "roman"))
+                ),
+                now
+            )
+        )
+    }
+
+    @Test
+    fun aStoppedViewIsReadAgainAboutFiveAndFifteenMinutesOnAndWhenTheLibraryOpens() {
+        // The server still says making (its clean-up has not run yet), so the row stays stale.
+        views("making", """{"status":"making","available":["roman","english"],"default":"roman","progress":{}}""")
+        val old = java.time.OffsetDateTime.now().minusMinutes(30).toString()
+        val open = androidx.compose.runtime.mutableStateOf(true)
+        library("""{"status":"making","default":"roman","progress":{}}""", updatedAt = old, open = open)
+        val reads = { server.requestsTo("GET", "/api/transcripts/.+/views").size }
+        pumpUntil("read as the Library opens") { reads() == 1 }
+        fun after(minutes: Long) {
+            compose.mainClock.advanceTimeBy(minutes * 60_000, ignoreFrameDuration = true)
+            compose.waitForIdle()
+        }
+        after(4)
+        assertEquals("not before 5 minutes", 1, reads())
+        after(1)
+        pumpUntil("read again at about 5 minutes") { reads() == 2 }
+        after(9)
+        assertEquals(2, reads())
+        after(1)
+        pumpUntil("read again at about 15 minutes") { reads() == 3 }
+        after(60)
+        assertEquals("no more while the Library stays open", 3, reads())
+        // Leaving the Library and opening it again reads them once more.
+        open.value = false
+        compose.waitForIdle()
+        open.value = true
+        pumpUntil("read as the Library opens again") { reads() == 4 }
     }
 }
