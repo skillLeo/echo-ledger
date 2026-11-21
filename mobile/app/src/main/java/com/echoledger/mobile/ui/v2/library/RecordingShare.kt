@@ -152,45 +152,71 @@ fun RecordingShareSheet(
         return
     }
     val target = remember { WhatsAppShare.target(WhatsAppShare.installed(context)) }
-    val copiedNote = stringResource(R.string.v2_rec_wa_text_copied)
+    val savingVoice = stringResource(R.string.v2_rec_wa_saving)
+    val loading = EchoV2.strings.loading
+    val say: (String) -> Unit = vm::showMessage
+
+    // The WhatsApp choice being prepared: the sheet stays (its scope with it) until the message is handed over; closed
+    // first, nothing is sent ("Not sent").
+    var working by remember { mutableStateOf<String?>(null) }
+    fun waitNote() {
+        if (working == "voice") say(context.getString(R.string.v2_rec_wa_wait))
+    }
+    fun run(kind: String, block: suspend () -> Unit) {
+        if (working != null) return waitNote()
+        working = kind
+        scope.launch {
+            try {
+                WhatsAppShare.attempt(context, say, block)
+            } finally {
+                working = null
+            }
+            onDismiss()
+        }
+    }
+    fun idle(action: () -> Unit): () -> Unit = { if (working == null) action() else waitNote() }
+    val free = working == null
     EchoBottomSheet(onDismiss = onDismiss, title = stringResource(R.string.v2_rec_share)) {
         Column(Modifier.fillMaxWidth()) {
-            MenuRow(EchoIcons.Share, stringResource(R.string.v2_rec_share_text), {
-                onDismiss()
-                shareTranscript(context, item.title.orEmpty(), shareText())
-            })
-            MenuRow(RecordingIcons.Link, stringResource(R.string.v2_rec_share_link), { linkSheet = true })
-            MenuRow(RecordingIcons.Send, stringResource(R.string.v2_rec_send), { sendSheet = true })
+            MenuRow(
+                EchoIcons.Share,
+                stringResource(R.string.v2_rec_share_text),
+                idle {
+                    onDismiss()
+                    shareTranscript(context, item.title.orEmpty(), shareText())
+                },
+                enabled = free
+            )
+            MenuRow(RecordingIcons.Link, stringResource(R.string.v2_rec_share_link), idle { linkSheet = true }, enabled = free)
+            MenuRow(RecordingIcons.Send, stringResource(R.string.v2_rec_send), idle { sendSheet = true }, enabled = free)
             if (transcriptId != null) {
                 EchoSectionHeader(
                     stringResource(if (target == WhatsAppShare.BUSINESS) R.string.v2_rec_whatsapp_business else R.string.v2_rec_whatsapp)
                 )
                 suspend fun transcriptText(): String? = vm.export(transcriptId, "txt", view)?.readText()
                 MenuRow(EchoIcons.WhatsApp, stringResource(R.string.v2_rec_wa_text), {
-                    onDismiss()
-                    scope.launch { transcriptText()?.let { WhatsAppShare.start(context, WhatsAppShare.textIntent(it, target)) } }
-                })
+                    run("text") { transcriptText()?.let { WhatsAppShare.send(context, WhatsAppShare.textIntent(it, target), say) } }
+                }, busy = loading.takeIf { working == "text" }, enabled = free)
                 if (hasAudio) {
                     MenuRow(EchoIcons.VoiceNote, stringResource(R.string.v2_rec_wa_voice), {
-                        onDismiss()
-                        scope.launch {
-                            val text = transcriptText() ?: return@launch
-                            val audio = vm.downloadAudio(item.id, "EchoLedger recording") ?: return@launch
-                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.exports", audio)
-                            // WhatsApp may drop text sent with audio: it is on the clipboard too.
-                            copyToClipboard(context, "Transcript", WhatsAppShare.clip(text))
-                            vm.showMessage(copiedNote)
-                            WhatsAppShare.start(context, WhatsAppShare.voiceIntent(uri, text, target))
+                        run("voice") {
+                            val text = transcriptText() ?: return@run
+                            WhatsAppShare.sendTextAndVoice(
+                                context,
+                                text,
+                                target,
+                                save = { dir -> vm.downloadAudio(item.id, "EchoLedger recording", dir) },
+                                say = say
+                            )
                         }
-                    })
+                    }, busy = savingVoice.takeIf { working == "voice" }, enabled = free)
                 }
                 MenuRow(RecordingIcons.Link, stringResource(R.string.v2_rec_wa_link), {
-                    onDismiss()
-                    scope.launch {
-                        val link = vm.createShare(item.id, 7L * 24 * 3600, null, includeAudio = hasAudio)?.url ?: return@launch
-                        WhatsAppShare.start(context, WhatsAppShare.textIntent(link, target))
+                    run("link") {
+                        val link = vm.createShare(item.id, 7L * 24 * 3600, null, includeAudio = hasAudio)?.url ?: return@run
+                        WhatsAppShare.send(context, WhatsAppShare.textIntent(link, target), say)
                     }
-                })
+                }, busy = loading.takeIf { working == "link" }, enabled = free)
             }
         }
     }

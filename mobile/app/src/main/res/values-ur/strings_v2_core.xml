@@ -119,7 +119,7 @@
     <string name="v2_vm_stop_recording_first">پہلے ریکارڈنگ روکیں، پھر ٹیسٹ چلائیں۔</string>
     <string name="v2_vm_stopped_sharing">شیئرنگ بند ہو گئی</string>
     <string name="v2_vm_wrong_sign_in_link">یہ سائن ان لنک اس سائن ان کے لیے نہیں۔ دوبارہ شروع کریں۔</string>
-    <string name="v2_vm_audio_download_failed">آڈیو ڈاؤن لوڈ نہیں ہو سکی۔ کنکشن چیک کریں اور دوبارہ کوشش کریں۔</string>
+    <string name="v2_vm_audio_download_failed">آواز ڈاؤن لوڈ نہیں ہو سکی۔ کنکشن چیک کریں اور دوبارہ کوشش کریں۔</string>
     <string name="v2_vm_change_not_saved">تبدیلی محفوظ نہیں ہو سکی۔</string>
     <string name="v2_vm_device_not_revoked">ڈیوائس ہٹائی نہیں جا سکی۔</string>
     <string name="v2_vm_export_failed">ایکسپورٹ ناکام رہا۔</string>
@@ -135,7 +135,7 @@
     <string name="v2_vm_term_not_added">لفظ شامل نہیں ہو سکا۔</string>
     <string name="v2_vm_views_not_started">ویوز شروع نہیں ہو سکے۔</string>
     <string name="v2_vm_signed_out">یہ فون سرور پر سائن آؤٹ کر دیا گیا۔ دوبارہ سائن ان کریں۔</string>
-    <string name="v2_vm_no_audio_on_server">اس ریکارڈنگ کی آڈیو سرور پر موجود نہیں۔</string>
+    <string name="v2_vm_no_audio_on_server">اس ریکارڈنگ کی آواز سرور پر موجود نہیں۔</string>
     <string name="v2_vm_one_updated">1 ریکارڈنگ اپ ڈیٹ ہو گئی</string>
     <string name="v2_vm_welcome">EchoLedger میں خوش آمدید</string>
     <string name="v2_vm_ws_it_could_not_be_removed">اسے ہٹایا نہیں جا سکا۔</string>
