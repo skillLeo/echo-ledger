@@ -10,5 +10,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    // As CI runs it (desktop-mac.yml, desktop-windows.yml: --testTimeout=30000): a test that passes there no longer
+    // fails here only because a busy computer is slower. Slow tests are still fixed at their cause (D-166, D-167).
+    testTimeout: 30_000,
   },
 });
