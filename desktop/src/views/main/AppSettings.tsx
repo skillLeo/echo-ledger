@@ -104,7 +104,7 @@ const APP_KEYS: readonly [string, string][] = [
   ["N", "Start or stop a voice note"],
   ["Space", "Play or pause the open recording"],
   ["Shift+← / →", "Back or forward 10 seconds (← / → 5 seconds)"],
-  ["Ctrl+F", "Find in the open transcript"],
+  ["Ctrl+F", "Find in the open transcript (in the new design, search when no recording is open)"],
   ["[", "Collapse or expand the sidebar"],
   ["?", "Help & shortcuts"],
 ];
