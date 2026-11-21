@@ -557,6 +557,7 @@
   border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
 }
 .el-sidebar__brand { display: flex; align-items: center; gap: var(--el-space-8); padding: var(--el-space-4) var(--el-space-8) var(--el-space-16); font-weight: var(--el-text-body-strong-weight); }
+.el-sidebar__brand-end { margin-inline-start: auto; display: inline-flex; }
 .el-nav-item {
   display: flex; align-items: center; gap: var(--el-space-12);
   min-block-size: var(--el-component-button-height);
@@ -816,7 +817,21 @@ button.el-step__head { cursor: pointer; }
    Media queries cannot read variables: the width mirrors --el-breakpoint-rail and AUTO_RAIL_BELOW (tokens/test/tokens.test.mjs checks both). */
 @media (width < 780px) {
   .el-sidebar { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
-  .el-sidebar__brand { display: none; }
+  /* The rail keeps the brand's end control (Search) at its top; the name goes. */
+  .el-sidebar__brand { justify-content: center; padding-inline: 0; }
+  .el-sidebar__brand-name { display: none; }
+  .el-sidebar__brand-end { margin-inline-start: 0; }
+  /* Sub-items (Shared with me, a project) are reached through their page in the rail; Record shows its icon alone,
+     its menu under it, both 40 px squares. */
+  .el-sidebar .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
+  .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
+  .el-shell__record > .el-button, .el-shell__record > .el-menu-anchor > .el-button {
+    inline-size: var(--el-space-40); min-inline-size: 0; justify-content: center; padding-inline: 0; border-radius: var(--el-radius-sm);
+  }
+  .el-shell__record > .el-button > span:not(.el-icon) {
+    position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
   .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
   .el-shell__me { justify-content: center; padding-inline: 0; }
   .el-nav-item__label, .el-nav-item__count, .el-sidebar .el-status > span:last-child, .el-shell__me-text {
