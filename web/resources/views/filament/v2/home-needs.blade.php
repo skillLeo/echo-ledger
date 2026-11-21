@@ -5,7 +5,7 @@
 <x-filament-widgets::widget>
     <p class="v2-help" data-needs-action>
         <span>{{ __('Needs action') }}:</span>
-        @foreach (\App\Filament\Widgets\V2NeedsActionWidget::items() as $i => $item)
+        @foreach ($items as $i => $item)
             @if ($i > 0)<span aria-hidden="true"> · </span>@endif
             <a href="{{ $item['url'] }}" class="v2-link" data-needs="{{ $item['key'] }}">{{ $item['words'] }}</a>
         @endforeach

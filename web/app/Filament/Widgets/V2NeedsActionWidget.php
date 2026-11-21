@@ -31,20 +31,32 @@ class V2NeedsActionWidget extends Widget
         return ConsoleV2::shell() && auth()->check() && self::items() !== [];
     }
 
+    /** @return array<string, mixed> */
+    protected function getViewData(): array
+    {
+        return ['items' => self::items()];
+    }
+
     /**
-     * What needs the person, in this order, each with its words and its Library view; nothing that counts 0.
+     * What needs the person (once a request), in this order, each with its words and its Library view; nothing that counts 0.
      *
      * @return list<array{key: string, words: string, url: string}>
      */
     public static function items(): array
     {
+        // Worked out once a request (canView asks first, then the line draws the same), kept on the request itself.
+        $memo = 'v2.needs-action.'.auth()->id().'.'.CurrentWorkspace::id();
+        if (is_array($kept = request()->attributes->get($memo))) {
+            return $kept;
+        }
         $organiser = app(LibraryOrganiser::class);
         $workspace = (int) CurrentWorkspace::id();
         $counts = $organiser->counts($workspace);
         $all = [
             'waiting' => [(int) ($counts['waiting'] ?? 0), ':count waiting for a decision|:count waiting for a decision'],
             'failed' => [(int) ($counts['failed'] ?? 0), '1 failed upload|:count failed uploads'],
-            'untranscribed' => [$organiser->untranscribedCount($workspace), '1 not transcribed|:count not transcribed'],
+            // The Library's Untranscribed view is the new Library's (ui_v2.library) only.
+            'untranscribed' => [ConsoleV2::library() ? $organiser->untranscribedCount($workspace) : 0, '1 not transcribed|:count not transcribed'],
         ];
         $items = [];
         foreach ($all as $key => [$count, $words]) {
@@ -53,6 +65,8 @@ class V2NeedsActionWidget extends Widget
                     'url' => CaptureSessionResource::getUrl('index', ['activeTab' => $key])];
             }
         }
+
+        request()->attributes->set($memo, $items);
 
         return $items;
     }

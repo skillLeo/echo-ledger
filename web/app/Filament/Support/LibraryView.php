@@ -265,7 +265,8 @@ final class LibraryView
             'opened' => $query->orderByRaw('CASE WHEN (SELECT MAX(opened_at) FROM session_opens WHERE session_opens.capture_session_id = capture_sessions.id AND session_opens.user_id = ?) IS NULL THEN 1 ELSE 0 END', [(int) $userId])
                 ->orderByRaw('(SELECT MAX(opened_at) FROM session_opens WHERE session_opens.capture_session_id = capture_sessions.id AND session_opens.user_id = ?) DESC', [(int) $userId])
                 ->orderByDesc($started),
-            default => $query->orderByDesc($started),
+            // The new Library breaks a tie by id, as the recording page's Previous / Next walk it.
+            default => ConsoleV2::library() ? $query->orderByDesc($started)->orderByDesc($query->qualifyColumn('id')) : $query->orderByDesc($started),
         };
     }
 

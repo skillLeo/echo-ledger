@@ -68,7 +68,7 @@ it('gives a read-only console no swipe (it can\'t delete or pin there)', functio
     $this->actingAs($member->fresh(), 'web');
     expect(\App\Services\Workspaces\ConsoleAccess::readOnly())->toBeTrue();
 
-    $response = $this->get('/app/sessions');
+    $response = $this->get('/app/sessions')->assertOk();
     expect((string) $response->getContent())->not->toContain('elV2LibrarySwipe');
 });
 

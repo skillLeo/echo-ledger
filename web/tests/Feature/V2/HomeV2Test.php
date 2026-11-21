@@ -71,3 +71,21 @@ it('WEB-HOM-005: has the usage meter in Settings › Plan & usage in the new des
     expect($html)->toContain('el-meter')->toContain('This month')->toContain('Transcription')->toContain('Resets 1 Dec')
         ->toContain('Minutes reset on the 1st of each month.');
 });
+
+it('WEB-HOM-005: works the line out once a page (not once to decide and again to draw), and says "not transcribed" only with the new Library', function () {
+    [$owner] = webParityWorld();
+    webParityDesign(true);
+    $this->actingAs($owner->fresh(), 'web');
+    \Illuminate\Support\Facades\DB::enableQueryLog();
+    expect(V2NeedsActionWidget::canView())->toBeTrue();
+    $first = count(\Illuminate\Support\Facades\DB::getQueryLog());
+    $items = V2NeedsActionWidget::items();
+    expect(count(\Illuminate\Support\Facades\DB::getQueryLog()))->toBe($first)->and($items)->not->toBe([]);
+
+    // The new frame without the new Library (ui_v2.library off): no Untranscribed view to point at.
+    app(\App\Services\InterfaceFlags::class)->set('ui_v2.library', false, 0, [], [], 'off');
+    app('auth')->forgetGuards();
+    SettingsContext::forget();
+    $html = (string) $this->actingAs($owner->fresh(), 'web')->get('/app')->assertOk()->getContent();
+    expect(webParityIsV2($html))->toBeTrue()->and($html)->toContain('1 failed upload')->not->toContain('data-needs="untranscribed"');
+});

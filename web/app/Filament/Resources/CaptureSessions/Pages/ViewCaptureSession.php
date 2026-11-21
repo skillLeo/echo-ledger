@@ -79,6 +79,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Js;
+use Livewire\Attributes\Locked;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use RuntimeException;
 
@@ -111,6 +112,15 @@ class ViewCaptureSession extends ViewRecord
      */
     public ?array $viewsBar = null;
 
+    /**
+     * Since U9b part 2: Previous / Next recording, worked out once when the page opens (and again when Pin moves this
+     * one), not on every poll of the page.
+     *
+     * @var array{previous: string|null, next: string|null}
+     */
+    #[Locked]
+    public array $v2Neighbours = ['previous' => null, 'next' => null];
+
     /** Opening the page counts as opening the recording (the apps stop showing it as new for this user). */
     public function mount(int|string $record): void
     {
@@ -124,6 +134,9 @@ class ViewCaptureSession extends ViewRecord
         $this->viewsBar = RecordingProgress::improvingBar($this->session());
         // Send to WhatsApp sends the view being read: the one the player opens in, until it says otherwise.
         $this->readingView = WhatsAppMessage::defaultView($this->session()) ?? 'original';
+        if (ConsoleV2::library()) {
+            $this->v2Neighbours = $this->v2NeighbourUrls();
+        }
     }
 
     public function getTitle(): string
@@ -439,6 +452,10 @@ class ViewCaptureSession extends ViewRecord
         $session = app(LibraryOrganiser::class)->update($this->session(), ['pinned' => ! $this->session()->pinned]);
         Notification::make()->title($session->pinned ? 'Pinned to the top of the Library' : 'Unpinned')
             ->url($session->pinned ? CaptureSessionResource::getUrl('index', ['tab' => 'pinned']) : null)->success()->send();
+        // Pinned or not, it has other neighbours in the Library's order.
+        if (ConsoleV2::library()) {
+            $this->v2Neighbours = $this->v2NeighbourUrls();
+        }
     }
 
     /**
@@ -1298,7 +1315,7 @@ class ViewCaptureSession extends ViewRecord
      */
     public function v2BackLink(): ?array
     {
-        return ConsoleV2::library() ? ['label' => __('Library'), 'url' => CaptureSessionResource::getUrl('index'), 'neighbours' => $this->v2NeighbourUrls()] : null;
+        return ConsoleV2::library() ? ['label' => __('Library'), 'url' => CaptureSessionResource::getUrl('index'), 'neighbours' => $this->v2Neighbours] : null;
     }
 
     /** "Sessions > Title", without a trailing "View" (C3). */

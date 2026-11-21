@@ -89,6 +89,25 @@ it('WEB-REC-007: goes to the previous and the next recording in the Library\'s d
     expect(recordingNavHref(recordingPageHtml($this, $second, false), 'Previous recording'))->toBeNull();
 });
 
+it('WEB-REC-007: works Previous / Next out once when the page opens, not on every poll, and again when Pin moves it', function () {
+    [$newest, $second] = $this->recs->values()->all();
+    webParityDesign(true);
+    $this->actingAs($this->owner->fresh(), 'web');
+    $walks = fn (): int => collect(\Illuminate\Support\Facades\DB::getQueryLog())->filter(fn (array $q): bool => str_contains($q['query'], '"pinned" >') || str_contains($q['query'], '`pinned` >'))->count();
+    \Illuminate\Support\Facades\DB::enableQueryLog();
+    $page = Livewire::test(ViewCaptureSession::class, ['record' => $second->id]);
+    expect($page->get('v2Neighbours')['previous'])->toEndWith('/app/sessions/'.$newest->id)
+        ->and($walks())->toBe(1);
+
+    \Illuminate\Support\Facades\DB::flushQueryLog();
+    $page->call('refreshWork');
+    expect($walks())->toBe(0);
+
+    // Pinned, it leads the Library: nothing above it any more.
+    $page->call('togglePin');
+    expect($page->get('v2Neighbours')['previous'])->toBeNull();
+});
+
 it('WEB-REC-007: mirrors ‹ › right to left, in Urdu', function () {
     [, $second] = $this->recs->values()->all();
     $prefs = is_array($this->owner->console_preferences) ? $this->owner->console_preferences : [];
@@ -134,10 +153,12 @@ it('WEB-REC-010: puts the bookmarks and pauses on the player bar, a click on one
         // The ticks play from their moment (the new design's script), with what each is on hover.
         ->toContain('window.elV2RecordingMarkers = true')->toContain('found.player.seekTo(found.item.ms)');
     expect(recordingPageHtml($this, $rec, false))->not->toContain('elV2RecordingMarkers')->toContain('aria-label="Bookmarks and pauses"');
+});
 
+it('WEB-REC-010: decides which moment a tick is and what it says as the Node test says', function () {
     $result = Process::path(base_path())->timeout(60)->run(['node', '--test', 'tests/js/recording-markers-core.test.mjs']);
     expect($result->successful())->toBeTrue($result->output().$result->errorOutput());
-});
+})->skip(fn (): bool => trim((string) shell_exec('command -v node')) === '', 'Node is not installed here');
 
 it('WEB-REC-015: edits the transcript text from More › Edit text, with Done editing, through classic\'s own save', function () {
     $rec = $this->recs->first();
