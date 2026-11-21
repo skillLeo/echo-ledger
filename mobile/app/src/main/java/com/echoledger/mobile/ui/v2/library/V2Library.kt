@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LibraryItem
+import com.echoledger.mobile.data.ListDto
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.v2.components.EchoAvatar
@@ -129,6 +130,14 @@ fun V2LibraryScreen(
     val offline by vm.offline.collectAsState()
     val clients by vm.clients.collectAsState()
     val settings by vm.settings.collectAsState()
+    val lists by vm.lists.collectAsState()
+    // The chip row (D14): one chip at a time; a list that is gone goes back to All.
+    var chosen by rememberSaveable { mutableStateOf(com.echoledger.mobile.core.LibraryLists.ALL) }
+    val chip = com.echoledger.mobile.core.LibraryLists.resolve(chosen, lists)
+    LaunchedEffect(chip) { if (chip != chosen) chosen = chip }
+    // The lists are read on opening and again after each sync (another device may have changed them).
+    LaunchedEffect(syncing) { if (!syncing) vm.loadLists() }
+    var addingToList by remember { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var filters by remember(initialViews) {
         mutableStateOf(
@@ -150,8 +159,9 @@ fun V2LibraryScreen(
     val yesterday = stringResource(R.string.v2_lib_yesterday)
     val todayWord = stringResource(R.string.v2_lib_today)
     val thisWeek = stringResource(R.string.v2_lib_this_week)
-    val visible = remember(library, filters, query, choice, settings.libraryOpened) {
-        com.echoledger.mobile.core.LibraryQuery.apply(library, filters.base, query, choice.sortBy, opened = settings.libraryOpened)
+    val visible = remember(library, filters, query, choice, settings.libraryOpened, chip, lists) {
+        val chipped = com.echoledger.mobile.core.LibraryLists.filter(library, chip, lists)
+        com.echoledger.mobile.core.LibraryQuery.apply(chipped, filters.base, query, choice.sortBy, opened = settings.libraryOpened)
             .filter { !filters.untranscribed || LibraryModel.status(it).let { s -> s == RowStatus.Untranscribed || s == RowStatus.Failed } }
     }
     val groupNames = groupNames()
@@ -226,6 +236,61 @@ fun V2LibraryScreen(
             }
         }
     }
+    val res = androidx.compose.ui.platform.LocalContext.current.resources
+    val listActions = remember(vm) {
+        object : ListActions {
+            /** The server's refusal of a name in the screen's words (the sheet already refuses the ones it knows). */
+            private fun refused(e: Throwable, name: String) {
+                val words = when (vm.problemOf(e)) {
+                    MainViewModel.ListProblem.Reserved -> res.getString(R.string.v2_lists_reserved, name)
+                    MainViewModel.ListProblem.Exists -> res.getString(R.string.v2_lists_duplicate, name)
+                    MainViewModel.ListProblem.Other -> null
+                }
+                words?.let { scope.launch { toasts.show(it) } }
+            }
+
+            override suspend fun create(name: String, colour: String): ListDto? =
+                vm.createList(name, colour.lowercase(java.util.Locale.ROOT)).onFailure { refused(it, name) }.getOrNull()
+
+            override suspend fun rename(list: ListDto, name: String): Boolean =
+                vm.updateList(list.key, name = name).onFailure { refused(it, name) }.isSuccess
+
+            override suspend fun recolour(list: ListDto, colour: String) {
+                vm.updateList(list.key, color = colour.lowercase(java.util.Locale.ROOT)).onFailure { refused(it, list.name) }
+            }
+
+            override suspend fun move(list: ListDto, delta: Int) {
+                vm.moveList(list.key, delta)
+            }
+
+            override suspend fun delete(list: ListDto) {
+                vm.deleteList(list.key)
+            }
+        }
+    }
+    if (addingToList) {
+        val chosenItems = library.filter { it.id in picked }
+        AddToListFlow(
+            lists = lists,
+            inAll = { list -> chosenItems.isNotEmpty() && chosenItems.all { com.echoledger.mobile.core.LibraryLists.carries(it, list) } },
+            onToggle = { list, add ->
+                scope.launch {
+                    // Only the recordings that change: those not in it yet (adding) or in it (taking out).
+                    val changing = if (add) {
+                        com.echoledger.mobile.core.LibraryLists.gaining(chosenItems, list)
+                    } else {
+                        chosenItems.filter { com.echoledger.mobile.core.LibraryLists.carries(it, list) }.map { it.id }
+                    }
+                    val changed = vm.label(changing, list, add) ?: return@launch
+                    if (changed.isEmpty()) return@launch
+                    val words = res.getString(if (add) R.string.v2_lists_added else R.string.v2_lists_removed, list.name)
+                    toasts.showUndo(words, undo) { scope.launch { vm.label(changed, list, !add) } }
+                }
+            },
+            onCreate = { name, colour -> listActions.create(name, colour) },
+            onDismiss = { addingToList = false }
+        )
+    }
     fun act(action: SelectionAction) {
         val ids = ticked.toList()
         val items = visible.filter { it.id in ticked }
@@ -295,10 +360,26 @@ fun V2LibraryScreen(
                         if (all) pick(visible.map { it.id })
                     },
                     onAction = ::act,
-                    choices = OrganiseChoices.of(visible.filter { it.id in ticked })
+                    choices = OrganiseChoices.of(visible.filter { it.id in ticked }),
+                    onAddToList = { addingToList = true }
                 )
             },
             filterRow = { LibraryFilterRow(filters, folders, labels, tags, languages) { filters = it } },
+            listRow = {
+                LibraryListRow(
+                    lists = lists,
+                    chip = chip,
+                    unread = com.echoledger.mobile.core.LibraryLists.unread(library),
+                    onChip = { chosen = it },
+                    actions = listActions
+                )
+            },
+            emptyList = when (chip) {
+                com.echoledger.mobile.core.LibraryLists.ALL -> null
+                com.echoledger.mobile.core.LibraryLists.UNREAD -> stringResource(R.string.v2_lists_unread)
+                com.echoledger.mobile.core.LibraryLists.IMPORTANT -> stringResource(R.string.v2_lists_important)
+                else -> com.echoledger.mobile.core.LibraryLists.chosenList(chip, lists)?.name
+            },
             filtered = filters.count > 0,
             onClearFilters = { filters = V2Filters() },
             onSortGroup = { sortOpen = true },
@@ -344,7 +425,11 @@ class LibraryTools(
     val onSelect: () -> Unit,
     val onPin: (V2Row) -> Unit,
     val matches: List<TranscriptMatch>,
-    val onOpenAt: (TranscriptMatch) -> Unit
+    val onOpenAt: (TranscriptMatch) -> Unit,
+    /** The chip row of lists (D14): All · Unread · Important · the person's lists · "+". */
+    val listRow: (@Composable () -> Unit)? = null,
+    /** The chosen chip's name while one other than All is chosen: an empty list says "Nothing in Clients yet". */
+    val emptyList: String? = null
 )
 
 /** LibraryGrouping's fixed English names in the screen's language. */
@@ -461,6 +546,7 @@ fun V2LibraryContent(
                 tools?.let { EchoIconButton(EchoIcons.Sort, stringResource(R.string.v2_lib_sort_group), it.onSortGroup) }
             }
             if (tools != null) {
+                tools.listRow?.invoke()
                 tools.filterRow()
             } else {
                 EchoFilterBar(
@@ -514,6 +600,12 @@ fun V2LibraryContent(
                     if (state.rows.isEmpty() && state.uploads.isEmpty()) {
                         item {
                             when {
+                                tools?.emptyList != null && tools.filtered != true && query.isBlank() -> EchoEmptyState(
+                                    stringResource(R.string.v2_lists_empty_title, tools.emptyList),
+                                    stringResource(R.string.v2_lists_empty_body),
+                                    icon = EchoIcons.Label
+                                )
+
                                 tools?.filtered == true -> EchoEmptyState(
                                     stringResource(R.string.v2_lib_nothing_matches),
                                     stringResource(R.string.v2_lib_nothing_matches_body),

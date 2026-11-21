@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Library's lists (D14, contract 2.0.0-m): the chip row, its sheets and the list menu. -->
+<resources>
+    <string name="v2_lists_all">سب</string>
+    <string name="v2_lists_unread">نہ پڑھی گئی</string>
+    <string name="v2_lists_important">اہم</string>
+    <string name="v2_lists_add">نئی فہرست</string>
+    <string name="v2_lists_new_title">نئی فہرست</string>
+    <string name="v2_lists_name">فہرست کا نام</string>
+    <string name="v2_lists_colour">رنگ</string>
+    <string name="v2_lists_create">بنائیں</string>
+    <string name="v2_lists_duplicate">آپ کی %1$s نام کی فہرست پہلے سے ہے۔</string>
+    <string name="v2_lists_reserved">%1$s لائبریری کا اپنا چِپ ہے۔ کوئی اور نام چنیں۔</string>
+    <string name="v2_lists_empty_title">%1$s میں ابھی کچھ نہیں</string>
+    <string name="v2_lists_empty_body">ریکارڈنگز ان کے ⋮ مینو سے شامل کریں: فہرست میں شامل کریں۔</string>
+    <string name="v2_lists_rename">نام بدلیں…</string>
+    <string name="v2_lists_rename_title">فہرست کا نام بدلیں</string>
+    <string name="v2_lists_save">محفوظ کریں</string>
+    <string name="v2_lists_recolour">رنگ بدلیں…</string>
+    <string name="v2_lists_recolour_title">رنگ بدلیں</string>
+    <string name="v2_lists_move_left">بائیں منتقل کریں</string>
+    <string name="v2_lists_move_right">دائیں منتقل کریں</string>
+    <string name="v2_lists_delete">فہرست حذف کریں…</string>
+    <string name="v2_lists_delete_title">%1$s حذف کریں؟</string>
+    <string name="v2_lists_delete_body">اس کی ریکارڈنگز آپ کی لائبریری میں رہیں گی؛ صرف فہرست جائے گی۔</string>
+    <string name="v2_lists_delete_confirm">حذف کریں</string>
+    <string name="v2_lists_add_to">فہرست میں شامل کریں</string>
+    <string name="v2_lists_new_list">نئی فہرست…</string>
+    <string name="v2_lists_added">%1$s میں شامل</string>
+    <string name="v2_lists_removed">%1$s سے ہٹا دی گئی</string>
+    <string name="v2_lists_chips">فہرستیں</string>
+    <string name="v2_colour_grey">سرمئی</string>
+    <string name="v2_colour_red">سرخ</string>
+    <string name="v2_colour_orange">نارنجی</string>
+    <string name="v2_colour_amber">کہربائی</string>
+    <string name="v2_colour_green">سبز</string>
+    <string name="v2_colour_teal">فیروزی</string>
+    <string name="v2_colour_blue">نیلا</string>
+    <string name="v2_colour_pink">گلابی</string>
+</resources>

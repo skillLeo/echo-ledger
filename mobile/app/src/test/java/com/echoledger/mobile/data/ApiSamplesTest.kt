@@ -66,6 +66,12 @@ class ApiSamplesTest {
         "session_open" to CreateSessionResponse.serializer(),
         "session_screens" to ScreensResponse.serializer(),
         "sessions_bulk" to BulkAnswer.serializer(),
+        // Lists (contract 2.0.0-m).
+        "lists" to ListsResponse.serializer(),
+        "list_create" to ListResponse.serializer(),
+        "list_update" to ListResponse.serializer(),
+        "list_delete" to ListDeletedAnswer.serializer(),
+        "list_order" to ListsResponse.serializer(),
         "share_create" to ShareLinkDto.serializer(),
         "shared_save" to SavedSharedAnswer.serializer(),
         "shared_with_me" to SharedResponse.serializer(),
@@ -87,17 +93,12 @@ class ApiSamplesTest {
     private val notRead =
         setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
-    /** Answers the phone does not ask for yet: Transcribe later (2.0.0-j) reaches the phone with its Audio only screen; lists (2.0.0-m) with its lists screen; account (2.0.0-l) with its account screens. */
+    /** Answers the phone does not ask for yet: Transcribe later (2.0.0-j) reaches the phone with its Audio only screen; account (2.0.0-l) with its account screens. */
     private val notUsedYet =
         setOf(
             "session_transcribe",
             "sessions_transcribe",
             "sessions_transcribe_estimate",
-            "lists",
-            "list_create",
-            "list_update",
-            "list_order",
-            "list_delete",
             "account_avatar",
             "account_email",
             "account_email_confirm",

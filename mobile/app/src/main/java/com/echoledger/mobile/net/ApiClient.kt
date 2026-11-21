@@ -682,6 +682,44 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("sessions/$id").patch(body).build(), null as KSerializer<Unit>?)
     }
 
+    // ---- Lists (contract 2.0.0-m) ----------------------------------------------------------------------------------
+
+    private fun listPath(key: String) = "lists/" + java.net.URLEncoder.encode(key, "UTF-8").replace("+", "%20")
+
+    /** `GET /api/lists`: the person's lists in the chip row's order. */
+    suspend fun lists(): List<com.echoledger.mobile.data.ListDto> =
+        call(request("lists").get().build(), com.echoledger.mobile.data.ListsResponse.serializer())!!.data
+
+    /** `POST /api/lists`: an empty list at the end of the row, in [color] (`#rrggbb`). */
+    suspend fun createList(name: String, color: String?): com.echoledger.mobile.data.ListDto {
+        val body = buildJsonObject {
+            put("name", name)
+            color?.let { put("color", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("lists").post(body).build(), com.echoledger.mobile.data.ListResponse.serializer())!!.data
+    }
+
+    /** `PATCH /api/lists/{key}`: a new name (on every recording of the person at once) and/or colour. */
+    suspend fun updateList(key: String, name: String? = null, color: String? = null): com.echoledger.mobile.data.ListDto {
+        val body = buildJsonObject {
+            name?.let { put("name", it) }
+            color?.let { put("color", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request(listPath(key)).patch(body).build(), com.echoledger.mobile.data.ListResponse.serializer())!!.data
+    }
+
+    /** `DELETE /api/lists/{key}`: the label comes off every recording and the list goes; the recordings stay. */
+    suspend fun deleteList(key: String): com.echoledger.mobile.data.ListDeletedAnswer =
+        call(request(listPath(key)).delete().build(), com.echoledger.mobile.data.ListDeletedAnswer.serializer())!!
+
+    /** `PUT /api/lists/order`: every list's key once, in the new order. */
+    suspend fun orderLists(keys: List<String>): List<com.echoledger.mobile.data.ListDto> {
+        val body = buildJsonObject {
+            put("keys", buildJsonArray { keys.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+        }.toString().toRequestBody(jsonType)
+        return call(request("lists/order").put(body).build(), com.echoledger.mobile.data.ListsResponse.serializer())!!.data
+    }
+
     /** `POST /api/sessions/bulk` (since v1.1): one action for up to 200 recordings; how many changed. */
     suspend fun bulk(ids: List<String>, action: String, clientId: String? = null, label: String? = null): Int {
         val body = buildJsonObject {
