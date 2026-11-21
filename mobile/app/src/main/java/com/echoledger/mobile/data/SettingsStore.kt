@@ -258,6 +258,8 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
         // Nor the account's pictures, nor a two-step key or recovery codes still on the clipboard.
         com.echoledger.mobile.account.AvatarCache.clearAll(context)
         com.echoledger.mobile.account.SecretClip.clearNow(context)
+        // And any account page's remembered step (the two-step key and codes kept across a rotation).
+        com.echoledger.mobile.account.SignOuts.happened()
         context.dataStore.edit {
             it.remove(Keys.TOKEN)
             it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), it.toSettings().copy(deviceId = null, deviceName = null))

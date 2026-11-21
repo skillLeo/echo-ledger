@@ -64,7 +64,8 @@ fun TranscribeDialog(ask: TranscribeAsk, onDismiss: () -> Unit, onConfirm: () ->
             text = res.getString(R.string.v2_tx_budget, e.minutes.toInt(), (e.minutesLeft ?: 0).toInt()),
             confirmLabel = stringResource(R.string.v2_tx_ok),
             onConfirm = onDismiss,
-            dismissLabel = stringResource(R.string.v2_cancel),
+            // Nothing can start: OK only.
+            dismissLabel = null,
             onDismiss = onDismiss
         )
         return

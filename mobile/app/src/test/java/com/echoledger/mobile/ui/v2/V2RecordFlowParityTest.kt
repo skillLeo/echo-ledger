@@ -172,6 +172,73 @@ class V2RecordFlowParityTest : ScreenTest() {
     }
 
     @Test
+    fun anImportThatFailsSaysSoAndTheSheetIsReadyAgain() {
+        val files = listOf(FileImport.Picked(android.net.Uri.parse("content://x/1"), "Rate call.m4a", "audio/mp4", 2_000_000))
+        var tries = 0
+        var closed: String? = "open"
+        show {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
+                    V2ImportSheet(files, emptyList(), onImport = { _, _ ->
+                        tries++
+                        if (tries == 1) throw java.io.IOException("disk full")
+                        FileImport.Summary(imported = listOf("a"), duplicates = 0, unreadable = 0)
+                    }, onDone = { closed = it })
+                }
+            }
+        }
+        val go = hasText("Import 1 file") and hasClickAction()
+        shows("Import 1 file")
+        compose.onAllNodes(go).onFirst().performSemanticsAction(SemanticsActions.OnClick)
+        shows("The files could not be imported. Try again.")
+        assertEquals("the sheet stays", "open", closed)
+        // Not stuck on Importing…: the button works again.
+        compose.onAllNodes(go).onFirst().performSemanticsAction(SemanticsActions.OnClick)
+        pumpUntil("imported") { closed != "open" }
+        assertEquals("Importing 1 file.", closed)
+    }
+
+    @Test
+    fun theHeadsetNoteFollowsTheHeadsetWhileThePageIsOpen() {
+        var headset = false
+        val owner = object : androidx.lifecycle.LifecycleOwner {
+            val registry = androidx.lifecycle.LifecycleRegistry(this)
+            override val lifecycle: androidx.lifecycle.Lifecycle get() = registry
+        }
+        owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED
+        show {
+            CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides owner) {
+                EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                    CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
+                        V2VoiceNoteScreen(vm, onBack = {}, headsetConnected = { headset })
+                    }
+                }
+            }
+        }
+        shows("Import files")
+        compose.onAllNodesWithText("Bluetooth", substring = true).assertCountEquals(0)
+        // A headset is connected while the phone was elsewhere: back on the page, it says so.
+        headset = true
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.STARTED }
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+        shows("A Bluetooth headset is connected.")
+        headset = false
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.STARTED }
+        compose.runOnIdle { owner.registry.currentState = androidx.lifecycle.Lifecycle.State.RESUMED }
+        pumpUntil("the note to go") { compose.onAllNodesWithText("Bluetooth", substring = true).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun theRecordingStateIsAPoliteLiveRegion() {
+        voice()
+        val node = compose.onAllNodesWithText("Not recording").onFirst().fetchSemanticsNode()
+        assertEquals(
+            androidx.compose.ui.semantics.LiveRegionMode.Polite,
+            node.config[androidx.compose.ui.semantics.SemanticsProperties.LiveRegion]
+        )
+    }
+
+    @Test
     fun uploadingRecordingsSayHowManyAndRetryNowSendsThemAgain() {
         app.storeRecording(id = "a", state = "queued", lastError = "timeout")
         app.storeRecording(id = "b", state = "uploading")

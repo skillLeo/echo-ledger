@@ -334,6 +334,39 @@ class V2TranscribeParityTest : ScreenTest() {
         shows("It is already transcribed or still uploading.")
     }
 
+    @Test
+    fun onAnAudioOnlyPageNotEnoughMinutesSaysSoAndNothingStarts() {
+        server.on(
+            "POST",
+            "/api/sessions/${ServerFixtures.SESSION_ID}/transcribe",
+            FakeServer.json(403, """{"message":"Over budget","code":"budget_exceeded","minutes_needed":2,"minutes_left":1}""")
+        )
+        page()
+        val go = compose.onAllNodes(hasText("Transcribe") and hasClickAction()).onFirst()
+        runCatching { go.performScrollTo() }
+        go.performClick()
+        shows("2 needed, 1 left. Nothing was started.")
+        assertEquals(1, server.requestsTo("POST", "/api/sessions/${ServerFixtures.SESSION_ID}/transcribe").size)
+        // It stays audio only, with Transcribe to try again.
+        assertTrue(vm.library.value.none { it.id == ServerFixtures.SESSION_ID && it.status == "processing" })
+        shows("Kept as audio, not transcribed yet.")
+    }
+
+    @Test
+    fun notEnoughMinutesHasOnlyOk() {
+        library(listOf(done, audio("01JB", "Rehman Textiles")))
+        server.on(
+            "POST",
+            "/api/sessions/transcribe-estimate",
+            FakeServer.json(200, """{"minutes":30,"minutes_left":10,"items":[{"id":"01JB","minutes":30}]}""")
+        )
+        pick("Rehman Textiles")
+        more()
+        click("Transcribe…")
+        inDialog("OK")
+        compose.onAllNodes(hasText("Cancel") and hasAnyAncestor(isDialog())).assertCountEquals(0)
+    }
+
     // Copy for AI of several recordings (the lead's review of parity 3).
 
     private val segments = listOf(
@@ -374,5 +407,24 @@ class V2TranscribeParityTest : ScreenTest() {
         assertFalse(plain, plain.contains(note))
         assertFalse("marks off stays off", plain.contains("[?"))
         assertTrue(plain, plain.contains("Title: Bilal") && plain.contains("Title: Rehman") && plain.contains("\n\n---\n\n"))
+        // One rule for one recording and many: marks off, the single Copy for AI has neither marks nor the note.
+        val one = RecordingCopy.text(
+            com.echoledger.mobile.ui.v2.library.CopyKind.ForAi,
+            LibraryItem(id = "x", title = "Bilal", updatedAt = "2026-10-20T10:05:00+00:00"),
+            segments,
+            null,
+            off,
+            emptyList()
+        )
+        assertFalse(one, one.contains(note) || one.contains("[?"))
+        val oneOn = RecordingCopy.text(
+            com.echoledger.mobile.ui.v2.library.CopyKind.ForAi,
+            LibraryItem(id = "x", title = "Bilal", updatedAt = "2026-10-20T10:05:00+00:00"),
+            segments,
+            null,
+            on,
+            emptyList()
+        )
+        assertTrue(oneOn, oneOn.contains(note) && oneOn.contains("[?Rate]"))
     }
 }

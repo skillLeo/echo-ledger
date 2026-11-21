@@ -44,4 +44,6 @@
         <item quantity="other">%1$d files could not be read.</item>
     </plurals>
     <string name="v2_vn_this_workspace">this workspace</string>
+    <string name="v2_act_project_named">Project: %1$s</string>
+    <string name="v2_imp_failed">The files could not be imported. Try again.</string>
 </resources>
