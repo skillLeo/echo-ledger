@@ -2085,3 +2085,103 @@ html[dir='rtl'] .v2-row-title {
         inset: calc(-1 * var(--el-space-16));
     }
 }
+
+/*
+ * Lists (D14, docs/v2/design-review/D14-lists.md): one chip row at the top of the Library: All · Unread · Important ·
+ * the person's lists · +. A list chip is its colour dot (.v2-label-dot--<name>) and its name; the selected chip takes
+ * the accent's tint with a check. The row scrolls sideways under 1280 px and wraps from there.
+ */
+.v2-lists {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+@media (min-width: 1280px) {
+    .v2-lists {
+        flex-wrap: wrap;
+        overflow-x: visible;
+    }
+}
+
+.v2-list-chip {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+    white-space: nowrap;
+}
+
+.v2-list-chip[aria-pressed='true'] {
+    border-color: var(--el-role-accent-default);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-list-chip:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+.v2-list-chip__count {
+    color: var(--el-role-text-secondary);
+    font-weight: var(--el-text-body-weight);
+    font-variant-numeric: tabular-nums;
+}
+
+.v2-list-add {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-component-chip-height);
+    height: var(--el-component-chip-height);
+    border: var(--el-border-hairline) dashed var(--el-role-border-strong);
+    border-radius: var(--el-radius-full);
+    color: var(--el-role-text-secondary);
+}
+
+/* The eight label colours as one radio group: 32 px dots in 44 px targets, the chosen one ringed and ticked. */
+.v2-colour-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--el-space-4);
+}
+
+.v2-colour-picker label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-layout-control-touch-min);
+    height: var(--el-layout-control-touch-min);
+    cursor: pointer;
+}
+
+.v2-colour-picker input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.v2-colour-picker .v2-label-dot {
+    width: var(--el-space-32);
+    height: var(--el-space-32);
+}
+
+.v2-colour-picker input:checked + .v2-label-dot {
+    box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-bg-surface), 0 0 0 calc(var(--el-border-strong) * 2) var(--el-role-text-primary);
+}
+
+.v2-colour-picker input:focus-visible + .v2-label-dot {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(var(--el-focus-offset) * 2);
+}
