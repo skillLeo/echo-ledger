@@ -180,6 +180,21 @@ fun rememberRecordingPage(vm: MainViewModel, item: LibraryItem, startAtMs: Long?
             p.views = vm.transcriptViews(id) ?: p.views
         }
     }
+    // Once a view it waited for is written, the server gives an automatic Urdu-script title in Roman Urdu: read it again.
+    var waitedForView by remember(item.id) { mutableStateOf(false) }
+    LaunchedEffect(p.views?.status) {
+        when (p.views?.status) {
+            "making" -> waitedForView = true
+
+            "ready" -> if (waitedForView) {
+                waitedForView = false
+                val before = p.shownTitle
+                vm.refreshQuietly().join()
+                val now = vm.library.value.firstOrNull { it.id == p.item.id }?.title
+                if (now != null && p.shownTitle == before) p.shownTitle = now
+            }
+        }
+    }
     // Open in the default view (Roman Urdu for Urdu): at once when it is made, else as soon as it is (U19).
     LaunchedEffect(p.transcript?.id) { ShowAs.autoView(p.transcript?.views)?.let { p.chooseView(it) } }
     return p

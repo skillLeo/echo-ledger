@@ -27,6 +27,7 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -35,7 +36,7 @@ import org.junit.Test
  * U19 on the v2 screens: an Urdu recording is read in Roman Urdu by default. While its view is made the page and the
  * Library row say "Converting to Roman Urdu… 60%" with a small progress ring (also before the server started it); once it is
  * ready the lines swap, Copy, Copy with timestamps and Copy for AI (its Language line too) use it, and the row's snippet
- * is its first Roman line. A view that failed says "Couldn't convert to Roman Urdu · Try again".
+ * is the server's Roman snippet. A view that failed says "Couldn't convert to Roman Urdu · Try again".
  */
 class V2RomanUrduTest : ScreenTest() {
     private val making =
@@ -124,10 +125,14 @@ class V2RomanUrduTest : ScreenTest() {
     @Test
     fun thePageSaysItIsConvertingThenSwapsToRomanUrduAndEveryCopyUsesIt() {
         views("making", making, making, ready)
+        // Once the view is written the server has the automatic title in Roman Urdu too.
+        val renamed = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, title = "Acme se rate ki baat")
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(renamed))))
         open(item(RowViewsDto("making", "roman", mapOf("roman" to com.echoledger.mobile.data.ProgressDto(3, 5)))))
         awaitText("Converting to Roman Urdu… 60%")
         awaitText("Hi, thanks for calling.")
         awaitPolled("Shukriya call karne ka.")
+        awaitText("Acme se rate ki baat")
         compose.onAllNodesWithText("Hi, thanks for calling.").assertCountEquals(0)
         press("Copy text without timestamps")
         pumpUntil("text in Roman Urdu") { clipboard()?.contains("Shukriya call karne ka.") == true }
@@ -141,6 +146,14 @@ class V2RomanUrduTest : ScreenTest() {
         assertTrue(forAi, forAi.contains("Language: Roman Urdu"))
         assertTrue(forAi, forAi.contains("Shukriya call karne ka."))
         assertTrue(forAi, !forAi.contains("Hi, thanks for calling."))
+    }
+
+    @Test
+    fun beforeTheServerCountsTheLinesItSaysConvertingWithoutAPercent() {
+        views("making", """{"status":"making","available":["roman","english"],"default":"roman","progress":{}}""")
+        open(item(RowViewsDto("making", "roman")))
+        awaitText("Converting to Roman Urdu…")
+        compose.onAllNodesWithText("%", substring = true).assertCountEquals(0)
     }
 
     @Test
@@ -170,9 +183,9 @@ class V2RomanUrduTest : ScreenTest() {
         awaitText("Converting to Roman Urdu…")
     }
 
-    private fun library(rowViews: String) {
-        val row = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, title = "Bilal Traders", preview = "Hello there.", client = null)
-            .replace("\"preview\":\"Hello there.\"", "\"preview\":\"Hello there.\",\"views\":$rowViews")
+    private fun library(rowViews: String, preview: String = "Hello there.", previewView: String = "original") {
+        val row = ServerFixtures.libraryItem(ServerFixtures.SESSION_ID, title = "Bilal Traders", preview = preview, client = null)
+            .replace("\"preview\":\"$preview\"", "\"preview\":\"$preview\",\"preview_view\":\"$previewView\",\"views\":$rowViews")
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(row))))
         runBlocking { app.graph.library.refresh() }
         show {
@@ -194,12 +207,17 @@ class V2RomanUrduTest : ScreenTest() {
     }
 
     @Test
-    fun aLibraryRowWhoseRomanUrduIsReadyShowsItsFirstRomanLine() {
-        views("ready", ready)
-        library("""{"status":"ready","default":"roman","progress":{}}""")
-        awaitText("Hello ji.")
-        compose.onAllNodesWithText("Hello there.", substring = true).assertCountEquals(0)
+    fun aLibraryRowWhoseRomanUrduIsReadyShowsTheServersRomanSnippet() {
+        library(
+            """{"status":"ready","default":"roman","progress":{}}""",
+            preview = "Hello ji. Shukriya call karne ka.",
+            previewView = "roman"
+        )
+        awaitText("Hello ji. Shukriya call karne ka.")
         compose.onAllNodesWithText("Converting", substring = true).assertCountEquals(0)
+        assertEquals("roman", vm.library.value.single().transcript?.previewView)
+        // The row needs no views of its own.
+        assertTrue(server.requestsTo("GET", "/api/transcripts/.+/views").isEmpty())
     }
 
     @Test

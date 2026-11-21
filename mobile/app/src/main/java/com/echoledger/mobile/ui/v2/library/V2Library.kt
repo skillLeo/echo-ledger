@@ -123,10 +123,8 @@ fun V2LibraryScreen(
     extras: LibraryExtras? = null
 ) {
     val text = v2Text
-    val synced by vm.library.collectAsState()
-    val previews by vm.viewPreviews.collectAsState()
-    // U19: each row's snippet in its default view (Roman Urdu) once that view is ready and read.
-    val library = remember(synced, previews) { com.echoledger.mobile.core.ViewPreviews.apply(synced, previews) }
+    // U19: each row's snippet comes in its default view (Roman Urdu) once ready (transcript.preview_view says which).
+    val library by vm.library.collectAsState()
     val pending by vm.pending.collectAsState()
     val syncing by vm.syncing.collectAsState()
     val offline by vm.offline.collectAsState()
@@ -311,8 +309,7 @@ fun V2LibraryScreen(
             onSelect = { visible.firstOrNull()?.let { picked = setOf(it.id) } },
             onPin = { row -> scope.launch { vm.bulk(listOf(row.id), if (row.item.pinned) "unpin" else "pin") } },
             matches = found,
-            onOpenAt = { m -> onOpenAt(m.row.item, m.atMs) },
-            onRowShown = vm::wantViewPreview
+            onOpenAt = { m -> onOpenAt(m.row.item, m.atMs) }
         )
     )
 }
@@ -348,9 +345,7 @@ class LibraryTools(
     val onSelect: () -> Unit,
     val onPin: (V2Row) -> Unit,
     val matches: List<TranscriptMatch>,
-    val onOpenAt: (TranscriptMatch) -> Unit,
-    /** A row came on screen (U19: its snippet in its default view is read once that view is ready). */
-    val onRowShown: (LibraryItem) -> Unit = {}
+    val onOpenAt: (TranscriptMatch) -> Unit
 )
 
 /** LibraryGrouping's fixed English names in the screen's language. */
@@ -563,7 +558,6 @@ fun V2LibraryContent(
                             }
                             if (!showHeader || g.key !in tools.folded) {
                                 items(g.rows, key = { it.id }) { row ->
-                                    LaunchedEffect(row.id, row.item.transcript?.views?.status) { tools.onRowShown(row.item) }
                                     SwipeRow(row.item.pinned, enabled = !selecting, onPin = {
                                         tools.onPin(row)
                                     }, onDelete = { onDelete(row) }) {

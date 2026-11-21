@@ -242,6 +242,21 @@ fun SessionScreen(
             views = vm.transcriptViews(id) ?: views
         }
     }
+    // Once a view it waited for is written, the server gives an automatic Urdu-script title in Roman Urdu: read it again.
+    var waitedForView by remember(item.id) { mutableStateOf(false) }
+    LaunchedEffect(views?.status) {
+        when (views?.status) {
+            "making" -> waitedForView = true
+
+            "ready" -> if (waitedForView) {
+                waitedForView = false
+                val before = shownTitle
+                vm.refreshQuietly().join()
+                val now = vm.library.value.firstOrNull { it.id == item.id }?.title
+                if (now != null && shownTitle == before) shownTitle = now
+            }
+        }
+    }
     fun chooseView(view: ShowAs) {
         showAs = view
         val id = t?.id ?: return

@@ -51,7 +51,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -609,35 +608,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Show as (since v1.2): the Roman Urdu and English views and their state; null when they cannot be read now. */
     suspend fun transcriptViews(transcriptId: String): TranscriptViewsDto? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.transcriptViews(transcriptId) }.getOrNull()
-            ?.also { views -> keepViewPreviews(transcriptId, views) }
-    }
-
-    private val _viewPreviews = MutableStateFlow<Map<String, String>>(emptyMap())
-
-    /** U19: Library snippets in the default view (Roman Urdu), by [com.echoledger.mobile.core.ViewPreviews.key]. */
-    val viewPreviews: StateFlow<Map<String, String>> = _viewPreviews.asStateFlow()
-    private val previewsAsked = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
-    private val previewGate = kotlinx.coroutines.sync.Semaphore(2)
-
-    private fun keepViewPreviews(transcriptId: String, views: TranscriptViewsDto) {
-        val lines = listOf("roman", "english", "urdu").mapNotNull { v ->
-            com.echoledger.mobile.core.ViewPreviews.firstLine(views, v)?.let { "$transcriptId:$v" to it }
-        }
-        if (lines.isNotEmpty()) _viewPreviews.update { it + lines }
-    }
-
-    /**
-     * U19: a Library row on screen whose default view is ready gets its snippet in that view: its first line is read once
-     * (two at a time) unless a page read the views already.
-     */
-    fun wantViewPreview(item: LibraryItem) {
-        val key = com.echoledger.mobile.core.ViewPreviews.key(item) ?: return
-        if (key in _viewPreviews.value || !previewsAsked.add(key)) return
-        val id = key.substringBefore(':')
-        viewModelScope.launch(Dispatchers.IO) {
-            val views = previewGate.withPermit { runCatching { graph.api()?.transcriptViews(id) }.getOrNull() }
-            if (views == null) previewsAsked.remove(key) else keepViewPreviews(id, views)
-        }
     }
 
     /** Show as (since v1.2): asks the server to write the views; null with a message when it cannot. */
