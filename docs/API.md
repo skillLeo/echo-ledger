@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-k (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-m (2026-11-21, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-m (proposed 2026-11-21, accepted when merged): lists (B11, see "Lists (since 2.0.0-m)"). A person's lists are their labels with a name, a colour and a place in the apps' row, kept by the server so every device shows the same ones: `GET /api/lists`, `POST /api/lists` (an empty list), `PATCH` and `DELETE /api/lists/{key}` (rename or delete changes every recording of the person in one transaction) and `PUT /api/lists/order`. Labelling a recording makes its list when it is new. `GET /api/library/views` gives the labels in list order. A label's colour is its list's (`PUT /api/labels/color` and `label_colors` answer as before). New codes `name_reserved`, `list_exists`, `list_not_found`. Only additions: older apps ignore them.
 2.0.0-k (proposed 2026-11-21, accepted when merged): a call's title comes from the person called (see "Title from the person"): a person's own title (any rename wins), then "Call with <name>" or the number, then the automatic title. `title` is that title; the new `title_source` (`own` | `person` | `auto` | `app`) says which, and `title_auto` stays `true` only for `auto`. Outside the account (share links, exports, WhatsApp, the audit log) the title never names the person called.
 2.0.0-j (accepted 2026-11-21): "Audio only and Transcribe later" (1.8.0-e) is served: the three endpoints, `audio_only`, `transcribe_estimate` and projects' `transcribe_calls`. Clarified where the server had to decide: minutes are plan minutes (0 on the person's own key or an on-device engine); the estimate lists only the person's audio-only recordings among the ids (what bulk would start); bulk on Free without an own key is `403 needs_transcription_key` and nothing starts; the open create takes `transcribe` too.
 2.0.0-i (accepted 2026-11-21): the parity plan's row indicators (docs/PLAN_V2_PARITY.md section 3). Library items carry
@@ -126,6 +127,9 @@ Every addition below is marked **(since v1.1)**.
 | 422 | `verification_failed` | `complete`: the assembled file failed the size/SHA-256 check; the parts were discarded | Upload the whole file again from chunk 0 |
 | 422 | `invalid_cursor` | `library` cursor is malformed | Restart paging without a cursor |
 | 422 | `too_many_labels` | More than 20 labels on one recording | Permanent: remove some labels first |
+| 422 | `name_reserved` | Since 2.0.0-m: a list can't be called All, Unread or Important (in English or Urdu: سب, نہ پڑھی گئی, اہم) | Ask for another name |
+| 409 | `list_exists` | Since 2.0.0-m: the person already has a list of that name (capitals and spaces ignored); `name` is that list's | Say "You already have a list called …" |
+| 404 | `list_not_found` | Since 2.0.0-m: no list of the person's has this key | Refresh the lists |
 | 429 | `rate_limited` | Throttled; `Retry-After` is always set | Wait `Retry-After` seconds |
 | 502 | `provider_error` | `stt/token`: the provider refused or could not be reached | Retry later |
 | 503 | `provider_not_configured` | `stt/token`: provider key or region missing. Since 1.8.1-b the `message` is "Live captions are not set up on the server yet. Ask your admin." (or "Dictation …" for dictation); it never names an engine | Show the message; retry later |
@@ -1084,6 +1088,7 @@ not decided Keep or Discard), `bookmarked`, `failed` (session `failed` or an upl
 ### `GET /api/library/views?tz=` — `library:read` (since v1.1)
 `200 {"views": {"today": 2, "this_week": 9, "waiting": 0, "bookmarked": 4, "failed": 1, "pinned": 3}, "labels": [{"label": "Invoice", "count": 5, "color": "#16a34a"}]}`.
 Counts match what `GET /api/library?view=…` lists. Each label's `color` (since 2.0.0-i) is `null` until one is chosen.
+Since 2.0.0-m the labels come in the order of the person's lists (`GET /api/lists`); a label without a list comes after them, by name.
 
 ### Important, label colours and days left (since 2.0.0-i)
 What a Library row shows beside the title and the time (docs/PLAN_V2_PARITY.md section 3):
@@ -1117,6 +1122,54 @@ returned in lower case as a project's colour is. A label none of the person's re
 label gets a new `updated_at`, so the other devices pick the colour up on their next sync. `422 validation_failed` for
 an empty label, a missing `color`, or a colour that is not `#rrggbb`. A viewer's device gets `403 not_allowed`, as for
 every other change.
+
+### Lists (since 2.0.0-m)
+The apps' row of lists (All · Unread · Important · the person's lists · +). A list is one of the person's labels with its
+name as typed, its colour and its place in the row; there is no other model. Like labels and their colours, lists belong
+to the person who made the recordings in the device's workspace: a teammate has lists of their own, and another person's
+list is answered like an unknown one. All, Unread and Important are the apps' own chips, never lists.
+
+- **The list:** `{"key": "clients", "name": "Clients", "color": "#e15f56", "position": 0, "count": 3}`. `key` is the
+  name in lower case (single spaces); it names the list in the paths below (URL-encoded) and in every label it matches,
+  capitals ignored only, as label colours are ("Résumé" and "resume" are two lists). `name` is cleaned as a label is
+  (trimmed, single spaces, at most 40 characters). `color` is one of the eight label colours (`#8e8a80` grey, `#e15f56`
+  red, `#dc6718` orange, `#b3820f` amber, `#2d9a63` green, `#26978f` teal, `#458cde` blue, `#d7609c` pink), or `null`
+  for a list made by labelling, or a colour set before 2.0.0-m (any `#rrggbb` through `PUT /api/labels/color`). `position` counts from
+  0 with no gaps. `count` is how many of the person's recordings, not in Trash, carry the label.
+- **Labelling makes the list:** a label given through `PATCH /api/sessions/{id}` `labels` or `POST /api/sessions/bulk`
+  `label` that is new to the person is a new list at the end of the row, without a colour. Taking the label off every
+  recording keeps the list, empty.
+- **Names:** a list can't be called All, Unread or Important, in English or in the Urdu the apps show (سب, نہ پڑھی گئی,
+  اہم), capitals and spaces ignored → `422 name_reserved`. A name another list of the person's has, capitals and spaces
+  ignored → `409 list_exists` with `name`, that list's name ("You already have a list called Clients."). An empty name or
+  one over 40 characters → `422 validation_failed`. A colour outside the eight → `422 validation_failed`.
+- Every change gives each recording it touches a new `updated_at`, so the other devices sync its labels and
+  `label_colors`. The audit log records `list_created`, `list_renamed` and `list_deleted` (staff see the event's name, not
+  the list's).
+
+### `GET /api/lists` — `config:read` (since 2.0.0-m)
+`200 {"data": [<list>]}` in `position` order. A label of the person's recordings (in Trash too) that has no list yet gets
+one at the end first.
+
+### `POST /api/lists` — `sessions:write` (since 2.0.0-m)
+`{"name": "Clients", "color": "#e15f56"}` (`color` optional) → `201 {"data": <list>}`, empty (`count` 0), at the end of
+the row. Without `color` the list takes the one of the eight fewest of the person's lists have, the earliest in the order
+above on a tie. `name_reserved`, `list_exists` and `validation_failed` as above.
+
+### `PATCH /api/lists/{key}` — `sessions:write` (since 2.0.0-m)
+`{"name": "Customers", "color": "#d7609c"}`, either or both → `200 {"data": <list>}`. A new name is the label's new
+spelling on every recording of the person that carries it, those in Trash too, all in one transaction: either every
+recording changes or none does. A change of capitals alone is allowed. `404 list_not_found`; the name checks as above.
+
+### `DELETE /api/lists/{key}` — `sessions:write` (since 2.0.0-m)
+The label comes off every recording of the person that carries it (in Trash too), in one transaction, and the list goes;
+the recordings stay. The lists after it move up one. `200 {"key": "clients", "changed": 3}` (`changed`: the recordings
+that lost the label). `404 list_not_found`.
+
+### `PUT /api/lists/order` — `sessions:write` (since 2.0.0-m)
+`{"keys": ["family", "clients", "home"]}` → `200 {"data": [<list>]}` in the new order. `keys` names every list of the
+person exactly once (as keys or names, capitals ignored); a list left out, named twice, or not the person's →
+`422 validation_failed` and nothing moves.
 
 ### `PATCH /api/sessions/{id}` — `sessions:write` (since v1.1)
 Body, every field optional: `title` (≤ 200; empty clears it), `client_id` (a client of the owner, `null` = no

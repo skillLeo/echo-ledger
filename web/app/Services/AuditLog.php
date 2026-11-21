@@ -118,10 +118,14 @@ final class AuditLog
         'connector_disconnected' => 'App disconnected',
         'connector_token_reused' => 'App disconnected: used token came back',
         'connector_tool_call' => 'Read by a connected app',
+        // Since 2.0.0-m: the person's lists.
+        'list_created' => 'List made',
+        'list_renamed' => 'List renamed',
+        'list_deleted' => 'List deleted',
     ];
 
     /** Events whose summary names a recording or a project (its title): staff read the event's name instead. */
-    public const NAMES_CONTENT = ['session_deleted', 'share_created', 'share_revoked', 'sent_to_teammate', 'support_content_viewed'];
+    public const NAMES_CONTENT = ['session_deleted', 'share_created', 'share_revoked', 'sent_to_teammate', 'support_content_viewed', 'list_created', 'list_renamed', 'list_deleted'];
 
     /**
      * How the admin panel shows an event (since v1.6, P2.2): metadata only, so an event that names a recording or a

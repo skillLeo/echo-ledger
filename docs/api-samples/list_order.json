@@ -1,0 +1,18 @@
+{
+    "data": [
+        {
+            "key": "customers",
+            "name": "Customers",
+            "color": "#458cde",
+            "position": 0,
+            "count": 0
+        },
+        {
+            "key": "sample",
+            "name": "Sample",
+            "color": null,
+            "position": 1,
+            "count": 1
+        }
+    ]
+}

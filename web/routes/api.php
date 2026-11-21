@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\FilingRuleController;
 use App\Http\Controllers\Api\HelpController;
 use App\Http\Controllers\Api\LibraryController;
 use App\Http\Controllers\Api\LinkController;
+use App\Http\Controllers\Api\ListController;
 use App\Http\Controllers\Api\LiveTranslateTokenController;
 use App\Http\Controllers\Api\MissedRecordingController;
 use App\Http\Controllers\Api\OrganiseController;
@@ -123,6 +124,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::post('promo-codes/check', [PromoCodeController::class, 'check'])->middleware(['abilities:config:read', 'throttle:promo-check'])->name('api.promo-codes.check');
         Route::get('security', [SecurityController::class, 'index'])->middleware('abilities:config:read')->name('api.security');
         Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
+        // Since 2.0.0-m: the person's lists (labels with a colour and a place in the row).
+        Route::get('lists', [ListController::class, 'index'])->middleware('abilities:config:read')->name('api.lists');
 
         Route::post('stt/token', SttTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token', EnsureCanRecord::class])->name('api.stt.token');
         Route::post('live-translate/token', LiveTranslateTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token', EnsureCanRecord::class])->name('api.live-translate.token');
@@ -142,6 +145,11 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->middleware($own)->name('api.sessions.bulk');
             // Since 2.0.0-i: a label's colour in the workspace.
             Route::put('labels/color', [OrganiseController::class, 'labelColor'])->middleware($own)->name('api.labels.color');
+            // Since 2.0.0-m: lists. A rename or delete changes every recording of the person in it, in one transaction.
+            Route::post('lists', [ListController::class, 'store'])->middleware($own)->name('api.lists.store');
+            Route::put('lists/order', [ListController::class, 'order'])->middleware($own)->name('api.lists.order');
+            Route::patch('lists/{key}', [ListController::class, 'update'])->middleware($own)->where('key', '.+')->name('api.lists.update');
+            Route::delete('lists/{key}', [ListController::class, 'destroy'])->middleware($own)->where('key', '.+')->name('api.lists.destroy');
             Route::post('clients', [OrganiseController::class, 'storeClient'])->middleware($own)->name('api.clients.store');
             Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->middleware($own)->name('api.clients.update');
             // Projects (v1.5): deleting one sends its recordings to the Inbox and its subfolders up a level.

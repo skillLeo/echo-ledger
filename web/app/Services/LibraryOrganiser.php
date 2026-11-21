@@ -12,10 +12,11 @@ use App\Exceptions\ApiError;
 use App\Filament\Support\ConsoleV2;
 use App\Models\CaptureSession;
 use App\Models\Client;
-use App\Models\LabelColor;
+use App\Models\LabelList;
 use App\Models\SessionLabel;
 use App\Models\User;
 use App\Services\Callers\CallerMatcher;
+use App\Services\Lists\LabelLists;
 use App\Services\Titles\AutoTitles;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
@@ -233,18 +234,23 @@ final class LibraryOrganiser
 
     /**
      * Every label the person uses in the workspace (all of the workspace's when no person is known), with how many
-     * recordings carry it and, since 2.0.0-i, its colour (null until one is chosen).
+     * recordings carry it and, since 2.0.0-i, its colour (null until one is chosen). Since 2.0.0-m in the order of the
+     * person's lists (GET /api/lists); a label without a list comes after them, by name.
      *
      * @return list<array{label: string, count: int, color: string|null}>
      */
     public function labels(int $workspaceId): array
     {
         $userId = CurrentWorkspace::userId();
-        $colors = $userId !== null ? $this->labelColors($workspaceId, $userId) : [];
+        // The person's lists in one read: each label's colour and place.
+        $lists = $userId !== null ? LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->get(['label_key', 'color', 'position']) : collect();
+        $colors = $lists->whereNotNull('color')->mapWithKeys(fn (LabelList $l): array => [$l->label_key => strtolower((string) $l->color)])->all();
+        $positions = $lists->mapWithKeys(fn (LabelList $l): array => [$l->label_key => $l->position])->all();
 
         return SessionLabel::query()
             ->whereHas('captureSession', fn (Builder $q) => $q->where('workspace_id', $workspaceId)->ofPerson())
             ->selectRaw('label, COUNT(*) as aggregate')->groupBy('label')->orderBy('label')->get()
+            ->sortBy(fn (SessionLabel $l): int => $positions[mb_strtolower($l->label)] ?? PHP_INT_MAX)
             ->map(fn (SessionLabel $l): array => ['label' => $l->label, 'count' => (int) $l->getAttribute('aggregate'),
                 'color' => $colors[mb_strtolower($l->label)] ?? null])
             ->values()->all();
@@ -263,9 +269,8 @@ final class LibraryOrganiser
             /** @var array<string, string> $cached */
             return $cached;
         }
-        $colors = LabelColor::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)
-            // Lower case on read too, so the apps' palette matches whatever wrote the row.
-            ->pluck('color', 'label_key')->map(fn ($c): string => strtolower((string) $c))->all();
+        // Since 2.0.0-m the colours are the lists' (lower case on read too, whatever wrote the row).
+        $colors = app(LabelLists::class)->colors($workspaceId, $userId);
         request()->attributes->set($key, $colors);
 
         return $colors;
@@ -299,23 +304,23 @@ final class LibraryOrganiser
         }
         $spelt = (string) $carriers->firstOrFail()->label;
         $color = $color !== null ? strtolower($color) : null;
-        DB::transaction(function () use ($workspaceId, $userId, $key, $color, $carriers): void {
-            $row = ['workspace_id' => $workspaceId, 'user_id' => $userId, 'label_key' => $key];
-            if ($color === null) {
-                LabelColor::query()->where($row)->delete();
-            } else {
-                // One statement, so two devices setting it at once never trip the unique index.
-                LabelColor::query()->upsert([[...$row, 'color' => $color, 'created_at' => now(), 'updated_at' => now()]],
-                    ['workspace_id', 'user_id', 'label_key'], ['color', 'updated_at']);
-            }
+        DB::transaction(function () use ($workspaceId, $userId, $spelt, $color, $carriers): void {
+            // Since 2.0.0-m the colour is the list's (made here when the label has none yet).
+            app(LabelLists::class)->setColour($workspaceId, $userId, $spelt, $color);
             // A plain list of ids: MySQL refuses an UPDATE that reads its own table in a subquery (error 1093).
             foreach ($carriers->pluck('capture_session_id')->unique()->chunk(500) as $ids) {
                 CaptureSession::query()->whereIn('id', $ids->values()->all())->update(['updated_at' => now()]);
             }
         });
-        request()->attributes->remove(self::colorsKey($workspaceId, $userId));
+        $this->forgetColors($workspaceId, $userId);
 
         return ['label' => $spelt, 'color' => $color];
+    }
+
+    /** The colours read for this request are stale (a list was recoloured, renamed or deleted). */
+    public function forgetColors(int $workspaceId, int $userId): void
+    {
+        request()->attributes->remove(self::colorsKey($workspaceId, $userId));
     }
 
     private static function colorsKey(int $workspaceId, int $userId): string
@@ -394,6 +399,8 @@ final class LibraryOrganiser
         foreach ($clean as $label) {
             $session->labels()->create(['label' => $label]);
         }
+        // Since 2.0.0-m: a new label is a new list of the person's, at the end of their row.
+        app(LabelLists::class)->ensure((int) $session->workspace_id, (int) $session->user_id, $clean);
     }
 
     /**
@@ -439,6 +446,13 @@ final class LibraryOrganiser
                 }
                 $session->updated_at = now();
                 $session->save();
+            }
+            // Since 2.0.0-m: a new label is a new list of each person whose recordings got it.
+            if ($action === 'label') {
+                foreach ($sessions->map(fn (CaptureSession $s): string => $s->workspace_id.'|'.$s->user_id)->unique() as $person) {
+                    [$workspaceId, $userId] = array_map('intval', explode('|', $person));
+                    app(LabelLists::class)->ensure($workspaceId, $userId, [(string) $label]);
+                }
             }
         });
 

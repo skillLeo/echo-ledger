@@ -75,6 +75,12 @@ function abilityRoutes(): array
         'transcribe estimate' => ['POST', '/api/sessions/transcribe-estimate', 'library:read'],
         // Since 2.0.0-i: a label's colour.
         'label colour' => ['PUT', '/api/labels/color', 'sessions:write'],
+        // Since 2.0.0-m: lists.
+        'lists' => ['GET', '/api/lists', 'config:read'],
+        'make list' => ['POST', '/api/lists', 'sessions:write'],
+        'order lists' => ['PUT', '/api/lists/order', 'sessions:write'],
+        'change list' => ['PATCH', "/api/lists/{$id}", 'sessions:write'],
+        'delete list' => ['DELETE', "/api/lists/{$id}", 'sessions:write'],
         'bulk export' => ['POST', '/api/sessions/export', 'library:read'],
         'smart views' => ['GET', '/api/library/views', 'library:read'],
         'create client' => ['POST', '/api/clients', 'sessions:write'],
