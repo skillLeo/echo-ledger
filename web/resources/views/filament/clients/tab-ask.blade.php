@@ -1,26 +1,30 @@
+{{-- W-209: a name or value inside a translated sentence is isolated in right to left, so the sentence keeps the page's direction (D4 §4). --}}
+@php
+    $iso = fn (mixed $value): string => \App\Filament\Support\ConsoleV2::rtl() ? "\u{2068}".$value."\u{2069}" : (string) $value;
+@endphp
 {{-- Ask: a short answer from the brief, memory, files and transcripts, with the moments and pages it comes from. --}}
 <div style="display: flex; flex-direction: column; gap: var(--space-5); max-width: 880px">
         @include('filament.clients.ai-locked')
     <form class="el-card" wire:submit="ask" style="display: flex; flex-direction: column; gap: var(--space-3)">
-        <label for="ask-question" class="el-card-title">Ask about {{ $client->name }} @if ($aiLocked){!! $aiBadge?->toHtml() !!}@endif</label>
+        <label for="ask-question" class="el-card-title">{{ __('Ask about :project', ['project' => $iso($client->name)]) }} @if ($aiLocked){!! $aiBadge?->toHtml() !!}@endif</label>
         <textarea id="ask-question" class="el-field-input" rows="3" wire:model="question" maxlength="500"
-            placeholder="What did we agree about the deadline?" x-on:keydown.ctrl.enter.prevent="$wire.ask()" x-on:keydown.meta.enter.prevent="$wire.ask()"></textarea>
+            placeholder="{{ __('What did we agree about the deadline?') }}" x-on:keydown.ctrl.enter.prevent="$wire.ask()" x-on:keydown.meta.enter.prevent="$wire.ask()"></textarea>
         @error('question')<p class="el-caption" role="alert" style="color: var(--danger)">{{ $message }}</p>@enderror
         <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3)">
-            <span class="el-seg" role="group" aria-label="Answer in">
-                <button type="button" wire:click="$set('askLanguage', 'en')" aria-pressed="{{ $this->askLanguage === 'en' ? 'true' : 'false' }}">English</button>
-                <button type="button" wire:click="$set('askLanguage', 'roman_urdu')" aria-pressed="{{ $this->askLanguage === 'roman_urdu' ? 'true' : 'false' }}">Roman Urdu</button>
+            <span class="el-seg" role="group" aria-label="{{ __('Answer in') }}">
+                <button type="button" wire:click="$set('askLanguage', 'en')" aria-pressed="{{ $this->askLanguage === 'en' ? 'true' : 'false' }}">{{ __('English') }}</button>
+                <button type="button" wire:click="$set('askLanguage', 'roman_urdu')" aria-pressed="{{ $this->askLanguage === 'roman_urdu' ? 'true' : 'false' }}">{{ __('Roman Urdu') }}</button>
             </span>
             <button type="submit" class="el-pill el-pill-primary" wire:loading.attr="disabled" wire:target="ask">
-                <span wire:loading.remove wire:target="ask">Ask</span>
-                <span wire:loading wire:target="ask">Asking…</span>
+                <span wire:loading.remove wire:target="ask">{{ __('Ask') }}</span>
+                <span wire:loading wire:target="ask">{{ __('Asking…') }}</span>
             </button>
         </div>
         @unless ($configured)
             @if ($credentialsUrl)
-                <p class="el-caption">Add your Anthropic key in <a class="el-link" href="{{ $credentialsUrl }}">API Credentials</a> to ask.</p>
+                <p class="el-caption">{!! __('Add your Anthropic key in :link to ask.', ['link' => '<a class="el-link" href="'.e($credentialsUrl).'">'.e(__('API Credentials')).'</a>']) !!}</p>
             @else
-                <p class="el-caption">Ask is not set up on this server yet.</p>
+                <p class="el-caption">{{ __('Ask is not set up on this server yet.') }}</p>
             @endif
         @endunless
     </form>
@@ -36,11 +40,11 @@
             <div class="el-banner el-banner-danger" role="alert">@svg('heroicon-o-exclamation-circle', ['aria-hidden' => 'true'])<span class="el-banner-body">{{ $this->askError }}</span></div>
         @elseif ($this->answer !== null)
             <section class="el-card" aria-labelledby="answer-heading" style="display: flex; flex-direction: column; gap: var(--space-4)">
-                <h3 id="answer-heading" class="el-sr">Answer</h3>
+                <h3 id="answer-heading" class="el-sr">{{ __('Answer') }}</h3>
                 <p class="el-answer" dir="auto">{{ $this->answer['answer'] }}</p>
                 @if ($this->answer['citations'] !== [])
                     <div>
-                        <h4 class="el-section-header">Sources</h4>
+                        <h4 class="el-section-header">{{ __('Sources') }}</h4>
                         <div class="el-sources">
                             @foreach ($this->answer['citations'] as $citation)
                                 @if ($citation['type'] === 'call')
@@ -55,7 +59,7 @@
                                     <a class="el-source" href="?tab=files#file-{{ $citation['file_id'] }}" wire:click.prevent="setTab('files')">
                                         @svg('heroicon-o-document-text', ['aria-hidden' => 'true'])
                                         <span>
-                                            <span style="font-weight: 600">{{ $citation['title'] }}</span>@if ($citation['page']) <span class="el-note-at">page {{ $citation['page'] }}</span>@endif
+                                            <span style="font-weight: 600">{{ $citation['title'] }}</span>@if ($citation['page']) <span class="el-note-at">{{ __('page :n', ['n' => $citation['page']]) }}</span>@endif
                                             @if (filled($citation['quote'] ?? null))<span class="el-source-quote" style="display: block" dir="auto">“{{ $citation['quote'] }}”</span>@endif
                                         </span>
                                     </a>
@@ -68,8 +72,8 @@
         @else
             <div class="el-empty" style="padding-block: var(--space-6)">
                 <span class="el-empty-icon">@svg('heroicon-o-chat-bubble-left-ellipsis', ['aria-hidden' => 'true'])</span>
-                <p class="el-empty-title">Ask anything about {{ $client->name }}</p>
-                <p class="el-empty-text">Answers come from the brief, the memory, the files and the transcripts, with the moment or page they are from.</p>
+                <p class="el-empty-title">{{ __('Ask anything about :project', ['project' => $iso($client->name)]) }}</p>
+                <p class="el-empty-text">{{ __('Answers come from the brief, the memory, the files and the transcripts, with the moment or page they are from.') }}</p>
             </div>
         @endif
     </div>

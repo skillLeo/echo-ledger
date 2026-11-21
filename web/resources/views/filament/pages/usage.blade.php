@@ -1,3 +1,7 @@
+{{-- W-209: a name or value inside a translated sentence is isolated in right to left, so the sentence keeps the page's direction (D4 §4). --}}
+@php
+    $iso = fn (mixed $value): string => \App\Filament\Support\ConsoleV2::rtl() ? "\u{2068}".$value."\u{2069}" : (string) $value;
+@endphp
 @php
     $t = $report['totals'];
     $min = fn (float $m): string => number_format($m, $m < 10 ? 1 : 0);
@@ -29,7 +33,7 @@
         ] as [$label, $value, $hint])
             <x-filament::section compact>
                 <div style="font-size:.8rem;opacity:.7">{{ $label }}</div>
-                <div style="font-size:1.6rem;font-weight:600;font-variant-numeric:tabular-nums">{{ $value }}</div>
+                <div style="font-size:1.6rem;font-weight:600;font-variant-numeric:tabular-nums">{{ $iso($value) }}</div>
                 <div style="font-size:.75rem;opacity:.6">{{ $hint }}</div>
             </x-filament::section>
         @endforeach
@@ -82,7 +86,7 @@
         {{-- Since v1.8.1 (W-001) every engine together: which provider did what is for the admin panel only. --}}
         <x-filament::section :heading="__('Totals')" :description="__('Billed minutes: audio minutes × billed channels. Per recorded hour: what an hour of recording cost (final transcripts).')">
             @if (! $anyUsage)
-                <p style="opacity:.6">{{ __('No usage in :month.', ['month' => $report['label']]) }}</p>
+                <p style="opacity:.6">{{ __('No usage in :month.', ['month' => $iso($report['label'])]) }}</p>
             @else
                 <table style="width:100%;font-size:.85rem;border-collapse:collapse" data-usage-totals>
                     <tbody>
@@ -98,7 +102,7 @@
 
         <x-filament::section :heading="__('By device')">
             @if ($report['devices'] === [])
-                <p style="opacity:.6">{{ __('No billable minutes in :month.', ['month' => $report['label']]) }}</p>
+                <p style="opacity:.6">{{ __('No billable minutes in :month.', ['month' => $iso($report['label'])]) }}</p>
             @else
                 <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                     <tbody>
@@ -112,7 +116,7 @@
 
         <x-filament::section :heading="__('Top projects')">
             @if ($report['clients'] === [])
-                <p style="opacity:.6">{{ __('No billable minutes for a project in :month.', ['month' => $report['label']]) }}</p>
+                <p style="opacity:.6">{{ __('No billable minutes for a project in :month.', ['month' => $iso($report['label'])]) }}</p>
             @else
                 <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                     <tbody>
@@ -126,7 +130,7 @@
 
         <x-filament::section :heading="__('Per language')" :description="__('What each language\'s recordings cost this month: transcription, the double-check of short notes and the views.')">
             @if (($report['languages'] ?? []) === [])
-                <p style="opacity:.6">{{ __('No billable minutes in :month.', ['month' => $report['label']]) }}</p>
+                <p style="opacity:.6">{{ __('No billable minutes in :month.', ['month' => $iso($report['label'])]) }}</p>
             @else
                 <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                     <tbody>

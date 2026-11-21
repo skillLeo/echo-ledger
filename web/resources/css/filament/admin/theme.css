@@ -2881,18 +2881,12 @@ textarea.el-field-input {
 }
 
 /*
- * W-203: Usage and a project's pages are still in English inside the Urdu (right-to-left) frame. Each piece of their
- * text takes its own direction from its first letter ("68.0 B", "0.0 min · no limit", a sentence's full stop at its end)
- * and stays on the frame's start side. Only these pages: elsewhere the frame's words are Urdu and keep its direction.
- * The alignment has no specificity, so an element's own alignment still wins.
+ * W-209: in the Urdu frame a project's selects (the memory's kind, Recordings' sort, a rule's kind and app) keep their
+ * arrow at the end, on the left, with the room for it on that side, so it never sits on their value.
  */
-[dir='rtl'] :is(.el-usage, .fi-resource-clients) :is(p, span, div, td, th, h2, h3, h4, li, a, dt, dd, label, strong, small) {
-    unicode-bidi: plaintext;
-}
-
-:where([dir='rtl'] :is(.el-usage, .fi-resource-clients) :is(p, span, div, td, th, h2, h3, h4, li, a, dt, dd, label, strong, small)) {
-    text-align: -webkit-match-parent;
-    text-align: match-parent;
+[dir='rtl'] .fi-resource-clients select.el-field-input {
+    padding-inline-end: var(--space-6);
+    background-position: left var(--space-2) center;
 }
 
 /*
