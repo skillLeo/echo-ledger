@@ -40,8 +40,10 @@ final class AccountProof
     }
 
     /**
-     * Checks one proof from [$input] (`password`, `otp` or `email_code`) or throws. [$authenticatorOnly]: only an
-     * authenticator or recovery code counts (turning two-step off).
+     * Checks one proof from [$input] (`password`, `otp` or `email_code`) or throws. With two-step on, the proof must
+     * include an authenticator or recovery code: the password alone is never enough, or the password and a device
+     * would stand in for the second step (a password sent with it is checked too). [$authenticatorOnly]: only an
+     * authenticator or recovery code counts, whatever the account has (turning two-step off).
      *
      * @param  array<string, mixed>  $input
      */
@@ -52,12 +54,25 @@ final class AccountProof
         $otp = is_string($input['otp'] ?? null) ? $input['otp'] : '';
         $emailCode = is_string($input['email_code'] ?? null) ? $input['email_code'] : '';
 
-        if ($authenticatorOnly || $otp !== '') {
-            if ($otp === '' || ! $this->codes->verify($user, $otp)) {
+        if ($authenticatorOnly || $user->hasTwoFactor()) {
+            if ($password !== '' && ! $this->passwordMatches($user, $password)) {
+                $this->fail($user, 'wrong_password', 'That password is wrong.');
+            }
+            if ($otp === '') {
+                if ($password === '' && $emailCode === '') {
+                    $this->required($user);
+                }
+                // Nothing was guessed: not counted as a failure.
+                throw new ApiError(422, 'invalid_otp', 'Enter a code from your authenticator app, or a recovery code.', ['accepts' => ['otp']]);
+            }
+            if (! $this->codes->verify($user, $otp)) {
                 $this->fail($user, 'invalid_otp', 'That code is wrong or was used already.');
             }
+        } elseif ($otp !== '') {
+            // No two-step: no authenticator code can be right.
+            $this->fail($user, 'invalid_otp', 'That code is wrong or was used already.');
         } elseif ($password !== '') {
-            if (! self::hasPassword($user) || ! Hash::check($password, (string) $user->password)) {
+            if (! $this->passwordMatches($user, $password)) {
                 $this->fail($user, 'wrong_password', 'That password is wrong.');
             }
         } elseif ($emailCode !== '') {
@@ -67,10 +82,20 @@ final class AccountProof
                 $this->fail($user, 'invalid_code', 'That code is wrong or has expired. Ask for a new one.');
             }
         } else {
-            throw new ApiError(422, 'proof_required', 'Confirm it is you: your password, a code from your authenticator app, or a code sent to your email.',
-                ['accepts' => self::accepts($user)]);
+            $this->required($user);
         }
         $this->guard->clear($user->email);
+    }
+
+    private function passwordMatches(User $user, #[\SensitiveParameter] string $password): bool
+    {
+        return self::hasPassword($user) && Hash::check($password, (string) $user->password);
+    }
+
+    private function required(User $user): never
+    {
+        throw new ApiError(422, 'proof_required', 'Confirm it is you: your password, a code from your authenticator app, or a code sent to your email.',
+            ['accepts' => self::accepts($user)]);
     }
 
     /** Sends a 6-digit code to the account's address (`POST /api/account/proof-code`; 5 an hour, by the route). */
@@ -87,9 +112,13 @@ final class AccountProof
     /** @return list<string> the proofs this account can give */
     public static function accepts(User $user): array
     {
+        // With two-step on, an authenticator or recovery code is needed (a password may come with it).
+        if ($user->hasTwoFactor()) {
+            return ['otp'];
+        }
+
         return array_values(array_filter([
             self::hasPassword($user) ? 'password' : null,
-            $user->hasTwoFactor() ? 'otp' : null,
             self::needsEmailCode($user) ? 'email_code' : null,
         ]));
     }

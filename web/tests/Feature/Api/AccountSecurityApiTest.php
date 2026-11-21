@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Auth\EditProfile;
 use App\Mail\EmailCodeMail;
 use App\Mail\SecurityChangeMail;
 use App\Models\AuditEvent;
@@ -15,6 +16,7 @@ use Filament\Facades\Filament;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use PragmaRX\Google2FA\Google2FA;
@@ -57,9 +59,9 @@ function secApiPasskey(User $user, string $name = 'Pixel'): Passkey
 }
 
 /** The phone's ceremony: options, then a software authenticator's answer from [$origin]. */
-function secApiAddPasskey(object $test, string $token, ?string $origin = null, string $name = 'My phone'): TestResponse
+function secApiAddPasskey(object $test, string $token, ?string $origin = null, string $name = 'My phone', array $proof = ['password' => 'password']): TestResponse
 {
-    $options = $test->asToken($token)->postJson('/api/account/passkeys/options', ['password' => 'password'])->assertOk()->json();
+    $options = $test->asToken($token)->postJson('/api/account/passkeys/options', $proof)->assertOk()->json();
     $answer = (new SoftAuthenticator)->create($options['options'], $origin ?? Passkeys::androidOrigins()[0]);
 
     return $test->asToken($token)->postJson('/api/account/passkeys', ['ceremony' => $options['ceremony'], 'name' => $name, 'credential' => $answer]);
@@ -479,7 +481,7 @@ describe('two-step', function () {
         [, $token] = $this->enroll($user->fresh());
 
         $this->asToken($token)->postJson('/api/account/two-factor/recovery-codes')->assertStatus(422)->assertJsonPath('code', 'proof_required');
-        $codes = $this->asToken($token)->postJson('/api/account/two-factor/recovery-codes', ['password' => 'password'])->assertOk()->json('recovery_codes');
+        $codes = $this->asToken($token)->postJson('/api/account/two-factor/recovery-codes', ['otp' => $old[1]])->assertOk()->json('recovery_codes');
         expect($codes)->toHaveCount(8)->and(array_intersect($codes, $old))->toBe([])
             ->and(secApiAudited('recovery_codes_regenerated', $user->id))->toBeTrue();
 
@@ -536,6 +538,7 @@ describe('proof', function () {
         $passkey = secApiPasskey($user);
         [, $phone] = $this->enroll($user->fresh());
         [, $laptop] = $this->enroll($user->fresh());
+        $recovery = accountsEnrolTotp($user)[1];
 
         $this->asToken($phone)->deleteJson('/api/account/google', ['password' => 'wrong-1'])->assertStatus(422);
         $this->asToken($laptop)->deleteJson("/api/account/passkeys/{$passkey->id}", ['password' => 'wrong-2'])->assertStatus(422);
@@ -548,7 +551,7 @@ describe('proof', function () {
         expect($user->fresh()->google_id)->toBe('google-sub-4');
 
         $this->travel(16)->minutes();
-        $this->asToken($laptop)->deleteJson('/api/account/google', ['password' => 'password'])->assertNoContent();
+        $this->asToken($laptop)->deleteJson('/api/account/google', ['password' => 'password', 'otp' => $recovery[0]])->assertNoContent();
     });
 
     it('refuses an email code from an account that has a password (422 invalid_code)', function () {
@@ -640,10 +643,10 @@ describe('logs', function () {
         $totp = app(Google2FA::class)->getCurrentOtp($begin['secret']);
         $first = $this->asToken($token)->postJson('/api/account/two-factor/confirm', ['ceremony' => $begin['ceremony'], 'code' => $totp])->assertOk()->json('recovery_codes');
         $second = $this->asToken($token)->postJson('/api/account/two-factor/recovery-codes', ['otp' => $first[0]])->assertOk()->json('recovery_codes');
-        $third = $this->asToken($token)->postJson('/api/account/two-factor/recovery-codes', ['password' => 'password'])->assertOk()->json('recovery_codes');
-        secApiAddPasskey($this, $token)->assertCreated();
+        $third = $this->asToken($token)->postJson('/api/account/two-factor/recovery-codes', ['otp' => $second[0]])->assertOk()->json('recovery_codes');
+        secApiAddPasskey($this, $token, null, 'My phone', ['otp' => $third[0]])->assertCreated();
         // A refused passkey answer is reported; that report must not carry a secret either.
-        secApiAddPasskey($this, $token, 'https://evil.example')->assertStatus(422);
+        secApiAddPasskey($this, $token, 'https://evil.example', 'My phone', ['otp' => $third[1]])->assertStatus(422);
 
         $secrets = [$begin['secret'], $begin['otpauth_uri'], urlencode($begin['otpauth_uri']), $totp, ...$first, ...$second, ...$third];
         $audits = AuditEvent::query()->where('user_id', $user->id)->get()->map(fn (AuditEvent $a): string => $a->summary.' '.json_encode($a->meta))->all();
@@ -707,7 +710,7 @@ describe('adding a way in needs proof, and the account holder hears of it (secur
         Mail::assertQueued(SecurityChangeMail::class, function (SecurityChangeMail $mail) use ($device, $begin, $codes): bool {
             $html = $mail->render();
 
-            return $mail->hasTo('farah@example.test') && $mail->change === SecurityChangeMail::TWO_FACTOR_ON && str_contains($html, e($device->readableName()))
+            return $mail->hasTo('farah@example.test') && $mail->change === SecurityChangeMail::TWO_FACTOR_ON && str_contains(html_entity_decode($html, ENT_QUOTES | ENT_HTML5), $device->readableName())
                 && ! str_contains($html, $begin['secret']) && ! str_contains($html, $codes[0]);
         });
     });
@@ -738,5 +741,99 @@ describe('adding a way in needs proof, and the account holder hears of it (secur
         expect($alice->fresh()->hasTwoFactor())->toBeFalse()->and($bob->fresh()->hasTwoFactor())->toBeFalse()
             ->and(Passkey::query()->count())->toBe(0);
         Mail::assertNotQueued(SecurityChangeMail::class);
+    });
+});
+
+describe('names in the security emails (security review of 2.0.0-l)', function () {
+    it('shows a crafted device name as plain text in the alert, never a link, emphasis or HTML', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        [$device, $token] = $this->enroll($user);
+        $crafted = "[click](https://evil.example) **now** <a href=\"https://evil.example\">x</a> ![i](https://evil.example/i.png)\n# Heading \u{202E}txt";
+        $device->forceFill(['name' => $crafted, 'name_chosen' => true])->save();
+
+        secApiAddPasskey($this, $token, null, 'Work phone')->assertCreated();
+
+        Mail::assertQueued(SecurityChangeMail::class, function (SecurityChangeMail $mail): bool {
+            $html = $mail->render();
+            $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            // The name may read as text, but nothing in it is a link, an image, emphasis, a heading or HTML.
+            $dom = new DOMDocument;
+            @$dom->loadHTML($html);
+            $links = array_map(fn (DOMElement $a): string => $a->getAttribute('href'), iterator_to_array($dom->getElementsByTagName('a')));
+            $images = array_map(fn (DOMElement $i): string => $i->getAttribute('src'), iterator_to_array($dom->getElementsByTagName('img')));
+            expect(array_filter([...$links, ...$images], fn (string $url): bool => str_contains($url, 'evil')))->toBe([])
+                ->and($links)->toContain(EditProfile::settingsUrl('security'))
+                ->and($html)->not->toContain('<img src="https://evil')->not->toContain('<strong>now</strong>')->not->toContain('<h1>Heading')
+                ->and($html)->not->toContain("\u{202E}")
+                ->and($text)->toContain('[click](https://evil.example) **now**');
+
+            return true;
+        });
+    });
+
+    it('validates passkey names as account names, so none can carry link syntax or bidi controls', function () {
+        $user = Fx::user();
+        [, $token] = $this->enroll($user);
+
+        secApiAddPasskey($this, $token, null, '[click](https://evil.example)')->assertStatus(422)
+            ->assertJsonPath('code', 'validation_failed')->assertJsonPath('error_codes.name', [['code' => 'invalid_characters']]);
+        secApiAddPasskey($this, $token, null, "Phone\u{202E}")->assertStatus(422)->assertJsonPath('error_codes.name', [['code' => 'invalid_characters']]);
+        secApiAddPasskey($this, $token, null, str_repeat('a', 81))->assertStatus(422)->assertJsonPath('error_codes.name', [['code' => 'too_long', 'max' => 80]]);
+        expect(Passkey::query()->count())->toBe(0);
+
+        $id = secApiAddPasskey($this, $token, null, '  Pixel 8 (work)  ')->assertCreated()->assertJsonPath('name', 'Pixel 8 (work)')->json('id');
+        $this->asToken($token)->patchJson("/api/account/passkeys/{$id}", ['name' => '**bold** <b>'])->assertStatus(422)->assertJsonPath('error_codes.name', [['code' => 'invalid_characters']]);
+        $this->asToken($token)->patchJson("/api/account/passkeys/{$id}", ['name' => 'فون'])->assertOk()->assertJsonPath('name', 'فون');
+        Mail::assertQueued(SecurityChangeMail::class, fn (SecurityChangeMail $m): bool => str_contains(html_entity_decode($m->render()), 'Pixel 8 (work)'));
+    });
+});
+
+describe('with two-step on, the password alone is never proof (security review of 2.0.0-l)', function () {
+    it('refuses a password-only proof on recovery codes, email change, password change, passkey add and two-step off', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        [$secret, $recovery] = accountsEnrolTotp($user);
+        [, $token] = $this->enroll($user->fresh());
+        $password = ['password' => 'password'];
+
+        foreach ([
+            ['postJson', '/api/account/two-factor/recovery-codes', $password],
+            ['postJson', '/api/account/email', [...$password, 'email' => 'new@example.test']],
+            ['putJson', '/api/account/password', ['current' => 'password', 'new' => 'a-new-password-42']],
+            ['postJson', '/api/account/passkeys/options', $password],
+            ['deleteJson', '/api/account/two-factor', $password],
+            ['deleteJson', '/api/account/google', $password],
+        ] as [$method, $uri, $body]) {
+            $this->asToken($token)->{$method}($uri, $body)->assertStatus(422)->assertJsonPath('code', 'invalid_otp')->assertJsonPath('accepts', ['otp']);
+        }
+        // Right passwords guessed nothing: no lock, and nothing changed.
+        expect($user->fresh()->hasTwoFactor())->toBeTrue()->and($user->fresh()->email)->toBe('farah@example.test')
+            ->and(Hash::check('password', $user->fresh()->password))->toBeTrue();
+        Mail::assertNotQueued(EmailCodeMail::class);
+        Mail::assertNotQueued(SecurityChangeMail::class);
+
+        // A wrong password with a right code is still refused, and counted.
+        $this->asToken($token)->putJson('/api/account/password', ['current' => 'wrong-1', 'otp' => $recovery[0], 'new' => 'a-new-password-42'])->assertStatus(422)->assertJsonPath('code', 'wrong_password');
+        // The password and a code together do it.
+        $this->asToken($token)->putJson('/api/account/password', ['current' => 'password', 'otp' => accountsTotp($user->fresh(), $secret), 'new' => 'a-new-password-42'])->assertNoContent();
+        $this->asToken($token)->postJson('/api/account/email', ['email' => 'new@example.test', 'otp' => $recovery[1]])->assertStatus(202);
+    });
+
+    it('emails the account holder when recovery codes are made again and when two-step is turned off', function () {
+        $user = Fx::user(['email' => 'farah@example.test']);
+        [, $recovery] = accountsEnrolTotp($user);
+        [$device, $token] = $this->enroll($user->fresh());
+
+        $codes = $this->asToken($token)->postJson('/api/account/two-factor/recovery-codes', ['otp' => $recovery[0]])->assertOk()->json('recovery_codes');
+        Mail::assertQueued(SecurityChangeMail::class, function (SecurityChangeMail $mail) use ($codes, $device): bool {
+            $html = $mail->render();
+
+            return $mail->change === SecurityChangeMail::RECOVERY_CODES && $mail->hasTo('farah@example.test') && ! str_contains($html, $codes[0])
+                && str_contains(html_entity_decode($html, ENT_QUOTES | ENT_HTML5), $device->readableName());
+        });
+
+        $this->asToken($token)->deleteJson('/api/account/two-factor', ['otp' => $codes[0]])->assertNoContent();
+        Mail::assertQueued(SecurityChangeMail::class, fn (SecurityChangeMail $mail): bool => $mail->change === SecurityChangeMail::TWO_FACTOR_OFF
+            && $mail->hasTo('farah@example.test') && str_contains($mail->render(), 'Two-step sign-in is off'));
+        expect($user->fresh()->hasTwoFactor())->toBeFalse();
     });
 });

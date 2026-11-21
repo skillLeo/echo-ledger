@@ -45,6 +45,8 @@ function everyMail(): array
         'deletion kept' => new DeletionCancelledMail,
         'two-step on' => new SecurityChangeMail(SecurityChangeMail::TWO_FACTOR_ON, 'S25 Ultra', "$u/app/settings/security"),
         'passkey added' => new SecurityChangeMail(SecurityChangeMail::PASSKEY_ADDED, 'S25 Ultra', "$u/app/settings/security", 'Phone'),
+        'recovery codes' => new SecurityChangeMail(SecurityChangeMail::RECOVERY_CODES, 'S25 Ultra', "$u/app/settings/security"),
+        'two-step off' => new SecurityChangeMail(SecurityChangeMail::TWO_FACTOR_OFF, 'S25 Ultra', "$u/app/settings/security"),
         'upgrade approved' => new UpgradeDecidedMail(true, 'Pro', 'Dec 9, 2026', null, "$u/admin"),
         'upgrade declined' => new UpgradeDecidedMail(false, 'Pro', null, 'Payment not received yet.', "$u/admin"),
         'unusual usage' => new UnusualUsageMail('Nida', 'nida@example.test', 7.5, 6, "$u/admin/plans"),

@@ -62,11 +62,12 @@ final class AccountRules
      * A name trimmed at both ends (spaces, and the joiners and direction marks that only belong inside a name), or the
      * problems with it. Letters, marks and numbers of any script, spaces, . ' - ( ) , and inside a name ZWNJ/ZWJ
      * (Urdu, Persian) and LRM/RLM; every other control or format character, the bidi embeddings, overrides and
-     * isolates among them, is refused rather than stripped.
+     * isolates among them, is refused rather than stripped. Since 2.0.0-l passkey names follow the same rules (80
+     * characters).
      *
      * @return array{0: string, 1: list<array{0: string, 1: string, 2?: array<string, int>}>}
      */
-    public static function name(mixed $value): array
+    public static function name(mixed $value, int $max = self::NAME_MAX): array
     {
         if (! is_string($value) || preg_match('//u', $value) !== 1) {
             return ['', [is_string($value) ? ['invalid_characters', 'The name has characters that cannot be used.'] : ['required', 'Enter your name.']]];
@@ -76,8 +77,8 @@ final class AccountRules
             return ['', [['required', 'Enter your name.']]];
         }
         $problems = [];
-        if (mb_strlen($name) > self::NAME_MAX) {
-            $problems[] = ['too_long', 'Use at most '.self::NAME_MAX.' characters.', ['max' => self::NAME_MAX]];
+        if (mb_strlen($name) > $max) {
+            $problems[] = ['too_long', "Use at most {$max} characters.", ['max' => $max]];
         }
         if (preg_match("/^[\\pL\\pM\\pN\\p{Zs}.'\\-(),\\x{200C}-\\x{200F}]+$/u", $name) !== 1) {
             $problems[] = ['invalid_characters', 'The name has characters that cannot be used.'];

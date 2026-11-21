@@ -1821,8 +1821,12 @@ The person's own account, from the phone and desktop apps, with the same rules a
   with at most 5 sent an hour. A wrong proof is `422 wrong_password`, `422 invalid_otp` or `422 invalid_code`. After
   5 wrong proofs in 15 minutes the answer is `429 too_many_attempts` with `Retry-After`, through the same SignInGuard
   as sign-in.
+  - **With two-step on, the proof must include an `otp`** (an authenticator or recovery code): the password alone is
+    never enough, or the password and a device would stand in for the second step. A password sent with it is checked
+    too (`422 wrong_password`). A right password without a code is `422 invalid_otp` with `"accepts": ["otp"]`, not
+    counted as a failure. `PUT /api/account/password` then takes `current` and `otp` together.
   - No proof at all is `422 proof_required` with `"accepts": ["password", "otp", "email_code"]` (the ones this account
-    can give). `email_code` counts only for an account with neither a password nor two-step; for any other it is
+    can give; only `["otp"]` with two-step on). `email_code` counts only for an account with neither a password nor two-step; for any other it is
     `422 invalid_code`, and `POST /api/account/proof-code` answers `409 proof_code_not_needed`.
   - Every way to add a way in (two-step, a passkey) asks for the proof when its ceremony starts, and the ceremony is
     the only way to finish, so a device on its own (a stolen token) cannot add one. The account holder gets an email
@@ -1985,12 +1989,15 @@ Limits: 3 requests an hour; 5 code attempts an hour, after which the change is c
    are shown only here and on regeneration, and are never sent again. Error: `422 invalid_otp` (also for a ceremony
    that ended, expired or is someone else's; 5 wrong codes end a ceremony). The account holder gets an email "Two-step
    sign-in is on" naming the device, never the secret.
-3. `POST /api/account/two-factor/recovery-codes {…proof}` → `200 {"recovery_codes": […]}`. The old codes stop working.
-   Error: `409 not_enabled` without two-step.
+3. `POST /api/account/two-factor/recovery-codes {"otp"}` → `200 {"recovery_codes": […]}`. The old codes stop working.
+   The proof is an authenticator or recovery code, never a password alone. Errors: `409 not_enabled` without two-step
+   (before any proof), `422 invalid_otp`. The account holder gets an email "New recovery codes were made" naming the
+   device, never a code.
 4. `DELETE /api/account/two-factor {"otp"}` → `204`. The proof here must be an authenticator or recovery code, never
    only a password or `email_code`; otherwise anyone who controls the email could turn two-step off. A person who has
    lost both gets help from support, as on the web. Error: `409 required_for_staff` for platform staff. Without
-   two-step on, the answer is `204` and nothing changes.
+   two-step on, the answer is `204` and nothing changes. The account holder gets an email "Two-step sign-in is off"
+   naming the device.
 
 #### 8. Passkeys on the phone
 1. `POST /api/account/passkeys/options {…proof}` → `200 {"ceremony": "…", "options": {…WebAuthn PublicKeyCredentialCreationOptions JSON…}}`.
@@ -2001,8 +2008,9 @@ Limits: 3 requests an hour; 5 code attempts an hour, after which the change is c
      errors listed above.
    - Limit: 10 an hour.
 2. `POST /api/account/passkeys {"ceremony", "name", "credential": {…registration response JSON…}}` → `201
-   {"id", "name", "created_at"}`. Error: `422 invalid_passkey` (also for a ceremony that was used, expired or is
-   someone else's). The account holder gets an email "A passkey was added" naming the passkey and the device.
+   {"id", "name", "created_at"}`. Errors: `422 invalid_passkey` (also for a ceremony that was used, expired or is
+   someone else's), and `422 validation_failed` on `name`, which follows the rules of a person's name (section 2) at
+   up to 80 characters (`invalid_characters`, `too_long`); no name is "Passkey". `PATCH` takes the same rules. The account holder gets an email "A passkey was added" naming the passkey and the device.
 3. The Android origin `android:apk-key-hash:<base64url of the signing cert SHA-256>` is accepted next to the console
    origin, built from `echoledger.android_app.fingerprints`. `/.well-known/assetlinks.json` gains the
    `delegate_permission/common.get_login_creds` relation, which Credential Manager needs.
@@ -2043,6 +2051,11 @@ These already exist and are now also written from the apps: `password_changed`, 
 account", the same event as the console's).
 
 Summaries never contain the addresses in full ("Email changed to h…@example.com").
+
+The account holder's emails about these changes (two-step on or off, new recovery codes, a passkey added) name the
+device and the passkey as plain text: every character but letters, marks, numbers and spaces is written as a
+character reference and control and direction characters are dropped, so a name can never become a link, an image or
+emphasis.
 
 ## Security centre (since v1.1)
 
