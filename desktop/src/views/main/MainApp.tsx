@@ -70,6 +70,11 @@ const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
 const ActivityV2 = lazy(() => v2().then((m) => ({ default: m.ActivityV2 })));
 const SharedV2 = lazy(() => v2().then((m) => ({ default: m.SharedV2 })));
 const RequestLinkSheetV2 = lazy(() => v2().then((m) => ({ default: m.RequestLinkSheet })));
+const ImportSheetV2 = lazy(() => v2().then((m) => ({ default: m.ImportSheetV2 })));
+const DropHintV2 = lazy(() => v2().then((m) => ({ default: m.DropHintV2 })));
+const ProjectsListV2 = lazy(() => v2().then((m) => ({ default: m.ProjectsListV2 })));
+const NameDialogV2 = lazy(() => v2().then((m) => ({ default: m.NameDialogV2 })));
+const AppToastV2 = lazy(() => v2().then((m) => ({ default: m.AppToastV2 })));
 const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
@@ -590,7 +595,17 @@ export default function MainApp() {
   // Its target opens only in the main window itself (never on the lock screen, the sign-in or the first-run wizard).
   const goRef = useRef<((target: NoticeTarget) => void) | null>(null);
   const inApp = !!status?.paired && restored && !lock?.locked && setupDone !== false;
-  const toastView = toast && (
+  // In the new design's window the message is the new design's toast: Open goes where it is about, Esc or × closes it.
+  const toastV2 = !!toast && inApp && ui.flags["ui_v2.shell"];
+  const toastView = toast && toastV2 ? (
+    <Suspense fallback={null}>
+      <div className="el-root el-embedded">
+        <AppToastV2 key={toast.id} text={toast.text} error={toast.error} duration={toast.error ? ERROR_MS : MESSAGE_MS}
+          onOpen={toast.target ? () => goRef.current?.(toast.target!) : undefined}
+          onClose={() => setToast((t) => (t?.id === toast.id ? null : t))} />
+      </div>
+    </Suspense>
+  ) : toast && (
     <div className="toast-region">
       <Notice key={toast.id} kind="toast" className={`toast ${toast.error ? "error" : ""}`} tone={toast.error ? "error" : "neutral"}
         role={toast.error ? "alert" : "status"} timeoutMs={toast.error ? ERROR_MS : MESSAGE_MS}
@@ -817,6 +832,17 @@ export default function MainApp() {
           projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
           requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
           onRequestLink={ui.flags["ui_v2.shell"] ? (id) => setRequestSheet({ projectId: id }) : undefined}
+          renderList={ui.flags["ui_v2.ask"] ? (ctx) => (
+            <Suspense fallback={null}>
+              <div className="el-root el-embedded">
+                <ProjectsListV2 projects={ctx.projects} error={ctx.error} onRetry={ctx.onReload} items={ctx.items} expanded={ctx.expanded} onToggle={ctx.onToggle}
+                  onOpen={ctx.onOpenProject} onNew={ctx.onNew} onRequest={ctx.onRequest} />
+              </div>
+            </Suspense>
+          ) : null}
+          renderNameDialog={ui.flags["ui_v2.ask"] ? (props) => (
+            <Suspense fallback={null}><div className="el-root el-embedded"><NameDialogV2 {...props} /></div></Suspense>
+          ) : null}
           renderPage={ui.flags["ui_v2.ask"] ? (ctx) => (
             <Suspense fallback={null}>
               <div className="el-root el-embedded">
@@ -922,10 +948,17 @@ export default function MainApp() {
           settings={findSettings}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}
-      {dragging && !importPaths && (
+      {dragging && !importPaths && !ui.flags["ui_v2.shell"] && (
         <div className="drop-hint" aria-hidden="true"><div className="drop-hint-card">Drop voice notes, audio or video files to import them</div></div>
       )}
-      {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
+      {importPaths && !ui.flags["ui_v2.shell"] && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
+      {/* The new design's drop hint and import sheet: the same drop handler, its own look. */}
+      {dragging && !importPaths && ui.flags["ui_v2.shell"] && <Suspense fallback={null}><div className="el-root el-embedded"><DropHintV2 /></div></Suspense>}
+      {importPaths && ui.flags["ui_v2.shell"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded"><ImportSheetV2 paths={importPaths} notify={notify} onClose={closeImport} /></div>
+        </Suspense>
+      )}
       {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onSettings={openAccount} />}
       {requestSheet && !ui.flags["ui_v2.shell"] && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       {requestSheet && ui.flags["ui_v2.shell"] && (

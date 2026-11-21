@@ -1529,3 +1529,30 @@ body.resizing-sidebar { cursor: col-resize; user-select: none; }
 [data-v2="library"]:not(:has(.el-selectbar)) .el-list > .el-list-section {
   position: sticky; inset-block-start: 0; z-index: var(--el-layer-sticky); background: var(--el-role-bg-canvas);
 }
+
+/* The import sheet's files, and the hint over the window while files are dragged over it. */
+.el-import__files { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-8); max-block-size: calc(var(--el-space-64) * 3); overflow-y: auto; }
+.el-import__file { display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: 0; }
+.el-import__file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-import__file--no { color: var(--el-role-text-secondary); }
+.el-drop-hint {
+  position: fixed; inset: 0; z-index: var(--el-layer-overlay); display: flex; align-items: center; justify-content: center;
+  background: var(--el-role-accent-soft); pointer-events: none;
+}
+.el-drop-hint__card {
+  display: inline-flex; align-items: center; gap: var(--el-space-12); padding: var(--el-space-24) var(--el-space-32);
+  border: var(--el-border-hairline) dashed var(--el-role-accent-default); border-radius: var(--el-radius-md);
+  background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight);
+}
+
+/* The Projects page's tree: a project's folders under it, indented by level; the fold button before each name. */
+.el-projects__row { gap: var(--el-space-8); padding-inline-start: calc(var(--el-space-12) + var(--el-tree-depth, 0) * var(--el-space-24)); }
+.el-projects__fold { display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-24); block-size: var(--el-space-24); flex: none; border: 0; padding: 0; background: transparent; color: var(--el-role-text-secondary); border-radius: var(--el-radius-sm); cursor: pointer; }
+span.el-projects__fold { cursor: default; }
+.el-projects__open { flex: 1; display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: 0; border: 0; padding: var(--el-space-4) 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.el-projects__open:hover .el-body-strong { text-decoration: underline; }
+.el-projects__text { display: flex; flex-direction: column; min-inline-size: 0; }
+.el-projects__text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-app-toast--error .el-toast { border-color: var(--el-role-danger-default); }
+.el-toast__open { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
+.el-toast__open:hover { text-decoration: underline; }
