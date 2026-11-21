@@ -4,7 +4,7 @@ import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type Ap
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityItems } from "./ActivityCentre";
-import { actionCount } from "../../lib/badge";
+import { actionCount, needsAction as needsActionItem } from "../../lib/badge";
 import { AUTO_RAIL_BELOW, COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, paletteKeys, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL, sidebarFolded } from "../../lib/shell";
 import { Sidebar, SHARED_TABS, type SharedTab, type ShellPage } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -49,7 +49,9 @@ import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { useUiFlags } from "../../v2/flags";
-import { shellStatus as shellStatusOf } from "../../v2/shell/status";
+import { shellChip } from "../../v2/shell/status";
+import { sourceAppLabel } from "../../lib/format";
+import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
 import { hasV2Page } from "../../v2/settings/pages/route";
 
@@ -139,6 +141,9 @@ export default function MainApp() {
     if (done) saveSidebarWidth(width);
   }, []);
   const [help, setHelp] = useState(false);
+  // Help & shortcuts in the new design: Settings › Help on its Shortcuts tab ("?", the sidebar, the palette).
+  const [helpStart, setHelpStart] = useState<{ tab: HelpTab; seq: number } | null>(null);
+  const openHelpRef = useRef<() => void>(() => setHelp(true));
   const [requestSheet, setRequestSheet] = useState(false);
   // "+ New project" from the top bar or the Projects column: the Projects page opens its dialog.
   const [projectRequest, setProjectRequest] = useState<{ kind: "new"; seq: number } | null>(null);
@@ -257,7 +262,7 @@ export default function MainApp() {
       }
       if (e.key === "?" && statusRef.current?.paired && !open) {
         e.preventDefault();
-        setHelp(true);
+        openHelpRef.current();
         return;
       }
       if (e.key.toLowerCase() === "n" && statusRef.current?.paired && !open) {
@@ -689,6 +694,13 @@ export default function MainApp() {
     setTab("settings");
     setSettingsSection({ id: section, seq: ++navigations.current });
   };
+  const helpInV2 = ui.flags["ui_v2.shell"] && ui.flags["ui_v2.settings"] && helpV2Reachable(ui.flags);
+  const openHelp = () => {
+    if (!helpInV2) return setHelp(true);
+    setHelpStart({ tab: "shortcuts", seq: ++navigations.current });
+    openAccount("help");
+  };
+  openHelpRef.current = openHelp;
   const newProject = () => {
     setTab("projects");
     setProjectId(null);
@@ -725,7 +737,7 @@ export default function MainApp() {
     ...SHARED_TABS.map(([id, label]) => ({ id: `shared-${id}`, label, group: "Shared", keywords: "share links shared", open: () => openShared(id) })),
     ...(canRecord ? [{ id: "upload", label: "Upload", keywords: "import files audio video", open: () => void pickImport() }] : []),
     ...settingsPages(settingsAvailable).map((p) => ({ id: p.id, label: p.label, group: p.group, keywords: p.keywords, open: () => openAccount(p.page) })),
-    { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => setHelp(true) },
+    { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => openHelp() },
   ];
   const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
   // While the server holds the queue (v1.6, P2.7) the recordings wait; they are not on their way.
@@ -764,7 +776,7 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} reviewRequest={reviewV2}
             folder={libraryFolder === "shared" ? null : libraryFolder} onFolder={openFolder}
-            onOpenProject={(id) => openProject(id)}
+            onOpenProject={(id) => openProject(id)} initialOpen={restoredRecording} onOpenChange={rememberRecording}
             top={ui.flags["ui_v2.shell"] ? {
               status, onRecord: canRecord && !status.recording ? record : undefined, onActivity: () => goTo("activity"),
               onSetup: () => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic"),
@@ -803,9 +815,10 @@ export default function MainApp() {
               onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
               onReadyCheck={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
               onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} onPlan={() => openAccount("plan")}
-              run={run} onImport={canRecord ? () => void pickImport() : undefined}
+              run={run} onImport={canRecord ? () => void pickImport() : undefined} notifications={activityItems.filter(needsActionItem).length}
               onAction={(a) => {
-                if (a === "failed") openLibraryView("failed");
+                if (a === "notifications") goTo("activity");
+                else if (a === "failed") openLibraryView("failed");
                 else if (a === "waiting") openLibraryView("waiting");
                 else if (a === "missed") goTo("activity");
                 else {
@@ -860,7 +873,8 @@ export default function MainApp() {
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
                 ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
-                  ? <HelpV2 platform={status.platform} onBack={onHome} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })} />
+                  ? <HelpV2 platform={status.platform} onBack={onHome} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
+                    start={helpStart} onSettings={openAccount} />
                   : hasV2Page(section.id)
                     ? <SettingsPagesV2 section={section} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
@@ -908,12 +922,13 @@ export default function MainApp() {
       <>
         <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
         <Suspense fallback={null}>
-          <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+          <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}
+            rail={collapsed} onRail={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} uploading={uploading} uploadsWait={!!waitingFor} activity={needsYou} recording={!!status.recording} onRecord={canRecord ? () => run(status.recording ? api.stopRecording : api.recordNow) : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
             onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
             pinnedProjects={(projects ?? []).filter((p) => p.pinned).map((p) => ({ id: p.id, name: p.name }))} projectId={projectId} onProject={(id) => openProject(id)}
             projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned }))}
             shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
-            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={() => setHelp(true)}
+            onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={openHelp}
             places={{
               // Classic's sidebar form: no All, the places that hold something, the Inbox always (it takes drops). Shared
               // with me is Shared's own, under Library.

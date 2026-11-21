@@ -11,3 +11,16 @@ export function shellStatus(s: { recording: unknown; elapsedMs: number; callsRea
   if (s.callsReady === false) return { kind: "setup", text: "Needs setup" };
   return { kind: "ready", text: "Ready to record" };
 }
+
+/**
+ * The sidebar's recording chip (classic's top bar): "Recording · Zoom · 02:14", "Paused · voice note · 02:14"; otherwise
+ * the same as shellStatus.
+ */
+export function shellChip(s: { recording: { mode: string; sourceApp: string } | null; paused?: boolean; elapsedMs: number; callsReady?: boolean | null },
+  appLabel: (app: string) => string): ShellStatus {
+  const base = shellStatus(s);
+  if (!s.recording) return base;
+  const what = s.recording.mode === "mic_note" ? "voice note" : appLabel(s.recording.sourceApp);
+  const time = base.text.replace(/^Recording /, "");
+  return { kind: "recording", text: `${s.paused ? "Paused" : "Recording"} · ${what} · ${time}` };
+}

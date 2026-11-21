@@ -83,9 +83,13 @@ export type LibraryV2Props = {
   top?: Omit<LibraryTopProps, "items" | "onAction"> & { onActivity: () => void };
   /** Opens a project (the recording page's project name). */
   onOpenProject?: (id: string) => void;
+  /** The recording that was open when the main window was last closed: opened again once it is known. */
+  initialOpen?: string | null;
+  /** The open recording changed (null: back to the list), to be kept for the next main window. */
+  onOpenChange?: (id: string | null) => void;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject, folder = null, onFolder }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -294,6 +298,26 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     if (folderIds) return folderIds.has(i.id);
     return inFolderHere(i, folder) ?? false;
   };
+  // The recording open when the main window closed opens again (classic's), once; what is opened after is kept.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (!initialOpen || restored.current) return;
+    restored.current = true;
+    setOpenIdNow((now) => now ?? initialOpen);
+  }, [initialOpen]);
+  const reported = useRef<string | null | undefined>(undefined);
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  useEffect(() => {
+    // Not on the first draw: the kept recording isn't forgotten before it is read back.
+    if (reported.current === undefined) {
+      reported.current = openId;
+      return;
+    }
+    if (reported.current === openId) return;
+    reported.current = openId;
+    onOpenChangeRef.current?.(openId);
+  }, [openId]);
   useEffect(() => {
     if (openRequest) {
       setView("all");

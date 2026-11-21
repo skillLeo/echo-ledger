@@ -2,12 +2,15 @@
 // its sections to read, What's new for this platform, and Contact support (an email to the server's support address;
 // this computer's last device check goes with it only when the person ticks it).
 import { useEffect, useRef, useState } from "react";
-import { api, errorMessage, type HelpGuide, type HelpGuideHit, type WhatsNewRelease } from "../../lib/ipc";
+import { api, errorMessage, type HelpGuide, type HelpGuideHit, type Settings, type WhatsNewRelease } from "../../lib/ipc";
+import { prettyShortcut } from "../../lib/format";
+import { CAPTURE_HELP, GLOBAL_SHORTCUTS, windowKeys } from "../../views/main/HelpDialog";
 import { rowDate, sentenceDate } from "../../lib/format";
 import { Button, Card, Checkbox, EmptyState, Icons, List, ListRow, Loading, SearchField, Skeleton, SkeletonRow, Tabs, TextArea, TextField } from "../components";
 import { Markdown } from "./markdown";
 
-type Tab = "guides" | "whats_new" | "contact";
+export type HelpTab = "guides" | "shortcuts" | "whats_new" | "contact";
+type Tab = HelpTab;
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; value: T };
 
 /** An error in words: a core without the help commands yet says so plainly, never as a command name. */
@@ -24,19 +27,65 @@ export type HelpV2Props = {
   onBack: () => void;
   /** The Mac check (today's page), on a Mac. */
   onMacCheck?: () => void;
+  /** Open on a tab ("?" opens Shortcuts); `seq` opens it again. */
+  start?: { tab: HelpTab; seq: number } | null;
+  /** A Settings page (Keyboard shortcuts, Screen-share privacy). */
+  onSettings?: (page: string) => void;
 };
 
-export function HelpV2({ platform, onBack, onMacCheck }: HelpV2Props) {
-  const [tab, setTab] = useState<Tab>("guides");
+export function HelpV2({ platform, onBack, onMacCheck, start = null, onSettings }: HelpV2Props) {
+  const [tab, setTab] = useState<Tab>(start?.tab ?? "guides");
+  useEffect(() => {
+    if (start) setTab(start.tab);
+  }, [start?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="el-page el-page--narrow" data-v2="help">
       <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>Settings</Button>
       <header className="el-page__head"><h1 className="el-title-l">Help</h1></header>
       <Tabs label="Help" value={tab} onChange={setTab}
-        tabs={[{ value: "guides", label: "Guides" }, { value: "whats_new", label: "What's new" }, { value: "contact", label: "Contact support" }]}>
+        tabs={[{ value: "guides", label: "Guides" }, { value: "shortcuts", label: "Shortcuts" }, { value: "whats_new", label: "What's new" }, { value: "contact", label: "Contact support" }]}>
         {tab === "guides" ? <Guides platform={platform} onMacCheck={onMacCheck} />
+          : tab === "shortcuts" ? <Shortcuts platform={platform} onSettings={onSettings} />
           : tab === "whats_new" ? <WhatsNew /> : <ContactSupport platform={platform} onMacCheck={onMacCheck} />}
       </Tabs>
+    </div>
+  );
+}
+
+/**
+ * Every key of the window (classic's "In this window"), the shortcuts that work anywhere on this computer as set in
+ * Settings, and how to get a screenshot of EchoLedger and what to send for support.
+ */
+function Shortcuts({ platform, onSettings }: { platform: string; onSettings?: (page: string) => void }) {
+  const [settings, setSettings] = useState<Settings | null>(null);
+  useEffect(() => {
+    api.settings().then(setSettings).catch(() => undefined);
+  }, []);
+  const keyList = (label: string, rows: readonly (readonly [string, string])[]) => (
+    <dl className="el-keys" aria-label={label}>
+      {rows.map(([keys, what]) => (
+        <div key={`${keys}-${what}`} className="el-keys__row">
+          <dt><kbd className="el-kbd" dir="ltr">{keys}</kbd></dt>
+          <dd>{what}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+  return (
+    <div className="el-help-keys">
+      <h2 className="el-title-s">In this window</h2>
+      <p className="el-caption el-secondary">They work while EchoLedger is in front, never while you type in a field.</p>
+      {keyList("In this window", windowKeys(platform))}
+      <h2 className="el-title-s">Anywhere on this computer</h2>
+      {keyList("Anywhere on this computer", GLOBAL_SHORTCUTS.map(([action, what]) => [
+        settings?.shortcuts[action] ? prettyShortcut(settings.shortcuts[action], platform) : "Not set", what,
+      ] as const))}
+      {onSettings && <Button size="sm" variant="quiet" onClick={() => onSettings("shortcuts")}>Change them in Keyboard shortcuts</Button>}
+      <Card className="el-help-keys__tip">
+        <h2 className="el-body-strong">Screenshots and support</h2>
+        <p className="el-caption" data-testid="capture-help">{CAPTURE_HELP}</p>
+        {onSettings && <Button size="sm" onClick={() => onSettings("share_privacy")}>Open Screen-share privacy</Button>}
+      </Card>
     </div>
   );
 }

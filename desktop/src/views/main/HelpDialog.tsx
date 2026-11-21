@@ -28,7 +28,7 @@ export function windowKeys(platform: string): readonly (readonly [string, string
   ];
 }
 
-const GLOBAL: readonly (readonly [ShortcutAction, string])[] = [
+export const GLOBAL_SHORTCUTS: readonly (readonly [ShortcutAction, string])[] = [
   ["record_now", "Record now"],
   ["toggle_captions", "Show / hide live captions"],
   ["toggle_saving", "Start / stop saving a recording"],
@@ -57,7 +57,7 @@ export function HelpDialog({ platform, onClose, onSettings }: { platform: string
         </dl>
         <h3 className="help-head">Anywhere on this computer</h3>
         <dl className="key-list">
-          {GLOBAL.map(([action, what]) => (
+          {GLOBAL_SHORTCUTS.map(([action, what]) => (
             <div key={action}><dt><span className="kbd">{settings?.shortcuts[action] ? prettyShortcut(settings.shortcuts[action], platform) : "Not set"}</span></dt><dd>{what}</dd></div>
           ))}
         </dl>

@@ -567,7 +567,7 @@
 
 .el-sidebar {
   display: flex; flex-direction: column; gap: var(--el-space-2);
-  inline-size: calc(var(--el-space-64) * 3.5);
+  inline-size: var(--el-sidebar-width, calc(var(--el-space-64) * 3.5));
   flex: none;
   padding: var(--el-space-16) var(--el-space-8);
   background: var(--el-role-bg-subtle);
@@ -847,27 +847,53 @@ button.el-step__head { cursor: pointer; }
    Media queries cannot read variables: the width mirrors --el-breakpoint-rail and AUTO_RAIL_BELOW (tokens/test/tokens.test.mjs checks both). */
 @media (width < 780px) {
   .el-sidebar { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
+  /* Opened in a narrow window (its Expand button or "["): its own width and names, until the window is wide again. */
+  .el-sidebar[data-rail="off"] { inline-size: var(--el-sidebar-width, calc(var(--el-space-64) * 3.5)); align-items: stretch; }
   /* The rail keeps the brand's end control (Search) at its top; the name goes. */
-  .el-sidebar__brand { justify-content: center; padding-inline: 0; }
-  .el-sidebar__brand-name { display: none; }
-  .el-sidebar__brand-end { margin-inline-start: 0; }
+  .el-sidebar:not([data-rail="off"]) .el-sidebar__brand { justify-content: center; padding-inline: 0; }
+  .el-sidebar:not([data-rail="off"]) .el-sidebar__brand-name { display: none; }
+  .el-sidebar:not([data-rail="off"]) .el-sidebar__brand-end { margin-inline-start: 0; }
   /* Sub-items (Shared with me, a project) are reached through their page in the rail; Record shows its icon alone,
      its menu under it, both 40 px squares. */
-  .el-sidebar .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
-  .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
-  .el-shell__record > .el-button, .el-shell__record > .el-menu-anchor > .el-button {
+  .el-sidebar:not([data-rail="off"]) .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
+  .el-sidebar:not([data-rail="off"]) .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
+  .el-sidebar:not([data-rail="off"]) .el-shell__record > .el-button, .el-sidebar:not([data-rail="off"]) .el-shell__record > .el-menu-anchor > .el-button {
     inline-size: var(--el-space-40); min-inline-size: 0; justify-content: center; padding-inline: 0; border-radius: var(--el-radius-sm);
   }
-  .el-shell__record > .el-button > span:not(.el-icon) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__record > .el-button > span:not(.el-icon) {
     position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
-  .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
-  .el-shell__me { justify-content: center; padding-inline: 0; }
-  .el-nav-item__label, .el-nav-item__count, .el-sidebar .el-status > span:last-child, .el-shell__me-text {
+  .el-sidebar:not([data-rail="off"]) .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
+  .el-sidebar:not([data-rail="off"]) .el-shell__me { justify-content: center; padding-inline: 0; }
+  .el-sidebar:not([data-rail="off"]) .el-nav-item__label, .el-sidebar:not([data-rail="off"]) .el-nav-item__count, .el-sidebar:not([data-rail="off"]) .el-status > span:last-child, .el-sidebar:not([data-rail="off"]) .el-shell__me-text {
     position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
+}
+/* The rail chosen in the sidebar (its Collapse button or "["): the same, at any window width. A sidebar opened
+   in a narrow window (data-rail="off") keeps its names. */
+.el-sidebar[data-rail="on"] { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
+/* The rail keeps the brand's end control (Search) at its top; the name goes. */
+.el-sidebar[data-rail="on"] .el-sidebar__brand { justify-content: center; padding-inline: 0; }
+.el-sidebar[data-rail="on"] .el-sidebar__brand-name { display: none; }
+.el-sidebar[data-rail="on"] .el-sidebar__brand-end { margin-inline-start: 0; }
+/* Sub-items (Shared with me, a project) are reached through their page in the rail; Record shows its icon alone,
+   its menu under it, both 40 px squares. */
+.el-sidebar[data-rail="on"] .el-nav-sub { display: none; } /* beats the later .el-nav-sub { display: flex } */
+.el-sidebar[data-rail="on"] .el-shell__record { flex-direction: column; align-items: center; gap: var(--el-space-2); }
+.el-sidebar[data-rail="on"] .el-shell__record > .el-button, .el-sidebar[data-rail="on"] .el-shell__record > .el-menu-anchor > .el-button {
+  inline-size: var(--el-space-40); min-inline-size: 0; justify-content: center; padding-inline: 0; border-radius: var(--el-radius-sm);
+}
+.el-sidebar[data-rail="on"] .el-shell__record > .el-button > span:not(.el-icon) {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.el-sidebar[data-rail="on"] .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
+.el-sidebar[data-rail="on"] .el-shell__me { justify-content: center; padding-inline: 0; }
+.el-sidebar[data-rail="on"] .el-nav-item__label, .el-sidebar[data-rail="on"] .el-nav-item__count, .el-sidebar[data-rail="on"] .el-status > span:last-child, .el-sidebar[data-rail="on"] .el-shell__me-text {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 
 /* ---- Skeleton, Loading, Progress ---------------------------------------------------------------------------- */
@@ -1452,3 +1478,26 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-record__card, .el-record__drop, .el-record__errors { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; }
 .el-record__drop { border-style: dashed; }
 .el-record__error-list { margin: 0; padding-inline-start: var(--el-space-16); display: grid; gap: var(--el-space-4); }
+
+/* The sidebar's edge (drag to resize, 200 to 320 px) and the uploads line at its foot; the rail has neither. */
+.el-shell { position: relative; }
+.el-shell__edge {
+  position: absolute; inset-block: 0; inset-inline-start: calc(var(--el-sidebar-width, calc(var(--el-space-64) * 3.5)) - var(--el-space-4));
+  inline-size: var(--el-space-8); cursor: col-resize; touch-action: none;
+}
+.el-shell__edge:hover, .el-shell__edge:focus-visible { background: var(--el-role-accent-soft); }
+.el-shell__edge:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
+body.resizing-sidebar { cursor: col-resize; user-select: none; }
+.el-shell__uploads { display: flex; align-items: center; gap: var(--el-space-8); margin: 0; padding-inline: var(--el-space-8); min-inline-size: 0; }
+.el-sidebar[data-rail="on"] .el-shell__uploads { display: none; }
+@media (width < 780px) {
+  .el-sidebar:not([data-rail="off"]) .el-shell__uploads { display: none; }
+  .el-shell:not(:has(> .el-sidebar[data-rail="off"])) > .el-shell__edge { display: none; }
+}
+
+/* Help › Shortcuts: each key beside what it does, then the screenshot and support tip. */
+.el-help-keys { display: flex; flex-direction: column; gap: var(--el-space-12); align-items: flex-start; }
+.el-keys { display: grid; gap: var(--el-space-8); margin: 0; inline-size: 100%; }
+.el-keys__row { display: grid; grid-template-columns: minmax(calc(var(--el-space-64) * 2), max-content) 1fr; gap: var(--el-space-12); align-items: baseline; }
+.el-keys__row > dd { margin: 0; }
+.el-help-keys__tip { display: flex; flex-direction: column; gap: var(--el-space-8); align-items: flex-start; inline-size: 100%; }
