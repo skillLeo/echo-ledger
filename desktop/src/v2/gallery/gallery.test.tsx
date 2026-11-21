@@ -190,3 +190,59 @@ describe("the shared bars page (screen=kit)", () => {
     expect(screen.getAllByRole("button", { name: "ترتیب اور گروپ" }).length).toBeGreaterThan(0);
   });
 });
+
+describe("the lists page (screen=lists, D14)", () => {
+  it("opens from the guard: the chip row under the search, All selected, then a list and its rows", () => {
+    expect(galleryParams("?v2gallery&screen=lists").screen).toBe("lists");
+    render(<Gallery screen="lists" lang="en" />);
+    const row = screen.getByRole("group", { name: "Lists" });
+    expect(within(row).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent))
+      .toEqual(["All", "Unread 2", "Important", "Clients", "Home", "Family", "New list"]);
+    expect(within(row).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(row).getByRole("button", { name: "Clients" }));
+    const list = screen.getByRole("list", { name: "Recordings: Clients" });
+    expect(within(list).getAllByRole("button")).toHaveLength(4);
+    expect(within(list).getAllByRole("img", { name: "Clients" })).toHaveLength(4);
+  });
+
+  it("+ makes a list that is then selected, empty; a row's right-click adds it to lists", () => {
+    render(<Gallery screen="lists" lang="en" />);
+    fireEvent.click(screen.getByRole("button", { name: "New list" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "List name" }), { target: { value: "Suppliers" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Blue" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(screen.getByRole("button", { name: "Suppliers", pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Nothing in Suppliers yet" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.contextMenu(document.querySelector('[data-row-id="r6"]')!.closest("li")!, { clientX: 300, clientY: 300 });
+    const menu = screen.getByRole("menu", { name: "Add to list" });
+    expect(within(menu).getAllByRole("menuitemcheckbox").map((i) => [i.textContent, i.getAttribute("aria-checked")]))
+      .toEqual([["Clients", "true"], ["Home", "false"], ["Family", "true"], ["Suppliers", "false"]]);
+    fireEvent.click(within(menu).getByRole("menuitemcheckbox", { name: "Suppliers" }));
+    expect(screen.getByText("Added to Suppliers")).toBeInTheDocument();
+  });
+
+  it("a list chip's menu moves it and deletes it after asking", () => {
+    render(<Gallery screen="lists" lang="en" />);
+    const home = () => within(screen.getByRole("group", { name: "Lists" })).getByRole("button", { name: "Home" });
+    fireEvent.contextMenu(home(), { clientX: 200, clientY: 100 });
+    fireEvent.click(within(screen.getByRole("menu", { name: "Home" })).getByRole("menuitem", { name: "Move later" }));
+    const names = () => within(screen.getByRole("group", { name: "Lists" })).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent);
+    expect(names().slice(3, 6)).toEqual(["Clients", "Family", "Home"]);
+    fireEvent.contextMenu(home(), { clientX: 200, clientY: 100 });
+    expect(within(screen.getByRole("menu", { name: "Home" })).queryByRole("menuitem", { name: "Move later" })).toBeNull();
+    fireEvent.click(within(screen.getByRole("menu", { name: "Home" })).getByRole("menuitem", { name: "Delete list…" }));
+    const ask = screen.getByRole("alertdialog", { name: "Delete Home?" });
+    expect(ask).toHaveAccessibleDescription("Its recordings stay in your Library; only the list goes.");
+    fireEvent.click(within(ask).getByRole("button", { name: "Delete" }));
+    expect(names().slice(3)).toEqual(["Clients", "Family", "New list"]);
+  });
+
+  it("is in Urdu, right to left, with Urdu lists and fixed chips", () => {
+    render(<Gallery screen="lists" lang="ur" />);
+    expect(document.querySelector(".el-root")).toHaveAttribute("dir", "rtl");
+    const row = screen.getByRole("group", { name: "فہرستیں" });
+    expect(within(row).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent))
+      .toEqual(["سب", "نہ پڑھی گئی 2", "اہم", "کلائنٹس", "گھر", "خاندان", "نئی فہرست"]);
+  });
+});
