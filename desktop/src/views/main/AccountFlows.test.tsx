@@ -192,6 +192,18 @@ describe.each(["classic", "v2"] as const)("Profile, %s", (design) => {
     expect(dialog()).toHaveAccessibleName("Change email");
   });
 
+  it("Change email while the last change can still be put back: said with its date, nothing else asked", async () => {
+    serve({ email: refuse(409, "email_change_locked", { until: "2026-11-28T10:00:00Z" }) });
+    profile(design);
+    await act(flushAsync);
+    await openRow("Change email");
+    type("New email", "ayesha@new.pk");
+    type("Your password", "secret");
+    await press("Send code");
+    expect(dialog()).toHaveTextContent("Your email was changed recently. You can change it again from 28 November 2026.");
+    expect(dialog()).toHaveAccessibleName("Change email");
+  });
+
   it("Check your new address notices a change confirmed by the link in a browser", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     respond("account_get", { ...ME, pending_email: "ayesha@new.pk" });

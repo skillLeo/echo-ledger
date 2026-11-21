@@ -13,7 +13,7 @@ describe("the words", () => {
   const FIELD_CODES = ["required", "too_short", "too_long", "needs_letters", "needs_numbers", "same_as_current", "invalid_characters", "invalid_email", "same_as_now", "email_taken"];
   const REFUSALS = ["wrong_password", "invalid_otp", "invalid_code", "proof_required", "email_taken", "expired", "already_enabled", "not_enabled", "required_for_staff",
     "last_sign_in_method", "passkey_not_found", "device_not_found", "browser_not_found", "current_device", "proof_code_not_needed", "too_large", "server_busy",
-    "too_many_attempts", "rate_limited"];
+    "too_many_attempts", "rate_limited", "email_change_locked"];
 
   it("has every contract code in English and Urdu", () => {
     for (const lang of ["en", "ur"] as const) {
@@ -29,6 +29,9 @@ describe("the words", () => {
     expect(fieldText({ code: "too_short", min: 12 }, "ur")).toBe("کم از کم 12 حروف استعمال کریں۔");
     expect(replyText(reply("too_many_attempts", { status: 429, retryAfter: 900 }), "en")).toBe("Too many tries. Wait 15 minutes, then try again.");
     expect(replyText(reply("rate_limited", { status: 429, retryAfter: 30 }), "ur")).toContain("30 سیکنڈ");
+    // A new address waits for the 7-day restore window of the last change.
+    expect(replyText(reply("email_change_locked", { status: 409, until: "2026-11-28T10:00:00Z" }), "en")).toBe("Your email was changed recently. You can change it again from 28 November 2026.");
+    expect(replyText(reply("email_change_locked", { status: 409 }), "en")).toContain("a few days from now");
   });
 
   it("says field codes before the server's own sentence, and the sentence for a field without a code", () => {

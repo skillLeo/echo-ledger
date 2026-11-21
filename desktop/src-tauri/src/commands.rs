@@ -201,8 +201,9 @@ async fn adopt_registration(app: &AppHandle, api: &ApiClient, registered: crate:
     }
     state.token_store.save(&registered.token).map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = Some(registered.token);
-    // Another account may be signing in: the last one's WhatsApp share copies go.
+    // Another account may be signing in: the last one's WhatsApp share copies and kept pictures go.
     forget_whatsapp_shares(app);
+    forget_avatars(app);
     state.update_settings(|s| {
         s.server_url = Some(api.base_url().to_string());
         s.pins = final_pins.clone();
@@ -445,8 +446,9 @@ pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callb
 #[tauri::command]
 pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     let state = app.state::<AppState>();
-    // First, so the share copies go even when a later step (the keychain) fails.
+    // First, so the share copies and kept pictures go even when a later step (the keychain) fails.
     forget_whatsapp_shares(&app);
+    forget_avatars(&app);
     state.token_store.forget().map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = None;
     state.api_cache.clear();
@@ -561,12 +563,17 @@ pub async fn account_avatar_choose(app: AppHandle) -> AppResult<Option<crate::my
 }
 
 /// A person's picture as a `data:` URL for the window (its pictures come from the app only), kept on this computer by
-/// its version so it still shows offline. `None` when there is none to show (the window draws the initials).
+/// server, person and version (`my_account::avatar_cache_path`) until sign-out, so it shows again without a download.
+/// `None` when there is none to show (the window draws the initials).
 #[tauri::command]
 pub async fn account_avatar_image(app: AppHandle, url: Option<String>, version: u64) -> AppResult<Option<String>> {
     use base64::Engine as _;
     let state = app.state::<AppState>();
-    let cached = crate::my_account::avatar_cache_path(&state.data_dir, version);
+    ensure_unlocked(&state)?;
+    let Some(url) = url else { return Ok(None) };
+    let server = state.settings().server_url.ok_or(AppError::NotPaired)?;
+    // Kept by server, person and version: another account's or server's picture is never this one.
+    let Some(cached) = crate::my_account::avatar_cache_path(&state.data_dir, &server, &url, version) else { return Ok(None) };
     let to_url = |bytes: &[u8]| {
         let mime = crate::receipts::sniff(bytes).map(|k| k.mime()).unwrap_or("image/webp");
         format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
@@ -574,8 +581,6 @@ pub async fn account_avatar_image(app: AppHandle, url: Option<String>, version: 
     if let Ok(bytes) = tokio::fs::read(&cached).await {
         return Ok(Some(to_url(&bytes)));
     }
-    let Some(url) = url else { return Ok(None) };
-    let server = state.settings().server_url.ok_or(AppError::NotPaired)?;
     if !crate::account::on_server(&url, &server) {
         return Ok(None);
     }
@@ -1613,6 +1618,11 @@ async fn audio_source(app: &AppHandle, id: &str) -> AppResult<AudioSource> {
     };
     let (version, size) = crate::share_sheet::audio_version(&detail);
     Ok(AudioSource { url, name: crate::files::audio_file_name(&detail), version, size })
+}
+
+/// The pictures kept on this computer (2.0.0-l) are this account's: removed on sign-out and when an account signs in.
+fn forget_avatars(app: &AppHandle) {
+    crate::my_account::clear_avatars(&app.state::<AppState>().data_dir);
 }
 
 /// Send to WhatsApp's share copies (F6) are this account's: removed on sign-out and when an account signs in.

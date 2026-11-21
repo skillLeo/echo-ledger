@@ -14,6 +14,8 @@ export interface AccountReply<T = Record<string, unknown>> {
   errorCodes: Record<string, FieldCode[]> | null;
   errors: Record<string, string[]> | null;
   retryAfter: number | null;
+  /** Until when a refusal holds (`email_change_locked`). */
+  until?: string | null;
   /** Two-step sign-in's QR code: rows of "1" (dark) and "0" (light). */
   qr: string[] | null;
 }
@@ -109,6 +111,7 @@ const EN: Words = {
   field_email_taken: "Another account already uses this email.",
   too_many_attempts: "Too many tries. Wait {wait}, then try again.",
   rate_limited: "That's a lot of changes for now. Try again in {wait}.",
+  email_change_locked: "Your email was changed recently. You can change it again from {until}.",
 };
 
 const UR: Words = {
@@ -146,6 +149,7 @@ const UR: Words = {
   field_email_taken: "یہ ای میل کسی اور اکاؤنٹ میں استعمال ہو رہی ہے۔",
   too_many_attempts: "بہت زیادہ کوششیں۔ {wait} انتظار کریں، پھر دوبارہ کوشش کریں۔",
   rate_limited: "ابھی بہت زیادہ تبدیلیاں ہو گئیں۔ {wait} بعد دوبارہ کوشش کریں۔",
+  email_change_locked: "آپ کی ای میل حال ہی میں بدلی گئی ہے۔ آپ اسے {until} سے دوبارہ بدل سکتے ہیں۔",
 };
 
 export const ACCOUNT_WORDS: Record<Lang, Words> = { en: EN, ur: UR };
@@ -180,6 +184,13 @@ export function replyText(reply: AccountReply<unknown>, lang: Lang = accountLang
   const code = reply.code ?? "";
   if (code === "too_many_attempts" || code === "rate_limited") return fill(words[code], { wait: waitWords(reply.retryAfter, lang) });
   if (code === "invalid_image") return fieldErrors(reply, lang).image ?? words.image_format;
+  if (code === "email_change_locked") {
+    const until = reply.until ? new Date(reply.until) : null;
+    const when = until && !Number.isNaN(until.getTime())
+      ? until.toLocaleDateString(lang === "ur" ? "ur-PK" : "en-GB", { day: "numeric", month: "long", year: "numeric" })
+      : lang === "ur" ? "کچھ دنوں بعد" : "a few days from now";
+    return fill(words.email_change_locked, { until: when });
+  }
   if (code === "validation_failed") return Object.values(fieldErrors(reply, lang))[0] ?? reply.message ?? words.proof_required;
   return words[code] ?? reply.message ?? (lang === "ur" ? "سرور نے یہ قبول نہیں کیا۔" : "The server did not accept this.");
 }

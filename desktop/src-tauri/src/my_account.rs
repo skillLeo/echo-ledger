@@ -75,6 +75,8 @@ pub struct AccountReply {
     /// Field errors as the server wrote them, when a field has no code.
     pub errors: serde_json::Value,
     pub retry_after: Option<u64>,
+    /// Until when a refusal holds (`409 email_change_locked {"until"}`: a new address waits for the restore window).
+    pub until: Option<String>,
     /// Two-step sign-in's QR code, drawn from `otpauth_uri`: each row of dark (`1`) and light (`0`) modules.
     pub qr: Option<Vec<String>>,
 }
@@ -106,6 +108,7 @@ impl AccountReply {
             error_codes: body.get("error_codes").cloned().unwrap_or(serde_json::Value::Null),
             errors: body.get("errors").cloned().unwrap_or(serde_json::Value::Null),
             retry_after,
+            until: body.get("until").and_then(serde_json::Value::as_str).map(str::to_string),
             qr: None,
         }
     }
@@ -233,9 +236,35 @@ pub fn heif_to_jpeg(_bytes: &[u8]) -> Option<Vec<u8>> {
     None
 }
 
-/// A picture of the person kept on this computer by its version (`avatars/<version>.img`), so it shows offline.
-pub fn avatar_cache_path(dir: &std::path::Path, version: u64) -> std::path::PathBuf {
-    dir.join("avatars").join(format!("{version}.img"))
+/// Where a person's picture is kept on this computer, so it shows again without a download: named by a digest of the
+/// server's origin and the link's path (`/api/avatars/<person>/<version>`, the signature left out), so another person,
+/// another server or another version never finds this copy. `None` for a link that is not such a picture of `server`
+/// or whose version is not `version`.
+pub fn avatar_cache_path(dir: &std::path::Path, server: &str, url: &str, version: u64) -> Option<std::path::PathBuf> {
+    let origin = |u: &str| reqwest::Url::parse(u.trim()).ok().map(|p| (p.origin().ascii_serialization(), p.path().to_string()));
+    let (server_origin, _) = origin(server)?;
+    let (url_origin, path) = origin(url)?;
+    if url_origin != server_origin {
+        return None;
+    }
+    let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    let [api, avatars, person, at] = parts.as_slice() else { return None };
+    if *api != "api" || *avatars != "avatars" || !safe_id(person) || at.parse::<u64>().ok() != Some(version) {
+        return None;
+    }
+    let digest = ring::digest::digest(&ring::digest::SHA256, format!("{url_origin}{path}").as_bytes());
+    let name: String = digest.as_ref().iter().map(|b| format!("{b:02x}")).collect();
+    Some(avatars_dir(dir).join(format!("{name}.img")))
+}
+
+/// The folder of the pictures kept on this computer.
+pub fn avatars_dir(dir: &std::path::Path) -> std::path::PathBuf {
+    dir.join("avatars")
+}
+
+/// Removes every kept picture (sign-out, another account signing in).
+pub fn clear_avatars(dir: &std::path::Path) {
+    let _ = std::fs::remove_dir_all(avatars_dir(dir));
 }
 
 /// The recovery codes as a text file to keep somewhere safe.
@@ -276,6 +305,8 @@ mod tests {
             "errors": {"new": ["The password must be at least 12 characters."]}, "error_codes": {"new": [{"code": "too_short", "min": 12}]}}), None);
         assert_eq!(fields.error_codes["new"][0]["min"], 12);
         assert_eq!(fields.errors["new"][0], "The password must be at least 12 characters.");
+        let waiting = AccountReply::from_answer(409, json!({"message": "Locked.", "code": "email_change_locked", "until": "2026-11-28T10:00:00+00:00"}), None);
+        assert_eq!(waiting.until.as_deref(), Some("2026-11-28T10:00:00+00:00"));
         let locked = AccountReply::from_answer(429, json!({"message": "Too many.", "code": "too_many_attempts"}), Some(900));
         assert_eq!(locked.retry_after, Some(900));
         assert_eq!(locked.message.as_deref(), Some("Too many sign-in attempts. Wait 15 minutes, then try again."));
@@ -357,6 +388,46 @@ mod tests {
             assert_eq!(image::load_from_memory(&ready.bytes).unwrap().width(), 400);
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_kept_picture_is_named_by_its_server_person_and_version_never_its_signature() {
+        let dir = std::path::Path::new("/data");
+        let server = "https://ledger.example.test";
+        let at = |url: &str, version| avatar_cache_path(dir, server, url, version);
+        let mine = at("https://ledger.example.test/api/avatars/1/1795276846?expires=1&signature=a", 1795276846).unwrap();
+        assert!(mine.starts_with("/data/avatars") && mine.extension().unwrap() == "img");
+        // A new signature for the same picture is the same copy.
+        assert_eq!(at("https://ledger.example.test/api/avatars/1/1795276846?expires=2&signature=b", 1795276846).unwrap(), mine);
+        // Another person, another version, another server: never this copy.
+        assert_ne!(at("https://ledger.example.test/api/avatars/2/1795276846?signature=a", 1795276846).unwrap(), mine);
+        assert_ne!(at("https://ledger.example.test/api/avatars/1/1795276999?signature=a", 1795276999).unwrap(), mine);
+        assert_ne!(avatar_cache_path(dir, "https://other.example.test", "https://other.example.test/api/avatars/1/1795276846", 1795276846).unwrap(), mine);
+        // Not a picture of this server, or not the version asked for.
+        assert_eq!(at("https://evil.example.test/api/avatars/1/1795276846", 1795276846), None);
+        assert_eq!(at("https://ledger.example.test/api/avatars/1/1795276846", 7), None);
+        assert_eq!(at("https://ledger.example.test/api/recordings/1/audio", 1), None);
+        assert_eq!(at("https://ledger.example.test/api/avatars/../1/1795276846", 1795276846), None);
+        assert_eq!(at("not a link", 1), None);
+    }
+
+    #[test]
+    fn signing_out_forgets_the_kept_pictures() {
+        let dir = std::env::temp_dir().join(format!("echoledger-avatars-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(avatars_dir(&dir)).unwrap();
+        std::fs::write(avatars_dir(&dir).join("a.img"), b"x").unwrap();
+        clear_avatars(&dir);
+        assert!(!avatars_dir(&dir).exists());
+        clear_avatars(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        let source = include_str!("commands.rs");
+        for start in ["pub async fn unpair(", "async fn adopt_registration("] {
+            let at = source.find(start).unwrap_or_else(|| panic!("{start} not found"));
+            let body = &source[at..at + source[at..].find("\n}\n").unwrap()];
+            assert!(body.contains("forget_avatars("), "{start} forgets the kept pictures");
+        }
+        let image = &source[source.find("pub async fn account_avatar_image(").unwrap()..];
+        assert!(image[..image.find("\n}\n").unwrap()].contains("ensure_unlocked(&state)?"), "locked, no picture");
     }
 
     #[test]
