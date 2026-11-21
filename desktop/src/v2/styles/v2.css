@@ -1370,3 +1370,14 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 .el-recording__title:hover { background: var(--el-role-bg-subtle); }
 .el-recording__title:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
 .el-recording__title-field { inline-size: 100%; border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm); background: transparent; color: inherit; font: inherit; padding-inline: var(--el-space-4); }
+
+/* What the engine was not sure of, kept as heard (parity DT-REC-111), and suggested fixes (DT-REC-106, 107). */
+.el-word { all: unset; cursor: pointer; }
+.el-word--unsure { text-decoration: underline dotted; text-decoration-color: var(--el-role-text-secondary); text-underline-offset: var(--el-space-2); }
+.el-word:focus-visible, .el-suggest:focus-visible { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
+.el-segment__text--unsure { text-decoration: underline dotted; text-decoration-color: var(--el-role-border-strong); }
+.el-segment__check { display: block; margin-block-start: var(--el-space-4); color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); }
+.el-suggest { all: unset; cursor: pointer; text-decoration: underline wavy; text-decoration-color: var(--el-role-accent); text-underline-offset: var(--el-space-2); }
+.el-suggest[aria-expanded="true"] { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); }
+.el-suggest-pop { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block: var(--el-space-8); padding: var(--el-space-8); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); }
+.el-suggestions { display: flex; align-items: center; gap: var(--el-space-8); }

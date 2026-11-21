@@ -4,9 +4,9 @@
 // PDF and the meeting packs, and Save audio. Under the player: Send to WhatsApp · Copy (the text at once, its chevron
 // for the other ways) · Export ▾; over the
 // transcript: Show as (Roman Urdu · اردو · English · Original), as classic.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  api, errorMessage, type ExportFormat, type LibraryItem, type TranscriptionLanguage, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
+  api, errorMessage, type ExportFormat, type LibraryItem, type TranscriptionLanguage, type TranscriptSuggestion, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
   type TranscriptViewsState,
 } from "../../lib/ipc";
 import { confirmAction } from "../../lib/confirm";
@@ -15,7 +15,7 @@ import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
 import { copiedTranscript, DEFAULT_UNSURE, fileSize, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
-import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName } from "../../lib/player";
+import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
 import { defaultViewOf, improvingView, transcribingLine, viewPercent } from "../../lib/progress";
 import { usePoll } from "../../lib/usePoll";
@@ -44,6 +44,12 @@ export function primarySize(detail: Record<string, unknown>): number | null {
   const size = primary?.size_bytes;
   return typeof size === "number" && size > 0 ? size : null;
 }
+
+/** Tooltips of what the engine was not sure of (kept as heard), as classic's. */
+export const UNSURE_WORD = "Not sure of this word. Click to hear it.";
+export const UNSURE_LINE = "The engine was not sure of this line. Click to hear it.";
+/** Double-check: what a second transcription heard on a line it disagreed on (never the engine's name, D-132). */
+export const SECOND_HEARD = "A second transcription heard:";
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; value: T };
 
 export type RecordingPageProps = {
@@ -273,13 +279,86 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       onMessage(errorMessage(e));
     }
   };
+  // Suggested fixes (since v1.4): open ones are marked in their line; one at a time opens with Accept and Dismiss. They
+  // are decided only in the words as heard, never in a Show as view or while editing.
+  const [openFix, setOpenFix] = useState<number | null>(null);
+  const [fixBusy, setFixBusy] = useState(false);
+  const openFixes = useMemo(() => (tDetail?.suggestions ?? []).filter((f) => f.status === "open"), [tDetail]);
+  const fixesShown = showAs === "original" && !editing ? openFixes : [];
+  const pendingFix = fixesShown.find((f) => f.id === openFix) ?? null;
+  const decideFix = async (fix: TranscriptSuggestion, accept: boolean) => {
+    const id = shownTranscript.current;
+    if (!id) return;
+    setFixBusy(true);
+    try {
+      const next = await api.decideSuggestion(id, fix.id, accept);
+      if (stillShown(id)) {
+        setTranscript({ state: "ready", value: next });
+        setOpenFix(null);
+      }
+      onMessage(accept ? `Changed to “${fix.to}”` : "Suggestion dismissed");
+    } catch (e) {
+      onMessage(errorMessage(e));
+    } finally {
+      if (mounted.current) setFixBusy(false);
+    }
+  };
+  /** A word the engine was not sure of plays from that word (its line's click would play from the line's start). */
+  const playWord = (ms: number) => {
+    seek(ms / 1000);
+    void audio.current?.play().catch(() => undefined);
+  };
+  const canPlay = detail.state === "ready" && !!detail.value.url;
+  /** A line as heard: its suggested fixes marked, else its unsure words underlined (a press plays from the word). */
+  const heardText = (i: number): ReactNode | undefined => {
+    const raw = tDetail?.segments[i];
+    if (!raw) return undefined;
+    const fixes = fixesShown.filter((f) => f.index === i).map((f) => ({ f, span: suggestionSpan(raw.text, f.from) }))
+      .filter((x): x is { f: TranscriptSuggestion; span: [number, number] } => !!x.span).sort((a, b) => a.span[0] - b.span[0]);
+    if (fixes.length) {
+      const out: ReactNode[] = [];
+      let pos = 0;
+      for (const { f, span: [from, to] } of fixes) {
+        if (from < pos) continue;
+        out.push(raw.text.slice(pos, from));
+        out.push(
+          <button key={f.id} type="button" className="el-suggest" aria-expanded={openFix === f.id} title={`Suggested: ${f.to}${f.reason ? ` (${f.reason})` : ""}`}
+            aria-label={`Suggested fix: ${raw.text.slice(from, to)} to ${f.to}`} onClick={(e) => { e.stopPropagation(); setOpenFix(openFix === f.id ? null : f.id); }}>
+            {raw.text.slice(from, to)}
+          </button>,
+        );
+        pos = to;
+      }
+      out.push(raw.text.slice(pos));
+      return out;
+    }
+    if (!raw.words?.some(uncertainWord)) return undefined;
+    return raw.words.map((w, wi) => (
+      <span key={wi}>
+        {uncertainWord(w) ? (
+          <button type="button" className="el-word el-word--unsure" title={UNSURE_WORD} aria-label={`${w.text}, not sure of this word${canPlay ? ", play it" : ""}`}
+            disabled={!canPlay} onClick={(e) => { e.stopPropagation(); playWord(w.start_ms); }}>{w.text}</button>
+        ) : w.text}
+        {wi < raw.words!.length - 1 ? " " : ""}
+      </span>
+    ));
+  };
+  /** A Show as view's "[?word]" marks drawn like the words as heard: underlined, without the brackets. */
+  const viewMarks = (text: string): ReactNode | undefined => {
+    const parts = text.split(/(\[\?[^\]]+\])/);
+    if (parts.length === 1) return undefined;
+    return parts.map((part, k) => {
+      const marked = /^\[\?([^\]]+)\]$/.exec(part);
+      return marked ? <span key={k} className="el-word el-word--unsure" title={UNSURE_WORD}>{marked[1]}</span> : part;
+    });
+  };
   /** The words a line has in the transcript itself (never a Show as view's): what an edit starts from. */
   const rawText = (i: number) => (transcript.state === "ready" ? transcript.value?.segments[i]?.text ?? segments[i].text : segments[i].text);
   const renderText = (i: number) => {
     if (editing && editLine === i) return <LineEditor text={rawText(i)} onSave={(t) => void saveLine(i, t)} onCancel={() => setEditLine(null)} />;
     if (editing) return <button type="button" className="el-line-edit" aria-label={`Edit line ${i + 1}: ${rawText(i)}`} onClick={(e) => { e.stopPropagation(); setEditLine(i); }}>{rawText(i)}</button>;
     const inLine = matches.map((m, index) => ({ ...m, index })).filter((m) => m.seg === i);
-    if (!inLine.length) return undefined;
+    if (!inLine.length) return viewText(i) !== null ? viewMarks(segments[i].text) : heardText(i);
     return markParts(segments[i].text, inLine).map((p, k) => (p.match === null ? <span key={k}>{p.text}</span>
       : <mark key={k} className={p.match === findCurrent ? "el-find el-find--current" : "el-find"}>{p.text}</mark>));
   };
@@ -647,10 +726,29 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               )}
               {findOpen && <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, findCurrent)}
                 onStep={(d) => matches.length && setFindAt((findCurrent + d + matches.length) % matches.length)} onClose={() => { setFindOpen(false); setFindQuery(""); }} />}
+              {fixesShown.length > 0 && (
+                <p className="el-suggestions el-caption" role="status" dir="auto">
+                  <span>{fixesShown.length === 1 ? "1 suggested fix" : `${fixesShown.length} suggested fixes`}: words that may have been misheard are underlined.</span>
+                  <Button size="sm" variant="quiet" icon={Icons.SparkleIcon} onClick={() => setOpenFix(fixesShown[0].id)}>Review</Button>
+                </p>
+              )}
               <Transcript label="Transcript" segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={detail.state === "ready" && detail.value.url ? playFrom : undefined}
                 lang={showAs === "urdu" ? "ur" : showAs === "original" ? normalizeLanguage(tDetail?.language) ?? undefined : undefined}
-                note={(i) => (showAs !== "original" && views?.kept?.[showAs]?.includes(i) ? <span className="el-segment__note">· original words</span> : null)}
-                after={(i) => { const at = screensAfter.get(i); return at ? <LineScreens screens={at} onOpen={openScreen} /> : null; }} />
+                note={(i) => (showAs !== "original" && views?.kept?.[showAs]?.includes(i) ? <span className="el-segment__note">· original words</span>
+                  : viewText(i) === null && tDetail?.segments[i]?.check ? <span className="el-segment__check" dir="auto"><b>{SECOND_HEARD}</b> {tDetail.segments[i].check!.text}</span> : null)}
+                lineTitle={(i) => (viewText(i) === null && tDetail?.segments[i]?.uncertain ? UNSURE_LINE : undefined)}
+                after={(i) => {
+                  const at = screensAfter.get(i);
+                  const fix = pendingFix?.index === i ? (
+                    <div className="el-suggest-pop" role="group" aria-label="Suggested fix">
+                      <span dir="auto">Change <b>{pendingFix.from}</b> to <b>{pendingFix.to}</b>?{pendingFix.reason ? <span className="el-secondary"> ({pendingFix.reason})</span> : null}</span>
+                      <Button size="sm" variant="primary" loading={fixBusy} loadingLabel="Changing…" onClick={() => void decideFix(pendingFix, true)}>Accept</Button>
+                      <Button size="sm" disabled={fixBusy} onClick={() => void decideFix(pendingFix, false)}>Dismiss</Button>
+                      <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close" onClick={() => setOpenFix(null)} />
+                    </div>
+                  ) : null;
+                  return at || fix ? <>{fix}{at && <LineScreens screens={at} onOpen={openScreen} />}</> : null;
+                }} />
             </>
           ) : transcript.state === "ready" && transcript.value?.status === "completed" && transcript.value.segments.length === 0 ? (
             <EmptyState icon={Icons.TranscriptIcon} title="The transcript is empty" body="No speech was detected in this recording." />

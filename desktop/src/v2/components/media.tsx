@@ -49,7 +49,7 @@ export function Player({
 export type Segment = { speaker: string; start: number; text: string };
 
 /** A transcript: who spoke, when, and what; the line being played is marked. */
-export function Transcript({ label, segments, activeIndex, lang, after, onPlayLine, playLabel = (s) => `Play from ${clock(s.start)}`, note, renderText }: {
+export function Transcript({ label, segments, activeIndex, lang, after, onPlayLine, playLabel = (s) => `Play from ${clock(s.start)}`, note, renderText, lineTitle }: {
   label: string;
   segments: Segment[];
   activeIndex?: number;
@@ -63,6 +63,8 @@ export function Transcript({ label, segments, activeIndex, lang, after, onPlayLi
   note?: (index: number) => ReactNode;
   /** A line's words drawn another way (Find's marks, the line being edited). */
   renderText?: (index: number) => ReactNode | undefined;
+  /** A line's tooltip and its dotted look (the engine was not sure of the whole line). */
+  lineTitle?: (index: number) => string | undefined;
 }) {
   return (
     <ol className={`el-transcript${onPlayLine ? " el-transcript--play" : ""}`} aria-label={label} lang={lang}>
@@ -74,7 +76,8 @@ export function Transcript({ label, segments, activeIndex, lang, after, onPlayLi
               <button type="button" className="el-segment__time el-segment__play el-num" aria-label={`${playLabel(s)} · ${s.speaker}`} onClick={() => onPlayLine(i)}>{clock(s.start)}</button>
             ) : <span className="el-segment__time el-num">{clock(s.start)}</span>}
           </span>
-          <p className="el-segment__text" dir="auto" onClick={onPlayLine ? () => { if (!window.getSelection()?.toString()) onPlayLine(i); } : undefined}>
+          <p className={`el-segment__text${lineTitle?.(i) ? " el-segment__text--unsure" : ""}`} dir="auto" title={lineTitle?.(i)}
+            onClick={onPlayLine ? () => { if (!window.getSelection()?.toString()) onPlayLine(i); } : undefined}>
             {renderText?.(i) ?? s.text}{note?.(i)}
           </p>
           {after?.(i)}
