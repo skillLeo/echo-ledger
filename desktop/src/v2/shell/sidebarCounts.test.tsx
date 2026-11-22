@@ -4,7 +4,7 @@
 // actually sits on (the sidebar, a row's hover, the current row, a place a recording is dragged over), and the rail's
 // dot at 3:1 or more, in light and dark, from the stylesheet's tokens.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { render } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -134,6 +134,16 @@ describe("the sidebar's counts", () => {
     expect(items[0]).toHaveTextContent("Activity6");
     // No count, no dot.
     expect(items[1].querySelector(".el-nav-item__dot")).toBeNull();
+  });
+
+  it("a count is in the item's name, as the places say theirs: \"Activity, 6\"; without one, just its name", () => {
+    for (const rail of ["off", "on"] as const) {
+      const { items, place } = drawSidebar(rail);
+      expect(items[0]).toHaveAccessibleName("Activity, 6");
+      expect(items[1]).toHaveAccessibleName("Settings");
+      expect(place.closest("button")).toHaveAccessibleName("Inbox, 12");
+      cleanup();
+    }
   });
 
   it("the dot is only for the rail: the full sidebar shows the pill instead", () => {

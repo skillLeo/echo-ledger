@@ -45,11 +45,11 @@ export type QueueCovers = { waiting: boolean; failed: boolean };
 
 /**
  * What needs action in the Library, for the header's button: null while the counts load (they read 0 until the
- * recordings and the skipped calls are in, so the button never shows a passing count), and when nothing does. What the
- * queue shows with its own Review is left out, so there is one Review for each thing. Without a status (the Library
- * is not the start screen) there is no button.
+ * recordings, the skipped calls and the queue's lists are in, so the button never shows a count it then corrects), and
+ * when nothing does. What the queue shows with its own Review (`covered`, null until its lists have answered) is left
+ * out, so there is one Review for each thing. Without a status (the Library is not the start screen) there is no button.
  */
-export function useLibraryNeeds(status: AppStatus | null, items: readonly LibraryItem[] | null, covered: QueueCovers): readonly NeedsAction[] | null {
+export function useLibraryNeeds(status: AppStatus | null, items: readonly LibraryItem[] | null, covered: QueueCovers | null): readonly NeedsAction[] | null {
   const [skipped, setSkipped] = useState<SkippedItem[] | null>(null);
   const on = status !== null;
   useEffect(() => {
@@ -61,7 +61,7 @@ export function useLibraryNeeds(status: AppStatus | null, items: readonly Librar
       live = false;
     };
   }, [on]);
-  if (!status || items === null || skipped === null) return null;
+  if (!status || items === null || skipped === null || covered === null) return null;
   const actions = needsAction({
     failed: covered.failed ? 0 : status.failedUploads,
     waiting: covered.waiting ? 0 : status.pendingDecisions,

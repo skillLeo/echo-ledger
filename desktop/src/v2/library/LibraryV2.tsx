@@ -29,10 +29,11 @@ import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type De
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
 import { SourceAvatar } from "./SourceAvatar";
-import { LibraryTop, NeedsButton, needsLabel, useLibraryNeeds, type LibraryTopProps, type QueueCovers } from "./LibraryTop";
+import { LibraryTop, NeedsButton, needsLabel, useLibraryNeeds, type LibraryTopProps } from "./LibraryTop";
 import { useHeaderFold, type Foldable } from "./headerFold";
 import type { NeedsAction } from "../home/HomeV2";
-import { QueueV2 } from "./QueueV2";
+import { QueueV2, queueCovers } from "./QueueV2";
+import { useLibraryQueue } from "../../views/main/LibraryQueue";
 import { addToListMenu, inPlace, listKey, ListsRow, placeGone, placeName, unreadCount, useLists, type Place } from "./lists";
 import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
@@ -146,8 +147,6 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const knownValues = useRef<Record<string, string>>({});
   // Sort and group, remembered per view on this computer (classic's View menu).
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
-  // What the queue shows with its own Review: the header's needs button leaves those out (one Review for each thing).
-  const [queueShows, setQueueShows] = useState<QueueCovers>({ waiting: false, failed: false });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
   // The server didn't answer a sync: the list shown is what this computer saved (classic's banner, with Retry).
@@ -190,6 +189,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   }, []);
 
   const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
+  // The queue at the top of the list (waiting calls, uploads), kept here rather than in the list: it stays loaded while
+  // the list is away (Trash, a selection, a recording open), so the header's needs button, which leaves to it what it
+  // shows, knows that the moment the list is back and never shows a count it then corrects.
+  const queue = useLibraryQueue(useCallback((text: string) => say(text), [say]));
 
   const load = useCallback(async () => {
     try {
@@ -564,7 +567,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const headRef = useRef<HTMLElement>(null);
   const headKeys = useRef<readonly string[]>([]);
   // What needs action (LibraryTop.tsx): the quiet button before Trash, the only place the Library says it.
-  const needs = useLibraryNeeds(top?.status ?? null, items, queueShows);
+  const needs = useLibraryNeeds(top?.status ?? null, items, queueCovers(queue));
   const headerNeeds = !!needs && view !== "trash" && !selecting;
   const foldable: Foldable[] = (counts?.all ?? 0) > 0 ? ["trash", "sync", "select"] : ["trash", "sync"];
   const needsWords = needs ? Object.values(needsLabel(needs)).join(" ") : "";
@@ -826,10 +829,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   if (onImport) add("import", <Button onClick={onImport}>Import</Button>);
   if (onRecord) add("record", <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>);
   headKeys.current = headerActions.map(([key]) => key);
+  // The Waiting place counts the calls waiting on this computer too (MainApp's libraryPlaces): its view lists them, in
+  // the queue above the recordings (opened), and counts them with the rest. A search or filter leaves them out.
+  const waitingHere = view === "waiting" && !query && !filtersOn && !folder ? queue.pending.length : 0;
   const subtitle = view === "trash" || !counts ? null
     : folder ? `${recordingsWord(matching)} in ${folderLabel(folder)}`
     : view === "all" && !filtersOn && !query ? `${recordingsWord(counts.all)} from your phone, this computer and the web.`
-      : `${recordingsWord(matching)} shown`;
+      : `${recordingsWord(matching + waitingHere)} shown`;
 
   return (
     <div className="el-root el-embedded" data-v2="library" ref={root}>
@@ -890,7 +896,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             {`${folderLabel(folder)} didn't load from the server: ${folderError}${folderKnownHere(folder) ? " Showing what this computer knows meanwhile." : ""}`}
           </Banner>
         )}
-        {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} onShown={setQueueShows} />}
+        {view !== "trash" && !selecting && <QueueV2 queue={queue} reviewRequest={reviewRequest} openWaiting={view === "waiting"} />}
         <div className="el-page__tools">
           {view !== "trash" && (
             <ListsRow lists={lists ?? []} setLists={setLists} reload={reloadLists} place={place} onPlace={setPlace} unread={items ? unreadCount(items, readHere) : 0}
@@ -995,7 +1001,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             action={<Button variant="primary" onClick={() => void load()}>Try again</Button>} />
         ) : !items ? (
           <Loading label="Loading recordings">{Array.from({ length: 7 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
-        ) : counts?.all === 0 ? (
+        ) : counts?.all === 0 && waitingHere === 0 ? (
           <EmptyState icon={Icons.LibraryIcon} title="No recordings yet"
             body="Calls and meetings you record on this computer or your phone, and files you import, appear here."
             action={onImport ? <Button onClick={onImport}>Import</Button> : undefined} />
@@ -1006,7 +1012,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           <EmptyState icon={Icons.LibraryIcon} title={place === "unread" ? "You've opened every recording" : "Nothing marked important yet"}
             body={place === "unread" ? "New recordings show here until you open them." : "Recordings you mark important show here."}
             action={<Button onClick={() => setPlace("all")}>Show all</Button>} />
-        ) : matching === 0 ? (
+        ) : matching === 0 && waitingHere > 0 ? null : matching === 0 ? (
           <EmptyState icon={Icons.SearchIcon}
             title={query || filtersOn ? "No recordings match" : view === "today" ? "Nothing recorded today" : view === "untranscribed" ? "Everything is transcribed" : `Nothing in ${VIEW_NAMES[view as ListView]}`}
             body={query ? "Try another word, or clear the search to see every recording." : filtersOn ? "Take a filter off, or clear them all to see every recording."

@@ -42,11 +42,12 @@ export function Sidebar({ label, brand, brandEnd, children, footer, rail, width 
 /**
  * One place in the sidebar; the current page is marked for assistive tools too. Its count needs attention (Activity's
  * "needs you"): the accent pill, and in the icon rail, where the count is only for assistive tools, a small accent dot
- * on the icon.
+ * on the icon. Its name says the count as the Library's places do: "Activity, 6".
  */
 export function NavItem({ icon, label, current, count, onClick }: { icon: IconType; label: string; current?: boolean; count?: number; onClick?: () => void }) {
   return (
-    <button type="button" className="el-nav-item" aria-current={current ? "page" : undefined} onClick={onClick} title={label}>
+    <button type="button" className="el-nav-item" aria-current={current ? "page" : undefined} onClick={onClick} title={label}
+      aria-label={count ? `${label}, ${count}` : undefined}>
       <Icon icon={icon} size="md" />
       <span className="el-nav-item__label">{label}</span>
       {count !== undefined && <span className="el-nav-item__count el-caption el-num">{count}</span>}

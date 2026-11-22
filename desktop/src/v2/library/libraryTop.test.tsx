@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makePendingItem, makeStatus } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeStatus, makeUploadItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { DISMISSED_PREFIX } from "./LibraryTop";
 import type { Account } from "../../lib/ipc";
@@ -44,6 +44,39 @@ describe("the top of the Library", () => {
   const actions = () => document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
   const needs = () => actions().firstElementChild?.matches(".el-menu-anchor") ? actions().querySelector("button")! : actions().firstElementChild as HTMLElement;
   const NEEDS = /need you|needs you|not transcribed|waiting|didn't upload|skipped|notification/;
+  /**
+   * Every change to the header's needs button once it is on screen: its words changed, or it went or was swapped for
+   * another (a count it then corrected). Being drawn is not a change. Read from the DOM's own records, so a state that
+   * a later render corrected before the test looks again is caught too.
+   */
+  const watchCorrections = () => {
+    const changes: string[] = [];
+    const host = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest(".el-needs");
+    const observer = new MutationObserver((records) => {
+      for (const r of records) {
+        const inside = host(r.target);
+        if (inside) changes.push(`changed: ${r.type === "characterData" ? `"${r.oldValue}" in ` : ""}"${inside.textContent}"`);
+        r.removedNodes.forEach((n) => {
+          const gone = n instanceof Element ? (n.matches(".el-needs") ? n : n.querySelector(".el-needs")) : null;
+          if (gone) changes.push(`went: "${gone.textContent}"`);
+        });
+      }
+    });
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true, characterDataOldValue: true });
+    return { changes, stop: () => observer.disconnect() };
+  };
+  /** A command that answers when the test says (`answer`), once per call. */
+  const later = (command: string) => {
+    const waiting: ((value: unknown) => void)[] = [];
+    respondWith(command, () => new Promise((resolve) => waiting.push(resolve)));
+    return {
+      calls: () => waiting.length,
+      answer: async (value: unknown) => {
+        await act(async () => waiting.splice(0).forEach((resolve) => resolve(value)));
+        await act(flushAsync);
+      },
+    };
+  };
 
   it("the get-started card until setup is done: each step runs its fix, and Hide keeps it hidden on this computer", async () => {
     const top = await show();
@@ -152,6 +185,68 @@ describe("the top of the Library", () => {
       expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
       await act(async () => answer([{ id: "s1" }]));
       expect(within(actions()).getByRole("button", { name: "4 need you" })).toBe(needs());
+    });
+
+    it("waits for the queue's waiting calls: a slow list never shows a count it then corrects", async () => {
+      const watch = watchCorrections();
+      const pending = later("pending_list");
+      await show();
+      // The status says 2 calls wait, but the queue (with its own Review) may be about to show them: no count yet.
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+      await pending.answer([makePendingItem("p1"), makePendingItem("p2")]);
+      expect(screen.getByTestId("waiting-line")).toHaveTextContent("2 calls waiting");
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      await act(flushAsync);
+      expect(watch.changes).toEqual([]);
+      watch.stop();
+    });
+
+    it("waits for the queue's uploads too: a slow upload list never shows a count it then corrects", async () => {
+      const watch = watchCorrections();
+      const uploads = later("upload_list");
+      respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
+      await show(makeStatus({ platform: "macos", pendingDecisions: 2, failedUploads: 1 }));
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+      await uploads.answer([makeUploadItem("f1", { state: "failed", title: "Board call" })]);
+      expect(screen.getByRole("heading", { name: "Uploads that need you · 1" })).toBeInTheDocument();
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(watch.changes).toEqual([]);
+      watch.stop();
+    });
+
+    it("with waiting calls, Trash and back, and a selection cancelled, show the right count at once and never correct it", async () => {
+      respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
+      respond("upload_list", []);
+      respond("bin_list", { data: [] });
+      await show();
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      // From here on the lists answer only when the test says: what the header shows meanwhile is what it knew.
+      const pending = later("pending_list");
+      const uploads = later("upload_list");
+      fireEvent.click(within(actions()).getByRole("button", { name: "Trash" }));
+      await act(flushAsync);
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+      const watch = watchCorrections();
+      fireEvent.click(within(actions()).getByRole("button", { name: "Trash" }));
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      await act(flushAsync);
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      await pending.answer([makePendingItem("p1"), makePendingItem("p2")]);
+      await uploads.answer([]);
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(watch.changes).toEqual([]);
+      watch.stop();
+
+      fireEvent.click(within(actions()).getByRole("button", { name: "Select" }));
+      await act(flushAsync);
+      const again = watchCorrections();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      await pending.answer([makePendingItem("p1"), makePendingItem("p2")]);
+      await uploads.answer([]);
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(again.changes).toEqual([]);
+      again.stop();
     });
 
     it("a dismissal the old banner stored never hides it, and is cleared (every account's); other settings stay", async () => {

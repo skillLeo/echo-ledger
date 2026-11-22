@@ -8,6 +8,7 @@ import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } 
 import { makeItem, makePendingItem, makeStatus, makeUploadItem } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
 import { LibraryV2 } from "./LibraryV2";
+import { libraryPlaces } from "../../lib/folders";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -328,5 +329,57 @@ describe("one Review for each thing at the top of the v2 Library (classic's Libr
     await act(() => emitEvent("pending:changed", [makePendingItem("p2")]));
     expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
     expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
+  });
+});
+
+describe("the Waiting place lists what it counts", () => {
+  // The sidebar's Waiting counts the server's waiting recordings and the calls waiting on this computer (MainApp gives
+  // libraryPlaces the status's pendingDecisions); its view lists both: the recordings, and the queue's calls, opened.
+  const waitingCount = (local: number, server = 0) =>
+    libraryPlaces({ views: { waiting: server } }, { total: 1, waiting: local, failed: 0, pinned: 0 }, null).find((p) => p.key === "waiting")!.count;
+  const open = async (pending: PendingItem[], items = [makeItem("a", { title: "Zoom with Acme" })]) => {
+    respond("library_list", items);
+    respond("library_refresh", items);
+    respond("bin_list", { data: [] });
+    respond("pending_list", pending);
+    respond("upload_list", []);
+    respond("list_clients", CLIENTS);
+    render(<LibraryV2 viewRequest={{ view: "waiting", seq: 1 }} />);
+    await act(flushAsync);
+  };
+  const subtitle = () => document.querySelector(".el-page__head .el-page__titles .el-secondary")?.textContent;
+
+  it("2 calls waiting here: the place says 2, and its view lists those 2, not \"Nothing in Waiting for decision\"", async () => {
+    await open([makePendingItem("p1", { title: "Call with Ali" }), makePendingItem("p2", { title: "Call with Bina" })]);
+    expect(waitingCount(2)).toBe(2);
+    expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
+    expect(screen.queryByText("Nothing in Waiting for decision")).toBeNull();
+    const list = waiting();
+    expect(within(list).getAllByRole("listitem")).toHaveLength(waitingCount(2));
+    expect(within(list).getByText("Call with Ali")).toBeInTheDocument();
+    expect(review()).toHaveTextContent("Hide");
+    expect(subtitle()).toBe("2 recordings shown");
+  });
+
+  it("with the server's waiting recordings too, the view lists them under the calls, and counts both", async () => {
+    await open([makePendingItem("p1")], [makeItem("a", { title: "Zoom with Acme" }), makeItem("w", { title: "Phone call", status: "recording" })]);
+    expect(waitingCount(1, 1)).toBe(2);
+    expect(within(waiting()).getAllByRole("listitem")).toHaveLength(1);
+    expect(document.querySelector("button[data-row-id=w]")).not.toBeNull();
+    expect(document.querySelector("button[data-row-id=a]")).toBeNull();
+    expect(subtitle()).toBe("2 recordings shown");
+  });
+
+  it("nothing waiting: the view says so", async () => {
+    await open([]);
+    expect(waitingCount(0)).toBe(0);
+    expect(screen.getByText("Nothing in Waiting for decision")).toBeInTheDocument();
+  });
+
+  it("the waiting list can still be hidden in the view", async () => {
+    await open([makePendingItem("p1")]);
+    fireEvent.click(review());
+    expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
+    expect(review()).toHaveTextContent("Review");
   });
 });
