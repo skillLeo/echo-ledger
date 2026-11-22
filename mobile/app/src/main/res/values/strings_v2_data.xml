@@ -7,6 +7,7 @@
     <string name="v2_data_making">Making the export… (you also get an email when it is ready)</string>
     <string name="v2_data_download">Download the export</string>
     <string name="v2_data_export_failed">The export could not be made.</string>
+    <string name="v2_data_check_failed">We couldn\'t check on the export. Check the connection and try again; it is still being made.</string>
     <string name="v2_data_try_again">Try again</string>
     <string name="v2_data_signin">Sign-in</string>
     <string name="v2_data_everywhere">Sign out everywhere…</string>

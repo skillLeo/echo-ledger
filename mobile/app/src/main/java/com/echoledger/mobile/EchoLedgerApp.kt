@@ -39,12 +39,21 @@ class EchoLedgerApp : Application() {
         // This phone's Live Assist card comes and goes with its session.
         com.echoledger.mobile.overlay.AssistCardWindow.follow(this, graph.scope)
         // Auto-record comes back on by itself after an update or a restart, without the app being opened.
-        cancelStartCheck = AutoRecordKeeper.onAppStart(this)
+        val autoRecord = AutoRecordKeeper.onAppStart(this)
+        // The settings read once as the app starts, off the main thread, so a window that opens next (the pill, the
+        // after-call card) has them at its first frame (graph.liveSettings).
+        val warm = Runnable { graph.scope.launch(Dispatchers.IO) { runCatching { graph.settings.current() } } }
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        main.postDelayed(warm, SETTINGS_WARM_MS)
+        cancelStartCheck = {
+            autoRecord()
+            main.removeCallbacks(warm)
+        }
         // Send to WhatsApp's voice copies an hour old or more (WhatsApp has read them by then).
         graph.scope.launch(Dispatchers.IO) { com.echoledger.mobile.share.WhatsAppShare.clearOldCopies(this@EchoLedgerApp) }
     }
 
-    /** Calls off the auto-record check of this process start (tests set up their own state). */
+    /** Calls off the auto-record check and the settings read of this process start (tests set up their own state). */
     var cancelStartCheck: () -> Unit = {}
         private set
 }
@@ -62,6 +71,14 @@ class AppGraph(val context: Context) {
             com.echoledger.mobile.recording.CallJournal.choices(context, com.echoledger.mobile.recording.CallJournal.choicesOf(saved))
         }
     }
+
+    /**
+     * The stored settings, kept hot for the whole process: every read and save of the store updates it, and the app
+     * reads them once as it starts ([EchoLedgerApp.onCreate]). What draws outside the activity starts from its value
+     * at once, never waiting on the store; null only until the store has been read the first time.
+     */
+    val liveSettings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?> get() = settings.latest
+
     val recordings: RecordingStore by lazy { RecordingStore(context, recordingCipher) }
     val library: LibraryRepository by lazy { LibraryRepository(context, secretCipher) { api() } }
     val helper: HelperConnection by lazy { HelperConnection(context) }
@@ -90,3 +107,6 @@ class AppGraph(val context: Context) {
         cached = null
     }
 }
+
+/** How soon after the process starts the settings are read for the windows outside the app. */
+private const val SETTINGS_WARM_MS = 50L

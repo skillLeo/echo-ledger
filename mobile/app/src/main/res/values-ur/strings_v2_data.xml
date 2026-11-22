@@ -7,6 +7,7 @@
     <string name="v2_data_making">ایکسپورٹ بن رہا ہے… (تیار ہونے پر آپ کو ای میل بھی آئے گی)</string>
     <string name="v2_data_download">ایکسپورٹ ڈاؤن لوڈ کریں</string>
     <string name="v2_data_export_failed">ایکسپورٹ نہیں بن سکا۔</string>
+    <string name="v2_data_check_failed">ایکسپورٹ کی صورتحال معلوم نہیں ہو سکی۔ کنکشن دیکھ کر دوبارہ کوشش کریں؛ یہ ابھی بن رہا ہے۔</string>
     <string name="v2_data_try_again">دوبارہ کوشش کریں</string>
     <string name="v2_data_signin">سائن ان</string>
     <string name="v2_data_everywhere">ہر جگہ سے سائن آؤٹ کریں…</string>

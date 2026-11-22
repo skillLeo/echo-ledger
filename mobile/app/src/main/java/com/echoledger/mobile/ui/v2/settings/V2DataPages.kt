@@ -48,6 +48,9 @@ import kotlinx.coroutines.launch
 
 /** How often a making export is asked about again (classic's 5 s). */
 private const val EXPORT_POLL_MS = 5_000L
+
+/** Checks on a making export that may fail in a row before the page says so. */
+private const val EXPORT_CHECKS_FAILING = 3
 private const val SECRET_MAX = 200
 
 /** The account calls Your data makes (the view model's, or a test's). */
@@ -75,16 +78,24 @@ fun YourDataPage(actions: DataActions, serverUrl: String?, highlight: String?, o
     var askSignOut by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { account = actions.account() }
-    // While it is being made, asked about every 5 s: a check that fails (offline, the server busy) is tried again.
-    LaunchedEffect(export?.id, export?.status) {
+    // While it is being made, asked about every 5 s: a check that fails (offline, the server busy) is tried again, but
+    // after three in a row the page says so and Try again asks again (the export goes on being made on the server).
+    var checkFailed by remember { mutableStateOf(false) }
+    LaunchedEffect(export?.id, export?.status, checkFailed) {
         val current = export ?: return@LaunchedEffect
-        if (current.status != "making") return@LaunchedEffect
-        while (true) {
+        if (current.status != "making" || checkFailed) return@LaunchedEffect
+        var failures = 0
+        while (failures < EXPORT_CHECKS_FAILING) {
             delay(EXPORT_POLL_MS)
-            val next = runCatching { actions.exportStatus(current.id) }.getOrNull() ?: continue
-            export = next
-            break
+            val next = runCatching { actions.exportStatus(current.id) }.getOrNull()
+            if (next == null) {
+                failures++
+            } else {
+                export = next
+                return@LaunchedEffect
+            }
         }
+        checkFailed = true
     }
     val pad = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4)
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
@@ -105,6 +116,14 @@ fun YourDataPage(actions: DataActions, serverUrl: String?, highlight: String?, o
                     e == null -> EchoButton(stringResource(R.string.v2_data_export), {
                         scope.launch { actions.startExport()?.let { export = it } }
                     }, pad, kind = EchoButtonKind.Secondary)
+
+                    e.status == "making" && checkFailed -> EchoBanner(
+                        stringResource(R.string.v2_data_check_failed),
+                        EchoBannerKind.Error,
+                        pad,
+                        actionLabel = stringResource(R.string.v2_data_try_again),
+                        onAction = { checkFailed = false }
+                    )
 
                     e.status == "making" -> Text(
                         stringResource(R.string.v2_data_making),

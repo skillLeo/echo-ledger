@@ -181,6 +181,47 @@ class AccountDataParityTest : ScreenTest() {
         assertEquals("https://echoledger.test/export/e1", open.dataString)
     }
 
+    /** Three checks fail in a row: the page says so with Try again, which asks again (here: ready). */
+    private fun threeFailedChecksThenTryAgain(said: String, tryAgain: String, ready: String) {
+        exports = mutableListOf(AccountExportDto("e1", "making"), null, null, null, AccountExportDto("e1", "ready", url = "https://x/e1"))
+        showBoth()
+        press(exportWord)
+        repeat(2) {
+            compose.mainClock.advanceTimeBy(6_000)
+            compose.waitForIdle()
+        }
+        pumpUntil("two checks") { calls.count { it == "status e1" } == 2 }
+        assertTrue("not yet", !shown(said))
+        compose.mainClock.advanceTimeBy(6_000)
+        pumpUntil("said") { shown(said) }
+        assertEquals(3, calls.count { it == "status e1" })
+        // It stops asking until Try again.
+        compose.mainClock.advanceTimeBy(20_000)
+        compose.waitForIdle()
+        assertEquals(3, calls.count { it == "status e1" })
+        press(tryAgain)
+        compose.mainClock.advanceTimeBy(6_000)
+        pumpUntil("ready") { shown(ready) }
+        assertEquals(4, calls.count { it == "status e1" })
+        assertEquals("the same export, not a new one", 1, calls.count { it == "export" })
+    }
+
+    private var exportWord = "Export my data"
+
+    @Test
+    fun afterThreeFailedChecksThePageSaysSoAndTryAgainAsksAgain() = threeFailedChecksThenTryAgain(
+        "We couldn't check on the export.",
+        "Try again",
+        "Download the export"
+    )
+
+    @Test
+    fun afterThreeFailedChecksThePageSaysSoInUrdu() {
+        language = EchoLanguage.Urdu
+        exportWord = "میرا ڈیٹا ایکسپورٹ کریں"
+        threeFailedChecksThenTryAgain("ایکسپورٹ کی صورتحال معلوم نہیں ہو سکی۔", "دوبارہ کوشش کریں", "ایکسپورٹ ڈاؤن لوڈ کریں")
+    }
+
     @Test
     fun aFailedExportOffersTryAgain() {
         exports = mutableListOf(AccountExportDto("e2", "failed"))

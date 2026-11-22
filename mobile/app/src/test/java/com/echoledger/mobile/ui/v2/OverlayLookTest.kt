@@ -14,7 +14,9 @@ import com.echoledger.mobile.ui.v2.live.V2RecordingPill
 import com.echoledger.mobile.ui.v2.shell.OverlayLook
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import java.io.File
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.stateIn
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -25,7 +27,7 @@ import org.junit.Test
  * chosen size, and change when the setting does.
  */
 class OverlayLookTest : ScreenTest() {
-    private val stored = MutableStateFlow(AppSettings(appLanguage = "ur", textSize = "largest"))
+    private val stored = MutableStateFlow<AppSettings?>(AppSettings(appLanguage = "ur", textSize = "largest"))
     private var fontScale by mutableStateOf(0f)
 
     @Test
@@ -44,11 +46,64 @@ class OverlayLookTest : ScreenTest() {
         pumpUntil("Urdu") { compose.onAllNodesWithContentDescription(urdu, substring = true).fetchSemanticsNodes().isNotEmpty() }
         val phone = app.resources.configuration.fontScale
         assertEquals(phone * 1.3f, fontScale, 0.01f)
-        // From its first frame: it starts from the stored settings, never the phone's size first.
+        // From its first frame: it starts from the app's hot copy of the settings, never the phone's size first.
         assertEquals(phone * 1.3f, scales.first(), 0.01f)
         stored.value = AppSettings(appLanguage = "en", textSize = "system")
         pumpUntil("English") { compose.onAllNodesWithContentDescription(english, substring = true).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(phone, fontScale, 0.01f)
+    }
+
+    @Test
+    fun theFirstFrameNeverWaitsForTheStoreAndTheSettingsFollowWhenRead() {
+        // A cold store, slow to answer (a process a call has just started), made hot as the app makes it.
+        val read = java.util.concurrent.atomic.AtomicBoolean(false)
+        val cold = kotlinx.coroutines.flow.flow {
+            kotlinx.coroutines.delay(SLOW_STORE_MS)
+            read.set(true)
+            emit(AppSettings(appLanguage = "ur", textSize = "largest"))
+        }
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+        val hot = cold.stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+        val scales = mutableListOf<Float>()
+        val started = System.nanoTime()
+        show {
+            OverlayLook(hot) {
+                scales += LocalDensity.current.fontScale
+                V2RecordingPill(PillState(elapsedMs = 134_000), 0, null, {})
+            }
+        }
+        compose.waitForIdle()
+        val firstFrameMs = (System.nanoTime() - started) / 1_000_000
+        // Drawn before the store answered, at the phone's own size: nothing waited for it.
+        assertTrue("drawn while the store was still being read", !read.get())
+        assertTrue("first frame after $firstFrameMs ms", firstFrameMs < SLOW_STORE_MS)
+        val phone = app.resources.configuration.fontScale
+        assertEquals(phone, scales.first(), 0.01f)
+        // Then the person's language and size, once the store has answered.
+        val urdu = V2Testing.resources(EchoLanguage.Urdu).getString(R.string.v2_live_pill_recording, "02:14")
+        pumpUntil("Urdu") { compose.onAllNodesWithContentDescription(urdu, substring = true).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(phone * 1.3f, scales.last(), 0.01f)
+        scope.cancel()
+    }
+
+    @Test
+    fun noWindowOutsideTheAppBlocksTheMainThreadForTheSettings() {
+        val look = File("src/main/java/com/echoledger/mobile/ui/v2/shell/AppLook.kt").readText()
+        assertTrue(!look.contains("runBlocking"))
+        // The settings are read as the app starts, off the main thread, for the windows that open next.
+        val start = File("src/main/java/com/echoledger/mobile/EchoLedgerApp.kt").readText()
+            .substringAfter("override fun onCreate()").substringBefore("\n    }\n")
+        assertTrue(start, start.contains("graph.settings.current()") && start.contains("Dispatchers.IO"))
+    }
+
+    @Test
+    fun theAppsHotCopyFollowsTheStore() {
+        vm.updateSettings { it.copy(appLanguage = "ur", textSize = "larger") }
+        pumpUntil("followed") { app.graph.liveSettings.value?.let { it.appLanguage == "ur" && it.textSize == "larger" } == true }
+        // A save reaches it at once, without waiting for anything to read the store.
+        kotlinx.coroutines.runBlocking { app.graph.settings.update { it.copy(textSize = "smaller") } }
+        assertEquals("smaller", app.graph.liveSettings.value?.textSize)
+        assertTrue(com.echoledger.mobile.ui.v2.shell.overlaySettings(app) === app.graph.liveSettings)
     }
 
     @Test
@@ -67,5 +122,9 @@ class OverlayLookTest : ScreenTest() {
             assertTrue("$file wraps $drawn in OverlayLook", before.lastIndexOf("OverlayLook(") > before.lastIndexOf("EchoV2Theme("))
             assertTrue("$file reads the stored settings", source.contains("overlaySettings("))
         }
+    }
+
+    private companion object {
+        const val SLOW_STORE_MS = 3_000L
     }
 }
