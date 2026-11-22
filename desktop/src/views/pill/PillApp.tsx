@@ -77,6 +77,8 @@ export default function PillApp() {
   const [anchor, setAnchor] = useState<TimerAnchor | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [menu, setMenu] = useState(false);
+  /** The new look's menu is open (the pill owns it). */
+  const [menuV2, setMenuV2] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mark, setMark] = useState<MarkPayload | null>(null);
   const [markAt, setMarkAt] = useState(0);
@@ -224,6 +226,15 @@ export default function PillApp() {
   const missing = shown && !missingDismissed ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
   const banner = shown && !!live?.startBanner;
+  // The window takes no more of the screen than it shows: it grows while the menu or the start banner shows, and gives
+  // the screen back when they close. Said only when it changes (the first state is the closed one).
+  const expanded = shown && (menu || menuV2 || banner);
+  const sentExpanded = useRef(false);
+  useEffect(() => {
+    if (sentExpanded.current === expanded) return;
+    sentExpanded.current = expanded;
+    api.pillExpanded(expanded).catch(() => undefined);
+  }, [expanded]);
   const tray = menu && shown ? "menu" : banner ? "start" : mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : limitNotice && shown ? "limit" : screensNotice && shown && live?.screens?.on ? "screens" : null;
   const concealed = useConcealed();
   useHitRegions([shown, menu, tray, concealed]);
@@ -353,6 +364,7 @@ export default function PillApp() {
       <div className="pill-root el-root el-embedded" onMouseDown={startDrag} onMouseMove={afterDrag}>
         <Suspense fallback={null}>
           <RecordingPillV2
+            onMenu={setMenuV2}
             model={{
               elapsed, name: caller || label, paused, captions: live.captions, language: languageChip(live.language), error,
               screens: live.screens ? { on: live.screens.on, count: live.screens.count } : null,

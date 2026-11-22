@@ -162,6 +162,13 @@ describe("recording pill", () => {
     expect(callsOf("cancel_recording")).toHaveLength(0);
   });
 
+  it("ticks nothing on the menu before a choice is made", async () => {
+    await renderPill(makeRecordingState({ callChoice: null }));
+    fireEvent.click(screen.getByTestId("pill-choice"));
+    for (const name of ["Transcribe this call", "Save audio only"]) expect(screen.getByRole("menuitemradio", { name })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("menu").querySelector("[aria-checked=true]")).toBeNull();
+  });
+
   it("Transcribe this call and Save audio only go to the core and stay marked; the recording goes on", async () => {
     respond("call_choice", recordingStatus());
     await renderPill();
@@ -202,6 +209,21 @@ describe("recording pill", () => {
     fireEvent.click(within(banner).getByRole("button", { name: "Don't record" }));
     await waitFor(() => expect(callsOf("call_choice")).toEqual([{ choice: "delete" }]));
     expect(pill()).not.toBeInTheDocument();
+  });
+
+  it("the window keeps its old size while the menu is closed and grows only while the menu or the banner shows", async () => {
+    respond("pill_expanded", undefined);
+    await renderPill();
+    expect(callsOf("pill_expanded"), "closed: nothing to grow").toEqual([]);
+    fireEvent.click(screen.getByTestId("pill-choice"));
+    await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true }]));
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true }, { expanded: false }]));
+    await emitEvent("recording:state", makeRecordingState({ startBanner: true }));
+    await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true }, { expanded: false }, { expanded: true }]));
+    await emitEvent("recording:state", makeRecordingState({ startBanner: false }));
+    await waitFor(() => expect(callsOf("pill_expanded")).toHaveLength(4));
+    expect(callsOf("pill_expanded")[3]).toEqual({ expanded: false });
   });
 
   it("doing nothing records: the banner goes when the core says its 5 s are over", async () => {

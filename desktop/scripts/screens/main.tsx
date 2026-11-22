@@ -13,7 +13,7 @@ import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeCallDone, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeCallDone, makeCallGroup, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
 import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
@@ -422,9 +422,9 @@ const commands: Record<string, (args: Args) => unknown> = {
     bluetoothMic: bluetooth,
     missing: screen === "controls-permission" ? [NO_SYSTEM_AUDIO] : screen === "controls-nothing" ? [{ kind: "microphone", sentence: NOTHING_TO_RECORD }, { kind: "system_audio", sentence: NOTHING_TO_RECORD }] : [],
     deviceNote: screen === "controls-device" ? { text: "Microphone changed to AirPods Pro. Still recording.", warning: false } : null,
-    // "At the start of the call": the banner beside the pill.
+    // "At the start of the call": the banner beside the pill. No choice is made yet: nothing on the menu is ticked.
     startBanner: screen === "controls-banner",
-    callChoice: screen === "controls-card" ? "transcribe" : null,
+    callChoice: null,
   }),
   // The after-call window (the call choice), one thing at a time: the card (with its first-time line on
   // "controls-card"), a confirmation, the grouped card, or "Always do this?". Each stays for the picture.
@@ -434,7 +434,8 @@ const commands: Record<string, (args: Args) => unknown> = {
     if (screen === "controls-done") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "audio", until }) });
     if (screen === "controls-discarded") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "delete", until }) });
     if (screen === "controls-always") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "transcribe", until, offerAlways: "always_transcribe" }) });
-    if (screen === "controls-group") return makeAfterCallState({ group: { count: 3, until } });
+    // Back to back: Omar's call was saved as audio, then Muneeb's was stopped and deleted from the pill: one card, both Undos.
+    if (screen === "controls-group") return makeAfterCallState({ group: makeCallGroup([makeCallDone({ ...call, id: "g1", callerName: "Omar Khan", kind: "audio", until }), makeCallDone({ ...call, id: call.id, kind: "delete", until })], Date.now() + 3_592_000) });
     return makeAfterCallState({ hint: screen === "controls-card", ask: makeChipItem(call.id, { ...call, deadlineAt: new Date(Date.now() + 5_000).toISOString() }) });
   },
   privacy_status: () => privacyStatus(),

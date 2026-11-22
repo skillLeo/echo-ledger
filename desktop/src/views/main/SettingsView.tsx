@@ -305,7 +305,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
     };
     if (entry.id in choice) return optionLabel(entry.id, choice[entry.id] ?? "");
     const on: Record<string, boolean> = {
-      "calls.auto": s.autoMode, "calls.ask_unknown": s.askUnknownApps, "calls.browser_tabs": s.browserAutomation, "mic.far_side_warning": s.farSideWarning,
+      "calls.ask_unknown": s.askUnknownApps, "calls.browser_tabs": s.browserAutomation, "mic.far_side_warning": s.farSideWarning,
       "captions.enabled": s.captionsOnRecord, "share_privacy.one_window": s.shareOneWindow, "share_privacy.diagnostics": s.sendDiagnostics, "captions.compact": s.captionStyle.compact, "screen.enabled": s.screenMoments,
       "voice.cleanup": s.dictationCleanup, "voice.sounds": s.dictationSounds, "notifications.enabled": s.activityNotifications, "notifications.quiet": s.quietHours, "lock.enabled": s.appLock,
     };

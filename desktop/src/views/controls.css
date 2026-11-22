@@ -175,16 +175,16 @@
 .rec-choice {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
   height: 28px; margin-left: -6px; padding: 0 6px;
-  border: 0; border-radius: 14px; background: transparent; color: inherit; font: inherit; cursor: pointer;
+  border: 0; border-radius: var(--radius-md); background: transparent; color: inherit; font: inherit; cursor: pointer;
 }
 .rec-choice:hover, .rec-choice[aria-expanded="true"] { background: var(--ctl-hover); }
 .rec-menu {
   display: flex; flex-direction: column; gap: 2px;
   min-width: 220px; padding: 4px;
-  border-radius: 12px;
+  border-radius: var(--radius-field);
   background: var(--ctl-surface);
   border: 1px solid var(--ctl-hairline);
-  box-shadow: var(--ctl-highlight), 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--shadow-2);
   animation-name: ctl-slide-in;
   animation-duration: var(--motion-fast);
   animation-timing-function: ease-out;
@@ -192,7 +192,7 @@
 .rec-menu-item {
   display: flex; align-items: center; gap: var(--space-2);
   height: 28px; padding: 0 var(--space-2);
-  border: 0; border-radius: 8px; background: transparent; color: var(--ctl-text);
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ctl-text);
   font: inherit; font-size: var(--text-sm); text-align: start; cursor: pointer;
 }
 .rec-menu-item:hover { background: var(--ctl-hover); }
@@ -281,11 +281,11 @@
   width: 340px;
   max-width: 100%;
   padding: var(--space-3) var(--space-4);
-  border-radius: 16px;
+  border-radius: var(--radius-sheet);
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border-strong);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 6px 18px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--shadow-2);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   touch-action: pan-y;
@@ -296,17 +296,19 @@
 }
 .call-card p { margin: 0; }
 .call-card-head { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.call-card-logo { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--text-muted); }
+.call-card-logo { flex: none; width: 36px; height: 36px; border-radius: var(--radius-full); display: grid; place-items: center; background: var(--surface-2); color: var(--text-muted); overflow: hidden; }
+.call-card-logo.logo { background: transparent; border-radius: var(--radius-sm); }
+.call-card-logo .source-logo { width: 100%; height: 100%; }
 .call-card-name {
   display: flex; flex: 1 1 auto; flex-direction: column; align-items: flex-start; min-width: 0;
   padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer;
 }
 .call-card-name:hover .call-card-title { text-decoration: underline; }
 .call-card-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.call-card-meta { color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-card-meta { max-width: 100%; color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .call-card .rec-btn { color: var(--text-muted); }
 .call-card .rec-btn:hover { background: var(--surface-2); color: var(--text); }
-.call-card-close { flex: none; margin-inline-end: -6px; }
+.call-card-close { flex: none; margin-inline-end: calc(var(--space-1) * -1.5); }
 .call-card-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
 .call-card-actions .ctl-btn { height: 32px; }
 /* Delete and the confirmations' actions: quiet text buttons (one filled button only: Transcribe). */
@@ -315,7 +317,7 @@
   height: 30px;
   padding: 0 var(--space-2);
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--accent-text);
   font: inherit;
@@ -324,16 +326,19 @@
 }
 .call-text-btn:hover { background: var(--surface-2); }
 .call-text-btn:disabled, .call-card .ctl-btn:disabled { opacity: 0.55; cursor: default; }
-.call-card-line { display: block; height: 3px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.call-card-line { display: block; height: 3px; border-radius: var(--radius-full); background: var(--surface-2); overflow: hidden; }
 .call-card-line > span { display: block; height: 100%; background: var(--accent); transform-origin: left center; animation-name: call-line; animation-timing-function: linear; animation-fill-mode: both; }
 [dir="rtl"] .call-card-line > span { transform-origin: right center; }
 @keyframes call-line { from { transform: scaleX(var(--from, 1)); } to { transform: scaleX(0); } }
 .call-card-note { color: var(--text-muted); font-size: var(--text-xs); }
 .call-done { gap: var(--space-1); padding-block: var(--space-2); }
 .call-done-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.call-done-text { display: flex; flex: 1 1 auto; align-items: baseline; gap: var(--space-2); min-width: 0; overflow: hidden; white-space: nowrap; }
-.call-done-text b { flex: none; font-weight: 600; }
-.call-done-text .call-card-meta { min-width: 0; }
+/* What was done on one line, the name on its own line under it (never cut to a few letters by the buttons). */
+.call-done-text { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+.call-done-text > * { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.call-done-text b { font-weight: 600; }
+/* The grouped card's first line wraps rather than clip, in either direction. */
+.call-group-headline { display: block; white-space: normal; overflow-wrap: anywhere; font-weight: 600; }
 .call-error { color: var(--danger); font-size: var(--text-xs); }
 
 .ctl-btn {

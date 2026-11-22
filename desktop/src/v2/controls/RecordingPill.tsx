@@ -4,7 +4,7 @@
 // there means no card after the call. With "At the start of the call", "Recording this call · Don't record" shows
 // under the pill for 5 s. Captions are off by default (the core's choice). Media controls never mirror. The window
 // never takes focus, so everything works on click; [data-hit] marks what the core keeps clickable.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { CallChoice } from "../../lib/ipc";
 import { CALL_WORDS, PILL_MENU } from "../../lib/callChoice";
@@ -66,8 +66,17 @@ export function useScreenCaptured(): { count: number; seq: number } | null {
   return captured;
 }
 
-export function RecordingPill({ model, actions, defaultOpen = false }: { model: PillModel; actions: PillActions; defaultOpen?: boolean }) {
+export function RecordingPill({ model, actions, defaultOpen = false, onMenu }: {
+  model: PillModel;
+  actions: PillActions;
+  defaultOpen?: boolean;
+  /** The menu opened or closed (the window grows only while it shows). */
+  onMenu?: (open: boolean) => void;
+}) {
   const [open, setOpen] = useState(defaultOpen);
+  const reportMenu = useRef(onMenu);
+  reportMenu.current = onMenu;
+  useEffect(() => reportMenu.current?.(open), [open]);
   const captured = useScreenCaptured();
   const [marked, setMarked] = useState(false);
   useEffect(() => {

@@ -46,12 +46,12 @@ describe("the v2 Activity page", () => {
     expect(onItems).toHaveBeenCalledWith(ITEMS);
   });
 
-  it("Needs action: Keep or discard? › Review opens the first waiting recording", async () => {
+  it("Needs action: Transcribe or delete? › Review opens the first waiting recording", async () => {
     respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
     const { onReview } = await show();
     const needs = screen.getByRole("list", { name: "Needs action" });
-    expect(within(needs).getByText("Keep or discard?")).toBeInTheDocument();
-    fireEvent.click(within(row("Keep or discard?")).getByRole("button", { name: "Review" }));
+    expect(within(needs).getByText("Transcribe or delete?")).toBeInTheDocument();
+    fireEvent.click(within(row("Transcribe or delete?")).getByRole("button", { name: "Review" }));
     expect(onReview).toHaveBeenCalledWith("p1");
   });
 

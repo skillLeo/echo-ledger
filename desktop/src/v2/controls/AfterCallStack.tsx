@@ -41,7 +41,9 @@ export function AfterCallStack({ state, screens = 0, onGone }: {
             onOpen: () => void act(() => api.pendingOpen(item.id, true), "ask"),
           }} />
       ) : state.group ? (
-        <CallGroupCard group={state.group} busy={busy} onReview={() => void act(() => api.callGroupClose(true), "group")} onClose={() => void act(() => api.callGroupClose(false), "group")} />
+        <CallGroupCard group={state.group} busy={busy} error={error} onReview={() => void act(() => api.callGroupClose(true), "group")}
+          onClose={() => void act(() => api.callGroupClose(false), "group")} onUndo={(id) => void act(() => api.callUndo(id))}
+          onTranscribe={(id) => void act(() => api.callDoneTranscribe(id))} />
       ) : done ? (
         <CallDoneCard key={`${done.id}-${done.kind}`} done={done} busy={busy} error={error}
           onUndo={() => void act(() => api.callUndo(done.id))}

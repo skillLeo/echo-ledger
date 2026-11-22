@@ -82,6 +82,8 @@
   --radius-field: 12px;
   --radius-md: 14px;
   --radius-lg: 20px;
+  /* Floating cards (the after-call card), as the new design's sheet radius. */
+  --radius-sheet: 16px;
   --radius-full: 999px;
   /* elevation: one shadow for sheets and floating controls; dark uses surface steps and a 1 px border instead */
   --shadow-1: none;

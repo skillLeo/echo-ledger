@@ -28,7 +28,7 @@ export const CALL_WORDS = {
   pill_audio: "Save audio only",
   pill_stop_delete: "Stop and delete",
   start_banner: "Recording this call",
-  card_swipe: "Swipe away to keep audio only",
+  card_close_desktop: "Close to keep audio only",
   card_first_hint: "You can change this in Settings › After each call.",
   card_always: "Always do this?",
   card_always_yes: "Yes",
@@ -79,6 +79,20 @@ export const AFTER_EACH_CALL_OPTIONS: { value: AfterEachCall; label: string; hin
   { value: "always_audio", label: CALL_WORDS.setting_audio, hint: CALL_WORDS.setting_audio_help },
   { value: "off", label: CALL_WORDS.setting_off, hint: CALL_WORDS.setting_off_help },
 ];
+
+/** "Always do this? Transcribe every call": the deck's question with the setting Yes will choose (offered only for
+ * Transcribe every call and Save audio only, never Don't record calls). */
+export function alwaysOffer(value: AfterEachCall): string {
+  return `${CALL_WORDS.card_always} ${AFTER_EACH_CALL_OPTIONS.find((o) => o.value === value)?.label ?? ""}`.trim();
+}
+
+/** The rows the grouped card lists (the newest); the rest are a Review away. Matches the core's GROUP_ROWS. */
+export const GROUP_ROWS = 3;
+
+/** The grouped card's first line: the deck's "3 calls saved as audio" when every call in it is saved as audio. */
+export function groupHeadline(calls: Pick<CallDone, "kind">[]): string | null {
+  return calls.length > 0 && calls.every((c) => c.kind === "audio") ? groupedAudio(calls.length) : null;
+}
 
 /** "When to ask" under Ask me. */
 export const ASK_WHEN_OPTIONS: { value: Settings["askWhen"]; label: string }[] = [

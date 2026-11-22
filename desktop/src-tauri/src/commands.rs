@@ -3409,6 +3409,12 @@ pub fn call_group_close(app: AppHandle, review: bool) {
     if review { crate::actions::group_review(&app) } else { crate::actions::group_close(&app) }
 }
 
+/// The pill page opened or closed the call choice's menu or the start banner: its window grows for it and shrinks back.
+#[tauri::command]
+pub fn pill_expanded(app: AppHandle, expanded: bool) {
+    crate::overlay::set_pill_expanded(&app, expanded);
+}
+
 /// The pill's menu during a call: `transcribe` (Transcribe this call), `audio` (Save audio only) or `delete` (Stop and
 /// delete; also the start banner's Don't record).
 #[tauri::command]

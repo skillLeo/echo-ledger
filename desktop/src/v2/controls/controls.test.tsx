@@ -87,6 +87,12 @@ describe("the recording pill", () => {
     expect((a.onChoice as ReturnType<typeof vi.fn>).mock.calls).toEqual([["transcribe"], ["audio"], ["delete"]]);
   });
 
+  it("ticks nothing before a choice is made", () => {
+    render(<RecordingPill model={{ ...MODEL, choice: null }} actions={actions()} defaultOpen />);
+    for (const name of ["Transcribe this call", "Save audio only"]) expect(screen.getByRole("menuitemradio", { name })).toHaveAttribute("aria-checked", "false");
+    expect(document.querySelector(".el-pill-menu__mark svg[data-check], .el-pill-menu [aria-checked=true]")).toBeNull();
+  });
+
   it("marks the choice made during the call; Escape closes the menu; a voice note offers only Stop and delete", () => {
     const { unmount } = render(<RecordingPill model={{ ...MODEL, choice: "audio" }} actions={actions()} defaultOpen />);
     expect(screen.getByRole("menuitemradio", { name: "Save audio only" })).toHaveAttribute("aria-checked", "true");
@@ -96,6 +102,15 @@ describe("the recording pill", () => {
     unmount();
     render(<RecordingPill model={{ ...MODEL, call: false }} actions={actions()} defaultOpen />);
     expect(menuItems(document.body)).toEqual(["Stop and delete"]);
+  });
+
+  it("says when its menu opens and closes, so the window grows only while it shows", () => {
+    const onMenu = vi.fn();
+    render(<RecordingPill model={MODEL} actions={actions()} onMenu={onMenu} />);
+    expect(onMenu.mock.calls).toEqual([[false]]);
+    fireEvent.click(screen.getByRole("button", { name: /Show the controls$/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Save audio only" }));
+    expect(onMenu.mock.calls).toEqual([[false], [true], [false]]);
   });
 
   it("At the start of the call: Recording this call · Don't record beside the pill; doing nothing records", () => {
@@ -130,8 +145,9 @@ describe("the after-call card (the call choice)", () => {
     render(<AfterCallCard item={ITEM} screens={3} actions={a} now={Date.parse("2026-11-17T10:04:20Z")} />);
     const card = screen.getByRole("region", { name: "Omar Farooq" });
     expect(card).toHaveTextContent("0:44 · just now · 3 screens");
-    expect(card).toHaveTextContent("Swipe away to keep audio only");
-    expect(card).toHaveAccessibleDescription("Swipe away to keep audio only");
+    expect(card).toHaveTextContent("Close to keep audio only");
+    expect(card).toHaveAccessibleDescription("Close to keep audio only");
+    expect(card.querySelector(".el-aftercall__logo .source-logo"), "WhatsApp's own logo, as in the Library").not.toBeNull();
     const buttons = within(card).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent);
     expect(buttons).toEqual(["Omar Farooq, 0:44 · just now, 3 screens. Rename or choose a project", "Save audio only", "Delete", "Transcribe"]);
     expect(within(card).getByRole("button", { name: "Transcribe" })).toHaveClass("el-button--primary");
@@ -218,20 +234,44 @@ describe("the after-call stack", () => {
     expect(callsOf("call_undo")).toEqual([{ id: "p1" }]);
   });
 
-  it("Always do this? [Yes] once, under the confirmation", async () => {
+  it("Always do this? [Yes] once, under the confirmation, naming the setting it sets", async () => {
     respond("call_always", null);
-    render(<AfterCallStack state={{ ...STATE, ask: null, done: done("audio", "always_audio") }} onGone={() => undefined} />);
-    expect(screen.getByTestId("call-always")).toHaveTextContent("Always do this?");
+    const { rerender } = render(<AfterCallStack state={{ ...STATE, ask: null, done: { ...done("transcribe"), offerAlways: "always_transcribe" } }} onGone={() => undefined} />);
+    expect(screen.getByTestId("call-always")).toHaveTextContent("Always do this? Transcribe every call");
+    rerender(<AfterCallStack state={{ ...STATE, ask: null, done: done("delete") }} onGone={() => undefined} />);
+    expect(screen.queryByTestId("call-always")).toBeNull();
+    rerender(<AfterCallStack state={{ ...STATE, ask: null, done: done("audio", "always_audio") }} onGone={() => undefined} />);
+    expect(screen.getByTestId("call-always")).toHaveTextContent("Always do this? Save audio only");
     fireEvent.click(screen.getByRole("button", { name: "Yes" }));
     await act(flushAsync);
     expect(callsOf("call_always")).toEqual([{ id: "p1", value: "always_audio" }]);
   });
 
+  it("a new call inside the 5 s keeps the earlier Undo: each call in the grouped card has its own, and Stop and delete's too", async () => {
+    respond("call_undo", null);
+    respond("call_done_transcribe", null);
+    const calls = [{ ...done("audio"), id: "a", callerName: "Omar Khan" }, { ...done("delete"), id: "b", callerName: "A very long name that would not fit beside its buttons at all" }];
+    render(<AfterCallStack state={{ ask: null, hint: false, done: null, group: { count: 2, until: "2026-11-17T10:05:00Z", calls } }} onGone={() => undefined} />);
+    const rows = screen.getAllByTestId("call-group-row");
+    expect(rows.map((r) => r.textContent)).toEqual(["Saved as audioOmar KhanTranscribeUndo", "DeletedA very long name that would not fit beside its buttons at allUndo"]);
+    expect(screen.getByTestId("call-group")).not.toHaveTextContent("calls saved as audio");
+    fireEvent.click(within(rows[1]).getByRole("button", { name: "Undo: A very long name that would not fit beside its buttons at all" }));
+    await act(flushAsync);
+    fireEvent.click(within(rows[0]).getByRole("button", { name: "Transcribe" }));
+    await act(flushAsync);
+    expect(callsOf("call_undo")).toEqual([{ id: "b" }]);
+    expect(callsOf("call_done_transcribe")).toEqual([{ id: "a" }]);
+    // The name has a line of its own under what was done, never squeezed beside the buttons.
+    expect(rows[1].querySelector(".el-aftercall__done-text")!.children).toHaveLength(2);
+  });
+
   it("back to back: one grouped card, never a stack; Review opens the Library", async () => {
     respond("call_group_close", null);
     const onGone = vi.fn();
-    render(<AfterCallStack state={{ ask: null, hint: false, done: done("audio"), group: { count: 3, until: "2026-11-17T10:05:00Z" } }} onGone={onGone} />);
+    const all = ["g1", "g2", "g3"].map((id) => ({ ...done("audio"), id }));
+    render(<AfterCallStack state={{ ask: null, hint: false, done: done("audio"), group: { count: 3, until: "2026-11-17T10:05:00Z", calls: all } }} onGone={onGone} />);
     expect(screen.getByTestId("call-group")).toHaveTextContent("3 calls saved as audio");
+    expect(screen.getAllByTestId("call-group-row")).toHaveLength(3);
     expect(screen.queryByTestId("call-done")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     await act(flushAsync);

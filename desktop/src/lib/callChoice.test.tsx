@@ -6,7 +6,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AFTER_EACH_CALL_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch, cardMeta, cardName, doneText, groupedAudio, progressStyle } from "./callChoice";
+import { AFTER_EACH_CALL_OPTIONS, CALL_WORDS, afterEachCallOf, alwaysOffer, afterEachCallPatch, cardMeta, cardName, doneText, groupedAudio, progressStyle } from "./callChoice";
 import { makeSettings, makePrivacyStatus } from "../test/fixtures";
 import { resetTauriMock, respond } from "../test/tauri";
 import { CallsPage } from "../views/main/CaptureSettings";
@@ -42,6 +42,9 @@ describe("the words", () => {
     expect(cardName({ title: null, callerName: "Muneeb Quraishi" })).toBe("Muneeb Quraishi");
     expect(cardName({ title: null, callerName: " " })).toBe("Call");
     expect([doneText({ kind: "transcribe" }), doneText({ kind: "audio" }), doneText({ kind: "delete" })]).toEqual(["Transcribing…", "Saved as audio", "Deleted"]);
+    // "Always do this?" names what Yes sets, in the deck's words.
+    expect(alwaysOffer("always_transcribe")).toBe("Always do this? Transcribe every call");
+    expect(alwaysOffer("always_audio")).toBe("Always do this? Save audio only");
     // The 8 s line starts where the time is: full at 8 s, half at 4 s, empty when it is over.
     const now = Date.parse("2026-11-22T10:00:00Z");
     expect(progressStyle("2026-11-22T10:00:08Z", now)).toMatchObject({ animationDuration: "8s", "--from": "1" });
@@ -82,6 +85,25 @@ describe("After each call", () => {
       fireEvent.click(within(group).getByRole("radio", { name: "Don't record calls" }));
       expect(patch).toHaveBeenLastCalledWith({ autoMode: false });
       unmount();
+    }
+  });
+});
+
+describe("one setting for recording calls", () => {
+  it("has no Auto-record calls switch beside After each call; under Don't record calls the apps are greyed out with the reason, in both designs", () => {
+    for (const autoMode of [false, true]) {
+      for (const page of [
+        <CallsPage key="classic" settings={makeSettings({ autoMode, afterCall: "always_audio" })} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />,
+        <div key="v2" className="el-root"><CallsPageV2 settings={makeSettings({ autoMode, afterCall: "always_audio" })} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} onConsent={vi.fn()} /></div>,
+      ]) {
+        const { unmount } = render(page);
+        expect(screen.queryByRole("switch", { name: "Auto-record calls" })).toBeNull();
+        expect(screen.getByRole("radio", { name: autoMode ? "Save audio only" : "Don't record calls" })).toBeChecked();
+        expect(screen.getByRole("switch", { name: "Auto-record Zoom" })).toHaveProperty("disabled", !autoMode);
+        if (autoMode) expect(screen.queryByTestId("apps-off-reason")).toBeNull();
+        else expect(screen.getByTestId("apps-off-reason")).toHaveTextContent("Calls are not recorded. You can still record one from the pill or Record.");
+        unmount();
+      }
     }
   });
 });

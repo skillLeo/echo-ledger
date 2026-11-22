@@ -11,7 +11,7 @@ import DictationApp from "./views/dictation/DictationApp";
 import { MacCheckCard } from "./views/main/MacCheck";
 import { PermissionStep } from "./views/main/Permissions";
 import { emitEvent, flushAsync, pushChannelMessage, resetTauriMock, respondAll, setWindowLabel } from "./test/tauri";
-import { makeAfterCallState, makeChipItem, makeItem, makePendingItem, makeRecordingState, makeCallDone, makeSettings, makeStatus, makeTranscript, makeUploadItem } from "./test/fixtures";
+import { makeAfterCallState, makeChipItem, makeItem, makePendingItem, makeRecordingState, makeCallDone, makeCallGroup, makeSettings, makeStatus, makeTranscript, makeUploadItem } from "./test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("./test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("./test/tauri")).eventModule);
@@ -82,7 +82,7 @@ describe("screen-reader names (C7)", () => {
     const review = [
       makeAfterCallState({ hint: true, ask: makeChipItem("p1") }),
       makeAfterCallState({ done: makeCallDone({ kind: "audio", offerAlways: "always_audio" }) }),
-      makeAfterCallState({ group: { count: 3, until: new Date(Date.now() + 8000).toISOString() } }),
+      makeAfterCallState({ group: makeCallGroup([makeCallDone({ id: "g1", kind: "audio" }), makeCallDone({ id: "g2", kind: "delete" })]) }),
     ];
     for (const [label, View, state] of [["overlay", OverlayApp, null], ["pill", PillApp, null], ...review.map((s) => ["review", ReviewApp, s] as const), ["dictation", DictationApp, null]] as const) {
       setWindowLabel(label);

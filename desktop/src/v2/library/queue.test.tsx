@@ -1,4 +1,4 @@
-// The top of the v2 Library list (QueueV2): recordings waiting for Keep / Discard with Review, Keep all, Discard all,
+// The top of the v2 Library list (QueueV2): recordings waiting for Transcribe / Delete with Review, Transcribe all, Delete all,
 // Rename, Choose project, Language and Remember the language; Importing with Cancel; Uploads that need you with Retry /
 // Discard; Waiting for another account with Discard / Discard all N; Checking upload. The same core commands as classic.
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +15,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 const NOW = new Date(2026, 9, 24, 12, 0);
 const CLIENTS = { data: [{ id: "c1", name: "Acme Holdings", language: null }, { id: "c2", name: "Northwind", language: null }] };
 const DISCARD = "Discard this recording? It can't be undone.";
+const DELETE = "Delete this recording? It can't be undone.";
 
 async function show(pending: PendingItem[] = [], uploads: UploadItem[] = []) {
   respond("library_list", [makeItem("a", { title: "Zoom with Acme" })]);
@@ -70,31 +71,31 @@ describe("waiting recordings at the top of the v2 Library", () => {
     expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
   });
 
-  it("Keep keeps one with pending_keep; Discard asks first", async () => {
+  it("Transcribe sends one with pending_keep; Delete asks first", async () => {
     const confirm = answerConfirm().mockReturnValue(true);
     await show([makePendingItem("p1", { title: "Keep me" }), makePendingItem("p2", { title: "Drop me" })]);
     fireEvent.click(review());
-    fireEvent.click(within(rowOf("Keep me")).getByRole("button", { name: "Keep" }));
+    fireEvent.click(within(rowOf("Keep me")).getByRole("button", { name: "Transcribe" }));
     await act(flushAsync);
     expect(callsOf("pending_keep")).toEqual([{ id: "p1" }]);
     expect(screen.queryByText("Keep me")).toBeNull();
-    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Kept");
-    fireEvent.click(within(rowOf("Drop me")).getByRole("button", { name: "Discard" }));
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Transcribing…");
+    fireEvent.click(within(rowOf("Drop me")).getByRole("button", { name: "Delete" }));
     await act(flushAsync);
-    expect(confirm).toHaveBeenCalledWith(DISCARD);
+    expect(confirm).toHaveBeenCalledWith(DELETE);
     expect(callsOf("pending_discard")).toEqual([{ id: "p2" }]);
     expect(screen.queryByTestId("library-queue")).toBeNull();
   });
 
-  it("Keep all keeps every one; Discard all asks once and discards nothing when cancelled", async () => {
+  it("Transcribe all sends every one; Delete all asks once and deletes nothing when cancelled", async () => {
     const confirm = answerConfirm().mockReturnValue(false);
     await show([makePendingItem("p1"), makePendingItem("p2")]);
     fireEvent.click(review());
-    fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete all" }));
     await act(flushAsync);
-    expect(confirm).toHaveBeenCalledWith("Discard all 2 recordings? It can't be undone.");
+    expect(confirm).toHaveBeenCalledWith("Delete all 2 recordings? It can't be undone.");
     expect(callsOf("pending_discard")).toEqual([]);
-    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe all" }));
     await act(flushAsync);
     expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]);
     expect(screen.queryByTestId("library-queue")).toBeNull();
@@ -154,13 +155,13 @@ describe("waiting recordings at the top of the v2 Library", () => {
     expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { language: "ur" } }]);
   });
 
-  it("one primary per area: Keep all is the card's only filled button; each row's Keep is secondary", async () => {
+  it("one primary per area: Transcribe all is the card's only filled button; each row's Transcribe is secondary", async () => {
     await show([makePendingItem("p1"), makePendingItem("p2", { title: "Board call" })]);
     fireEvent.click(review());
     const card = screen.getByRole("region", { name: "Waiting recordings" });
     const primary = [...card.querySelectorAll("button.el-button--primary")].map((b) => b.textContent);
-    expect(primary).toEqual(["Keep all"]);
-    for (const keep of within(waiting()).getAllByRole("button", { name: "Keep" })) {
+    expect(primary).toEqual(["Transcribe all"]);
+    for (const keep of within(waiting()).getAllByRole("button", { name: "Transcribe" })) {
       expect(keep).toHaveClass("el-button--secondary");
       expect(keep).not.toHaveClass("el-button--primary");
     }

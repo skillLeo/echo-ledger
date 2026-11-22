@@ -800,6 +800,7 @@ pub fn run() {
             commands::call_always,
             commands::call_group_close,
             commands::call_choice,
+            commands::pill_expanded,
             commands::skipped_list,
             commands::recovered_sessions,
             commands::skipped_restore,

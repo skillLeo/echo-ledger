@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ReviewApp from "./ReviewApp";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondAll, setWindowLabel } from "../../test/tauri";
-import { makeAfterCallState, makeAskPayload, makeCallDone, makeChipItem } from "../../test/fixtures";
+import { makeAfterCallState, makeAskPayload, makeCallDone, makeCallGroup, makeChipItem } from "../../test/fixtures";
 import type { AfterCallState } from "../../lib/ipc";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -51,7 +51,8 @@ describe("the card (Ask me, after the call)", () => {
     const card = chip()!;
     expect(card).toHaveTextContent("Muneeb Quraishi");
     expect(card).toHaveTextContent("0:44 · just now");
-    expect(card).toHaveTextContent("Swipe away to keep audio only");
+    expect(card).toHaveTextContent("Close to keep audio only");
+    expect(card.querySelector(".call-card-logo .source-logo"), "WhatsApp's own logo, as in the Library").not.toBeNull();
     // One filled button, Transcribe; Delete is a quiet text button; the × saves the audio only.
     expect(button("Transcribe")).toHaveClass("ctl-btn", "primary");
     expect(button("Delete")).toHaveClass("call-text-btn");
@@ -170,6 +171,14 @@ describe("the confirmation (one at a time, Undo for 5 s)", () => {
     expect(chip()).toBeInTheDocument();
   });
 
+  it("names Transcribe every call after 3 Transcribes, and offers nothing after Deletes (the core sends no offer then)", async () => {
+    await renderWindow(makeAfterCallState({ done: makeCallDone({ id: "p1", kind: "transcribe", offerAlways: "always_transcribe" }) }));
+    expect(screen.getByTestId("call-always")).toHaveTextContent("Always do this? Transcribe every call");
+    await emitEvent("aftercall:state", makeAfterCallState({ done: makeCallDone({ id: "p2", kind: "delete", offerAlways: null }) }));
+    expect(screen.queryByTestId("call-always")).not.toBeInTheDocument();
+    expect(done()).not.toHaveTextContent(/Don't record|Always/);
+  });
+
   it("says so when Undo comes too late", async () => {
     fail("call_undo", "Too late to undo: it was already done.");
     await renderWindow(makeAfterCallState({ done: makeCallDone({ id: "p1", kind: "delete" }) }));
@@ -177,16 +186,16 @@ describe("the confirmation (one at a time, Undo for 5 s)", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Too late to undo: it was already done.");
   });
 
-  it("after 3 same choices offers Always do this? once; Yes sets it", async () => {
+  it("after 3 same choices offers Always do this? once, naming the setting; Yes sets it", async () => {
     await renderWindow(makeAfterCallState({ done: makeCallDone({ id: "p1", kind: "audio", offerAlways: "always_audio" }) }));
-    expect(screen.getByTestId("call-always")).toHaveTextContent("Always do this?");
+    expect(screen.getByTestId("call-always")).toHaveTextContent("Always do this? Save audio only");
     fireEvent.click(button("Yes"));
     await flushAsync();
     expect(callsOf("call_always")).toEqual([{ id: "p1", value: "always_audio" }]);
   });
 
   it("never shows two things at once: the card comes first, then the grouped card, then a confirmation", async () => {
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1"), group: { count: 2, until: new Date(Date.now() + 8000).toISOString() }, done: makeCallDone() }));
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1"), group: makeCallGroup([makeCallDone({ id: "g1" }), makeCallDone({ id: "g2" })]), done: makeCallDone() }));
     expect(chip()).toBeInTheDocument();
     expect(done()).not.toBeInTheDocument();
     expect(screen.queryByTestId("call-group")).not.toBeInTheDocument();
@@ -197,15 +206,25 @@ describe("back-to-back calls", () => {
   beforeEach(setup);
   afterEach(() => vi.unstubAllGlobals());
 
+  it("a pill's Stop and delete while another call's card was up: both in one card, each with its Undo", async () => {
+    await renderWindow(makeAfterCallState({ group: makeCallGroup([makeCallDone({ id: "a", kind: "audio", callerName: "Omar" }), makeCallDone({ id: "b", kind: "delete", callerName: "Muneeb" })]) }));
+    const rows = screen.getAllByTestId("call-group-row");
+    expect(rows.map((r) => r.textContent)).toEqual(["Saved as audioOmarTranscribeUndo", "DeletedMuneebUndo"]);
+    fireEvent.click(screen.getByRole("button", { name: "Undo: Muneeb" }));
+    await flushAsync();
+    expect(callsOf("call_undo")).toEqual([{ id: "b" }]);
+  });
+
   it("one grouped card says how many were saved as audio; Review opens the Library, × closes it", async () => {
-    await renderWindow(makeAfterCallState({ group: { count: 3, until: new Date(Date.now() + 8000).toISOString() } }));
+    await renderWindow(makeAfterCallState({ group: makeCallGroup(["g1", "g2", "g3"].map((id) => makeCallDone({ id, kind: "audio" }))) }));
     expect(screen.getByTestId("call-group")).toHaveTextContent("3 calls saved as audio");
     expect(document.querySelectorAll("[data-testid=keep-chip], [data-testid=call-group]")).toHaveLength(1);
     fireEvent.click(button("Review"));
     await flushAsync();
     expect(screen.queryByTestId("call-group")).not.toBeInTheDocument();
-    await emitEvent("aftercall:state", makeAfterCallState({ group: { count: 4, until: new Date(Date.now() + 8000).toISOString() } }));
+    await emitEvent("aftercall:state", makeAfterCallState({ group: makeCallGroup(["g1", "g2", "g3", "g4"].map((id) => makeCallDone({ id, kind: "audio" }))) }));
     expect(screen.getByTestId("call-group")).toHaveTextContent("4 calls saved as audio");
+    expect(screen.getAllByTestId("call-group-row"), "the newest three; the rest are a Review away").toHaveLength(3);
     fireEvent.click(button("Close"));
     await flushAsync();
     expect(callsOf("call_group_close")).toEqual([{ review: true }, { review: false }]);

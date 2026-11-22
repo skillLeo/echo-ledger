@@ -64,7 +64,8 @@ describe("system-style settings", () => {
     open("Calls & meetings");
     expect(screen.getByRole("heading", { level: 1, name: "Calls & meetings" })).toBeInTheDocument();
     expect(nav.getByRole("button", { name: "Calls & meetings" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("switch", { name: "Auto-record calls" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "After each call" })).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Auto-record calls" }), "one setting: Don't record calls").not.toBeInTheDocument();
   });
 
   it("changes the theme from Appearance, and says it saved", async () => {

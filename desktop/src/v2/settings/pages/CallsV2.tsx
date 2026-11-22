@@ -27,8 +27,16 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
   const sites = settings.siteRules.filter((r) => !isNeverRule(r)).length;
   return (
     <>
-      <Group title="Record automatically">
-        <SwitchSetting id="calls.auto" on={settings.autoMode} onChange={(v) => void patch({ autoMode: v })} />
+      <Group title={CALL_WORDS.setting_title}>
+        <ChoiceSetting id="calls.after" value={afterEachCallOf(settings)} options={AFTER_EACH_CALL_OPTIONS} onChange={(v) => void patch(afterEachCallPatch(v))} />
+      </Group>
+      {afterEachCallOf(settings) === "ask" && (
+        <Group title={CALL_WORDS.when_title}>
+          <ChoiceSetting id="calls.ask_when" value={settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS} onChange={(v) => void patch({ askWhen: v })} />
+        </Group>
+      )}
+      {/* One setting: Don't record calls is the only switch for recording calls by themselves; the apps wait under it. */}
+      <Group title="Record automatically" footer={!settings.autoMode ? <p data-testid="apps-off-reason">{CALL_WORDS.setting_off_help}</p> : undefined}>
         {CALL_APPS.map(([app, name]) => {
           const on = appRecords(settings.autoRecordApps, app);
           return (
@@ -40,14 +48,6 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
         <SwitchSetting id="calls.ask_unknown" on={settings.askUnknownApps} onChange={(v) => void patch({ askUnknownApps: v })} />
         {platform === "macos" && <SwitchSetting id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Group>
-      <Group title={CALL_WORDS.setting_title}>
-        <ChoiceSetting id="calls.after" value={afterEachCallOf(settings)} options={AFTER_EACH_CALL_OPTIONS} onChange={(v) => void patch(afterEachCallPatch(v))} />
-      </Group>
-      {afterEachCallOf(settings) === "ask" && (
-        <Group title={CALL_WORDS.when_title}>
-          <ChoiceSetting id="calls.ask_when" value={settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS} onChange={(v) => void patch({ askWhen: v })} />
-        </Group>
-      )}
       <Group footer={<p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p>}>
         <SelectSetting id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => ({ value: String(s), label }))}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />

@@ -63,8 +63,19 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
   const sites = settings.siteRules.filter((r) => !isNeverRule(r)).length;
   return (
     <>
-      <Section title="Record automatically" footer={<p>{setting("calls.ask_unknown").description}</p>}>
-        <SwitchRow id="calls.auto" on={settings.autoMode} onChange={(v) => void patch({ autoMode: v })} />
+      <Section title={CALL_WORDS.setting_title}>
+        <ChoiceListRow id="calls.after" value={afterEachCallOf(settings)} options={AFTER_EACH_CALL_OPTIONS} onChange={(v) => void patch(afterEachCallPatch(v))} />
+      </Section>
+      {afterEachCallOf(settings) === "ask" && (
+        <Section title={CALL_WORDS.when_title}>
+          <ChoiceListRow id="calls.ask_when" value={settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS} onChange={(v) => void patch({ askWhen: v })} />
+        </Section>
+      )}
+      {/* One setting: Don't record calls is the only switch for recording calls by themselves; the apps wait under it. */}
+      <Section title="Record automatically" footer={<>
+        {!settings.autoMode && <p data-testid="apps-off-reason">{CALL_WORDS.setting_off_help}</p>}
+        <p>{setting("calls.ask_unknown").description}</p>
+      </>}>
         {CALL_APPS.map(([app, name]) => (
           <div key={app} className={`set-row ${settings.autoMode ? "" : "disabled"}`.trim()} {...rowAttrs(`calls.app.${app}`)}>
             <label className="set-hit">
@@ -78,14 +89,6 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         <SwitchRow id="calls.ask_unknown" on={settings.askUnknownApps} onChange={(v) => void patch({ askUnknownApps: v })} />
         {platform === "macos" && <SwitchRow id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Section>
-      <Section title={CALL_WORDS.setting_title}>
-        <ChoiceListRow id="calls.after" value={afterEachCallOf(settings)} options={AFTER_EACH_CALL_OPTIONS} onChange={(v) => void patch(afterEachCallPatch(v))} />
-      </Section>
-      {afterEachCallOf(settings) === "ask" && (
-        <Section title={CALL_WORDS.when_title}>
-          <ChoiceListRow id="calls.ask_when" value={settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS} onChange={(v) => void patch({ askWhen: v })} />
-        </Section>
-      )}
       <Section footer={<p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p>}>
         <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => [String(s), label] as const)}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />

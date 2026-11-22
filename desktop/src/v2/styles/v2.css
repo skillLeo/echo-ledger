@@ -739,7 +739,7 @@ button.el-step__head { cursor: pointer; }
 }
 @keyframes el-aftercall-in { from { transform: translateY(calc(var(--el-space-12) * -1)); opacity: 0; } }
 .el-aftercall__head { display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: 0; }
-.el-aftercall__logo { display: inline-flex; flex: none; align-items: center; justify-content: center; inline-size: var(--el-space-32); block-size: var(--el-space-32); border-radius: var(--el-radius-full); background: var(--el-role-bg-subtle); }
+.el-aftercall__logo { display: inline-flex; flex: none; }
 .el-aftercall__name {
   display: flex; flex: 1; flex-direction: column; align-items: flex-start; min-inline-size: 0;
   padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer;
@@ -755,16 +755,19 @@ button.el-step__head { cursor: pointer; }
 }
 [dir="rtl"] .el-aftercall__line > span { transform-origin: right center; }
 @keyframes el-aftercall-line { from { transform: scaleX(var(--from, 1)); } to { transform: scaleX(0); } }
-.el-aftercall__swipe { margin: 0; }
+.el-aftercall__close-line { margin: 0; }
 /* The desktop's words are English (lang="en"): English metrics, also in a window laid out right to left. */
 .el-aftercall:lang(en), .el-pill-menu:lang(en), .el-pill-banner:lang(en) { font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
 .el-aftercall:lang(en) .el-caption { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
 .el-aftercall p { margin: 0; }
 .el-aftercall--done { gap: var(--el-space-4); padding-block: var(--el-space-8); }
 .el-aftercall__done { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
-.el-aftercall__done-text { display: flex; flex: 1; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; overflow: hidden; white-space: nowrap; }
-.el-aftercall__done-text > :first-child { flex: none; }
-.el-aftercall__done-name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+/* What was done on one line, the name on its own line under it (never cut to a few letters by the buttons). */
+.el-aftercall__done-text { display: flex; flex: 1; flex-direction: column; min-inline-size: 0; }
+.el-aftercall__done-text > * { min-inline-size: 0; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The grouped card's first line wraps rather than clip, in either direction. */
+.el-aftercall__headline { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+.el-aftercall__done-name { text-align: start; }
 .el-aftercall__done > .el-button { flex: none; }
 @media (prefers-reduced-motion: reduce) {
   .el-aftercall { animation: none; }

@@ -15,6 +15,7 @@ import type {
   RecordingInfo,
   RecordingState,
   CallDone,
+  CallGroup,
   ScreenMoment,
   Segment,
   SkippedItem,
@@ -235,6 +236,12 @@ export function makeCallDone(overrides: Partial<CallDone> = {}, now = Date.now()
     offerAlways: null,
     ...overrides,
   };
+}
+
+/** The grouped card for back-to-back calls: each call with what happens to it (the newest last), for 8 s from `now`. */
+export function makeCallGroup(calls: CallDone[], now = Date.now()): CallGroup {
+  const until = new Date(now + 8_000).toISOString();
+  return { count: calls.length, until, calls: calls.map((c) => ({ ...c, until })) };
 }
 
 /** The card of a WhatsApp call, whose audio is saved by itself (not transcribed) 8 s from `now`. */

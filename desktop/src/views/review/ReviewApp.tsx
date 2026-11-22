@@ -3,7 +3,8 @@ import { announceReady, api, errorMessage, listenTo, type AfterCallState, type A
 import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
 import { alwaysIgnoreLabel, askSeconds, askSubject } from "../../lib/controls";
-import { CALL_WORDS, cardMeta, cardName, doneText, groupedAudio, progressStyle, useEscape, useSwipeAway } from "../../lib/callChoice";
+import { CALL_WORDS, GROUP_ROWS, alwaysOffer, cardMeta, cardName, doneText, groupHeadline, progressStyle, useEscape, useSwipeAway } from "../../lib/callChoice";
+import { hasSourceLogo, SourceLogo } from "../../components/SourceLogos";
 import { CloseIcon, MicIcon, SourceAppIcon } from "../../components/Icons";
 import "../controls.css";
 import { useRisingCount, useUiFlags } from "../../v2/flags";
@@ -21,12 +22,12 @@ const EMPTY: AfterCallState = { ask: null, hint: false, done: null, group: null 
  * The `review` window (360 x 240, next to the recording pill): the call choice after a call (docs/v2/copy/call-choice.md)
  * and the ask chip for an unrecognised app. One thing at a time, as the core sends it (`aftercall:state`):
  * - the card (Ask me): the app's logo, the name or "Call" and "0:44 · just now"; Delete as a quiet text button and
- *   Transcribe as the one filled button; an 8 s line, then "Swipe away to keep audio only". The ×, Esc, a swipe or 8 s
+ *   Transcribe as the one filled button; an 8 s line, then "Close to keep audio only". The ×, Esc, a sideways drag or 8 s
  *   with no choice save the audio only. The first card ever adds where to change it. The name opens the recording to
  *   rename it or pick a project.
  * - one confirmation with Undo for 5 s: "Transcribing…", "Saved as audio · Transcribe", "Deleted"; the core applies the
  *   choice only then, so Undo brings the card back with nothing lost. Once, "Always do this?" [Yes].
- * - back-to-back calls: "3 calls saved as audio · Review".
+ * - back-to-back calls: "3 calls saved as audio · Review", each call with what happens to it and its Undo.
  * A solid surface with radius 16 in the app's font, light and dark; it slides in over 200 ms, the line is its only
  * animation, and both stop under Reduce motion. No sound. The window never takes focus, so everything works on click
  * and only what is visible is reported as a hit region. The ask chip is time-critical (a call is starting), so it shows
@@ -108,7 +109,9 @@ function CallChoiceStack({ state, onGone }: { state: AfterCallState; onGone: (pa
       onOpen={() => void act(() => api.pendingOpen(item.id, true), "ask")} />;
   }
   if (state.group) {
-    return <CallGroupLine group={state.group} busy={busy} onReview={() => void act(() => api.callGroupClose(true), "group")} onClose={() => void act(() => api.callGroupClose(false), "group")} />;
+    return <CallGroupLine group={state.group} busy={busy} error={error} onReview={() => void act(() => api.callGroupClose(true), "group")}
+      onClose={() => void act(() => api.callGroupClose(false), "group")} onUndo={(id) => void act(() => api.callUndo(id))}
+      onTranscribe={(id) => void act(() => api.callDoneTranscribe(id))} />;
   }
   if (done) {
     return <CallDoneLine key={`${done.id}-${done.kind}`} done={done} busy={busy} error={error} onUndo={() => void act(() => api.callUndo(done.id))}
@@ -117,7 +120,16 @@ function CallChoiceStack({ state, onGone }: { state: AfterCallState; onGone: (pa
   return error ? <p className="call-error" role="alert">{error}</p> : null;
 }
 
-/** The card: Delete (quiet), Transcribe (the one filled button), the 8 s line and "Swipe away to keep audio only". */
+/** The app's own logo, as in the Library (the neutral glyph for an app without one). */
+function AppLogo({ app }: { app: string }) {
+  return (
+    <span className={`call-card-logo${hasSourceLogo(app) ? " logo" : ""}`} aria-hidden="true">
+      {hasSourceLogo(app) ? <SourceLogo app={app} size={36} /> : <SourceAppIcon app={app} size={18} />}
+    </span>
+  );
+}
+
+/** The card: Delete (quiet), Transcribe (the one filled button), the 8 s line and "Close to keep audio only". */
 function CallCard({ item, hint, busy, error, onAnswer, onOpen }: {
   item: PendingItem;
   hint: boolean;
@@ -134,9 +146,9 @@ function CallCard({ item, hint, busy, error, onAnswer, onOpen }: {
   // Worked out once per deadline: the line runs on by itself from there (a new deadline, after Undo, starts it again).
   const line = useMemo(() => progressStyle(item.deadlineAt, Date.now()), [item.deadlineAt]);
   return (
-    <section className="call-card" lang="en" data-hit data-testid="keep-chip" aria-label={name} aria-describedby={`call-swipe-${item.id}`} style={swipe.style} {...swipe.handlers}>
+    <section className="call-card" lang="en" data-hit data-testid="keep-chip" aria-label={name} aria-describedby={`call-close-${item.id}`} style={swipe.style} {...swipe.handlers}>
       <div className="call-card-head">
-        <span className="call-card-logo" aria-hidden="true"><SourceAppIcon app={item.sourceApp} size={18} /></span>
+        <AppLogo app={item.sourceApp} />
         <button type="button" className="call-card-name" title="Rename or choose a project" aria-label={`${name}, ${meta}. Rename or choose a project`} onClick={onOpen}>
           <span className="call-card-title" dir="auto">{name}</span>
           <span className="call-card-meta" dir="auto">{meta}</span>
@@ -151,13 +163,27 @@ function CallCard({ item, hint, busy, error, onAnswer, onOpen }: {
         <button type="button" className="ctl-btn primary" disabled={busy} onClick={() => onAnswer("transcribe")}>{CALL_WORDS.transcribe}</button>
       </div>
       <span className="call-card-line" aria-hidden="true"><span key={item.deadlineAt ?? ""} style={line} /></span>
-      <p className="call-card-note" id={`call-swipe-${item.id}`} dir="auto">{CALL_WORDS.card_swipe}</p>
+      <p className="call-card-note" id={`call-close-${item.id}`} dir="auto">{CALL_WORDS.card_close_desktop}</p>
       {hint && <p className="call-card-note" data-testid="call-hint" dir="auto">{CALL_WORDS.card_first_hint}</p>}
     </section>
   );
 }
 
-/** One confirmation with Undo for 5 s; once, "Always do this?" [Yes] under it. */
+/** What was done to one call, its name on a line of its own, and its Transcribe (audio only) and Undo. */
+function DoneRow({ done, busy, onUndo, onTranscribe, testId, named = false }: { done: CallDone; busy: boolean; onUndo: () => void; onTranscribe: () => void; testId?: string; named?: boolean }) {
+  return (
+    <div className="call-done-row" data-testid={testId}>
+      <span className="call-done-text">
+        <b dir="auto">{doneText(done)}</b>
+        <span className="call-card-meta" dir="auto">{cardName(done)}</span>
+      </span>
+      {done.kind === "audio" && <button type="button" className="call-text-btn" disabled={busy} onClick={onTranscribe}>{CALL_WORDS.transcribe}</button>}
+      <button type="button" className="call-text-btn" disabled={busy} onClick={onUndo} aria-label={named ? `${CALL_WORDS.undo}: ${cardName(done)}` : undefined}>{CALL_WORDS.undo}</button>
+    </div>
+  );
+}
+
+/** One confirmation with Undo for 5 s; once, "Always do this? Transcribe every call" [Yes] under it. */
 function CallDoneLine({ done, busy, error, onUndo, onTranscribe, onAlways }: {
   done: CallDone;
   busy: boolean;
@@ -169,14 +195,10 @@ function CallDoneLine({ done, busy, error, onUndo, onTranscribe, onAlways }: {
   const offer = done.offerAlways;
   return (
     <section className="call-card call-done" lang="en" data-hit role="status" aria-label={`${doneText(done)} ${cardName(done)}`} data-testid="call-done">
-      <div className="call-done-row">
-        <span className="call-done-text"><b dir="auto">{doneText(done)}</b><span className="call-card-meta" dir="auto">{cardName(done)}</span></span>
-        {done.kind === "audio" && <button type="button" className="call-text-btn" disabled={busy} onClick={onTranscribe}>{CALL_WORDS.transcribe}</button>}
-        <button type="button" className="call-text-btn" disabled={busy} onClick={onUndo}>{CALL_WORDS.undo}</button>
-      </div>
+      <DoneRow done={done} busy={busy} onUndo={onUndo} onTranscribe={onTranscribe} />
       {offer && (
         <div className="call-done-row" data-testid="call-always">
-          <span className="call-card-meta" dir="auto">{CALL_WORDS.card_always}</span>
+          <span className="call-card-meta call-done-text" dir="auto">{alwaysOffer(offer)}</span>
           <button type="button" className="call-text-btn" disabled={busy} onClick={() => onAlways(offer)}>{CALL_WORDS.card_always_yes}</button>
         </div>
       )}
@@ -185,15 +207,29 @@ function CallDoneLine({ done, busy, error, onUndo, onTranscribe, onAlways }: {
   );
 }
 
-/** Back-to-back calls: "3 calls saved as audio · Review". */
-function CallGroupLine({ group, busy, onReview, onClose }: { group: CallGroup; busy: boolean; onReview: () => void; onClose: () => void }) {
+/** Back-to-back calls in one card: "3 calls saved as audio · Review", and each call (the newest three) with its Undo. */
+function CallGroupLine({ group, busy, error, onReview, onClose, onUndo, onTranscribe }: {
+  group: CallGroup;
+  busy: boolean;
+  error: string | null;
+  onReview: () => void;
+  onClose: () => void;
+  onUndo: (id: string) => void;
+  onTranscribe: (id: string) => void;
+}) {
+  const calls = group.calls ?? [];
+  const headline = groupHeadline(calls);
   return (
-    <section className="call-card call-done" lang="en" data-hit role="status" aria-label={groupedAudio(group.count)} data-testid="call-group">
+    <section className="call-card call-done" lang="en" data-hit role="status" aria-label={headline ?? calls.map((c) => `${doneText(c)} ${cardName(c)}`).join(", ")} data-testid="call-group">
       <div className="call-done-row">
-        <span className="call-done-text"><b dir="auto">{groupedAudio(group.count)}</b></span>
+        <b className="call-done-text call-group-headline" dir="auto">{headline}</b>
         <button type="button" className="call-text-btn" disabled={busy} onClick={onReview}>{CALL_WORDS.grouped_review}</button>
         <button type="button" className="rec-btn" aria-label="Close" title="Close" disabled={busy} onClick={onClose}><CloseIcon size={15} /></button>
       </div>
+      {calls.slice(-GROUP_ROWS).map((c) => (
+        <DoneRow key={c.id} done={c} busy={busy} testId="call-group-row" named onUndo={() => onUndo(c.id)} onTranscribe={() => onTranscribe(c.id)} />
+      ))}
+      {error && <p className="call-error" role="alert">{error}</p>}
     </section>
   );
 }

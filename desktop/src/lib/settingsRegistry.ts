@@ -114,8 +114,6 @@ export const SETTINGS: readonly SettingEntry[] = [
   // ---- Recording ----------------------------------------------------------------------------------------------------
   { id: "calls", title: "Calls & meetings", page: null, root: "Recording", kind: "page",
     keywords: ["call recording", "auto record", "meeting", "whatsapp call", "call"], ru: ["call", "kol", "call record", "mulaqat"], ur: ["کال", "ریکارڈنگ", "میٹنگ"] },
-  { id: "calls.auto", title: "Auto-record calls", page: "calls", section: "Record automatically", kind: "switch", resettable: true,
-    keywords: ["automatic", "record calls"], ru: ["khud record"], ur: ["خودکار ریکارڈ"] },
   ...CALL_APPS.map(([app, name]): SettingEntry => ({ id: `calls.app.${app}`, title: name, page: "calls", section: "Record automatically", kind: "switch", resettable: true,
     keywords: [name.toLowerCase(), "auto record"] })),
   { id: "calls.ask_unknown", title: "Ask about unknown apps", page: "calls", section: "Record automatically", kind: "switch", resettable: true,
@@ -123,11 +121,12 @@ export const SETTINGS: readonly SettingEntry[] = [
     keywords: ["unknown app", "unrecognised app", "prompt", "ask me"] },
   { id: "calls.browser_tabs", title: "Read browser tab addresses", page: "calls", section: "Record automatically", kind: "switch", requires: { os: "macos" }, resettable: true,
     keywords: ["google meet browser", "tab", "url"] },
-  // The call choice (docs/v2/copy/call-choice.md): one choice of four, each with its help line; Don't record calls is
-  // "Auto-record calls" off (afterEachCallOf).
-  { id: "calls.after", title: "After each call", page: "calls", section: "After each call", kind: "choice", resettable: true, aliases: ["After a call"],
+  // The call choice (docs/v2/copy/call-choice.md): one choice of four, each with its help line. Don't record calls is the
+  // one switch for recording calls by themselves (autoMode off, afterEachCallOf); there is no separate Auto-record row.
+  { id: "calls.after", title: "After each call", page: "calls", section: "After each call", kind: "choice", resettable: true, aliases: ["After a call", "Auto-record calls"],
     options: opts(["ask", "Ask me", true], ["always_transcribe", "Transcribe every call"], ["always_audio", "Save audio only"], ["off", "Don't record calls"]),
-    keywords: ["save", "save audio", "audio only", "transcribe", "delete", "ask before saving", "card after the call", "don't record"], ru: ["baad mein", "save karo"], ur: ["ہر کال کے بعد", "کال کے بعد"] },
+    keywords: ["save", "save audio", "audio only", "transcribe", "delete", "ask before saving", "card after the call", "don't record", "automatic", "record calls", "auto record"],
+    ru: ["baad mein", "save karo", "khud record"], ur: ["ہر کال کے بعد", "کال کے بعد", "خودکار ریکارڈ"] },
   { id: "calls.ask_when", title: "When to ask", page: "calls", section: "After each call", kind: "choice", resettable: true,
     options: opts(["after", "After the call (recommended)", true], ["start", "At the start of the call"]),
     keywords: ["ask at the start", "banner", "start of the call", "after the call"], ru: ["kab poochen"], ur: ["کب پوچھیں"] },

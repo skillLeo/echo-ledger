@@ -8,7 +8,7 @@ use chrono::Utc;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
-use crate::after_call::{AfterCallState, Arrival, CallChoice, CallDone, CallGroup, Outcome, OutcomeInput};
+use crate::after_call::{AfterCallState, Before, CallChoice, CallDone, CallGroup, Outcome, OutcomeInput};
 use crate::audio::types::Channel;
 use crate::audio::{FinishedRecording, RecordingMode};
 use crate::error::{AppError, AppResult};
@@ -669,16 +669,19 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     let quiet = crate::activity::in_quiet_hours(settings.quiet_hours, &settings.quiet_from, &settings.quiet_to, crate::notifications::local_minutes());
     let outcome = crate::after_call::outcome(OutcomeInput { setting: settings.after_call, ask_when: settings.ask_when, mode, pill, assist_saved, interactive, quiet });
     let id = decision.id.clone();
-    // The card, or one grouped card when another call's card is still counting (back to back).
-    let arrival = (outcome == Outcome::Ask && interactive).then(|| surfaces(&state).arrive(&id, !settings.card_hint_seen, Instant::now()));
-    let decision = match (outcome, &arrival) {
-        (Outcome::Ask, Some(Arrival::Card)) => decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)),
-        (Outcome::Confirm(choice), _) => decision.chosen_at(choice, applied_at(now, choice)),
+    // The card, or (back to back: something else holds the window) one grouped card with this call saved as audio.
+    let before = (outcome == Outcome::Ask && interactive).then(|| surfaces(&state).arrive(&id, !settings.card_hint_seen, Instant::now()));
+    let card = before == Some(Before::Nothing);
+    let decision = match outcome {
+        Outcome::Ask if card => decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)),
+        Outcome::Ask if before.is_some() => decision.chosen_at(CallChoice::Audio, applied_at(now, CallChoice::Audio)),
+        Outcome::Confirm(choice) => decision.chosen_at(choice, applied_at(now, choice)),
         _ => decision,
     };
     let keep_at = decision.keep_at();
     let done = match outcome {
         Outcome::Confirm(choice) => Some(CallDone::of(&decision, choice, now)),
+        Outcome::Ask if !card => Some(CallDone::of(&decision, CallChoice::Audio, now)),
         _ => None,
     };
     {
@@ -689,17 +692,17 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             files.set_server_session(&id, &late)?;
         }
     }
-    match (outcome, arrival) {
-        (Outcome::KeepNow { transcribe }, _) => return keep_decision_as(app, &id, transcribe),
-        (Outcome::Confirm(choice), _) => {
-            if interactive && let Some(done) = done {
-                surfaces(&state).show_done(done, Instant::now());
-                refresh_after(app, Duration::from_secs(crate::after_call::CONFIRM_SECONDS));
-            }
+    match outcome {
+        Outcome::KeepNow { transcribe } => return keep_decision_as(app, &id, transcribe),
+        Outcome::Confirm(choice) => {
             let at = applied_at(now, choice);
             if choice == CallChoice::Delete { schedule_discard(app, at) } else { schedule_keep(app, at) }
+            if interactive && let Some(done) = done {
+                // Never hidden: with something else in the window (another call's card above all), both are grouped.
+                show_or_group(app, done);
+            }
         }
-        (Outcome::Ask, Some(Arrival::Card)) => {
+        Outcome::Ask if card => {
             // The first card says where to change it, once.
             if !settings.card_hint_seen {
                 let _ = state.update_settings(|s| s.card_hint_seen = true);
@@ -708,21 +711,48 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
                 schedule_keep(app, at);
             }
         }
-        (Outcome::Ask, Some(Arrival::Group { earlier })) => {
-            // Never a stack of cards: the calls are saved as audio only, and the grouped card says so with Review.
-            if let Some(earlier) = earlier
-                && let Err(e) = keep_decision_as(app, &earlier, false)
-            {
-                eprintln!("[echoledger] saving the earlier call as audio: {e}");
+        Outcome::Ask => {
+            if let (Some(before), Some(done)) = (before, done) {
+                fold_into_group(app, before, done);
             }
-            keep_decision_as(app, &id, false)?;
-            refresh_after(app, Duration::from_secs(crate::after_call::GROUP_SECONDS));
         }
-        (Outcome::Ask, None) | (Outcome::Wait, _) => {}
+        Outcome::Wait => {}
     }
     emit_pending(app);
     refresh_after_call(app);
     Ok(())
+}
+
+/// Back to back: `newest` needs the window while `before` holds it. Both go into the one grouped card, each call with its
+/// Undo (a counting card's call saved as audio), and every choice in it is applied when the grouped card goes, so no
+/// Undo shown there is ever too late.
+fn fold_into_group(app: &AppHandle, before: Before, newest: CallDone) {
+    let state = app.state::<crate::AppState>();
+    let now = Utc::now();
+    let at = now + chrono::Duration::seconds(crate::after_call::GROUP_SECONDS as i64);
+    let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+    let files = DecisionFiles::in_dir(&state.data_dir);
+    let store = files.load();
+    let mut calls = crate::after_call::grouped(before, |id| store.find(id).map(|d| CallDone::of(d, CallChoice::Audio, now)), newest);
+    for call in &mut calls {
+        call.until = at.to_rfc3339();
+        call.offer_always = None;
+        let applied = if call.kind == CallChoice::Delete {
+            let slack = chrono::Duration::from_std(crate::after_call::DISCARD_SLACK).unwrap_or_default();
+            files.discard_later(&call.id, at + slack)
+        } else {
+            files.choose(&call.id, call.kind, at)
+        };
+        if let Err(e) = applied {
+            eprintln!("[echoledger] the grouped card's call {}: {e}", call.id);
+        }
+    }
+    calls.retain(|c| files.load().find(&c.id).is_some());
+    drop(_guard);
+    surfaces(&state).group_with(calls, Instant::now());
+    schedule_keep(app, at);
+    schedule_discard(app, at + chrono::Duration::from_std(crate::after_call::DISCARD_SLACK).unwrap_or_default());
+    refresh_after(app, Duration::from_secs(crate::after_call::GROUP_SECONDS));
 }
 
 /// When a choice made at `now` is applied: once its confirmation's Undo time is over (a deletion's files a little
@@ -868,16 +898,23 @@ pub fn card_answer(app: &AppHandle, id: &str, choice: CallChoice) -> AppResult<(
     }) {
         eprintln!("[echoledger] counting the card's answers: {e}");
     }
-    {
-        let mut surfaces = surfaces(&state);
-        surfaces.clear_card(id);
-        surfaces.show_done(CallDone { offer_always: offer, ..CallDone::of(&decision, choice, now) }, Instant::now());
-    }
+    surfaces(&state).clear_card(id);
     if choice == CallChoice::Delete { schedule_discard(app, at) } else { schedule_keep(app, at) }
+    show_or_group(app, CallDone { offer_always: offer, ..CallDone::of(&decision, choice, now) });
     emit_pending(app);
     refresh_after_call(app);
-    refresh_after(app, Duration::from_secs(crate::after_call::CONFIRM_SECONDS));
     Ok(())
+}
+
+/// A confirmation in the window; when something else holds it (another call's card, confirmation or the grouped card),
+/// the two are grouped instead, so no confirmation or Undo is ever hidden.
+fn show_or_group(app: &AppHandle, done: CallDone) {
+    let before = surfaces(&app.state::<crate::AppState>()).show_done(done.clone(), Instant::now());
+    if before == Before::Nothing {
+        refresh_after(app, Duration::from_secs(crate::after_call::CONFIRM_SECONDS));
+    } else {
+        fold_into_group(app, before, done);
+    }
 }
 
 /// Transcribe on "Saved as audio": it is transcribed instead, with "Transcribing… · Undo" for 5 s.
@@ -889,10 +926,18 @@ pub fn done_transcribe(app: &AppHandle, id: &str) -> AppResult<()> {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
         DecisionFiles::in_dir(&state.data_dir).choose(id, CallChoice::Transcribe, at).map_err(|_| AppError::msg(TRANSCRIBE_TOO_LATE))?
     };
-    {
-        let mut surfaces = surfaces(&state);
-        surfaces.clear_done(id);
-        surfaces.show_done(CallDone::of(&decision, CallChoice::Transcribe, now), Instant::now());
+    let done = CallDone::of(&decision, CallChoice::Transcribe, now);
+    // In the grouped card it changes on its row, applied with the others when the card goes.
+    let in_group = surfaces(&state).group_calls(Instant::now()).and_then(|(calls, _)| calls.iter().find(|c| c.id == id).map(|c| c.until.clone()));
+    match in_group {
+        Some(until) => {
+            if let Ok(group_at) = chrono::DateTime::parse_from_rfc3339(&until) {
+                let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+                let _ = DecisionFiles::in_dir(&state.data_dir).choose(id, CallChoice::Transcribe, group_at.with_timezone(&Utc));
+            }
+            surfaces(&state).update_in_group(CallDone { until, ..done });
+        }
+        None => show_or_group(app, done),
     }
     schedule_keep(app, at);
     emit_pending(app);
@@ -1041,11 +1086,11 @@ pub fn after_call_state(app: &AppHandle) -> AfterCallState {
     let (card, hint, done, group) = {
         let surfaces = surfaces(&state);
         let now = Instant::now();
-        (surfaces.card().map(str::to_string), surfaces.hint(), surfaces.done(now).cloned(), surfaces.group_left(now))
+        (surfaces.card().map(str::to_string), surfaces.hint(), surfaces.done(now).cloned(), surfaces.group_calls(now).map(|(calls, left)| (calls.to_vec(), left)))
     };
     let screens = crate::screens::store::ScreenStore::in_dir(&state.data_dir);
     let ask = card.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| d.counting() && d.chosen().is_none()).map(|d| d.item_with_screens(&screens)));
-    let group = group.map(|(count, left)| CallGroup { count, until: (Utc::now() + chrono::Duration::from_std(left).unwrap_or_default()).to_rfc3339() });
+    let group = group.map(|(calls, left)| CallGroup { count: calls.len(), until: (Utc::now() + chrono::Duration::from_std(left).unwrap_or_default()).to_rfc3339(), calls });
     AfterCallState { hint: hint && ask.is_some(), ask, done, group }
 }
 
@@ -1140,15 +1185,11 @@ fn time_out_card(app: &AppHandle, now: chrono::DateTime<Utc>) {
         }
     };
     let Some(decision) = decision else { return };
-    {
-        let mut surfaces = surfaces(&state);
-        surfaces.clear_card(&id);
-        surfaces.show_done(CallDone::of(&decision, CallChoice::Audio, now), Instant::now());
-    }
+    surfaces(&state).clear_card(&id);
     schedule_keep(app, at);
+    show_or_group(app, CallDone::of(&decision, CallChoice::Audio, now));
     emit_pending(app);
     refresh_after_call(app);
-    refresh_after(app, Duration::from_secs(crate::after_call::CONFIRM_SECONDS));
 }
 
 /// Wakes up when a chip's time is over and keeps what is due then.

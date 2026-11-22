@@ -1512,10 +1512,12 @@ export interface CallDone {
   offerAlways: AfterEachCall | null;
 }
 
-/** "3 calls saved as audio · Review": back-to-back calls, never a stack of cards. */
+/** "3 calls saved as audio · Review": back-to-back calls, never a stack of cards. Each call keeps what happens to it
+ * and its Undo (the newest last); the choices are applied when the card goes (`until`). */
 export interface CallGroup {
   count: number;
   until: string;
+  calls: CallDone[];
 }
 
 /** What the after-call window shows, one at a time: the card (its item's `deadlineAt` is when it saves the audio only),
@@ -2005,6 +2007,8 @@ export const api = {
   callAlways: (id: string, value: AfterEachCall) => invoke<void>("call_always", { id, value }),
   /** The grouped card: Review (opens the Library) or its ×. */
   callGroupClose: (review: boolean) => invoke<void>("call_group_close", { review }),
+  /** The pill's menu or the start banner opened or closed: its window grows for it and gives the screen back after. */
+  pillExpanded: (expanded: boolean) => invoke<void>("pill_expanded", { expanded }),
   /** The pill's menu during a call: Transcribe this call, Save audio only, or Stop and delete. */
   callChoice: (choice: CallChoice) => invoke<AppStatus>("call_choice", { choice }),
   /** Undo on the Saved toast: the recording goes (to Recently deleted once it is uploaded). */

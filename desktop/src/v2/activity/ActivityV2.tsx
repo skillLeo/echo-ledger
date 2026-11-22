@@ -127,7 +127,7 @@ export function ActivityV2({ status, onOpenRecording, onReview, onFailed, onItem
           <Card>
             <List label="Needs action" className="el-group__rows">
               {waiting && (
-                <ListRow icon={Icons.ClockIcon} title="Keep or discard?"
+                <ListRow icon={Icons.ClockIcon} title="Transcribe or delete?"
                   meta={pending.length > 0 ? waitingSummary(pending) : `${status.pendingDecisions} waiting for your decision`}
                   control={<Button size="sm" onClick={() => onReview(pending[0]?.id ?? null)}>Review</Button>} />
               )}

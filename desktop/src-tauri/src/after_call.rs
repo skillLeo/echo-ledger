@@ -8,7 +8,9 @@
 //! - After any choice, one confirmation with Undo for 5 s ([`CONFIRM_SECONDS`]): "Transcribing…", "Saved as audio ·
 //!   Transcribe" or "Deleted". The choice itself is applied only once that time is over (`pending::DecisionFiles::choose`,
 //!   `discard_later`), so Undo really undoes all three: the card comes back and nothing was uploaded or deleted.
-//! - Back-to-back calls: one grouped card ("2 calls saved as audio · Review"), never a stack.
+//! - Back-to-back calls: one grouped card ("2 calls saved as audio · Review"), never a stack. Whatever was on screen
+//!   when another call needs the window (a card, a confirmation, the grouped card) joins it there, each call with its
+//!   Undo, and every choice in it is applied only when the grouped card goes.
 //! - Quiet hours (Settings › Notifications): no card; the call is saved as audio only and waits in the Library.
 //!
 //! [`outcome`] and [`Surfaces`] are plain data (unit-tested below); `actions` adds the files, timers and events.
@@ -48,12 +50,13 @@ pub enum CallChoice {
 }
 
 impl CallChoice {
-    /// The "After each call" value that makes this choice every time ("Always do this?").
-    pub fn always(self) -> AfterEachCall {
+    /// The "After each call" value that makes this choice every time ("Always do this?"). Delete has none: Don't record
+    /// calls from one tap is too much (lead decision); per-contact rules will cover it.
+    pub fn always(self) -> Option<AfterEachCall> {
         match self {
-            CallChoice::Transcribe => AfterEachCall::AlwaysTranscribe,
-            CallChoice::Audio => AfterEachCall::AlwaysAudio,
-            CallChoice::Delete => AfterEachCall::Off,
+            CallChoice::Transcribe => Some(AfterEachCall::AlwaysTranscribe),
+            CallChoice::Audio => Some(AfterEachCall::AlwaysAudio),
+            CallChoice::Delete => None,
         }
     }
 }
@@ -74,10 +77,10 @@ pub fn next_streak(previous: Option<CardStreak>, choice: CallChoice) -> CardStre
     }
 }
 
-/// Whether the confirmation offers "Always do this?" now (pure): the same choice [`ALWAYS_AFTER`] times in a row on the
-/// card, never offered before, and the person still asked after each call.
+/// Whether the confirmation offers "Always do this?" now (pure): Transcribe or Save audio only [`ALWAYS_AFTER`] times in
+/// a row on the card (never Delete), never offered before, and the person still asked after each call.
 pub fn offers_always(streak: CardStreak, offered_before: bool, now: AfterEachCall) -> Option<AfterEachCall> {
-    (streak.count >= ALWAYS_AFTER && !offered_before && now == AfterEachCall::Ask).then(|| streak.choice.always())
+    streak.choice.always().filter(|_| streak.count >= ALWAYS_AFTER && !offered_before && now == AfterEachCall::Ask)
 }
 
 /// "Transcribing…", "Saved as audio · Transcribe", "Deleted", each with Undo (`AfterCallState.done`).
@@ -116,13 +119,15 @@ impl CallDone {
     }
 }
 
-/// "3 calls saved as audio · Review" (`AfterCallState.group`).
+/// "3 calls saved as audio · Review" (`AfterCallState.group`): back-to-back calls, each with what happens to it and its
+/// Undo (the newest last).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CallGroup {
     pub count: usize,
-    /// RFC 3339: when the grouped card goes.
+    /// RFC 3339: when the grouped card goes and the choices in it are applied.
     pub until: String,
+    pub calls: Vec<CallDone>,
 }
 
 /// What the after-call window shows (`aftercall:state`, `after_call_state`): one thing at a time, the card, one
@@ -212,20 +217,39 @@ pub fn start_banner(after: AfterEachCall, ask_when: AskWhen, auto: bool, mode: R
     after == AfterEachCall::Ask && ask_when == AskWhen::Start && auto && mode == RecordingMode::Call
 }
 
-/// Where a call that would ask goes, given what is on screen.
+/// What was on screen when another call needed the after-call window. Anything but `Nothing` goes into the grouped
+/// card with the new call (`actions`), so no Undo is lost and nothing stacks.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Arrival {
-    /// Its card shows.
-    Card,
-    /// Back to back: grouped. `earlier` is the call whose card was counting (saved as audio now too).
-    Group { earlier: Option<String> },
+pub enum Before {
+    Nothing,
+    /// A card was counting: its call joins the group, saved as audio unless the person says otherwise there.
+    Card(String),
+    /// A confirmation within its 5 s.
+    Done(CallDone),
+    /// The grouped card, still up.
+    Group(Vec<CallDone>),
+}
+
+/// The grouped card's calls when `newest` needs the window and `before` was there (pure): a counting card's call is saved
+/// as audio (`card_as_audio` gives that confirmation), a confirmation and the grouped card's calls keep theirs with their
+/// Undo; each call once, the newest last.
+pub fn grouped(before: Before, card_as_audio: impl Fn(&str) -> Option<CallDone>, newest: CallDone) -> Vec<CallDone> {
+    let mut calls = match before {
+        Before::Nothing => Vec::new(),
+        Before::Card(id) => card_as_audio(&id).into_iter().collect(),
+        Before::Done(done) => vec![done],
+        Before::Group(calls) => calls,
+    };
+    calls.retain(|c| c.id != newest.id);
+    calls.push(newest);
+    calls
 }
 
 #[derive(Clone, Debug)]
 enum Shown {
     Card { id: String, hint: bool },
     Done { done: CallDone, until: Instant },
-    Group { ids: Vec<String>, until: Instant },
+    Group { calls: Vec<CallDone>, until: Instant },
 }
 
 /// The core's side of the after-call window (managed state): what it shows, one at a time.
@@ -262,54 +286,66 @@ impl Surfaces {
 
     /// How many calls the grouped card counts, while it is on screen.
     pub fn group(&self, now: Instant) -> Option<usize> {
+        self.group_calls(now).map(|(calls, _)| calls.len())
+    }
+
+    /// The grouped card's calls and how long it stays, while it is on screen.
+    pub fn group_calls(&self, now: Instant) -> Option<(&[CallDone], Duration)> {
         match &self.shown {
-            Some(Shown::Group { ids, until }) if *until > now => Some(ids.len()),
+            Some(Shown::Group { calls, until }) if *until > now => Some((calls, until.saturating_duration_since(now))),
             _ => None,
         }
     }
 
-    /// How many calls the grouped card counts and how long it stays, while it is on screen.
-    pub fn group_left(&self, now: Instant) -> Option<(usize, Duration)> {
-        match &self.shown {
-            Some(Shown::Group { ids, until }) if *until > now => Some((ids.len(), until.saturating_duration_since(now))),
-            _ => None,
-        }
-    }
-
-    /// A call that would ask (`id`): its card shows, unless another card is counting or the grouped card is up. Then the
-    /// calls are grouped: never two cards, never a stack.
-    pub fn arrive(&mut self, id: &str, hint: bool, now: Instant) -> Arrival {
-        let until = now + Duration::from_secs(GROUP_SECONDS);
+    /// Takes what is on screen now: a confirmation or the grouped card only while it lasts.
+    fn take_live(&mut self, now: Instant) -> Before {
         match self.shown.take() {
-            Some(Shown::Card { id: earlier, .. }) => {
-                self.shown = Some(Shown::Group { ids: vec![earlier.clone(), id.to_string()], until });
-                Arrival::Group { earlier: Some(earlier) }
-            }
-            Some(Shown::Group { mut ids, until: was }) if was > now => {
-                ids.push(id.to_string());
-                self.shown = Some(Shown::Group { ids, until });
-                Arrival::Group { earlier: None }
-            }
-            _ => {
-                self.shown = Some(Shown::Card { id: id.to_string(), hint });
-                Arrival::Card
-            }
+            Some(Shown::Card { id, .. }) => Before::Card(id),
+            Some(Shown::Done { done, until }) if until > now => Before::Done(done),
+            Some(Shown::Group { calls, until }) if until > now => Before::Group(calls),
+            _ => Before::Nothing,
         }
     }
 
-    /// A confirmation for [`CONFIRM_SECONDS`]: it replaces another confirmation, never a card or the grouped card (a call
-    /// waiting for an answer comes first; the choice confirmed is still applied on time). False when it is not shown.
-    pub fn show_done(&mut self, done: CallDone, now: Instant) -> bool {
-        let busy = match &self.shown {
-            Some(Shown::Card { .. }) => true,
-            Some(Shown::Group { until, .. }) => *until > now,
-            _ => false,
-        };
-        if busy {
-            return false;
+    /// A call that would ask (`id`): its card shows when the window is free. Otherwise what was there is returned and
+    /// the caller puts it in the grouped card with this call ([`Surfaces::group_with`]): never two cards, never a stack.
+    pub fn arrive(&mut self, id: &str, hint: bool, now: Instant) -> Before {
+        let before = self.take_live(now);
+        if before == Before::Nothing {
+            self.shown = Some(Shown::Card { id: id.to_string(), hint });
         }
-        self.shown = Some(Shown::Done { done, until: now + Duration::from_secs(CONFIRM_SECONDS) });
-        true
+        before
+    }
+
+    /// A confirmation for [`CONFIRM_SECONDS`] when the window is free, or in place of the same call's confirmation (its
+    /// Transcribe). Otherwise what was there is returned and the caller groups it with this one, so a choice made on the
+    /// pill while another call's card is up still gets its confirmation and Undo.
+    pub fn show_done(&mut self, done: CallDone, now: Instant) -> Before {
+        let before = self.take_live(now);
+        let same = matches!(&before, Before::Done(d) if d.id == done.id);
+        if before == Before::Nothing || same {
+            self.shown = Some(Shown::Done { done, until: now + Duration::from_secs(CONFIRM_SECONDS) });
+            return Before::Nothing;
+        }
+        before
+    }
+
+    /// The grouped card with `calls` (the newest last) for [`GROUP_SECONDS`] from `now`; returns when it goes.
+    pub fn group_with(&mut self, calls: Vec<CallDone>, now: Instant) -> Instant {
+        let until = now + Duration::from_secs(GROUP_SECONDS);
+        self.shown = Some(Shown::Group { calls, until });
+        until
+    }
+
+    /// A call's entry in the grouped card changes (Transcribe on its row); false when it is not in it.
+    pub fn update_in_group(&mut self, done: CallDone) -> bool {
+        if let Some(Shown::Group { calls, .. }) = &mut self.shown
+            && let Some(at) = calls.iter().position(|c| c.id == done.id)
+        {
+            calls[at] = done;
+            return true;
+        }
+        false
     }
 
     /// The card of `id` goes (answered, timed out or opened); false when it shows another call or none.
@@ -346,7 +382,8 @@ impl Surfaces {
         }
     }
 
-    /// Undo on the confirmation of `id`: its card is back (in place of whatever shows).
+    /// Undo on the confirmation of `id` (or on its row in the grouped card): its card is back in the window, which a
+    /// call waiting for an answer needs first; the others in the group are still applied when their time is over.
     pub fn ask_again(&mut self, id: &str) {
         self.shown = Some(Shown::Card { id: id.to_string(), hint: false });
     }
@@ -450,30 +487,65 @@ mod tests {
     fn back_to_back_calls_get_one_grouped_card_never_a_stack() {
         let mut s = Surfaces::default();
         let t0 = Instant::now();
-        assert_eq!(s.arrive("a", true, t0), Arrival::Card);
+        let audio = |id: &str| Some(done(id, CallChoice::Audio));
+        assert_eq!(s.arrive("a", true, t0), Before::Nothing);
         assert_eq!(s.card(), Some("a"));
         assert!(s.hint(), "the first card says where to change it");
-        assert_eq!(s.arrive("b", false, t0), Arrival::Group { earlier: Some("a".into()) }, "a's card was counting: both go to the group");
+        let before = s.arrive("b", false, t0);
+        assert_eq!(before, Before::Card("a".into()), "a's card was counting: both go to the group");
+        s.group_with(grouped(before, audio, done("b", CallChoice::Audio)), t0);
         assert_eq!((s.card(), s.group(t0)), (None, Some(2)));
-        assert_eq!(s.arrive("c", false, t0 + Duration::from_secs(3)), Arrival::Group { earlier: None });
-        assert_eq!(s.group(t0 + Duration::from_secs(3)), Some(3), "3 calls saved as audio");
-        assert_eq!(s.group(t0 + Duration::from_secs(12)), None, "gone 8 s after the last one");
-        assert_eq!(s.arrive("d", false, t0 + Duration::from_secs(12)), Arrival::Card, "a call after that has its own card");
+        let later = t0 + Duration::from_secs(3);
+        let before = s.arrive("c", false, later);
+        assert!(matches!(&before, Before::Group(calls) if calls.len() == 2));
+        s.group_with(grouped(before, audio, done("c", CallChoice::Audio)), later);
+        assert_eq!(s.group(later), Some(3), "3 calls saved as audio");
+        assert_eq!(s.group_calls(later).unwrap().0.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["a", "b", "c"], "the newest last");
+        assert_eq!(s.group(later + Duration::from_secs(GROUP_SECONDS)), None, "gone 8 s after the last one");
+        assert_eq!(s.arrive("d", false, later + Duration::from_secs(GROUP_SECONDS)), Before::Nothing, "a call after that has its own card");
     }
 
     #[test]
-    fn one_message_at_a_time_and_a_card_comes_first() {
+    fn a_new_call_inside_the_5_s_keeps_the_earlier_undo_in_the_grouped_card() {
+        let mut s = Surfaces::default();
+        let t0 = Instant::now();
+        assert_eq!(s.show_done(done("a", CallChoice::Transcribe), t0), Before::Nothing, "a free window: the confirmation shows");
+        // Another call ends 2 s later: its card would take the window, so both go to the group, a's Undo with it.
+        let before = s.arrive("b", false, t0 + Duration::from_secs(2));
+        assert_eq!(before, Before::Done(done("a", CallChoice::Transcribe)));
+        let calls = grouped(before, |_| None, done("b", CallChoice::Audio));
+        assert_eq!(calls.iter().map(|c| (c.id.as_str(), c.kind)).collect::<Vec<_>>(), [("a", CallChoice::Transcribe), ("b", CallChoice::Audio)]);
+        s.group_with(calls, t0 + Duration::from_secs(2));
+        assert!(s.card().is_none() && s.done(t0).is_none(), "never two at once");
+        // Transcribe on b's row updates it in place.
+        assert!(s.update_in_group(done("b", CallChoice::Transcribe)));
+        assert!(!s.update_in_group(done("z", CallChoice::Transcribe)), "not in the group");
+        assert_eq!(s.group_calls(t0).unwrap().0[1].kind, CallChoice::Transcribe);
+        // After the 5 s of a confirmation, the window is free again.
+        let mut free = Surfaces::default();
+        free.show_done(done("a", CallChoice::Audio), t0);
+        assert_eq!(free.arrive("b", false, t0 + Duration::from_secs(CONFIRM_SECONDS)), Before::Nothing);
+    }
+
+    #[test]
+    fn stop_and_delete_on_the_pill_while_another_card_is_up_still_gets_its_deleted_and_undo() {
         let mut s = Surfaces::default();
         let t0 = Instant::now();
         s.arrive("a", false, t0);
-        assert!(!s.show_done(done("b", CallChoice::Transcribe), t0), "never over a card");
-        assert!(s.clear_card("a"));
-        assert!(s.show_done(done("a", CallChoice::Audio), t0), "the answer replaces the card");
-        assert!(s.show_done(done("b", CallChoice::Delete), t0), "a newer confirmation replaces the older one");
-        assert_eq!(s.done(t0).map(|d| d.id.as_str()), Some("b"));
-        assert_eq!(s.done(t0 + Duration::from_secs(CONFIRM_SECONDS)), None, "gone after 5 s");
-        assert_eq!(s.arrive("c", false, t0), Arrival::Card, "a card replaces a confirmation");
-        assert!(s.done(t0).is_none());
+        let before = s.show_done(done("b", CallChoice::Delete), t0);
+        assert_eq!(before, Before::Card("a".into()), "the card is up: the two are grouped, not hidden");
+        let calls = grouped(before, |id| Some(done(id, CallChoice::Audio)), done("b", CallChoice::Delete));
+        assert_eq!(calls.iter().map(|c| (c.id.as_str(), c.kind)).collect::<Vec<_>>(), [("a", CallChoice::Audio), ("b", CallChoice::Delete)]);
+        s.group_with(calls, t0);
+        assert_eq!(s.group(t0), Some(2));
+        // A card answered replaces itself with its confirmation; Transcribe on a confirmation replaces the same call's.
+        let mut one = Surfaces::default();
+        one.arrive("c", false, t0);
+        assert!(one.clear_card("c"));
+        assert_eq!(one.show_done(done("c", CallChoice::Audio), t0), Before::Nothing);
+        assert_eq!(one.show_done(done("c", CallChoice::Transcribe), t0), Before::Nothing, "the same call: in place");
+        assert_eq!(one.done(t0).map(|d| d.kind), Some(CallChoice::Transcribe));
+        assert_eq!(one.done(t0 + Duration::from_secs(CONFIRM_SECONDS)), None, "gone after 5 s");
     }
 
     #[test]
@@ -502,8 +574,17 @@ mod tests {
         assert_eq!(offers_always(third, true, AfterEachCall::Ask), None, "once only");
         assert_eq!(offers_always(third, false, AfterEachCall::AlwaysAudio), None, "nothing to offer when it does not ask");
         assert_eq!(next_streak(Some(third), CallChoice::Audio), CardStreak { choice: CallChoice::Audio, count: 1 }, "another choice starts again");
-        assert_eq!(CallChoice::Audio.always(), AfterEachCall::AlwaysAudio);
-        assert_eq!(CallChoice::Delete.always(), AfterEachCall::Off, "always deleting is not recording calls");
+        assert_eq!(CallChoice::Audio.always(), Some(AfterEachCall::AlwaysAudio));
+    }
+
+    #[test]
+    fn three_saves_as_audio_offer_save_audio_only_and_three_deletes_never_offer_anything() {
+        let audio = (0..3).fold(None, |s, _| Some(next_streak(s, CallChoice::Audio))).unwrap();
+        assert_eq!(offers_always(audio, false, AfterEachCall::Ask), Some(AfterEachCall::AlwaysAudio));
+        let deletes = (0..5).fold(None, |s, _| Some(next_streak(s, CallChoice::Delete))).unwrap();
+        assert_eq!(deletes.count, 5);
+        assert_eq!(offers_always(deletes, false, AfterEachCall::Ask), None, "Don't record calls is never one tap away");
+        assert_eq!(CallChoice::Delete.always(), None);
     }
 
     #[test]

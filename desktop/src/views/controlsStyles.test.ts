@@ -83,7 +83,9 @@ describe("after-call styles (the call choice)", () => {
     const rule = topLevelRule(".call-card")!;
     expect(rule.style.background).toBe("var(--surface)");
     expect(rule.style.getPropertyValue("backdrop-filter")).toBe("");
-    expect(rule.style.borderRadius).toBe("16px");
+    expect(rule.style.borderRadius).toBe("var(--radius-sheet)");
+    expect(appCss).toMatch(/--radius-sheet: 16px;/);
+    expect(rule.style.boxShadow).toBe("var(--shadow-2)");
     expect(rule.style.fontFamily).toBe("var(--font-sans)");
     expect(rule.style.color).toBe("var(--text)");
   });
@@ -91,6 +93,20 @@ describe("after-call styles (the call choice)", () => {
   it("has one filled button: Delete and the confirmations' actions are quiet text buttons", () => {
     const quiet = topLevelRule(".call-text-btn {") ?? topLevelRule(".call-text-btn");
     expect(quiet?.style.background).toBe("transparent");
+  });
+
+  it("uses the classic radius and shadow tokens, never raw values, in the call choice's rules", () => {
+    const ours = [...style.sheet!.cssRules].filter((r): r is CSSStyleRule => r instanceof CSSStyleRule && /\.(call-|rec-menu|rec-choice)/.test(r.selectorText));
+    expect(ours.length).toBeGreaterThan(10);
+    for (const r of ours) {
+      if (r.style.borderRadius) expect(r.style.borderRadius, r.selectorText).toMatch(/^var\(--radius-/);
+      if (r.style.boxShadow) expect(r.style.boxShadow, r.selectorText).toMatch(/^var\(--shadow-/);
+    }
+  });
+
+  it("puts what was done and the name on lines of their own, so the name is never cut to a few letters", () => {
+    expect(styleOf("call-done-text", "call-done-row").flexDirection).toBe("column");
+    expect(styleOf("call-group-headline", "call-done-row").whiteSpace).toBe("normal");
   });
 
   it("ellipsises a long name and keeps the length in tabular digits", () => {

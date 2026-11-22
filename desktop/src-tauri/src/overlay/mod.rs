@@ -34,14 +34,55 @@ pub const RESCUED: [&str; 6] = [OVERLAY, DICTATION, PILL, REVIEW, ASSIST, crate:
 pub const ASSIST: &str = crate::privacy::ASSIST;
 
 const DICTATION_SIZE: (f64, f64) = (420.0, 110.0);
-/// The pill on top, and under it the room for its menu (the call choice), the start banner, the bookmark tray or a
-/// warning; the rest of the window lets clicks through.
-pub const PILL_SIZE: (f64, f64) = (352.0, 148.0);
+/// The pill window: the pill, and under it the bookmark tray or a warning. It never takes more of the screen than
+/// that; only while the call choice's menu or the start banner shows does it grow to [`PILL_OPEN_SIZE`].
+pub const PILL_SIZE: (f64, f64) = (352.0, 84.0);
+/// The pill window while its menu (Transcribe this call, Save audio only, Stop and delete) or the start banner shows.
+pub const PILL_OPEN_SIZE: (f64, f64) = (352.0, 148.0);
 /// How much of the pill window the pill itself takes (the after-call card goes right under it).
 pub const PILL_VISIBLE_LOGICAL: f64 = 48.0;
-/// The after-call card (the call choice: the card with its first-time line, a confirmation or the grouped card) and
-/// the unknown-app chip.
-pub const REVIEW_SIZE: (f64, f64) = (360.0, 240.0);
+/// The after-call window for a confirmation, the grouped card or the unknown-app chip; only while the card shows does
+/// it grow to [`REVIEW_CARD_SIZE`].
+pub const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
+/// The after-call window while the card shows (with its first-time line at most).
+pub const REVIEW_CARD_SIZE: (f64, f64) = (360.0, 240.0);
+
+/// The pill's menu or the start banner is open (the pill page says so, `pill_expanded`).
+static PILL_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// The after-call window shows the card.
+static REVIEW_CARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The pill window's size at 100 % text (pure): its old size, or room for the menu while it is open.
+pub fn pill_base(open: bool) -> (f64, f64) {
+    if open { PILL_OPEN_SIZE } else { PILL_SIZE }
+}
+
+/// The rows the grouped card lists at most (the newest; the rest are a Review away).
+pub const GROUP_ROWS: usize = 3;
+
+/// The after-call window's size at 100 % text (pure): room for the card, or for a grouped card with all its rows, only
+/// while it shows; its old size otherwise.
+pub fn review_base(state: &crate::after_call::AfterCallState) -> (f64, f64) {
+    let tall_group = state.group.as_ref().is_some_and(|g| g.calls.len() >= GROUP_ROWS);
+    if state.ask.is_some() || tall_group { REVIEW_CARD_SIZE } else { REVIEW_SIZE }
+}
+
+/// The base size of `label` now.
+fn base_now(label: &str) -> Option<(f64, f64)> {
+    use std::sync::atomic::Ordering::SeqCst;
+    match label {
+        PILL => Some(pill_base(PILL_OPEN.load(SeqCst))),
+        REVIEW => Some(if REVIEW_CARD.load(SeqCst) { REVIEW_CARD_SIZE } else { REVIEW_SIZE }),
+        _ => None,
+    }
+}
+
+/// The pill page opened or closed its menu or the start banner: the window grows for it, and gives the screen back
+/// when it closes (kept where it is at the top, the pill does not move).
+pub fn set_pill_expanded(app: &AppHandle, open: bool) {
+    PILL_OPEN.store(open, std::sync::atomic::Ordering::SeqCst);
+    fit_to_text_size_later(app, PILL);
+}
 /// The pill and the after-call card grow with the system's text size (D-141), up to twice their size.
 pub const TEXT_SCALE_MAX: f64 = 2.0;
 
@@ -61,11 +102,7 @@ pub fn needs_resize(current: (f64, f64), wanted: (f64, f64)) -> bool {
 /// shown and at every screen check while one is built (`keep_on_screen`), so a change in Settings reaches it without a
 /// restart. The pill keeps its centre; the card stays docked bottom-right.
 pub fn fit_to_text_size<R: Runtime>(app: &AppHandle<R>, label: &str) {
-    let base = match label {
-        PILL => PILL_SIZE,
-        REVIEW => REVIEW_SIZE,
-        _ => return,
-    };
+    let Some(base) = base_now(label) else { return };
     let Some(window) = app.get_webview_window(label) else { return };
     let (Ok(scale), Ok(inner)) = (window.scale_factor(), window.inner_size()) else { return };
     let current = (f64::from(inner.width) / scale, f64::from(inner.height) / scale);
@@ -230,9 +267,9 @@ pub fn create_overlay<R: Runtime>(app: &AppHandle<R>, label: &str, setup: Overla
     let size = match label {
         OVERLAY => caption_overlay_size_for(setup.caption_lines, setup.caption_size, setup.caption_width),
         DICTATION => DICTATION_SIZE,
-        PILL => scaled_size(PILL_SIZE, text_scale()),
+        PILL => scaled_size(base_now(PILL).unwrap_or(PILL_SIZE), text_scale()),
         ASSIST => ASSIST_SIZE,
-        _ => scaled_size(REVIEW_SIZE, text_scale()),
+        _ => scaled_size(base_now(REVIEW).unwrap_or(REVIEW_SIZE), text_scale()),
     };
     let window = build(app, label, size)?;
     #[cfg(target_os = "macos")]
@@ -609,6 +646,8 @@ fn make_click_through(app: &AppHandle, label: &str) {
 
 /// The recording pill on or off.
 pub fn set_pill_visible(app: &AppHandle, visible: bool) {
+    // A new recording's pill starts closed, at its old size.
+    PILL_OPEN.store(false, std::sync::atomic::Ordering::SeqCst);
     if visible {
         lifecycle::show(app, PILL, "pill");
         fit_to_text_size_later(app, PILL);
@@ -644,6 +683,7 @@ pub fn show_after_call(app: &AppHandle, state: &crate::after_call::AfterCallStat
             }
         });
     } else {
+        REVIEW_CARD.store(review_base(state) == REVIEW_CARD_SIZE, std::sync::atomic::Ordering::SeqCst);
         lifecycle::show(app, REVIEW, "after_call");
         place_review_later(app);
         lifecycle::emit(app, REVIEW, "aftercall:state", state);
@@ -676,12 +716,45 @@ mod tests {
     fn the_pill_and_the_after_call_card_grow_with_the_text_size_up_to_twice() {
         assert_eq!(scaled_size(PILL_SIZE, 1.0), PILL_SIZE, "100 %");
         assert_eq!(scaled_size(REVIEW_SIZE, 1.0), REVIEW_SIZE);
-        assert_eq!(scaled_size(PILL_SIZE, 2.0), (704.0, 296.0), "200 %");
-        assert_eq!(scaled_size(REVIEW_SIZE, 2.0), (720.0, 480.0));
-        assert_eq!(scaled_size(REVIEW_SIZE, 1.5), (540.0, 360.0));
-        assert_eq!(scaled_size(REVIEW_SIZE, 2.25), (720.0, 480.0), "Windows goes to 225 %: the card stops at twice");
+        assert_eq!(scaled_size(PILL_SIZE, 2.0), (704.0, 168.0), "200 %");
+        assert_eq!(scaled_size(REVIEW_SIZE, 2.0), (720.0, 336.0));
+        assert_eq!(scaled_size(REVIEW_SIZE, 1.5), (540.0, 252.0));
+        assert_eq!(scaled_size(REVIEW_SIZE, 2.25), (720.0, 336.0), "Windows goes to 225 %: the card stops at twice");
         assert_eq!(scaled_size(PILL_SIZE, 0.5), PILL_SIZE, "never smaller than at 100 %");
         assert_eq!(scaled_size(PILL_SIZE, f64::NAN), PILL_SIZE);
+    }
+
+    #[test]
+    fn the_pill_and_the_card_window_take_no_more_screen_than_they_show() {
+        use crate::after_call::{AfterCallState, CallChoice, CallDone, CallGroup};
+        // The pill: its old size while the menu is closed, room for the menu only while it is open.
+        assert_eq!(pill_base(false), (352.0, 84.0));
+        assert_eq!(pill_base(true), (352.0, 148.0));
+        assert_eq!(scaled_size(pill_base(true), 2.0), (704.0, 296.0), "at 200 % text too");
+        // The after-call window: its old size for a confirmation, the grouped card or nothing; taller only for the card.
+        let done = CallDone {
+            kind: CallChoice::Audio, id: "a".into(), title: None, caller_name: None, source_app: "whatsapp".into(),
+            mode: crate::audio::RecordingMode::Call, duration_ms: 1_000, until: String::new(), offer_always: None,
+        };
+        let group = CallGroup { count: 2, until: String::new(), calls: vec![done.clone(), CallDone { id: "b".into(), ..done.clone() }] };
+        let three = CallGroup { count: 3, until: String::new(), calls: vec![done.clone(); 3] };
+        assert_eq!(review_base(&AfterCallState { group: Some(three), ..Default::default() }), (360.0, 240.0), "three rows need the room");
+        assert_eq!(review_base(&AfterCallState::default()), (360.0, 168.0));
+        assert_eq!(review_base(&AfterCallState { done: Some(done), ..Default::default() }), (360.0, 168.0));
+        assert_eq!(review_base(&AfterCallState { group: Some(group), ..Default::default() }), (360.0, 168.0));
+        let card = crate::pending::PendingItem {
+            id: "a".into(), source_app: "whatsapp".into(), auto: true, mode: crate::audio::RecordingMode::Call, title: None, client_id: None,
+            client_name: None, started_at: String::new(), ended_at: String::new(), duration_ms: 44_000, first_line: None,
+            deadline_at: None, language: None, caller_name: None, screens: 0,
+        };
+        assert_eq!(review_base(&AfterCallState { ask: Some(card), hint: true, ..Default::default() }), (360.0, 240.0), "room for the card and its first-time line");
+        let code = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/overlay/mod.rs")).unwrap();
+        let fit = &code[code.find("pub fn fit_to_text_size<").unwrap()..];
+        assert!(fit[..fit.find("\n}\n").unwrap()].contains("base_now(label)"), "every resize follows what is shown now");
+        let show = &code[code.find("pub fn show_after_call(").unwrap()..];
+        assert!(show[..show.find("\n}\n").unwrap()].contains("review_base(state)"), "the card window grows only for the card");
+        let pill = &code[code.find("pub fn set_pill_visible(").unwrap()..];
+        assert!(pill[..pill.find("\n}\n").unwrap()].contains("PILL_OPEN.store(false"), "a new pill starts closed");
     }
 
     #[test]
@@ -689,7 +762,7 @@ mod tests {
         let at_100 = scaled_size(PILL_SIZE, 1.0);
         assert!(needs_resize(at_100, scaled_size(PILL_SIZE, 1.5)), "the text grew while it was shown");
         assert!(!needs_resize(scaled_size(PILL_SIZE, 1.5), scaled_size(PILL_SIZE, 1.5)), "then left alone at each check");
-        assert!(!needs_resize((352.4, 147.6), at_100), "a scale's rounding is no change");
+        assert!(!needs_resize((352.4, 83.6), at_100), "a scale's rounding is no change");
         assert!(needs_resize(scaled_size(REVIEW_SIZE, 2.0), scaled_size(REVIEW_SIZE, 1.0)), "and back when it shrank");
     }
 
