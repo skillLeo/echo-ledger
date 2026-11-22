@@ -224,7 +224,7 @@ describe("recording pill", () => {
     await renderPill();
     fireEvent.click(screen.getByTestId("pill-choice"));
     await flushAsync();
-    expect(callsOf("pill_expanded")).toEqual([{ expanded: true }]);
+    expect(callsOf("pill_expanded")).toEqual([{ expanded: true, warning: false }]);
     expect(screen.queryByRole("menu"), "not drawn before the window has room").not.toBeInTheDocument();
     await act(async () => grown());
     expect(await screen.findByRole("menu")).toBeInTheDocument();
@@ -236,14 +236,38 @@ describe("recording pill", () => {
     expect(callsOf("pill_expanded"), "closed: nothing to grow").toEqual([]);
     fireEvent.click(screen.getByTestId("pill-choice"));
     await flushAsync();
-    await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true }]));
+    await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true, warning: false }]));
     fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true }, { expanded: false }]));
+    await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true, warning: false }, { expanded: false, warning: false }]));
     await emitEvent("recording:state", makeRecordingState({ startBanner: true }));
-    await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true }, { expanded: false }, { expanded: true }]));
+    await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true, warning: false }, { expanded: false, warning: false }, { expanded: true, warning: false }]));
     await emitEvent("recording:state", makeRecordingState({ startBanner: false }));
     await waitFor(() => expect(callsOf("pill_expanded")).toHaveLength(4));
-    expect(callsOf("pill_expanded")[3]).toEqual({ expanded: false });
+    expect(callsOf("pill_expanded")[3]).toEqual({ expanded: false, warning: false });
+  });
+
+  it("with the other side not recorded, the warning stays above the open menu and the window grows for both", async () => {
+    const notRecorded = [{ kind: "system_audio" as const, sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.", otherSide: "permission" as const }];
+    await renderPill(makeRecordingState({ missing: notRecorded }));
+    expect(screen.getByTestId("missing-permission")).toHaveTextContent("The other side isn't being recorded");
+    fireEvent.click(screen.getByTestId("pill-choice"));
+    await flushAsync();
+    // Both on screen, each a hit region, the warning first (right under the pill), and the window asked for room for both.
+    const warning = screen.getByTestId("missing-permission");
+    const menu = screen.getByRole("menu");
+    expect(warning.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(warning).toHaveAttribute("data-hit");
+    expect(menu).toHaveAttribute("data-hit");
+    expect(within(warning).getByRole("button", { name: "Open System Settings" })).toBeInTheDocument();
+    expect(within(warning).getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(callsOf("pill_expanded").at(-1)).toEqual({ expanded: true, warning: true });
+    fireEvent.click(within(warning).getByRole("button", { name: "Try again" }));
+    expect(callsOf("capture_retry_system")).toHaveLength(1);
+    // The menu closes: the window gives back the menu's room; the warning stays.
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(callsOf("pill_expanded").at(-1)).toEqual({ expanded: false, warning: true }));
+    expect(screen.getByTestId("missing-permission")).toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("doing nothing records: the banner goes when the core says its 5 s are over", async () => {
@@ -637,6 +661,36 @@ describe("Screens chip (v1.5)", () => {
       await emitEvent("recording:state", makeRecordingState({ missing: noSystem }));
       await emitEvent("pill:visibility", true);
       expect(screen.getByTestId("missing-permission")).toBeInTheDocument();
+    });
+
+    it("the other side not being recorded (2.0.6): stays, opens System Audio Recording and tries again", async () => {
+      const notRecorded = [{ kind: "system_audio" as const, sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.", otherSide: "permission" as const }];
+      respond("capture_retry_system", true);
+      await renderPill(makeRecordingState({ missing: notRecorded }));
+      await emitEvent("pill:visibility", true);
+      const warning = screen.getByTestId("missing-permission");
+      expect(warning).toHaveTextContent("The other side isn't being recorded");
+      expect(warning).toHaveAttribute("title", notRecorded[0].sentence);
+      expect(within(warning).queryByRole("button", { name: "Dismiss warning" })).toBeNull();
+      fireEvent.click(within(warning).getByRole("button", { name: "Open System Settings" }));
+      expect(callsOf("open_privacy_settings")).toEqual([{ kind: "system_audio" }]);
+      fireEvent.click(within(warning).getByRole("button", { name: "Try again" }));
+      expect(callsOf("capture_retry_system")).toHaveLength(1);
+      // Heard again: the line goes.
+      await emitEvent("recording:state", makeRecordingState({ missing: [] }));
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+    });
+
+    it("the other side not heard while another app plays (2.0.6): neutral words, no System Settings, can be dismissed", async () => {
+      const silent = [{ kind: "system_audio" as const, sentence: "Can't hear the other side. Check the call's speaker or output device.", otherSide: "silent" as const }];
+      await renderPill(makeRecordingState({ missing: silent }));
+      await emitEvent("pill:visibility", true);
+      const warning = screen.getByTestId("missing-permission");
+      expect(warning).toHaveTextContent("Can't hear the other side");
+      expect(warning).not.toHaveTextContent(/System Audio|permission/);
+      expect(within(warning).queryByRole("button", { name: "Open System Settings" })).toBeNull();
+      fireEvent.click(within(warning).getByRole("button", { name: "Dismiss warning" }));
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
     });
 
     it("hears a prompt answered after the start, and says more when more goes during the recording", async () => {

@@ -416,8 +416,18 @@ fn a_running_recording_looks_at_its_permissions_again() {
     let ticker = &actions[actions.find("fn start_ticker").unwrap()..actions.find("/// Seconds between looks").unwrap()];
     assert!(ticker.contains("read_recording_permissions(&app)"));
     let reader = &actions[actions.find("fn read_recording_permissions").unwrap()..];
-    assert!(reader.contains("missing_during(info.mode, &state.permissions_now())"));
+    // What the system says, with the other side's check (2.0.6) in place of any other line about system audio.
+    assert!(reader.contains("let permissions = state.permissions_now();"));
+    assert!(reader.contains("missing_with(info.mode, &permissions, warning)"));
     assert!(reader.contains("spawn_blocking"), "the ticker never waits for the system");
+    // The other side is looked at every second; what that reads and writes runs beside the ticker too.
+    assert!(ticker.contains("check_system_side(&app)"));
+    let check = &actions[actions.find("fn check_system_side").unwrap()..actions.find("fn system_side_changed").unwrap()];
+    assert!(check.contains("spawn_blocking(move || system_side_changed(&app, verdict))"));
+    assert!(!check.contains("permissions_now"), "no system read on the ticker");
+    // Whether another app plays sound (the process list) is read beside the ticker too.
+    let playing = &check[check.find("others_playing()").unwrap() - 200..check.find("others_playing()").unwrap()];
+    assert!(playing.contains("spawn_blocking"));
 }
 
 /// The sound tests hold `capture_test`; a real call that starts during one must not lose its screen moments for it.

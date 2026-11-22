@@ -31,6 +31,9 @@ export type PillModel = {
   choice?: CallChoice | null;
   /** "Recording this call · Don't record" (its first 5 s, "At the start of the call"). */
   banner?: boolean;
+  /** What the system keeps out of this recording (2.0.6): the short line, its full sentence, and whether the other side
+   * isn't being recorded (Open System Settings and Try again, never dismissed) or only not heard (dismissable). */
+  warning?: { text: string; sentence: string; notRecorded: boolean } | null;
 };
 
 export type PillActions = {
@@ -42,6 +45,10 @@ export type PillActions = {
   onLanguage: () => void;
   /** The menu's choice; `delete` is Stop and delete (also the banner's Don't record). */
   onChoice: (choice: CallChoice) => void;
+  /** The warning row's actions. */
+  onOpenSettings?: () => void;
+  onRetrySystem?: () => void;
+  onDismissWarning?: () => void;
 };
 
 /** How long the pill marks a kept screen (the flash, or the still highlight under Reduce motion). */
@@ -134,6 +141,20 @@ export function RecordingPill({ model, actions, defaultOpen = false, onMenu, bef
           </div>
         )}
       </div>
+      {model.warning && (
+        <div className="el-pill-warning" data-hit role="alert" data-testid="missing-permission" title={model.warning.sentence}>
+          <Icons.WarningIcon />
+          <span className="el-pill-warning__text" dir="auto">{model.warning.text}</span>
+          {model.warning.notRecorded ? (
+            <>
+              <Button size="sm" variant="quiet" title={model.warning.sentence} onClick={actions.onOpenSettings}>Open System Settings</Button>
+              <Button size="sm" variant="quiet" onClick={actions.onRetrySystem}>Try again</Button>
+            </>
+          ) : (
+            <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Dismiss warning" title="Dismiss" onClick={actions.onDismissWarning} />
+          )}
+        </div>
+      )}
       {open ? (
         <div className="el-pill-menu" lang="en" role="menu" aria-label={CALL_WORDS.setting_title} data-hit data-testid="pill-menu">
           {items.map((m) => (

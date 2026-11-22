@@ -1,6 +1,6 @@
 // Library as the start screen (PLAN_V2_PARITY 2): Home's get-started checklist as a card that can be hidden, until
 // setup is done, and what needs action as one quiet banner that opens the right view.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeItem, makePendingItem, makeStatus } from "../../test/fixtures";
@@ -155,6 +155,85 @@ describe("the top of the Library", () => {
       } finally {
         get.mockRestore();
       }
+    });
+  });
+
+  describe("the header's button while the banner is dismissed", () => {
+    const actions = () => document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
+    const needs = () => actions().firstElementChild?.matches(".el-menu-anchor") ? actions().querySelector("button")! : actions().firstElementChild as HTMLElement;
+    const dismiss = () => fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" }));
+    afterEach(() => {
+      document.documentElement.dir = "";
+      vi.restoreAllMocks();
+    });
+
+    it("is not there while the banner shows, and never beside it", async () => {
+      await show();
+      expect(screen.getByTestId("needs-action")).toBeInTheDocument();
+      expect(within(actions()).queryByRole("button", { name: /need you|not transcribed/ })).toBeNull();
+      expect(within(actions()).getAllByRole("button")[0]).toHaveAccessibleName("Trash");
+    });
+
+    it("after ×, several kinds: \"3 need you\" before Trash, a menu of each kind like Review's", async () => {
+      await show();
+      dismiss();
+      expect(screen.queryByTestId("needs-action")).toBeNull();
+      const button = within(actions()).getByRole("button", { name: "3 need you" });
+      expect(button).toBe(needs());
+      expect(button).toHaveTextContent("3 need you");
+      expect(button).toHaveAttribute("aria-haspopup", "menu");
+      expect(button).toHaveAttribute("title", "2 calls wait for your decision · 1 recording isn't transcribed");
+      fireEvent.click(button);
+      expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["2 calls wait for your decision", "1 recording isn't transcribed"]);
+      fireEvent.click(screen.getByRole("menuitem", { name: "1 recording isn't transcribed" }));
+      expect([...document.querySelectorAll("button[data-row-id]")].map((b) => b.getAttribute("data-row-id"))).toEqual(["a"]);
+    });
+
+    it("after ×, one kind: \"1 not transcribed\" opens what Review opens, without a menu", async () => {
+      await show(makeStatus({ platform: "macos" }));
+      expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording isn't transcribed");
+      dismiss();
+      const button = within(actions()).getByRole("button", { name: "1 not transcribed" });
+      expect(button).toBe(needs());
+      expect(button).not.toHaveAttribute("aria-haspopup");
+      expect(button).toHaveAttribute("title", "1 recording isn't transcribed");
+      fireEvent.click(button);
+      expect([...document.querySelectorAll("button[data-row-id]")].map((b) => b.getAttribute("data-row-id"))).toEqual(["a"]);
+    });
+
+    it("stays after a restart while dismissed, goes when the banner comes back, and when nothing needs action", async () => {
+      const first = await show(makeStatus({ platform: "macos", pendingDecisions: 2 }));
+      dismiss();
+      first.unmount();
+      const same = await show(makeStatus({ platform: "macos", pendingDecisions: 2 }));
+      expect(within(actions()).getByRole("button", { name: "3 need you" })).toBeInTheDocument();
+      same.unmount();
+      const more = await show(makeStatus({ platform: "macos", pendingDecisions: 3 }));
+      expect(screen.getByTestId("needs-action")).toBeInTheDocument();
+      expect(within(actions()).queryByRole("button", { name: /need you|not transcribed|waiting/ })).toBeNull();
+      more.unmount();
+      respond("library_list", [ITEMS[1]]);
+      respond("library_refresh", [ITEMS[1]]);
+      await show(makeStatus({ platform: "macos" }));
+      expect(screen.queryByTestId("needs-action")).toBeNull();
+      expect(within(actions()).getAllByRole("button")[0]).toHaveAccessibleName("Trash");
+    });
+
+    it("in a right-to-left (Urdu) window: first on the start side, its count and words one left-to-right piece", async () => {
+      document.documentElement.dir = "rtl";
+      await show(makeStatus({ platform: "macos" }));
+      dismiss();
+      const button = needs();
+      expect(button).toHaveAccessibleName("1 not transcribed");
+      const words = button.querySelector("[dir=auto]");
+      expect(words?.textContent).toBe("1 not transcribed");
+      expect(actions().firstElementChild).toBe(button);
+    });
+
+    it("always keeps its words (narrow windows fold other actions into More instead: headerFold.test.tsx)", async () => {
+      await show(makeStatus({ platform: "macos" }));
+      dismiss();
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toHaveTextContent("1 not transcribed");
     });
   });
 });

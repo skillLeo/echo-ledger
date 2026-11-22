@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type Ref } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type ReactNode, type Ref } from "react";
 import { Button, Icon, type ButtonProps, type IconType } from "./Button";
 import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
 
@@ -214,7 +214,8 @@ export function Menu({ label, items: given, button, chip }: {
   label: string;
   /** The items, or a function that makes them when the menu opens (a row's ⋮ in a long list). */
   items: readonly MenuItem[] | (() => readonly MenuItem[]);
-  button?: Omit<ButtonProps, "onClick" | "children"> & { text?: string };
+  /** The button's words: a string, or words in an element of their own (a count and its words as one piece). */
+  button?: Omit<ButtonProps, "onClick" | "children"> & { text?: ReactNode };
   /** A filter chip opens it instead of a button: its words, and filled while the filter is on. */
   chip?: { text: string; on: boolean };
 }) {

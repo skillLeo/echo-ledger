@@ -780,7 +780,7 @@ button.el-step__head { cursor: pointer; }
 }
 
 /* The pill's menu (Transcribe this call, Save audio only, Stop and delete) and the start banner, under the pill. */
-.el-pill-stack { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4); }
+.el-pill-stack { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4); max-inline-size: 100%; min-inline-size: 0; }
 .el-pill-menu {
   display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: calc(var(--el-space-64) * 3);
   padding: var(--el-space-4);
@@ -800,6 +800,20 @@ button.el-step__head { cursor: pointer; }
 .el-pill-menu__item[aria-checked="true"] { color: var(--el-role-accent-text); font-weight: var(--el-text-body-strong-weight); }
 .el-pill-menu__item--danger { color: var(--el-role-danger-default); }
 .el-pill-menu__mark { display: inline-flex; inline-size: var(--el-space-16); }
+/* The other side not being recorded (2.0.6): a warning row under the pill, kept above the open menu or banner. */
+.el-pill-warning {
+  display: flex; align-items: center; gap: var(--el-space-4); box-sizing: border-box; max-inline-size: 100%; min-inline-size: 0;
+  padding: var(--el-space-2) var(--el-space-4) var(--el-space-2) var(--el-space-12);
+  background: var(--el-role-bg-overlay);
+  color: var(--el-role-text-primary);
+  border: var(--el-border-hairline) solid var(--el-role-warning-default);
+  border-radius: var(--el-radius-full);
+  box-shadow: var(--el-shadow-2);
+  white-space: nowrap;
+}
+.el-pill-warning > svg { flex: none; color: var(--el-role-warning-default); }
+.el-pill-warning__text { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.el-pill-warning > .el-button { flex: none; }
 .el-pill-banner {
   display: inline-flex; align-items: center; gap: var(--el-space-8);
   padding: var(--el-space-2) var(--el-space-4) var(--el-space-2) var(--el-space-12);

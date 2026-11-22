@@ -122,7 +122,7 @@ fn the_caption_style_is_replaced_whole_and_the_microphone_choice_can_be_cleared(
 fn privacy_settings_open_the_right_system_page() {
     assert_eq!(privacy_settings_url("microphone", false), Some("ms-settings:privacy-microphone"));
     assert!(privacy_settings_url("microphone", true).unwrap().contains("Privacy_Microphone"));
-    assert!(privacy_settings_url("system_audio", true).unwrap().contains("Privacy_ScreenCapture"));
+    assert_eq!(privacy_settings_url("system_audio", true), Some("x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture"));
     assert_eq!(privacy_settings_url("system_audio", false), None, "Windows needs no permission for system audio");
     assert_eq!(privacy_settings_url("camera", true), None);
     // The Mac check's other two panes, which Windows does not have.

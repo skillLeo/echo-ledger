@@ -113,6 +113,24 @@ describe("the recording pill", () => {
     expect(onMenu.mock.calls).toEqual([[false], [true], [false]]);
   });
 
+  it("carries the not-recorded warning and the menu together, the warning right under the pill", () => {
+    const a = { ...actions(), onOpenSettings: vi.fn(), onRetrySystem: vi.fn(), onDismissWarning: vi.fn() };
+    const warning = { text: "The other side isn't being recorded", sentence: "Allow System Audio Recording for EchoLedger.", notRecorded: true };
+    const { rerender } = render(<RecordingPill model={{ ...MODEL, warning }} actions={a} defaultOpen />);
+    const row = screen.getByTestId("missing-permission");
+    const menu = screen.getByRole("menu");
+    expect(row.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(row).toHaveAttribute("data-hit");
+    fireEvent.click(within(row).getByRole("button", { name: "Open System Settings" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Try again" }));
+    expect([a.onOpenSettings.mock.calls.length, a.onRetrySystem.mock.calls.length]).toEqual([1, 1]);
+    expect(within(row).queryByRole("button", { name: "Dismiss warning" }), "not recorded: never dismissed").toBeNull();
+    rerender(<RecordingPill model={{ ...MODEL, warning: { ...warning, text: "Can't hear the other side", notRecorded: false } }} actions={a} />);
+    fireEvent.click(within(screen.getByTestId("missing-permission")).getByRole("button", { name: "Dismiss warning" }));
+    expect(a.onDismissWarning).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Open System Settings" })).toBeNull();
+  });
+
   it("At the start of the call: Recording this call · Don't record beside the pill; doing nothing records", () => {
     const a = actions();
     render(<RecordingPill model={{ ...MODEL, banner: true }} actions={a} />);
@@ -315,6 +333,25 @@ describe("the windows with the flags", () => {
     await act(flushAsync);
     expect(await screen.findByTestId("recording-pill-v2")).toBeInTheDocument();
     expect(screen.queryByTestId("recording-pill")).toBeNull();
+  });
+
+  it("ui_v2.recording_controls: the new pill shows the core's not-recorded warning and grows for it with the menu", async () => {
+    respond("ui_flags", { ui_flags: { "ui_v2.recording_controls": true } });
+    const missing = [{ kind: "system_audio" as const, sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.", otherSide: "permission" as const }];
+    respond("recording_state", { ...REC, missing });
+    respond("set_hit_regions", null);
+    respond("window_ready", null);
+    respond("pill_expanded", null);
+    render(<PillApp />);
+    await act(flushAsync);
+    await act(() => emitEvent("pill:visibility", true));
+    await act(flushAsync);
+    expect(await screen.findByTestId("missing-permission")).toHaveTextContent("The other side isn't being recorded");
+    fireEvent.click(screen.getByRole("button", { name: /Show the controls$/ }));
+    await act(flushAsync);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByTestId("missing-permission")).toBeInTheDocument();
+    expect(callsOf("pill_expanded").at(-1)).toEqual({ expanded: true, warning: true });
   });
 
   it("ui_v2.after_call draws the new card in the after-call window", async () => {

@@ -8,6 +8,7 @@ import { useWindowShown } from "../../lib/visibility";
 import { AlertIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { Notice } from "../../components/Notice";
+import { otherSideNotRecorded } from "../../lib/controls";
 import { StateBanner } from "../../components/StateBanner";
 import { useBannerTurn } from "../../components/BannerSlot";
 
@@ -234,6 +235,39 @@ export function PermissionBanner({ recordingRef }: { recordingRef: string | null
         );
       })}
     </div>
+  );
+}
+
+/**
+ * The main window, while a call records and the recording itself found its other side missing (2.0.6). Not recorded (a
+ * tap held back: System Audio Recording) stays until the other side is heard, with Open System Settings (System Audio
+ * Recording's own pane) and Try again; after a try that did not help its words say to quit and reopen. Not heard (only
+ * silence for 30 s while another app plays sound) is said in neutral words and can be closed.
+ */
+export function OtherSideBanner() {
+  const [warning, setWarning] = useState<MissingPermission | null>(null);
+  useEffect(() => {
+    const un = listenTo("recording:state", (state) => setWarning(state.active ? otherSideNotRecorded(state.missing) : null));
+    return () => {
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
+  // Closed by hand it stays closed until its words change (a try that did not help says to quit and reopen).
+  const [closed, setClosed] = useState<string | null>(null);
+  const shown = useBannerTurn("other-side", !!warning && closed !== warning.sentence);
+  if (!shown || !warning) return null;
+  const permission = warning.otherSide === "permission";
+  const open = () => void api.openPrivacySettings("system_audio").catch(() => undefined);
+  return (
+    <Notice kind="banner" tone={permission ? "danger" : "warn"} className={`banner ${permission ? "danger" : "warn"}`} role={permission ? "alert" : "status"}
+      testId="other-side-not-recorded" icon={<AlertIcon size={16} />} timeoutMs={null}
+      onOpen={permission ? open : undefined} openLabel={permission ? `${warning.sentence} Open System Settings` : undefined} onDismiss={() => setClosed(warning.sentence)}
+      actions={permission ? <>
+        <button type="button" className="btn compact" onClick={open}>Open System Settings</button>
+        <button type="button" className="btn compact" onClick={() => void api.captureRetrySystem().catch(() => undefined)}>Try again</button>
+      </> : undefined}>
+      <span>{warning.sentence}</span>
+    </Notice>
   );
 }
 

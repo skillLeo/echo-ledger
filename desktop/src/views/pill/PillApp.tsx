@@ -7,7 +7,7 @@ import { useConcealed } from "../../lib/privacy";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
 import { fillHeight } from "../../lib/motion";
 import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
-import { elapsedAt, formatTimer, isTwoChannel, meterLevel, missingShort, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
+import { elapsedAt, formatTimer, isTwoChannel, meterLevel, missingShort, nextAnchor, otherSideNotRecorded, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { BLUETOOTH_NOTE } from "../../lib/microphone";
 import { CaptionsIcon, MicIcon, MonitorIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { BookmarkIcon, CheckIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon, WarningIcon } from "../../components/ControlIcons";
@@ -221,28 +221,37 @@ export default function PillApp() {
   }, [limitNotice]);
 
   // Dismissed is for what was on the line: something new going missing during the recording is said again.
-  const missingKinds = (live?.missing ?? []).map((m) => m.kind).join();
+  const missingKinds = (live?.missing ?? []).map((m) => `${m.kind}:${m.sentence}`).join();
   useEffect(() => setMissingDismissed(false), [missingKinds]);
-  const missing = shown && !missingDismissed ? missingShort(live?.missing, live?.mode) : null;
+  // The other side not being recorded (2.0.6) stays until it is heard: no dismiss. Not heard (neutral) can be dismissed.
+  const otherSide = shown ? otherSideNotRecorded(live?.missing) : null;
+  const notRecorded = otherSide?.otherSide === "permission" ? otherSide : null;
+  const missing = shown && (!missingDismissed || notRecorded) ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
   const banner = shown && !!live?.startBanner;
   // The window takes no more of the screen than it shows: it grows while the menu or the start banner shows, and gives
   // the screen back when they close. Said only when it changes (the first state is the closed one).
+  // A warning (the other side not being recorded) stays under the pill with the menu or the banner open: the window
+  // grows for whichever shows, or both, so neither is clipped.
   const expanded = shown && (menu || menuV2 || banner);
-  const sentExpanded = useRef(false);
+  const warning = shown && !!missing;
+  const sent = useRef("false:false");
   /** Grows the window first and then lets the menu be drawn, so it is never clipped for a frame. */
   const growFirst = useCallback(async () => {
-    sentExpanded.current = true;
-    await api.pillExpanded(true).catch(() => undefined);
-  }, []);
+    sent.current = `true:${warning}`;
+    await api.pillExpanded(true, warning).catch(() => undefined);
+  }, [warning]);
   useEffect(() => {
-    if (sentExpanded.current === expanded) return;
-    sentExpanded.current = expanded;
-    api.pillExpanded(expanded).catch(() => undefined);
-  }, [expanded]);
+    const key = `${expanded}:${warning}`;
+    if (sent.current === key) return;
+    sent.current = key;
+    api.pillExpanded(expanded, warning).catch(() => undefined);
+  }, [expanded, warning]);
   const tray = menu && shown ? "menu" : banner ? "start" : mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : limitNotice && shown ? "limit" : screensNotice && shown && live?.screens?.on ? "screens" : null;
   const concealed = useConcealed();
-  useHitRegions([shown, menu, tray, concealed]);
+  // With the menu or the banner open, the warning keeps its row above them.
+  const warningWithOpen = (menu || banner) && !!missing;
+  useHitRegions([shown, menu, tray, warningWithOpen, concealed]);
 
   /** Runs one command at a time; on failure shows the message and resyncs with the core. */
   const run = async (action: Action, command: () => Promise<unknown>) => {
@@ -375,15 +384,34 @@ export default function PillApp() {
               elapsed, name: caller || label, paused, captions: live.captions, language: languageChip(live.language), error,
               screens: live.screens ? { on: live.screens.on, count: live.screens.count } : null,
               call: live.mode === "call", choice: live.callChoice ?? null, banner,
+              warning: missing ? { text: missing, sentence: otherSide?.sentence ?? live.missing?.[0]?.sentence ?? missing, notRecorded: !!notRecorded } : null,
             }}
             actions={{
               onCaptions: toggleCaptions, onPause: togglePause, onStop: stop, onScreens: toggleScreens,
               onCapture: () => void run("screens", captureNowV2), onLanguage: cycleLanguage, onChoice: choose,
+              onOpenSettings: () => void api.openPrivacySettings("system_audio").catch(() => undefined),
+              onRetrySystem: () => void api.captureRetrySystem().catch(() => undefined),
+              onDismissWarning: () => setMissingDismissed(true),
             }} />
         </Suspense>
       </div>
     );
   }
+
+  const missingRow = missing && (
+    <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={otherSide?.sentence ?? live?.missing?.[0]?.sentence}>
+      <WarningIcon size={14} />
+      <span className="mark-text">{missing}</span>
+      {notRecorded ? (
+        <>
+          <button type="button" className="rec-text-btn" title={notRecorded.sentence} onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Open System Settings</button>
+          <button type="button" className="rec-text-btn" onClick={() => void api.captureRetrySystem().catch(() => undefined)}>Try again</button>
+        </>
+      ) : (
+        <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setMissingDismissed(true)}><MinimizeIcon size={14} /></button>
+      )}
+    </div>
+  );
 
   return (
     <div className="pill-root">
@@ -435,6 +463,7 @@ export default function PillApp() {
             <PillButton label="Hide controls" onClick={hide}><MinimizeIcon size={15} /></PillButton>
         </span>
       </div>
+      {warningWithOpen && missingRow}
       {tray === "menu" && (
         <div className="rec-menu" id="rec-menu" lang="en" data-hit role="menu" aria-label={CALL_WORDS.setting_title} data-testid="pill-menu">
           {PILL_MENU.filter((m) => live.mode === "call" || m.choice === "delete").map((m) => (
@@ -478,13 +507,7 @@ export default function PillApp() {
           <span className="mark-text">{deviceNote.text}</span>
         </div>
       )}
-      {tray === "missing" && missing && (
-        <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={live?.missing?.[0]?.sentence}>
-          <WarningIcon size={14} />
-          <span className="mark-text">{missing}</span>
-          <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setMissingDismissed(true)}><MinimizeIcon size={14} /></button>
-        </div>
-      )}
+      {tray === "missing" && missingRow}
       {tray === "screens" && (
         <div className="mark-tray note" data-hit data-testid="screens-notice" role="status">
           <MonitorIcon size={14} />

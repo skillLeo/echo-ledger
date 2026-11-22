@@ -39,6 +39,8 @@ const DICTATION_SIZE: (f64, f64) = (420.0, 110.0);
 pub const PILL_SIZE: (f64, f64) = (352.0, 84.0);
 /// The pill window while its menu (Transcribe this call, Save audio only, Stop and delete) or the start banner shows.
 pub const PILL_OPEN_SIZE: (f64, f64) = (352.0, 148.0);
+/// One warning row under the pill (the other side not being recorded, 2.0.6), kept above the open menu or banner.
+pub const PILL_WARNING_ROW: f64 = 40.0;
 /// How much of the pill window the pill itself takes (the after-call card goes right under it).
 pub const PILL_VISIBLE_LOGICAL: f64 = 48.0;
 /// The after-call window for a confirmation, a short grouped card or the unknown-app chip; it grows only for what it
@@ -57,6 +59,8 @@ pub const REVIEW_MAX_HEIGHT: f64 = 480.0;
 
 /// The pill's menu or the start banner is open (the pill page says so, `pill_expanded`).
 static PILL_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// A warning row shows under the pill as well (the page says so with the menu or banner).
+static PILL_WARNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// The after-call window's height now (logical px at 100 % text, as f64 bits): it grows before it draws something
 /// taller and keeps that size until it has nothing left to show.
 static REVIEW_HEIGHT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -70,9 +74,14 @@ fn set_review_height(height: f64) {
     REVIEW_HEIGHT.store(height.to_bits(), std::sync::atomic::Ordering::SeqCst);
 }
 
-/// The pill window's size at 100 % text (pure): its old size, or room for the menu while it is open.
-pub fn pill_base(open: bool) -> (f64, f64) {
-    if open { PILL_OPEN_SIZE } else { PILL_SIZE }
+/// The pill window's size at 100 % text (pure): its old size (the pill and one row under it: a warning, the bookmark
+/// tray), room for the menu or the start banner while open, and a row more for a warning shown with them.
+pub fn pill_base(open: bool, warning: bool) -> (f64, f64) {
+    match (open, warning) {
+        (false, _) => PILL_SIZE,
+        (true, false) => PILL_OPEN_SIZE,
+        (true, true) => (PILL_OPEN_SIZE.0, PILL_OPEN_SIZE.1 + PILL_WARNING_ROW),
+    }
 }
 
 /// The height a list of rows takes (pure): the rows it shows (every Delete, `after_call::visible_rows`) and "+N more".
@@ -98,7 +107,7 @@ pub fn review_base(state: &crate::after_call::AfterCallState) -> (f64, f64) {
 fn base_now(label: &str) -> Option<(f64, f64)> {
     use std::sync::atomic::Ordering::SeqCst;
     match label {
-        PILL => Some(pill_base(PILL_OPEN.load(SeqCst))),
+        PILL => Some(pill_base(PILL_OPEN.load(SeqCst), PILL_WARNING.load(SeqCst))),
         REVIEW => Some((REVIEW_SIZE.0, review_height())),
         _ => None,
     }
@@ -107,8 +116,9 @@ fn base_now(label: &str) -> Option<(f64, f64)> {
 /// The pill page opens or closes its menu or the start banner: the window grows for it (before the page draws it, so
 /// nothing is clipped for a frame; call from an async command), and gives the screen back when it closes (kept where it
 /// is at the top, the pill does not move).
-pub fn set_pill_expanded(app: &AppHandle, open: bool) {
+pub fn set_pill_expanded(app: &AppHandle, open: bool, warning: bool) {
     PILL_OPEN.store(open, std::sync::atomic::Ordering::SeqCst);
+    PILL_WARNING.store(warning, std::sync::atomic::Ordering::SeqCst);
     fit_to_text_size(app, PILL);
 }
 
@@ -683,6 +693,7 @@ pub fn set_pill_visible(app: &AppHandle, visible: bool) {
     // (`preset_pill_open`, set just before).
     if !visible {
         PILL_OPEN.store(false, std::sync::atomic::Ordering::SeqCst);
+        PILL_WARNING.store(false, std::sync::atomic::Ordering::SeqCst);
     }
     if visible {
         lifecycle::show(app, PILL, "pill");
@@ -786,9 +797,11 @@ mod tests {
     fn the_pill_and_the_card_window_take_no_more_screen_than_they_show() {
         use crate::after_call::{AfterCallState, CallChoice, CallDone, CallGroup};
         // The pill: its old size while the menu is closed, room for the menu only while it is open.
-        assert_eq!(pill_base(false), (352.0, 84.0));
-        assert_eq!(pill_base(true), (352.0, 148.0));
-        assert_eq!(scaled_size(pill_base(true), 2.0), (704.0, 296.0), "at 200 % text too");
+        assert_eq!(pill_base(false, false), (352.0, 84.0));
+        assert_eq!(pill_base(false, true), (352.0, 84.0), "a warning alone fits under the pill, as before");
+        assert_eq!(pill_base(true, false), (352.0, 148.0));
+        assert_eq!(pill_base(true, true), (352.0, 188.0), "the menu and the warning both, neither clipped");
+        assert_eq!(scaled_size(pill_base(true, false), 2.0), (704.0, 296.0), "at 200 % text too");
         // The after-call window: its old size for a confirmation, the grouped card or nothing; taller only for the card.
         let done = CallDone {
             kind: CallChoice::Audio, id: "a".into(), title: None, caller_name: None, source_app: "whatsapp".into(),

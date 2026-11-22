@@ -200,6 +200,8 @@
 .rec-menu-item.danger { color: var(--danger); }
 .rec-menu-mark { display: inline-flex; width: 16px; flex: none; }
 .mark-tray .rec-dot { flex: none; }
+/* A row's actions keep their words on one line; the row's text gives way (ellipsis), never the buttons. */
+.mark-tray .rec-text-btn { flex: none; white-space: nowrap; }
 
 /* Bookmark tray (B3) and the silent-other-side warning (B5), under the pill for a few seconds. */
 .mark-tray {

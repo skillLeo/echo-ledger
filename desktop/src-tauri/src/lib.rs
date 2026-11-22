@@ -151,6 +151,10 @@ pub struct AppState {
     pub recording_missing: Mutex<Vec<permissions::Missing>>,
     /// Which permissions were granted last time, and what the person has not been told is gone yet (Phase 1B).
     pub permission_memory: Mutex<permissions::Memory>,
+    /// Whether the running call recording records the other side (`actions::check_system_side`).
+    pub system_watch: Mutex<audio::health::SystemWatch>,
+    /// What went wrong with the last recording's capture, for Copy diagnostics.
+    pub last_capture_notes: Mutex<Vec<String>>,
     /// The devices of the running recording: a channel without one, or news of a change (Phase 1B).
     pub device_status: Mutex<audio::devices::DeviceStatus>,
     /// The last Mac check of this run (Phase 1B).
@@ -173,7 +177,14 @@ impl AppState {
         let token = None;
         let library = LibraryCache::load(&paths::library(&data_dir));
         let settings_locked = settings.app_lock && lock::LockFile::load(&paths::app_lock(&data_dir)).pin_hash.is_some();
-        let permission_memory = permissions::Memory::load(&permissions::Memory::path(&data_dir));
+        // Another copy of EchoLedger (an update, another signature) asks for its permissions afresh: macOS may not have
+        // carried them over although its privacy call still says yes.
+        let stored = permissions::Memory::load(&permissions::Memory::path(&data_dir));
+        let permission_memory = stored.for_identity(&permissions::identity());
+        if permission_memory != stored {
+            eprintln!("[echoledger] permissions: another copy of EchoLedger than last time; what was granted is asked again");
+            permission_memory.save(&permissions::Memory::path(&data_dir));
+        }
         Self {
             data_dir,
             settings: Mutex::new(settings),
@@ -222,6 +233,8 @@ impl AppState {
             updates: updates::Updates::default(),
             recording_missing: Mutex::new(Vec::new()),
             permission_memory: Mutex::new(permission_memory),
+            system_watch: Mutex::new(audio::health::SystemWatch::default()),
+            last_capture_notes: Mutex::new(Vec::new()),
             device_status: Mutex::new(audio::devices::DeviceStatus::default()),
             mac_check: Mutex::new(None),
             ready: Mutex::new(None),
@@ -308,9 +321,21 @@ impl AppState {
         self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
+    /// What a real look at system audio found (a recording's other side, a short tap): kept, and said by
+    /// [`AppState::permissions_now`] from now on.
+    pub fn system_audio_checked(&self, result: Option<Result<(), String>>) {
+        let mut memory = self.permission_memory.lock().unwrap_or_else(|p| p.into_inner());
+        let next = memory.with_system_audio(result);
+        if next != *memory {
+            next.save(&permissions::Memory::path(&self.data_dir));
+            *memory = next;
+        }
+    }
+
     /// What the system allows now, taken into the memory of what was granted (a permission that went is said once).
+    /// System audio that did not record although the privacy call allows it counts as off (`Memory::overlay`).
     pub fn permissions_now(&self) -> permissions::Permissions {
-        let now = permissions::read();
+        let now = self.permission_memory_now().overlay(permissions::read());
         if cfg!(target_os = "macos") {
             let screens_wanted = self.lock_settings().screen_moments;
             let (can_tell, run) = (permissions::can_tell_not_asked(), permissions::this_run());
@@ -456,6 +481,12 @@ pub fn run() {
             let settings = app.state::<AppState>().settings();
             // Without a Developer ID macOS may forget permissions at an update: looked at every start (Phase 1B).
             app.state::<AppState>().permissions_now();
+            // Another copy of EchoLedger (the first start after an update): system audio looked at for real once, when it
+            // was allowed before (`Memory::wants_probe`).
+            if cfg!(target_os = "macos") && app.state::<AppState>().permission_memory_now().wants_probe() {
+                let verifying = handle.clone();
+                tauri::async_runtime::spawn(async move { commands::verify_system_audio(&verifying).await });
+            }
             // An update downloaded by the last run installs now, before anything records (v1.5).
             updates::install_kept(&handle);
 
@@ -680,6 +711,7 @@ pub fn run() {
             commands::permission_request,
             commands::permission_notice_dismiss,
             commands::open_privacy_settings,
+            commands::capture_retry_system,
             commands::ready_check,
             commands::ready_last,
             commands::ready_fix,

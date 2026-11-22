@@ -38,6 +38,12 @@ const SURFACES = [
     ["banner", "controls-banner", PILL, async (page) => page.locator("[data-testid=start-banner]").first().waitFor()],
     ["always", "controls-always", REVIEW, async (page) => page.locator("[data-testid=call-always]").first().waitFor()],
     ["held", "controls-held", REVIEW, async (page) => page.locator("[data-testid=call-held]").first().waitFor()],
+    // The not-recorded warning and the menu, both under the pill.
+    ["pill-warning", "controls-warning", PILL, async (page, design) => {
+      await page.locator("[data-testid=missing-permission]").first().waitFor();
+      await page.locator(design === "v2" ? ".el-pill__summary" : "[data-testid=pill-choice]").first().click();
+      await page.locator("[role=menu]").first().waitFor();
+    }],
   ] : []),
 ];
 
@@ -65,7 +71,7 @@ try {
       for (const theme of ["light", "dark"]) {
         for (const lang of ["en", "ur"]) {
           const name = `desktop-${tag}-${surface}-${design}-${theme}-${lang}`;
-          const page = await browser.newPage({ viewport: { width: 1200, height: 700 }, colorScheme: theme, reducedMotion: "reduce", deviceScaleFactor: 2 });
+          const page = await browser.newPage({ viewport: { width: 1200, height: 1100 }, colorScheme: theme, reducedMotion: "reduce", deviceScaleFactor: 2 });
           page.on("pageerror", (e) => console.error(`${name}: ${e.message.split("\n")[0]}`));
           const flags = design === "v2" ? `&uiflags=${FLAGS}` : "";
           await page.goto(`${base}scripts/screens/index.html?screen=${screen}&theme=${theme}${lang === "ur" ? "&lang=ur" : ""}${flags}`);

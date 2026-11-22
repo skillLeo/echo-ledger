@@ -420,7 +420,9 @@ const commands: Record<string, (args: Args) => unknown> = {
     sourceApp: "whatsapp",
     language: "ur",
     bluetoothMic: bluetooth,
-    missing: screen === "controls-permission" ? [NO_SYSTEM_AUDIO] : screen === "controls-nothing" ? [{ kind: "microphone", sentence: NOTHING_TO_RECORD }, { kind: "system_audio", sentence: NOTHING_TO_RECORD }] : [],
+    // "controls-warning": the other side not being recorded (2.0.6), with the call choice's menu open over it.
+    missing: screen === "controls-warning" ? [{ kind: "system_audio", sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.", otherSide: "permission" }]
+      : screen === "controls-permission" ? [NO_SYSTEM_AUDIO] : screen === "controls-nothing" ? [{ kind: "microphone", sentence: NOTHING_TO_RECORD }, { kind: "system_audio", sentence: NOTHING_TO_RECORD }] : [],
     deviceNote: screen === "controls-device" ? { text: "Microphone changed to AirPods Pro. Still recording.", warning: false } : null,
     // "At the start of the call": the banner beside the pill. No choice is made yet: nothing on the menu is ticked.
     startBanner: screen === "controls-banner",
@@ -508,7 +510,7 @@ async function render() {
   const { emit } = await import("@tauri-apps/api/event");
   root.render(
     <div className="screens-canvas">
-      <div className="screens-window" style={{ width: 352, height: 148 }}><PillApp /></div>
+      <div className="screens-window" style={{ width: 352, height: 188 }}><PillApp /></div>
       <div className="screens-window" style={{ width: 360, height: 340 }}><ReviewApp /></div>
       <div className="screens-window" style={{ width: 560, height: 150 }}><OverlayApp /></div>
     </div>,
