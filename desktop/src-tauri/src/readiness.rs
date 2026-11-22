@@ -596,7 +596,7 @@ mod tests {
         assert_eq!(fix_url("sound", false), Some("ms-settings:sound"));
         assert_eq!(fix_url("software_update", false), Some("ms-settings:windowsupdate"));
         assert!(fix_url("sound", true).unwrap().contains("Sound-Settings"));
-        assert!(fix_url("system_audio", true).unwrap().contains("Privacy_ScreenCapture"));
+        assert!(fix_url("system_audio", true).unwrap().contains("Privacy_AudioCapture"));
         assert_eq!(fix_url("system_audio", false), None, "Windows has no such permission");
     }
 }

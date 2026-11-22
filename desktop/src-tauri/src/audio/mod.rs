@@ -67,6 +67,9 @@ pub struct FinishedRecording {
     /// Bookmarks in time order and the pause gaps (recorded time).
     pub markers: Vec<MarkerDto>,
     pub pauses: Vec<PauseDto>,
+    /// What went wrong with the capture while it ran, for the recording's notes ("the system audio tap delivered no
+    /// audio in 3 s").
+    pub capture_notes: Vec<String>,
 }
 
 type LiveSinks = [Option<UnboundedSender<Vec<u8>>>; 2];
@@ -85,6 +88,10 @@ pub struct RecorderLink {
     pub system_heard: Arc<Mutex<Option<Instant>>>,
     /// When the microphone (this side) was last above [`health::HEARD_LEVEL`] (the after-call check, Phase 1C).
     pub mic_heard: Arc<Mutex<Option<Instant>>>,
+    /// System audio frames written so far, and when one was last more than digital silence: whether the other side is
+    /// being recorded at all ([`health::system_side_problem`]).
+    pub system_frames: Arc<AtomicU64>,
+    pub system_signal: Arc<Mutex<Option<Instant>>>,
 }
 
 /// Sent through the keep-alive sender once a paused backend has stopped: every packet captured before the pause
@@ -124,6 +131,12 @@ pub fn recorder_loop(mut recorder: Recorder, rx: Receiver<AudioChunk>, link: &Re
             seen_version = version;
         }
         let system = chunk.channel == Channel::System;
+        if system {
+            link.system_frames.fetch_add(chunk.samples.len() as u64, Ordering::Relaxed);
+            if health::has_signal(&chunk.samples) {
+                *link.system_signal.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
+            }
+        }
         recorder.push(chunk)?;
         let levels = recorder.levels();
         *link.levels.lock().unwrap_or_else(|p| p.into_inner()) = levels;
@@ -150,6 +163,22 @@ struct Active {
     notes: RecordingNotes,
     /// Start of the current running stretch (start or last resume), for the far-side silence check.
     running_since: Instant,
+    /// Since when the system side is looked at (start, resume or a try again), and the frames written before then.
+    system_since: Instant,
+    system_frames_before: u64,
+    /// The backend's count of empty system buffers then (`CaptureBackend::system_empty_buffers`).
+    system_empty_before: u64,
+    /// What went wrong with the capture, each said once (`note`).
+    capture_notes: Vec<String>,
+}
+
+impl Active {
+    /// The system side is looked at afresh from now.
+    fn look_at_system_from(&mut self, now: Instant) {
+        self.system_since = now;
+        self.system_frames_before = self.link.system_frames.load(Ordering::Relaxed);
+        self.system_empty_before = self.backend.as_ref().map_or(0, |b| b.system_empty_buffers());
+    }
 }
 
 #[derive(Default)]
@@ -214,6 +243,47 @@ impl CaptureController {
         Some(Instant::now().saturating_duration_since(since).as_millis() as u64)
     }
 
+    /// What the other side of a running call recording has done since it was last (re)started; none when no call
+    /// records or it is paused. The facts [`health::system_side_problem`] decides from.
+    pub fn system_side(&self) -> Option<health::SystemSide> {
+        let guard = self.lock();
+        let active = guard.as_ref().filter(|a| a.info.mode == RecordingMode::Call)?;
+        let backend = active.backend.as_ref()?;
+        let since = active.system_since;
+        let after = |m: &Arc<Mutex<Option<Instant>>>| m.lock().unwrap_or_else(|p| p.into_inner()).is_some_and(|at| at >= since);
+        Some(health::SystemSide {
+            running_ms: Instant::now().saturating_duration_since(since).as_millis() as u64,
+            failure: backend.system_failure(),
+            frames: active.link.system_frames.load(Ordering::Relaxed).saturating_sub(active.system_frames_before),
+            empty_buffers: backend.system_empty_buffers().saturating_sub(active.system_empty_before),
+            signal: after(&active.link.system_signal),
+            mic_heard: after(&active.link.mic_heard),
+            others_playing: None,
+        })
+    }
+
+    /// Opens the system side again (System Audio Recording allowed during the recording): true when the backend can,
+    /// and the check starts afresh; false when only quitting and reopening EchoLedger would.
+    pub fn retry_system(&self) -> bool {
+        let mut guard = self.lock();
+        let Some(active) = guard.as_mut().filter(|a| a.info.mode == RecordingMode::Call) else { return false };
+        let Some(backend) = active.backend.as_mut() else { return false };
+        if !backend.retry_system() {
+            return false;
+        }
+        active.look_at_system_from(Instant::now());
+        true
+    }
+
+    /// Keeps a line about the capture for the recording's notes, once.
+    pub fn note(&self, line: &str) {
+        if let Some(active) = self.lock().as_mut()
+            && !active.capture_notes.iter().any(|l| l == line)
+        {
+            active.capture_notes.push(line.to_string());
+        }
+    }
+
     /// What the capture has to say about its devices since it was last asked (a headset came or went, Phase 1B).
     pub fn take_device_notices(&self) -> Vec<devices::DeviceNotice> {
         self.lock().as_mut().and_then(|a| a.backend.as_mut()).map(|b| b.take_notices()).unwrap_or_default()
@@ -255,7 +325,22 @@ impl CaptureController {
         };
         let thread = spawn_recorder(dir, mono, rx, link.clone());
 
-        *guard = Some(Active { info: info.clone(), streams, backend: Some(backend), keepalive: tx, thread, link, clock: RecordingClock::new(Instant::now()), notes: RecordingNotes::default(), running_since: Instant::now() });
+        let now = Instant::now();
+        *guard = Some(Active {
+            info: info.clone(),
+            streams,
+            backend: Some(backend),
+            keepalive: tx,
+            thread,
+            link,
+            clock: RecordingClock::new(now),
+            notes: RecordingNotes::default(),
+            running_since: now,
+            system_since: now,
+            system_frames_before: 0,
+            system_empty_before: 0,
+            capture_notes: Vec::new(),
+        });
         Ok(info)
     }
 
@@ -292,6 +377,7 @@ impl CaptureController {
                 active.notes.resumed(paused_ms);
                 active.clock.resume(now);
                 active.running_since = now;
+                active.look_at_system_from(now);
                 Ok(())
             }
             Err(e) => {
@@ -336,14 +422,14 @@ impl CaptureController {
     pub fn stop(&self) -> AppResult<Option<FinishedRecording>> {
         let active = self.lock().take();
         let Some(active) = active else { return Ok(None) };
-        let Active { info, backend, keepalive, thread, notes, .. } = active;
+        let Active { info, backend, keepalive, thread, notes, capture_notes, .. } = active;
         if let Some(mut backend) = backend {
             backend.stop(); // drops the backend's senders
         }
         drop(keepalive); // the last sender: the recorder thread drains and finishes
         let output = thread.join().map_err(|_| AppError::Audio("recorder thread panicked".into()))?.map_err(AppError::Audio)?;
         let (markers, pauses) = notes.finish();
-        Ok(Some(FinishedRecording { info, ended_at: Utc::now(), output, markers, pauses }))
+        Ok(Some(FinishedRecording { info, ended_at: Utc::now(), output, markers, pauses, capture_notes }))
     }
 }
 

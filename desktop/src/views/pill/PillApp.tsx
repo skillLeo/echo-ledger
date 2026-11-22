@@ -6,7 +6,7 @@ import { useConcealed } from "../../lib/privacy";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
 import { fillHeight } from "../../lib/motion";
 import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
-import { elapsedAt, formatTimer, isTwoChannel, meterLevel, missingShort, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
+import { elapsedAt, formatTimer, isTwoChannel, meterLevel, missingShort, nextAnchor, otherSideNotRecorded, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { BLUETOOTH_NOTE } from "../../lib/microphone";
 import { CaptionsIcon, MicIcon, MonitorIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon, WarningIcon } from "../../components/ControlIcons";
@@ -215,9 +215,12 @@ export default function PillApp() {
   }, [limitNotice]);
 
   // Dismissed is for what was on the line: something new going missing during the recording is said again.
-  const missingKinds = (live?.missing ?? []).map((m) => m.kind).join();
+  const missingKinds = (live?.missing ?? []).map((m) => `${m.kind}:${m.sentence}`).join();
   useEffect(() => setMissingDismissed(false), [missingKinds]);
-  const missing = shown && !missingDismissed ? missingShort(live?.missing, live?.mode) : null;
+  // The other side not being recorded (2.0.6) stays until it is heard: no dismiss. Not heard (neutral) can be dismissed.
+  const otherSide = shown ? otherSideNotRecorded(live?.missing) : null;
+  const notRecorded = otherSide?.otherSide === "permission" ? otherSide : null;
+  const missing = shown && (!missingDismissed || notRecorded) ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
   const tray = mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : limitNotice && shown ? "limit" : screensNotice && shown && live?.screens?.on ? "screens" : null;
   const concealed = useConcealed();
@@ -434,10 +437,17 @@ export default function PillApp() {
         </div>
       )}
       {tray === "missing" && missing && (
-        <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={live?.missing?.[0]?.sentence}>
+        <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={otherSide?.sentence ?? live?.missing?.[0]?.sentence}>
           <WarningIcon size={14} />
           <span className="mark-text">{missing}</span>
-          <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setMissingDismissed(true)}><MinimizeIcon size={14} /></button>
+          {notRecorded ? (
+            <>
+              <button type="button" className="rec-text-btn" title={notRecorded.sentence} onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Open System Settings</button>
+              <button type="button" className="rec-text-btn" onClick={() => void api.captureRetrySystem().catch(() => undefined)}>Try again</button>
+            </>
+          ) : (
+            <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setMissingDismissed(true)}><MinimizeIcon size={14} /></button>
+          )}
         </div>
       )}
       {tray === "screens" && (

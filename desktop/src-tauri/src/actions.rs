@@ -264,6 +264,7 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
     clear_captions(app); // a new recording never inherits the previous one's lines
     let info = state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
     *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = missing;
+    *state.system_watch.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(auto, Ordering::SeqCst);
     on_recording_started(app, &info);
@@ -447,6 +448,10 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     crate::screens::on_recording_ended(app).await;
     let sides = state.capture.sides_heard();
     let finished = state.capture.stop()?;
+    *state.system_watch.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
+    if let Some(done) = finished.as_ref() {
+        keep_capture_notes(&state, done);
+    }
     if let (Some(heard), Some(done)) = (sides, finished.as_ref()) {
         check_sides(app, done.output.duration_ms, heard);
     }
@@ -457,6 +462,15 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     crate::overlay::set_pill_visible(app, false);
     *state.recording_started_at.lock().unwrap() = None;
     Ok(finished.map(|f| (f, session, provider)))
+}
+
+/// What went wrong with a finished recording's capture: in its folder (`capture-notes.txt`, beside its audio) and for
+/// Copy diagnostics. Nothing is written when nothing went wrong.
+fn keep_capture_notes(state: &crate::AppState, done: &crate::audio::FinishedRecording) {
+    *state.last_capture_notes.lock().unwrap_or_else(|p| p.into_inner()) = done.capture_notes.clone();
+    if !done.capture_notes.is_empty() {
+        let _ = std::fs::write(done.output.dir.join("capture-notes.txt"), done.capture_notes.join("\n") + "\n");
+    }
 }
 
 /// After each call (Phase 1C, A5): a side that was never heard is said, with why and how to fix it, as Call capture &
@@ -1250,6 +1264,7 @@ fn start_ticker(app: &AppHandle) {
                 read_recording_permissions(&app);
             }
             take_device_notices(&app);
+            check_system_side(&app);
             // The Record page hears of a device note when it comes and when it goes (news lasts a few seconds).
             let note = state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(Instant::now());
             if note != shown_note {
@@ -1273,7 +1288,9 @@ fn read_recording_permissions(app: &AppHandle) {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<crate::AppState>();
         let Some(info) = state.capture.info() else { return };
-        let next = crate::permissions::missing_during(info.mode, &state.permissions_now());
+        let permissions = state.permissions_now();
+        let warning = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).warning();
+        let next = crate::permissions::missing_with(info.mode, &permissions, warning);
         // The same recording: a very short one may have ended while the system was asked.
         if state.capture.info().is_some_and(|i| i.client_ref == info.client_ref) {
             let mut missing = state.recording_missing.lock().unwrap_or_else(|p| p.into_inner());
@@ -1283,6 +1300,86 @@ fn read_recording_permissions(app: &AppHandle) {
             }
         }
     });
+}
+
+/// Whether the running call recording records the other side (a Mac: macOS lets a copy of EchoLedger it no longer
+/// allows open a tap that delivers nothing, while its privacy call still says yes). Looked at every second: within
+/// about 3 s of the start a system side that failed, delivered nothing, or only digital silence while the microphone
+/// hears sound is said on the pill and in the main window, in the recording's notes, the log and Copy diagnostics. The
+/// microphone records on. Windows' loopback delivers nothing while nothing plays, so it is not looked at there.
+fn check_system_side(app: &AppHandle) {
+    if !cfg!(target_os = "macos") {
+        return;
+    }
+    let state = app.state::<crate::AppState>();
+    let Some(side) = state.capture.system_side() else { return };
+    let shown_silent = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).problem == Some(crate::audio::health::SystemProblem::Silent);
+    if crate::audio::health::needs_playing_check(&side) && !shown_silent {
+        // Only zeros for 30 s: said only while another app plays sound, which is read beside the ticker.
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let side = crate::audio::health::SystemSide { others_playing: Some(crate::audio::platform::others_playing()), ..side };
+            look_at_system_side(&app, &side);
+        });
+        return;
+    }
+    look_at_system_side(app, &side);
+}
+
+/// One look at the system side: a change is said beside the ticker (it reads the system and writes a file).
+fn look_at_system_side(app: &AppHandle, side: &crate::audio::health::SystemSide) {
+    let state = app.state::<crate::AppState>();
+    let verdict = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).look(side);
+    if verdict == crate::audio::health::SystemVerdict::Same {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || system_side_changed(&app, verdict));
+}
+
+/// What a change of the system-side check does: says it in the log and the recording's notes, keeps what was found for
+/// Setup and the Mac check (the permission only: never a quiet call), and puts the warning on the pill and in the main
+/// window, or takes it away once the other side is heard.
+fn system_side_changed(app: &AppHandle, verdict: crate::audio::health::SystemVerdict) {
+    use crate::audio::health::SystemVerdict;
+    let state = app.state::<crate::AppState>();
+    match verdict {
+        SystemVerdict::Same => return,
+        SystemVerdict::Missing(problem) => {
+            let reason = problem.reason();
+            let said = if problem.names_permission() { "the other side isn't being recorded" } else { "the other side isn't heard" };
+            eprintln!("[echoledger] capture: {said}: {reason}; the microphone records on");
+            state.capture.note(&format!("Other side {}: {reason}", if problem.names_permission() { "not recorded" } else { "not heard" }));
+            if problem.names_permission() {
+                // Setup, the Mac check and the next recording say System Audio Recording is missing.
+                state.system_audio_checked(Some(Err(reason)));
+            }
+        }
+        SystemVerdict::Recording => {
+            if state.permission_memory_now().system_audio_failing.is_some() {
+                eprintln!("[echoledger] capture: the other side is being recorded again");
+            }
+            state.system_audio_checked(Some(Ok(())));
+        }
+    }
+    let Some(info) = state.capture.info() else { return };
+    let permissions = state.permissions_now();
+    let warning = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).warning();
+    *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = crate::permissions::missing_with(info.mode, &permissions, warning);
+    emit_status(app);
+}
+
+/// "Try again" on the warning: opens the system side once more (System Audio Recording allowed meanwhile). False when
+/// only quitting and reopening EchoLedger would. The warning stays until the other side is heard; when the check after
+/// the try still finds it missing, it says to quit and reopen.
+pub fn retry_system_audio(app: &AppHandle) -> bool {
+    let state = app.state::<crate::AppState>();
+    if !state.capture.retry_system() {
+        return false;
+    }
+    state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).retry();
+    eprintln!("[echoledger] capture: trying the system side again");
+    true
 }
 
 /// What the capture says about its devices (a headset came or went, Phase 1B) goes to the pill and the Record page; a
