@@ -700,6 +700,15 @@ const SCREENS = [
     await page.getByRole("button", { name: "Collapse sidebar" }).click();
     await page.locator(".el-sidebar[data-rail=on] .el-nav-item__dot").waitFor();
   }],
+  // The Library header's needs menu open ("6 need you ▾", S2 on 2.0.8: it was cut off by the sidebar): whole, inside
+  // the window, off the sidebar, every item's words shown (long ones wrap). At 1280 beside the title, at 800 under it.
+  ...[1280, 800].map((width) => [`library-needs-menu-${width}-en`, `library&uiflags=${V2_FLAGS}`, async (page) => {
+    await page.getByRole("button", { name: "Library", exact: true }).last().click();
+    await page.evaluate(() => document.querySelectorAll("*").forEach((el) => { if (el.scrollTop) el.scrollTop = 0; }));
+    await page.locator(".el-page__head .el-page__actions").getByRole("button", { name: /need you$/ }).click();
+    await page.getByRole("menu", { name: "Needs action" }).waitFor();
+    await menuWhole(page);
+  }, { width, height: 800 }]),
 ];
 
 /**
@@ -821,6 +830,33 @@ async function openHelp(page) {
  * wherever it has room for both), else under it (what headerFold.ts promises; a header that stopped folding puts them
  * under the title, or on a third line). Throws, so the shot is not taken and the run fails.
  */
+/**
+ * The open menu is whole: inside the window, off the sidebar (when its button is not in the sidebar), above whatever
+ * is under it, and every item's words shown (none cut or covered). Throws, so the shot is not taken and the run fails.
+ */
+async function menuWhole(page) {
+  const problems = await page.evaluate(() => {
+    const menu = [...document.querySelectorAll("[role=menu]")].pop();
+    if (!menu) return ["no menu open"];
+    const m = menu.getBoundingClientRect();
+    const out = [];
+    if (m.left < 0 || m.top < 0 || m.right > innerWidth || m.bottom > innerHeight) out.push(`outside the window: ${[m.left, m.top, m.right, m.bottom].map(Math.round)}`);
+    const opener = document.querySelector(`[aria-controls="${menu.id}"]`);
+    const sidebar = document.querySelector(".el-shell > .el-sidebar")?.getBoundingClientRect();
+    if (sidebar && !opener?.closest(".el-sidebar") && m.left < sidebar.right && m.right > sidebar.left && m.top < sidebar.bottom && m.bottom > sidebar.top) out.push("over the sidebar");
+    for (const label of menu.querySelectorAll(".el-menu__label")) {
+      const r = label.getBoundingClientRect();
+      if (label.scrollWidth > label.clientWidth + 1 || r.left < m.left - 0.5 || r.right > m.right + 0.5) out.push(`cut: "${label.textContent}"`);
+      for (const x of [r.left + 2, r.left + r.width / 2, r.right - 2]) {
+        const hit = document.elementFromPoint(x, r.top + r.height / 2);
+        if (hit && !menu.contains(hit)) { out.push(`covered: "${label.textContent}"`); break; }
+      }
+    }
+    return out;
+  });
+  if (problems.length) throw new Error(`Menu: ${problems.join("; ")}`);
+}
+
 async function headerOnOneRow(page, beside) {
   const problem = await page.evaluate((expected) => {
     const head = document.querySelector(".el-page__head");
