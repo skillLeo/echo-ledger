@@ -1137,3 +1137,36 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
   - confirm the hPanel cron;
   - send the release key's SHA-256 for ECHOLEDGER_ANDROID_FINGERPRINTS;
   - change the VPS root password.
+
+## 2026-11-23 01:30 PKT — call choice on both apps; desktop 2.0.6–2.0.8, phone 2.0.6–2.0.8
+
+- **PLAN_CALL_CHOICE** (local, owner priority before "ship"): built, reviewed and merged on both apps.
+  - "After each call" (Ask me / Transcribe every call / Save audio only / Don't record calls) and "When to ask".
+  - The pill menu.
+  - The 5 s "At the start" banner (phone).
+  - One calm card with Undo; the grouped line.
+  - Words from docs/v2/copy/call-choice.md.
+  - Old "keep" migrates to Ask me on both apps.
+- **Owner decision on phone screenshots.** AOSP's screen-recording callback never covers overlay windows (S25 confirmed). So the pill and the after-call card carry no FLAG_SECURE. Only captions, Live Assist and Live Translate stay protected, behind "Hide EchoLedger's live words…" (on by default). "During screen sharing" is removed.
+- **Data-loss rule held by review on both apps:** a Delete is never applied while its Undo can't be reached.
+  - Grouped and held lines.
+  - A pending Delete at quit or crash returns as "Choose again", never kept or uploaded by a timer.
+  - Notification-first ordering.
+  - No-permission fallbacks.
+- **Mac 2.0.4 incident.** The signature changed (ad hoc → pinned), so macOS dropped every permission. System audio recorded 0 bytes in silence, and a client meeting went unrecorded.
+  - 2.0.6 warns within 3 s ("The other side isn't being recorded") and keeps the mic.
+  - It re-checks grants after an update.
+  - 2.0.7 puts the warning on both pills.
+- **Releases:**
+  - desktop v2.0.6 (ad13c731), v2.0.7 (75579012), v2.0.8 (35471d08), all signed and smoke-tested in CI;
+  - phone 2.0.6 (code 26, installed), 2.0.7 (27) and 2.0.8 (28, built, not installed: wireless adb off).
+- **Needs Hassam:**
+  - "mac free" for 2.0.8 and the 1-minute both-sides test;
+  - Wireless debugging for phone 2.0.8;
+  - the call-choice device batch;
+  - VISUAL-OK on docs/design/screens/call-choice/;
+  - "rows OK" (D12);
+  - make the GitHub repo private (still public);
+  - the hPanel cron;
+  - the Android fingerprint;
+  - the VPS root password.

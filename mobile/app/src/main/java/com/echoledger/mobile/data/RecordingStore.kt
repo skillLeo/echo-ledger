@@ -78,8 +78,13 @@ data class LocalRecording(
      * in-app toast); null when the Undo lives in a notification, which outlives the process.
      */
     val undoIn: String? = null,
-    /** Since 2.0.5: back waiting because its Delete was due after the process with its Undo had gone ("Choose again"). */
-    val restoredDelete: Boolean = false
+    /**
+     * Since 2.0.5: waiting for the person, never kept or sent by itself ("Choose again"): back because its Delete was due
+     * after the process with its Undo had gone ("Deleted just before EchoLedger closed."), or, with [notDeletedYet], a
+     * Delete that could not be shown with an Undo while EchoLedger kept running ("Not deleted yet.").
+     */
+    val restoredDelete: Boolean = false,
+    val notDeletedYet: Boolean = false
 )
 
 /**

@@ -97,7 +97,7 @@ object Decisions {
         if (keep && graph.recordings.get(recordingId)?.state == DISCARDING) return
         if (keep) {
             graph.recordings.update(recordingId) {
-                it.copy(state = "queued", transcribe = transcribe ?: it.transcribe, restoredDelete = false)
+                it.copy(state = "queued", transcribe = transcribe ?: it.transcribe, restoredDelete = false, notDeletedYet = false)
             }
             UploadWorker.enqueue(context, recordingId)
         } else {
@@ -125,7 +125,8 @@ object Decisions {
         Notifications.cancelDecision(context, recordingId)
         DecisionTimeoutWorker.cancel(context, recordingId)
         val kept = graph.recordings.update(recordingId) {
-            if (it.state == WAITING || it.state == KEPT) it.copy(state = KEPT, transcribe = transcribe, restoredDelete = false) else it
+            val decidable = it.state == WAITING || it.state == KEPT
+            if (decidable) it.copy(state = KEPT, transcribe = transcribe, restoredDelete = false, notDeletedYet = false) else it
         }?.takeIf { it.state == KEPT } ?: return null
         if (uploadAfterMs >
             0
@@ -188,7 +189,8 @@ object Decisions {
                     discardAt = at,
                     discardedFrom = if (it.state == WAITING) WAITING else KEPT,
                     undoIn = if (undoHere) PROCESS else null,
-                    restoredDelete = false
+                    restoredDelete = false,
+                    notDeletedYet = false
                 )
             } else {
                 it
@@ -221,15 +223,19 @@ object Decisions {
     }
 
     /**
-     * A waiting call left to the person ([LocalRecording.restoredDelete], "Choose again"): its 10 s backstop and any
-     * upload called off, so it is never kept or sent by itself. Null when it no longer waits.
+     * A waiting call left to the person ([LocalRecording.restoredDelete], "Choose again"), never kept or sent by itself:
+     * marked first, then its 10 s backstop and any upload called off, only when it still waits (a call decided meanwhile
+     * keeps its upload). [notDeletedYet]: EchoLedger keeps running ("Not deleted yet."); else the mark stays only if the
+     * process dies before the delete is stored ("Deleted just before EchoLedger closed."). Null when it no longer waits.
      */
-    suspend fun chooseAgain(context: Context, recordingId: String): LocalRecording? {
+    suspend fun chooseAgain(context: Context, recordingId: String, notDeletedYet: Boolean = false): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
+        val left = graph.recordings.update(recordingId) {
+            if (it.state == WAITING) it.copy(restoredDelete = true, notDeletedYet = notDeletedYet) else it
+        }?.takeIf { it.state == WAITING } ?: return null
         DecisionTimeoutWorker.cancel(context, recordingId)
         UploadWorker.cancel(context, recordingId)
-        return graph.recordings.update(recordingId) { if (it.state == WAITING) it.copy(restoredDelete = true) else it }
-            ?.takeIf { it.state == WAITING }
+        return left
     }
 
     /** Between the posted Undo and the store's write (tests stand a process's death in here). */
@@ -255,11 +261,12 @@ object Decisions {
                     discardedFrom = null,
                     undoIn = null,
                     restoredDelete = false,
+                    notDeletedYet = false,
                     restoreServerCopy = serverDelete == DiscardWorker.Stopped.MAYBE_RAN
                 )
 
                 // A delete whose store was never written (the process died after its Undo was posted): taken back too.
-                it.state == WAITING && it.restoredDelete -> it.copy(restoredDelete = false)
+                it.state == WAITING && it.restoredDelete -> it.copy(restoredDelete = false, notDeletedYet = false)
 
                 else -> it
             }
@@ -300,7 +307,7 @@ object Decisions {
         // Waiting for the person, not for a timer: nobody gets a call kept or sent that they had chosen to delete.
         DecisionTimeoutWorker.cancel(context, recordingId)
         UploadWorker.cancel(context, recordingId)
-        graph.recordings.update(back.id) { it.copy(state = WAITING, transcribe = null, restoredDelete = true) }
+        graph.recordings.update(back.id) { it.copy(state = WAITING, transcribe = null, restoredDelete = true, notDeletedYet = false) }
         WidgetStateStore.refresh(context)
     }
 

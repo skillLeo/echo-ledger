@@ -6,16 +6,16 @@ development Mac. Results go into [SCREEN_SHARE_MATRIX.md](SCREEN_SHARE_MATRIX.md
 
 Phone rules for every batch: `pm install -r` only; never uninstall, never clear data; check `mCallState=0` first.
 
-## Next slot — the call choice (PLAN_CALL_CHOICE), Mac 2.0.7 and phone 2.0.7, about 45 minutes
+## Next slot — the call choice (PLAN_CALL_CHOICE), Mac 2.0.8 and phone 2.0.8, about 45 minutes
 
 Builds:
-- **Mac:** 2.0.7, signed with the pinned identity, waiting in the lead's scratchpad. The lead installs it after "mac free".
-- **Windows:** `EchoLedger_2.0.7_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.7.
-- **Phone:** 2.0.7 (code 27), `phone-v2.0.7`. The lead installs it with `install -r` once Wireless debugging is on and `mCallState=0`.
+- **Mac:** 2.0.8, signed with the pinned identity, waiting in the lead's scratchpad. The lead installs it after "mac free".
+- **Windows:** `EchoLedger_2.0.8_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.8.
+- **Phone:** 2.0.8 (code 28), `phone-v2.0.8`. The lead installs it with `install -r` once Wireless debugging is on and `mCallState=0`.
 
 **1. Mac, about 15 minutes**
 1. **Install and check permissions.**
-   - Quit EchoLedger (⌘Q) and write "mac free". The lead installs 2.0.7.
+   - Quit EchoLedger (⌘Q) and write "mac free". The lead installs 2.0.8.
    - Open it. Allow Microphone, Screen Recording, System Audio Recording Only, and Automation for Chrome when asked. Then quit and reopen once.
 2. **Warning check.** Before allowing System Audio (if it isn't allowed yet), start a recording with a video playing.
    - Pass if within about 3 s the pill says "The other side isn't being recorded" with Open System Settings and Try again.
@@ -27,7 +27,7 @@ Builds:
    - "Close to keep audio only".
    Press Transcribe, then Undo, then Transcribe again.
 5. **Pill menu.** During a second short meeting, click the pill and choose "Save audio only". Pass if no card shows after it.
-6. **Library.** No banner. The header shows "N need you" with a dot. The sidebar folder counts are readable grey numbers (needs the next desktop build if not yet in 2.0.7).
+6. **Library.** No banner. The header shows "N need you" with a dot. The sidebar folder counts are readable grey numbers (in 2.0.8).
 
 **2. Phone, about 25 minutes.** Check `mCallState=0` first.
 1. **Three WhatsApp calls**, each about 20 s, with "After each call: Ask me" (the default after the update):

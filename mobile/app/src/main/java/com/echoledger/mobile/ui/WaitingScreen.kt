@@ -144,13 +144,10 @@ fun WaitingScreen(vm: MainViewModel, onBack: () -> Unit) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 96.dp)) {
                 shown.forEach { rec ->
                     KeepDiscardCard(
-                        // A Delete lost when EchoLedger closed says so (2.0.5): the call is back to choose again.
-                        whenText = if (rec.restoredDelete) {
-                            "${formatWhen(rec.startedAt).orEmpty()} · " +
-                                androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_restored_delete)
-                        } else {
-                            formatWhen(rec.startedAt)
-                        },
+                        // A call left to choose again says why (2.0.5): its Delete was lost, or not done yet.
+                        whenText = com.echoledger.mobile.calls.CallChoice.chooseAgainWords(rec)?.let { words ->
+                            "${formatWhen(rec.startedAt).orEmpty()} · " + androidx.compose.ui.res.stringResource(words)
+                        } ?: formatWhen(rec.startedAt),
                         title = Notifications.decisionText(rec, null),
                         app = SourceApp.from(rec.sourceApp),
                         language = rec.language,
