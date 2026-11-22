@@ -46,6 +46,7 @@ import androidx.glance.semantics.contentDescription
 import androidx.glance.semantics.semantics
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.MainActivity
@@ -98,6 +99,19 @@ internal fun widgetTextSize(sp: Int, scale: Float): Float = sp * scale
 
 @Composable
 private fun sized(sp: Int) = widgetTextSize(sp, LocalWidgetScale.current).sp
+
+/**
+ * In Urdu the widget's lines line up at the end, where Urdu starts. The launcher lays the widget out in the phone's
+ * direction (Glance gives a widget no direction of its own), so on an English phone this is the right-hand edge.
+ */
+@Composable
+private fun urdu() = LocalWidgetWords.current?.urdu == true
+
+@Composable
+private fun aligned(): TextAlign? = if (urdu()) TextAlign.End else null
+
+@Composable
+private fun wide(): GlanceModifier = if (urdu()) GlanceModifier.fillMaxWidth() else GlanceModifier
 
 /** EchoLedger's light and dark tokens, or the wallpaper's colours (Android 12+) when the app uses them. */
 internal fun widgetColors(dynamic: Boolean): ColorProviders = if (dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -198,9 +212,20 @@ private fun RecentRow(row: WidgetRow) {
         Text(
             row.title,
             maxLines = 1,
-            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = sized(13), fontWeight = FontWeight.Medium)
+            style = TextStyle(
+                textAlign = aligned(),
+                color = GlanceTheme.colors.onSurface,
+                fontSize = sized(13),
+                fontWeight = FontWeight.Medium
+            ),
+            modifier = wide()
         )
-        Text(row.line, maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sized(12)))
+        Text(
+            row.line,
+            maxLines = 1,
+            style = TextStyle(textAlign = aligned(), color = GlanceTheme.colors.onSurfaceVariant, fontSize = sized(12)),
+            modifier = wide()
+        )
     }
 }
 
@@ -222,12 +247,21 @@ private val READY_NIGHT = androidx.compose.ui.graphics.Color(0xFF4ADE80)
 
 @Composable
 private fun AppName(state: WidgetState) {
-    Row(GlanceModifier.clickable(actionStartActivity<MainActivity>()), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        wide().clickable(actionStartActivity<MainActivity>()),
+        horizontalAlignment = if (urdu()) Alignment.End else Alignment.Start,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         ReadyDot(state)
         Text(
             "EchoLedger",
             maxLines = 1,
-            style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Medium, fontSize = sized(13))
+            style = TextStyle(
+                textAlign = aligned(),
+                color = GlanceTheme.colors.onSurface,
+                fontWeight = FontWeight.Medium,
+                fontSize = sized(13)
+            )
         )
     }
 }
@@ -238,15 +272,16 @@ private fun StatusText(state: WidgetState, maxLines: Int) {
         (LocalWidgetWords.current?.statusLine ?: state.statusLine),
         maxLines = maxLines,
         style = TextStyle(
+            textAlign = aligned(),
             color = if (state.recording) GlanceTheme.colors.error else GlanceTheme.colors.onSurfaceVariant,
             fontSize = sized(12),
             fontWeight = if (state.recording) FontWeight.Medium else FontWeight.Normal
         ),
         modifier = when {
-            state.recording -> GlanceModifier
-            state.pendingDecisions > 0 -> GlanceModifier.clickable(openPending())
-            state.notReady -> GlanceModifier.clickable(openReady())
-            else -> GlanceModifier
+            state.recording -> wide()
+            state.pendingDecisions > 0 -> wide().clickable(openPending())
+            state.notReady -> wide().clickable(openReady())
+            else -> wide()
         }
     )
 }
@@ -257,8 +292,13 @@ private fun ReviewText(state: WidgetState) {
         Text(
             it,
             maxLines = 1,
-            style = TextStyle(color = GlanceTheme.colors.primary, fontSize = sized(12), fontWeight = FontWeight.Medium),
-            modifier = GlanceModifier.clickable(openPending())
+            style = TextStyle(
+                textAlign = aligned(),
+                color = GlanceTheme.colors.primary,
+                fontSize = sized(12),
+                fontWeight = FontWeight.Medium
+            ),
+            modifier = wide().clickable(openPending())
         )
     }
 }
@@ -270,11 +310,22 @@ private fun LastRecording(state: WidgetState) {
         Text(
             it,
             maxLines = 1,
-            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = sized(13), fontWeight = FontWeight.Medium)
+            style = TextStyle(
+                textAlign = aligned(),
+                color = GlanceTheme.colors.onSurface,
+                fontSize = sized(13),
+                fontWeight = FontWeight.Medium
+            ),
+            modifier = wide()
         )
     }
     state.lastPreview?.let {
-        Text(it, maxLines = 2, style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sized(12)))
+        Text(
+            it,
+            maxLines = 2,
+            style = TextStyle(textAlign = aligned(), color = GlanceTheme.colors.onSurfaceVariant, fontSize = sized(12)),
+            modifier = wide()
+        )
     }
 }
 

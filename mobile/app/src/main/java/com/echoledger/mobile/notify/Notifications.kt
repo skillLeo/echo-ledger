@@ -244,8 +244,19 @@ object Notifications {
         }
         // This view is the app's own layout: its text follows Settings › Appearance's text size (Android's own templates
         // can't; they keep the phone's).
+        // In sp, so the phone's own font size still applies when the shade draws it (a later font change too).
         recordingTextSize(context)?.let { scale ->
-            RECORDING_TEXT_SP.forEach { (id, sp) -> buttons.setTextViewTextSize(id, android.util.TypedValue.COMPLEX_UNIT_SP, sp * scale) }
+            recordingTextSp(context).forEach { (id, sp) ->
+                buttons.setTextViewTextSize(
+                    id,
+                    android.util.TypedValue.COMPLEX_UNIT_SP,
+                    sp * scale
+                )
+            }
+        }
+        // In Urdu the view reads right to left on any phone: the title and detail at the right, Pause on the right.
+        if (com.echoledger.mobile.notify.NoticeWords.isUrdu(com.echoledger.mobile.notify.AppWords.resources(context))) {
+            buttons.setInt(R.id.rec_root, "setLayoutDirection", android.view.View.LAYOUT_DIRECTION_RTL)
         }
         return NotificationCompat.Builder(context, CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_stat_rec)
@@ -285,18 +296,29 @@ object Notifications {
             .build()
     }
 
+    /** The recording view's texts, each scaled by the person's text size. */
+    internal val RECORDING_TEXT_IDS =
+        listOf(R.id.rec_title, R.id.rec_detail, R.id.rec_pause, R.id.rec_stop, R.id.rec_captions, R.id.rec_discard)
+
+    private class TextSp(val config: android.content.res.Configuration, val sp: Map<Int, Float>)
+
+    @Volatile private var textSp: TextSp? = null
+
     /**
-     * The recording view's text sizes at the phone's size (the Material notification styles its layout uses: title
-     * 14 sp, the rest 12 sp), each multiplied by the person's text size.
+     * The recording view's text sizes in sp as its layout's styles give them (the notification styles): the layout
+     * inflated once per configuration and read, never assumed; at font size 1, as Android adds the phone's font size again.
      */
-    internal val RECORDING_TEXT_SP = listOf(
-        R.id.rec_title to 14f,
-        R.id.rec_detail to 12f,
-        R.id.rec_pause to 12f,
-        R.id.rec_stop to 12f,
-        R.id.rec_captions to 12f,
-        R.id.rec_discard to 12f
-    )
+    internal fun recordingTextSp(context: Context): Map<Int, Float> {
+        val config = context.resources.configuration
+        textSp?.takeIf { it.config == config }?.let { return it.sp }
+        // Read at the phone's font size 1 (sp = px / density there; Android scales larger fonts non-linearly).
+        val plain = context.createConfigurationContext(android.content.res.Configuration(config).apply { fontScale = 1f })
+        val view = android.view.LayoutInflater.from(plain).inflate(R.layout.notification_recording_actions, null)
+        val density = plain.resources.displayMetrics.density
+        val sp = RECORDING_TEXT_IDS.associateWith { view.findViewById<android.widget.TextView>(it).textSize / density }
+        textSp = TextSp(android.content.res.Configuration(config), sp)
+        return sp
+    }
 
     /** Settings › Appearance's text size for the recording view; null at the phone's own size (the layout's styles stay). */
     internal fun recordingTextSize(context: Context): Float? {
@@ -372,7 +394,7 @@ object Notifications {
         )
         // In the app language; the person's own words (names, the project) go in as they are.
         val words = com.echoledger.mobile.notify.AppWords.resources(context)
-        val text = decisionText(words, rec, clientName)
+        val text = com.echoledger.mobile.notify.NoticeWords.drawn(words, decisionText(words, rec, clientName))
         val public = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Save this recording?"))
@@ -428,7 +450,7 @@ object Notifications {
             // The title as the person named it, or the app's words for the call, in the app language.
             .setContentTitle(
                 com.echoledger.mobile.notify.AppWords.resources(context).let {
-                    it.getString(R.string.n_saved, recordingTitle(it, rec), duration)
+                    com.echoledger.mobile.notify.NoticeWords.drawn(it, it.getString(R.string.n_saved, recordingTitle(it, rec), duration))
                 }
             )
             .setCategory(NotificationCompat.CATEGORY_STATUS)
@@ -471,7 +493,10 @@ object Notifications {
             // The title as the person named it, or the app's words for the call, in the app language.
             .setContentTitle(
                 com.echoledger.mobile.notify.AppWords.resources(context).let {
-                    it.getString(R.string.n_discarded, recordingTitle(it, rec), duration)
+                    com.echoledger.mobile.notify.NoticeWords.drawn(
+                        it,
+                        it.getString(R.string.n_discarded, recordingTitle(it, rec), duration)
+                    )
                 }
             )
             .setCategory(NotificationCompat.CATEGORY_STATUS)

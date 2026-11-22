@@ -70,9 +70,22 @@ object NoticeWords {
     /** [english] in the app language (the person's, from [context]). */
     fun say(context: Context, english: String?): String = say(AppWords.resources(context), AppWords.resources(context, "en"), english)
 
-    /** [english] in [res]'s language; [en] are the English resources. Lines this table doesn't know stay as they are. */
-    fun say(res: Resources, en: Resources, english: String?): String {
-        val text = english.orEmpty()
+    /** The right-to-left mark: an Urdu line drawn with it reads right to left even when it starts with a Latin name. */
+    const val RLM = "\u200F"
+
+    /**
+     * [text] as Android should draw it in [res]'s language: in Urdu it starts with [RLM], since Android takes a line's
+     * direction from its first letter ("Omar کے ساتھ کال" would read left to right) and lays it out in the phone's
+     * direction. Only for what a notification draws: words that are copied or shared never get the mark.
+     */
+    fun drawn(res: Resources, text: String): String = if (isUrdu(res) && text.isNotEmpty() && !text.startsWith(RLM)) RLM + text else text
+
+    /** [english] in [res]'s language, as drawn ([drawn]); [en] are the English resources. Lines it doesn't know stay as they are. */
+    fun say(res: Resources, en: Resources, english: String?): String = drawn(res, words(res, en, english))
+
+    /** [english] in [res]'s language, without the drawing mark. */
+    private fun words(res: Resources, en: Resources, english: String?): String {
+        val text = english.orEmpty().removePrefix(RLM)
         if (text.isEmpty() || !isUrdu(res)) return text
         val known = lines(en)
         known.firstOrNull { it.exact == text }?.let { return res.getString(it.id) }
@@ -85,13 +98,13 @@ object NoticeWords {
             val args: List<Any> = m.groupValues.drop(1).mapIndexed { i, v ->
                 when {
                     i + 1 in line.numbers -> v.toIntOrNull() ?: v
-                    line.id in appWordHoles -> say(res, en, v)
+                    line.id in appWordHoles -> words(res, en, v)
                     else -> v
                 }
             }
             return res.getString(line.id, *args.toTypedArray())
         }
-        return if (text.contains(PARTS)) text.split(PARTS).joinToString(PARTS) { say(res, en, it) } else text
+        return if (text.contains(PARTS)) text.split(PARTS).joinToString(PARTS) { words(res, en, it) } else text
     }
 
     /** Whether the table has words for [english] (tests: every line the app can post). */
@@ -119,7 +132,13 @@ object NoticeWords {
             }
         } ?: problem.detail
         val fix = problem.fix?.let { res.getString(com.echoledger.mobile.ui.v2.setup.HealthChecks.fixLabel(it)) }
-        return Triple(res.getString(R.string.n_calls_not_recorded, res.getString(fail)), why, fix)
+        return Triple(
+            drawn(res, res.getString(R.string.n_calls_not_recorded, res.getString(fail))),
+            drawn(res, why),
+            fix?.let {
+                drawn(res, it)
+            }
+        )
     }
 
     /** A notification channel's name and line in the app language. */
@@ -150,5 +169,5 @@ object NoticeWords {
         NotifyCategory.LIVE_TRANSLATE -> R.string.c_live_translate_t to R.string.c_live_translate_b
         NotifyCategory.UPDATES -> R.string.c_updates_t to R.string.c_updates_b
         NotifyCategory.OTHER -> R.string.c_other_t to R.string.c_other_b
-    }.let { (title, line) -> res.getString(title) to res.getString(line) }
+    }.let { (title, line) -> drawn(res, res.getString(title)) to drawn(res, res.getString(line)) }
 }
