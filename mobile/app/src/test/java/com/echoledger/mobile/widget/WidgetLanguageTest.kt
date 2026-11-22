@@ -46,8 +46,8 @@ class WidgetLanguageTest : AppTest() {
         }
         render(WidgetState(paired = true, recording = true, pendingDecisions = 2), "ur") {
             onNode(hasText("ریکارڈ ہو رہا ہے…")).assertExists()
-            onNode(hasText("2 دیکھنے کے لیے")).assertExists()
-            onNode(hasContentDescription("روکیں")).assertExists()
+            onNode(hasText("2 کا فیصلہ باقی")).assertExists()
+            onNode(hasContentDescription("بند کریں")).assertExists()
         }
         render(WidgetState(), "ur") { onNode(hasText("پیئر کرنے کے لیے EchoLedger کھولیں")).assertExists() }
         // English: the same words as the widget always said.

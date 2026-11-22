@@ -8,7 +8,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
-import kotlinx.coroutines.launch
 
 /** Settings › Appearance's text size and app language, as the new design applies them. */
 object AppLook {
@@ -73,12 +72,10 @@ const val OVERLAY_WAIT_MS = 1_500L
 
 /**
  * The app's stored settings, kept hot, for a window outside the activity. Before they have been read once (a process a
- * call has just started), it asks for that read now, off the main thread, without waiting for it.
+ * call has just started), it asks for that read, once, off the main thread, without waiting for it.
  */
 fun overlaySettings(context: android.content.Context): kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?>? {
     val graph = (context.applicationContext as? com.echoledger.mobile.EchoLedgerApp)?.graph ?: return null
-    if (graph.liveSettings.value == null) {
-        graph.scope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { graph.settings.current() } }
-    }
+    graph.readSettingsOnce()
     return graph.liveSettings
 }

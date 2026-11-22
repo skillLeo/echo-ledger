@@ -5,9 +5,10 @@
     <string name="n_test">آزمائش</string>
     <string name="n_calls_not_recorded">کالز ریکارڈ نہیں ہو رہیں: %1$s</string>
     <string name="n_only_voice">صرف آپ کی آواز ریکارڈ ہوئی</string>
-    <string name="n_paused">رکا ہوا · %1$s</string>
+    <string name="n_paused">رکی ہوئی · %1$s</string>
     <string name="n_resume">جاری رکھیں</string>
     <string name="n_pause">روکیں</string>
+    <string name="n_captions">کیپشنز</string>
     <string name="n_stop">بند کریں</string>
     <string name="n_undo_discard">ہٹانا واپس لیں</string>
     <string name="n_discard">ہٹائیں</string>
@@ -88,7 +89,7 @@
     <string name="n_lt_overlay">لائیو ترجمہ دیکھنے کے لیے EchoLedger کو دوسری ایپس کے اوپر دکھانے کی اجازت دیں۔</string>
     <string name="n_lt_no_plan">لائیو ترجمہ آپ کے پلان میں نہیں ہے۔</string>
     <string name="n_lt_choose_games">پہلے گیم ترجمہ میں اپنی گیمز چنیں۔</string>
-    <string name="n_lt_start_helper">کال ریکارڈ کرنے والا ہیلپر شروع کریں (سیٹنگز › تعارف › یہ فون › سیٹ اپ گائیڈ)، یا آواز شیئر کرنے کے لیے ایپ سے لائیو ترجمہ شروع کریں۔</string>
+    <string name="n_lt_start_helper">کال ریکارڈ کرنے والا ہیلپر شروع کریں (سیٹنگز › معلومات › یہ فون › سیٹ اپ گائیڈ)، یا آواز شیئر کرنے کے لیے ایپ سے لائیو ترجمہ شروع کریں۔</string>
     <string name="n_lt_nothing_playing">ابھی کچھ نہیں چل رہا۔ پہلے گیم یا ویڈیو شروع کریں، پھر لائیو ترجمہ۔</string>
     <string name="n_lt_could_not_start">لائیو ترجمہ شروع نہیں ہو سکا۔ بعد میں دوبارہ کوشش کریں۔</string>
     <string name="n_lt_not_set_up">لائیو ترجمہ ابھی سرور پر سیٹ اپ نہیں ہوا۔ اپنے ایڈمن سے پوچھیں۔</string>

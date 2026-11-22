@@ -207,6 +207,8 @@ class PhoneCheckParityTest : ScreenTest() {
         press("Copy report")
         val clip = { app.getSystemService(ClipboardManager::class.java).primaryClip!!.getItemAt(0).text.toString() }
         assertEquals(DeviceCheck.report(shownFacts, DeviceCheck.rows(shownFacts)), clip())
+        // The page says the report goes in English, as the admin reads it.
+        assertTrue(shown("in English, as your admin reads it"))
         press("Copy diagnostics")
         pumpUntil("copied") { clip() == "EchoLedger diagnostics" }
         press("Send to my admin")
@@ -233,6 +235,7 @@ class PhoneCheckParityTest : ScreenTest() {
         }
         assertTrue(shown(PhoneCheckWords.steps(ur, PhoneBrand.XIAOMI).first().take(30)))
         assertTrue(shown("Xiaomi، Redmi یا POCO"))
+        assertTrue(shown("انگریزی میں، جیسے آپ کا ایڈمن پڑھتا ہے"))
         assertTrue(compose.onAllNodes(hasContentDescription("سیٹ اپ کریں: ایپ کالز")).fetchSemanticsNodes().isNotEmpty())
     }
 }

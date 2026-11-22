@@ -15,7 +15,7 @@
     <string name="v2_pc_report_copied">Copied the report</string>
     <string name="v2_pc_send">Send to my admin</string>
     <string name="v2_pc_sending">Sending…</string>
-    <string name="v2_pc_report_note">The report holds this phone\'s maker, model and Android version and the lines above. It goes to your admin only when you tap Send.</string>
+    <string name="v2_pc_report_note">The report holds this phone\'s maker, model and Android version and the lines above, in English, as your admin reads it. It goes to your admin only when you tap Send.</string>
     <string name="v2_pc_report_note_signed_out">Sign in to send the report to your admin. Copy report works now.</string>
     <string name="v2_pc_keep_running">Keep EchoLedger running on %1$s</string>
     <string name="v2_pc_open_settings">Open settings</string>

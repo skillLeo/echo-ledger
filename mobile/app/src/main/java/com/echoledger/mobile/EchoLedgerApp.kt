@@ -104,6 +104,17 @@ class AppGraph(val context: Context) {
      */
     val liveSettings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?> get() = latestSettings
 
+    private val settingsAsked = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Before the settings have been read once, reads them now, off the main thread, once (a window drawing again and
+     * again asks only one read; a read that fails can be asked again).
+     */
+    fun readSettingsOnce() {
+        if (latestSettings.value != null || !settingsAsked.compareAndSet(false, true)) return
+        scope.launch(Dispatchers.IO) { if (runCatching { settings.current() }.isFailure) settingsAsked.set(false) }
+    }
+
     /** Kept here, not in the store: reading [liveSettings] never makes the store (it opens the settings file). */
     private val latestSettings = kotlinx.coroutines.flow.MutableStateFlow<com.echoledger.mobile.data.AppSettings?>(null)
 

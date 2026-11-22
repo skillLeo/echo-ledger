@@ -12,6 +12,11 @@ import java.util.Locale
  * read once (a process just started) it is the phone's language.
  */
 object AppWords {
+    /** One configuration context per language, made again only when the phone's own configuration changes. */
+    private class Made(val base: Configuration, val res: Resources)
+
+    private val made = java.util.concurrent.ConcurrentHashMap<String, Made>()
+
     /** The resources of [choice] (`en`, `ur`; anything else is the phone's). */
     fun resources(context: Context, choice: String?): Resources {
         val locale = when (choice) {
@@ -19,9 +24,11 @@ object AppWords {
             "en" -> Locale.UK
             else -> return context.resources
         }
-        if (context.resources.configuration.locales[0]?.language == locale.language) return context.resources
-        val config = Configuration(context.resources.configuration).apply { setLocale(locale) }
-        return context.createConfigurationContext(config).resources
+        val base = context.resources.configuration
+        if (base.locales[0]?.language == locale.language) return context.resources
+        made[choice]?.takeIf { it.base == base }?.let { return it.res }
+        val config = Configuration(base).apply { setLocale(locale) }
+        return context.createConfigurationContext(config).resources.also { made[choice] = Made(Configuration(base), it) }
     }
 
     /**
