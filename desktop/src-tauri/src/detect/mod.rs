@@ -195,6 +195,8 @@ pub struct DetectState {
     call: Mutex<CallTracker>,
     ask: Mutex<AskTracker>,
     far_side: Mutex<crate::audio::health::FarSideMonitor>,
+    /// Whether another app plays sound, read at most every 5 s (the far-side warning on a Mac).
+    playing: Mutex<crate::audio::health::PlayingCache>,
     meeting: Mutex<Option<crate::screens::platform::MeetingTree>>,
     /// When the loop last looked (the Ready check's heartbeat, Phase 1C).
     looked: Mutex<Option<Instant>>,
@@ -307,7 +309,11 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
     }
 
     let silent_ms = state.capture.far_side_silent_ms();
-    if let Some(payload) = lock(&detect.far_side).tick(silent_ms, settings.far_side_warning) {
+    // The one "not hearing the other side" warning (a quiet tap gives zeros, so on a Mac only while another app plays).
+    let enabled = crate::audio::health::far_side_enabled(settings.far_side_warning, silent_ms, cfg!(target_os = "macos"), || {
+        lock(&detect.playing).get(Instant::now(), crate::audio::platform::others_playing)
+    });
+    if let Some(payload) = lock(&detect.far_side).tick(silent_ms, enabled) {
         let _ = app.emit("capture:far_side", payload);
     }
 

@@ -149,7 +149,6 @@ describe("missingShort", () => {
     const notRecorded = { kind: "system_audio" as const, sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.", otherSide: "permission" as const };
     expect(missingShort([notRecorded])).toBe("The other side isn't being recorded");
     expect(otherSideNotRecorded([notRecorded])).toEqual(notRecorded);
-    expect(missingShort([{ kind: "system_audio", sentence: "Can't hear the other side.", otherSide: "silent" }])).toBe("Can't hear the other side");
     expect(otherSideNotRecorded([{ kind: "system_audio", sentence: "System audio is off for EchoLedger." }])).toBeNull();
     expect(missingShort([{ kind: "microphone", sentence: "" }])).toMatch(/recording the other side/);
     expect(missingShort([{ kind: "microphone", sentence: "" }, { kind: "system_audio", sentence: "" }])).toMatch(/Nothing is being recorded/);
