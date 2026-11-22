@@ -220,7 +220,12 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
     else if (e.key === forward) { e.preventDefault(); openSub(active); }
     else if (e.key === backward && className.includes("el-menu--sub")) { e.preventDefault(); onBack(); }
     else if (e.key === "Escape") { e.preventDefault(); onBack(); }
-    else if (e.key === "Tab") onLeave();
+    // Tab leaves the menu: it closes and focus goes back to what opened it. Tab then moves on from there (the browser's
+    // own step); Shift+Tab stays on it, so focus lands on the button, not on whatever is before it.
+    else if (e.key === "Tab") {
+      if (e.shiftKey) e.preventDefault();
+      onLeave();
+    }
   };
 
   // When some items carry a tick, the others keep its column empty so every label starts in the same place.
@@ -241,7 +246,8 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
             : ticks && <span className="el-menu__check" aria-hidden="true" />}
           {item.icon ? <Icon icon={item.icon} /> : item.checked === undefined && <span className="el-menu__icon-space" aria-hidden="true" />}
-          <span className="el-menu__label">{item.label}</span>
+          {/* An item's words keep their own order in a right-to-left window ("3 recordings…", not "…recordings 3"). */}
+          <span className="el-menu__label" dir="auto">{item.label}</span>
           {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
           {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
           {item.items && <Icon icon={ChevronEndIcon} directional />}
@@ -396,7 +402,7 @@ export function ContextMenu({ label, items, at, onClose }: { label: string; item
     <Layer from={back.current}>
       <MenuList label={label} items={items} className="el-menu el-menu--context" initial={0} listRef={list}
         style={{ left: place.x, top: place.y }}
-        onBack={close} onLeave={onClose} onPick={(item) => { close(); item.onPick?.(); }} />
+        onBack={close} onLeave={close} onPick={(item) => { close(); item.onPick?.(); }} />
     </Layer>
   );
 }
