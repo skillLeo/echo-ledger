@@ -262,7 +262,7 @@ describe("one Review for each thing at the top of the v2 Library (classic's Libr
     respond("skipped_list", []);
   });
 
-  it("while the queue shows the waiting calls and the uploads that need you, the banner above leaves them out", async () => {
+  it("while the queue shows the waiting calls and the uploads that need you, the header's needs button leaves them out", async () => {
     const items = [makeItem("a", { title: "Zoom with Acme" }), makeItem("u", { title: "Ali", status: "uploaded", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } })];
     respond("library_list", items);
     respond("library_refresh", items);
@@ -273,17 +273,18 @@ describe("one Review for each thing at the top of the v2 Library (classic's Libr
     await act(flushAsync);
     expect(screen.getByTestId("waiting-line")).toHaveTextContent("2 calls waiting");
     expect(screen.getByRole("heading", { name: "Uploads that need you · 1" })).toBeInTheDocument();
-    // The banner keeps only what the queue doesn't show; there is one Review button, the queue's.
-    const banner = screen.getByTestId("needs-action");
-    expect(banner).toHaveTextContent("1 recording isn't transcribed");
-    expect(banner).not.toHaveTextContent(/wait for your decision|didn't upload/);
-    expect(within(banner).queryByRole("button", { name: /^Review/ })).not.toBeNull();
-    expect(screen.getAllByRole("button", { name: /^Review/ })).toHaveLength(2);
-    fireEvent.click(within(banner).getByRole("button", { name: /^Review/ }));
+    // The button keeps only what the queue doesn't show; there is one Review button, the queue's, and no banner.
+    expect(screen.queryByTestId("needs-action")).toBeNull();
+    const head = document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
+    const needs = within(head).getByRole("button", { name: "1 not transcribed" });
+    expect(needs).toHaveAttribute("title", "1 recording isn't transcribed");
+    expect(within(head).queryByRole("button", { name: /waiting|didn't upload|need you/ })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Review/ })).toHaveLength(1);
+    fireEvent.click(needs);
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("with nothing in the queue, the banner still says what waits (the status counts it)", async () => {
+  it("with nothing in the queue, the header's needs button still says what waits (the status counts it)", async () => {
     respond("library_list", [makeItem("a", { title: "Zoom with Acme" })]);
     respond("library_refresh", [makeItem("a", { title: "Zoom with Acme" })]);
     respond("bin_list", { data: [] });
@@ -292,9 +293,10 @@ describe("one Review for each thing at the top of the v2 Library (classic's Libr
     render(<LibraryV2 top={top()} />);
     await act(flushAsync);
     expect(screen.queryByTestId("library-queue")).toBeNull();
-    expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording didn't upload · 1 more needs you");
-    fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Review" }));
-    expect(screen.getByRole("menuitem", { name: "2 calls wait for your decision" })).toBeInTheDocument();
+    expect(screen.queryByTestId("needs-action")).toBeNull();
+    const head = document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
+    fireEvent.click(within(head).getByRole("button", { name: "3 need you" }));
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["1 recording didn't upload", "2 calls wait for your decision"]);
   });
 
   it("Activity's Review opens the list once: Trash and back leaves it as the person left it", async () => {

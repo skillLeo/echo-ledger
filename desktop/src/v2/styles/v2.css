@@ -443,6 +443,9 @@
 .el-status--setup .el-status__dot { color: var(--el-role-warning-default); }
 .el-status--recording .el-status__dot { color: var(--el-role-record-default); animation: el-pulse var(--el-component-recording-dot-pulse) ease-in-out infinite; }
 .el-status--idle .el-status__dot { color: var(--el-role-text-secondary); }
+/* Something needs you: a small dot in the accent, as the sidebar's counts that need attention (the Library header's
+   needs button leads with it). Over 3:1 on the page and on a quiet button's hover, in both themes. */
+.el-attention-dot { display: block; inline-size: var(--el-component-status-dot-size); block-size: var(--el-component-status-dot-size); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); flex: none; }
 @keyframes el-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) {
   .el-status--recording .el-status__dot { animation: none; }

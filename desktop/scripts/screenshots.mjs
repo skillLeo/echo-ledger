@@ -661,13 +661,12 @@ const SCREENS = [
   ["record-narrow", "record", async (page) => page.waitForSelector(".record-btn"), { width: 860, height: 560 }],
   ["projects-narrow", "projects", async (page) => page.waitForSelector(".project-tree.on-page"), { width: 860, height: 560 }],
   ["activity-narrow", "activity", async (page) => page.waitForSelector(".activity-item"), { width: 860, height: 560 }],
-  // The v2 Library's header once the needs-action banner is dismissed: its quiet button before Trash, always with its
-  // words; where the row has no room, Select, then Sync, then Trash fold into More. English and right to left (lang=ur)
-  // at 1280 and 760 (the rail), and English at 1200 and 800 with the full sidebar.
+  // The v2 Library's header, the only place it says what needs action: its quiet button before Trash, led by an
+  // attention dot, always with its words; where the row has no room, Select, then Sync, then Trash fold into More.
+  // English and right to left (lang=ur) at 1280 and 760 (the rail), and English at 1200 and 800 with the full sidebar.
   ...[[1280, "en"], [1280, "ur"], [760, "en"], [760, "ur"], [1200, "en"], [800, "en"]].map(([width, lang]) => [`library-needs-top-${width}-${lang}`, `library&uiflags=${V2_FLAGS}${lang === "ur" ? "&lang=ur" : ""}`, async (page) => {
     // The fixture opens a recording: its Back (the last "Library" in the window) shows the list.
     await page.getByRole("button", { name: "Library", exact: true }).last().click();
-    await page.getByTestId("needs-action").getByRole("button", { name: "Dismiss" }).click();
     await page.locator(".el-page__head .el-page__actions").getByRole("button", { name: /need you$/ }).waitFor();
     // At rest: every scroller back at its top (the click can scroll the page).
     await page.evaluate(() => document.querySelectorAll("*").forEach((el) => { if (el.scrollTop) el.scrollTop = 0; }));

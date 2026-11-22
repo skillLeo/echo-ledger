@@ -123,7 +123,7 @@ export const PAIRS = [
       await page.keyboard.type("go");
       await page.waitForTimeout(600);
     })]],
-  ["library-top", "Library as the start screen: classic's Home (get started, needs action) | the new Library's get-started card and needs-action banner",
+  ["library-top", "Library as the start screen: classic's Home (get started, needs action) | the new Library's get-started card, and what needs action as its header's button",
     [`${classic("library")}`, steps(async (page) => {
       await page.locator(".sidebar").getByRole("button", { name: /^Home/ }).click();
       await page.waitForTimeout(1200);

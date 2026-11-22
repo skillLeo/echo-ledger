@@ -1,5 +1,6 @@
-// The Library header with the needs button (headerFold.ts): the least-used actions fold into More (Select, then Sync,
-// then Trash) so the header keeps its lines and its actions stay on one row, at every window width from 720 to 1920 px,
+// The Library header with the needs button (headerFold.ts), there whenever something needs action: the least-used
+// actions fold into More (Select, then Sync, then Trash) so the header keeps its lines and its actions stay on one row,
+// at every window width from 720 to 1920 px,
 // in English and right to left, with the full sidebar or the rail. jsdom draws nothing, so each action is given the
 // width Chromium draws it at (scripts/screens, measured), and the header the width the window leaves it.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,10 +20,11 @@ const ITEMS = [
   makeItem("b", { title: "Bina" }),
 ];
 
-/** Each action's width as Chromium draws it, and a button's height (More is as wide as it is tall). */
+/** Each action's width as Chromium draws it, and a button's height (More is as wide as it is tall). The needs button
+ * leads with its attention dot (8 px where an icon was 16). */
 const DRAWN = {
-  en: { widths: { "3 need you": 148.3, Trash: 87.7, Sync: 83.5, Select: 92.6, Import: 71, Record: 97.9 } as Record<string, number>, height: 36 },
-  rtl: { widths: { "3 need you": 154.3, Trash: 92.4, Sync: 87.7, Select: 97.8, Import: 76.6, Record: 103.9 } as Record<string, number>, height: 40 },
+  en: { widths: { "3 need you": 140.3, Trash: 87.7, Sync: 83.5, Select: 92.6, Import: 71, Record: 97.9 } as Record<string, number>, height: 36 },
+  rtl: { widths: { "3 need you": 146.3, Trash: 92.4, Sync: 87.7, Select: 97.8, Import: 76.6, Record: 103.9 } as Record<string, number>, height: 40 },
 };
 /** The titles' flex basis, the header's gap and the actions' gap (v2.css .el-page__head). */
 const BASIS = 384, HEAD_GAP = 16, GAP = 8;
@@ -89,8 +91,8 @@ describe("the header's actions with the needs button, at every width", () => {
     const top = { status: makeStatus({ platform: "macos", pendingDecisions: 2 }), onSetup: vi.fn(), onReadyCheck: vi.fn(), onRecord: vi.fn(), onActivity: vi.fn() };
     render(<LibraryV2 top={top} onImport={vi.fn()} onRecord={vi.fn()} />);
     await act(flushAsync);
-    fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" }));
-    await act(flushAsync);
+    // No banner to dismiss first: the button is there as soon as something needs action.
+    expect(screen.queryByTestId("needs-action")).toBeNull();
   };
   const actions = () => document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
   const at = async (width: number) => {
@@ -125,9 +127,11 @@ describe("the header's actions with the needs button, at every width", () => {
           expect(names.includes("More actions"), where).toBe(gone.length > 0);
           folds.set(gone.join("+") || "none", [...(folds.get(gone.join("+") || "none") ?? []), window]);
         }
-        // Wide windows keep the title and the actions on one row: Select and Sync go into More.
-        expect(folds.get("Select+Sync")).toContain(1920);
-        expect(folds.get("Select+Sync")).toContain(1280);
+        // Wide windows keep the title and the actions on one row: Select goes into More, and Sync too where the words
+        // are wider (right to left: 583 px of actions with Sync beside the 560 the titles leave; English 556).
+        const wide = rtl ? "Select+Sync" : "Select";
+        expect(folds.get(wide)).toContain(1920);
+        expect(folds.get(wide)).toContain(1280);
       });
     }
   }

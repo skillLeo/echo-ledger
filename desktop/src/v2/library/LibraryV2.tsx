@@ -29,7 +29,7 @@ import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type De
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
 import { SourceAvatar } from "./SourceAvatar";
-import { LibraryTop, NeedsButton, needsLabel, type LibraryTopProps } from "./LibraryTop";
+import { LibraryTop, NeedsButton, needsLabel, useLibraryNeeds, type LibraryTopProps, type QueueCovers } from "./LibraryTop";
 import { useHeaderFold, type Foldable } from "./headerFold";
 import type { NeedsAction } from "../home/HomeV2";
 import { QueueV2 } from "./QueueV2";
@@ -87,8 +87,8 @@ export type LibraryV2Props = {
   folder?: SmartFolder | null;
   /** The folder's way back to every recording (its chip's ×, Clear all). */
   onFolder?: (folder: SmartFolder | null) => void;
-  /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
-  top?: Omit<LibraryTopProps, "items" | "onAction"> & { onActivity: () => void };
+  /** Library as the start screen (plan 2): the get-started card on top, and what needs action in the header. */
+  top?: Omit<LibraryTopProps, "items"> & { onActivity: () => void };
   /** Opens a project (the recording page's project name). */
   onOpenProject?: (id: string) => void;
   /** The recording that was open when the main window was last closed: opened again once it is known. */
@@ -146,12 +146,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const knownValues = useRef<Record<string, string>>({});
   // Sort and group, remembered per view on this computer (classic's View menu).
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
-  // What the queue shows with its own Review: the banner above it leaves those out (one Review for each thing).
-  const [queueShows, setQueueShows] = useState<{ waiting: boolean; failed: boolean }>({ waiting: false, failed: false });
+  // What the queue shows with its own Review: the header's needs button leaves those out (one Review for each thing).
+  const [queueShows, setQueueShows] = useState<QueueCovers>({ waiting: false, failed: false });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
-  /** What still needs action while the banner is dismissed (LibraryTop says): the quiet button before Trash. */
-  const [needsKept, setNeedsKept] = useState<readonly NeedsAction[] | null>(null);
   // The server didn't answer a sync: the list shown is what this computer saved (classic's banner, with Retry).
   const [syncError, setSyncError] = useState<string | null>(null);
   // Show as List or Table, and the table's columns, kept on this computer (classic's).
@@ -565,9 +563,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   // (headerFold.ts): Select, then Sync, then Trash. `headKeys` names the actions as the header last drew them.
   const headRef = useRef<HTMLElement>(null);
   const headKeys = useRef<readonly string[]>([]);
-  const headerNeeds = !!needsKept && view !== "trash" && !selecting;
+  // What needs action (LibraryTop.tsx): the quiet button before Trash, the only place the Library says it.
+  const needs = useLibraryNeeds(top?.status ?? null, items, queueShows);
+  const headerNeeds = !!needs && view !== "trash" && !selecting;
   const foldable: Foldable[] = (counts?.all ?? 0) > 0 ? ["trash", "sync", "select"] : ["trash", "sync"];
-  const needsWords = needsKept ? Object.values(needsLabel(needsKept)).join(" ") : "";
+  const needsWords = needs ? Object.values(needsLabel(needs)).join(" ") : "";
   const folded = useHeaderFold(headRef, headKeys, foldable, headerNeeds, `${syncing}|${needsWords}`);
   const { groups, rows: shown, matching } = useMemo(() => listOf(items),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -804,13 +804,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
   // A list chip with nothing in it (and nothing else narrowing the list) says how to fill it.
   const inList = place.startsWith("list:") && view === "all" && !query && !filtersOn;
-  /** What needs action, from the banner's Review or the header's button: missed calls are in Activity, the rest here. */
+  /** What needs action, from the header's button: missed calls are in Activity, the rest here. */
   const openNeed = (a: NeedsAction["id"]) => (a === "missed" ? top?.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"));
   // The header's actions in their order, by key (headerFold.ts measures them by it); a folded one is in More instead.
   const headerActions: [string, ReactNode][] = [];
   const add = (key: string, action: ReactNode) => headerActions.push([key, action]);
   const more: MenuItem[] = [];
-  if (needsKept && headerNeeds) add("needs", <NeedsButton actions={needsKept} onAction={openNeed} />);
+  if (needs && headerNeeds) add("needs", <NeedsButton actions={needs} onAction={openNeed} />);
   if (folded.has("trash")) more.push({ label: "Trash", icon: Icons.TrashIcon, onPick: () => setView("trash") });
   else add("trash", <Button variant="quiet" icon={Icons.TrashIcon} aria-pressed={view === "trash"} title="Recently deleted recordings"
     onClick={() => setView(view === "trash" ? "all" : "trash")}>Trash</Button>);
@@ -876,7 +876,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           </header>
         )}
         {top && view !== "trash" && !selecting && (
-          <LibraryTop {...top} items={items} covered={queueShows} onAction={openNeed} onQuiet={setNeedsKept} />
+          <LibraryTop {...top} items={items} />
         )}
         {view !== "trash" && syncError && items && (
           <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
