@@ -702,13 +702,19 @@ const SCREENS = [
   }],
   // The Library header's needs menu open ("6 need you ▾", S2 on 2.0.8: it was cut off by the sidebar): whole, inside
   // the window, off the sidebar, every item's words shown (long ones wrap). At 1280 beside the title, at 800 under it.
-  ...[1280, 800].map((width) => [`library-needs-menu-${width}-en`, `library&uiflags=${V2_FLAGS}`, async (page) => {
+  ...[[1280, "en"], [800, "en"], [1280, "ur"]].map(([width, lang]) => [`library-needs-menu-${width}-${lang}`, `library&uiflags=${V2_FLAGS}${lang === "ur" ? "&lang=ur" : ""}`, async (page) => {
     await page.getByRole("button", { name: "Library", exact: true }).last().click();
     await page.evaluate(() => document.querySelectorAll("*").forEach((el) => { if (el.scrollTop) el.scrollTop = 0; }));
     await page.locator(".el-page__head .el-page__actions").getByRole("button", { name: /need you$/ }).click();
     await page.getByRole("menu", { name: "Needs action" }).waitFor();
     await menuWhole(page);
   }, { width, height: 800 }]),
+  // The recording page's Copy ▾ (SplitButton) open: the shared menu, floating from the whole button, every item whole.
+  ["recording-copy-menu-en", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    await page.getByRole("button", { name: "More copy options" }).click();
+    await page.getByRole("menu", { name: "More copy options" }).waitFor();
+    await menuWhole(page);
+  }, { width: 1280, height: 800 }],
 ];
 
 /**

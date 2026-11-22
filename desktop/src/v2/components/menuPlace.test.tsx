@@ -7,7 +7,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Menu, placeMenu } from "./Menu";
+import { ContextMenu, Menu, placeMenu } from "./Menu";
+import { SplitButton } from "./SplitButton";
 import { InfoIcon, MoreIcon, PhoneIcon, TranscriptIcon } from "./icons";
 
 const v2Css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
@@ -167,5 +168,68 @@ describe("long items", () => {
     expect(value(".el-menu", "max-inline-size")).toBe("calc(var(--el-space-64) * 5)");
     // A floating menu is never wider than the window, less its edges.
     expect(value(".el-menu--floating", "max-inline-size")).toContain("calc(100% - var(--el-space-16))");
+  });
+});
+
+describe("Tab and Shift+Tab out of a menu", () => {
+  // The list floats in its own layer at the end of the page, so leaving it must put focus back by hand: on the button
+  // that opened it (Tab then moves on from there, the browser's own step; Shift+Tab stays on the button).
+  const press = (target: Element, shiftKey: boolean) => fireEvent.keyDown(target, { key: "Tab", shiftKey });
+
+  for (const shiftKey of [false, true]) {
+    const key = shiftKey ? "Shift+Tab" : "Tab";
+    it(`${key} from a Menu closes it and focus is on its button${shiftKey ? ", where it stays" : ", for the browser to move on from"}`, () => {
+      render(<Menu label="Needs action" button={{ text: "6 need you" }} items={NEEDS.map((n) => ({ ...n, onPick: () => undefined }))} />);
+      const button = screen.getByRole("button", { name: "6 need you" });
+      fireEvent.click(button);
+      const item = screen.getAllByRole("menuitem")[0];
+      item.focus();
+      const moved = press(item, shiftKey);
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(button).toHaveFocus();
+      // fireEvent's answer is false when the key's default was prevented.
+      expect(moved).toBe(!shiftKey);
+    });
+
+    it(`${key} from a SplitButton's menu closes it and focus is on its chevron${shiftKey ? ", where it stays" : ""}`, () => {
+      render(<SplitButton label="Copy" onClick={() => undefined} menuLabel="More copy options"
+        items={[{ label: "Copy text", onPick: () => undefined }, { label: "Copy for AI", onPick: () => undefined }]} />);
+      const chevron = screen.getByRole("button", { name: "More copy options" });
+      fireEvent.click(chevron);
+      const item = screen.getAllByRole("menuitem")[1];
+      item.focus();
+      const moved = press(item, shiftKey);
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(chevron).toHaveFocus();
+      expect(moved).toBe(!shiftKey);
+    });
+
+    it(`${key} from a right-click menu closes it and focus goes back to the row it opened on`, () => {
+      const onClose = vi.fn();
+      const { rerender } = render(<button type="button">Row</button>);
+      const row = screen.getByRole("button", { name: "Row" });
+      row.focus();
+      rerender(<><button type="button">Row</button><ContextMenu label="Recording actions" items={[{ label: "Open", onPick: () => undefined }]} at={{ x: 10, y: 10 }} onClose={onClose} /></>);
+      const item = screen.getByRole("menuitem", { name: "Open" });
+      item.focus();
+      const moved = press(item, shiftKey);
+      expect(onClose).toHaveBeenCalled();
+      expect(row).toHaveFocus();
+      expect(moved).toBe(!shiftKey);
+    });
+  }
+});
+
+describe("an item's words in a right-to-left window", () => {
+  afterEach(() => {
+    document.documentElement.dir = "";
+  });
+  it("keep their own order: each label reads by its own direction (dir=auto)", () => {
+    document.documentElement.dir = "rtl";
+    render(<Menu label="Needs action" button={{ text: "6 need you" }} items={NEEDS.map((n) => ({ ...n, onPick: () => undefined }))} />);
+    fireEvent.click(screen.getByRole("button", { name: "6 need you" }));
+    const labels = [...screen.getByRole("menu").querySelectorAll(".el-menu__label")];
+    expect(labels.map((l) => l.textContent)).toEqual(NEEDS.map((n) => n.label));
+    for (const l of labels) expect(l).toHaveAttribute("dir", "auto");
   });
 });
