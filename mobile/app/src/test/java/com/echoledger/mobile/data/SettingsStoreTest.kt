@@ -298,6 +298,54 @@ class SettingsStoreTest : AppTest() {
         assertEquals("a choice made afterwards is kept", true, store.current().secureScreen)
     }
 
+    // ---- 2.0.5: the app lock's "hide content" became Block screenshots of EchoLedger -----------------------------------
+
+    private val before205 = """{"serverUrl":"https://x.example","deviceId":"d1","onboardingDone":true,"settingsVersion":2"""
+
+    @Test
+    fun `Block screenshots is off by default`() = runBlocking {
+        assertEquals(false, AppSettings().blockScreens)
+        assertEquals(false, store.current().blockScreens)
+    }
+
+    @Test
+    fun `a phone whose lock hid content keeps screenshots blocked after the update`() = runBlocking {
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":true,\"secureScreen\":true}")
+        assertEquals(true, store.current().blockScreens)
+        assertEquals("the lock itself is untouched", true, store.current().appLockEnabled)
+
+        // The choice is written with the next change, so turning it off later stays off.
+        store.update { it.copy(blockScreens = false) }
+        assertEquals(false, store.current().blockScreens)
+        store.update { it.copy(micSource = "mic") }
+        assertEquals("turned off stays off though the old switch is still on", false, store.current().blockScreens)
+    }
+
+    @Test
+    fun `hide content without the lock blocked nothing, so it blocks nothing after the update`() = runBlocking {
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":false,\"secureScreen\":true}")
+        assertEquals(false, store.current().blockScreens)
+
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":true,\"secureScreen\":false}")
+        assertEquals("the lock alone blocked nothing", false, store.current().blockScreens)
+    }
+
+    @Test
+    fun `a Block screenshots choice already stored wins over the old switch`() = runBlocking {
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":true,\"secureScreen\":true,\"blockScreens\":false}")
+        assertEquals(false, store.current().blockScreens)
+
+        plantRaw("settings_json", "$before205,\"appLockEnabled\":false,\"secureScreen\":false,\"blockScreens\":true}")
+        assertEquals(true, store.current().blockScreens)
+    }
+
+    @Test
+    fun `settings from before v1_1_1 still have screenshots allowed`() = runBlocking {
+        // Then hide content was on by default and was reset once; it never becomes a block.
+        plantRaw("settings_json", """{"serverUrl":"https://x.example","deviceId":"d1","appLockEnabled":true,"secureScreen":true}""")
+        assertEquals(false, store.current().blockScreens)
+    }
+
     // ---- the hot copy for windows outside the app (latest) ----------------------------------------------------------
 
     @Test

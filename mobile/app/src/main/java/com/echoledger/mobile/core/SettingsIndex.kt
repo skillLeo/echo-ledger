@@ -101,7 +101,14 @@ object SettingsIndex {
         item("notifications.activity", "notifications", "notifications", "Activity notifications", "alerts bell transcript ready notify"),
         item("notifications.quiet", "notifications", "notifications", "Quiet hours", "do not disturb night silent from to"),
         item("lock.app", "lock", "app-lock", "App lock", "fingerprint face unlock screen lock pin security biometric"),
-        item("lock.hide", "lock", "app-lock", "Hide in recent apps", "screenshots recents secure privacy widget titles home screen"),
+        item("lock.hide", "lock", "app-lock", "Widget titles", "widget titles home screen hide privacy"),
+        item(
+            "privacy.block",
+            "privacy",
+            "screen-share",
+            "Block screenshots of EchoLedger",
+            "screenshot screenshots block secure recents capture hide content"
+        ),
         item(
             "privacy.share",
             "privacy",

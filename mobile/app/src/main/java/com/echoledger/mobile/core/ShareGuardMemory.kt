@@ -11,18 +11,19 @@ class ShareGuardMemory(context: Context) : ShareGuard.Memory {
     private val prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
     override fun read(): ShareGuard.Saved? {
-        if (!prefs.contains(MODE)) return null
-        return ShareGuard.Saved(ShareGuard.Mode.of(prefs.getString(MODE, null)))
+        if (!prefs.contains(MODE) && !prefs.contains(BLOCK)) return null
+        return ShareGuard.Saved(ShareGuard.Mode.of(prefs.getString(MODE, null)), prefs.getBoolean(BLOCK, false))
     }
 
     override fun write(saved: ShareGuard.Saved) {
         // "hidden" was kept by the first v1.8.1 builds; it goes with the next change of the setting.
-        prefs.edit().putString(MODE, saved.mode.wire).remove(HIDDEN).apply()
+        prefs.edit().putString(MODE, saved.mode.wire).putBoolean(BLOCK, saved.block).remove(HIDDEN).apply()
     }
 
     private companion object {
         const val FILE = "screen_share_privacy"
         const val MODE = "mode"
+        const val BLOCK = "block_screens"
         const val HIDDEN = "hidden"
     }
 }

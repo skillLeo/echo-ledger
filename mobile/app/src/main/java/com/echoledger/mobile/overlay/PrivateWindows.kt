@@ -8,12 +8,14 @@ import com.echoledger.mobile.core.ShareGuard
 
 /**
  * The one way EchoLedger's floating windows reach the screen (since v1.8.1): the recording controls, captions, the
- * after-call card and Live Translate's box, grip dot and toolbar are added, changed and removed here. Each one carries
- * FLAG_SECURE from before its first frame unless Settings → Privacy & data → During screen sharing is Show
- * ([ShareGuard.secure]), every later change keeps it, and a change of the setting reaches the windows already open at
- * once. Android never tells an app that a floating window is in a screen share, so this flag is the protection.
+ * after-call card, the Live Assist card and Live Translate's box, grip dot and toolbar are added, changed and removed
+ * here. Each one carries FLAG_SECURE from before its first frame in During screen sharing: Private (black box), the
+ * default, and while Block screenshots of EchoLedger is on ([ShareGuard.windowsSecure]); only Show leaves them in
+ * screenshots and shares. Every later change keeps the flag right, and a change of a setting reaches the windows
+ * already open at once.
  *
- * Every window also holds [ShareWatch] while it is open. Main thread only; a setting that changes on another thread is
+ * Every window also holds [ShareWatch] while it is open (on Android 15+ the windows shrink to the dot while Android
+ * reports one of the app's own screens in a share). Main thread only; a setting that changes on another thread is
  * posted to it.
  */
 internal object PrivateWindows {
@@ -26,7 +28,7 @@ internal object PrivateWindows {
     /** Adds [view] as a floating window with [params]; false when Android refused it (no overlay permission). */
     fun add(wm: WindowManager, view: View, params: WindowManager.LayoutParams): Boolean {
         follow()
-        params.flags = ShareGuard.windowFlags(params.flags, ShareGuard.mode.value)
+        params.flags = ShareGuard.windowFlags(params.flags, ShareGuard.windowsSecure)
         if (runCatching { wm.addView(view, params) }.isFailure) return false
         open += Open(wm, view, params)
         ShareWatch.acquire(view.context)
@@ -35,7 +37,7 @@ internal object PrivateWindows {
 
     /** Applies [params] (moved, resized, new flags) to an open window, with the secure flag the setting asks for. */
     fun update(wm: WindowManager, view: View, params: WindowManager.LayoutParams) {
-        params.flags = ShareGuard.windowFlags(params.flags, ShareGuard.mode.value)
+        params.flags = ShareGuard.windowFlags(params.flags, ShareGuard.windowsSecure)
         runCatching { wm.updateViewLayout(view, params) }
     }
 
@@ -53,9 +55,9 @@ internal object PrivateWindows {
 
     /** The setting changed: the open windows that need it get the flag set or cleared now. */
     private fun apply() {
-        val mode = ShareGuard.mode.value
+        val secure = ShareGuard.windowsSecure
         open.forEach { w ->
-            val flags = ShareGuard.windowFlags(w.params.flags, mode)
+            val flags = ShareGuard.windowFlags(w.params.flags, secure)
             if (flags != w.params.flags) {
                 w.params.flags = flags
                 runCatching { w.wm.updateViewLayout(w.view, w.params) }
@@ -67,7 +69,7 @@ internal object PrivateWindows {
     private fun follow() {
         if (following) return
         following = true
-        ShareGuard.observeMode {
+        ShareGuard.observeSecure {
             if (Looper.myLooper() == Looper.getMainLooper()) apply() else main.post(::apply)
         }
     }
@@ -75,8 +77,8 @@ internal object PrivateWindows {
 
 /**
  * Each of EchoLedger's floating windows: its title (as `adb shell dumpsys window` lists it, next to SECURE) and its
- * flags before FLAG_SECURE, which [PrivateWindows] adds. Live Translate's box uses [TranslateOverlay.EDIT_FLAGS] while
- * it is being moved.
+ * flags before FLAG_SECURE, which [PrivateWindows] adds in Private or while screenshots are blocked. Live Translate's
+ * box uses [TranslateOverlay.EDIT_FLAGS] while it is being moved.
  */
 internal enum class FloatingWindow(val title: String, val flags: Int) {
     RECORDING_CONTROLS("EchoLedger recording controls", TOUCHABLE),

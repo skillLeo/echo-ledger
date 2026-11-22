@@ -4,8 +4,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -19,7 +22,10 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-/** Settings → Privacy & data → During screen sharing (since v1.8.1): two choices, in the names of docs/DESIGN_SYSTEM.md. */
+/**
+ * Settings → Privacy & data → During screen sharing (since v1.8.1): two choices, in the names of docs/DESIGN_SYSTEM.md;
+ * and Block screenshots of EchoLedger (since 2.0.5).
+ */
 class ScreenShareSettingTest : ScreenTest() {
     private fun openPrivacy() {
         show { SettingsScreen(vm, onSetup = {}) }
@@ -37,8 +43,10 @@ class ScreenShareSettingTest : ScreenTest() {
         compose.onNodeWithText("Private (black box)").assertIsSelected()
         compose.onNodeWithText("Show").assertIsNotSelected()
         compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).assertCountEquals(2)
+        // What is hidden, where, and on which Android versions (the screen-recording callback never sees an overlay).
         compose.onNodeWithText(
-            "In a screen share, recording or screenshot, the floating windows are a black box. You see them as usual.",
+            "In a screenshot, screen recording or screen share the floating windows are a black box, on every Android version. " +
+                "You see them as usual, and screenshots of the app's own screens are not affected.",
             useUnmergedTree = true
         ).assertExists()
         compose.onNodeWithText("Everyone watching can read them.", useUnmergedTree = true).assertExists()
@@ -73,6 +81,28 @@ class ScreenShareSettingTest : ScreenTest() {
         openPrivacy()
         compose.onNodeWithText("Private (black box)").assertIsSelected()
         assertEquals("black_box", stored())
+    }
+
+    @Test
+    fun `Block screenshots of EchoLedger is off by default and saved when turned on, with the line for this Android`() {
+        runBlocking { app.pairLocally(server) }
+        openPrivacy()
+        val block = compose.onNodeWithContentDescription("Block screenshots of EchoLedger")
+        block.performScrollTo().assertIsOff()
+        compose.onNodeWithText(
+            "Off: you can take screenshots at any time, also while recording. EchoLedger's windows still hide when you share your screen.",
+            useUnmergedTree = true
+        ).assertExists()
+        // These tests run as Android 14, which has no screen-recording callback.
+        compose.onNodeWithText(
+            "On this Android version, EchoLedger's windows hide from screen sharing only while this is on.",
+            useUnmergedTree = true
+        ).assertExists()
+
+        block.performClick()
+        pumpUntil("Block screenshots to be saved") { runBlocking { app.currentSettings().blockScreens } }
+        pumpUntil("Block screenshots to reach the floating windows") { ShareGuard.block.value }
+        block.assertIsOn()
     }
 
     @Test

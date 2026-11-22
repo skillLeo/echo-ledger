@@ -94,6 +94,7 @@ object SettingsTransfer {
         "appLockEnabled",
         "lockAfterMs",
         "secureScreen",
+        "blockScreens",
         "settingsVersion",
         "onboardingDone",
         "themeMode",

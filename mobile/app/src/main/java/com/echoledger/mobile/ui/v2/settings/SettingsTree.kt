@@ -214,6 +214,7 @@ object SettingsTree {
         "lock.app" to R.string.v2_set_item_lock_app,
         "lock.hide" to R.string.v2_set_item_lock_hide,
         "privacy.share" to R.string.v2_set_item_privacy_share,
+        "privacy.block" to R.string.cc_block_screens,
         "storage.space" to R.string.v2_set_item_storage_space,
         "storage.kept" to R.string.v2_set_item_storage_kept,
         "plan.usage" to R.string.v2_set_item_plan_usage,

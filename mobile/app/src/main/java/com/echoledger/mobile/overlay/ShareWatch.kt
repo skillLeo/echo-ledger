@@ -16,11 +16,14 @@ import kotlinx.coroutines.launch
 
 /**
  * Keeps [ShareGuard] up to date for the floating windows ([PrivateWindows] holds it while each one is open):
- * - Settings → During screen sharing, followed on the main thread from the first window on, so later windows start
- *   with the right secure flag;
- * - on Android 15+, while a window is open, the public `addScreenRecordingCallback` (DETECT_SCREEN_RECORDING): Android
- *   says our windows are in a screen share or recording, though only while one of EchoLedger's own screens is in front
- *   (measured on the S25). The windows then shrink to a grey dot in Private; the secure flag never waits for it.
+ * - Settings → During screen sharing and Block screenshots of EchoLedger, followed on the main thread from the first
+ *   window on, so later windows start with the right secure flag;
+ * - on Android 15+, while a window is open, the public `addScreenRecordingCallback` (DETECT_SCREEN_RECORDING),
+ *   registered for the app's uid from the application context, so it lives while only floating windows are open. Android
+ *   reports the uid as recorded only while one of its activities is visible in the recorded display or task, never for
+ *   an overlay window alone (AOSP ScreenRecordingCallbackController.uidHasRecordedActivity walks forAllActivities;
+ *   measured on the S25, docs/SCREEN_SHARE_MATRIX.md). The windows then shrink to a grey dot in Private, and show again
+ *   when it ends. The black box (FLAG_SECURE in Private) is what keeps them out of a share over another app.
  */
 object ShareWatch {
     private var holders = 0
@@ -52,27 +55,50 @@ object ShareWatch {
         val graph = (context.applicationContext as? EchoLedgerApp)?.graph ?: return
         following = graph.scope.launch(Dispatchers.Main) {
             runCatching {
-                graph.settings.settings.map { it.screenShareMode }.distinctUntilChanged().collect {
-                    ShareGuard.setMode(ShareGuard.Mode.of(it))
+                graph.settings.settings.map { it.screenShareMode to it.blockScreens }.distinctUntilChanged().collect { (mode, block) ->
+                    ShareGuard.setMode(ShareGuard.Mode.of(mode))
+                    ShareGuard.setBlock(block)
                 }
             }
         }
     }
 
+    /** Where the screen-recording callback is registered: Android's window manager (tests put their own). */
+    internal interface Registrar {
+        /** Registers [callback]; returns the state now. */
+        fun add(context: Context, callback: Consumer<Int>): Int
+
+        fun remove(context: Context, callback: Consumer<Int>)
+    }
+
+    @RequiresApi(35)
+    private object SystemRegistrar : Registrar {
+        override fun add(context: Context, callback: Consumer<Int>): Int =
+            context.getSystemService(WindowManager::class.java).addScreenRecordingCallback(context.mainExecutor, callback)
+
+        override fun remove(context: Context, callback: Consumer<Int>) =
+            context.getSystemService(WindowManager::class.java).removeScreenRecordingCallback(callback)
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal var registrar: Registrar? = null
+
+    /** What Android says: our windows are in a screen share or recording now (VISIBLE), or no longer. */
+    internal fun onRecordingState(state: Int) = ShareGuard.setShared(state == WindowManager.SCREEN_RECORDING_STATE_VISIBLE)
+
     @RequiresApi(35)
     private fun start(context: Context) {
-        val wm = context.getSystemService(WindowManager::class.java)
-        val cb = Consumer<Int> { state -> ShareGuard.setShared(state == WindowManager.SCREEN_RECORDING_STATE_VISIBLE) }
-        val initial = wm.addScreenRecordingCallback(context.mainExecutor, cb)
+        val cb = Consumer<Int> { state -> onRecordingState(state) }
+        val initial = (registrar ?: SystemRegistrar).add(context, cb)
         callback = cb
-        ShareGuard.setShared(initial == WindowManager.SCREEN_RECORDING_STATE_VISIBLE)
+        onRecordingState(initial)
     }
 
     @RequiresApi(35)
     @Suppress("UNCHECKED_CAST")
     private fun stop(context: Context) {
         val cb = callback as? Consumer<Int> ?: return
-        context.getSystemService(WindowManager::class.java).removeScreenRecordingCallback(cb)
+        (registrar ?: SystemRegistrar).remove(context, cb)
         callback = null
     }
 

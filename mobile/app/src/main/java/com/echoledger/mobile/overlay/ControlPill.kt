@@ -69,8 +69,8 @@ private val GLASS = Color(0xFF1E1F23)
 
 /**
  * A touchable overlay window that never takes the keyboard: the base of the recording controls and the captions. It
- * opens, moves and closes through [PrivateWindows], which keeps it a black box in a screen share unless During screen
- * sharing is Show.
+ * opens, moves and closes through [PrivateWindows], which keeps it a black box in a screenshot or screen share unless
+ * During screen sharing is Show (and Block screenshots of EchoLedger is off).
  */
 private abstract class OverlayWindow(protected val context: Context, kind: FloatingWindow) {
     protected val wm: WindowManager = context.getSystemService(WindowManager::class.java)

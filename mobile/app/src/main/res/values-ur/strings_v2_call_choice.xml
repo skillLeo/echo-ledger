@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The call choice (before, during and after a call): word for word docs/v2/copy/call-choice.md. values/ is English,
+     values-ur/ Urdu: keep the keys the same (the deck's keys with cc_ in front). -->
+<resources>
+    <string name="cc_transcribe">ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_save_audio_only">صرف آڈیو محفوظ کریں</string>
+    <string name="cc_delete">حذف کریں</string>
+    <string name="cc_dont_record">ریکارڈ نہ کریں</string>
+    <string name="cc_undo">واپس لیں</string>
+    <string name="cc_setting_title">ہر کال کے بعد</string>
+    <string name="cc_setting_ask">مجھ سے پوچھیں</string>
+    <string name="cc_setting_ask_help">ہر کال کے بعد ایک چھوٹا کارڈ۔</string>
+    <string name="cc_setting_transcribe">ہر کال کا ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_setting_transcribe_help">کوئی سوال نہیں۔</string>
+    <string name="cc_setting_audio">صرف آڈیو محفوظ کریں</string>
+    <string name="cc_setting_audio_help">کوئی سوال نہیں۔ چاہیں تو بعد میں لائبریری سے ٹرانسکرپٹ بنائیں۔</string>
+    <string name="cc_setting_off">کالز ریکارڈ نہ کریں</string>
+    <string name="cc_setting_off_help">کالز ریکارڈ نہیں ہوں گی۔ پھر بھی پِل یا ریکارڈ سے کوئی کال ریکارڈ کر سکتے ہیں۔</string>
+    <string name="cc_when_title">کب پوچھیں</string>
+    <string name="cc_when_after">کال کے بعد (تجویز کردہ)</string>
+    <string name="cc_when_start">کال کے شروع میں</string>
+    <string name="cc_pill_transcribe">اس کال کا ٹرانسکرپٹ بنائیں</string>
+    <string name="cc_pill_audio">صرف آڈیو محفوظ کریں</string>
+    <string name="cc_pill_stop_delete">روکیں اور حذف کریں</string>
+    <string name="cc_start_banner">یہ کال ریکارڈ ہو رہی ہے</string>
+    <string name="cc_card_meta">%1$s · ابھی</string>
+    <string name="cc_card_swipe">صرف آڈیو رکھنے کے لیے ہٹا دیں</string>
+    <string name="cc_card_first_hint">آپ اسے ترتیبات › ہر کال کے بعد میں بدل سکتے ہیں۔</string>
+    <string name="cc_card_always">ہمیشہ یہی کریں؟</string>
+    <string name="cc_card_always_yes">ہاں</string>
+    <string name="cc_done_transcribing">ٹرانسکرپٹ بن رہا ہے…</string>
+    <string name="cc_done_audio">آڈیو محفوظ ہو گئی</string>
+    <string name="cc_done_deleted">حذف ہو گئی</string>
+    <string name="cc_grouped_audio">%1$d کالز کی آڈیو محفوظ ہو گئی</string>
+    <string name="cc_grouped_review">دیکھیں</string>
+    <string name="cc_quiet_saved">خاموش اوقات میں آڈیو محفوظ ہوئی</string>
+    <string name="cc_block_screens">EchoLedger کے اسکرین شاٹس روکیں</string>
+    <string name="cc_block_screens_help">بند: آپ کسی بھی وقت اسکرین شاٹ لے سکتے ہیں، ریکارڈنگ کے دوران بھی۔ اسکرین شیئر کرتے وقت EchoLedger کی ونڈوز پھر بھی چھپ جاتی ہیں۔</string>
+    <string name="cc_block_screens_help_old_android">اس اینڈرائیڈ ورژن پر EchoLedger کی ونڈوز اسکرین شیئر سے صرف تب چھپتی ہیں جب یہ آن ہو۔</string>
+</resources>

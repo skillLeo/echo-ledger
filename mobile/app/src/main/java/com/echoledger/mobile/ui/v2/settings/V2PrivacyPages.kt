@@ -147,13 +147,7 @@ fun AppLockPage(
                     EchoRadio(lockAfter == ms, { update { it.copy(lockAfterMs = ms) } }, stringResource(words.getValue(ms)))
                 }
             }
-            EchoSwitch(
-                checked = settings.secureScreen,
-                onCheckedChange = { v -> update { it.copy(secureScreen = v) } },
-                label = stringResource(R.string.v2_priv_lock_hide),
-                supporting = stringResource(R.string.v2_priv_lock_hide_line),
-                modifier = Modifier.highlightedIf(highlight == "lock.hide")
-            )
+            // Hiding the app's content in screenshots and Recents is Privacy & data's Block screenshots now (2.0.5).
         } else {
             // With the lock on the widget shows no recordings, so its titles matter only while it's off.
             EchoSwitch(
@@ -168,6 +162,9 @@ fun AppLockPage(
     }
 }
 
+/** Android 15: the first with the screen-recording callback that hides the floating windows during a share. */
+const val SCREEN_RECORDING_CALLBACK_SDK = 35
+
 /** Why App lock can't be used, in the screen's language: each reason of [lockAvailability] by its own words. */
 internal val LOCK_REASONS: Map<String, Int> = mapOf(
     REASON_NO_SCREEN_LOCK to R.string.v2_priv_lock_no_screen_lock,
@@ -175,8 +172,10 @@ internal val LOCK_REASONS: Map<String, Int> = mapOf(
 )
 
 /**
- * Privacy & data: recording consent (I understand), the floating windows during a screen share (Private or Show), and
- * Export or delete my data (on Sign-in & security, [onOpenPage]).
+ * Privacy & data: recording consent (I understand), Block screenshots of EchoLedger (off by default: the app's own
+ * screens and every floating window; the line for Android 10 to 14 below it), the floating windows during a screen
+ * share (Private, a black box in screenshots and shares on every Android version, or Show), and Export or delete my
+ * data (on Sign-in & security, [onOpenPage]).
  */
 @Composable
 fun PrivacyPage(
@@ -185,7 +184,9 @@ fun PrivacyPage(
     highlight: String?,
     onOpenPage: (String) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** The phone's Android version: below 15 there is no screen-recording callback (the help line says so). */
+    sdkInt: Int = android.os.Build.VERSION.SDK_INT
 ) {
     Page(stringResource(R.string.v2_set_page_privacy), onBack, modifier) {
         Column(Modifier.highlightedIf(highlight == "privacy.consent")) {
@@ -196,6 +197,15 @@ fun PrivacyPage(
                 onCheckedChange = { v -> update { it.copy(consentAcknowledged = v) } },
                 label = stringResource(R.string.v2_priv_consent_ok)
             )
+        }
+        Column(Modifier.highlightedIf(highlight == "privacy.block")) {
+            EchoSwitch(
+                checked = settings.blockScreens,
+                onCheckedChange = { v -> update { it.copy(blockScreens = v) } },
+                label = stringResource(R.string.cc_block_screens),
+                supporting = stringResource(R.string.cc_block_screens_help)
+            )
+            if (sdkInt < SCREEN_RECORDING_CALLBACK_SDK) Note(stringResource(R.string.cc_block_screens_help_old_android))
         }
         Column(Modifier.highlightedIf(highlight == "privacy.share")) {
             EchoSectionHeader(stringResource(R.string.v2_set_item_privacy_share))

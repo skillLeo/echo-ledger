@@ -189,7 +189,7 @@ object DecisionPopup {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             // Not focusable and not modal: touches outside the card go to the app underneath. PrivateWindows adds
-            // FLAG_SECURE unless Settings → During screen sharing is Show.
+            // FLAG_SECURE unless During screen sharing is Show (and Block screenshots of EchoLedger is off).
             FloatingWindow.AFTER_CALL_CARD.flags,
             PixelFormat.TRANSLUCENT
         ).apply {

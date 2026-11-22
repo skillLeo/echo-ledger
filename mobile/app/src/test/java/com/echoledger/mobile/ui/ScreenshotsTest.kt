@@ -380,12 +380,16 @@ class ScreenshotsTest : ScreenTest() {
         capture("settings-general")
     }
 
-    /** Settings → Privacy & data, with During screen sharing: Private (black box) or Show (since v1.8.1). */
+    /**
+     * Settings → Privacy & data, with Block screenshots of EchoLedger (off by default, since 2.0.5) and During screen
+     * sharing: Private or Show (since v1.8.1).
+     */
     @Test
     fun settingsPrivacy() {
         runBlocking { app.pairLocally(server) }
         shoot { SettingsScreen(vm, onSetup = {}) }
         compose.onNodeWithText("Privacy & data").performScrollTo().performClick()
+        compose.onNodeWithText("Block screenshots of EchoLedger").assertExists()
         compose.onNodeWithText("Private (black box)").assertExists()
         capture("settings-privacy")
     }
@@ -495,7 +499,7 @@ class ScreenshotsTest : ScreenTest() {
         capture("translate-hidden")
     }
 
-    /** Settings → App lock: the floating windows are left out of screenshots unless During screen sharing is Show. */
+    /** Settings → App lock with the lock on: Lock after (hiding content in screenshots is Privacy & data's since 2.0.5). */
     @Test
     fun settingsAppLock() {
         runBlocking {
@@ -510,7 +514,7 @@ class ScreenshotsTest : ScreenTest() {
             }
         }
         compose.onNodeWithText("App lock").performScrollTo().performClick()
-        compose.onNodeWithText("Hide content in Recents and screenshots", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Lock after", useUnmergedTree = true).assertExists()
         capture("settings-lock")
     }
 

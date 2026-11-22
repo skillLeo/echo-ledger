@@ -168,6 +168,7 @@ object SettingsReset {
                 appLockEnabled = d.appLockEnabled,
                 lockAfterMs = d.lockAfterMs,
                 secureScreen = d.secureScreen,
+                blockScreens = d.blockScreens,
                 widgetHideTitles = d.widgetHideTitles,
                 screenShareMode = d.screenShareMode,
                 activityNotifications = d.activityNotifications,

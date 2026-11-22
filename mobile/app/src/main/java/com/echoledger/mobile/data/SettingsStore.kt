@@ -30,8 +30,16 @@ data class AppSettings(
     val appLockEnabled: Boolean = false,
     /** How long the app may stay in the background before the lock engages again: 0, 60 000 or 300 000 ms. */
     val lockAfterMs: Long = 0L,
-    /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
+    /**
+     * Until 2.0.5: while the lock was on, hide the app's content in Recents and screenshots. Folded into [blockScreens]
+     * (a phone with the lock and this on reads as blocked); kept so older settings files still read.
+     */
     val secureScreen: Boolean = false,
+    /**
+     * Settings › Privacy & data › "Block screenshots of EchoLedger" (since 2.0.5, off by default): FLAG_SECURE on the
+     * whole app and on every floating window. Off, screenshots are allowed at any time, also while recording.
+     */
+    val blockScreens: Boolean = false,
     /** What the server last said about updates, an announcement and maintenance (since v1.6, P2.7). */
     val serverNotices: com.echoledger.mobile.core.ServerNotices = com.echoledger.mobile.core.ServerNotices(),
     /** The announcement texts the person closed (their hashes), the latest 20. */
@@ -40,8 +48,8 @@ data class AppSettings(
     val widgetHideTitles: Boolean = false,
     /**
      * Since v1.8.1, Settings → Privacy & data → During screen sharing ([com.echoledger.mobile.core.ShareGuard.Mode.of]):
-     * "hide" = Private, the default (FLAG_SECURE on every floating window); "show" = Show; "black_box" (the first v1.8.1
-     * builds) and any unknown value read as Private.
+     * "hide" = Private (black box), the default (FLAG_SECURE on every floating window, on every Android version); "show"
+     * = Show; "black_box" (the first v1.8.1 builds) and any unknown value read as Private.
      */
     val screenShareMode: String = "hide",
     /** Absent in settings stored before v1.1.1, which also reset the old default "hide content" (on) to off. */
@@ -318,13 +326,23 @@ class SettingsStore(
         val migrated = if (!raw.contains("\"onboardingDone\"") && parsed.paired) parsed.copy(onboardingDone = true) else parsed
         // Until v1.1.1 "Hide content in Recents and screenshots" was on by default; screenshots are always allowed now
         // unless the person turns the option on themselves.
-        return if (!raw.contains(
+        val versioned = if (!raw.contains(
                 "\"settingsVersion\""
             )
         ) {
             migrated.copy(secureScreen = false, settingsVersion = SETTINGS_VERSION)
         } else {
             migrated
+        }
+        // 2.0.5: the app lock's "hide content" became Block screenshots of EchoLedger. Where it was in effect (the lock
+        // on and it on) screenshots stay blocked; nobody else gets a block they didn't choose.
+        return if (!raw.contains(
+                "\"blockScreens\""
+            )
+        ) {
+            versioned.copy(blockScreens = versioned.appLockEnabled && versioned.secureScreen)
+        } else {
+            versioned
         }
     }
 

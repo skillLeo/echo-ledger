@@ -1126,22 +1126,7 @@ internal fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
                     Text(label, modifier = Modifier.padding(start = 8.dp))
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Hide content in Recents and screenshots")
-                    Text(
-                        "Off by default, so you can take screenshots of the app. EchoLedger's floating windows are always a black " +
-                            "box in screenshots unless you choose Show in During screen sharing.",
-                        color = Brand.Muted,
-                        fontSize = 12.sp
-                    )
-                }
-                Switch(
-                    checked = settings.secureScreen,
-                    onCheckedChange = { v -> vm.updateSettings { it.copy(secureScreen = v) } },
-                    modifier = Modifier.semantics { contentDescription = "Hide content in Recents and screenshots" }
-                )
-            }
+            // Hiding the app's content in screenshots and Recents is Privacy & data's Block screenshots now (2.0.5).
         }
         // Since v1.6 (Phase 1C I4): the widget can name recordings by their app only. With the lock on it shows none.
         if (!on) {

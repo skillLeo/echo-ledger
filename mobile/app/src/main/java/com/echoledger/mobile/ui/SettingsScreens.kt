@@ -871,6 +871,7 @@ private fun ConsentCard(vm: MainViewModel, settings: AppSettings) {
  * Settings → Privacy & data → During screen sharing (since v1.8.1; names from docs/DESIGN_SYSTEM.md "Screen-share
  * privacy names"): Private (black box), the default, stored as "hide" (the v1.8.1 "black_box" reads as Private too), or
  * Show. Android never says when a floating window is in a screen share, so the black box does not wait for a signal.
+ * Then Block screenshots of EchoLedger (since 2.0.5, off by default).
  */
 @Composable
 private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
@@ -878,7 +879,8 @@ private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
         Triple(
             ShareGuard.Mode.PRIVATE,
             "Private (black box)",
-            "In a screen share, recording or screenshot, the floating windows are a black box. You see them as usual."
+            "In a screenshot, screen recording or screen share the floating windows are a black box, on every Android " +
+                "version. You see them as usual, and screenshots of the app's own screens are not affected."
         ),
         Triple(ShareGuard.Mode.SHOW, "Show", "Everyone watching can read them.")
     )
@@ -916,6 +918,32 @@ private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
             color = Brand.Muted,
             fontSize = 12.sp
         )
+    }
+    // Since 2.0.5 (the call-choice plan): screenshots of the app are allowed unless the person blocks them here.
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Block screenshots of EchoLedger")
+                Text(
+                    "Off: you can take screenshots at any time, also while recording. EchoLedger's windows still hide when you " +
+                        "share your screen.",
+                    color = Brand.Muted,
+                    fontSize = 12.sp
+                )
+                if (android.os.Build.VERSION.SDK_INT < 35) {
+                    Text(
+                        "On this Android version, EchoLedger's windows hide from screen sharing only while this is on.",
+                        color = Brand.Muted,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+            Switch(
+                checked = settings.blockScreens,
+                onCheckedChange = { v -> vm.updateSettings { it.copy(blockScreens = v) } },
+                modifier = Modifier.semantics { contentDescription = "Block screenshots of EchoLedger" }
+            )
+        }
     }
 }
 

@@ -189,6 +189,8 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         }
         text = view
         boxParams = params
+        // A screen share Android reported as this first window opened (the callback starts with it): no frame with text.
+        private = !ShareGuard.textVisible.value
         attachDrag(view)
         if (this.showGrip) addGrip()
         applyBox()

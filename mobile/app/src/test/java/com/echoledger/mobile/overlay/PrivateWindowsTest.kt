@@ -24,15 +24,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowSettings
 import org.robolectric.shadows.ShadowWindowManagerImpl
 
 /**
- * Every floating window carries FLAG_SECURE in Private (the default) and not in Show: from its first frame, through
- * every change it makes, and when the setting changes while it is open. Android never reports a screen share for a
- * floating window (the S25, docs/SCREEN_SHARE_MATRIX.md), so this flag is the protection. The flags are read from what
- * the window manager holds (each window's own copy), not from the params object the overlay keeps.
+ * Every floating window carries FLAG_SECURE in During screen sharing: Private (black box), the default, and while
+ * Settings › Privacy & data › Block screenshots of EchoLedger is on: from its first frame, through every change it
+ * makes, and when a setting changes while it is open. Only Show with Block screenshots off leaves them plain. Android's
+ * screen-recording callback never reports an overlay window (AOSP ScreenRecordingCallbackController counts activities
+ * only), so the black box cannot wait for it. The flags are read from what the window manager holds (each window's own
+ * copy), not from the params object the overlay keeps.
  *
  * A change on the main thread reaches the windows at once, so most tests never idle the looper: idling runs animation
  * frames and moves the clock, which would let the after-call card and the Live Translate toolbar time out.
@@ -50,6 +53,7 @@ class PrivateWindowsTest : AppTest() {
         closers.clear()
         DecisionPopup.hide()
         idle()
+        ShareWatch.registrar = null
     }
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
@@ -71,6 +75,8 @@ class PrivateWindowsTest : AppTest() {
     private fun flagsOf(window: FloatingWindow): Int = checkNotNull(onScreen()[window.title]) { "${window.title} is not on screen" }
 
     private fun setting(mode: ShareGuard.Mode) = runBlocking { app.graph.settings.update { it.copy(screenShareMode = mode.wire) } }
+
+    private fun block(on: Boolean) = runBlocking { app.graph.settings.update { it.copy(blockScreens = on) } }
 
     /** Paused, so its dot holds still: the pulse of a live recording never lets the looper go idle. */
     private fun pill() = ControlPill(app, MutableStateFlow(PillState(elapsedMs = 61_000, paused = true)), {
@@ -130,23 +136,26 @@ class PrivateWindowsTest : AppTest() {
     }
 
     @Test
-    fun `in Private every floating window is secure from its first frame`() {
+    fun `by default, in Private, every floating window is secure from its first frame`() {
         assertEquals(ShareGuard.Mode.PRIVATE, ShareGuard.mode.value)
+        assertFalse("Block screenshots is not what makes them secure", AppSettingsDefaults.blockScreens)
         everyWindow()
-
         val shown = onScreen()
         assertEquals("every kind of floating window is on screen", usual.map { it.title }.toSet(), shown.keys)
         shown.forEach { (title, flags) -> assertTrue("$title has FLAG_SECURE", secure(flags)) }
     }
 
     @Test
-    fun `in Show no floating window is secure`() {
+    fun `in Show no floating window is secure, and Block screenshots makes every one secure again`() {
         setting(ShareGuard.Mode.SHOW)
         everyWindow()
+        onScreen().forEach { (title, flags) -> assertFalse("$title has no FLAG_SECURE in Show", secure(flags)) }
 
-        val shown = onScreen()
-        assertEquals(usual.map { it.title }.toSet(), shown.keys)
-        shown.forEach { (title, flags) -> assertFalse("$title has no FLAG_SECURE", secure(flags)) }
+        block(true)
+        assertEquals(usual.size, onScreen().size)
+        onScreen().forEach { (title, flags) -> assertTrue("$title is secure with Block screenshots", secure(flags)) }
+        block(false)
+        onScreen().forEach { (title, flags) -> assertFalse("$title is plain again", secure(flags)) }
     }
 
     @Test
@@ -163,35 +172,38 @@ class PrivateWindowsTest : AppTest() {
 
     private companion object {
         const val HARDWARE = WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+        val AppSettingsDefaults = com.echoledger.mobile.data.AppSettings()
+
+        /** WindowManager.SCREEN_RECORDING_STATE_VISIBLE and _NOT_VISIBLE (Android 15). */
+        const val SHARED = 1
+        const val NOT_SHARED = 0
     }
 
     @Test
     fun `changing the setting reaches the windows already open, both ways`() {
-        setting(ShareGuard.Mode.SHOW)
         everyWindow()
-        assertTrue(onScreen().values.none(::secure))
+        assertTrue(onScreen().values.all(::secure))
+
+        setting(ShareGuard.Mode.SHOW)
+        assertEquals(usual.size, onScreen().size)
+        onScreen().forEach { (title, flags) -> assertFalse("$title is plain in Show", secure(flags)) }
 
         setting(ShareGuard.Mode.PRIVATE)
-        assertEquals(usual.size, onScreen().size)
-        onScreen().forEach { (title, flags) -> assertTrue("$title became secure", secure(flags)) }
-
-        setting(ShareGuard.Mode.SHOW)
-        onScreen().forEach { (title, flags) -> assertFalse("$title is plain again", secure(flags)) }
+        onScreen().forEach { (title, flags) -> assertTrue("$title is secure again", secure(flags)) }
     }
 
     @Test
-    fun `Show to Private on an open after-call card and an open Live Translate box sets the flag`() {
-        setting(ShareGuard.Mode.SHOW)
+    fun `Show chosen over an open after-call card and an open Live Translate box clears the flag`() {
         afterCallCard()
         liveTranslate(toolbar = false)
-        assertFalse(secure(flagsOf(FloatingWindow.AFTER_CALL_CARD)))
-        assertFalse(secure(flagsOf(FloatingWindow.LIVE_TRANSLATE)))
-
-        setting(ShareGuard.Mode.PRIVATE)
-
         assertTrue(secure(flagsOf(FloatingWindow.AFTER_CALL_CARD)))
         assertTrue(secure(flagsOf(FloatingWindow.LIVE_TRANSLATE)))
-        assertTrue(secure(flagsOf(FloatingWindow.LIVE_TRANSLATE_GRIP)))
+
+        setting(ShareGuard.Mode.SHOW)
+
+        assertFalse(secure(flagsOf(FloatingWindow.AFTER_CALL_CARD)))
+        assertFalse(secure(flagsOf(FloatingWindow.LIVE_TRANSLATE)))
+        assertFalse(secure(flagsOf(FloatingWindow.LIVE_TRANSLATE_GRIP)))
     }
 
     @Test
@@ -199,11 +211,12 @@ class PrivateWindowsTest : AppTest() {
         setting(ShareGuard.Mode.SHOW)
         captions()
         liveTranslate(toolbar = false)
+        assertFalse(secure(flagsOf(FloatingWindow.CAPTIONS)))
         // Saved from a background thread, the way a settings import or reset does it.
-        val change = Thread { runBlocking { app.graph.settings.update { it.copy(screenShareMode = ShareGuard.Mode.PRIVATE.wire) } } }
+        val change = Thread { runBlocking { app.graph.settings.update { it.copy(blockScreens = true) } } }
         change.start()
         change.join()
-        assertEquals(ShareGuard.Mode.PRIVATE, ShareGuard.mode.value)
+        assertTrue(ShareGuard.block.value)
         assertFalse("not from the other thread itself", secure(flagsOf(FloatingWindow.CAPTIONS)))
         idle()
         assertTrue(secure(flagsOf(FloatingWindow.CAPTIONS)))
@@ -212,31 +225,34 @@ class PrivateWindowsTest : AppTest() {
     }
 
     @Test
-    fun `a window opened before the setting has loaded is secure, then follows the setting`() {
+    fun `a window opened before the store has loaded is private at once, then follows the store`() {
         setting(ShareGuard.Mode.SHOW)
-        // A new process whose small memory is empty (the first start after an update): the setting is not read yet.
+        // A new process whose small memory is empty (the first start after the update): Private until the store answers.
         ShareGuard.resetForTest()
         liveTranslate(toolbar = false)
         afterCallCard()
 
         assertTrue("secure at once, before the settings store answered", secure(flagsOf(FloatingWindow.LIVE_TRANSLATE)))
-        assertTrue(secure(flagsOf(FloatingWindow.AFTER_CALL_CARD)))
         DecisionPopup.hide() // its progress line would run out while the looper turns
         pumpUntil("the stored Show to arrive") { !secure(flagsOf(FloatingWindow.LIVE_TRANSLATE)) }
         assertEquals(ShareGuard.Mode.SHOW, ShareGuard.mode.value)
     }
 
     @Test
-    fun `the setting kept from the last process gives the first frame its flag`() {
+    fun `the choices kept from the last process give the first frame its flag`() {
         setting(ShareGuard.Mode.SHOW)
-        setting(ShareGuard.Mode.PRIVATE)
-        assertEquals("every saved change reaches the memory", ShareGuard.Mode.PRIVATE, ShareGuardMemory(app).read()?.mode)
-
-        setting(ShareGuard.Mode.SHOW)
+        assertEquals("every saved change reaches the memory", ShareGuard.Mode.SHOW, ShareGuardMemory(app).read()?.mode)
         ShareGuard.resetForTest()
         ShareGuard.restore(ShareGuardMemory(app)) // a new process
         afterCallCard()
         assertFalse("Show is honoured from the first frame", secure(flagsOf(FloatingWindow.AFTER_CALL_CARD)))
+
+        DecisionPopup.hide()
+        block(true)
+        ShareGuard.resetForTest()
+        ShareGuard.restore(ShareGuardMemory(app))
+        afterCallCard()
+        assertTrue("and so is Block screenshots", secure(flagsOf(FloatingWindow.AFTER_CALL_CARD)))
     }
 
     @Test
@@ -287,6 +303,136 @@ class PrivateWindowsTest : AppTest() {
         assertFalse(TranslateOverlay(app, subtitles = false, actions = NoActions).show(BoxPlacement(0.1f, 0.1f, 0.5f, 0.2f), 0.8f, true))
         assertEquals(before, PrivateWindows.count)
         assertTrue(onScreen().isEmpty())
+    }
+
+    // ---- the screen-recording callback (Android 15+): the windows hide during a share, without FLAG_SECURE -----------
+
+    /** Android's screen-recording callback as the windows meet it: [state] is what Android says now. */
+    private class FakeRecordings(var state: Int = NOT_SHARED) : ShareWatch.Registrar {
+        val callbacks = mutableListOf<java.util.function.Consumer<Int>>()
+        var removed = 0
+
+        override fun add(context: android.content.Context, callback: java.util.function.Consumer<Int>): Int {
+            callbacks += callback
+            return state
+        }
+
+        override fun remove(context: android.content.Context, callback: java.util.function.Consumer<Int>) {
+            assertTrue("only a registered callback is removed", callbacks.remove(callback))
+            removed++
+        }
+
+        fun say(now: Int) {
+            state = now
+            callbacks.toList().forEach { it.accept(now) }
+        }
+    }
+
+    private fun recordings(state: Int = NOT_SHARED): FakeRecordings {
+        shadowOf(app).grantPermissions(ShareWatch.PERMISSION)
+        return FakeRecordings(state).also { ShareWatch.registrar = it }
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `on Android 15 a screen share hides the windows to the grey dot and its end shows them again`() {
+        val android = recordings()
+        liveTranslate(toolbar = false)
+        pill()
+        assertEquals("one callback for all the windows", 1, android.callbacks.size)
+        assertTrue(ShareGuard.textVisible.value)
+        assertEquals(null, dotView())
+
+        android.say(SHARED)
+        idle()
+        assertTrue(ShareGuard.shared.value)
+        assertFalse("Private hides EchoLedger's text in the share", ShareGuard.textVisible.value)
+        assertEquals(View.INVISIBLE, boxView().visibility)
+        assertTrue("the grey dot is there instead", dotView() != null)
+        onScreen().forEach { (title, flags) -> assertTrue("$title stays a black box in Private too", secure(flags)) }
+
+        android.say(NOT_SHARED)
+        idle()
+        assertFalse(ShareGuard.shared.value)
+        assertTrue(ShareGuard.textVisible.value)
+        assertEquals(View.VISIBLE, boxView().visibility)
+        assertEquals(null, dotView())
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `on Android 15 a share already running when the first window opens hides it at once`() {
+        recordings(state = SHARED)
+        liveTranslate(toolbar = false)
+        assertFalse(ShareGuard.textVisible.value)
+        assertEquals(View.INVISIBLE, boxView().visibility)
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `on Android 15 Show keeps the windows readable in a share`() {
+        val android = recordings()
+        setting(ShareGuard.Mode.SHOW)
+        pill()
+        pumpUntil("Show to reach the windows") { ShareGuard.mode.value == ShareGuard.Mode.SHOW }
+        liveTranslate(toolbar = false)
+
+        android.say(SHARED)
+        idle()
+        assertTrue(ShareGuard.shared.value)
+        assertTrue(ShareGuard.textVisible.value)
+        assertEquals(View.VISIBLE, boxView().visibility)
+        assertEquals(null, dotView())
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `the last window closing stops listening and forgets the share`() {
+        val android = recordings()
+        val box = liveTranslate(toolbar = false)
+        val controls = pill()
+        android.say(SHARED)
+        assertTrue(ShareGuard.shared.value)
+
+        controls.hide()
+        assertEquals("still listening while a window is open", 0, android.removed)
+        box.hideAll()
+        assertEquals(1, android.removed)
+        assertTrue(android.callbacks.isEmpty())
+        assertFalse(ShareGuard.shared.value)
+        assertTrue(ShareGuard.textVisible.value)
+    }
+
+    @Test
+    @Config(sdk = [35])
+    fun `without the screen-recording permission nothing listens`() {
+        val android = FakeRecordings().also { ShareWatch.registrar = it }
+        shadowOf(app).denyPermissions(ShareWatch.PERMISSION)
+        liveTranslate(toolbar = false)
+        assertTrue(android.callbacks.isEmpty())
+    }
+
+    @Test
+    fun `before Android 15 there is no callback, and the black box keeps the windows out of a share all the same`() {
+        val android = recordings()
+        liveTranslate(toolbar = false)
+        assertTrue(android.callbacks.isEmpty())
+        assertTrue(ShareGuard.textVisible.value)
+        assertTrue("Private: FLAG_SECURE without any signal", secure(flagsOf(FloatingWindow.LIVE_TRANSLATE)))
+        setting(ShareGuard.Mode.SHOW)
+        assertFalse(secure(flagsOf(FloatingWindow.LIVE_TRANSLATE)))
+        block(true)
+        assertTrue("in Show only Block screenshots keeps them out of a share", secure(flagsOf(FloatingWindow.LIVE_TRANSLATE)))
+    }
+
+    @Test
+    fun `in Show with Block screenshots on the grey dot is secure too`() {
+        setting(ShareGuard.Mode.SHOW)
+        block(true)
+        liveTranslate(toolbar = false)
+        ShareGuard.setHidden(true)
+        idle()
+        assertTrue(secure(flagsOf(FloatingWindow.LIVE_TRANSLATE_DOT)))
     }
 
     // ---- Live Translate while the floating windows are hidden (review of v1.8.1) -------------------------------------

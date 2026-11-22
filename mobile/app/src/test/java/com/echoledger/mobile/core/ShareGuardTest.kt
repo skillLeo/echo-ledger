@@ -13,7 +13,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** Settings → During screen sharing and the state of the floating windows (pure; see PrivateWindowsTest for windows). */
+/**
+ * Settings → During screen sharing and Block screenshots of EchoLedger, and the state of the floating windows (pure; see
+ * PrivateWindowsTest for the windows themselves).
+ */
 class ShareGuardTest {
     @Before fun reset() = ShareGuard.resetForTest()
 
@@ -31,20 +34,27 @@ class ShareGuardTest {
     }
 
     @Test
-    fun `private is a black box in every screen share and show is the only mode without it`() {
-        assertTrue(ShareGuard.secure(Mode.PRIVATE))
-        assertFalse(ShareGuard.secure(Mode.SHOW))
+    fun `the two sharing modes are Private and Show`() {
         assertEquals(listOf(Mode.PRIVATE, Mode.SHOW), Mode.entries.toList())
     }
 
     @Test
-    fun `the secure flag follows the mode and leaves every other flag alone`() {
+    fun `the floating windows are secure in Private and while Block screenshots is on, readable only in Show`() {
+        // Android's screen-recording callback never reports an overlay window, so Private cannot wait for a signal.
+        assertTrue(ShareGuard.secureWindows(Mode.PRIVATE, block = false))
+        assertTrue(ShareGuard.secureWindows(Mode.PRIVATE, block = true))
+        assertTrue(ShareGuard.secureWindows(Mode.SHOW, block = true))
+        assertFalse(ShareGuard.secureWindows(Mode.SHOW, block = false))
+    }
+
+    @Test
+    fun `the secure flag leaves every other flag alone`() {
         val others = listOf(0, 0x0008, 0x0010 or 0x0100, 0x0008 or 0x0020 or 0x0100 or 0x40000, 0x7FFFFFFF and FLAG_SECURE.inv())
         others.forEach { flags ->
-            assertEquals(flags or FLAG_SECURE, ShareGuard.windowFlags(flags, Mode.PRIVATE))
-            assertEquals(flags, ShareGuard.windowFlags(flags, Mode.SHOW))
-            assertEquals("set twice is set once", flags or FLAG_SECURE, ShareGuard.windowFlags(flags or FLAG_SECURE, Mode.PRIVATE))
-            assertEquals("Show clears a flag set before", flags, ShareGuard.windowFlags(flags or FLAG_SECURE, Mode.SHOW))
+            assertEquals(flags or FLAG_SECURE, ShareGuard.windowFlags(flags, secure = true))
+            assertEquals(flags, ShareGuard.windowFlags(flags, secure = false))
+            assertEquals("set twice is set once", flags or FLAG_SECURE, ShareGuard.windowFlags(flags or FLAG_SECURE, secure = true))
+            assertEquals("off clears a flag set before", flags, ShareGuard.windowFlags(flags or FLAG_SECURE, secure = false))
         }
     }
 
@@ -68,9 +78,10 @@ class ShareGuardTest {
     }
 
     @Test
-    fun `the windows start private until the setting is read`() {
+    fun `the windows start private and secure, with the app's screenshots allowed, until the settings are read`() {
         assertEquals(Mode.PRIVATE, ShareGuard.mode.value)
-        assertTrue(ShareGuard.secure(ShareGuard.mode.value))
+        assertTrue("a window that opens first is never readable in a screen share", ShareGuard.windowsSecure)
+        assertFalse("screenshots of the app are allowed by default, also while recording", ShareGuard.block.value)
     }
 
     @Test
@@ -95,16 +106,19 @@ class ShareGuardTest {
     }
 
     @Test
-    fun `mode listeners hear the current mode, then each change once`() {
-        val seen = mutableListOf<Mode>()
-        val stop = ShareGuard.observeMode { seen += it }
-        ShareGuard.setMode(Mode.SHOW)
+    fun `secure-flag listeners hear the current flag, then each change of it once`() {
+        val seen = mutableListOf<Boolean>()
+        val stop = ShareGuard.observeSecure { seen += it }
+        ShareGuard.setMode(Mode.SHOW) // Private → Show: plain
         ShareGuard.setMode(Mode.SHOW)
         ShareGuard.setHidden(true)
-        ShareGuard.setMode(Mode.PRIVATE)
+        ShareGuard.setBlock(true) // Show with Block: secure
+        ShareGuard.setMode(Mode.PRIVATE) // still secure: no news
+        ShareGuard.setBlock(false) // Private alone: still secure
+        ShareGuard.setMode(Mode.SHOW) // plain
         stop()
-        ShareGuard.setMode(Mode.SHOW)
-        assertEquals(listOf(Mode.PRIVATE, Mode.SHOW, Mode.PRIVATE), seen)
+        ShareGuard.setMode(Mode.PRIVATE)
+        assertEquals(listOf(true, false, true, false), seen)
     }
 
     @Test
@@ -165,16 +179,17 @@ class ShareGuardTest {
     }
 
     /**
-     * Review of v1.8.1: a Hide kept across process death left Live Translate without a way back, and every floating
-     * window is a black box in a screen share anyway. So only the setting outlives the process; Hide lasts the session.
+     * Review of v1.8.1: a Hide kept across process death left Live Translate without a way back. So only the settings
+     * outlive the process; Hide lasts the session.
      */
     @Test
-    fun `the setting survives a new process but Hide does not, since every window is already a black box in a screen share`() {
+    fun `the settings survive a new process but Hide does not`() {
         val memory = FakeMemory()
         ShareGuard.restore(memory)
         ShareGuard.setMode(Mode.SHOW)
+        ShareGuard.setBlock(true)
         assertTrue(ShareGuard.toggleHidden())
-        assertEquals(ShareGuard.Saved(Mode.SHOW), memory.saved)
+        assertEquals(ShareGuard.Saved(Mode.SHOW, block = true), memory.saved)
 
         ShareGuard.resetForTest() // the process ends (a cached kill, a crash, an update)
         ShareGuard.setHidden(true)
@@ -182,6 +197,7 @@ class ShareGuardTest {
         ShareGuard.restore(memory) // a new one starts
 
         assertEquals(Mode.SHOW, ShareGuard.mode.value)
+        assertTrue("Block screenshots comes back with the process", ShareGuard.block.value)
         assertFalse("Hide is for the session only", ShareGuard.hiddenByUser.value)
         assertFalse("nothing is in a screen share when a process starts", ShareGuard.shared.value)
         assertTrue(ShareGuard.textVisible.value)
@@ -197,11 +213,13 @@ class ShareGuardTest {
     }
 
     @Test
-    fun `with nothing saved a process starts private with the windows shown`() {
+    fun `with nothing saved a process starts private with screenshots allowed and the windows shown`() {
         ShareGuard.setMode(Mode.SHOW)
+        ShareGuard.setBlock(true)
         ShareGuard.setHidden(true)
         ShareGuard.restore(FakeMemory())
         assertEquals(Mode.PRIVATE, ShareGuard.mode.value)
+        assertFalse(ShareGuard.block.value)
         assertFalse(ShareGuard.hiddenByUser.value)
         assertTrue(ShareGuard.textVisible.value)
     }
@@ -218,6 +236,8 @@ class ShareGuardTest {
         assertEquals(0, memory.writes)
         ShareGuard.setMode(Mode.SHOW)
         assertEquals(1, memory.writes)
+        ShareGuard.setBlock(true)
+        assertEquals(2, memory.writes)
     }
 
     @Test
