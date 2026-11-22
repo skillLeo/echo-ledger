@@ -147,6 +147,13 @@ object CallChoice {
         WHEN_START to com.echoledger.mobile.R.string.cc_when_start
     )
 
+    /** The words a call left to choose again shows under its name, or null for an ordinary waiting call. */
+    fun chooseAgainWords(rec: com.echoledger.mobile.data.LocalRecording): Int? = when {
+        !rec.restoredDelete -> null
+        rec.notDeletedYet -> com.echoledger.mobile.R.string.cc_not_deleted_yet
+        else -> com.echoledger.mobile.R.string.cc_restored_delete
+    }
+
     /** The After each call value one tap on "Always do this? Yes" sets. */
     fun settingFor(pick: Pick): String = if (pick == Pick.TRANSCRIBE) TRANSCRIBE else AUDIO
 }

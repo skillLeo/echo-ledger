@@ -89,6 +89,9 @@ object DecisionPopup {
     /** When the line or question on screen ends ([SystemClock.uptimeMillis]). */
     private var endsAt = 0L
 
+    /** The app the card last opened for: where a Deleted line held behind it shows once the card goes. */
+    private var lastApp: Context? = null
+
     /** A choice made on the card, counted toward "Always do this?" only once its line closes without Undo. */
     private var picked: Pick? = null
 
@@ -200,7 +203,7 @@ object DecisionPopup {
             // No notification can carry its Undo. Meanwhile the call is left to the person ("Choose again"), so it is
             // never kept, sent or deleted by itself; a busy card shows its line once the line on screen is over.
             if (busy) waiting += Held(rec, themeMode, deleteLineMs = lineMs)
-            step(app, { Decisions.chooseAgain(app, rec.id) })
+            step(app, { Decisions.chooseAgain(app, rec.id, notDeletedYet = true) })
         }
         return shown
     }
@@ -211,7 +214,7 @@ object DecisionPopup {
     /** Draws [mode] for [rec] at once (tests and screenshots): the question or one of its lines. */
     internal fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode): Boolean {
         val app = context.applicationContext
-        hide()
+        teardown()
         val shown = when (mode) {
             Mode.ASK -> CallCardScreen.Ask(callCardTitle(app.resources, rec), rec.durationMs, rec.sourceApp)
             Mode.TRANSCRIBING -> CallCardScreen.Done(Pick.TRANSCRIBE)
@@ -235,7 +238,8 @@ object DecisionPopup {
     }
 
     private fun open(app: Context, rec: LocalRecording, themeMode: String, first: CallCardScreen): Boolean {
-        hide()
+        teardown()
+        lastApp = app
         // Without "Display over other apps" there is no card (Android would refuse the window anyway).
         if (!android.provider.Settings.canDrawOverlays(app)) return false
         val wm = app.getSystemService(WindowManager::class.java) ?: return false
@@ -356,7 +360,13 @@ object DecisionPopup {
     /** The card's time is over: it goes, then a call held back by a Deleted line is asked about. */
     private fun close(app: Context) {
         val next = waiting.toList()
-        hide()
+        waiting.clear()
+        teardown()
+        showHeld(app, next)
+    }
+
+    /** The held calls, in the order they ended ([next]; all of them by default), now that the card is free. */
+    private fun showHeld(app: Context, next: List<Held> = waiting.toList().also { waiting.clear() }) {
         // In the order they ended: the first shows, any later question joins it on the grouped line (back-to-back calls)
         // and any later Deleted line waits for the one before it.
         next.forEach { held ->
@@ -384,8 +394,25 @@ object DecisionPopup {
         picked = null
     }
 
-    /** Removes the card. Never decides anything. */
+    /**
+     * Removes the card. Never decides anything. A Deleted line held behind it (no notification could carry its Undo) is
+     * not dropped: it shows next, as when the card's own time is over ([close]).
+     */
     fun hide() {
+        teardown()
+        val app = lastApp ?: return
+        if (waiting.isNotEmpty()) handler.post { if (!isShowing && waiting.isNotEmpty()) showHeld(app) }
+    }
+
+    /** Everything back as without a card (tests): held lines too. */
+    @androidx.annotation.VisibleForTesting
+    internal fun resetForTest() {
+        teardown()
+        waiting.clear()
+    }
+
+    /** The card goes; held questions go with it (their backstop decides), held Deleted lines stay. */
+    private fun teardown() {
         timeout?.let(handler::removeCallbacks)
         timeout = null
         view?.let { v -> windowManager?.let { PrivateWindows.remove(it, v) } }
@@ -398,7 +425,7 @@ object DecisionPopup {
         current = null
         screen = null
         grouped.clear()
-        waiting.clear()
+        waiting.removeAll { it.deleteLineMs == null }
         picked = null
     }
 
