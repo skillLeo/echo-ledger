@@ -136,6 +136,45 @@ describe("the header's actions with the needs button, at every width", () => {
     }
   }
 
+  // The header goes while a recording is open (the list opens it as its own page) and is drawn again on Back: it is
+  // measured again then, also when the window changed meanwhile. (The fixture starts with a recording open.)
+  const names = () => [...actions().children].map(nameOf);
+  const back = async () => {
+    const buttons = screen.getAllByRole("button", { name: "Library", exact: true });
+    fireEvent.click(buttons[buttons.length - 1]);
+    await act(flushAsync);
+  };
+  const startOpen = async (window: number) => {
+    head = headWidth(window, "full");
+    const top = { status: makeStatus({ platform: "macos", pendingDecisions: 2 }), onSetup: vi.fn(), onReadyCheck: vi.fn(), onRecord: vi.fn(), onActivity: vi.fn() };
+    render(<LibraryV2 top={top} onImport={vi.fn()} onRecord={vi.fn()} initialOpen="a" />);
+    await act(flushAsync);
+    expect(document.querySelector(".el-page__head .el-page__actions [aria-haspopup=menu]")?.textContent ?? "").not.toMatch(/need you/);
+  };
+  const ROWS = { 1280: ["3 need you", "Trash", "Sync", "More actions", "Import", "Record"], 800: ["3 need you", "Trash", "More actions", "Import", "Record"] } as const;
+
+  for (const window of [1280, 800] as const) {
+    it(`a recording opened at start and closed: at ${window} px the header folds as it should (${window === 1280 ? "Select" : "Select and Sync"} in More)`, async () => {
+      await startOpen(window);
+      await back();
+      expect(names()).toEqual(ROWS[window]);
+    });
+  }
+
+  it("a recording opened from the list and closed, with the window changed meanwhile: measured again at the new width", async () => {
+    await open();
+    await at(headWidth(1280, "full"));
+    expect(names()).toEqual(ROWS[1280]);
+    fireEvent.click(document.querySelector("button[data-row-id=a]")!);
+    await act(flushAsync);
+    expect(document.querySelector("button[data-row-id=a]")).toBeNull();
+    head = headWidth(800, "full");
+    await back();
+    expect(names()).toEqual(ROWS[800]);
+    await at(headWidth(1280, "full"));
+    expect(names()).toEqual(ROWS[1280]);
+  });
+
   it("More keeps each action's icon, words and shortcut, and does what the button did", async () => {
     await open();
     await at(headWidth(800, "full"));

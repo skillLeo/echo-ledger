@@ -43,14 +43,48 @@ export function forgetDismissed(): void {
 /** What the queue under the header already shows with its own Review (waiting calls, uploads that need you). */
 export type QueueCovers = { waiting: boolean; failed: boolean };
 
+/** How long a change in the waiting calls that only one side has reported waits for the other (see useHeldWaiting). */
+export const WAITING_HOLD_MS = 1000;
+
+/**
+ * The waiting calls the header counts: the status's, unless the queue shows them with its own Review. The core reports
+ * a call that starts waiting, or is decided, twice, one after the other: in its status and in the queue's list
+ * (`list`, a new list each time it says anything). A change only one of them has reported is held until the other
+ * reports too, or WAITING_HOLD_MS, whichever is first, so the button never shows "1 waiting" for the moment between
+ * them (and the header's actions don't fold and unfold for it).
+ */
+function useHeldWaiting(status: number, list: unknown, covered: boolean | null): number {
+  const now = covered ? 0 : status;
+  const ready = covered !== null;
+  const [held, setHeld] = useState({ shown: now, status, list, ready });
+  const statusMoved = status !== held.status;
+  const listMoved = list !== held.list;
+  // Before the queue has answered (and as it does), or when both have moved or neither: what they say now.
+  const settled = !ready || !held.ready || statusMoved === listMoved;
+  useEffect(() => {
+    const next = { shown: now, status, list, ready };
+    if (settled) {
+      if (held.shown !== now || statusMoved || listMoved || held.ready !== ready) setHeld(next);
+      return;
+    }
+    const timer = window.setTimeout(() => setHeld(next), WAITING_HOLD_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settled, now, status, list, ready]);
+  return settled ? now : held.shown;
+}
+
 /**
  * What needs action in the Library, for the header's button: null while the counts load (they read 0 until the
  * recordings, the skipped calls and the queue's lists are in, so the button never shows a count it then corrects), and
  * when nothing does. What the queue shows with its own Review (`covered`, null until its lists have answered) is left
- * out, so there is one Review for each thing. Without a status (the Library is not the start screen) there is no button.
+ * out, so there is one Review for each thing; a waiting call only the status or only the queue's list (`waitingList`)
+ * has reported yet is held for the other (useHeldWaiting). Without a status (the Library is not the start screen)
+ * there is no button.
  */
-export function useLibraryNeeds(status: AppStatus | null, items: readonly LibraryItem[] | null, covered: QueueCovers | null): readonly NeedsAction[] | null {
+export function useLibraryNeeds(status: AppStatus | null, items: readonly LibraryItem[] | null, covered: QueueCovers | null, waitingList?: unknown): readonly NeedsAction[] | null {
   const [skipped, setSkipped] = useState<SkippedItem[] | null>(null);
+  const waiting = useHeldWaiting(status?.pendingDecisions ?? 0, waitingList, covered ? covered.waiting : null);
   const on = status !== null;
   useEffect(() => {
     if (!on) return;
@@ -64,7 +98,7 @@ export function useLibraryNeeds(status: AppStatus | null, items: readonly Librar
   if (!status || items === null || skipped === null || covered === null) return null;
   const actions = needsAction({
     failed: covered.failed ? 0 : status.failedUploads,
-    waiting: covered.waiting ? 0 : status.pendingDecisions,
+    waiting,
     untranscribed: items.filter((i) => !i.deleted && isUntranscribed(i)).length,
     missed: skipped.length,
   });

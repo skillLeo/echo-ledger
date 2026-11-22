@@ -664,12 +664,16 @@ const SCREENS = [
   // The v2 Library's header, the only place it says what needs action: its quiet button before Trash, led by an
   // attention dot, always with its words; where the row has no room, Select, then Sync, then Trash fold into More.
   // English and right to left (lang=ur) at 1280 and 760 (the rail), and English at 1200 and 800 with the full sidebar.
-  ...[[1280, "en"], [1280, "ur"], [760, "en"], [760, "ur"], [1200, "en"], [800, "en"]].map(([width, lang]) => [`library-needs-top-${width}-${lang}`, `library&uiflags=${V2_FLAGS}${lang === "ur" ? "&lang=ur" : ""}`, async (page) => {
+  // `beside`: the header has its title and actions on one line there without the needs button, so it keeps that line
+  // with it (headerFold.test.tsx: 1280 and 1200 fold Select, or Select and Sync; 800 and 760 have the actions under the
+  // title already).
+  ...[[1280, "en", true], [1280, "ur", true], [760, "en", false], [760, "ur", false], [1200, "en", true], [800, "en", false]].map(([width, lang, beside]) => [`library-needs-top-${width}-${lang}`, `library&uiflags=${V2_FLAGS}${lang === "ur" ? "&lang=ur" : ""}`, async (page) => {
     // The fixture opens a recording: its Back (the last "Library" in the window) shows the list.
     await page.getByRole("button", { name: "Library", exact: true }).last().click();
     await page.locator(".el-page__head .el-page__actions").getByRole("button", { name: /need you$/ }).waitFor();
     // At rest: every scroller back at its top (the click can scroll the page).
     await page.evaluate(() => document.querySelectorAll("*").forEach((el) => { if (el.scrollTop) el.scrollTop = 0; }));
+    await headerOnOneRow(page, beside);
   }, { width, height: 800 }]),
   // The v2 sidebar: the Library's places with their counts as quiet text (no pill), Activity's "needs you" count on its
   // accent pill; and the same sidebar as the icon rail.
@@ -810,6 +814,32 @@ async function openHelp(page) {
     }).map((b) => b.textContent);
   });
   if (outside.length) throw new Error(`Help's buttons are not on screen: ${outside.join(", ")}`);
+}
+
+/**
+ * The Library header's actions sit on one row, beside the title where `beside` says the header has that line (and
+ * wherever it has room for both), else under it (what headerFold.ts promises; a header that stopped folding puts them
+ * under the title, or on a third line). Throws, so the shot is not taken and the run fails.
+ */
+async function headerOnOneRow(page, beside) {
+  const problem = await page.evaluate((expected) => {
+    const head = document.querySelector(".el-page__head");
+    const titles = head?.querySelector(":scope > .el-page__titles");
+    const actions = head?.querySelector(":scope > .el-page__actions");
+    if (!head || !titles || !actions) return "no Library header";
+    const boxes = [...actions.children].map((c) => c.getBoundingClientRect());
+    const tops = boxes.map((b) => Math.round(b.top));
+    if (Math.max(...tops) - Math.min(...tops) > 1) return `actions on ${new Set(tops).size} rows`;
+    const gap = parseFloat(getComputedStyle(actions).columnGap) || 0;
+    const row = boxes.reduce((sum, b) => sum + b.width, 0) + gap * (boxes.length - 1);
+    const beside = (parseFloat(getComputedStyle(titles).flexBasis) || 0) + (parseFloat(getComputedStyle(head).columnGap) || 0);
+    // On the title's line (the header centres them on it) or on a line of their own under it.
+    const together = actions.getBoundingClientRect().top < titles.getBoundingClientRect().bottom - 1;
+    if (beside + row <= head.clientWidth + 0.5 && !together) return `actions (${Math.round(row)} px) under the title though the header (${head.clientWidth} px) has room beside it`;
+    if (expected !== together) return expected ? "actions under the title, not beside it" : "actions beside the title, not under it";
+    return null;
+  }, beside);
+  if (problem) throw new Error(`Library header: ${problem}`);
 }
 
 async function shoot(page, file, keepPointer = false) {

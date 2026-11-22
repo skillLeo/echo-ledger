@@ -3,10 +3,10 @@
 // shows whenever something needs action and opens the right view (there is no needs-action banner).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makePendingItem, makeStatus, makeUploadItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
-import { DISMISSED_PREFIX } from "./LibraryTop";
+import { DISMISSED_PREFIX, WAITING_HOLD_MS } from "./LibraryTop";
 import type { Account } from "../../lib/ipc";
 
 const account = (email: string): Account => ({ name: "Ayesha Khan", email, email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
@@ -154,13 +154,19 @@ describe("the top of the Library", () => {
     it("shows whenever something needs action and goes at 0, as the counts change, without a ×", async () => {
       respond("library_list", [ITEMS[1]]);
       respond("library_refresh", [ITEMS[1]]);
+      // Calls the status counts and the queue doesn't list (their after-call card still counts down); the core reports
+      // each change twice, in its status and then in the queue's list.
+      const counting = (id: string) => makePendingItem(id, { deadlineAt: "2026-11-23T10:00:08Z" });
+      respond("pending_list", [counting("p1"), counting("p2")]);
       const top = await show(makeStatus({ platform: "macos", pendingDecisions: 2 }));
       expect(within(actions()).getByRole("button", { name: "2 waiting" })).toBe(needs());
       expect(within(needs()).queryByRole("button", { name: /Dismiss|Close/ })).toBeNull();
       await top.update({ pendingDecisions: 0 });
+      await act(() => emitEvent("pending:changed", []));
       expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
       expect(within(actions()).getAllByRole("button")[0]).toHaveAccessibleName("Trash");
       await top.update({ pendingDecisions: 1 });
+      await act(() => emitEvent("pending:changed", [counting("p3")]));
       expect(within(actions()).getByRole("button", { name: "1 waiting" })).toBe(needs());
       await top.update({ pendingDecisions: 1, failedUploads: 2 });
       expect(within(actions()).getByRole("button", { name: "3 need you" })).toBe(needs());
@@ -247,6 +253,51 @@ describe("the top of the Library", () => {
       expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
       expect(again.changes).toEqual([]);
       again.stop();
+    });
+
+    describe("a waiting call reported by the status and the queue's list one after the other", () => {
+      const ALI = makePendingItem("p1", { title: "Call with Ali" });
+      afterEach(() => vi.useRealTimers());
+
+      it("the status first: held until the list says the queue shows it, never a passing \"2 need you\"", async () => {
+        respond("pending_list", []);
+        const top = await show(makeStatus({ platform: "macos" }));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        const watch = watchCorrections();
+        await top.update({ pendingDecisions: 1 });
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await act(() => emitEvent("pending:changed", [ALI]));
+        expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        expect(watch.changes).toEqual([]);
+        watch.stop();
+      });
+
+      it("the queue's list first (the call decided there): held until the status says so, never a passing \"1 waiting\"", async () => {
+        respond("pending_list", [ALI]);
+        const top = await show(makeStatus({ platform: "macos", pendingDecisions: 1 }));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        const watch = watchCorrections();
+        await act(() => emitEvent("pending:changed", []));
+        expect(screen.queryByTestId("waiting-line")).toBeNull();
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await top.update({ pendingDecisions: 0 });
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        expect(watch.changes).toEqual([]);
+        watch.stop();
+      });
+
+      it("only the status ever says it: the count shows after the hold (about a second)", async () => {
+        respond("pending_list", []);
+        const top = await show(makeStatus({ platform: "macos" }));
+        vi.useFakeTimers();
+        await top.update({ pendingDecisions: 1 });
+        await act(async () => vi.advanceTimersByTime(WAITING_HOLD_MS - 50));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await act(async () => vi.advanceTimersByTime(100));
+        expect(within(actions()).getByRole("button", { name: "2 need you" })).toBe(needs());
+        expect(WAITING_HOLD_MS).toBeLessThanOrEqual(1000);
+      });
     });
 
     it("a dismissal the old banner stored never hides it, and is cleared (every account's); other settings stay", async () => {

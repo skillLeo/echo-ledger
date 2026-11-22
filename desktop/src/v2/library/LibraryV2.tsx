@@ -564,14 +564,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const counts = items ? viewCounts(items) : null;
   // With the needs button in the header, its least-used actions fold into More where the row has no room for it
   // (headerFold.ts): Select, then Sync, then Trash. `headKeys` names the actions as the header last drew them.
-  const headRef = useRef<HTMLElement>(null);
+  // The header as drawn now (a callback ref): it goes while a recording is open, and is measured again when it is back.
+  const [headEl, setHeadEl] = useState<HTMLElement | null>(null);
   const headKeys = useRef<readonly string[]>([]);
   // What needs action (LibraryTop.tsx): the quiet button before Trash, the only place the Library says it.
-  const needs = useLibraryNeeds(top?.status ?? null, items, queueCovers(queue));
+  const needs = useLibraryNeeds(top?.status ?? null, items, queueCovers(queue), queue.pending);
   const headerNeeds = !!needs && view !== "trash" && !selecting;
   const foldable: Foldable[] = (counts?.all ?? 0) > 0 ? ["trash", "sync", "select"] : ["trash", "sync"];
   const needsWords = needs ? Object.values(needsLabel(needs)).join(" ") : "";
-  const folded = useHeaderFold(headRef, headKeys, foldable, headerNeeds, `${syncing}|${needsWords}`);
+  const folded = useHeaderFold(headEl, headKeys, foldable, headerNeeds, `${syncing}|${needsWords}`);
   const { groups, rows: shown, matching } = useMemo(() => listOf(items),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [items, view, filters, query, choice, opened, collapsed, folder, folderIds, place, readHere]);
@@ -869,7 +870,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             </div>
           </header>
         ) : (
-          <header className="el-page__head" ref={headRef}>
+          <header className="el-page__head" ref={setHeadEl}>
             <div className="el-page__titles">
               {/* Library › the place shown (a smart folder, a view, a list); Library shows every recording again. */}
               {crumb && <Breadcrumbs crumbs={[{ label: "Library", onOpen: showEverything }, { label: crumb }]} />}
