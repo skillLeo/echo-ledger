@@ -18,7 +18,7 @@ import { ConfirmHost } from "./ConfirmHost";
 import { roleOf } from "./AccountSettings";
 import { searchSettings } from "../../lib/settingsIndex";
 import { OnboardingView } from "./OnboardingView";
-import { PermissionLossNotice } from "./Permissions";
+import { OtherSideBanner, PermissionLossNotice } from "./Permissions";
 import { AfterCallNotice } from "./AfterCallNotice";
 import { ShareDefaultNotice } from "./ShareDefaultNotice";
 import { AlertIcon } from "../../components/Icons";
@@ -818,6 +818,7 @@ export default function MainApp() {
     <>
       {/* One banner at a time, the most important first (BannerSlot); the next one shows once it goes. */}
       <BannerSlot>
+      {status.platform === "macos" && <OtherSideBanner />}
       <UpdateBanner appStatus={status} notify={notify} onOpen={() => openAccount("about")} />
       <ServerBanners server={status.server} notify={notify} />
       {/* The new shell shows its own (ui_v2.shell). */}

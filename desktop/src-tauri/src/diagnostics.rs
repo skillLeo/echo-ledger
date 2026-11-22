@@ -40,6 +40,19 @@ pub struct DiagnosticInputs {
     pub protection: String,
     pub share_check: Option<ShareCheckLine>,
     pub shortcuts: Vec<ShortcutLine>,
+    /// A Mac: whether system audio records for this copy of EchoLedger (`permissions::Memory`), and what went wrong
+    /// with the last recording's capture. None elsewhere.
+    pub system_audio: Option<SystemAudioLine>,
+}
+
+/// What EchoLedger found about system audio itself, as the report says it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SystemAudioLine {
+    /// Why it did not record, when it did not.
+    pub failing: Option<String>,
+    /// Not looked at yet by this copy (an update, another signature).
+    pub unchecked: bool,
+    pub last_recording: Vec<String>,
 }
 
 /// The report (pure).
@@ -70,6 +83,17 @@ pub fn report_text(d: &DiagnosticInputs) -> String {
         Some(c) => format!("Last Share Check: {} on {} ({})", c.result, c.at.format("%Y-%m-%d %H:%M UTC"), c.methods.join(", ")),
         None => "Last Share Check: not run on this app and system version yet".into(),
     });
+    if let Some(audio) = &d.system_audio {
+        out.push(String::new());
+        out.push(match (&audio.failing, audio.unchecked) {
+            (Some(why), _) => format!("System audio: not recording: {why}"),
+            (None, true) => "System audio: not checked by this version yet".into(),
+            (None, false) => "System audio: recording".into(),
+        });
+        if !audio.last_recording.is_empty() {
+            out.push(format!("Last recording: {}", audio.last_recording.join("; ")));
+        }
+    }
     out.push(String::new());
     out.push("Shortcuts:".into());
     for s in &d.shortcuts {
@@ -118,6 +142,14 @@ pub fn gather(app: &tauri::AppHandle) -> DiagnosticInputs {
         protection,
         share_check,
         shortcuts,
+        system_audio: macos.then(|| {
+            let memory = state.permission_memory_now();
+            SystemAudioLine {
+                failing: memory.system_audio_failing,
+                unchecked: memory.verify_system_audio,
+                last_recording: state.last_capture_notes.lock().unwrap_or_else(|p| p.into_inner()).clone(),
+            }
+        }),
     }
 }
 
@@ -157,6 +189,7 @@ mod tests {
                 ShortcutLine { title: "Bookmark this moment", keys: Some("Ctrl+Shift+B".into()), taken: false },
                 ShortcutLine { title: "Capture a voice note", keys: None, taken: false },
             ],
+            system_audio: None,
         }
     }
 
@@ -180,5 +213,21 @@ mod tests {
         let bare = report_text(&DiagnosticInputs { ready: None, share_check: None, ..inputs() });
         assert!(bare.contains("Ready check: not run yet"));
         assert!(bare.contains("Last Share Check: not run on this app and system version yet"));
+    }
+
+    #[test]
+    fn a_mac_s_report_says_why_system_audio_did_not_record() {
+        let failing = SystemAudioLine {
+            failing: Some("the system audio tap delivered no audio in 3 s".into()),
+            unchecked: false,
+            last_recording: vec!["Other side not recorded: the system audio tap delivered no audio in 3 s".into()],
+        };
+        let text = report_text(&DiagnosticInputs { system_audio: Some(failing), ..inputs() });
+        assert!(text.contains("\n\nSystem audio: not recording: the system audio tap delivered no audio in 3 s\nLast recording: Other side not recorded: the system audio tap delivered no audio in 3 s\n\nShortcuts:"), "{text}");
+        let unchecked = report_text(&DiagnosticInputs { system_audio: Some(SystemAudioLine { failing: None, unchecked: true, last_recording: Vec::new() }), ..inputs() });
+        assert!(unchecked.contains("System audio: not checked by this version yet\n\nShortcuts:"));
+        let fine = report_text(&DiagnosticInputs { system_audio: Some(SystemAudioLine { failing: None, unchecked: false, last_recording: Vec::new() }), ..inputs() });
+        assert!(fine.contains("System audio: recording\n") && !fine.contains("Last recording"));
+        assert!(!report_text(&inputs()).contains("System audio"), "Windows has no such line");
     }
 }

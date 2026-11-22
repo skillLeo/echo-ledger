@@ -604,6 +604,9 @@ export type SettingsPane = PermissionKind | "automation" | "sound" | "software_u
 export interface MissingPermission {
   kind: PermissionKind;
   sentence: string;
+  /** A call's other side found by the recording itself (2.0.6): not recorded (the tap is held back: System Audio
+   * Recording), or not heard for 30 s while another app plays sound (neutral). */
+  otherSide?: "permission" | "silent";
 }
 
 export interface PermissionsStatus {
@@ -1991,6 +1994,9 @@ export const api = {
   testCapture: (seconds?: number) => invoke<TestResult>("test_capture", { seconds: seconds ?? null }),
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
   openPrivacySettings: (kind: SettingsPane) => invoke<void>("open_privacy_settings", { kind }),
+  /** "Try again" on "The other side isn't being recorded": opens the call's system side again; false when only quitting
+   * and reopening EchoLedger would. */
+  captureRetrySystem: () => invoke<boolean>("capture_retry_system"),
   permissionRequest: (kind: PermissionKind) => invoke<PermissionsStatus>("permission_request", { kind }),
   /** "Quit & reopen": Screen Recording allowed while EchoLedger ran works once it opens again (refused while recording). */
   quitAndReopen: () => invoke<void>("quit_and_reopen"),

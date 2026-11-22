@@ -93,6 +93,50 @@ pub fn access_of_screen(preflight: bool, tcc: Access) -> Access {
     }
 }
 
+#[link(name = "Security", kind = "framework")]
+unsafe extern "C" {
+    fn SecCodeCopySelf(flags: u32, code: *mut *const c_void) -> i32;
+    fn SecCodeCopySigningInformation(code: *const c_void, flags: u32, information: *mut *const c_void) -> i32;
+    static kSecCodeInfoUnique: *const c_void;
+}
+
+#[link(name = "CoreFoundation", kind = "framework")]
+unsafe extern "C" {
+    fn CFDictionaryGetValue(dictionary: *const c_void, key: *const c_void) -> *const c_void;
+    fn CFDataGetLength(data: *const c_void) -> isize;
+    fn CFDataGetBytePtr(data: *const c_void) -> *const u8;
+    fn CFRelease(object: *const c_void);
+}
+
+/// `kSecCSSigningInformation`: ask for the signature's details.
+const SIGNING_INFORMATION: u32 = 1 << 1;
+
+/// The hash of this copy's code signature (its CDHash, hex), which macOS's privacy settings tell copies apart by: another
+/// build or signing identity has another. None when it cannot be read.
+pub fn code_hash() -> Option<String> {
+    // SAFETY: Security's public calls on this process's own code; every object copied here is released here, and the
+    // hash is read before its dictionary goes.
+    unsafe {
+        let mut code: *const c_void = std::ptr::null();
+        if SecCodeCopySelf(0, &mut code) != 0 || code.is_null() {
+            return None;
+        }
+        let mut information: *const c_void = std::ptr::null();
+        let status = SecCodeCopySigningInformation(code, SIGNING_INFORMATION, &mut information);
+        CFRelease(code);
+        if status != 0 || information.is_null() {
+            return None;
+        }
+        let unique = CFDictionaryGetValue(information, kSecCodeInfoUnique);
+        let hash = (!unique.is_null()).then(|| {
+            let bytes = std::slice::from_raw_parts(CFDataGetBytePtr(unique), CFDataGetLength(unique).max(0) as usize);
+            bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
+        });
+        CFRelease(information);
+        hash.filter(|h| !h.is_empty())
+    }
+}
+
 /// Whether this macOS answers the private TCC call that tells "not asked" apart (system audio, Screen Recording).
 pub fn reads_privacy_answers() -> bool {
     preflight().is_some()

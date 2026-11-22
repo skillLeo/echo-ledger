@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ALLOWED_BEFORE, CANNOT_TELL, PERMISSION_KINDS, REOPEN, SWITCH_OFF_ON, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
+import { ALLOWED_BEFORE, CANNOT_TELL, OtherSideBanner, PERMISSION_KINDS, REOPEN, SWITCH_OFF_ON, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
 import { MAC_STEPS, OnboardingView, STEPS, stepsFor } from "./OnboardingView";
 import { RecordView } from "./RecordView";
 import { MicrophonePage as MicrophoneCard } from "./CaptureSettings";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll } from "../../test/tauri";
-import { makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeRecording, makeRecordingState, makeSettings, makeStatus } from "../../test/fixtures";
 import type { PermissionsStatus } from "../../lib/ipc";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -369,5 +369,49 @@ describe("the whole-system sentence of an old Windows, and the devices of a reco
     record(makeStatus({ recording: null, deviceNote: { text: "x", warning: false } }));
     await flushAsync();
     expect(screen.queryByTestId("device-note")).not.toBeInTheDocument();
+  });
+});
+
+describe("the main window while a call's other side isn't being recorded (2.0.6)", () => {
+  beforeEach(() => resetTauriMock());
+  const sentence = "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.";
+
+  it("says it with Open System Settings (System Audio Recording) and Try again, until the other side is heard", async () => {
+    respond("capture_retry_system", true);
+    render(<OtherSideBanner />);
+    await flushAsync();
+    expect(screen.queryByTestId("other-side-not-recorded")).toBeNull();
+    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence, otherSide: "permission" }] }));
+    const banner = screen.getByTestId("other-side-not-recorded");
+    expect(banner).toHaveTextContent(sentence);
+    fireEvent.click(within(banner).getByRole("button", { name: "Open System Settings" }));
+    expect(callsOf("open_privacy_settings")).toEqual([{ kind: "system_audio" }]);
+    fireEvent.click(within(banner).getByRole("button", { name: "Try again" }));
+    expect(callsOf("capture_retry_system")).toHaveLength(1);
+    // A try that did not help says to quit and reopen.
+    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence: "The other side still isn't being recorded. Allow System Audio Recording for EchoLedger, then quit and reopen EchoLedger.", otherSide: "permission" }] }));
+    expect(screen.getByTestId("other-side-not-recorded")).toHaveTextContent("quit and reopen EchoLedger");
+    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [] }));
+    expect(screen.queryByTestId("other-side-not-recorded")).toBeNull();
+  });
+
+  it("is not about a permission the person turned off (Record page says that) or a recording that ended", async () => {
+    render(<OtherSideBanner />);
+    await flushAsync();
+    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence: "System audio is off for EchoLedger: a recording will have your voice, not the other side of the call." }] }));
+    expect(screen.queryByTestId("other-side-not-recorded")).toBeNull();
+    await emitEvent("recording:state", makeRecordingState({ active: false, missing: [{ kind: "system_audio", sentence, otherSide: "permission" }] }));
+    expect(screen.queryByTestId("other-side-not-recorded")).toBeNull();
+  });
+
+  it("not heard while another app plays: neutral words, no System Settings or Try again, and it can be closed", async () => {
+    render(<OtherSideBanner />);
+    await flushAsync();
+    const silent = "Can't hear the other side. Check the call's speaker or output device.";
+    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence: silent, otherSide: "silent" }] }));
+    const banner = screen.getByTestId("other-side-not-recorded");
+    expect(banner).toHaveTextContent(silent);
+    expect(within(banner).queryByRole("button", { name: "Open System Settings" })).toBeNull();
+    expect(within(banner).queryByRole("button", { name: "Try again" })).toBeNull();
   });
 });

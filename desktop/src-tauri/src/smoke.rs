@@ -47,17 +47,36 @@ pub const EXIT_PERMISSIONS_HUNG: i32 = 9;
 /// How long the permissions may take to answer: they read the system once, never a prompt.
 pub const PERMISSIONS_WITHIN: Duration = Duration::from_secs(10);
 
-/// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, and every
-/// floating window must be a non-activating panel (it floats over a full-screen meeting without taking the focus) that,
-/// under the default setting, is still hidden from screen capture after its class changed.
-pub fn mac_app_problem(answers_quits: bool, windows: &[crate::mac_check::WindowFacts]) -> Option<String> {
+/// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, the main
+/// window must be an ordinary titled window ([`main_window_problem`]), and every floating window must be a non-activating
+/// panel (it floats over a full-screen meeting without taking the focus) that, under the default setting, is still hidden
+/// from screen capture after its class changed.
+pub fn mac_app_problem(answers_quits: bool, main: &crate::mac_check::WindowFacts, windows: &[crate::mac_check::WindowFacts]) -> Option<String> {
     if !answers_quits {
         return Some("the application delegate does not answer applicationShouldTerminate:".into());
+    }
+    if let Some(problem) = main_window_problem(main) {
+        return Some(problem);
     }
     if let Some(w) = windows.iter().find(|w| !w.panel) {
         return Some(format!("the {} window is not a non-activating panel ({})", w.label, w.line()));
     }
     windows.iter().find(|w| !w.hidden_from_capture()).map(|w| format!("the {} window is not hidden from screen capture ({})", w.label, w.line()))
+}
+
+/// What is wrong with the main window, if anything (pure). The floating windows are built as panels by swapping NSWindow's
+/// allocator while they are built (`overlay::macos::build_as_panel`), and the smoke test opens them and the main window
+/// at the same time: the main window must still come out an ordinary window (never an `NSPanel`) with its title bar and
+/// its close, minimise and zoom buttons.
+pub fn main_window_problem(main: &crate::mac_check::WindowFacts) -> Option<String> {
+    if !main.exists {
+        return Some("the main window could not be read".into());
+    }
+    if main.ns_panel {
+        return Some(format!("the main window is a panel ({}, style 0x{:x})", main.class, main.style));
+    }
+    let missing = crate::overlay::geometry::mac_missing_buttons(main.style as usize);
+    (!missing.is_empty()).then(|| format!("the main window has no {} ({}, style 0x{:x})", missing.join(", "), main.class, main.style))
 }
 
 /// The test's own folder while it runs; everything that would touch the real one asks here first.
@@ -308,13 +327,16 @@ pub fn drive(app: tauri::AppHandle) {
                 say("failed: a floating window could not be read");
                 finish(&dir, EXIT_MAC_APP);
             }
-            if let Some(problem) = mac_app_problem(crate::app_life::mac::answers_quits(), &windows) {
+            // Built at the same time as the floating panels: still an ordinary window with its buttons.
+            let main = app.get_webview_window(MAIN).and_then(|window| overlay::macos::window_facts(&window, MAIN)).unwrap_or_else(|| crate::mac_check::WindowFacts::missing(MAIN));
+            if let Some(problem) = mac_app_problem(crate::app_life::mac::answers_quits(), &main, &windows) {
                 say(&format!("failed: {problem}"));
                 finish(&dir, EXIT_MAC_APP);
             }
             for window in &windows {
                 say(&format!("  {}: {}", window.label, window.line()));
             }
+            say(&format!("ok: the main window is an ordinary window with its close, minimise and zoom buttons ({}, style 0x{:x})", main.class, main.style));
             let setter = windows.iter().filter(|w| w.activation_setter).count();
             say(&format!("ok: quits from the Dock keep a recording first; the floating windows are non-activating panels hidden from screen capture (activation setter applied to {setter} of {})", windows.len()));
         }
@@ -424,19 +446,46 @@ mod tests {
 
     #[test]
     fn the_mac_smoke_test_fails_without_the_quit_answer_the_panels_or_the_capture_flag() {
-        let panel = |label: &'static str| crate::mac_check::WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, activation_setter: true, sharing: 0 };
+        let panel = |label: &'static str| crate::mac_check::WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, ns_panel: true, activation_setter: true, sharing: 0 };
+        let main = main_window();
         let good = [panel("overlay"), panel("pill")];
-        assert_eq!(mac_app_problem(true, &good), None);
-        assert!(mac_app_problem(false, &good).unwrap().contains("applicationShouldTerminate:"));
-        let plain = crate::mac_check::WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, ..panel("pill") };
-        assert!(mac_app_problem(true, &[panel("overlay"), plain]).unwrap().starts_with("the pill window is not a non-activating panel (TaoWindow, style 0x0"));
+        assert_eq!(mac_app_problem(true, &main, &good), None);
+        assert!(mac_app_problem(false, &main, &good).unwrap().contains("applicationShouldTerminate:"));
+        let plain = crate::mac_check::WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, ns_panel: false, ..panel("pill") };
+        assert!(mac_app_problem(true, &main, &[panel("overlay"), plain]).unwrap().starts_with("the pill window is not a non-activating panel (TaoWindow, style 0x0"));
         // The capture flag must survive the class change: a panel shown in screen capture fails.
         let shown = crate::mac_check::WindowFacts { sharing: 1, ..panel("overlay") };
-        assert!(mac_app_problem(true, &[shown, panel("pill")]).unwrap().starts_with("the overlay window is not hidden from screen capture (EchoLedgerFloatingPanel, style 0x80, sharing 1"));
+        assert!(mac_app_problem(true, &main, &[shown, panel("pill")]).unwrap().starts_with("the overlay window is not hidden from screen capture (EchoLedgerFloatingPanel, style 0x80, sharing 1"));
         // Without the activation setter it still passes (the output says how many got it).
-        assert_eq!(mac_app_problem(true, &[crate::mac_check::WindowFacts { activation_setter: false, ..panel("pill") }]), None);
+        assert_eq!(mac_app_problem(true, &main, &[crate::mac_check::WindowFacts { activation_setter: false, ..panel("pill") }]), None);
+        // A main window built as a panel fails, before the floating windows are looked at.
+        let as_panel = crate::mac_check::WindowFacts { class: "EchoLedgerFloatingPanel".into(), ns_panel: true, ..main.clone() };
+        assert_eq!(mac_app_problem(true, &as_panel, &good).unwrap(), "the main window is a panel (EchoLedgerFloatingPanel, style 0x800f)");
         assert_eq!(EXIT_MAC_APP, 7);
         assert!(![EXIT_WINDOW_FAILED, EXIT_TIMED_OUT, EXIT_CHECK_FAILED, EXIT_CHECK_SKIPPED, EXIT_CHECK_BROKEN].contains(&EXIT_MAC_APP), "its own code");
+    }
+
+    /// The main window as a Mac builds it: tao's class (KVO's once its content is in), titled, closable, miniaturizable,
+    /// resizable and with its content under the title bar (`titleBarStyle: Overlay`).
+    fn main_window() -> crate::mac_check::WindowFacts {
+        crate::mac_check::WindowFacts { exists: true, visible: true, on_screen: true, class: "NSKVONotifying_TaoWindow".into(), style: 0x800f, sharing: 1, ..crate::mac_check::WindowFacts::missing(lifecycle::MAIN) }
+    }
+
+    #[test]
+    fn the_main_window_keeps_its_buttons_and_is_never_a_panel() {
+        let main = main_window();
+        assert_eq!(main_window_problem(&main), None);
+        let as_panel = crate::mac_check::WindowFacts { class: "NSKVONotifying_EchoLedgerFloatingPanel".into(), ns_panel: true, ..main.clone() };
+        assert_eq!(main_window_problem(&as_panel).unwrap(), "the main window is a panel (NSKVONotifying_EchoLedgerFloatingPanel, style 0x800f)");
+        // A panel's style on the main window: no title bar, no buttons, non-activating.
+        let borderless = crate::mac_check::WindowFacts { style: 0x80, ..main.clone() };
+        assert_eq!(main_window_problem(&borderless).unwrap(), "the main window has no title bar, close, minimise, zoom (NSKVONotifying_TaoWindow, style 0x80)");
+        let no_close = crate::mac_check::WindowFacts { style: 0x800d, ..main.clone() };
+        assert_eq!(main_window_problem(&no_close).unwrap(), "the main window has no close (NSKVONotifying_TaoWindow, style 0x800d)");
+        let no_zoom = crate::mac_check::WindowFacts { style: 0x8007, ..main.clone() };
+        assert_eq!(main_window_problem(&no_zoom).unwrap(), "the main window has no zoom (NSKVONotifying_TaoWindow, style 0x8007)");
+        assert_eq!(main_window_problem(&crate::mac_check::WindowFacts::missing(lifecycle::MAIN)).unwrap(), "the main window could not be read");
+        assert_eq!(mac_app_problem(true, &no_close, &[]).unwrap(), "the main window has no close (NSKVONotifying_TaoWindow, style 0x800d)", "the smoke test fails on it");
     }
 
     #[test]

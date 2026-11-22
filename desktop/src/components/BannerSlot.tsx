@@ -7,6 +7,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 export const BANNER_ORDER = [
   // The person's own window is in a whole-screen share right now.
   "main-in-share",
+  // The call recording now has no other side although macOS seemed to allow it (2.0.6).
+  "other-side",
   // This version is refused or must update: nothing uploads until it does.
   "app-update",
   // The call that just ended lost one side.

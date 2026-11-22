@@ -112,6 +112,8 @@ pub struct WindowFacts {
     /// A non-activating panel that never takes the keyboard: it floats over a full-screen meeting, and a click on it
     /// leaves the meeting in front.
     pub panel: bool,
+    /// An `NSPanel` (or a subclass of it) whatever its style: the floating windows are, the main window never is.
+    pub ns_panel: bool,
     /// The window server was told a click on it must not activate EchoLedger (`overlay::macos::make_panel`).
     pub activation_setter: bool,
     /// Its `NSWindowSharingType`: 0 none (hidden from screen capture), 1 read-only, 2 read-write.
@@ -121,7 +123,7 @@ pub struct WindowFacts {
 impl WindowFacts {
     /// A window that could not be read.
     pub fn missing(label: &'static str) -> Self {
-        Self { label, exists: false, visible: false, on_screen: false, level_ok: false, spaces_ok: false, class: String::new(), style: 0, panel: false, activation_setter: false, sharing: 0 }
+        Self { label, exists: false, visible: false, on_screen: false, level_ok: false, spaces_ok: false, class: String::new(), style: 0, panel: false, ns_panel: false, activation_setter: false, sharing: 0 }
     }
 
     /// Left out of screen capture (`NSWindowSharingNone`): the privacy service's flag, kept through the class change.
@@ -549,7 +551,7 @@ mod tests {
     }
 
     fn good_windows() -> Vec<WindowFacts> {
-        ["overlay", "pill"].map(|label| WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, activation_setter: true, sharing: 0 }).to_vec()
+        ["overlay", "pill"].map(|label| WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, ns_panel: true, activation_setter: true, sharing: 0 }).to_vec()
     }
 
     /// A Mac on which everything works; each test changes what it is about. It records which tests really ran.
