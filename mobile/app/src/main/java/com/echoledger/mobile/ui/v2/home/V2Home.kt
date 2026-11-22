@@ -166,7 +166,8 @@ class DiscardBatch(
 
     fun discard(id: String) {
         scope.launch {
-            val discarding = withContext(Dispatchers.IO) { Decisions.discardLater(context, id, toasts.clock()) } ?: return@launch
+            val discarding =
+                withContext(Dispatchers.IO) { Decisions.discardLater(context, id, toasts.clock(), undoHere = true) } ?: return@launch
             vm.reloadLocal()
             val endsAt = runCatching { Instant.parse(discarding.discardAt).toEpochMilli() }.getOrNull() ?: return@launch
             calls += id to endsAt
@@ -460,7 +461,8 @@ private fun WaitingCall(
     Column {
         EchoListRow(
             title = afterCallTitle(res, rec),
-            meta = stringResource(R.string.v2_home_waiting_decision),
+            // A Delete lost when EchoLedger closed says so (2.0.5): the call is back to choose again.
+            meta = stringResource(if (rec.restoredDelete) R.string.cc_restored_delete else R.string.v2_home_waiting_decision),
             metaEnd = { Text(formatClock(rec.durationMs + 500), style = EchoV2.type.mono, color = c.textSecondary) },
             leading = { EchoAvatar(icon = LibraryModel.icon(com.echoledger.mobile.core.SourceApp.from(rec.sourceApp))) },
             tall = true

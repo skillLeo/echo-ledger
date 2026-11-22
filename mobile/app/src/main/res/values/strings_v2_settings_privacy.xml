@@ -12,6 +12,7 @@
     <string name="v2_priv_lock_5min">After 5 minutes</string>
     <string name="v2_priv_lock_widget">Hide recording titles on the widget</string>
     <string name="v2_priv_lock_widget_line">The home-screen widget then says \"WhatsApp call\" or \"Voice note\". With App lock on it shows no recordings.</string>
+    <string name="v2_priv_lock_widget_locked">Hide recording titles on the widget: with App lock on, the widget shows no recordings at all.</string>
     <string name="v2_priv_consent_line">Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it. A recording notification is always shown.</string>
     <string name="v2_priv_consent_ok">I understand</string>
     <string name="v2_priv_export">Export or delete my data</string>

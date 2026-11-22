@@ -48,7 +48,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.delay
 
-/** Calls waiting for Keep or Discard, summed up in one line (since 1.3.2: one card instead of a row per call). */
+/** Calls waiting for their choice (Transcribe, Save audio only or Delete), summed up in one line (since 1.3.2: one card instead of a row per call). */
 object WaitingSummary {
     /** "4 calls waiting · oldest Oct 30 · 2:18 total" ("1 call waiting · Oct 30 · 0:36"). */
     fun line(waiting: List<LocalRecording>, zone: ZoneId = ZoneId.systemDefault()): String {
@@ -91,8 +91,9 @@ fun WaitingSummaryCard(waiting: List<LocalRecording>, onReview: () -> Unit, modi
 }
 
 /**
- * Waiting for you (since 1.3.2): every call waiting for Keep or Discard, each with its title, client and language, and
- * Keep all / Discard all for the lot. Discard all can be undone for 5 seconds before anything is deleted.
+ * Waiting for you (since 1.3.2): every call waiting for its choice, each with its title, client and language, and Save
+ * all as audio only / Delete all for the lot (the copy deck's words since 2.0.5). Delete all can be undone for 5 seconds
+ * before anything is deleted.
  */
 @Composable
 fun WaitingScreen(vm: MainViewModel, onBack: () -> Unit) {
@@ -117,7 +118,11 @@ fun WaitingScreen(vm: MainViewModel, onBack: () -> Unit) {
                 navigation = { BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = LocalEchoColors.current.text) }
             )
             if (shown.isEmpty()) {
-                EchoEmptyState(Icons.Rounded.HourglassTop, "Nothing waiting", body = "Calls you have not kept or discarded appear here.")
+                EchoEmptyState(
+                    Icons.Rounded.HourglassTop,
+                    "Nothing waiting",
+                    body = "Calls waiting for Transcribe, Save audio only or Delete appear here."
+                )
                 return@Column
             }
             Text(
@@ -127,19 +132,32 @@ fun WaitingScreen(vm: MainViewModel, onBack: () -> Unit) {
                 modifier = Modifier.padding(horizontal = Space.screen)
             )
             Row(Modifier.padding(horizontal = Space.screen, vertical = Space.s3), horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
-                EchoButton("Keep all", { shown.forEach { vm.decide(it.id, keep = true, title = it.title) } })
-                EchoButton("Discard all", { discarding = shown.map { it.id } }, kind = ButtonKind.Secondary)
+                EchoButton(androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_save_audio_all), {
+                    shown.forEach { vm.decide(it.id, keep = true, title = it.title, transcribe = false) }
+                })
+                EchoButton(
+                    androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.v2_act_discard_all),
+                    { discarding = shown.map { it.id } },
+                    kind = ButtonKind.Secondary
+                )
             }
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 96.dp)) {
                 shown.forEach { rec ->
                     KeepDiscardCard(
-                        whenText = formatWhen(rec.startedAt),
+                        // A Delete lost when EchoLedger closed says so (2.0.5): the call is back to choose again.
+                        whenText = if (rec.restoredDelete) {
+                            "${formatWhen(rec.startedAt).orEmpty()} · " +
+                                androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_restored_delete)
+                        } else {
+                            formatWhen(rec.startedAt)
+                        },
                         title = Notifications.decisionText(rec, null),
                         app = SourceApp.from(rec.sourceApp),
                         language = rec.language,
                         onLanguage = { vm.setPendingLanguage(rec.id, it) },
-                        onKeep = { title -> vm.decide(rec.id, keep = true, title = title) },
+                        onKeep = { title -> vm.decide(rec.id, keep = true, title = title, transcribe = true) },
                         onDiscard = { discarding = discarding + rec.id },
+                        onSaveAudio = { title -> vm.decide(rec.id, keep = true, title = title, transcribe = false) },
                         question = learn?.takeIf { it.recordingId == rec.id }?.question,
                         onAnswer = { vm.answerLearn(it) },
                         typedTitle = rec.title,
@@ -153,7 +171,7 @@ fun WaitingScreen(vm: MainViewModel, onBack: () -> Unit) {
         }
         if (discarding.isNotEmpty()) {
             UndoSnackbar(
-                if (discarding.size == 1) "Discarding 1 call" else "Discarding ${discarding.size} calls",
+                if (discarding.size == 1) "Deleting 1 call" else "Deleting ${discarding.size} calls",
                 onUndo = { discarding = emptyList() },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(Space.screen).padding(bottom = 80.dp),
                 // Closing it (× or a swipe, since v1.6.1) means "go ahead": the calls are discarded now.

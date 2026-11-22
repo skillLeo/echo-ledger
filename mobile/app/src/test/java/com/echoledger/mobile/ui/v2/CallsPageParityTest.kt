@@ -113,8 +113,15 @@ class CallsPageParityTest : ScreenTest() {
     /** Today's control → the v2 control (kind and name). */
     private val where: Map<String, String> = buildMap {
         put("button: Back", "button: Back")
-        put("radio: Keep automatically (default) — a small \"Saved · Undo\" shows for 6 s", "radio: Keep automatically")
-        put("radio: Ask me — a small after-call card to keep or discard it; kept after 10 s", "radio: Ask me")
+        // After each call and When to ask (2.0.5): the deck's words on both pages.
+        listOf(
+            "Ask me",
+            "Transcribe every call",
+            "Save audio only",
+            "Don't record calls",
+            "After the call (recommended)",
+            "At the start of the call"
+        ).forEach { put("radio: $it", "radio: $it") }
         put("radio: Never", "radio: Never")
         put("radio: 5 s", "radio: 5 seconds")
         put("radio: 10 s (default)", "radio: 10 seconds (default)")

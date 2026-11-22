@@ -40,7 +40,8 @@ class ScreenShareSettingTest : ScreenTest() {
         compose.onNodeWithContentDescription(block).performScrollTo().assertIsOff()
         compose.onNodeWithContentDescription(live).performScrollTo().assertIsOn()
         compose.onNodeWithText(
-            "Off: you can take screenshots of the app at any time. On: EchoLedger's own screens can't be captured.",
+            "Off: you can take screenshots of the app, except screens that show keys or recovery codes. " +
+                "On: EchoLedger's own screens can't be captured and are hidden in Recents.",
             useUnmergedTree = true
         ).assertExists()
         compose.onNodeWithText(

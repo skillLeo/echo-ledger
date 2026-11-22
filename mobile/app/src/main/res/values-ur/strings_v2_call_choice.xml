@@ -36,8 +36,9 @@
     <string name="cc_grouped_review">دیکھیں</string>
     <string name="cc_save_audio_all">سب کی صرف آڈیو محفوظ کریں</string>
     <string name="cc_quiet_saved">خاموش اوقات میں آڈیو محفوظ ہوئی</string>
+    <string name="cc_restored_delete">EchoLedger بند ہونے سے ذرا پہلے حذف کی گئی تھی۔ دوبارہ منتخب کریں۔</string>
     <string name="cc_block_screens">EchoLedger کے اسکرین شاٹس روکیں</string>
-    <string name="cc_block_screens_help">بند: آپ ایپ کے اسکرین شاٹس کسی بھی وقت لے سکتے ہیں۔ آن: EchoLedger کی اپنی اسکرینز کیپچر نہیں ہو سکتیں۔</string>
+    <string name="cc_block_screens_help">بند: آپ ایپ کے اسکرین شاٹس لے سکتے ہیں، سوائے ان اسکرینز کے جن پر کلیدیں یا ریکوری کوڈز ہوں۔ آن: EchoLedger کی اپنی اسکرینز کیپچر نہیں ہو سکتیں اور حالیہ ایپس میں چھپی رہتی ہیں۔</string>
     <string name="cc_hide_live_words">EchoLedger کے لائیو الفاظ اسکرین شاٹس اور اسکرین شیئر سے چھپائیں</string>
     <string name="cc_hide_live_words_help">آن: کیپشنز، لائیو اسسٹ اور لائیو ترجمہ اسکرین شاٹس، اسکرین ریکارڈنگ اور اسکرین شیئر میں کالا ڈبہ دکھتے ہیں۔ ریکارڈنگ پِل اور کال کے بعد کا کارڈ ہمیشہ دکھتے ہیں۔ بند: سب کچھ دکھتا ہے۔</string>
 </resources>

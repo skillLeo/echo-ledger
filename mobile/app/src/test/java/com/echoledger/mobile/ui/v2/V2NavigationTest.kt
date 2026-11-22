@@ -253,13 +253,13 @@ class V2NavigationTest : ScreenTest() {
         // and the chip say so already: the banner says the next thing, the call waiting.
         compose.onNodeWithText("Call recording ready").assertExists()
         compose.onNodeWithText("Calls are not being recorded", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("1 call waiting for Keep or Discard").assertExists()
+        compose.onNodeWithText("1 call waiting: Transcribe or Delete").assertExists()
         compose.onNodeWithText("Not ready · Fix").performClick()
         assertEquals(listOf(false), readyChecks)
         compose.onNodeWithContentDescription("Activity, 1 needs you").performClick()
         compose.onNodeWithText("Needs action").assertExists()
-        compose.onNodeWithText("Keep").assertExists()
-        compose.onNodeWithText("Discard").assertExists()
+        compose.onNodeWithText("Transcribe").assertExists()
+        compose.onNodeWithText("Delete").assertExists()
     }
 
     @Test

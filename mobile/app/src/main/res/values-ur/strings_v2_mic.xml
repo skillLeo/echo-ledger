@@ -40,7 +40,7 @@
     <string name="v2_mic_p_helper">کال ریکارڈ کرنے والا ہیلپر</string>
     <string name="v2_mic_p_helper_why">کالز میں دوسری طرف کی آواز ریکارڈ کرنے کے لیے ضروری ہے۔</string>
     <string name="v2_mic_p_notifications">اطلاعات</string>
-    <string name="v2_mic_p_notifications_why">کال کے بعد رکھیں یا ہٹائیں پوچھتی ہیں اور ریکارڈنگ کے بٹن دکھاتی ہیں۔</string>
+    <string name="v2_mic_p_notifications_why">کال کے بعد پوچھتا ہے: ٹرانسکرپٹ بنائیں، صرف آڈیو محفوظ کریں یا حذف کریں، اور ریکارڈنگ کے کنٹرول دکھاتا ہے۔</string>
     <string name="v2_mic_p_overlay">دوسری ایپس کے اوپر دکھائیں</string>
     <string name="v2_mic_p_overlay_why">کال کے اوپر لائیو کیپشنز دکھاتا ہے۔</string>
     <string name="v2_mic_p_battery">بیٹری کا بلا روک ٹوک استعمال</string>

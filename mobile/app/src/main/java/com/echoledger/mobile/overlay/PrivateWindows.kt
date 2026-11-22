@@ -96,6 +96,14 @@ internal enum class FloatingWindow(val title: String, val flags: Int, val liveWo
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         liveWords = false
     ),
+
+    /** "Recording this call · Don't record" at the start of a call (2.0.5): it always shows, like the pill. */
+    START_BANNER(
+        "EchoLedger start banner",
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        liveWords = false
+    ),
     LIVE_TRANSLATE("EchoLedger Live Translate", TranslateOverlay.LOCKED_FLAGS, liveWords = true),
 
     /** This phone's Live Assist card: touchable, never takes the keyboard; touches outside go to the call underneath. */

@@ -53,6 +53,27 @@ class OverlayLookTest : ScreenTest() {
         assertEquals(phone, fontScale, 0.01f)
     }
 
+    @Test
+    fun windowsOutsideTheAppUseTheAppsFontEvenWithThePhonesFontOnAndTheCardFollowsTheTheme() {
+        // The after-call card in a handwritten phone font was hard to read over other apps (the call-choice plan, 2.0.5).
+        stored.value = AppSettings(phoneFont = true)
+        var face: androidx.compose.ui.text.font.FontFamily? = null
+        var dark: Boolean? = null
+        var light by mutableStateOf(false)
+        show {
+            OverlayLook(stored, dark = !light) {
+                face = com.echoledger.mobile.ui.v2.theme.EchoV2.type.body.fontFamily
+                dark =
+                    com.echoledger.mobile.ui.v2.theme.EchoV2.colors.bgCanvas == com.echoledger.mobile.ui.v2.theme.EchoV2Colors.Dark.bgCanvas
+            }
+        }
+        pumpUntil("drawn") { face != null }
+        assertEquals(com.echoledger.mobile.ui.v2.theme.EchoV2Type.of(EchoLanguage.English, phoneFont = false).body.fontFamily, face)
+        assertEquals(true, dark)
+        light = true
+        pumpUntil("light") { dark == false }
+    }
+
     private fun pillShown() = compose.onAllNodesWithContentDescription("02:14", substring = true).fetchSemanticsNodes().isNotEmpty()
 
     @Test
@@ -143,11 +164,13 @@ class OverlayLookTest : ScreenTest() {
 
     @Test
     fun theThreeWindowsOutsideTheAppDrawWithTheSettingsLook() {
-        // The pill, the after-call card and the Live Assist card are each drawn inside OverlayLook with the stored settings.
+        // The pill, the after-call card, the start banner and the Live Assist card are each drawn inside OverlayLook with
+        // the stored settings.
         val overlay = File("src/main/java/com/echoledger/mobile/overlay")
         for ((file, drawn) in listOf(
             "ControlPill.kt" to "V2RecordingPill(",
-            "DecisionPopup.kt" to "V2AfterCallCard(",
+            "DecisionPopup.kt" to "CallChoiceCard(",
+            "StartBanner.kt" to "StartBannerContent(",
             "AssistCardWindow.kt" to "V2AssistHost("
         )) {
             val source = File(overlay, file).readText()

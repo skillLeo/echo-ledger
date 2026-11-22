@@ -87,6 +87,9 @@ abstract class AppTest {
 
     @After
     fun releaseApp() {
+        // The call choice's windows live for the process: one a test left open never holds this test's app.
+        runCatching { com.echoledger.mobile.overlay.DecisionPopup.hide() }
+        runCatching { com.echoledger.mobile.overlay.StartBanner.hide() }
         activities.asReversed().forEach { runCatching { it.pause().stop().destroy() } }
         activities.clear()
         services.asReversed().forEach { runCatching { it.destroy() } }

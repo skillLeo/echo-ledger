@@ -937,6 +937,10 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
     val transcribing = if (row.status == RowStatus.Transcribing) transcribingDetails(res, row.item.transcript?.finalProgress) else null
     // Audio kept without a transcript says how long it stays: "Audio · 18 days left".
     val daysLeft = if (row.status == RowStatus.Untranscribed) LibraryModel.daysLeft(row.item.expiresAt) else null
+    // A call kept as audio only during quiet hours or Do Not Disturb, when no card asked (the call-choice plan, 2.0.5).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val quiet = row.status == RowStatus.Untranscribed &&
+        androidx.compose.runtime.remember(row.id) { com.echoledger.mobile.calls.QuietSaved.has(context, row.item.id, row.item.clientRef) }
     val important = stringResource(R.string.v2_lib_important_mark)
     EchoListRow(
         title = row.title,
@@ -948,6 +952,7 @@ private fun LibraryRow(row: V2Row, selected: Boolean?, compact: Boolean, onOpen:
             problem != null -> null
             conversion != null -> conversion
             transcribing != null -> transcribing
+            quiet -> stringResource(R.string.cc_quiet_saved)
             daysLeft != null -> pluralStringResource(R.plurals.v2_lib_audio_days_left, daysLeft, daysLeft)
             else -> row.meta
         },

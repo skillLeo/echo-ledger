@@ -42,8 +42,8 @@
     <string name="v2_lib_setup_title">سیٹ اپ مکمل کریں</string>
     <string name="v2_lib_setup_hide">چھپائیں</string>
     <string name="v2_lib_need_calls_off">کالز ریکارڈ نہیں ہو رہیں</string>
-    <string name="v2_lib_need_waiting_one">1 کال رکھنے یا ہٹانے کی منتظر</string>
-    <string name="v2_lib_need_waiting">%1$d کالز رکھنے یا ہٹانے کی منتظر</string>
+    <string name="v2_lib_need_waiting_one">1 کال انتظار میں: ٹرانسکرپٹ بنائیں یا حذف کریں</string>
+    <string name="v2_lib_need_waiting">%1$d کالز انتظار میں: ٹرانسکرپٹ بنائیں یا حذف کریں</string>
     <string name="v2_lib_need_more">%1$s · %2$d مزید</string>
     <string name="v2_lib_need_review">دیکھیں</string>
     <string name="v2_lib_need_fix">ٹھیک کریں</string>
@@ -53,7 +53,7 @@
     <string name="v2_act_today">آج</string>
     <string name="v2_act_earlier">پہلے</string>
     <string name="v2_act_empty_title">سب کچھ دیکھ لیا گیا</string>
-    <string name="v2_act_empty_body">مکمل ٹرانسکرپٹس، مسائل اور رکھنے یا ہٹانے کی منتظر کالز یہاں نظر آتی ہیں۔</string>
+    <string name="v2_act_empty_body">مکمل ٹرانسکرپٹس، مسائل اور وہ کالز جو ٹرانسکرپٹ بنانے یا حذف کرنے کے انتظار میں ہیں یہاں نظر آتی ہیں۔</string>
     <string name="v2_act_error">سرگرمی لوڈ نہیں ہو سکی۔ کنکشن چیک کریں۔</string>
     <string name="v2_act_retry">دوبارہ کوشش کریں</string>
     <string name="v2_act_dismiss">ہٹائیں</string>
@@ -91,6 +91,6 @@
     <string name="v2_act_why_line">فون لائن نہیں کھل سکی، اس لیے کال ریکارڈ نہیں ہوئی۔</string>
     <string name="v2_act_why_background">اینڈرائیڈ نے خودکار ریکارڈنگ کو پس منظر میں شروع نہیں ہونے دیا۔</string>
     <string name="v2_act_why_not_running">کال شروع ہوتے وقت خودکار ریکارڈنگ چل نہیں رہی تھی۔</string>
-    <string name="v2_act_keep_all">سب رکھیں</string>
-    <string name="v2_act_discard_all">سب ہٹائیں</string>
+    <string name="v2_act_keep_all">سب کا ٹرانسکرپٹ بنائیں</string>
+    <string name="v2_act_discard_all">سب حذف کریں</string>
 </resources>

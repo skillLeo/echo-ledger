@@ -74,7 +74,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.core.DeviceCheck
 import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.core.PlanState
@@ -115,10 +114,16 @@ internal fun AutoRecordCallsRow(capabilities: Capabilities, settings: com.echole
         "Auto-record calls",
         summary = when {
             !capabilities.helperInBuild -> Capabilities.NOT_IN_THIS_BUILD
+
             !capabilities.callCaptureSupportedByOs -> "Needs Android 12 or newer"
+
             !capabilities.helperConnected -> "Enable call capture in Setup first"
-            settings.afterCall == PostCallPrompt.ASK -> "The after-call card asks after each call; kept after 10 s"
-            else -> "Answered calls are kept automatically; unanswered and short ones are skipped"
+
+            else -> androidx.compose.ui.res.stringResource(
+                com.echoledger.mobile.calls.CallChoice.SETTING_WORDS.first {
+                    it.first == com.echoledger.mobile.calls.CallChoice.setting(settings)
+                }.third
+            )
         },
         onClick = if (capabilities.helperConnected || !capabilities.helperInBuild) null else onSetup,
         trailing = {
@@ -258,7 +263,7 @@ private fun ModeTile(icon: ImageVector, name: String, status: String, modifier: 
 
 /**
  * Record (since v1.3). Voice: a live waveform, a large tabular timer, and discard · record or stop · pause, then the
- * live controls and transcript; Import file opens the system picker. Calls: auto-record and calls waiting for Keep or Discard.
+ * live controls and transcript; Import file opens the system picker. Calls: auto-record and calls waiting for their choice.
  */
 @Composable
 fun RecordScreen(
@@ -540,9 +545,10 @@ private fun Waveform(levels: List<Float>, running: Boolean, modifier: Modifier) 
 }
 
 /**
- * Keep or discard a finished call (since v1.3 look): the call's title (typed here, or "WhatsApp call · 2:05" left to the
- * server), when it was, the client and the language, then Keep (primary) and Discard; an optional learning question
- * underneath. The floating card after a call (DecisionPopup) uses the same words.
+ * A finished call waiting for its choice (since v1.3 look; the copy deck's words since 2.0.5): the call's title (typed
+ * here, or "WhatsApp call · 2:05" left to the server), when it was, the client and the language, then Delete, Save
+ * audio only and Transcribe (primary); an optional learning question underneath. The after-call card uses the same
+ * words.
  */
 @Composable
 fun KeepDiscardCard(
@@ -553,6 +559,8 @@ fun KeepDiscardCard(
     onLanguage: (String?) -> Unit,
     onKeep: (title: String?) -> Unit,
     onDiscard: () -> Unit,
+    /** Save audio only: kept without a transcript (transcribed later from the Library if wanted). */
+    onSaveAudio: (title: String?) -> Unit,
     question: String? = null,
     onAnswer: (Boolean) -> Unit = {},
     typedTitle: String? = null,
@@ -601,9 +609,20 @@ fun KeepDiscardCard(
         }
         if (clients.isNotEmpty()) ClientChip(clients, clientId, onClient)
         LanguageChips(language, onLanguage)
-        Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
-            EchoButton("Discard", onDiscard, Modifier.weight(1f), kind = ButtonKind.Secondary)
-            EchoButton("Keep", { onKeep(text.takeIf { it != typedTitle.orEmpty() }) }, Modifier.weight(1f))
+        // The three choices wrap onto a second row when they don't fit (a small phone, large text, Urdu).
+        androidx.compose.foundation.layout.FlowRow(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Space.s2, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(Space.s2)
+        ) {
+            val typed = { text.takeIf { it != typedTitle.orEmpty() } }
+            EchoButton(androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_delete), onDiscard, kind = ButtonKind.Text)
+            EchoButton(
+                androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_save_audio_only),
+                { onSaveAudio(typed()) },
+                kind = ButtonKind.Secondary
+            )
+            EchoButton(androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_transcribe), { onKeep(typed()) })
         }
         question?.let { q ->
             Row(verticalAlignment = Alignment.CenterVertically) {

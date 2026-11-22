@@ -136,8 +136,8 @@ class HomeTest {
         compose.setContent { EchoV2Theme(darkTheme = false, language = EchoLanguage.English) { Home(state, taps, kept, discarded) } }
         compose.onNodeWithText("Fix").performClick()
         compose.onNodeWithText("Set up").performClick()
-        compose.onNodeWithText("Keep").performScrollTo().performClick()
-        compose.onNodeWithText("Discard").performScrollTo().performClick()
+        compose.onNodeWithText("Transcribe").performScrollTo().performClick()
+        compose.onNodeWithText("Delete").performScrollTo().performClick()
         compose.onNodeWithText("Retry").performScrollTo().performClick()
         compose.onNodeWithText("1 recording not transcribed").performScrollTo().performClick()
         assertEquals(listOf("setup", "setup", "retry", "untranscribed"), taps.log)

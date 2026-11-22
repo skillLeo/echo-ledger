@@ -520,6 +520,14 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             WorkManager.getInstance(context).enqueueUniqueWork("upload-$recordingId", ExistingWorkPolicy.KEEP, request(recordingId))
         }
 
+        /** Sends [recordingId] after [delayMs] instead of any upload waiting for it (the after-call card's Undo time). */
+        fun enqueueDelayed(context: Context, recordingId: String, delayMs: Long) {
+            val seconds = ((delayMs + 999) / 1000).coerceAtLeast(1)
+            WorkManager.getInstance(
+                context
+            ).enqueueUniqueWork("upload-$recordingId", ExistingWorkPolicy.REPLACE, request(recordingId, seconds))
+        }
+
         /** Runs the upload again after [delaySeconds] (a long `Retry-After`), after the current run ends. */
         fun enqueueAfter(context: Context, recordingId: String, delaySeconds: Long) {
             WorkManager.getInstance(context)

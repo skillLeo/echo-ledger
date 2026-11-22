@@ -362,6 +362,30 @@ class SettingsStoreTest : AppTest() {
         assertEquals("written with the next change, so it stays off", false, store.current().hideLiveWords)
     }
 
+    // ---- 2.0.5: "After a call" became After each call ------------------------------------------------------------
+
+    @Test
+    fun `After each call is Ask me after the call on a new phone`() = runBlocking {
+        assertEquals("ask", store.current().afterEachCall)
+        assertEquals("after", store.current().whenToAsk)
+    }
+
+    @Test
+    fun `Keep automatically and Ask me both become Ask me`() = runBlocking {
+        plantRaw("settings_json", "$before205,\"afterCall\":\"keep\"}")
+        assertEquals("ask", store.current().afterEachCall)
+        plantRaw("settings_json", "$before205}")
+        assertEquals("the old default, never written, too", "ask", store.current().afterEachCall)
+        plantRaw("settings_json", "$before205,\"afterCall\":\"ask\",\"decisionTimeout\":\"discard\",\"decisionTimeoutChosen\":true}")
+        assertEquals("ask", store.current().afterEachCall)
+        assertEquals("the old timeout is kept as it was", "discard", store.current().decisionTimeout)
+
+        // Written with the next change, so a choice made afterwards stays.
+        store.update { it.copy(afterEachCall = "off") }
+        store.update { it.copy(micSource = "mic") }
+        assertEquals("off", store.current().afterEachCall)
+    }
+
     @Test
     fun `settings from before v1_1_1 still have screenshots allowed`() = runBlocking {
         // Then hide content was on by default and was reset once; it never becomes a block.
