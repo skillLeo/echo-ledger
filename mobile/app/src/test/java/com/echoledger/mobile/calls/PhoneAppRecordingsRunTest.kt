@@ -117,7 +117,7 @@ class PhoneAppRecordingsRunTest : AppTest() {
         assertEquals(Instant.ofEpochMilli(c.dateMs + 8 * sec + 1_000).toString(), rec.startedAt)
         assertTrue(rec.captureWarning!!.startsWith(PhoneAppRecordings.IMPORTED))
         assertEquals("the after-call card", imported, DecisionPopup.showingFor)
-        assertEquals("Call with Omar Khan", DecisionPopup.title(rec))
+        assertEquals("the card names the caller", "Omar Khan", com.echoledger.mobile.ui.v2.live.callCardTitle(app.resources, rec))
         assertEquals(CallJournal.Seen.PHONE_APP, CallJournal.book(app).call(imported)?.seenBy)
         assertEquals("Imported the Phone app's recording (125 s).", note())
         assertTrue(CaptureLog.lines(app).any { it.contains("phone app recording") && it.contains("imported") })
@@ -130,7 +130,8 @@ class PhoneAppRecordingsRunTest : AppTest() {
         val rec = app.graph.recordings.get(run(Store(mutableListOf(recording(1, c)), listOf(c))).imported.single())!!
         assertNull(rec.callerName)
         assertEquals("+923001234567", rec.callerNumber)
-        assertEquals("Call with +923001234567", DecisionPopup.title(rec))
+        // Isolated (FSI…PDI) so it reads left to right inside any line, as the copy deck asks for numbers.
+        assertEquals("\u2068+923001234567\u2069", com.echoledger.mobile.ui.v2.live.callCardTitle(app.resources, rec))
     }
 
     /**
@@ -216,7 +217,7 @@ class PhoneAppRecordingsRunTest : AppTest() {
         val store = Store(mutableListOf(recording(1, c).copy(name = "Call recording 1.3gp", mime = "audio/3gpp")), listOf(c))
         assertEquals(emptyList<String>(), run(store).imported)
         val own = app.graph.recordings.get("mine")!!
-        assertEquals("kept as usual (After a call: keep)", "queued", own.state)
+        assertEquals("asked as usual (After each call: Ask me)", "pending_decision", own.state)
         assertEquals("its card, right after the call", "mine", DecisionPopup.showingFor)
     }
 
@@ -634,7 +635,7 @@ class PhoneAppRecordingsRunTest : AppTest() {
     @Test
     fun `quiet imports on Ask me are kept like any unanswered question, and the notice says they are in the Library`() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        runBlocking { app.graph.settings.update { it.copy(afterCall = "ask") } }
+        runBlocking { app.graph.settings.update { it.copy(afterEachCall = "ask") } }
         val c = call()
         assertEquals(1, run(Store(mutableListOf(recording(1, c)), listOf(c)), atMs = t + 50 * 60 * sec).imported.size)
         val notice = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications

@@ -1,6 +1,8 @@
 package com.echoledger.mobile.recording
 
 import android.content.Intent
+import com.echoledger.mobile.calls.Decisions
+import com.echoledger.mobile.calls.DiscardLaterWorker
 import com.echoledger.mobile.capture.ICallListener
 import com.echoledger.mobile.capture.ICaptureHelper
 import com.echoledger.mobile.testsupport.AppTest
@@ -10,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.robolectric.Shadows.shadowOf
@@ -99,6 +102,13 @@ class RecordingServiceTest : AppTest() {
     }
 
     private fun settings() = runBlocking { app.graph.settings.current() }
+
+    /** A card or banner a test's call left on screen never reaches the next test (they live for the process). */
+    @org.junit.After
+    fun closeCallWindows() {
+        com.echoledger.mobile.overlay.DecisionPopup.hide()
+        com.echoledger.mobile.overlay.StartBanner.hide()
+    }
 
     @Test
     fun `an unknown or missing action goes foreground briefly and stops the service`() {
@@ -305,6 +315,68 @@ class RecordingServiceTest : AppTest() {
     }
 
     /**
+     * Review of 2.0.5: a Stop and delete (or the start banner's Don't record) still counting down when the call ends. The
+     * call is stored only to be deleted when that Undo time is over: never kept, asked about or sent.
+     */
+    @Test
+    fun `a call that ends during a pending Stop and delete is deleted after its Undo, never kept or sent`() {
+        val far = join(tone(1_000), quiet(2_000), speech(4_000))
+        val helper = ScriptedHelper(stereo(join(quiet(3_000), speech(4_000)), far))
+        app.graph.helper.attach(helper, source = "adb")
+        val service = start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        helper.listener!!.onCallStarted("com.whatsapp")
+        pumpUntil("the call to start recording") { CallJournal.book(app).calls.any { it.reached(CallJournal.Stage.STARTED) } }
+        Thread.sleep(3_200)
+        service.onStartCommand(Intent(app, RecordingService::class.java).setAction(RecordingService.ACTION_DISCARD_NOW), 0, 5)
+        assertTrue("the delete counts down", RecordingService.pillState.value.discarding)
+        // Overlays only from here: a live pill's pulse would never let the looper go idle; the card's line needs them.
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true)
+        helper.listener!!.onCallEnded()
+        pumpUntil("the call to be finished") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+        pumpUntil("stored only to be deleted") { app.graph.recordings.all().singleOrNull()?.state == Decisions.DISCARDING }
+
+        val rec = app.graph.recordings.all().single()
+        assertEquals(CallJournal.Result.DISCARDED.wire, CallJournal.book(app).calls.single().result)
+        assertNull("nothing asks about it", rec.transcribe)
+        assertEquals("its Undo is on this process's card", Decisions.PROCESS, rec.undoIn)
+        pumpUntil("Deleted · Undo on the card") {
+            com.echoledger.mobile.overlay.DecisionPopup.showingMode == com.echoledger.mobile.overlay.DecisionPopup.Mode.DELETED
+        }
+        val work = androidx.work.WorkManager.getInstance(app)
+        assertTrue(
+            "nothing is sent",
+            work.getWorkInfosForUniqueWork("upload-${rec.id}").get().none { it.state == androidx.work.WorkInfo.State.ENQUEUED }
+        )
+        val delete = work.getWorkInfosForUniqueWork(DiscardLaterWorker.workName(rec.id)).get().single()
+        assertTrue(
+            "deleted after the Undo time that was left",
+            delete.initialDelayMillis <= PillMachine.UNDO_MS + Decisions.DISCARD_GRACE_MS
+        )
+        androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!.setInitialDelayMet(delete.id)
+        pumpUntil("deleted") { app.graph.recordings.all().isEmpty() }
+    }
+
+    @Test
+    @org.robolectric.annotation.Config(sdk = [34])
+    fun `with Don't record calls, Record by hand still records`() {
+        runBlocking { app.graph.settings.update { it.copy(afterEachCall = com.echoledger.mobile.calls.CallChoice.OFF) } }
+        val helper = OneTrackHelper(seconds = 2)
+        app.graph.helper.attach(helper, source = "adb")
+        app.getSystemService(android.media.AudioManager::class.java).mode = android.media.AudioManager.MODE_IN_COMMUNICATION
+        val controller = buildService(
+            RecordingService::class.java,
+            Intent(app, RecordingService::class.java).setAction(RecordingService.ACTION_TOGGLE)
+        ).create()
+        controller.startCommand(0, 1)
+        pumpUntil("the recording to start") { RecordingService.isRecording }
+        Thread.sleep(2_200)
+        controller.get().onStartCommand(Intent(app, RecordingService::class.java).setAction(RecordingService.ACTION_TOGGLE), 0, 2)
+        pumpUntil("the recording to be saved") { !RecordingService.isRecording && app.graph.recordings.all().isNotEmpty() }
+        assertTrue(app.graph.recordings.all().single().durationMs > 0)
+    }
+
+    /**
      * v1.8 0.2 review: while an outgoing call rings, the ringback tone and your own voice fill both channels. That is
      * neither "both channels have audio" nor an answer: the journal keeps the answer the recording's gate saw.
      */
@@ -372,6 +444,24 @@ class RecordingServiceTest : AppTest() {
         assertEquals("zoom", call.app)
         assertEquals(listOf("detected", "armed"), call.stages.map { it.stage })
         assertEquals(CallJournal.Failure("started", "mic_busy", com.echoledger.mobile.calls.MissedReason.MIC_BUSY.detail), call.failure)
+        assertFalse(RecordingService.isRecording)
+    }
+
+    @Test
+    fun `with Don't record calls a call is not recorded, and the journal says why`() {
+        runBlocking { app.graph.settings.update { it.copy(afterEachCall = com.echoledger.mobile.calls.CallChoice.OFF) } }
+        val helper = RefusingHelper()
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+
+        helper.listener!!.onCallStarted("us.zoom.videomeetings")
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals(CallJournal.Result.NOT_WANTED.wire, call.result)
+        assertEquals(CallJournal.NotWanted.CALLS_OFF, call.note)
+        assertNull("nothing was asked of the helper", call.failure)
         assertFalse(RecordingService.isRecording)
     }
 

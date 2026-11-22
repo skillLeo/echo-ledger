@@ -43,7 +43,7 @@ class SettingsHubTest : ScreenTest() {
 
         compose.onNodeWithText("Calls & meetings").performClick()
         compose.onNodeWithText("Auto-record apps").assertIsDisplayed()
-        compose.onNodeWithText("After a call").assertExists()
+        compose.onNodeWithText("After each call").assertExists()
         compose.onNodeWithContentDescription("Search settings").assertExists()
 
         compose.onNodeWithContentDescription("Back").performClick()

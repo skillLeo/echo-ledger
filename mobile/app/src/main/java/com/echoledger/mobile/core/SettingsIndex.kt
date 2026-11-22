@@ -65,7 +65,13 @@ object SettingsIndex {
             "Auto-record apps",
             "whatsapp zoom teams meet telegram signal skype phone call record automatically khud record"
         ),
-        item("calls.after", "calls", "after-call", "After a call", "keep discard ask before saving decision timeout wait undecided"),
+        item(
+            "calls.after",
+            "calls",
+            "after-call",
+            "After each call",
+            "ask me transcribe every call save audio only don't record calls when to ask start keep discard decision undecided"
+        ),
         item("mic.source", "mic", "microphone", "Microphone source", "echo cancelled raw voice communication input"),
         item("mic.test", "mic", "microphone", "Test recording", "check try sample far side other person silent"),
         item("mic.permissions", "mic", "microphone", "Permissions and battery", "overlay battery optimisation background helper shizuku"),

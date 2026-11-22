@@ -94,7 +94,7 @@ class PrivateWindowsTest : AppTest() {
 
     private fun afterCallCard() {
         val rec = app.storeRecording(id = "call-1", durationMs = 252_000)
-        assertTrue(DecisionPopup.show(app, rec, "dark", DecisionPopup.Mode.SAVED))
+        assertTrue(DecisionPopup.show(app, rec, "dark", DecisionPopup.Mode.ASK))
     }
 
     /** Live Translate's box with its grip dot and, from a long-press on the grip, its toolbar. */
@@ -132,6 +132,8 @@ class PrivateWindowsTest : AppTest() {
         pill()
         captions()
         afterCallCard()
+        assertTrue(StartBanner.show(app, "dark") {})
+        closers += { StartBanner.hide() }
         assistCard()
         return liveTranslate()
     }
@@ -155,7 +157,7 @@ class PrivateWindowsTest : AppTest() {
     fun `by default the live-words windows are secure from their first frame and the pill and the card are not`() {
         assertTrue(AppSettingsDefaults.hideLiveWords)
         assertEquals(
-            setOf(FloatingWindow.RECORDING_CONTROLS.title, FloatingWindow.AFTER_CALL_CARD.title),
+            setOf(FloatingWindow.RECORDING_CONTROLS.title, FloatingWindow.AFTER_CALL_CARD.title, FloatingWindow.START_BANNER.title),
             alwaysShown
         )
         everyWindow()

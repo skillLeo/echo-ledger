@@ -40,7 +40,7 @@
     <string name="v2_mic_p_helper">Call capture helper</string>
     <string name="v2_mic_p_helper_why">Needed to record the other side of calls.</string>
     <string name="v2_mic_p_notifications">Notifications</string>
-    <string name="v2_mic_p_notifications_why">Asks Keep or Discard after a call and shows the recording controls.</string>
+    <string name="v2_mic_p_notifications_why">Asks Transcribe, Save audio only or Delete after a call and shows the recording controls.</string>
     <string name="v2_mic_p_overlay">Display over other apps</string>
     <string name="v2_mic_p_overlay_why">Shows live captions over the call.</string>
     <string name="v2_mic_p_battery">Unrestricted battery use</string>

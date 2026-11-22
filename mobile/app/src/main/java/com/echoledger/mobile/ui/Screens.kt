@@ -109,7 +109,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.BuildConfig
-import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.calls.SkippedCalls
 import com.echoledger.mobile.core.Bookmarks
 import com.echoledger.mobile.core.DeviceCheck
@@ -1000,24 +999,38 @@ internal fun ConfirmDialog(text: String, confirmLabel: String, onConfirm: () -> 
  * are skipped quietly (shorter than the setting; unanswered and silent calls always are).
  */
 @Composable
+private fun ChoiceRow(selected: Boolean, label: String, help: String?, enabled: Boolean = true, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().selectable(selected = selected, enabled = enabled, role = Role.RadioButton, onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = null, enabled = enabled)
+        Column(Modifier.padding(start = 8.dp)) {
+            Text(label)
+            if (help != null) Text(help, color = Brand.Muted, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
 internal fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
+    // After each call and When to ask (since 2.0.5, the call-choice plan): the deck's words.
     SectionCard {
-        Text("After a call", fontWeight = FontWeight.SemiBold)
-        listOf(
-            PostCallPrompt.KEEP to "Keep automatically (default) — a small \"Saved · Undo\" shows for 6 s",
-            PostCallPrompt.ASK to "Ask me — a small after-call card to keep or discard it; kept after 10 s"
-        ).forEach { (value, label) ->
-            Row(
-                Modifier.fillMaxWidth()
-                    .selectable(
-                        selected = settings.afterCall == value,
-                        role = Role.RadioButton,
-                        onClick = { vm.updateSettings { it.copy(afterCall = value) } }
-                    ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(selected = settings.afterCall == value, onClick = null)
-                Text(label, modifier = Modifier.padding(start = 8.dp))
+        Text(androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_setting_title), fontWeight = FontWeight.SemiBold)
+        val current = com.echoledger.mobile.calls.CallChoice.setting(settings)
+        com.echoledger.mobile.calls.CallChoice.SETTING_WORDS.forEach { (value, label, help) ->
+            ChoiceRow(current == value, androidx.compose.ui.res.stringResource(label), androidx.compose.ui.res.stringResource(help)) {
+                vm.updateSettings { it.copy(afterEachCall = value) }
+            }
+        }
+    }
+    SectionCard {
+        Text(androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_when_title), fontWeight = FontWeight.SemiBold)
+        val asking = com.echoledger.mobile.calls.CallChoice.setting(settings) == com.echoledger.mobile.calls.CallChoice.ASK
+        val current = com.echoledger.mobile.calls.CallChoice.whenToAsk(settings)
+        com.echoledger.mobile.calls.CallChoice.WHEN_WORDS.forEach { (value, label) ->
+            ChoiceRow(current == value, androidx.compose.ui.res.stringResource(label), null, enabled = asking) {
+                vm.updateSettings { it.copy(whenToAsk = value) }
             }
         }
     }

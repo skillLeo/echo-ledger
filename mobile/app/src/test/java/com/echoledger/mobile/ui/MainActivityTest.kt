@@ -591,9 +591,9 @@ class MainActivityTest : AppTest() {
         val controller = buildActivity(MainActivity::class.java, pendingIntent()).create()
         controller.get().simulateBiometrics(false)
         controller.start().postCreate(null).resume().visible()
-        // v2 Activity: the waiting call with its Keep, Discard and Rename; the classic "Waiting for you" never shows.
-        awaitText("Keep")
-        awaitText("Discard")
+        // v2 Activity: the waiting call with its Transcribe, Delete and Rename; the classic "Waiting for you" never shows.
+        awaitText("Transcribe")
+        awaitText("Delete")
         val renamable = androidx.compose.ui.test.SemanticsMatcher("can be renamed") { node ->
             node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.OnClick) { null }?.label == "Rename"
         }
@@ -603,10 +603,10 @@ class MainActivityTest : AppTest() {
         controller.get().onBackPressedDispatcher.onBackPressed()
         pumpUntil("back in Library") {
             compose.waitForIdle()
-            !present("Keep")
+            !present("Transcribe")
         }
         controller.newIntent(pendingIntent())
-        awaitText("Keep")
+        awaitText("Transcribe")
         assertFalse(present("Waiting for you"))
     }
 

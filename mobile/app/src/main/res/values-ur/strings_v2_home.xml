@@ -26,8 +26,8 @@
     <string name="v2_home_failed_uploads_detail">یہ اس فون پر محفوظ ہیں۔</string>
     <string name="v2_home_retry">دوبارہ کوشش کریں</string>
     <string name="v2_home_waiting_decision">یہ کال رکھیں؟</string>
-    <string name="v2_home_keep">رکھیں</string>
-    <string name="v2_home_discard">ضائع کریں</string>
+    <string name="v2_home_keep">ٹرانسکرپٹ بنائیں</string>
+    <string name="v2_home_discard">حذف کریں</string>
     <string name="v2_home_discarded">کال ضائع کر دی گئی</string>
     <string name="v2_home_discarded_many">%1$d کالز ضائع کر دی گئیں</string>
     <string name="v2_home_already_deleted">وہ کال پہلے ہی حذف ہو چکی تھی۔</string>

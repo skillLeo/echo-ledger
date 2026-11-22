@@ -35,9 +35,10 @@ class AppLanguageNoticesTest : AppTest() {
         val shown = mutableListOf<Notification>()
         shown += Notifications.recording(ctx, "Recording call with Omar", "Both sides · auto · 2 bookmarks", paused = true)
         shown += Notifications.recording(ctx, "Voice note", "Not hearing the other side for 12 s")
-        shown += Notifications.armed(ctx, ready = true, askAfterCall = true)
+        shown += Notifications.armed(ctx, ready = true)
+        shown += Notifications.armed(ctx, ready = true, afterEachCall = com.echoledger.mobile.calls.CallChoice.OFF)
         shown += Notifications.armed(ctx, ready = false)
-        Notifications.showSaveDecision(ctx, rec, "Acme", "keep")
+        Notifications.showSaveDecision(ctx, rec, "Acme")
         Notifications.savedWithUndo(ctx, rec.copy(id = "rec-3"))
         Notifications.discardedWithUndo(ctx.applicationContext, rec.copy(id = "rec-2", callerName = null))
         Notifications.captureNotReady(ctx)
@@ -95,6 +96,9 @@ class AppLanguageNoticesTest : AppTest() {
         assertTrue("\u200Fدونوں طرف · خودکار · 2 بک مارکس" in all)
         assertTrue("\u200Fمحفوظ · Omar کے ساتھ کال · 4:12" in all)
         assertTrue("\u200F3 کال ریکارڈنگز لے آئی گئیں" in all)
+        // Don't record calls (2.0.5): said plainly, in Urdu too.
+        assertTrue("\u200Fخودکار کال ریکارڈنگ بند ہے" in all)
+        assertTrue("\u200Fہر کال کے بعد: کالز ریکارڈ نہ کریں۔" in all)
     }
 
     @Test
@@ -110,8 +114,12 @@ class AppLanguageNoticesTest : AppTest() {
             "3 call recordings brought in",
             "Ready to record WhatsApp calls",
             "Calls are recorded automatically; you decide after each call.",
+            "Automatic call recording is off",
+            "After each call: Don't record calls.",
             "Record now",
-            "Keep",
+            "Transcribe",
+            "Save audio only",
+            "Delete",
             "Undo"
         ).forEach { assertTrue(it, it in all) }
         assertTrue(all.none { Regex("[\\u0600-\\u06FF]").containsMatchIn(it) })
@@ -152,7 +160,7 @@ class AppLanguageNoticesTest : AppTest() {
         // A contact called "Client" and a title of the person's own that ends in " call": neither is looked up.
         val client = rec.copy(id = "rec-c", callerName = "Client")
         val titled = rec.copy(id = "rec-t", title = "Bilal Traders weekly call")
-        Notifications.showSaveDecision(app, client, "Client", "keep")
+        Notifications.showSaveDecision(app, client, "Client")
         Notifications.savedWithUndo(app, titled)
         val all = shadowOf(manager).allNotifications.flatMap { words(it) }
         assertTrue(all.toString(), "\u200FClient کے ساتھ کال · 4:12 · Client" in all)
@@ -257,7 +265,7 @@ class AppLanguageNoticesTest : AppTest() {
         val rec2 = rec.copy(callerName = "Omar")
         // The English words the app copies, shares or sends (the card, the decision line, the device report) carry none.
         assertTrue(Notifications.decisionText(rec2, "Acme").none { it == '\u200F' })
-        assertTrue(com.echoledger.mobile.overlay.DecisionPopup.title(rec2).none { it == '\u200F' })
+        assertTrue(com.echoledger.mobile.ui.v2.live.callCardTitle(app.resources, rec2).none { it == '\u200F' })
         assertTrue(Notifications.decisionText(AppWords.resources(app, "ur"), rec2, "Acme").none { it == '\u200F' })
         // In English nothing is ever marked.
         language("en")

@@ -16,6 +16,8 @@
     <string name="n_capture_not_ready">Call capture isn\'t ready — tap to fix</string>
     <string name="n_armed_ask">Calls are recorded automatically; you decide after each call.</string>
     <string name="n_armed_keep">Calls are recorded and kept automatically.</string>
+    <string name="n_armed_off_title">Automatic call recording is off</string>
+    <string name="n_armed_off">After each call: Don\'t record calls.</string>
     <string name="n_start_shizuku">Start Shizuku (or run the setup command), then open Setup.</string>
     <string name="n_record_now">Record now</string>
     <string name="n_turn_off">Turn off</string>
@@ -24,7 +26,7 @@
     <string name="n_saved">Saved · %1$s · %2$s</string>
     <string name="n_call_saved">Call saved</string>
     <string name="n_undo">Undo</string>
-    <string name="n_discarded">Discarded · %1$s · %2$s</string>
+    <string name="n_discarded">Deleted · %1$s · %2$s</string>
     <string name="n_call_discarded">Call discarded</string>
     <string name="n_not_ready_text">This call is not being recorded because the capture helper is not running. Tap to open Setup and start it.</string>
     <string name="n_call_not_recorded_first">This call could not be recorded.</string>

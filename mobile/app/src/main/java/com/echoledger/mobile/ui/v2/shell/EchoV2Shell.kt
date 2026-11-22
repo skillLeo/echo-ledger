@@ -157,7 +157,9 @@ fun EchoV2Shell(
     onRecordNow: () -> Boolean = { false },
     onReadyCheck: (turnOn: Boolean) -> Unit = {},
     /** Goes up by one each time Activity should open (the after-call card's title: rename it or pick a project there). */
-    openActivity: Int = 0
+    openActivity: Int = 0,
+    /** Goes up by one each time the Library should open (the after-call card's Review). */
+    openLibrary: Int = 0
 ) {
     val settings by vm.settings.collectAsState()
     val shown = AppLook.language(settings.appLanguage, language)
@@ -167,7 +169,7 @@ fun EchoV2Shell(
             CompositionLocalProvider(LocalEchoToasts provides toasts) {
                 MessagesToToasts(vm, toasts)
                 Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
-                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock, openActivity)
+                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock, openActivity, openLibrary)
                     EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
                 }
             }
@@ -225,13 +227,20 @@ private fun ShellBody(
     onRecordNow: () -> Boolean,
     onReadyCheck: (Boolean) -> Unit,
     clock: () -> Long,
-    openActivity: Int = 0
+    openActivity: Int = 0,
+    openLibrary: Int = 0
 ) {
     val text = v2Text
     val context = LocalContext.current
     var tab by rememberSaveable { mutableStateOf(V2Tab.Library) }
     var route by remember { mutableStateOf<V2Route>(V2Route.Tabs) }
     LaunchedEffect(openActivity) { if (openActivity > 0) route = V2Route.Activity }
+    LaunchedEffect(openLibrary) {
+        if (openLibrary > 0) {
+            route = V2Route.Tabs
+            tab = V2Tab.Library
+        }
+    }
     var libraryViews by remember { mutableStateOf(emptySet<SavedView>()) }
     var reselected by remember { mutableIntStateOf(0) }
     var recordSheet by remember { mutableStateOf(false) }

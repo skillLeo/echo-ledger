@@ -12,6 +12,7 @@
     <string name="v2_priv_lock_5min">5 منٹ بعد</string>
     <string name="v2_priv_lock_widget">ویجیٹ پر ریکارڈنگز کے عنوان چھپائیں</string>
     <string name="v2_priv_lock_widget_line">پھر ہوم اسکرین ویجیٹ پر صرف ایپ کا نام آتا ہے، جیسے \"WhatsApp call\" یا \"Voice note\"۔ ایپ لاک آن ہو تو کوئی ریکارڈنگ نظر نہیں آتی۔</string>
+    <string name="v2_priv_lock_widget_locked">ویجیٹ پر ریکارڈنگ کے عنوانات چھپائیں: ایپ لاک آن ہو تو ویجیٹ کوئی ریکارڈنگ نہیں دکھاتا۔</string>
     <string name="v2_priv_consent_line">ریکارڈنگ کے قوانین ہر ملک میں مختلف ہیں۔ جہاں قانون کہے، میٹنگ کے لوگوں کو بتائیں کہ آپ ریکارڈ کر رہے ہیں۔ ریکارڈنگ کی اطلاع ہمیشہ دکھائی جاتی ہے۔</string>
     <string name="v2_priv_consent_ok">میں سمجھ گیا ہوں</string>
     <string name="v2_priv_export">میرا ڈیٹا ایکسپورٹ یا حذف کریں</string>
