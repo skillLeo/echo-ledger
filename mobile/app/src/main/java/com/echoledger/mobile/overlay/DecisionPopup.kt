@@ -195,8 +195,7 @@ object DecisionPopup {
     }
 
     /** A delete whose Undo is a notification: the call on its way out and its "Deleted · Undo" posted, in one step. */
-    private suspend fun deleteWithNotification(app: Context, id: String): LocalRecording? =
-        Decisions.discardLater(app, id, widget = false)?.also { com.echoledger.mobile.notify.Notifications.discardedWithUndo(app, it) }
+    private suspend fun deleteWithNotification(app: Context, id: String): LocalRecording? = Decisions.discardWithNotification(app, id)
 
     /** Draws [mode] for [rec] at once (tests and screenshots): the question or one of its lines. */
     internal fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode): Boolean {
@@ -470,4 +469,12 @@ object DecisionPopup {
 
     @androidx.annotation.VisibleForTesting
     internal var stepTimeoutMs = STEP_TIMEOUT_MS
+
+    /** Waits until every step asked for so far has run (tests: none reaches the next test's card). */
+    @androidx.annotation.VisibleForTesting
+    internal fun drainForTest(timeoutMs: Long = 15_000) {
+        val done = java.util.concurrent.CountDownLatch(1)
+        steps.launch { order.withLock { done.countDown() } }
+        done.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
 }
