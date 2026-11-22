@@ -9,6 +9,7 @@ import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { FLAGS as V2_FLAGS } from "../src/v2/gallery/cases.mjs";
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), "..");
 // The sign-in screens show a build with its server built in (v1.6), never a real address: vite.config.ts reads this.
@@ -663,6 +664,14 @@ const SCREENS = [
   ["record-narrow", "record", async (page) => page.waitForSelector(".record-btn"), { width: 860, height: 560 }],
   ["projects-narrow", "projects", async (page) => page.waitForSelector(".project-tree.on-page"), { width: 860, height: 560 }],
   ["activity-narrow", "activity", async (page) => page.waitForSelector(".activity-item"), { width: 860, height: 560 }],
+  // The v2 Library's header once the needs-action banner is dismissed: its quiet button before Trash, with its words
+  // where they fit and its count alone where they would add a line; English and right to left (lang=ur).
+  ...[1280, 760].flatMap((width) => ["en", "ur"].map((lang) => [`library-needs-top-${width}-${lang}`, `library&uiflags=${V2_FLAGS}${lang === "ur" ? "&lang=ur" : ""}`, async (page) => {
+    // The fixture opens a recording: its Back (the last "Library" in the window) shows the list.
+    await page.getByRole("button", { name: "Library", exact: true }).last().click();
+    await page.getByTestId("needs-action").getByRole("button", { name: "Dismiss" }).click();
+    await page.locator(".el-page__head .el-page__actions").getByRole("button", { name: /need you$/ }).waitFor();
+  }, { width, height: 800 }])),
 ];
 
 /**

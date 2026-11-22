@@ -267,6 +267,16 @@ pub const MAC_OVERLAY_BEHAVIOUR: usize = CAN_JOIN_ALL_SPACES | STATIONARY | IGNO
 /// `NSWindowStyleMaskNonactivatingPanel`: a click on the window never activates EchoLedger.
 pub const MAC_NONACTIVATING: usize = 1 << 7;
 
+/// The main window's buttons on a Mac and the `NSWindowStyleMask` bit each needs: close (`Closable`), minimise
+/// (`Miniaturizable`) and zoom (`Resizable`), all on a title bar (`Titled`).
+pub const MAC_MAIN_BUTTONS: [(&str, usize); 4] = [("title bar", 1 << 0), ("close", 1 << 1), ("minimise", 1 << 2), ("zoom", 1 << 3)];
+
+/// What a style lacks of the main window's buttons (pure), by name: none when it has its title bar, close, minimise and
+/// zoom buttons.
+pub fn mac_missing_buttons(style: usize) -> Vec<&'static str> {
+    MAC_MAIN_BUTTONS.iter().filter(|(_, bit)| style & bit == 0).map(|(name, _)| *name).collect()
+}
+
 /// An overlay's style on a Mac (pure): its own, plus non-activating. With the panel class (`macos::make_panel`), a click on
 /// the recording controls or the captions never brings EchoLedger (and its main window's Space) in front of the meeting,
 /// and macOS lets the panel float over another app's full-screen window although EchoLedger is a normal app with a Dock

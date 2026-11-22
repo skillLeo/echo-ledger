@@ -43,7 +43,7 @@ export function needsAction(input: { failed: number; waiting: number; untranscri
   return all.filter((a) => a.count > 0);
 }
 
-const NEEDS_ICONS: Record<NeedsAction["id"], typeof Icons.ErrorIcon> = {
+export const NEEDS_ICONS: Record<NeedsAction["id"], typeof Icons.ErrorIcon> = {
   failed: Icons.ErrorIcon, waiting: Icons.ClockIcon, untranscribed: Icons.TranscriptIcon, missed: Icons.PhoneIcon, notifications: Icons.BellIcon,
 };
 

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type Ref } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type ReactNode, type Ref } from "react";
 import { Button, Icon, type ButtonProps, type IconType } from "./Button";
 import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
 
@@ -214,7 +214,9 @@ export function Menu({ label, items: given, button, chip }: {
   label: string;
   /** The items, or a function that makes them when the menu opens (a row's ⋮ in a long list). */
   items: readonly MenuItem[] | (() => readonly MenuItem[]);
-  button?: Omit<ButtonProps, "onClick" | "children"> & { text?: string };
+  /** The button's words (a string, or words with a part that hides when space runs out); `aria-label` names it
+   * instead when given. */
+  button?: Omit<ButtonProps, "onClick" | "children"> & { text?: ReactNode };
   /** A filter chip opens it instead of a button: its words, and filled while the filter is on. */
   chip?: { text: string; on: boolean };
 }) {
@@ -261,7 +263,7 @@ export function Menu({ label, items: given, button, chip }: {
           {chip.text}<Icon icon={ChevronDownIcon} />
         </button>
       ) : (
-        <Button {...buttonProps} ref={opener} aria-label={text ? undefined : label} aria-haspopup="menu" aria-expanded={!!open} aria-controls={open ? `${id}-menu` : undefined}
+        <Button {...buttonProps} ref={opener} aria-label={buttonProps["aria-label"] ?? (text ? undefined : label)} aria-haspopup="menu" aria-expanded={!!open} aria-controls={open ? `${id}-menu` : undefined}
           onClick={press} onKeyDown={openerKey}>{text}</Button>
       )}
       {open && (

@@ -29,7 +29,8 @@ import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type De
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
 import { SourceAvatar } from "./SourceAvatar";
-import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
+import { LibraryTop, NeedsButton, type LibraryTopProps } from "./LibraryTop";
+import type { NeedsAction } from "../home/HomeV2";
 import { QueueV2 } from "./QueueV2";
 import { addToListMenu, inPlace, listKey, ListsRow, placeGone, placeName, unreadCount, useLists, type Place } from "./lists";
 import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
@@ -148,6 +149,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const [queueShows, setQueueShows] = useState<{ waiting: boolean; failed: boolean }>({ waiting: false, failed: false });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
+  /** What still needs action while the banner is dismissed (LibraryTop says): the quiet button before Trash. */
+  const [needsKept, setNeedsKept] = useState<readonly NeedsAction[] | null>(null);
   // The server didn't answer a sync: the list shown is what this computer saved (classic's banner, with Retry).
   const [syncError, setSyncError] = useState<string | null>(null);
   // Show as List or Table, and the table's columns, kept on this computer (classic's).
@@ -792,6 +795,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
   // A list chip with nothing in it (and nothing else narrowing the list) says how to fill it.
   const inList = place.startsWith("list:") && view === "all" && !query && !filtersOn;
+  /** What needs action, from the banner's Review or the header's button: missed calls are in Activity, the rest here. */
+  const openNeed = (a: NeedsAction["id"]) => (a === "missed" ? top?.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"));
   const subtitle = view === "trash" || !counts ? null
     : folder ? `${recordingsWord(matching)} in ${folderLabel(folder)}`
     : view === "all" && !filtersOn && !query ? `${recordingsWord(counts.all)} from your phone, this computer and the web.`
@@ -837,6 +842,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
               {subtitle && <p className="el-secondary" aria-live="polite">{subtitle}</p>}
             </div>
             <div className="el-page__actions">
+              {needsKept && view !== "trash" && <NeedsButton actions={needsKept} onAction={openNeed} />}
               <Button variant="quiet" icon={Icons.TrashIcon} aria-pressed={view === "trash"} title="Recently deleted recordings"
                 onClick={() => setView(view === "trash" ? "all" : "trash")}>Trash</Button>
               {view !== "trash" && (
@@ -851,8 +857,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           </header>
         )}
         {top && view !== "trash" && !selecting && (
-          <LibraryTop {...top} items={items} covered={queueShows}
-            onAction={(a) => (a === "missed" ? top.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"))} />
+          <LibraryTop {...top} items={items} covered={queueShows} onAction={openNeed} onQuiet={setNeedsKept} />
         )}
         {view !== "trash" && syncError && items && (
           <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
