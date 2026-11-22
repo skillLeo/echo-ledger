@@ -24,6 +24,7 @@ import com.echoledger.mobile.data.AccountExportDto
 import com.echoledger.mobile.net.ApiClient
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
+import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.ui.SettingsScreen
@@ -53,9 +54,11 @@ class AccountDataParityTest : ScreenTest() {
     private var which = "data"
     private var language = EchoLanguage.English
     private var account = AccountDto(name = "Ayesha Siddiqui", email = "ayesha@bilaltraders.pk", hasPassword = true)
-    private var exports = mutableListOf<AccountExportDto>()
+
+    /** What each export call answers in turn; null is a check that failed (offline, the server busy). */
+    private var exports = mutableListOf<AccountExportDto?>()
     private val calls = mutableListOf<String>()
-    private var deletion: String? = "2026-11-29T10:00:00Z"
+    private val client by lazy { ApiClient(server.baseUrl, emptyList(), token = "7|eld_test") }
 
     private fun sample(name: String) = File("../../docs/api-samples/$name.json").readText()
 
@@ -70,9 +73,10 @@ class AccountDataParityTest : ScreenTest() {
             exports.removeFirstOrNull()
         },
         signOutEverywhere = { calls += "everywhere" },
+        // Through the account's own calls to the server, so a refused proof comes back as the server says it.
         deleteAccount = { password, code ->
             calls += "delete ${password ?: "-"} ${code ?: "-"}"
-            deletion
+            AccountActions { client }.deleteAccount(password, code)
         }
     )
 
@@ -154,16 +158,23 @@ class AccountDataParityTest : ScreenTest() {
     }
 
     @Test
-    fun theExportIsMadeLookedAtAgainAndDownloadedOrTriedAgain() {
-        exports =
-            mutableListOf(AccountExportDto("e1", "making"), AccountExportDto("e1", "ready", url = "https://echoledger.test/export/e1"))
+    fun theExportIsMadeLookedAtAgainEvenAfterAFailedCheckAndDownloaded() {
+        // Making, then a check that fails, then ready: the failed check is tried again 5 s later.
+        exports = mutableListOf(
+            AccountExportDto("e1", "making"),
+            null,
+            AccountExportDto("e1", "ready", url = "https://echoledger.test/export/e1")
+        )
         showBoth()
         press("Export my data")
         pumpUntil("making") { shown("Making the export") }
-        // Looked at again after five seconds, then ready.
+        // Looked at again after five seconds (that check fails), and again: ready.
+        compose.mainClock.advanceTimeBy(6_000)
+        pumpUntil("checked once") { calls == listOf("export", "status e1") }
+        assertTrue(shown("Making the export"))
         compose.mainClock.advanceTimeBy(6_000)
         pumpUntil("ready") { shown("Download the export") }
-        assertEquals(listOf("export", "status e1"), calls)
+        assertEquals(listOf("export", "status e1", "status e1"), calls)
         press("Download the export")
         val open = shadowOf(app).nextStartedActivity
         assertEquals(Intent.ACTION_VIEW, open.action)
@@ -192,17 +203,57 @@ class AccountDataParityTest : ScreenTest() {
         pumpUntil("signed out") { calls == listOf("everywhere") }
     }
 
+    private fun deleteWith(label: String, secret: String) {
+        compose.onAllNodes(hasSetTextAction() and hasText(label, substring = true)).onFirst().performTextInput(secret)
+        compose.waitForIdle()
+        compose.onAllNodes(hasText(deleteWord) and hasClickAction()).onLast().performSemanticsAction(SemanticsActions.OnClick)
+        compose.waitForIdle()
+    }
+
+    private var deleteWord = "Delete"
+
     @Test
     fun deletingAsksForThePasswordOrTheCodeAndShowsTheDate() {
+        server.on("DELETE", "/api/account", FakeServer.json(202, """{"deletes_at":"2026-11-29T10:00:00Z"}"""))
         showBoth()
         press("Delete my account…")
         pumpUntil("the sheet") { shown("Your recordings, transcripts, screens, files and projects are deleted after 7 days.") }
-        compose.onAllNodes(hasText("Delete") and hasClickAction()).fetchSemanticsNodes().let { assertTrue(it.isNotEmpty()) }
-        compose.onAllNodes(hasSetTextAction() and hasText("Your password", substring = true)).onFirst().performTextInput("hunter22")
-        compose.waitForIdle()
-        compose.onAllNodes(hasText("Delete") and hasClickAction()).onLast().performSemanticsAction(SemanticsActions.OnClick)
+        deleteWith("Your password", "hunter22")
         pumpUntil("asked") { calls == listOf("delete hunter22 -") }
-        pumpUntil("the date") { shown("This account will be deleted on 2026-11-29.") }
+        pumpUntil("sent") { server.requestsTo("DELETE", "/api/account").isNotEmpty() }
+        assertTrue(server.requestsTo("DELETE", "/api/account").single().bodyText().contains("\"password\":\"hunter22\""))
+        pumpUntil("the date") { shown("This account will be deleted on 29 Nov 2026.") }
+    }
+
+    @Test
+    fun aWrongPasswordIsSaidInTheSheetWhichStaysOpen() {
+        server.on("DELETE", "/api/account", FakeServer.json(422, """{"message":"x","code":"wrong_password"}"""))
+        showBoth()
+        press("Delete my account…")
+        pumpUntil("the sheet") { shown("Your password") }
+        deleteWith("Your password", "nope")
+        pumpUntil("said") { shown("That password isn't right.") }
+        assertTrue("the sheet stays", shown("Your recordings, transcripts, screens, files and projects are deleted after 7 days."))
+        assertTrue("no date", !shown("This account will be deleted on"))
+        // Typing again clears it.
+        compose.onAllNodes(hasSetTextAction() and hasText("Your password", substring = true)).onFirst().performTextInput("x")
+        compose.waitForIdle()
+        assertTrue(!shown("That password isn't right."))
+    }
+
+    @Test
+    fun aWrongCodeIsSaidInTheSheetInUrdu() {
+        server.on("DELETE", "/api/account", FakeServer.json(422, """{"message":"x","code":"invalid_otp"}"""))
+        account = account.copy(twoFactor = true)
+        language = EchoLanguage.Urdu
+        deleteWord = "حذف کریں"
+        showBoth()
+        press("میرا اکاؤنٹ حذف کریں…")
+        pumpUntil("the code") { shown("آپ کی authenticator ایپ کا کوڈ") }
+        deleteWith("آپ کی authenticator ایپ کا کوڈ", "123456")
+        pumpUntil("asked") { calls == listOf("delete - 123456") }
+        val said = V2Testing.resources(EchoLanguage.Urdu).getString(com.echoledger.mobile.R.string.v2_acct_err_invalid_otp)
+        pumpUntil("said in Urdu") { shown(said) }
     }
 
     @Test

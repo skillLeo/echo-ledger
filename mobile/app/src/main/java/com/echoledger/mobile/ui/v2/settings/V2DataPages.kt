@@ -56,8 +56,8 @@ class DataActions(
     val startExport: suspend () -> AccountExportDto?,
     val exportStatus: suspend (String) -> AccountExportDto?,
     val signOutEverywhere: suspend () -> Unit,
-    /** The password, or the authenticator code; the deletion date once asked for, else null. */
-    val deleteAccount: suspend (password: String?, code: String?) -> String?
+    /** The password, or the authenticator code: the deletion date once asked for, or why not (a wrong password or code). */
+    val deleteAccount: suspend (password: String?, code: String?) -> com.echoledger.mobile.account.AccountResult<String?>
 )
 
 /**
@@ -75,18 +75,27 @@ fun YourDataPage(actions: DataActions, serverUrl: String?, highlight: String?, o
     var askSignOut by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { account = actions.account() }
+    // While it is being made, asked about every 5 s: a check that fails (offline, the server busy) is tried again.
     LaunchedEffect(export?.id, export?.status) {
         val current = export ?: return@LaunchedEffect
         if (current.status != "making") return@LaunchedEffect
-        delay(EXPORT_POLL_MS)
-        actions.exportStatus(current.id)?.let { export = it }
+        while (true) {
+            delay(EXPORT_POLL_MS)
+            val next = runCatching { actions.exportStatus(current.id) }.getOrNull() ?: continue
+            export = next
+            break
+        }
     }
     val pad = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s4)
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(stringResource(R.string.v2_data_title), onBack = onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             account?.deletesAt?.let {
-                EchoBanner(stringResource(R.string.v2_data_deletes_on, it.take(10)), EchoBannerKind.Warning, pad)
+                EchoBanner(
+                    stringResource(R.string.v2_data_deletes_on, com.echoledger.mobile.core.PlanFormat.dateWithYear(it) ?: it.take(10)),
+                    EchoBannerKind.Warning,
+                    pad
+                )
             }
             Column(Modifier.highlightedIf(highlight == "account.export")) {
                 EchoSectionHeader(stringResource(R.string.v2_data_title))
@@ -153,7 +162,7 @@ fun YourDataPage(actions: DataActions, serverUrl: String?, highlight: String?, o
     if (deleting) {
         DeleteSheet(account, serverUrl, actions, onDone = { at ->
             deleting = false
-            if (at != null) account = account?.copy(deletesAt = at)
+            if (!at.isNullOrEmpty()) account = account?.copy(deletesAt = at)
         })
     }
 }
@@ -167,6 +176,8 @@ private fun DeleteSheet(account: AccountDto?, serverUrl: String?, actions: DataA
     val twoFactor = account?.twoFactor == true
     var secret by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    val res = context.resources
     EchoBottomSheet(onDismiss = { onDone(null) }, title = stringResource(R.string.v2_data_delete_title)) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
@@ -175,8 +186,12 @@ private fun DeleteSheet(account: AccountDto?, serverUrl: String?, actions: DataA
             Text(stringResource(R.string.v2_data_delete_body), style = EchoV2.type.body, color = c.textPrimary)
             EchoTextField(
                 secret,
-                { secret = it.take(SECRET_MAX) },
+                {
+                    secret = it.take(SECRET_MAX)
+                    problem = null
+                },
                 stringResource(if (twoFactor) R.string.v2_data_code else R.string.v2_data_password),
+                error = problem,
                 keyboardOptions = if (twoFactor) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
                 secret = !twoFactor
             )
@@ -185,9 +200,16 @@ private fun DeleteSheet(account: AccountDto?, serverUrl: String?, actions: DataA
                 {
                     working = true
                     scope.launch {
-                        val at = if (twoFactor) actions.deleteAccount(null, secret.trim()) else actions.deleteAccount(secret, null)
+                        val answer = if (twoFactor) actions.deleteAccount(null, secret.trim()) else actions.deleteAccount(secret, null)
                         working = false
-                        if (at != null) onDone(at)
+                        when (answer) {
+                            // Asked for: the date shows on the page.
+                            is com.echoledger.mobile.account.AccountResult.Done -> onDone(answer.value ?: "")
+
+                            // Said under the field, in the screen's language; the sheet stays open to try again.
+                            is com.echoledger.mobile.account.AccountResult.Failed ->
+                                problem = com.echoledger.mobile.ui.v2.account.AccountWords.problem(res, answer.problem)
+                        }
                     }
                 },
                 Modifier.fillMaxWidth(),

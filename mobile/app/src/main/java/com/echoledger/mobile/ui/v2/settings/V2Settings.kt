@@ -256,19 +256,22 @@ fun V2SettingsScreen(
 
                 "key" -> KeyPage(vm, settings.plan, r.highlight, back)
 
-                "account" -> AccountSettingsPage(
-                    settings.serverUrl,
-                    r.highlight,
-                    DataActions(
-                        account = { vm.account() },
-                        startExport = { vm.startExport() },
-                        exportStatus = { vm.exportStatus(it) },
-                        signOutEverywhere = { vm.signOutEverywhere() },
-                        deleteAccount = { password, code -> vm.deleteAccount(password, code) }
-                    ),
-                    { vm.unpair() },
-                    back
-                )
+                "account" -> {
+                    val accountCalls = com.echoledger.mobile.ui.v2.account.accountActions()
+                    AccountSettingsPage(
+                        settings.serverUrl,
+                        r.highlight,
+                        DataActions(
+                            account = { vm.account() },
+                            startExport = { vm.startExport() },
+                            exportStatus = { vm.exportStatus(it) },
+                            signOutEverywhere = { vm.signOutEverywhere() },
+                            deleteAccount = { password, code -> accountCalls.deleteAccount(password, code) }
+                        ),
+                        { vm.unpair() },
+                        back
+                    )
+                }
 
                 "devices" -> DevicesPage(r.highlight, back)
 
