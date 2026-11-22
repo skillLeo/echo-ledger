@@ -23,6 +23,7 @@ import com.echoledger.mobile.data.PlanOfferDto
 import com.echoledger.mobile.data.TranscriptionKeyDto
 import com.echoledger.mobile.data.UpgradeRequestDto
 import com.echoledger.mobile.testsupport.ScreenTest
+import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.ui.FlowStart
 import com.echoledger.mobile.ui.FlowStep
@@ -33,6 +34,7 @@ import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import java.time.LocalDate
 import java.time.ZoneOffset
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -52,6 +54,15 @@ class PlanPageParityTest : ScreenTest() {
     private val cancelled = mutableListOf<String>()
     private var keyOpened = 0
     private var shownOnce = false
+    private var canPay by mutableStateOf(true)
+
+    /** A meter read by TalkBack as a progress bar: its limit's name, its state the words. */
+    private fun meter(title: String, words: String) = compose.onAllNodes(
+        hasContentDescription(title) and androidx.compose.ui.test.SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.StateDescription,
+            words
+        ) and androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.ProgressBarRangeInfo)
+    ).fetchSemanticsNodes().isNotEmpty()
 
     private fun offers() = listOf(
         PlanOfferDto("free", "Free"),
@@ -129,7 +140,7 @@ class PlanPageParityTest : ScreenTest() {
                         cancelled += id
                         null
                     },
-                    canPay = true
+                    canPay = canPay
                 )
             }
         }
@@ -227,7 +238,7 @@ class PlanPageParityTest : ScreenTest() {
         assertTrue(shown("Not added. Tap to add your key"))
         press("Transcription")
         assertEquals(1, keyOpened)
-        assertTrue(compose.onAllNodes(hasContentDescription("Storage: 1.1 GB of 4.7 GB")).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(meter("Storage", "1.1 GB of 4.7 GB"))
         assertTrue(shown("Sign out a device to add another."))
         // What the plan includes.
         assertTrue(shown("1 year"))
@@ -235,7 +246,7 @@ class PlanPageParityTest : ScreenTest() {
         assertTrue(shown("Up to 20"))
         plan = pro(used = 120)
         compose.waitForIdle()
-        assertTrue(compose.onAllNodes(hasContentDescription("Transcription: 120 of 300 min")).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(meter("Transcription", "120 of 300 min"))
         assertTrue(shown("Resets "))
         assertTrue(shown("Minutes reset on the 1st of each month."))
         assertTrue(shown("Team members"))
@@ -311,7 +322,88 @@ class PlanPageParityTest : ScreenTest() {
         val words = listOf("Pro پلان", "اس مہینے", "ٹرانسکرپشن", "پلانز", "ہر فیچر دیکھیں")
         runCatching { pumpUntil("Urdu") { words.all(::shown) } }.onFailure { throw AssertionError("missing: " + words.filterNot(::shown)) }
         assertTrue(
-            compose.onAllNodes(hasContentDescription("ٹرانسکرپشن: 300 منٹ میں سے 120")).fetchSemanticsNodes().isNotEmpty()
+            meter("ٹرانسکرپشن", "300 منٹ میں سے 120")
         )
+    }
+
+    /** Nothing on the page sells or prices a plan: no price, no Upgrade, no Compare, no Choose, no bank transfer. */
+    private fun nothingForSale() {
+        for (words in listOf("Rs ", "Payments are by bank transfer.")) assertTrue(words, !shown(words))
+        for (words in listOf("Upgrade", "Compare plans", "Choose ")) {
+            assertTrue(words, compose.onAllNodes(hasText(words, substring = true) and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        }
+    }
+
+    @Test
+    fun theGooglePlayBuildShowsThePlanAndItsUseButNoPricesAndNothingToBuy() {
+        canPay = false
+        plan = pro(expires = inDays(40)).copy(upgrade = request("awaiting_payment"))
+        showBoth()
+        assertTrue(shown("Pro plan"))
+        assertTrue(shown("Paid until "))
+        assertTrue(meter("Transcription", "120 of 300 min"))
+        nothingForSale()
+        // No request card and no every-feature list to buy from.
+        assertTrue(!shown("Waiting for payment"))
+        assertTrue(compose.onAllNodes(hasText("See every feature") and hasClickAction()).fetchSemanticsNodes().isEmpty())
+        // And on Free: the key line still leads to the key page.
+        plan = free()
+        compose.waitForIdle()
+        nothingForSale()
+        press("Transcription")
+        assertEquals(1, keyOpened)
+        assertTrue(flows.isEmpty())
+    }
+
+    @Test
+    fun aTeamMemberSeesWhoManagesThePlanAndNothingToBuy() {
+        plan = pro(expires = inDays(40)).copy(role = "member", workspace = "Bilal Traders")
+        showBoth()
+        assertTrue(shown("Bilal Traders is on Pro. Its owner manages the plan."))
+        nothingForSale()
+        // Where plans are sold, the paid plan's own price shows for its owner.
+        plan = pro(expires = inDays(40))
+        compose.waitForIdle()
+        assertTrue(shown("Rs 2,999 a month"))
+        plan = pro(expires = inDays(40)).copy(role = "viewer")
+        compose.waitForIdle()
+        nothingForSale()
+        assertTrue(flows.isEmpty())
+    }
+
+    @Test
+    fun inSettingsChooseOpensTheUpgradeFlowInTheNewDesignAndBackReturnsToThePlan() {
+        runBlocking { app.pairLocally(server) }
+        server.on("*", ".*", com.echoledger.mobile.testsupport.FakeServer.json(404, """{"code":"not_found"}"""))
+        vm.updateSettings { it.copy(plan = free()) }
+        pumpUntil("the plan") { vm.settings.value.plan.key == "free" }
+        show {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    com.echoledger.mobile.ui.v2.shell.LocalEchoToasts provides
+                        com.echoledger.mobile.ui.v2.components.rememberEchoToastState()
+                ) {
+                    com.echoledger.mobile.ui.v2.settings.V2SettingsScreen(
+                        vm,
+                        com.echoledger.mobile.ui.v2.shell.UiFlags.Off,
+                        {},
+                        {},
+                        { p, _ -> androidx.compose.material3.Text("classic $p") },
+                        { _, _ -> },
+                        {},
+                        initialPage = "plan"
+                    )
+                }
+            }
+        }
+        pumpUntil("Plan & usage") { shown("Free plan") }
+        press("Choose Ultra")
+        // The v2 flow, drawn in place of the page (classic's is a dialog), with the plans' prices and the promo code.
+        pumpUntil("the flow") { shown("Rs 12,499 a month") && !shown("Free plan") }
+        assertTrue(compose.onAllNodes(hasAnyAncestor(isDialog())).fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodes(hasText("Promo code") and hasClickAction()).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(!shown("classic "))
+        press("Back")
+        pumpUntil("back on the plan") { shown("Free plan") }
     }
 }

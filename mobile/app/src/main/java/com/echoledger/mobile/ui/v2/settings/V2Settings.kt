@@ -187,6 +187,11 @@ fun V2SettingsScreen(
             if (account == null && storage == null) ProfileState.Error else ProfileState.Ready(profileOf(account, storage, settings.plan))
     }
     androidx.activity.compose.BackHandler(enabled = route != SettingsRoute.Root) { route = SettingsRoute.Root }
+    // The upgrade flow in the new design (plans, payment details, promo code, receipt, status) over the page that opened it.
+    flow?.let { start ->
+        com.echoledger.mobile.ui.v2.plan.V2UpgradeFlow(vm, start.planKey, start.feature, start.step, given = settings.plan) { flow = null }
+        return
+    }
     when (val r = route) {
         is SettingsRoute.Page -> {
             val back = { route = SettingsRoute.Root }
@@ -286,9 +291,6 @@ fun V2SettingsScreen(
             onBack = onBack,
             modifier = modifier
         )
-    }
-    flow?.let { start ->
-        com.echoledger.mobile.ui.UpgradeFlow(vm, start.planKey, start.feature, start.step, given = settings.plan) { flow = null }
     }
     if (confirmSignOut) {
         EchoDialog(

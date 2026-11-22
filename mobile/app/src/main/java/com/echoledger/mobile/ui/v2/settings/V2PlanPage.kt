@@ -36,6 +36,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.echoledger.mobile.R
@@ -204,7 +205,9 @@ fun PlanPage(
         EchoTopBar(stringResource(R.string.v2_set_page_plan), onBack = onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = EchoTokens.Space.s24)) {
             Column(Modifier.highlightedIf(highlight == "plan.upgrade")) {
-                CurrentPlan(plan, canBuy && !open, member, onUpgrade = { onFlow(FlowStart(plan.higherPlans.firstOrNull()?.key)) }) {
+                CurrentPlan(plan, canBuy && !open, member, showPrice = canBuy, onUpgrade = {
+                    onFlow(FlowStart(plan.higherPlans.firstOrNull()?.key))
+                }) {
                     scope.launch { plansAt.bringIntoView() }
                 }
             }
@@ -219,7 +222,7 @@ fun PlanPage(
             }
             problem?.let { Note(it) }
             Column(Modifier.highlightedIf(highlight == "plan.usage")) { ThisMonth(res, plan, onOpenKey) }
-            Included(res, plan) { everyFeature = true }
+            Included(res, plan, canPay) { everyFeature = true }
             if (canBuy && plan.higherPlans.isNotEmpty()) {
                 Column(Modifier.bringIntoViewRequester(plansAt).highlightedIf(highlight == "plan.pay" || highlight == "plan.promo")) {
                     Plans(plan, enabled = !open) { offer -> onFlow(FlowStart(offer.key)) }
@@ -251,7 +254,15 @@ fun PlanPage(
 }
 
 @Composable
-private fun CurrentPlan(plan: PlanState, canUpgrade: Boolean, member: Boolean, onUpgrade: () -> Unit, onCompare: () -> Unit) {
+private fun CurrentPlan(
+    plan: PlanState,
+    canUpgrade: Boolean,
+    member: Boolean,
+    /** Prices only where plans are sold: not in the Google Play build, not to a team member or viewer. */
+    showPrice: Boolean,
+    onUpgrade: () -> Unit,
+    onCompare: () -> Unit
+) {
     val c = EchoV2.colors
     val paid = !plan.isFree
     val until = PlanFormat.dateWithYear(plan.expiresAt)
@@ -266,7 +277,7 @@ private fun CurrentPlan(plan: PlanState, canUpgrade: Boolean, member: Boolean, o
             !paid -> Line(stringResource(R.string.v2_pl_free_key))
 
             else -> {
-                if (manualPayments) {
+                if (showPrice) {
                     plan.offers.firstOrNull {
                         it.key == plan.key
                     }?.let { o -> PlanFormat.price(o.priceText, o.pricePkr, o.price) }?.let { Line(it) }
@@ -416,9 +427,11 @@ private fun Meter(title: String, words: String, fraction: Float?, note: String?)
             androidx.compose.foundation.layout.Box(
                 Modifier.fillMaxWidth().height(EchoTokens.Space.s4)
                     .background(c.bgSubtle, RoundedCornerShape(EchoTokens.Radius.full))
+                    // Read as a progress bar named for its limit, its state the words ("Storage, 1.1 GB of 4.7 GB").
                     .semantics {
                         progressBarRangeInfo = ProgressBarRangeInfo(share, 0f..1f)
-                        contentDescription = "$title: $words"
+                        contentDescription = title
+                        stateDescription = words
                     }
             ) {
                 androidx.compose.foundation.layout.Box(
@@ -433,7 +446,7 @@ private fun Meter(title: String, words: String, fraction: Float?, note: String?)
 
 /** Included in your plan: how long recordings are kept, the longest recording, uploads a day, team members; every feature. */
 @Composable
-private fun Included(res: Resources, plan: PlanState, onEveryFeature: () -> Unit) {
+private fun Included(res: Resources, plan: PlanState, canPay: Boolean, onEveryFeature: () -> Unit) {
     val facts = buildList {
         plan.limits["retention_days"]?.limit?.let { add(R.string.v2_pl_kept to planDays(res, it)) }
         plan.limits["max_file_minutes"]?.limit?.let { add(R.string.v2_pl_longest to planHours(res, it)) }
@@ -450,7 +463,7 @@ private fun Included(res: Resources, plan: PlanState, onEveryFeature: () -> Unit
     if (facts.isEmpty() && plan.allFeatures.isEmpty()) return
     EchoSectionHeader(stringResource(R.string.v2_pl_included))
     facts.forEach { (title, value) -> EchoSettingRow(stringResource(title), value = value) }
-    if (plan.allFeatures.isNotEmpty() && manualPayments) {
+    if (plan.allFeatures.isNotEmpty() && canPay) {
         EchoSettingRow(stringResource(R.string.v2_pl_every_feature), icon = EchoIcons.Plan, onClick = onEveryFeature)
     }
     if (plan.isFree) Note(stringResource(R.string.v2_pl_every_plan))
