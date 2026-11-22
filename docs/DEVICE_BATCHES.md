@@ -6,6 +6,52 @@ development Mac. Results go into [SCREEN_SHARE_MATRIX.md](SCREEN_SHARE_MATRIX.md
 
 Phone rules for every batch: `pm install -r` only; never uninstall, never clear data; check `mCallState=0` first.
 
+## Tonight 20:00–21:30 PKT (2026-11-22) — 2.0.4 on the Mac and Windows, phone 2.0.5, about 85 minutes
+
+Builds:
+- **Mac:** 2.0.4, signed with the pinned identity, already in /Applications. It starts only after a quit and reopen, because 2.0.3 was still running.
+- **Phone:** 2.0.5 (code 25), already installed with data kept.
+- **Windows:** `EchoLedger_2.0.4_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.4, SHA-256 `1cfaba63…a867`.
+
+Not in tonight's batch:
+- the call choice redesign (PLAN_CALL_CHOICE), the phone screenshot fix and the desktop system-audio warning are still in build or review. They get their own batch when they're installed.
+- "ship" waits for the call choice, so tonight ends with a fix list, not "ship".
+
+**1. Mac, about 30 minutes**
+1. **Permissions.** Quit EchoLedger (⌘Q). In System Settings › Privacy & Security:
+   - Microphone: EchoLedger on.
+   - Screen & System Audio Recording: EchoLedger on under Screen Recording and under System Audio Recording Only. Remove an old EchoLedger entry with "–" first, if one is there.
+   Open EchoLedger. Help › About shows 2.0.4.
+2. **Window buttons.** If the window is in full screen, leave it with Ctrl+⌘+F. Pass if the close, minimize and zoom buttons show top left. Send a photo if they don't.
+3. **The waiting call.** In the Library, Review › open the waiting WhatsApp call with Muneeb (17:47) › Keep. It uploads and transcribes; only Muneeb's side has sound (2.0.3's silent mic).
+4. **Titles.** Pass if no automatic title is in Urdu letters, e.g. yesterday's 8:41 pm voice note now reads in Roman Urdu.
+5. **Zoom in Chrome.** Join a test meeting with the phone as the other person; talk from both for 2 minutes; stop.
+   - Pass if the transcript has both sides.
+   - The lead checks the audio files at the same time: system.wav must not be empty.
+6. **WhatsApp desktop.** A 1-minute call. Pass if both sides are heard and the after-call card works (the current card; the new one comes later).
+
+**2. Phone (S25), about 25 minutes.** Check `mCallState=0` first.
+1. **A WhatsApp call, 1 minute.**
+   - The pill shows; the recording saves; the title is in Roman Urdu if you spoke Urdu.
+   - Take a screenshot while the pill shows. On 2.0.5 it is still blocked; this confirms the fix that comes next.
+2. **Settings › Microphone & audio › Reset.** Pass if SIM calls and the Phone app's recordings stay as they were (Calls & meetings page).
+3. **Settings › Plan & usage.** The plan card and the meters. **Your data:** Export my data reaches "ready" or says why. **About:** version 2.0.5.
+4. **Urdu notifications.** Set the app language to Urdu, then make a short call.
+   - The recording notification reads right to left, with the name at the right.
+   - At the Largest text size, its buttons are whole: `ہٹانا واپس لیں` may wrap but is never cut.
+   - Set the language back.
+5. **Widget.** Add the EchoLedger widget. In Urdu its lines sit at the right; at Largest its text is larger.
+6. **Help › Phone check.** It runs in English and in Urdu; Copy report works.
+
+**3. Windows laptop, about 20 minutes**
+1. Install `EchoLedger_2.0.4_x64-setup.exe` over the old version; Help › About shows 2.0.4.
+2. Record a WhatsApp or Zoom call with both sides for 1 minute. Pass if the transcript has both sides.
+3. Make the window half the screen. Pass if nothing overlaps and the Library header actions stay on one row.
+
+**4. Approvals, about 10 minutes**
+1. **D12 Library rows.** Look at the pictures in `~/Desktop/EchoLedger-row-redesign`; reply "rows OK" or what to change.
+2. **Fix list.** Send what failed above. The call choice batch (3 WhatsApp calls, a choice from the pill, At the start, a screenshot while recording) follows when those builds are in.
+
 ## Tonight 20:00–21:30 PKT (2026-11-17) — the v1.8.1 release candidate, about 85 minutes
 
 Builds: the v1.8.1 release candidate from CI on `release/v1.8.1` (desktop 1.8.1; Android 1.8.1, code 18). Windows
