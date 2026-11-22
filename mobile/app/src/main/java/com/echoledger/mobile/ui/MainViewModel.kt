@@ -1548,6 +1548,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Onboarding and settings files (B19) ------------------------------------------------------------------------
 
+    /**
+     * The server's interface flags, read now and kept as the config read keeps them (the first-run wizard, after sign-in,
+     * decides its design from them); null when signed out or the server does not answer.
+     */
+    suspend fun interfaceFlags(): com.echoledger.mobile.ui.v2.shell.UiFlags? {
+        val config = withContext(Dispatchers.IO) { runCatching { graph.api()?.config() }.getOrNull() } ?: return null
+        graph.settings.update { it.copy(uiFlags = config.uiFlags, uiClassic = config.uiClassic, uiDesign = config.uiDesign) }
+        return com.echoledger.mobile.ui.v2.shell.UiFlags(config.uiFlags, config.uiClassic, server = config.uiDesign)
+    }
+
     /** Ends the first-run wizard for good; the consent box of its last step is recorded when ticked. */
     fun finishOnboarding(consent: Boolean = false) = updateSettings {
         it.copy(onboardingDone = true, consentAcknowledged = it.consentAcknowledged || consent)

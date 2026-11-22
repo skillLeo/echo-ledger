@@ -18,7 +18,8 @@ import org.junit.Test
 
 /** The Projects list says when each project's last call was, as classic does (parity.csv PH-OTH-018), and opens it. */
 class V2ProjectsListParityTest : ScreenTest() {
-    private val now = ZonedDateTime.now()
+    // Read after @Before has set the test zone, never while the class is made.
+    private val now: ZonedDateTime by lazy { ZonedDateTime.now() }
 
     private fun call(id: String, project: String?, startedAt: ZonedDateTime) = LibraryItem(
         id = id,
@@ -43,7 +44,7 @@ class V2ProjectsListParityTest : ScreenTest() {
         val opened = mutableListOf<String>()
         show {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
-                V2WorkspacesContent(projects, library, onOpen = { opened += it }, onSharedAndImported = {}, onNew = {}, onBack = {})
+                V2WorkspacesContent(projects, library, onOpen = { opened += it }, onNew = {}, onBack = {})
             }
         }
         val day = newest.format(DateTimeFormatter.ofPattern("MMM d", java.util.Locale.ENGLISH)) +

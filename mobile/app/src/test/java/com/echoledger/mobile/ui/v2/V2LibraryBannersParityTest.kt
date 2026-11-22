@@ -160,7 +160,18 @@ class V2LibraryBannersParityTest : ScreenTest() {
         seed()
         runBlocking { app.graph.settings.update { it.copy(setupCardHidden = true) } }
         shell()
-        // This test phone's helper isn't running: the banner says which of the Ready check's problems stops it.
-        pumpUntil("the reason") { seen("Calls are not being recorded: ") }
+        // The banner says, in Setup & health's words, the first of the Ready check's problems that stops calls.
+        val facts = com.echoledger.mobile.recording.ReadinessWatch.facts(
+            app,
+            runBlocking {
+                app.graph.settings.current()
+            },
+            app.graph.helper
+        )
+        val blocking = com.echoledger.mobile.core.Readiness.evaluate(facts).problems.first { it.blocking }
+        val reason = app.getString(com.echoledger.mobile.ui.v2.setup.HealthChecks.failWords(blocking.key)!!).replaceFirstChar {
+            it.lowercase()
+        }
+        pumpUntil("the reason") { compose.onAllNodesWithText("Calls are not being recorded: $reason").fetchSemanticsNodes().isNotEmpty() }
     }
 }

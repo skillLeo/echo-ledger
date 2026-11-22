@@ -70,6 +70,27 @@ fun OnboardingScreen(vm: MainViewModel) {
     LaunchedEffect(settings.paired, step) {
         if (step == OnboardingStep.Pair && settings.paired) saved = OnboardingStep.Test.name
     }
+    // Before sign-in the flags cannot be read, so the wizard is classic's. Once signed in, the server's flags are read
+    // (a few seconds at most; no answer is classic) and, when they say the new design, the steps left use it.
+    var newDesign by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(settings.paired) {
+        if (settings.paired && newDesign == null) newDesign = com.echoledger.mobile.ui.v2.setup.WizardDesign.afterSignIn(vm)
+    }
+    val afterSignIn = settings.paired && (step == OnboardingStep.Test || step == OnboardingStep.Done)
+    if (afterSignIn && newDesign == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
+        return
+    }
+    if (afterSignIn && newDesign == true) {
+        com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+            if (step == OnboardingStep.Test) {
+                com.echoledger.mobile.ui.v2.setup.V2WizardTest(onNext = { saved = step.next.name }, onSkip = { vm.finishOnboarding() })
+            } else {
+                com.echoledger.mobile.ui.v2.setup.V2WizardDone(onFinish = { consent -> vm.finishOnboarding(consent) })
+            }
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(step.label, color = Brand.Muted, fontSize = 12.sp)

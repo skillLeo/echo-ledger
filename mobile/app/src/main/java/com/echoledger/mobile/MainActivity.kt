@@ -751,7 +751,36 @@ class MainActivity : FragmentActivity() {
 
                         !settings.onboardingDone -> OnboardingScreen(vm)
 
+                        // Signed out with the new design chosen on this phone: its sign-in (parity.csv PH-OTH-039).
+                        !settings.paired && shellOn -> com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                            com.echoledger.mobile.ui.v2.account.V2SignInScreen(vm)
+                        }
+
                         !settings.paired -> PairingScreen(vm)
+
+                        // The new design's page for the notes when its Library is on (parity.csv PH-OTH-038).
+                        sharedNotes != null && shellOn && flags.library ->
+                            com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                                com.echoledger.mobile.ui.v2.live.V2SharedNotesScreen(
+                                    vm,
+                                    sharedNotes.orEmpty().split(',').filter { it.isNotBlank() },
+                                    onLeave = {
+                                        sharedNotes = null
+                                        showItem(null)
+                                        tab = TAB_LIBRARY
+                                    },
+                                    sourceApp = sharedFrom?.let { pkg ->
+                                        runCatching {
+                                            packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                                        }.getOrNull()
+                                    },
+                                    onBackToSource = {
+                                        sharedNotes = null
+                                        tab = TAB_LIBRARY
+                                        moveTaskToBack(true)
+                                    }
+                                )
+                            }
 
                         sharedNotes != null -> SharedNotesScreen(
                             vm,
@@ -849,6 +878,15 @@ class MainActivity : FragmentActivity() {
 
                         // The v2 shell (behind `ui_v2.shell`, contract 2.0.0-a): its own navigation and toasts; every area whose own
                         // flag is off shows the classic screen here.
+                        // Upgrade in the new design when its Settings is on (parity.csv PH-OTH-041); an open request
+                        // opens where it stands. As classic's canBuy, the Google Play build and a team member or viewer
+                        // get the plans without prices and nothing to buy.
+                        shellPlans && flags.settings -> com.echoledger.mobile.ui.v2.shell.EchoV2Frame(vm, isDarkTheme(settings.themeMode)) {
+                            com.echoledger.mobile.ui.v2.plan.V2UpgradeFlow(vm, startPlan = null, feature = null, startAt = null) {
+                                shellPlans = false
+                            }
+                        }
+
                         shellPlans -> {
                             BackHandler { shellPlans = false }
                             SettingsScreen(vm, onSetup = { showSetup = true }, openPage = "plan")

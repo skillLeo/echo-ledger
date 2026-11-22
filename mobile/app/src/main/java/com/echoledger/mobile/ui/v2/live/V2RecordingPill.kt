@@ -41,10 +41,19 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
  * The recording pill on the v2 components (behind `ui_v2.recording_controls`, docs/PLAN_V1_8.md 1.3): "● 02:14 · Omar".
  * It floats over other apps, so it always uses the dark roles. It draws [state] from the existing PillMachine and sends
  * its [PillEvent]s back. A component only: the pill window draws it once the phone core wires it. A tap opens Captions,
- * Pause, Language, Discard (with Undo while it counts down), Stop (two taps) and Hide.
+ * Pause, Language, Discard (with Undo while it counts down), Stop (two taps), Shrink to a dot, Hide controls and Hide
+ * EchoLedger windows.
  */
 @Composable
-fun V2RecordingPill(state: PillState, nowMs: Long, title: String?, onEvent: (PillEvent) -> Unit, modifier: Modifier = Modifier) {
+fun V2RecordingPill(
+    state: PillState,
+    nowMs: Long,
+    title: String?,
+    onEvent: (PillEvent) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Hide EchoLedger windows: every floating window a grey dot until it is tapped. */
+    onHideWindows: () -> Unit = { com.echoledger.mobile.core.ShareGuard.setHidden(true) }
+) {
     CompositionLocalProvider(LocalEchoV2Colors provides EchoV2Colors.Dark) {
         when (state.mode) {
             PillState.Mode.HIDDEN -> Unit
@@ -55,7 +64,7 @@ fun V2RecordingPill(state: PillState, nowMs: Long, title: String?, onEvent: (Pil
 
             PillState.Mode.MENU -> Column(modifier, verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
                 PillBar(state, nowMs, title, onEvent)
-                PillMenu(state, onEvent)
+                PillMenu(state, onEvent, onHideWindows)
             }
         }
     }
@@ -129,7 +138,7 @@ private fun PillBar(state: PillState, nowMs: Long, title: String?, onEvent: (Pil
 }
 
 @Composable
-private fun PillMenu(state: PillState, onEvent: (PillEvent) -> Unit) {
+private fun PillMenu(state: PillState, onEvent: (PillEvent) -> Unit, onHideWindows: () -> Unit) {
     val c = EchoV2.colors
     Surface(
         shape = RoundedCornerShape(EchoTokens.Component.menuRadius),
@@ -168,8 +177,14 @@ private fun PillMenu(state: PillState, onEvent: (PillEvent) -> Unit) {
                 icon = EchoIcons.Record,
                 onClick = { onEvent(PillEvent.Stop) }
             )
+            MenuRow(stringResource(R.string.v2_live_pill_shrink), icon = EchoIcons.Shrink, onClick = { onEvent(PillEvent.ShrinkToDot) })
             MenuRow(stringResource(R.string.v2_live_pill_hide), icon = EchoIcons.Close, onClick = {
                 onEvent(PillEvent.HideControls)
+            })
+            // Before a screen share (as classic since v1.8.1): every floating window becomes a grey dot until it is tapped.
+            MenuRow(stringResource(R.string.v2_live_pill_hide_windows), icon = EchoIcons.HideWindows, onClick = {
+                onEvent(PillEvent.CloseMenu)
+                onHideWindows()
             })
         }
     }

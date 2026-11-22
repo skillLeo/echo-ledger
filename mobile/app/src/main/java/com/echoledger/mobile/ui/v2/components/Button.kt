@@ -88,7 +88,9 @@ fun EchoButton(
     enabled: Boolean = true,
     loading: Boolean = false,
     loadingText: String = EchoV2.strings.loading,
-    icon: ImageVector? = null
+    icon: ImageVector? = null,
+    /** A mark drawn in its own colours before the words (Google's "G"), instead of a tinted [icon]. */
+    leading: (@Composable () -> Unit)? = null
 ) {
     val colors = buttonColors(kind, enabled && !loading)
     val loadingLabel = EchoV2.strings.loading
@@ -122,6 +124,7 @@ fun EchoButton(
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.CenterHorizontally)
         ) {
             if (icon != null && !loading) Icon(icon, contentDescription = null, Modifier.size(EchoTokens.Icon.md))
+            if (leading != null && !loading) leading()
             Text(
                 if (loading) loadingText else text,
                 style = EchoV2.type.label,

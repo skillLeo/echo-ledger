@@ -10,6 +10,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -20,6 +21,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import com.echoledger.mobile.recording.LiveRecording
@@ -310,7 +312,9 @@ class ShellReviewFixesTest : ScreenTest() {
         shell()
         compose.onNodeWithText("Live").performClick()
         compose.onNodeWithText("Watch translate").performClick()
-        compose.onNodeWithText("Classic WatchTranslate").assertExists()
+        // Watch translate's own page in the new design (parity.csv PH-OTH-030), not Game translate's.
+        compose.onNodeWithText("Video settings").performScrollTo().assertExists()
+        compose.onAllNodesWithText("Game settings").assertCountEquals(0)
     }
 
     // Major: Text size and App language keep the page, and reach sheets and dialogs.

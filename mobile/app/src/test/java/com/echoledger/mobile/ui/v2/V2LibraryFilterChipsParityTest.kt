@@ -31,12 +31,14 @@ import org.junit.Test
  * and each tag), Label (only when there are labels), and the row's source mark with its device badge.
  */
 class V2LibraryFilterChipsParityTest : ScreenTest() {
-    private val now: ZonedDateTime = ZonedDateTime.now()
+    // Read once the test has set its clock and zone up (after @Before), never while the class is made.
+    private val now: ZonedDateTime by lazy { ZonedDateTime.now() }
 
     /** A moment of today, never in the future: a minute after midnight, or now if that is sooner. */
-    private val today: String = minOf(now, now.toLocalDate().atStartOfDay(now.zone).plusMinutes(1).plusSeconds(1))
-        .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-    private val longAgo: String = now.minusDays(40).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+    private val today: String by lazy {
+        minOf(now, now.toLocalDate().atStartOfDay(now.zone).plusMinutes(1).plusSeconds(1)).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+    }
+    private val longAgo: String by lazy { now.minusDays(40).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME) }
 
     private fun item(
         id: String,
