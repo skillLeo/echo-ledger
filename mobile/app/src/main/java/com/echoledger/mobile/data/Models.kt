@@ -767,6 +767,13 @@ data class SegmentDto(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val words: List<WordDto> = emptyList(),
+    /**
+     * The language this line was heard in (since 2.0.0-o: `ur`, `en`, `ar`…), null when the engine did not say; the
+     * page can skip a language's lines (null lines always show). Sent with live captions only when known.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val language: String? = null,
     /** The engine was not sure of this line (since v1.2); kept as heard. Never sent by the phone. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)

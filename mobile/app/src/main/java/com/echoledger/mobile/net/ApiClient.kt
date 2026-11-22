@@ -1010,6 +1010,22 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(request("clients/$id/ask").post(body).build(), com.echoledger.mobile.data.AskResponse.serializer())!!.data
     }
 
+    /** `POST /api/sessions/{id}/ask` (since 2.0.0-o): Ask about one recording; the same answer as a project's. */
+    suspend fun askRecording(id: String, question: String, language: String): com.echoledger.mobile.data.AskAnswerDto =
+        askAt("sessions/$id/ask", question, language)
+
+    /** `POST /api/ask` (since 2.0.0-o): Ask across all of the person's own recordings. */
+    suspend fun askEverywhere(question: String, language: String): com.echoledger.mobile.data.AskAnswerDto =
+        askAt("ask", question, language)
+
+    private suspend fun askAt(path: String, question: String, language: String): com.echoledger.mobile.data.AskAnswerDto {
+        val body = buildJsonObject {
+            put("question", question)
+            put("language", language)
+        }.toString().toRequestBody(jsonType)
+        return call(request(path).post(body).build(), com.echoledger.mobile.data.AskResponse.serializer())!!.data
+    }
+
     /** `GET /api/clients/{id}/bundle`: "Copy for AI" text. */
     suspend fun bundle(id: String, notes: Int = 5): String =
         call(request("clients/$id/bundle?notes=$notes").get().build(), com.echoledger.mobile.data.BundleResponse.serializer())!!.data.text

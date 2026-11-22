@@ -100,15 +100,18 @@ class ApiSamplesTest {
         "transcript_views_make" to TranscriptViewsDto.serializer(),
         "session_notes" to CallNotesResponse.serializer(),
         "session_notes_make" to CallNotesResponse.serializer(),
-        "client_ask" to AskResponse.serializer()
+        "client_ask" to AskResponse.serializer(),
+        // Since 2.0.0-o: Ask about one recording, and across all of the person's.
+        "session_ask" to AskResponse.serializer(),
+        "ask" to AskResponse.serializer()
     )
 
     /** Answers the phone sends for and does not read (only whether the call worked). */
     private val notRead =
         setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
-    /** Answers the phone does not ask for yet: Ask about a recording or all of them (2.0.0-o) reaches the phone with its Ask screens. */
-    private val notUsedYet = setOf("session_ask", "ask")
+    /** Answers the phone does not ask for yet: none today (every sample has a model). */
+    private val notUsedYet = emptySet<String>()
 
     private val everyField = Json {
         encodeDefaults = true
@@ -222,6 +225,11 @@ class ApiSamplesTest {
         // A citation of a recording has no file or page; a note without a kind is a plain line; saving a recording is not a project.
         "client_ask.data.citations[0].file_id",
         "client_ask.data.citations[0].page",
+        // Since 2.0.0-o a recording's and every recording's Ask cite calls only (never a file).
+        "session_ask.data.citations[0].file_id",
+        "session_ask.data.citations[0].page",
+        "ask.data.citations[0].file_id",
+        "ask.data.citations[0].page",
         "session_notes.data.sections[0].items[0].kind",
         "shared_save.client_id",
         // Since v1.8 (contract 1.8.0-b) only a missed_recording item carries its reason and its row's id.

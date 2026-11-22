@@ -433,10 +433,11 @@ private fun ChooseStep(vm: MainViewModel, plan: PlanState, startPlan: String?, f
         if (chosen != null) {
             val full = chosen.pricePkr
             val free = promoFits && promo?.free == true
-            // What the code leaves to pay, from the plan's price in rupees (the server's words only without one).
+            // What the code leaves to pay is the server's own amount (its final price, without "/ month"); worked out
+            // from the plan's rupees only when an older server sends none.
             val due = promo?.takeIf { promoFits }?.let { p ->
-                full?.let { PlanFormat.rupees(Math.round(it * (100 - p.percent) / 100.0)) }
-                    ?: p.finalPrice?.substringBefore(" /")?.substringBefore(" a month")
+                p.finalPrice?.substringBefore(" /")?.substringBefore(" a month")?.takeIf { it.isNotBlank() }
+                    ?: full?.let { PlanFormat.rupees(Math.round(it * (100 - p.percent) / 100.0)) }
             }
             BottomBar(
                 caption = if (free) null else stringResource(R.string.v2_up_bank_next),

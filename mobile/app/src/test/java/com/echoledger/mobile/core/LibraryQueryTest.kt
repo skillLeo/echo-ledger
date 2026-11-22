@@ -53,7 +53,8 @@ class LibraryQueryTest {
     fun `a date, a mark and a state each narrow the others, and choices of one kind widen`() {
         // Pinned (Views) and Failed (Status): only what is both, never either.
         val pinnedAndFailed = LibraryFilters(views = setOf(SmartView.PINNED, SmartView.FAILED))
-        assertEquals(emptyList<String>(), LibraryQuery.apply(items, pinnedAndFailed, "", LibrarySort.NEWEST, now).map { it.id })
+        val both = item("e", started = "2026-10-25T09:00:00Z", pinned = true, final = "failed")
+        assertEquals(listOf("e"), LibraryQuery.apply(items + both, pinnedAndFailed, "", LibrarySort.NEWEST, now).map { it.id })
         val pinnedThisWeek = LibraryFilters(views = setOf(SmartView.PINNED, SmartView.THIS_WEEK))
         assertEquals(listOf("c"), LibraryQuery.apply(items, pinnedThisWeek, "", LibrarySort.NEWEST, now).map { it.id })
         // Two states, or two dates, add up.

@@ -41,7 +41,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -78,7 +80,14 @@ fun OnboardingScreen(vm: MainViewModel) {
     }
     val afterSignIn = settings.paired && (step == OnboardingStep.Test || step == OnboardingStep.Done)
     if (afterSignIn && newDesign == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
+        val waiting = androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.v2_wiz_one_moment)
+        Box(
+            Modifier.fillMaxSize().semantics {
+                contentDescription = waiting
+                liveRegion = LiveRegionMode.Polite
+            },
+            contentAlignment = Alignment.Center
+        ) { androidx.compose.material3.CircularProgressIndicator() }
         return
     }
     if (afterSignIn && newDesign == true) {
@@ -290,7 +299,8 @@ private fun ColumnScope.TestStep(onNext: () -> Unit, onSkip: () -> Unit) {
         if (testing) LevelBar("Me", level, Brand.Violet)
         result?.let { r ->
             LevelBar("Peak", r.peak, Brand.Violet)
-            Text(micTestVerdict(r), fontSize = 13.sp)
+            // The wizard's own words: there is no playback or microphone choice on this step.
+            Text(if (r.heard) WIZARD_HEARD else WIZARD_NOT_HEARD, fontSize = 13.sp)
         }
         if (failed) {
             Text(
@@ -319,3 +329,7 @@ private fun ColumnScope.DoneStep(onFinish: (Boolean) -> Unit) {
         }
     }
 }
+
+/** What the wizard's 10-second test says (no playback or microphone choice here, unlike Settings' test). */
+internal const val WIZARD_HEARD = "Your microphone is working."
+internal const val WIZARD_NOT_HEARD = "We did not hear your microphone. Check the microphone permission and try again."

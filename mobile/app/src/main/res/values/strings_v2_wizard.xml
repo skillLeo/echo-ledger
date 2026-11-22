@@ -14,11 +14,12 @@
     <string name="v2_wiz_allow_mic">Allow the microphone on the previous step to run the test.</string>
     <string name="v2_wiz_me">Me</string>
     <string name="v2_wiz_peak">Peak</string>
-    <string name="v2_wiz_heard">Your microphone is working. Play it back to check how you sound.</string>
-    <string name="v2_wiz_not_heard">We did not hear your microphone. Check the microphone above and the microphone permission.</string>
+    <string name="v2_wiz_heard">Your microphone is working.</string>
+    <string name="v2_wiz_not_heard">We did not hear your microphone. Check the microphone permission and try again.</string>
     <string name="v2_wiz_failed">The test could not record. Check the microphone permission and try again.</string>
     <string name="v2_wiz_done_title">You are set</string>
     <string name="v2_wiz_done_body">Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it. A recording notification is always shown.</string>
     <string name="v2_wiz_start_using">Start using EchoLedger</string>
     <string name="v2_wiz_consent">I understand and will get consent where required</string>
+    <string name="v2_wiz_one_moment">One moment…</string>
 </resources>

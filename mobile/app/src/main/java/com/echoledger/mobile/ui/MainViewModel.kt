@@ -1197,9 +1197,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Ask for the v2 screen (P-089): the answer, or the failure itself (offline or not, the server's status and code,
      * and words for people), never null plus a message elsewhere. The classic screen keeps [ask].
      */
-    suspend fun askOutcome(clientId: String, question: String, language: String): AskOutcome = withContext(Dispatchers.IO) {
+    suspend fun askOutcome(clientId: String, question: String, language: String): AskOutcome =
+        askOutcome(AskScope.Project(clientId), question, language)
+
+    /** Ask a project, one recording or all of the person's recordings (since 2.0.0-o); the same outcomes. */
+    suspend fun askOutcome(scope: AskScope, question: String, language: String): AskOutcome = withContext(Dispatchers.IO) {
         try {
-            AskOutcome.Answer((graph.api() ?: error(com.echoledger.mobile.core.Problems.SIGN_IN)).ask(clientId, question, language))
+            val api = graph.api() ?: error(com.echoledger.mobile.core.Problems.SIGN_IN)
+            AskOutcome.Answer(
+                when (scope) {
+                    is AskScope.Project -> api.ask(scope.id, question, language)
+                    is AskScope.Recording -> api.askRecording(scope.id, question, language)
+                    AskScope.Everywhere -> api.askEverywhere(question, language)
+                }
+            )
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -2029,19 +2040,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         /** The same sentence as the classic Ask's. */
         const val ASK_FAILED = "The AI assistant could not answer right now. Try again in a minute."
 
+        /** `409 no_transcript` (since 2.0.0-o). */
+        const val NOTHING_TO_ASK = "There is nothing transcribed to ask about yet. Ask again once a transcript is ready."
+
         /**
          * A failed Ask in words for people: by its code, else [com.echoledger.mobile.core.Problems] (a bare status such
          * as "Request failed (502)" or a connection's own text never shows).
          */
         internal fun askFailure(e: Throwable): AskOutcome.Failed {
             val refused = e as? ApiException
-            val words = if (refused?.code == "ai_unavailable") AI_NOT_SET_UP else com.echoledger.mobile.core.Problems.text(e, ASK_FAILED)
+            val words = when (refused?.code) {
+                "ai_unavailable" -> AI_NOT_SET_UP
+
+                // Since 2.0.0-o: a recording (or every recording) with no finished transcript.
+                "no_transcript" -> NOTHING_TO_ASK
+
+                else -> com.echoledger.mobile.core.Problems.text(e, ASK_FAILED)
+            }
             val offline = refused == null && words == com.echoledger.mobile.core.Problems.OFFLINE
             return AskOutcome.Failed(offline = offline, status = refused?.status, code = refused?.code, words = words)
         }
 
         const val NOT_A_PAIRING_QR = "That isn't an EchoLedger sign-in code. In the console open Account → Devices → Sign in a device."
     }
+}
+
+/** What Ask is about: a project, one recording, or all of the person's own recordings (since 2.0.0-o). */
+sealed interface AskScope {
+    data class Project(val id: String) : AskScope
+
+    data class Recording(val id: String) : AskScope
+
+    data object Everywhere : AskScope
 }
 
 /** What Ask got back (P-089). */
