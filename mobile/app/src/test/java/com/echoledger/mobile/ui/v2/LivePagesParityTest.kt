@@ -40,8 +40,10 @@ import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.robolectric.Shadows.shadowOf
 
 /**
  * Games and Videos on the v2 components against classic's pages (docs/v2/audit/parity.csv PH-SET-045 to 056): the same
@@ -247,6 +249,36 @@ class LivePagesParityTest : ScreenTest() {
         assertTrue(compose.onAllNodesWithText("Continue this month anyway").fetchSemanticsNodes().isEmpty())
     }
 
+    private fun liveNotice(): String? = shadowOf(app.getSystemService(android.app.NotificationManager::class.java))
+        .getNotification(com.echoledger.mobile.translate.LiveTranslateService.NOTIFICATION_PROBLEM_ID)
+        ?.extras?.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString()
+
+    private fun startGameTranslate() {
+        app.getSystemService(android.app.NotificationManager::class.java).cancelAll()
+        val intent = com.echoledger.mobile.translate.LiveTranslateService.startIntent(app, TranslateMode.GAME)
+        buildService(com.echoledger.mobile.translate.LiveTranslateService::class.java, intent).create().startCommand(0, 1)
+        pumpUntil("Game translate to decide") { liveNotice() != null }
+    }
+
+    @Test
+    fun continueThisMonthAnywayLetsGameTranslateStartOverTheBudget() {
+        vm.updateSettings { it.copy(liveTranslate = LiveTranslatePrefs(monthlyBudgetUsd = 5.0)) }
+        pumpUntil("five") { lt().monthlyBudgetUsd == 5.0 && lt().budgetOverrideMonth == null }
+        TranslateUsage(app).add(TranslateMode.GAME, 50L * 3_600_000)
+        // Over the budget, Game translate pauses and says where to continue.
+        startGameTranslate()
+        assertTrue(liveNotice(), liveNotice()!!.startsWith("Live Translate is paused"))
+        com.echoledger.mobile.translate.LiveTranslateService.stop(app)
+        // Continue this month anyway on the v2 page, and it goes on past the budget (to its next step: the games).
+        showBoth()
+        press("Continue this month anyway")
+        pumpUntil("overridden") { lt().budgetOverrideMonth == TranslateUsage(app).month() }
+        startGameTranslate()
+        assertFalse(liveNotice(), liveNotice()!!.startsWith("Live Translate is paused"))
+        assertEquals("Choose your games in Game translate first.", liveNotice())
+        com.echoledger.mobile.translate.LiveTranslateService.stop(app)
+    }
+
     @Test
     fun eachVideosControlChangesItsSettingAndResetKeepsThePickedApps() {
         which = "videos"
@@ -293,6 +325,16 @@ class LivePagesParityTest : ScreenTest() {
         language = EchoLanguage.Urdu
         showBoth()
         pumpUntil("games in Urdu") { listOf("گیمز چنیں", "وہ بولتے ہیں", "خانے کا انداز", "ماہانہ بجٹ", "عربی").all(::shown) }
+        // "$1.00 of $10.00" reads in Urdu as the budget, then what was spent ("$10.00 میں سے $1.00").
+        vm.updateSettings { it.copy(liveTranslate = LiveTranslatePrefs(monthlyBudgetUsd = 10.0)) }
+        TranslateUsage(app).add(TranslateMode.GAME, (1.0 / com.echoledger.mobile.translate.TranslateCost.USD_PER_HOUR * 3_600_000).toLong())
+        which = "videos"
+        compose.waitForIdle()
+        which = "games"
+        compose.waitForIdle()
+        pumpUntil("the budget in Urdu") {
+            compose.onAllNodesWithText("اس مہینے: \$10.00 میں سے \$1.00", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
         which = "videos"
         pumpUntil("videos in Urdu") { listOf("ایپس چنیں", "سب ٹائٹل کا انداز", "متن کے پیچھے کالا خانہ").all(::shown) }
     }

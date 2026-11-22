@@ -523,7 +523,7 @@ private fun AppPicker(
                     { chosen = if (it) chosen + app.packageName else chosen - app.packageName },
                     app.label,
                     Modifier.padding(horizontal = EchoTokens.Space.s8),
-                    supporting = if (app.game) stringResource(R.string.v2_lt_game) else null
+                    supporting = if (app.game) stringResource(R.string.v2_lt_game_tag) else null
                 )
             }
         }

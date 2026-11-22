@@ -10,9 +10,6 @@
     <string name="v2_lt_fastest">تیز ترین</string>
     <string name="v2_lt_balanced">متوازن</string>
     <string name="v2_lt_accurate">درست</string>
-    <string name="v2_lt_lang_en">انگریزی</string>
-    <string name="v2_lt_lang_ur">اردو</string>
-    <string name="v2_lt_lang_ar">عربی</string>
     <string name="v2_lt_lang_hi">ہندی</string>
     <string name="v2_lt_lang_fa">فارسی</string>
     <string name="v2_lt_lang_tr">ترکی</string>
@@ -31,8 +28,7 @@
     <string name="v2_lt_show_original">جو کہا گیا وہ دکھائیں</string>
     <string name="v2_lt_done">ہو گیا</string>
     <string name="v2_lt_no_apps">کوئی ایپ نہیں ملی۔</string>
-    <string name="v2_lt_game">گیم</string>
-    <string name="v2_lt_cost">تقریباً $%1$s فی گھنٹہ، اور جب کوئی بول رہا ہو تو فی گھنٹہ زیادہ سے زیادہ %2$d MB موبائل ڈیٹا (خاموشی میں کچھ نہیں)۔</string>
+    <string name="v2_lt_game_tag">گیم</string>
     <string name="v2_lt_preview_game">ایک نمونہ گیم کے منظر پر جھلک</string>
     <string name="v2_gm_games">گیمز</string>
     <string name="v2_gm_games_help">ان گیمز میں ساتھیوں کی وائس چیٹ کا ترجمہ ایک چھوٹے خانے میں دکھایا جاتا ہے۔</string>
@@ -61,7 +57,7 @@
     <string name="v2_gm_save">سیشن کا متن محفوظ کریں</string>
     <string name="v2_gm_save_help">بند: کچھ نہیں رکھا جاتا۔ آن: ہر گیم کا ترجمہ شدہ متن لائبریری میں جاتا ہے۔</string>
     <string name="v2_gm_budget">ماہانہ بجٹ</string>
-    <string name="v2_gm_budget_help">اس مہینے: %1$s میں سے %2$s۔ 80%% پر انتباہ؛ 100%% پر لائیو ترجمہ رک جاتا ہے۔</string>
+    <string name="v2_gm_budget_help">اس مہینے: %2$s میں سے %1$s۔ 80%% پر انتباہ؛ 100%% پر لائیو ترجمہ رک جاتا ہے۔</string>
     <string name="v2_gm_continue">اس مہینے پھر بھی جاری رکھیں</string>
     <string name="v2_vd_apps">ایپس</string>
     <string name="v2_vd_apps_help">ان ایپس میں فلموں اور ویڈیوز کو سب ٹائٹلز ملتے ہیں۔ جو ایپس اجازت نہیں دیتیں وہ بتا دیتی ہیں۔</string>
