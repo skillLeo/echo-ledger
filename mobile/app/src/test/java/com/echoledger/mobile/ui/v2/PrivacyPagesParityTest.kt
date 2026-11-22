@@ -247,8 +247,8 @@ class PrivacyPagesParityTest : ScreenTest() {
                 }
 
                 PrivacyStep.Shown -> {
-                    press("Show")
-                    pumpUntil("show") { vm.settings.value.screenShareMode == "show" }
+                    toggle("Hide EchoLedger's live words from screenshots and screen shares")
+                    pumpUntil("live words shown") { !vm.settings.value.hideLiveWords }
                 }
             }
             compose.waitForIdle()
@@ -256,9 +256,9 @@ class PrivacyPagesParityTest : ScreenTest() {
         val today = ParityKit.shownIn(compose, PrivacyStep.entries, run)
         val d = AppSettings()
         vm.updateSettings {
-            it.copy(consentAcknowledged = d.consentAcknowledged, screenShareMode = d.screenShareMode, blockScreens = d.blockScreens)
+            it.copy(consentAcknowledged = d.consentAcknowledged, hideLiveWords = d.hideLiveWords, blockScreens = d.blockScreens)
         }
-        pumpUntil("defaults") { vm.settings.value.screenShareMode == d.screenShareMode && !vm.settings.value.blockScreens }
+        pumpUntil("defaults") { vm.settings.value.hideLiveWords && !vm.settings.value.blockScreens }
         page = 1
         compose.waitForIdle()
         val v2 = ParityKit.shownIn(compose, PrivacyStep.entries, run)
@@ -266,8 +266,8 @@ class PrivacyPagesParityTest : ScreenTest() {
             "button: Back" to "button: Back",
             "switch: I understand" to "switch: I understand",
             "switch: Block screenshots of EchoLedger" to "switch: Block screenshots of EchoLedger",
-            "radio: Private (black box)" to "radio: Private (black box)",
-            "radio: Show" to "radio: Show",
+            "switch: Hide EchoLedger's live words from screenshots and screen shares" to
+                "switch: Hide EchoLedger's live words from screenshots and screen shares",
             "button: Export or delete my data" to "button: Export or delete my data"
         )
         val first = { m: Map<String, List<PrivacyStep>> -> m.mapValues { it.value.first() } }

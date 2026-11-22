@@ -16,14 +16,14 @@ import kotlinx.coroutines.launch
 
 /**
  * Keeps [ShareGuard] up to date for the floating windows ([PrivateWindows] holds it while each one is open):
- * - Settings → During screen sharing and Block screenshots of EchoLedger, followed on the main thread from the first
- *   window on, so later windows start with the right secure flag;
+ * - Settings › Privacy & data › Hide EchoLedger's live words, followed on the main thread from the first window on, so
+ *   later windows start with the right secure flag;
  * - on Android 15+, while a window is open, the public `addScreenRecordingCallback` (DETECT_SCREEN_RECORDING),
  *   registered for the app's uid from the application context, so it lives while only floating windows are open. Android
  *   reports the uid as recorded only while one of its activities is visible in the recorded display or task, never for
  *   an overlay window alone (AOSP ScreenRecordingCallbackController.uidHasRecordedActivity walks forAllActivities;
- *   measured on the S25, docs/SCREEN_SHARE_MATRIX.md). The windows then shrink to a grey dot in Private, and show again
- *   when it ends. The black box (FLAG_SECURE in Private) is what keeps them out of a share over another app.
+ *   measured on the S25, docs/SCREEN_SHARE_MATRIX.md). The live-words windows then hide their text while the setting is
+ *   on, and show it again when it ends. Their FLAG_SECURE is what keeps them out of a share over another app.
  */
 object ShareWatch {
     private var holders = 0
@@ -55,10 +55,7 @@ object ShareWatch {
         val graph = (context.applicationContext as? EchoLedgerApp)?.graph ?: return
         following = graph.scope.launch(Dispatchers.Main) {
             runCatching {
-                graph.settings.settings.map { it.screenShareMode to it.blockScreens }.distinctUntilChanged().collect { (mode, block) ->
-                    ShareGuard.setMode(ShareGuard.Mode.of(mode))
-                    ShareGuard.setBlock(block)
-                }
+                graph.settings.settings.map { it.hideLiveWords }.distinctUntilChanged().collect { ShareGuard.setHideLive(it) }
             }
         }
     }

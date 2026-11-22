@@ -35,6 +35,7 @@
     <string name="cc_grouped_review">Review</string>
     <string name="cc_quiet_saved">Saved as audio during quiet hours</string>
     <string name="cc_block_screens">Block screenshots of EchoLedger</string>
-    <string name="cc_block_screens_help">Off: you can take screenshots at any time, also while recording. EchoLedger\'s windows still hide when you share your screen.</string>
-    <string name="cc_block_screens_help_old_android">On this Android version, EchoLedger\'s windows hide from screen sharing only while this is on.</string>
+    <string name="cc_block_screens_help">Off: you can take screenshots of the app at any time. On: EchoLedger\'s own screens can\'t be captured.</string>
+    <string name="cc_hide_live_words">Hide EchoLedger\'s live words from screenshots and screen shares</string>
+    <string name="cc_hide_live_words_help">On: captions, Live Assist and Live Translate show as a black box in screenshots, screen recordings and screen shares. The recording pill and the after-call card always show. Off: everything shows.</string>
 </resources>

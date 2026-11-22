@@ -113,8 +113,8 @@ object SettingsIndex {
             "privacy.share",
             "privacy",
             "screen-share",
-            "During screen sharing",
-            "screen share recording cast meeting floating windows private black box show hide dot"
+            "Hide EchoLedger's live words from screenshots and screen shares",
+            "screen share sharing recording cast meeting floating windows captions live assist translate black box private"
         ),
         item("storage.space", "storage", "storage", "Space used", "storage disk space full free up delete"),
         item("storage.kept", "storage", "storage", "How long recordings are kept", "retention deleted bin days"),

@@ -78,11 +78,9 @@ class AppGraph(val context: Context) {
     private val lookRefresh = Dispatchers.Default.limitedParallelism(1)
 
     val settings: SettingsStore by lazy {
-        // Every saved change of During screen sharing and Block screenshots reaches the floating windows and ShareGuard's
-        // memory at once.
+        // Every saved change of Hide EchoLedger's live words reaches the floating windows and ShareGuard's memory at once.
         SettingsStore(context, secretCipher, latestSettings) { saved ->
-            ShareGuard.setMode(ShareGuard.Mode.of(saved.screenShareMode))
-            ShareGuard.setBlock(saved.blockScreens)
+            ShareGuard.setHideLive(saved.hideLiveWords)
             // The capture journal keeps the choices that decide whether a call should be recorded, as they change.
             com.echoledger.mobile.recording.CallJournal.choices(context, com.echoledger.mobile.recording.CallJournal.choicesOf(saved))
             // The app language or text size changed (or this process saves for the first time): what Android draws for

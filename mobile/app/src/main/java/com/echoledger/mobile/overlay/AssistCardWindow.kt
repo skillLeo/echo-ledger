@@ -25,8 +25,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The Live Assist card over other apps while this phone's session runs. It reaches the screen only through
- * [PrivateWindows], so it carries FLAG_SECURE (a black box in a screen share or a screenshot) like the other floating
- * windows unless During screen sharing is Show, and while EchoLedger's text is hidden it is the grey dot. Text only; it never reads another app's screen.
+ * [PrivateWindows], so it carries FLAG_SECURE (a black box in a screen share or a screenshot) while Hide EchoLedger's live
+ * words is on, like the other live-words windows, and while EchoLedger's text is hidden it is the grey dot. Text only; it never reads another app's screen.
  */
 internal object AssistCardWindow {
     private var view: ComposeView? = null

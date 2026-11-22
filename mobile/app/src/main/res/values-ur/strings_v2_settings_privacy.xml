@@ -14,12 +14,6 @@
     <string name="v2_priv_lock_widget_line">پھر ہوم اسکرین ویجیٹ پر صرف ایپ کا نام آتا ہے، جیسے \"WhatsApp call\" یا \"Voice note\"۔ ایپ لاک آن ہو تو کوئی ریکارڈنگ نظر نہیں آتی۔</string>
     <string name="v2_priv_consent_line">ریکارڈنگ کے قوانین ہر ملک میں مختلف ہیں۔ جہاں قانون کہے، میٹنگ کے لوگوں کو بتائیں کہ آپ ریکارڈ کر رہے ہیں۔ ریکارڈنگ کی اطلاع ہمیشہ دکھائی جاتی ہے۔</string>
     <string name="v2_priv_consent_ok">میں سمجھ گیا ہوں</string>
-    <string name="v2_priv_share_line">EchoLedger کی تیرتی کھڑکیاں ریکارڈنگ کے کنٹرول، کیپشنز، کال کے بعد کا کارڈ اور لائیو ترجمہ ہیں۔</string>
-    <string name="v2_priv_share_private">نجی (سیاہ ڈبہ)</string>
-    <string name="v2_priv_share_private_line">اسکرین شاٹ، اسکرین ریکارڈنگ یا اسکرین شیئر میں تیرتی کھڑکیاں ہر Android ورژن پر سیاہ ڈبہ ہوتی ہیں۔ آپ انہیں معمول کے مطابق دیکھتے ہیں، اور ایپ کی اپنی اسکرینز کے اسکرین شاٹس پر اس کا اثر نہیں ہوتا۔</string>
-    <string name="v2_priv_share_show">دکھائیں</string>
-    <string name="v2_priv_share_show_line">دیکھنے والا ہر شخص انہیں پڑھ سکتا ہے۔</string>
-    <string name="v2_priv_share_note">Android ایپس کو نہیں بتاتا کہ تیرتی کھڑکی اسکرین شیئر میں ہے، اس لیے سیاہ ڈبہ ہمیشہ آن رہتا ہے جب تک آپ دکھائیں نہ چنیں۔</string>
     <string name="v2_priv_export">میرا ڈیٹا ایکسپورٹ یا حذف کریں</string>
     <string name="v2_priv_storage_error">سرور کی اسٹوریج لوڈ نہیں ہو سکی۔ کنکشن چیک کریں۔</string>
     <string name="v2_priv_storage_retry">دوبارہ کوشش کریں</string>

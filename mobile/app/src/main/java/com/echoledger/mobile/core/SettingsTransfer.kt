@@ -29,6 +29,7 @@ object SettingsTransfer {
         "autoRecordArmed",
         "widgetHideTitles",
         "screenShareMode",
+        "hideLiveWords",
         // Game and Watch translate (since v1.3): the choices travel; box spots are fractions of the screen.
         "liveTranslate",
         "captionsEnabled",

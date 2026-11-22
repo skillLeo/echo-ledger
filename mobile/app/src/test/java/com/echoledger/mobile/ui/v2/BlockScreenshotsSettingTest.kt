@@ -3,8 +3,6 @@ package com.echoledger.mobile.ui.v2
 import android.content.res.Configuration
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -19,59 +17,83 @@ import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.ui.v2.settings.PrivacyPage
-import com.echoledger.mobile.ui.v2.settings.SCREEN_RECORDING_CALLBACK_SDK
 import com.echoledger.mobile.ui.v2.settings.SettingsTree
+import com.echoledger.mobile.ui.v2.theme.EchoLanguage
+import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import java.io.File
 import java.util.Locale
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Settings › Privacy & data › "Block screenshots of EchoLedger" (the call-choice plan, 2.0.5): off by default, saved and
- * passed to the floating windows at once, with the line for Android 10 to 14 (no screen-recording callback there), and
- * every word of the call choice exactly as docs/v2/copy/call-choice.md has it, in English and Urdu.
+ * Settings › Privacy & data (the owner's decision, 2.0.5): "Block screenshots of EchoLedger" (the app's own screens, off
+ * by default) and "Hide EchoLedger's live words from screenshots and screen shares" (on by default), each saved and
+ * passed on at once, with no During screen sharing and no Android-version line; and every word of the call choice
+ * exactly as docs/v2/copy/call-choice.md has it, in English and Urdu.
  */
 class BlockScreenshotsSettingTest : ScreenTest() {
     private val label = "Block screenshots of EchoLedger"
-    private val help = "Off: you can take screenshots at any time, also while recording. EchoLedger's windows still hide when you " +
-        "share your screen."
-    private val oldAndroid = "On this Android version, EchoLedger's windows hide from screen sharing only while this is on."
-
-    private var sdk by mutableIntStateOf(SCREEN_RECORDING_CALLBACK_SDK)
+    private val help = "Off: you can take screenshots of the app at any time. On: EchoLedger's own screens can't be captured."
+    private val live = "Hide EchoLedger's live words from screenshots and screen shares"
+    private val liveHelp = "On: captions, Live Assist and Live Translate show as a black box in screenshots, screen recordings and " +
+        "screen shares. The recording pill and the after-call card always show. Off: everything shows."
 
     private fun showPage() = show {
         val settings by vm.settings.collectAsState()
-        PrivacyPage(settings, vm::updateSettings, highlight = "privacy.block", onOpenPage = {}, onBack = {}, sdkInt = sdk)
+        PrivacyPage(settings, vm::updateSettings, highlight = "privacy.block", onOpenPage = {}, onBack = {})
     }
 
-    private fun blockSwitch() = compose.onNode(isToggleable() and hasText(label), useUnmergedTree = false)
+    private fun switch(name: String) = compose.onNode(isToggleable() and hasText(name), useUnmergedTree = false)
 
     @Test
-    fun `off by default, with its plain line, and turning it on blocks the windows at once`() {
+    fun `Block screenshots is off by default, with its plain line, and is saved both ways`() {
         showPage()
-        blockSwitch().assertIsOff()
+        switch(label).assertIsOff()
         compose.onNodeWithText(help, useUnmergedTree = true).assertExists()
-        assertFalse(ShareGuard.block.value)
 
-        blockSwitch().performClick()
+        switch(label).performClick()
         pumpUntil("Block screenshots to be saved") { vm.settings.value.blockScreens }
-        pumpUntil("Block screenshots to reach the floating windows") { ShareGuard.block.value }
-        blockSwitch().assertIsOn()
-
-        blockSwitch().performClick()
-        pumpUntil("allowed again") { !vm.settings.value.blockScreens && !ShareGuard.block.value }
+        switch(label).assertIsOn()
+        switch(label).performClick()
+        pumpUntil("allowed again") { !vm.settings.value.blockScreens }
     }
 
     @Test
-    fun `Android 10 to 14 says the windows hide from a share only while it is on, Android 15 and newer do not`() {
+    fun `Hide live words is on by default, with its line, and reaches the floating windows at once`() {
         showPage()
-        listOf(29 to 1, 34 to 1, 35 to 0, 36 to 0).forEach { (version, lines) ->
-            sdk = version
-            compose.waitForIdle()
-            compose.onAllNodesWithText(oldAndroid, useUnmergedTree = true).assertCountEquals(lines)
+        switch(live).assertIsOn()
+        compose.onNodeWithText(liveHelp, useUnmergedTree = true).assertExists()
+        assertTrue(ShareGuard.hideLive.value)
+
+        switch(live).performClick()
+        pumpUntil("saved") { !vm.settings.value.hideLiveWords }
+        pumpUntil("in the floating windows") { !ShareGuard.hideLive.value }
+        switch(live).performClick()
+        pumpUntil("on again") { vm.settings.value.hideLiveWords && ShareGuard.hideLive.value }
+    }
+
+    @Test
+    fun `During screen sharing and its Android-version line are gone`() {
+        showPage()
+        listOf("During screen sharing", "Private (black box)", "On this Android version").forEach {
+            compose.onAllNodesWithText(it, substring = true, useUnmergedTree = true).assertCountEquals(0)
         }
+        compose.onAllNodesWithText("Show", useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun `in Urdu both switches speak the deck's words`() {
+        val ur = V2Testing.resources(EchoLanguage.Urdu)
+        show {
+            EchoV2Theme(language = EchoLanguage.Urdu) {
+                val settings by vm.settings.collectAsState()
+                PrivacyPage(settings, vm::updateSettings, highlight = null, onOpenPage = {}, onBack = {})
+            }
+        }
+        listOf(R.string.cc_block_screens, R.string.cc_block_screens_help, R.string.cc_hide_live_words, R.string.cc_hide_live_words_help)
+            .forEach { id -> compose.onNodeWithText(ur.getString(id), useUnmergedTree = true).assertExists() }
+        assertEquals("EchoLedger کے لائیو الفاظ اسکرین شاٹس اور اسکرین شیئر سے چھپائیں", ur.getString(R.string.cc_hide_live_words))
     }
 
     @Test
@@ -94,7 +116,8 @@ class BlockScreenshotsSettingTest : ScreenTest() {
 
     @Test
     fun `every word of the call choice is the copy deck's, in English and in Urdu`() {
-        val rows = deck()
+        // The desktop's own words (key ending in _desktop) are not the phone's.
+        val rows = deck().filterNot { it.first.endsWith("_desktop") }
         assertTrue("the deck has its rows", rows.size >= 35)
         val en = words("en")
         val ur = words("ur")

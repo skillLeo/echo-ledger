@@ -339,6 +339,29 @@ class SettingsStoreTest : AppTest() {
         assertEquals(true, store.current().blockScreens)
     }
 
+    // ---- 2.0.5, the owner's decision: During screen sharing became Hide EchoLedger's live words --------------------
+
+    @Test
+    fun `Hide live words is on on a new phone`() = runBlocking {
+        assertEquals(true, AppSettings().hideLiveWords)
+        assertEquals(true, store.current().hideLiveWords)
+    }
+
+    @Test
+    fun `each old During screen sharing value becomes the switch, and a later choice stays`() = runBlocking {
+        listOf("show" to false, "hide" to true, "black_box" to true).forEach { (mode, hide) ->
+            plantRaw("settings_json", "$before205,\"screenShareMode\":\"$mode\"}")
+            assertEquals(mode, hide, store.current().hideLiveWords)
+        }
+        plantRaw("settings_json", "$before205}")
+        assertEquals("nothing chosen: on", true, store.current().hideLiveWords)
+
+        plantRaw("settings_json", "$before205,\"screenShareMode\":\"hide\"}")
+        store.update { it.copy(hideLiveWords = false) }
+        store.update { it.copy(micSource = "mic") }
+        assertEquals("written with the next change, so it stays off", false, store.current().hideLiveWords)
+    }
+
     @Test
     fun `settings from before v1_1_1 still have screenshots allowed`() = runBlocking {
         // Then hide content was on by default and was reset once; it never becomes a block.

@@ -124,9 +124,9 @@ object DecisionPopup {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
-                // Hidden, or in a screen share Android reports (since v1.8.1): a grey dot instead of the call's name;
-                // the timeout still runs.
-                if (!ShareGuard.textVisible.collectAsState().value) {
+                // Hidden by the person (Hide EchoLedger windows): a grey dot instead of the call's name; the timeout still
+                // runs. The card itself always shows, in screenshots and screen shares too (2.0.5).
+                if (ShareGuard.hiddenByUser.collectAsState().value) {
                     PrivateDot(onShow = { ShareGuard.setHidden(false) })
                     return@setContent
                 }
@@ -188,8 +188,8 @@ object DecisionPopup {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            // Not focusable and not modal: touches outside the card go to the app underneath. PrivateWindows adds
-            // FLAG_SECURE unless During screen sharing is Show (and Block screenshots of EchoLedger is off).
+            // Not focusable and not modal: touches outside the card go to the app underneath. PrivateWindows never
+            // gives the after-call card FLAG_SECURE: it shows in screenshots and screen shares.
             FloatingWindow.AFTER_CALL_CARD.flags,
             PixelFormat.TRANSLUCENT
         ).apply {

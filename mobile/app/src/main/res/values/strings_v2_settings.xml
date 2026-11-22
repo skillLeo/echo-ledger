@@ -57,7 +57,6 @@
     <string name="v2_set_item_notifications_quiet">Quiet hours</string>
     <string name="v2_set_item_lock_app">App lock</string>
     <string name="v2_set_item_lock_hide">Widget titles</string>
-    <string name="v2_set_item_privacy_share">During screen sharing</string>
     <string name="v2_set_item_storage_space">Space used</string>
     <string name="v2_set_item_storage_kept">How long recordings are kept</string>
     <string name="v2_set_item_plan_usage">Plan &amp; usage</string>

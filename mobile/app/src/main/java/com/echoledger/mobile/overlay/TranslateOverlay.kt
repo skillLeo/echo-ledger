@@ -164,7 +164,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             } else {
                 BoxGeometry.defaultBox(safe, (84 * density).toInt(), (520 * density).toInt())
             }
-        // Every window here opens and changes through PrivateWindows: FLAG_SECURE unless During screen sharing is Show.
+        // Every window here opens and changes through PrivateWindows: FLAG_SECURE while live words are hidden.
         val params = WindowManager.LayoutParams(
             rect.width,
             rect.height,

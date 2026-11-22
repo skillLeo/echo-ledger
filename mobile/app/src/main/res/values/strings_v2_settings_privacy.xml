@@ -14,12 +14,6 @@
     <string name="v2_priv_lock_widget_line">The home-screen widget then says \"WhatsApp call\" or \"Voice note\". With App lock on it shows no recordings.</string>
     <string name="v2_priv_consent_line">Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it. A recording notification is always shown.</string>
     <string name="v2_priv_consent_ok">I understand</string>
-    <string name="v2_priv_share_line">EchoLedger\'s floating windows are the recording controls, captions, the after-call card and Live Translate.</string>
-    <string name="v2_priv_share_private">Private (black box)</string>
-    <string name="v2_priv_share_private_line">In a screenshot, screen recording or screen share the floating windows are a black box, on every Android version. You see them as usual, and screenshots of the app\'s own screens are not affected.</string>
-    <string name="v2_priv_share_show">Show</string>
-    <string name="v2_priv_share_show_line">Everyone watching can read them.</string>
-    <string name="v2_priv_share_note">Android doesn\'t tell apps when a floating window is in a screen share, so the black box is always on unless you choose Show.</string>
     <string name="v2_priv_export">Export or delete my data</string>
     <string name="v2_priv_storage_error">Couldn\'t load the server\'s storage. Check the connection.</string>
     <string name="v2_priv_storage_retry">Retry</string>

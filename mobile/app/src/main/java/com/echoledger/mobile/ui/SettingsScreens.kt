@@ -98,7 +98,6 @@ import com.echoledger.mobile.core.SettingsCatalogue
 import com.echoledger.mobile.core.SettingsEntry
 import com.echoledger.mobile.core.SettingsGroup
 import com.echoledger.mobile.core.SettingsIndex
-import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.dictation.DictationHistory
@@ -868,81 +867,35 @@ private fun ConsentCard(vm: MainViewModel, settings: AppSettings) {
 }
 
 /**
- * Settings → Privacy & data → During screen sharing (since v1.8.1; names from docs/DESIGN_SYSTEM.md "Screen-share
- * privacy names"): Private (black box), the default, stored as "hide" (the v1.8.1 "black_box" reads as Private too), or
- * Show. Android never says when a floating window is in a screen share, so the black box does not wait for a signal.
- * Then Block screenshots of EchoLedger (since 2.0.5, off by default).
+ * Settings → Privacy & data (since 2.0.5, the owner's decision; words from docs/v2/copy/call-choice.md): Block
+ * screenshots of EchoLedger (the app's own screens, off by default) and Hide EchoLedger's live words from screenshots and
+ * screen shares (captions, Live Assist and Live Translate, on by default; the pill and the after-call card always show).
+ * They replace During screen sharing.
  */
 @Composable
 private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
-    val choices = listOf(
-        Triple(
-            ShareGuard.Mode.PRIVATE,
-            "Private (black box)",
-            "In a screenshot, screen recording or screen share the floating windows are a black box, on every Android " +
-                "version. You see them as usual, and screenshots of the app's own screens are not affected."
-        ),
-        Triple(ShareGuard.Mode.SHOW, "Show", "Everyone watching can read them.")
-    )
-    SectionCard {
-        Text("During screen sharing", fontWeight = FontWeight.SemiBold)
-        Text(
-            "EchoLedger's floating windows are the recording controls, captions, the after-call card and Live Translate.",
-            color = Brand.Muted,
-            fontSize = 13.sp
-        )
-        val current = ShareGuard.Mode.of(settings.screenShareMode)
-        Column(Modifier.selectableGroup()) {
-            choices.forEach { (mode, title, line) ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .selectable(
-                            selected = current == mode,
-                            role = Role.RadioButton,
-                            onClick = { vm.updateSettings { it.copy(screenShareMode = mode.wire) } }
-                        )
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = current == mode, onClick = null)
-                    Column(Modifier.padding(start = 8.dp)) {
-                        Text(title)
-                        Text(line, color = Brand.Muted, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-        Text(
-            "Android doesn't tell apps when a floating window is in a screen share, so the black box is always on unless " +
-                "you choose Show.",
-            color = Brand.Muted,
-            fontSize = 12.sp
-        )
-    }
-    // Since 2.0.5 (the call-choice plan): screenshots of the app are allowed unless the person blocks them here.
+    ScreenSwitch(
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_block_screens),
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_block_screens_help),
+        settings.blockScreens
+    ) { v -> vm.updateSettings { it.copy(blockScreens = v) } }
+    ScreenSwitch(
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_hide_live_words),
+        androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_hide_live_words_help),
+        settings.hideLiveWords
+    ) { v -> vm.updateSettings { it.copy(hideLiveWords = v) } }
+}
+
+/** One switch of Privacy & data with its words and line; TalkBack reads the words. */
+@Composable
+private fun ScreenSwitch(title: String, line: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     SectionCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Block screenshots of EchoLedger")
-                Text(
-                    "Off: you can take screenshots at any time, also while recording. EchoLedger's windows still hide when you " +
-                        "share your screen.",
-                    color = Brand.Muted,
-                    fontSize = 12.sp
-                )
-                if (android.os.Build.VERSION.SDK_INT < 35) {
-                    Text(
-                        "On this Android version, EchoLedger's windows hide from screen sharing only while this is on.",
-                        color = Brand.Muted,
-                        fontSize = 12.sp
-                    )
-                }
+                Text(title)
+                Text(line, color = Brand.Muted, fontSize = 12.sp)
             }
-            Switch(
-                checked = settings.blockScreens,
-                onCheckedChange = { v -> vm.updateSettings { it.copy(blockScreens = v) } },
-                modifier = Modifier.semantics { contentDescription = "Block screenshots of EchoLedger" }
-            )
+            Switch(checked = checked, onCheckedChange = onChange, modifier = Modifier.semantics { contentDescription = title })
         }
     }
 }

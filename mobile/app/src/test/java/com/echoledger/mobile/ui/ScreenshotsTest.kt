@@ -381,8 +381,8 @@ class ScreenshotsTest : ScreenTest() {
     }
 
     /**
-     * Settings → Privacy & data, with Block screenshots of EchoLedger (off by default, since 2.0.5) and During screen
-     * sharing: Private or Show (since v1.8.1).
+     * Settings → Privacy & data, with Block screenshots of EchoLedger (off by default) and Hide EchoLedger's live words
+     * (on by default; both since 2.0.5).
      */
     @Test
     fun settingsPrivacy() {
@@ -390,7 +390,7 @@ class ScreenshotsTest : ScreenTest() {
         shoot { SettingsScreen(vm, onSetup = {}) }
         compose.onNodeWithText("Privacy & data").performScrollTo().performClick()
         compose.onNodeWithText("Block screenshots of EchoLedger").assertExists()
-        compose.onNodeWithText("Private (black box)").assertExists()
+        compose.onNodeWithText("Hide EchoLedger's live words from screenshots and screen shares").assertExists()
         capture("settings-privacy")
     }
 

@@ -35,6 +35,7 @@
     <string name="cc_grouped_review">دیکھیں</string>
     <string name="cc_quiet_saved">خاموش اوقات میں آڈیو محفوظ ہوئی</string>
     <string name="cc_block_screens">EchoLedger کے اسکرین شاٹس روکیں</string>
-    <string name="cc_block_screens_help">بند: آپ کسی بھی وقت اسکرین شاٹ لے سکتے ہیں، ریکارڈنگ کے دوران بھی۔ اسکرین شیئر کرتے وقت EchoLedger کی ونڈوز پھر بھی چھپ جاتی ہیں۔</string>
-    <string name="cc_block_screens_help_old_android">اس اینڈرائیڈ ورژن پر EchoLedger کی ونڈوز اسکرین شیئر سے صرف تب چھپتی ہیں جب یہ آن ہو۔</string>
+    <string name="cc_block_screens_help">بند: آپ ایپ کے اسکرین شاٹس کسی بھی وقت لے سکتے ہیں۔ آن: EchoLedger کی اپنی اسکرینز کیپچر نہیں ہو سکتیں۔</string>
+    <string name="cc_hide_live_words">EchoLedger کے لائیو الفاظ اسکرین شاٹس اور اسکرین شیئر سے چھپائیں</string>
+    <string name="cc_hide_live_words_help">آن: کیپشنز، لائیو اسسٹ اور لائیو ترجمہ اسکرین شاٹس، اسکرین ریکارڈنگ اور اسکرین شیئر میں کالا ڈبہ دکھتے ہیں۔ ریکارڈنگ پِل اور کال کے بعد کا کارڈ ہمیشہ دکھتے ہیں۔ بند: سب کچھ دکھتا ہے۔</string>
 </resources>

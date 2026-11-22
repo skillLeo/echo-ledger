@@ -44,8 +44,8 @@ object SettingsCatalogue {
         SettingsEntry(
             "screen-share",
             SettingsGroup.General,
-            "During screen sharing",
-            "screen share sharing recording cast meeting floating windows private black box show hide dot"
+            "Screenshots and screen sharing",
+            "screenshot screenshots block screen share sharing recording cast meeting floating windows live words black box"
         ),
         SettingsEntry("devices", SettingsGroup.General, "Devices", "revoke paired activity audit security"),
         SettingsEntry("storage", SettingsGroup.General, "Storage and retention", "storage disk space retention deleted bin days"),
@@ -137,7 +137,7 @@ object SettingsReset {
                 lockAfterMs = d.lockAfterMs,
                 secureScreen = d.secureScreen,
                 widgetHideTitles = d.widgetHideTitles,
-                screenShareMode = d.screenShareMode
+                hideLiveWords = d.hideLiveWords
             )
 
             "language" -> s.copy(transcriptionLanguage = d.transcriptionLanguage)
@@ -170,7 +170,7 @@ object SettingsReset {
                 secureScreen = d.secureScreen,
                 blockScreens = d.blockScreens,
                 widgetHideTitles = d.widgetHideTitles,
-                screenShareMode = d.screenShareMode,
+                hideLiveWords = d.hideLiveWords,
                 activityNotifications = d.activityNotifications,
                 quietHours = d.quietHours,
                 quietFrom = d.quietFrom,
