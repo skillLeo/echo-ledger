@@ -1,16 +1,14 @@
 // The top of the Library when Library is where the app starts (PLAN_V2_PARITY 2: Home is removed as a tab): the
-// get-started checklist as a card that can be hidden, until setup is done, and what needs action as one quiet banner.
-// The same rules as Home's (home/HomeV2.tsx checklist and needsAction), from the same data. The banner's × hides it
-// until the situation changes: a count goes up or a new kind of notice appears; fewer things to fix keeps it hidden.
-// While it is hidden and something still needs action, NeedsButton keeps it in the Library's header, before Trash.
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+// get-started checklist as a card that can be hidden, until setup is done. What needs action lives in one place, the
+// quiet button in the Library's header (NeedsButton, before Trash), from the same rules as Home's (home/HomeV2.tsx
+// needsAction): it shows whenever something needs action and goes when nothing does.
+import { useEffect, useState } from "react";
 import { api, type AppStatus, type LibraryItem, type SkippedItem } from "../../lib/ipc";
 import { useReadyReport } from "../../views/main/ReadyCheck";
 import { accessOf, usePermissions } from "../../views/main/Permissions";
-import { useAccount } from "../../views/main/AccountSettings";
 import { permissionKinds } from "../setup/SetupHealth";
 import { checklist, needsAction, NEEDS_ICONS, type ChecklistItem, type NeedsAction } from "../home/HomeV2";
-import { Banner, Button, Card, Icon, Icons } from "../components";
+import { Button, Card, Icon, Icons } from "../components";
 import { Menu } from "../components/Menu";
 import { isUntranscribed } from "./model";
 
@@ -23,38 +21,93 @@ const readHidden = () => {
   }
 };
 
-/** What the needs-action banner said when it was dismissed: each kind and its count. */
-export type DismissedSignature = Partial<Record<NeedsAction["id"], number>>;
-const DISMISSED_KEY = "echoledger-library-needs-action-dismissed";
-/** One key per account (server and email: the core gives no account id), so another account starts with the banner. */
-export const dismissedKey = (serverUrl: string | null | undefined, email: string) =>
-  `${DISMISSED_KEY}:${serverUrl ?? ""}:${email.trim().toLowerCase()}`;
-const readDismissed = (key: string): DismissedSignature | null => {
+/**
+ * Where the Library's needs-action banner, now gone, kept what its × dismissed: one key per account under this prefix.
+ * Nothing reads it any more; it is cleared once so an old dismissal can never hide anything.
+ */
+export const DISMISSED_PREFIX = "echoledger-library-needs-action-dismissed";
+export function forgetDismissed(): void {
   try {
-    const raw = window.localStorage.getItem(key);
-    const value: unknown = raw ? JSON.parse(raw) : null;
-    return value && typeof value === "object" && !Array.isArray(value) ? (value as DismissedSignature) : null;
+    const store = window.localStorage;
+    const stale: string[] = [];
+    for (let i = 0; i < store.length; i++) {
+      const key = store.key(i);
+      if (key?.startsWith(DISMISSED_PREFIX)) stale.push(key);
+    }
+    stale.forEach((key) => store.removeItem(key));
   } catch {
-    return null;
+    // Storage can be unavailable: then there is nothing stored to clear.
   }
-};
-const writeDismissed = (key: string | null, signature: DismissedSignature | null) => {
-  if (!key) return;
-  try {
-    if (signature) window.localStorage.setItem(key, JSON.stringify(signature));
-    else window.localStorage.removeItem(key);
-  } catch {
-    // Storage can be unavailable: dismissed until the window closes.
-  }
-};
-const signatureOf = (actions: readonly NeedsAction[]): DismissedSignature =>
-  Object.fromEntries(actions.map((a) => [a.id, a.count]));
-/** Still dismissed while every kind shown was in the dismissed banner and has not gone up since. */
-export function stillDismissed(dismissed: DismissedSignature | null, actions: readonly NeedsAction[]): boolean {
-  return dismissed !== null && actions.every((a) => {
-    const then = dismissed[a.id];
-    return typeof then === "number" && a.count <= then;
+}
+
+/** What the queue under the header already shows with its own Review (waiting calls, uploads that need you). */
+export type QueueCovers = { waiting: boolean; failed: boolean };
+
+/** How long a change that only one side has reported waits for the other (see useHeldCount). */
+export const HOLD_MS = 1000;
+
+/**
+ * A count the header shows (the waiting calls, the uploads that didn't go up): the status's, unless the queue shows
+ * them with its own Review (`covered`). The core reports such a change twice, one after the other: in its status and
+ * in the queue's list (`list`, a new list each time it says anything: the waiting calls, or the uploads). A change only
+ * one of them has reported is held until the other reports too, or HOLD_MS, whichever is first, so the button never
+ * shows "1 waiting" or "1 didn't upload" for the moment between them (and the header's actions don't fold and unfold
+ * for it).
+ */
+function useHeldCount(status: number, list: unknown, covered: boolean | null): number {
+  const now = covered ? 0 : status;
+  const ready = covered !== null;
+  const [held, setHeld] = useState({ shown: now, status, list, ready });
+  const statusMoved = status !== held.status;
+  const listMoved = list !== held.list;
+  // What they say now: before the queue has answered (and as it does), when the count shown stays as it is (a list that
+  // changed for something else, a status that moved for what the queue shows: taken as the new point to compare with),
+  // and when both have moved since (or neither). Else one side has moved the count alone: held for the other.
+  const settled = !ready || !held.ready || now === held.shown || statusMoved === listMoved;
+  useEffect(() => {
+    const next = { shown: now, status, list, ready };
+    if (settled) {
+      if (held.shown !== now || statusMoved || listMoved || held.ready !== ready) setHeld(next);
+      return;
+    }
+    const timer = window.setTimeout(() => setHeld(next), HOLD_MS);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settled, now, status, list, ready]);
+  return settled ? now : held.shown;
+}
+
+/**
+ * What needs action in the Library, for the header's button: null while the counts load (they read 0 until the
+ * recordings, the skipped calls and the queue's lists are in, so the button never shows a count it then corrects), and
+ * when nothing does. What the queue shows with its own Review (`covered`, null until its lists have answered) is left
+ * out, so there is one Review for each thing; a waiting call or a failed upload only the status or only the queue's
+ * lists (`lists`) have reported yet is held for the other (useHeldCount). Without a status (the Library is not the
+ * start screen) there is no button.
+ */
+export function useLibraryNeeds(status: AppStatus | null, items: readonly LibraryItem[] | null, covered: QueueCovers | null,
+  lists: { waiting?: unknown; uploads?: unknown } = {}): readonly NeedsAction[] | null {
+  const [skipped, setSkipped] = useState<SkippedItem[] | null>(null);
+  const waiting = useHeldCount(status?.pendingDecisions ?? 0, lists.waiting, covered ? covered.waiting : null);
+  const failed = useHeldCount(status?.failedUploads ?? 0, lists.uploads, covered ? covered.failed : null);
+  const on = status !== null;
+  useEffect(() => {
+    if (!on) return;
+    forgetDismissed();
+    let live = true;
+    api.skippedList().then((s) => live && setSkipped(Array.isArray(s) ? s : []), () => live && setSkipped([]));
+    return () => {
+      live = false;
+    };
+  }, [on]);
+  if (!status || items === null || skipped === null || covered === null) return null;
+  const actions = needsAction({
+    failed,
+    waiting,
+    untranscribed: items.filter((i) => !i.deleted && isUntranscribed(i)).length,
+    missed: skipped.length,
   });
+  return actions.length > 0 ? actions : null;
 }
 
 export type LibraryTopProps = {
@@ -63,69 +116,17 @@ export type LibraryTopProps = {
   onSetup: () => void;
   onReadyCheck: () => void;
   onRecord?: () => void;
-  onAction: (id: NeedsAction["id"]) => void;
-  /** What the queue under it already shows with its own Review (waiting calls, uploads that need you): left out here. */
-  covered?: { waiting: boolean; failed: boolean };
-  /** What still needs action while the banner is dismissed (null otherwise, and once this is gone): the header's button. */
-  onQuiet?: (actions: readonly NeedsAction[] | null) => void;
 };
 
-export function LibraryTop({ status, items, onSetup, onReadyCheck, onRecord, onAction, covered, onQuiet }: LibraryTopProps) {
+export function LibraryTop({ status, items, onSetup, onReadyCheck, onRecord }: LibraryTopProps) {
   const [report] = useReadyReport();
   const [permissions] = usePermissions();
-  const [skipped, setSkipped] = useState<SkippedItem[] | null>(null);
   const [hidden, setHidden] = useState(readHidden);
-  // The account is needed for the key; without one (an older core) a dismissal lasts until the window closes.
-  const [account] = useAccount();
-  const storeKey = account?.email ? dismissedKey(status.serverUrl, account.email) : null;
-  const stored = useMemo(() => (storeKey ? readDismissed(storeKey) : null), [storeKey]);
-  const [memory, setMemory] = useState<{ key: string | null; value: DismissedSignature | null } | null>(null);
-  const dismissed = memory && memory.key === storeKey ? memory.value : stored;
-  const setDismissed = (value: DismissedSignature | null) => {
-    setMemory({ key: storeKey, value });
-    writeDismissed(storeKey, value);
-  };
-  useEffect(() => {
-    api.skippedList().then((s) => setSkipped(Array.isArray(s) ? s : []), () => setSkipped([]));
-  }, []);
   const live = (items ?? []).filter((i) => !i.deleted);
   const kinds = permissionKinds(status.platform);
   const permissionsOk = permissions ? kinds.every((k) => accessOf(permissions, k) === "allowed") : null;
   const known = permissions !== null && (report !== null || status.callsReady != null) && items !== null;
   const steps = known && !hidden ? checklist({ permissionsOk, ready: report?.ready ?? status.callsReady ?? null, recordings: live.length }) : null;
-  const counts = {
-    failed: status.failedUploads,
-    waiting: status.pendingDecisions,
-    untranscribed: live.filter(isUntranscribed).length,
-    missed: skipped?.length ?? 0,
-  };
-  const actions = needsAction({
-    ...counts,
-    failed: covered?.failed ? 0 : counts.failed,
-    waiting: covered?.waiting ? 0 : counts.waiting,
-  });
-  // What a dismissal remembers: every kind and count, also the ones the queue shows for now (it reports that only once
-  // it has loaded, so they can be in the banner for a moment after a restart).
-  const all = signatureOf(needsAction(counts));
-  // Counts read 0 until the recordings and skipped calls load: only settled counts move what was dismissed.
-  const settled = items !== null && skipped !== null && account !== undefined;
-  const quiet = stillDismissed(dismissed, actions);
-  const key = JSON.stringify([all, actions.map((a) => a.id)]);
-  useEffect(() => {
-    if (!settled || dismissed === null) return;
-    // Went up or a new kind: show again. Went down: stay dismissed, from the lower counts, so a later rise shows.
-    const lower = Object.fromEntries(Object.entries(all).flatMap(([id, n]) => {
-      const then = dismissed[id as NeedsAction["id"]];
-      return typeof then === "number" ? [[id, Math.min(then, n ?? 0)]] : [];
-    })) as DismissedSignature;
-    const next = quiet && Object.keys(lower).length > 0 ? lower : null;
-    if (JSON.stringify(next) === JSON.stringify(dismissed)) return;
-    setDismissed(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settled, quiet, key, storeKey]);
-  const dismiss = () => {
-    setDismissed(all);
-  };
   const run = (id: ChecklistItem["id"]) => (id === "permissions" ? onSetup() : id === "ready" ? onReadyCheck() : onRecord?.());
   const hide = () => {
     setHidden(true);
@@ -135,49 +136,27 @@ export function LibraryTop({ status, items, onSetup, onReadyCheck, onRecord, onA
       // Storage can be unavailable: hidden until the window closes.
     }
   };
-  // Until the account is known the banner waits, so a dismissed one never flashes.
-  const banner = actions.length > 0 && !quiet && account !== undefined;
-  // Dismissed with something left: the header's button, from settled counts only. Reported before the paint, so the
-  // banner and the button are never on screen together.
-  const kept = settled && actions.length > 0 && quiet ? actions : null;
-  const keptKey = JSON.stringify(kept);
-  useLayoutEffect(() => {
-    onQuiet?.(kept);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [keptKey]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useLayoutEffect(() => () => onQuiet?.(null), []);
-  if (!steps && !banner) return null;
+  if (!steps) return null;
   return (
     <div className="el-library-top">
-      {steps && (
-        <Card className="el-library-setup" label="Get started">
-          <div className="el-group__head">
-            <h2 className="el-body-strong">Get started</h2>
-            <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Hide Get started" onClick={hide} />
-          </div>
-          <ol className="el-steps" aria-label="Get started">
-            {steps.map((item, i) => (
-              <li key={item.id} className={`el-step${item.done ? " el-step--done" : ""}`}>
-                <span className="el-step__number" aria-hidden="true">{item.done ? <Icon icon={Icons.CheckIcon} /> : i + 1}</span>
-                <div className="el-step__main el-home-check">
-                  <span className="el-step__title">{item.title}</span>
-                  <span className="el-caption">{item.done ? "Done" : "To do"}</span>
-                </div>
-                {!item.done && <Button size="sm" onClick={() => run(item.id)}>{item.action}</Button>}
-              </li>
-            ))}
-          </ol>
-        </Card>
-      )}
-      {banner && (
-        <Banner icon={Icons.InfoIcon} testId="needs-action" onClose={dismiss} closeLabel="Dismiss"
-          action={actions.length === 1 ? <Button size="sm" onClick={() => onAction(actions[0].id)}>Review</Button>
-            : <Menu label="Needs action" button={{ size: "sm", text: "Review", iconEnd: Icons.ChevronDownIcon }}
-              items={actions.map((a) => ({ label: a.title, onPick: () => onAction(a.id) }))} />}>
-          {actions.length === 1 ? actions[0].title : `${actions[0].title} · ${actions.length - 1} more need${actions.length === 2 ? "s" : ""} you`}
-        </Banner>
-      )}
+      <Card className="el-library-setup" label="Get started">
+        <div className="el-group__head">
+          <h2 className="el-body-strong">Get started</h2>
+          <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Hide Get started" onClick={hide} />
+        </div>
+        <ol className="el-steps" aria-label="Get started">
+          {steps.map((item, i) => (
+            <li key={item.id} className={`el-step${item.done ? " el-step--done" : ""}`}>
+              <span className="el-step__number" aria-hidden="true">{item.done ? <Icon icon={Icons.CheckIcon} /> : i + 1}</span>
+              <div className="el-step__main el-home-check">
+                <span className="el-step__title">{item.title}</span>
+                <span className="el-caption">{item.done ? "Done" : "To do"}</span>
+              </div>
+              {!item.done && <Button size="sm" onClick={() => run(item.id)}>{item.action}</Button>}
+            </li>
+          ))}
+        </ol>
+      </Card>
     </div>
   );
 }
@@ -198,10 +177,16 @@ export function needsLabel(actions: readonly NeedsAction[]): { count: number; wo
   return { count, words: count === 1 ? "needs you" : "need you" };
 }
 
+/** The small attention dot (the accent, as the sidebar's counts that need you) where the button's icon would be. */
+function AttentionDot({ className }: { className?: string }) {
+  return <span className={["el-attention-dot", className].filter(Boolean).join(" ")} />;
+}
+
 /**
- * What still needs action once the banner is dismissed, as one quiet button in the Library's header: one kind opens
- * what Review opens ("5 not transcribed"); several open a menu of them ("7 need you"). It always keeps its words: where
- * the header runs out of room, its least-used actions fold into More instead (headerFold.ts).
+ * What needs action in the Library, as one quiet button in its header, the only place the Library says it: one kind
+ * opens what Review opens ("5 not transcribed"); several open a menu of them ("7 need you"). A small attention dot
+ * leads it. It always keeps its words: where the header runs out of room, its least-used actions fold into More
+ * instead (headerFold.ts).
  */
 export function NeedsButton({ actions, onAction }: { actions: readonly NeedsAction[]; onAction: (id: NeedsAction["id"]) => void }) {
   const { count, words } = needsLabel(actions);
@@ -209,10 +194,10 @@ export function NeedsButton({ actions, onAction }: { actions: readonly NeedsActi
   const label = <span dir="auto">{count} {words}</span>;
   if (actions.length === 1) {
     const [a] = actions;
-    return <Button variant="quiet" icon={NEEDS_ICONS[a.id]} title={a.title} onClick={() => onAction(a.id)}>{label}</Button>;
+    return <Button variant="quiet" className="el-needs" icon={AttentionDot} title={a.title} onClick={() => onAction(a.id)}>{label}</Button>;
   }
   return (
-    <Menu label="Needs action" button={{ variant: "quiet", icon: Icons.InfoIcon, iconEnd: Icons.ChevronDownIcon, text: label, title: actions.map((a) => a.title).join(" · ") }}
+    <Menu label="Needs action" button={{ variant: "quiet", className: "el-needs", icon: AttentionDot, iconEnd: Icons.ChevronDownIcon, text: label, title: actions.map((a) => a.title).join(" · ") }}
       items={actions.map((a) => ({ label: a.title, icon: NEEDS_ICONS[a.id], onPick: () => onAction(a.id) }))} />
   );
 }

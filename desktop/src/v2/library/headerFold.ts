@@ -51,22 +51,26 @@ export function foldCount({ room, beside, gap, base, needs, more }: HeaderRoom):
 const px = (value: string) => parseFloat(value) || 0;
 
 /**
- * Which of `shown` (the foldable actions the header has now) fold into More. `keys` names the header's actions in the
- * order they are drawn, as the last render drew them ("needs", "trash", "more", …); every action's width is kept from
- * when it was last drawn, so a folded one still counts at its own width. Off (nothing folds) without the needs button.
- * Measured before the paint, and again when the header's width changes.
+ * Which of `shown` (the foldable actions the header has now) fold into More. `head` is the header element as it is now
+ * (from a callback ref: null while it is away, a recording open), so a header drawn again is measured again, and its
+ * width watched. `keys` names the header's actions in the order they are drawn, as the last render drew them ("needs",
+ * "trash", "more", …); every action's width is kept from when it was last drawn, so a folded one still counts at its
+ * own width. Off (nothing folds) without the needs button. Measured before the paint, and again when the header's
+ * width changes.
  */
-export function useHeaderFold(head: RefObject<HTMLElement | null>, keys: RefObject<readonly string[]>, shown: readonly Foldable[], on: boolean, watch = ""): ReadonlySet<Foldable> {
+export function useHeaderFold(head: HTMLElement | null, keys: RefObject<readonly string[]>, shown: readonly Foldable[], on: boolean, watch = ""): ReadonlySet<Foldable> {
   const [count, setCount] = useState(0);
   const widths = useRef(new Map<string, number>());
   const present = FOLD_ORDER.filter((key) => shown.includes(key));
   const presentKey = present.join();
   useLayoutEffect(() => {
-    const el = head.current;
-    if (!on || !el) {
+    const el = head;
+    if (!on) {
       setCount(0);
       return;
     }
+    // Away (a recording open): what folded stays, and the header is measured again when it is back.
+    if (!el) return;
     const fit = () => {
       const actions = el.querySelector<HTMLElement>(":scope > .el-page__actions");
       const titles = el.querySelector<HTMLElement>(":scope > .el-page__titles");
@@ -112,6 +116,6 @@ export function useHeaderFold(head: RefObject<HTMLElement | null>, keys: RefObje
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [on, presentKey, count, watch]);
+  }, [on, head, presentKey, count, watch]);
   return new Set(on ? present.slice(0, count) : []);
 }

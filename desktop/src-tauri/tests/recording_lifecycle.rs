@@ -440,6 +440,43 @@ fn changing_the_language_chip_before_keep_changes_the_final_transcript_language(
     assert_eq!(files.load().find("m").unwrap().to_upload().language, None, "Auto: the server decides");
 }
 
+/// The status's count of waiting calls (`waiting()`: the tray, the sidebar's Waiting, the Library header) and the
+/// queue's list (`ui_items` without a `deadline_at`: what the Library's waiting line lists) agree in every state an
+/// after-call card's call goes through, so the header never says "1 waiting" for a call its view does not list.
+#[test]
+fn the_waiting_count_and_the_waiting_list_agree_through_a_card() {
+    use desktop_lib::after_call::CallChoice;
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let listed = |files: &DecisionFiles| files.load().ui_items().iter().filter(|i| i.deadline_at.is_none()).count();
+    let agree = |files: &DecisionFiles, waiting: usize, what: &str| {
+        let store = files.load();
+        assert_eq!(store.waiting(), waiting, "{what}: the count");
+        assert_eq!(listed(files), waiting, "{what}: the list");
+    };
+    let now = Utc::now();
+    let card = now + chrono::Duration::seconds(pending::CHIP_SECONDS);
+
+    // The card counts down (8 s): neither counts it.
+    files.add(decision(root.path(), "c", None, now).keeping_at(card)).unwrap();
+    agree(&files, 0, "while the card counts down");
+    // Its time is over with no choice: saved as audio only after the confirmation; still not waiting.
+    assert!(files.time_out_card("c", card, card + chrono::Duration::seconds(5)).unwrap());
+    agree(&files, 0, "saved as audio after the card");
+    // Undo on that confirmation: the card asks again, counting down; not waiting.
+    files.ask_again("c", card + chrono::Duration::seconds(8)).unwrap();
+    agree(&files, 0, "the card asking again");
+    // Opened in the main window: no card keeps it now, it waits; both count it.
+    files.stop_countdown("c").unwrap();
+    agree(&files, 1, "opened: it waits for the person");
+    // Chosen on the waiting list (Transcribe, applied after its Undo time): neither counts it.
+    files.choose("c", CallChoice::Transcribe, now + chrono::Duration::seconds(5)).unwrap();
+    agree(&files, 0, "chosen");
+    // A call with no card at all (Ask me in quiet hours, or no window): both count it.
+    files.add(decision(root.path(), "q", None, now)).unwrap();
+    agree(&files, 1, "a call with no card");
+}
+
 #[test]
 fn waiting_recordings_survive_a_restart() {
     let root = tempfile::tempdir().unwrap();

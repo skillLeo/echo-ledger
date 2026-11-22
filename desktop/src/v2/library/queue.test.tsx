@@ -8,6 +8,7 @@ import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } 
 import { makeItem, makePendingItem, makeStatus, makeUploadItem } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
 import { LibraryV2 } from "./LibraryV2";
+import { libraryPlaces } from "../../lib/folders";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -262,7 +263,7 @@ describe("one Review for each thing at the top of the v2 Library (classic's Libr
     respond("skipped_list", []);
   });
 
-  it("while the queue shows the waiting calls and the uploads that need you, the banner above leaves them out", async () => {
+  it("while the queue shows the waiting calls and the uploads that need you, the header's needs button leaves them out", async () => {
     const items = [makeItem("a", { title: "Zoom with Acme" }), makeItem("u", { title: "Ali", status: "uploaded", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } })];
     respond("library_list", items);
     respond("library_refresh", items);
@@ -273,17 +274,18 @@ describe("one Review for each thing at the top of the v2 Library (classic's Libr
     await act(flushAsync);
     expect(screen.getByTestId("waiting-line")).toHaveTextContent("2 calls waiting");
     expect(screen.getByRole("heading", { name: "Uploads that need you · 1" })).toBeInTheDocument();
-    // The banner keeps only what the queue doesn't show; there is one Review button, the queue's.
-    const banner = screen.getByTestId("needs-action");
-    expect(banner).toHaveTextContent("1 recording isn't transcribed");
-    expect(banner).not.toHaveTextContent(/wait for your decision|didn't upload/);
-    expect(within(banner).queryByRole("button", { name: /^Review/ })).not.toBeNull();
-    expect(screen.getAllByRole("button", { name: /^Review/ })).toHaveLength(2);
-    fireEvent.click(within(banner).getByRole("button", { name: /^Review/ }));
+    // The button keeps only what the queue doesn't show; there is one Review button, the queue's, and no banner.
+    expect(screen.queryByTestId("needs-action")).toBeNull();
+    const head = document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
+    const needs = within(head).getByRole("button", { name: "1 not transcribed" });
+    expect(needs).toHaveAttribute("title", "1 recording isn't transcribed");
+    expect(within(head).queryByRole("button", { name: /waiting|didn't upload|need you/ })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Review/ })).toHaveLength(1);
+    fireEvent.click(needs);
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("with nothing in the queue, the banner still says what waits (the status counts it)", async () => {
+  it("with nothing in the queue, the header's needs button still says what waits (the status counts it)", async () => {
     respond("library_list", [makeItem("a", { title: "Zoom with Acme" })]);
     respond("library_refresh", [makeItem("a", { title: "Zoom with Acme" })]);
     respond("bin_list", { data: [] });
@@ -292,9 +294,10 @@ describe("one Review for each thing at the top of the v2 Library (classic's Libr
     render(<LibraryV2 top={top()} />);
     await act(flushAsync);
     expect(screen.queryByTestId("library-queue")).toBeNull();
-    expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording didn't upload · 1 more needs you");
-    fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Review" }));
-    expect(screen.getByRole("menuitem", { name: "2 calls wait for your decision" })).toBeInTheDocument();
+    expect(screen.queryByTestId("needs-action")).toBeNull();
+    const head = document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
+    fireEvent.click(within(head).getByRole("button", { name: "3 need you" }));
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["1 recording didn't upload", "2 calls wait for your decision"]);
   });
 
   it("Activity's Review opens the list once: Trash and back leaves it as the person left it", async () => {
@@ -326,5 +329,57 @@ describe("one Review for each thing at the top of the v2 Library (classic's Libr
     await act(() => emitEvent("pending:changed", [makePendingItem("p2")]));
     expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
     expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
+  });
+});
+
+describe("the Waiting place lists what it counts", () => {
+  // The sidebar's Waiting counts the server's waiting recordings and the calls waiting on this computer (MainApp gives
+  // libraryPlaces the status's pendingDecisions); its view lists both: the recordings, and the queue's calls, opened.
+  const waitingCount = (local: number, server = 0) =>
+    libraryPlaces({ views: { waiting: server } }, { total: 1, waiting: local, failed: 0, pinned: 0 }, null).find((p) => p.key === "waiting")!.count;
+  const open = async (pending: PendingItem[], items = [makeItem("a", { title: "Zoom with Acme" })]) => {
+    respond("library_list", items);
+    respond("library_refresh", items);
+    respond("bin_list", { data: [] });
+    respond("pending_list", pending);
+    respond("upload_list", []);
+    respond("list_clients", CLIENTS);
+    render(<LibraryV2 viewRequest={{ view: "waiting", seq: 1 }} />);
+    await act(flushAsync);
+  };
+  const subtitle = () => document.querySelector(".el-page__head .el-page__titles .el-secondary")?.textContent;
+
+  it("2 calls waiting here: the place says 2, and its view lists those 2, not \"Nothing in Waiting for decision\"", async () => {
+    await open([makePendingItem("p1", { title: "Call with Ali" }), makePendingItem("p2", { title: "Call with Bina" })]);
+    expect(waitingCount(2)).toBe(2);
+    expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
+    expect(screen.queryByText("Nothing in Waiting for decision")).toBeNull();
+    const list = waiting();
+    expect(within(list).getAllByRole("listitem")).toHaveLength(waitingCount(2));
+    expect(within(list).getByText("Call with Ali")).toBeInTheDocument();
+    expect(review()).toHaveTextContent("Hide");
+    expect(subtitle()).toBe("2 recordings shown");
+  });
+
+  it("with the server's waiting recordings too, the view lists them under the calls, and counts both", async () => {
+    await open([makePendingItem("p1")], [makeItem("a", { title: "Zoom with Acme" }), makeItem("w", { title: "Phone call", status: "recording" })]);
+    expect(waitingCount(1, 1)).toBe(2);
+    expect(within(waiting()).getAllByRole("listitem")).toHaveLength(1);
+    expect(document.querySelector("button[data-row-id=w]")).not.toBeNull();
+    expect(document.querySelector("button[data-row-id=a]")).toBeNull();
+    expect(subtitle()).toBe("2 recordings shown");
+  });
+
+  it("nothing waiting: the view says so", async () => {
+    await open([]);
+    expect(waitingCount(0)).toBe(0);
+    expect(screen.getByText("Nothing in Waiting for decision")).toBeInTheDocument();
+  });
+
+  it("the waiting list can still be hidden in the view", async () => {
+    await open([makePendingItem("p1")]);
+    fireEvent.click(review());
+    expect(screen.queryByRole("list", { name: "Waiting recordings" })).toBeNull();
+    expect(review()).toHaveTextContent("Review");
   });
 });

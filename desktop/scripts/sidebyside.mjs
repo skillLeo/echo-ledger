@@ -123,12 +123,19 @@ export const PAIRS = [
       await page.keyboard.type("go");
       await page.waitForTimeout(600);
     })]],
-  ["library-top", "Library as the start screen: classic's Home (get started, needs action) | the new Library's get-started card and needs-action banner",
+  ["library-top", "Library as the start screen: classic's Home (get started, needs action) | the new Library's get-started card, and what needs action as its header's button",
     [`${classic("library")}`, steps(async (page) => {
       await page.locator(".sidebar").getByRole("button", { name: /^Home/ }).click();
       await page.waitForTimeout(1200);
     })],
-    [`${v2("library")}&calls=notready`, null]],
+    [`${v2("library")}&calls=notready`, steps(async (page) => {
+      // The fixture opens a recording: its Back (the last "Library" in the window) shows the list and its header.
+      await page.getByRole("button", { name: "Library", exact: true }).last().click();
+      await page.locator(".el-page__head .el-page__actions").getByRole("button", { name: /need you$/ }).waitFor();
+      // At rest: every scroller back at its top (the list keeps where it was when the recording opened).
+      await page.evaluate(() => document.querySelectorAll("*").forEach((el) => { if (el.scrollTop) el.scrollTop = 0; }));
+      await page.waitForTimeout(400);
+    })]],
   ["library-queue", "The top of the Library list: waiting calls (Review open: Keep all, Discard all, Keep, Discard, Rename, Choose project, Language), Importing with Cancel, Uploads that need you (Retry, Discard), Waiting for another account (Discard all 2), Checking upload",
     [`${classic("library")}&uploads=1`, steps(click("Review")), { width: 1600, height: 1400 }],
     [`${v2("library")}&uploads=1`, steps(async (page) => {
