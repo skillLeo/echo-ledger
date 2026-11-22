@@ -381,7 +381,7 @@ describe("the main window while a call's other side isn't being recorded (2.0.6)
     render(<OtherSideBanner />);
     await flushAsync();
     expect(screen.queryByTestId("other-side-not-recorded")).toBeNull();
-    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence }] }));
+    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence, otherSide: "permission" }] }));
     const banner = screen.getByTestId("other-side-not-recorded");
     expect(banner).toHaveTextContent(sentence);
     fireEvent.click(within(banner).getByRole("button", { name: "Open System Settings" }));
@@ -389,7 +389,7 @@ describe("the main window while a call's other side isn't being recorded (2.0.6)
     fireEvent.click(within(banner).getByRole("button", { name: "Try again" }));
     expect(callsOf("capture_retry_system")).toHaveLength(1);
     // A try that did not help says to quit and reopen.
-    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence: "The other side still isn't being recorded. Allow System Audio Recording for EchoLedger, then quit and reopen EchoLedger." }] }));
+    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence: "The other side still isn't being recorded. Allow System Audio Recording for EchoLedger, then quit and reopen EchoLedger.", otherSide: "permission" }] }));
     expect(screen.getByTestId("other-side-not-recorded")).toHaveTextContent("quit and reopen EchoLedger");
     await emitEvent("recording:state", makeRecordingState({ active: true, missing: [] }));
     expect(screen.queryByTestId("other-side-not-recorded")).toBeNull();
@@ -400,7 +400,18 @@ describe("the main window while a call's other side isn't being recorded (2.0.6)
     await flushAsync();
     await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence: "System audio is off for EchoLedger: a recording will have your voice, not the other side of the call." }] }));
     expect(screen.queryByTestId("other-side-not-recorded")).toBeNull();
-    await emitEvent("recording:state", makeRecordingState({ active: false, missing: [{ kind: "system_audio", sentence }] }));
+    await emitEvent("recording:state", makeRecordingState({ active: false, missing: [{ kind: "system_audio", sentence, otherSide: "permission" }] }));
     expect(screen.queryByTestId("other-side-not-recorded")).toBeNull();
+  });
+
+  it("not heard while another app plays: neutral words, no System Settings or Try again, and it can be closed", async () => {
+    render(<OtherSideBanner />);
+    await flushAsync();
+    const silent = "Can't hear the other side. Check the call's speaker or output device.";
+    await emitEvent("recording:state", makeRecordingState({ active: true, missing: [{ kind: "system_audio", sentence: silent, otherSide: "silent" }] }));
+    const banner = screen.getByTestId("other-side-not-recorded");
+    expect(banner).toHaveTextContent(silent);
+    expect(within(banner).queryByRole("button", { name: "Open System Settings" })).toBeNull();
+    expect(within(banner).queryByRole("button", { name: "Try again" })).toBeNull();
   });
 });

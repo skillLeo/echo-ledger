@@ -55,35 +55,49 @@ impl FarSideMonitor {
 
 /// How soon after a call recording starts (or resumes, or tries the other side again) its system side must deliver.
 pub const SYSTEM_CHECK_AFTER_MS: u64 = 3_000;
-/// A sample this small or smaller is digital silence: below half of a 16-bit step, what a tap macOS gives nothing
-/// delivers.
+/// How long the system side may deliver only silence, while another app plays sound, before the neutral warning.
+pub const SILENT_WHILE_PLAYING_MS: u64 = FAR_SIDE_SILENT_MS;
+/// A sample this small or smaller is digital silence: below half of a 16-bit step.
 pub const DIGITAL_SILENCE: f32 = 1.0 / 65_536.0;
 
 /// What the other side of a running call recording (system audio) has done since it last (re)started: the facts the
 /// system-side check is made from. Times are milliseconds since that start.
+///
+/// Two things look alike in the files and must never be taken for each other (2.0.6):
+/// - A tap macOS does not let through (System Audio Recording not allowed for this copy, whatever its privacy call
+///   says) delivers buffers with no data at all (`mDataByteSize` 0): no frames, `empty_buffers` counting. That is the
+///   permission, and is said as one.
+/// - A tap that is let through but has nothing to hear (nothing playing, the other person muted or not there yet, you
+///   speaking first) delivers frames of exact zeros: `frames` counting, no `signal`. That is a quiet call, never the
+///   permission; it is said, in neutral words, only after a long while and only while another app is playing sound.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SystemSide {
     /// Since the call recording started, resumed or tried the other side again.
     pub running_ms: u64,
     /// Why the system side could not open (the tap, the aggregate device or the IOProc); the microphone records on.
     pub failure: Option<String>,
-    /// System audio frames delivered since then.
+    /// System audio frames delivered since then (zero-valued ones too).
     pub frames: u64,
-    /// Some of them were more than digital silence.
+    /// IOProc calls since then whose tap buffer had no data.
+    pub empty_buffers: u64,
+    /// Some frames were more than digital silence: the other side was heard.
     pub signal: bool,
     /// The microphone heard sound since then.
     pub mic_heard: bool,
+    /// Whether another app is playing sound now (Core Audio's process list); none when it was not read.
+    pub others_playing: Option<bool>,
 }
 
-/// Why the other side is not being recorded.
+/// Why the other side is not being recorded or heard.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SystemProblem {
-    /// The system side could not open: the reason.
+    /// The system side could not open: the reason. The permission (or the device) is the cause.
     Failed(String),
-    /// It opened but delivered nothing (what macOS does when System Audio Recording is not allowed for this copy).
-    NoFrames,
-    /// It delivers only digital silence while the microphone hears sound.
-    DigitalSilence,
+    /// It opened but its buffers carry no data at all: what macOS does when System Audio Recording is not allowed.
+    NoData,
+    /// It delivers only silence (zeros) for a long while although another app is playing sound: the call's output or
+    /// the device, not the permission.
+    Silent,
 }
 
 impl SystemProblem {
@@ -91,32 +105,39 @@ impl SystemProblem {
     pub fn reason(&self) -> String {
         match self {
             SystemProblem::Failed(why) => format!("the system audio tap did not open: {why}"),
-            SystemProblem::NoFrames => format!("the system audio tap delivered no audio in {} s", SYSTEM_CHECK_AFTER_MS / 1_000),
-            SystemProblem::DigitalSilence => "the system audio tap delivered only digital silence while the microphone heard sound".into(),
+            SystemProblem::NoData => format!("the system audio tap delivered buffers with no audio data for {} s", SYSTEM_CHECK_AFTER_MS / 1_000),
+            SystemProblem::Silent => format!("the system audio tap delivered only silence for {} s while another app was playing sound", SILENT_WHILE_PLAYING_MS / 1_000),
         }
     }
 
-    /// Sure enough to count System Audio Recording as missing beyond this recording (Setup, the Mac check): a tap that
-    /// failed or delivered nothing. Digital silence can also be a call nobody spoke in yet.
-    pub fn is_certain(&self) -> bool {
-        !matches!(self, SystemProblem::DigitalSilence)
+    /// The permission is the cause: said as System Audio Recording, and counted as missing beyond this recording
+    /// (Setup, the Mac check). Silence is never this.
+    pub fn names_permission(&self) -> bool {
+        !matches!(self, SystemProblem::Silent)
     }
 }
 
-/// Whether the other side of a call recording is not being recorded (pure): a failure at once; nothing delivered, or
-/// only digital silence while the microphone hears sound, from [`SYSTEM_CHECK_AFTER_MS`] on. Asked again every second,
-/// so it clears by itself as soon as the other side is heard.
+/// Whether the other side of a call recording is not being recorded or heard (pure). A tap that failed, at once;
+/// buffers with no data and no frames, from [`SYSTEM_CHECK_AFTER_MS`] on (the permission); only zero-valued frames for
+/// [`SILENT_WHILE_PLAYING_MS`] while another app is playing sound (neutral). Zero-valued frames alone, however long,
+/// are a quiet call: never a problem while nothing else plays.
 pub fn system_side_problem(side: &SystemSide) -> Option<SystemProblem> {
     if let Some(why) = &side.failure {
         return Some(SystemProblem::Failed(why.clone()));
     }
-    if side.running_ms < SYSTEM_CHECK_AFTER_MS {
+    if side.running_ms < SYSTEM_CHECK_AFTER_MS || side.signal {
         return None;
     }
     if side.frames == 0 {
-        return Some(SystemProblem::NoFrames);
+        // No IOProc call at all is the device's matter (the supervisor reopens it and says so), not the permission's.
+        return (side.empty_buffers > 0).then_some(SystemProblem::NoData);
     }
-    (!side.signal && side.mic_heard).then_some(SystemProblem::DigitalSilence)
+    (side.running_ms >= SILENT_WHILE_PLAYING_MS && side.others_playing == Some(true)).then_some(SystemProblem::Silent)
+}
+
+/// Whether the check needs to know if another app is playing sound (pure): zero-valued frames only, long enough.
+pub fn needs_playing_check(side: &SystemSide) -> bool {
+    side.failure.is_none() && side.frames > 0 && !side.signal && side.running_ms >= SILENT_WHILE_PLAYING_MS
 }
 
 /// What the running call recording's check said last (`actions::check_system_side`): the problem shown, whether the
@@ -124,7 +145,10 @@ pub fn system_side_problem(side: &SystemSide) -> Option<SystemProblem> {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SystemWatch {
     pub problem: Option<SystemProblem>,
+    /// "Try again" was pressed since the warning first showed.
     pub retried: bool,
+    /// The check after that try found it still missing: the warning says to quit and reopen.
+    pub after_retry: bool,
     pub confirmed: bool,
 }
 
@@ -133,38 +157,52 @@ pub struct SystemWatch {
 pub enum SystemVerdict {
     /// Nothing new.
     Same,
-    /// The other side is not being recorded (newly, or for another reason).
+    /// The other side is not being recorded or heard (newly, for another reason, or still after a try).
     Missing(SystemProblem),
     /// The other side is heard (for the first time in this recording, or again): system audio works.
     Recording,
-    /// The problem went (tried again) but nothing is known yet.
-    Cleared,
 }
 
 impl SystemWatch {
-    /// Takes in one look at the system side (pure).
+    /// Takes in one look at the system side (pure). A warning stays until the other side is heard: a resume or a try
+    /// again starts the counts afresh, and those first seconds (no problem known yet) never take it away.
     pub fn look(&mut self, side: &SystemSide) -> SystemVerdict {
-        let problem = system_side_problem(side);
-        let verdict = match (&problem, &self.problem) {
-            (Some(now), Some(was)) if now == was => SystemVerdict::Same,
-            (Some(now), _) => SystemVerdict::Missing(now.clone()),
-            // Sound from the other side, not only frames: a tap macOS holds back may deliver digital silence.
-            (None, _) if side.signal && !self.confirmed => SystemVerdict::Recording,
-            (None, Some(_)) => SystemVerdict::Cleared,
-            (None, None) => SystemVerdict::Same,
-        };
-        match &verdict {
-            SystemVerdict::Missing(_) => self.confirmed = false,
-            SystemVerdict::Recording => self.confirmed = true,
-            _ => {}
+        if side.signal {
+            let had = self.problem.take().is_some();
+            (self.retried, self.after_retry) = (false, false);
+            if had || !self.confirmed {
+                self.confirmed = true;
+                return SystemVerdict::Recording;
+            }
+            return SystemVerdict::Same;
         }
-        self.problem = problem;
-        verdict
+        let Some(now) = system_side_problem(side) else { return SystemVerdict::Same };
+        let reopen_turn = self.retried && !self.after_retry && now.names_permission();
+        if reopen_turn {
+            self.after_retry = true;
+        }
+        if self.problem.as_ref() == Some(&now) && !reopen_turn {
+            return SystemVerdict::Same;
+        }
+        self.problem = Some(now.clone());
+        self.confirmed = false;
+        SystemVerdict::Missing(now)
     }
 
-    /// The sentence for the running recording: none while the other side records.
-    pub fn sentence(&self) -> Option<&'static str> {
-        self.problem.as_ref().map(|_| if self.retried { crate::permissions::SYSTEM_NOT_RECORDED_REOPEN } else { crate::permissions::SYSTEM_NOT_RECORDED })
+    /// "Try again" was pressed: the warning stays as it is until the next look says more.
+    pub fn retry(&mut self) {
+        self.retried = true;
+        self.after_retry = false;
+    }
+
+    /// The warning for the running recording: what kind and its words; none while the other side records.
+    pub fn warning(&self) -> Option<(crate::permissions::OtherSide, &'static str)> {
+        use crate::permissions::{OTHER_SIDE_SILENT, OtherSide, SYSTEM_NOT_RECORDED, SYSTEM_NOT_RECORDED_REOPEN};
+        self.problem.as_ref().map(|problem| match problem {
+            SystemProblem::Silent => (OtherSide::Silent, OTHER_SIDE_SILENT),
+            _ if self.after_retry => (OtherSide::Permission, SYSTEM_NOT_RECORDED_REOPEN),
+            _ => (OtherSide::Permission, SYSTEM_NOT_RECORDED),
+        })
     }
 }
 

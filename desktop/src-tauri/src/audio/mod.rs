@@ -166,6 +166,8 @@ struct Active {
     /// Since when the system side is looked at (start, resume or a try again), and the frames written before then.
     system_since: Instant,
     system_frames_before: u64,
+    /// The backend's count of empty system buffers then (`CaptureBackend::system_empty_buffers`).
+    system_empty_before: u64,
     /// What went wrong with the capture, each said once (`note`).
     capture_notes: Vec<String>,
 }
@@ -175,6 +177,7 @@ impl Active {
     fn look_at_system_from(&mut self, now: Instant) {
         self.system_since = now;
         self.system_frames_before = self.link.system_frames.load(Ordering::Relaxed);
+        self.system_empty_before = self.backend.as_ref().map_or(0, |b| b.system_empty_buffers());
     }
 }
 
@@ -252,8 +255,10 @@ impl CaptureController {
             running_ms: Instant::now().saturating_duration_since(since).as_millis() as u64,
             failure: backend.system_failure(),
             frames: active.link.system_frames.load(Ordering::Relaxed).saturating_sub(active.system_frames_before),
+            empty_buffers: backend.system_empty_buffers().saturating_sub(active.system_empty_before),
             signal: after(&active.link.system_signal),
             mic_heard: after(&active.link.mic_heard),
+            others_playing: None,
         })
     }
 
@@ -333,6 +338,7 @@ impl CaptureController {
             running_since: now,
             system_since: now,
             system_frames_before: 0,
+            system_empty_before: 0,
             capture_notes: Vec::new(),
         });
         Ok(info)

@@ -69,6 +69,8 @@ pub struct MacBackend {
     system_failure: Arc<std::sync::Mutex<Option<String>>>,
     /// Asks the watcher to open the stream again with a new tap.
     retry: Arc<AtomicBool>,
+    /// IOProc calls whose tap buffer carried no data (`open_stream`), across the streams of this recording.
+    tap_empty: Arc<AtomicU64>,
 }
 
 fn address(selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope) -> AudioObjectPropertyAddress {
@@ -220,6 +222,7 @@ struct MacHost {
     tx: Sender<AudioChunk>,
     /// Why the stream open now has no system side (its tap could not open); the microphone records on.
     system_failure: Arc<std::sync::Mutex<Option<String>>>,
+    tap_empty: Arc<AtomicU64>,
 }
 
 impl MacHost {
@@ -227,7 +230,7 @@ impl MacHost {
     fn open_on(&self, route: &Route) -> Result<Stream, CaptureError> {
         let (stream, failure) = super::open_keeping_mic(self.streams, |with_tap| {
             let streams = if with_tap { self.streams } else { Streams { mic: true, system: false } };
-            unsafe { open_stream(route, streams, self.tx.clone(), with_tap) }
+            unsafe { open_stream(route, streams, self.tx.clone(), with_tap, self.tap_empty.clone()) }
         })?;
         *self.system_failure.lock().unwrap_or_else(|p| p.into_inner()) = failure;
         Ok(stream)
@@ -270,7 +273,8 @@ impl MacBackend {
     /// Opens the first stream (its error is the recording's) and watches the devices from then on.
     pub fn start(streams: Streams, tx: Sender<AudioChunk>) -> Result<Self, CaptureError> {
         let system_failure = Arc::new(std::sync::Mutex::new(None));
-        let mut host = MacHost { streams, tx, system_failure: system_failure.clone() };
+        let tap_empty = Arc::new(AtomicU64::new(0));
+        let mut host = MacHost { streams, tx, system_failure: system_failure.clone(), tap_empty: tap_empty.clone() };
         let route = host.want();
         let first = host.open_on(&route)?;
         let mut supervisor = Supervisor::new(first, route, streams.mic, streams.system, Instant::now());
@@ -301,13 +305,13 @@ impl MacBackend {
                 }
             })
             .map_err(|e| CaptureError::Device(e.to_string()))?;
-        Ok(Self { stop, log, watcher: Some(watcher), system_failure, retry })
+        Ok(Self { stop, log, watcher: Some(watcher), system_failure, retry, tap_empty })
     }
 }
 
 /// Builds the tap and the aggregate device on `route` and starts them. Without `with_tap` (a call whose tap could not
 /// open) the aggregate has the devices only and records the microphone.
-unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>, with_tap: bool) -> Result<Stream, CaptureError> {
+unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>, with_tap: bool, tap_empty: Arc<AtomicU64>) -> Result<Stream, CaptureError> {
     let system_object = kAudioObjectSystemObject as AudioObjectID;
     let output_uid = route.output.clone().ok_or_else(|| CaptureError::Device("no default output device".into()))?;
     let input_uid = route.mic.clone().filter(|_| streams.mic);
@@ -398,6 +402,11 @@ unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>, w
             };
             let mic = mic_buffer(buffers.len(), output_inputs, same_device, with_tap).filter(|_| has_mic).map(read).unwrap_or_default();
             let system = buffers.len().checked_sub(1).filter(|_| with_tap).map(read).unwrap_or_default();
+            // A tap macOS does not let through gives buffers with no data (mDataByteSize 0), unlike one with nothing to
+            // hear, which gives zero-valued frames: only the first is the permission (`audio::health::SystemSide`).
+            if with_tap && system.is_empty() {
+                tap_empty.fetch_add(1, Ordering::Relaxed);
+            }
             let ts_ns = unsafe { AudioConvertHostTimeToNanos(in_time.as_ref().mHostTime) };
             let _ = raw_tx.send(RawPacket { mic, system, ts_ns });
         },
@@ -500,6 +509,10 @@ impl CaptureBackend for MacBackend {
         self.retry.store(true, Ordering::SeqCst);
         true
     }
+
+    fn system_empty_buffers(&self) -> u64 {
+        self.tap_empty.load(Ordering::Relaxed)
+    }
 }
 
 impl Drop for MacBackend {
@@ -523,6 +536,12 @@ struct AudioProcess {
 /// an empty list.
 fn audio_processes() -> Vec<AudioProcess> {
     read_audio_processes().unwrap_or_default()
+}
+
+/// Whether an app other than EchoLedger runs audio output now (`kAudioProcessPropertyIsRunningOutput`).
+pub fn others_playing() -> bool {
+    let own = std::process::id();
+    audio_processes().iter().any(|p| p.output && p.pid != own)
 }
 
 /// What the person reads when Core Audio could not be asked (its status code goes to the log only).

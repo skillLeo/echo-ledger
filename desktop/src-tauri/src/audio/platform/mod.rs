@@ -127,6 +127,24 @@ pub trait CaptureBackend: Send {
     fn retry_system(&mut self) -> bool {
         false
     }
+    /// IOProc calls so far whose system buffer carried no data at all (a Mac tap macOS does not let through), as
+    /// opposed to zero-valued frames (nothing playing): `audio::health::SystemSide`.
+    fn system_empty_buffers(&self) -> u64 {
+        0
+    }
+}
+
+/// Whether another app is playing sound now (a Mac: Core Audio's process list, EchoLedger left out). False where it
+/// cannot be told.
+pub fn others_playing() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::others_playing()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
 }
 
 pub fn start(streams: Streams, tx: Sender<AudioChunk>) -> Result<Box<dyn CaptureBackend>, CaptureError> {

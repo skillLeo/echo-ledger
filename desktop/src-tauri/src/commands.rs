@@ -2951,7 +2951,7 @@ pub async fn verify_system_audio(app: &AppHandle) {
     }
     let checked = app.clone();
     if let Ok(result) = tauri::async_runtime::spawn_blocking(crate::permissions::probe_system_audio).await {
-        if let Err(why) = &result {
+        if let Some(Err(why)) = &result {
             eprintln!("[echoledger] permissions: macOS says system audio is allowed, but {why}");
         }
         checked.state::<AppState>().system_audio_checked(result);

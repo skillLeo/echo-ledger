@@ -217,9 +217,10 @@ export default function PillApp() {
   // Dismissed is for what was on the line: something new going missing during the recording is said again.
   const missingKinds = (live?.missing ?? []).map((m) => `${m.kind}:${m.sentence}`).join();
   useEffect(() => setMissingDismissed(false), [missingKinds]);
-  // The other side not being recorded (2.0.6) stays until it is fixed: it has no dismiss.
+  // The other side not being recorded (2.0.6) stays until it is heard: no dismiss. Not heard (neutral) can be dismissed.
   const otherSide = shown ? otherSideNotRecorded(live?.missing) : null;
-  const missing = shown && (!missingDismissed || otherSide) ? missingShort(live?.missing, live?.mode) : null;
+  const notRecorded = otherSide?.otherSide === "permission" ? otherSide : null;
+  const missing = shown && (!missingDismissed || notRecorded) ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
   const tray = mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : limitNotice && shown ? "limit" : screensNotice && shown && live?.screens?.on ? "screens" : null;
   const concealed = useConcealed();
@@ -439,9 +440,9 @@ export default function PillApp() {
         <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={otherSide?.sentence ?? live?.missing?.[0]?.sentence}>
           <WarningIcon size={14} />
           <span className="mark-text">{missing}</span>
-          {otherSide ? (
+          {notRecorded ? (
             <>
-              <button type="button" className="rec-text-btn" title={otherSide.sentence} onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Allow</button>
+              <button type="button" className="rec-text-btn" title={notRecorded.sentence} onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Open System Settings</button>
               <button type="button" className="rec-text-btn" onClick={() => void api.captureRetrySystem().catch(() => undefined)}>Try again</button>
             </>
           ) : (

@@ -1289,8 +1289,8 @@ fn read_recording_permissions(app: &AppHandle) {
         let state = app.state::<crate::AppState>();
         let Some(info) = state.capture.info() else { return };
         let permissions = state.permissions_now();
-        let sentence = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).sentence();
-        let next = crate::permissions::missing_with(info.mode, &permissions, sentence);
+        let warning = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).warning();
+        let next = crate::permissions::missing_with(info.mode, &permissions, warning);
         // The same recording: a very short one may have ended while the system was asked.
         if state.capture.info().is_some_and(|i| i.client_ref == info.client_ref) {
             let mut missing = state.recording_missing.lock().unwrap_or_else(|p| p.into_inner());
@@ -1311,20 +1311,35 @@ fn check_system_side(app: &AppHandle) {
     if !cfg!(target_os = "macos") {
         return;
     }
-    use crate::audio::health::SystemVerdict;
     let state = app.state::<crate::AppState>();
     let Some(side) = state.capture.system_side() else { return };
-    let verdict = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).look(&side);
-    if verdict == SystemVerdict::Same {
+    let shown_silent = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).problem == Some(crate::audio::health::SystemProblem::Silent);
+    if crate::audio::health::needs_playing_check(&side) && !shown_silent {
+        // Only zeros for 30 s: said only while another app plays sound, which is read beside the ticker.
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let side = crate::audio::health::SystemSide { others_playing: Some(crate::audio::platform::others_playing()), ..side };
+            look_at_system_side(&app, &side);
+        });
         return;
     }
-    // What follows reads the system and writes a file: beside the ticker, so it never waits for them.
+    look_at_system_side(app, &side);
+}
+
+/// One look at the system side: a change is said beside the ticker (it reads the system and writes a file).
+fn look_at_system_side(app: &AppHandle, side: &crate::audio::health::SystemSide) {
+    let state = app.state::<crate::AppState>();
+    let verdict = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).look(side);
+    if verdict == crate::audio::health::SystemVerdict::Same {
+        return;
+    }
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || system_side_changed(&app, verdict));
 }
 
 /// What a change of the system-side check does: says it in the log and the recording's notes, keeps what was found for
-/// Setup and the Mac check, and puts the warning on the pill and in the main window (or takes it away).
+/// Setup and the Mac check (the permission only: never a quiet call), and puts the warning on the pill and in the main
+/// window, or takes it away once the other side is heard.
 fn system_side_changed(app: &AppHandle, verdict: crate::audio::health::SystemVerdict) {
     use crate::audio::health::SystemVerdict;
     let state = app.state::<crate::AppState>();
@@ -1332,39 +1347,37 @@ fn system_side_changed(app: &AppHandle, verdict: crate::audio::health::SystemVer
         SystemVerdict::Same => return,
         SystemVerdict::Missing(problem) => {
             let reason = problem.reason();
-            eprintln!("[echoledger] capture: the other side isn't being recorded: {reason}; the microphone records on");
-            state.capture.note(&format!("Other side not recorded: {reason}"));
-            if problem.is_certain() {
+            let said = if problem.names_permission() { "the other side isn't being recorded" } else { "the other side isn't heard" };
+            eprintln!("[echoledger] capture: {said}: {reason}; the microphone records on");
+            state.capture.note(&format!("Other side {}: {reason}", if problem.names_permission() { "not recorded" } else { "not heard" }));
+            if problem.names_permission() {
                 // Setup, the Mac check and the next recording say System Audio Recording is missing.
-                state.system_audio_checked(Err(reason));
+                state.system_audio_checked(Some(Err(reason)));
             }
         }
         SystemVerdict::Recording => {
             if state.permission_memory_now().system_audio_failing.is_some() {
                 eprintln!("[echoledger] capture: the other side is being recorded again");
             }
-            state.system_audio_checked(Ok(()));
+            state.system_audio_checked(Some(Ok(())));
         }
-        SystemVerdict::Cleared => {}
     }
     let Some(info) = state.capture.info() else { return };
     let permissions = state.permissions_now();
-    let sentence = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).sentence();
-    *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = crate::permissions::missing_with(info.mode, &permissions, sentence);
+    let warning = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).warning();
+    *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = crate::permissions::missing_with(info.mode, &permissions, warning);
     emit_status(app);
 }
 
 /// "Try again" on the warning: opens the system side once more (System Audio Recording allowed meanwhile). False when
-/// only quitting and reopening EchoLedger would; after a try that did not help the warning says to.
+/// only quitting and reopening EchoLedger would. The warning stays until the other side is heard; when the check after
+/// the try still finds it missing, it says to quit and reopen.
 pub fn retry_system_audio(app: &AppHandle) -> bool {
     let state = app.state::<crate::AppState>();
     if !state.capture.retry_system() {
         return false;
     }
-    let mut watch = state.system_watch.lock().unwrap_or_else(|p| p.into_inner());
-    watch.retried = true;
-    watch.problem = None;
-    drop(watch);
+    state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).retry();
     eprintln!("[echoledger] capture: trying the system side again");
     true
 }

@@ -80,6 +80,19 @@ pub fn read() -> Permissions {
 pub struct Missing {
     pub kind: Kind,
     pub sentence: String,
+    /// A call's other side found not recorded or not heard by the recording itself (2.0.6), not read from the system.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub other_side: Option<OtherSide>,
+}
+
+/// What the recording found about its other side (`audio::health::SystemProblem`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OtherSide {
+    /// Not recorded: the tap did not open or carries no data. System Audio Recording is named, with its settings.
+    Permission,
+    /// Only silence for a long while although another app plays sound: neutral words, never the permission.
+    Silent,
 }
 
 const NO_MICROPHONE: &str = "The microphone is off for EchoLedger: a recording will have the other side of the call, not your voice.";
@@ -92,7 +105,7 @@ pub const NO_DICTATION: &str = "The microphone is off for EchoLedger. Allow it i
 const NO_NOTE_SYSTEM_AUDIO: &str = "System audio is off for EchoLedger, so sound playing on this computer cannot be captured. Allow it in System Settings.";
 
 fn missing(kind: Kind, sentence: &str) -> Missing {
-    Missing { kind, sentence: sentence.to_string() }
+    Missing { kind, sentence: sentence.to_string(), other_side: None }
 }
 
 /// What the Record page says now: what is off and what a call recording holds without it. Screen Recording counts only
@@ -166,12 +179,15 @@ pub struct Memory {
     /// privacy call still says yes, so what was granted is forgotten when it changes ([`Memory::for_identity`]).
     #[serde(default)]
     pub identity: Option<String>,
-    /// Why system audio did not record although macOS's privacy call allowed it: a tap that could not open or delivered
-    /// nothing (`audio::health::SystemProblem::is_certain`). While set, system audio counts as off ([`Memory::overlay`]);
-    /// it goes when system audio is heard again or a check finds it working.
+    /// Why system audio did not record although macOS's privacy call allowed it: a tap that could not open or gave
+    /// buffers with no data (`audio::health::SystemProblem::names_permission`; never zero-valued frames, a quiet call).
+    /// While set, system audio counts as off ([`Memory::overlay`]); it goes when the other side is heard again or a
+    /// check finds it working.
     #[serde(default)]
     pub system_audio_failing: Option<String>,
-    /// System audio must be checked for real (a short tap, [`probe_system_audio`]): this copy has not used it yet.
+    /// System audio must be checked for real (a short tap, [`probe_system_audio`]): this copy has not been checked yet.
+    /// Set once per copy ([`Memory::for_identity`]), so the check (and macOS's purple indicator with it) comes once,
+    /// at the first start after an update, never at every start.
     #[serde(default)]
     pub verify_system_audio: bool,
 }
@@ -210,9 +226,23 @@ impl Memory {
         }
     }
 
-    /// What a real look at system audio found (pure): `Err` why it did not record, `Ok` it did.
-    pub fn with_system_audio(&self, result: Result<(), String>) -> Memory {
-        Memory { system_audio_failing: result.err(), verify_system_audio: false, ..self.clone() }
+    /// What a real look at system audio found (pure): `Err` why it did not record, `Ok` it did, none nothing could be
+    /// told (what was found before stays). Either way this copy has been checked.
+    pub fn with_system_audio(&self, result: Option<Result<(), String>>) -> Memory {
+        let system_audio_failing = match result {
+            Some(result) => result.err(),
+            None => self.system_audio_failing.clone(),
+        };
+        Memory { system_audio_failing, verify_system_audio: false, ..self.clone() }
+    }
+
+    /// Whether this start looks at system audio for real (pure): once per copy of EchoLedger, and only where it was
+    /// allowed before, so no first-time prompt comes unasked. A signed copy's code hash (CDHash) changes with every
+    /// build, but a person only gets a new build through an update, so this is the first start after an update, before
+    /// the first call. System audio found failing is not looked at again at every start: the next call says so itself,
+    /// and Allow (or the Mac check) looks again.
+    pub fn wants_probe(&self) -> bool {
+        self.verify_system_audio && self.ever.contains(&Kind::SystemAudio)
     }
 
     pub fn load(path: &Path) -> Self {
@@ -309,7 +339,8 @@ impl Memory {
 }
 
 /// The running copy of EchoLedger: its version and, on a Mac, its code signature's hash (another build or signing
-/// identity is another copy to macOS's privacy settings).
+/// identity is another copy to macOS's privacy settings). The hash changes with every build, so every update is a new
+/// copy: what was granted is asked again and system audio is looked at once ([`Memory::wants_probe`]).
 pub fn identity() -> String {
     let version = env!("CARGO_PKG_VERSION");
     #[cfg(target_os = "macos")]
@@ -327,43 +358,68 @@ pub const SYSTEM_NOT_RECORDED: &str = "The other side isn't being recorded. Allo
 /// The same once trying again did not help: macOS applies it when EchoLedger opens again.
 pub const SYSTEM_NOT_RECORDED_REOPEN: &str = "The other side still isn't being recorded. Allow System Audio Recording for EchoLedger, then quit and reopen EchoLedger.";
 
-/// What a running recording is missing (pure): what the system says ([`missing_during`]) and, for a call whose other
-/// side is not being recorded, that sentence in place of any other about system audio.
-pub fn missing_with(mode: RecordingMode, permissions: &Permissions, not_recorded: Option<&str>) -> Vec<Missing> {
+/// The neutral words for a call that hears only silence from its other side while another app plays sound.
+pub const OTHER_SIDE_SILENT: &str = "Can't hear the other side. Check the call's speaker or output device.";
+
+/// What a running recording is missing (pure): what the system says ([`missing_during`]) and what the recording found
+/// about its other side. Not recorded takes the place of any other line about system audio; not heard is added.
+pub fn missing_with(mode: RecordingMode, permissions: &Permissions, warning: Option<(OtherSide, &str)>) -> Vec<Missing> {
     let mut out = missing_during(mode, permissions);
-    if let (RecordingMode::Call, Some(sentence)) = (mode, not_recorded) {
-        // Both sides off already says nothing is recorded.
-        if !out.iter().any(|m| m.kind == Kind::Microphone) {
-            out.retain(|m| m.kind != Kind::SystemAudio);
-            out.push(missing(Kind::SystemAudio, sentence));
-        }
+    let Some((found, sentence)) = warning.filter(|_| mode == RecordingMode::Call) else { return out };
+    // Both sides off already says nothing is recorded.
+    if out.iter().any(|m| m.kind == Kind::Microphone) {
+        return out;
     }
+    if found == OtherSide::Permission {
+        out.retain(|m| m.kind != Kind::SystemAudio);
+    }
+    out.push(Missing { kind: Kind::SystemAudio, sentence: sentence.to_string(), other_side: Some(found) });
     out
 }
 
-/// Records system audio for a moment to see whether macOS lets it through: `Err` why not. The privacy call can say
-/// yes for a copy macOS no longer lets record (another signature), and a tap then delivers nothing (blocking, ~1.5 s).
-pub fn probe_system_audio() -> Result<(), String> {
+/// What a short look at system audio found (pure), from what the tap did: `Some(Err)` System Audio Recording is not
+/// letting this copy through, `Some(Ok)` it is, `None` nothing can be told.
+/// - The tap did not open, or every buffer it gave carried no data (`mDataByteSize` 0): not allowed. macOS gives a copy
+///   it does not let record empty buffers, whatever its privacy call says.
+/// - It gave frames, zeros included: allowed. Nothing playing is a quiet computer, never a missing permission, so a
+///   silent start is never kept as one.
+/// - It gave nothing at all (no IOProc call): the device's matter; nothing is kept.
+pub fn probe_verdict(opened: Result<(), String>, frames: u64, empty_buffers: u64) -> Option<Result<(), String>> {
+    match opened {
+        Err(why) => Some(Err(format!("the system audio tap did not open: {why}"))),
+        Ok(()) if frames > 0 => Some(Ok(())),
+        Ok(()) if empty_buffers > 0 => Some(Err("the system audio tap delivered buffers with no audio data".into())),
+        Ok(()) => None,
+    }
+}
+
+/// Records system audio for a moment to see whether macOS lets it through ([`probe_verdict`]; blocking, ~1.5 s). The
+/// privacy call can say yes for a copy macOS no longer lets record (another signature).
+pub fn probe_system_audio() -> Option<Result<(), String>> {
     #[cfg(target_os = "macos")]
     {
         use crate::audio::types::Channel;
         let (tx, rx) = std::sync::mpsc::channel();
-        let mut backend = crate::audio::platform::start(crate::audio::platform::Streams { mic: false, system: true }, tx).map_err(|e| e.to_string())?;
+        let mut backend = match crate::audio::platform::start(crate::audio::platform::Streams { mic: false, system: true }, tx) {
+            Ok(backend) => backend,
+            Err(e) => return probe_verdict(Err(e.to_string()), 0, 0),
+        };
         let until = std::time::Instant::now() + std::time::Duration::from_millis(1_500);
-        let mut frames = 0_usize;
+        let mut frames = 0_u64;
         while let Some(left) = until.checked_duration_since(std::time::Instant::now()) {
             match rx.recv_timeout(left) {
-                Ok(chunk) if chunk.channel == Channel::System => frames += chunk.samples.len(),
+                Ok(chunk) if chunk.channel == Channel::System => frames += chunk.samples.len() as u64,
                 Ok(_) => {}
                 Err(_) => break,
             }
         }
+        let empty = backend.system_empty_buffers();
         backend.stop();
-        if frames == 0 { Err("the system audio tap delivered no audio".into()) } else { Ok(()) }
+        probe_verdict(Ok(()), frames, empty)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        Ok(())
+        Some(Ok(()))
     }
 }
 
@@ -446,15 +502,42 @@ mod tests {
 
     #[test]
     fn system_audio_that_did_not_record_counts_as_off_until_it_does() {
-        let memory = Memory::default().with_system_audio(Err("the system audio tap delivered no audio in 3 s".into()));
+        let memory = Memory::default().with_system_audio(Some(Err("the system audio tap delivered no audio in 3 s".into())));
         assert_eq!(memory.overlay(ON).system_audio, Access::Denied, "Setup and the Mac check say it is missing");
         assert_eq!(memory.overlay(ON).microphone, Access::Allowed);
         assert_eq!(missing_now(&memory.overlay(ON), false)[0].kind, Kind::SystemAudio);
         let saved: Memory = serde_json::from_str(&serde_json::to_string(&memory).unwrap()).unwrap();
         assert_eq!(saved.system_audio_failing.as_deref(), Some("the system audio tap delivered no audio in 3 s"), "kept across a restart");
-        let working = memory.with_system_audio(Ok(()));
+        assert_eq!(memory.with_system_audio(None).system_audio_failing, memory.system_audio_failing, "nothing told: kept");
+        let working = memory.with_system_audio(Some(Ok(())));
         assert_eq!(working.overlay(ON), ON);
         assert!(!working.verify_system_audio);
+    }
+
+    #[test]
+    fn a_quiet_computer_is_never_a_missing_permission() {
+        // Zero-valued frames (nothing playing): allowed, never kept as a failure.
+        assert_eq!(probe_verdict(Ok(()), 24_000, 0), Some(Ok(())));
+        assert_eq!(probe_verdict(Ok(()), 24_000, 3), Some(Ok(())), "a few empty buffers before frames: allowed");
+        // Buffers with no data at all, or a tap that did not open: System Audio Recording is not letting it through.
+        assert_eq!(probe_verdict(Ok(()), 0, 140), Some(Err("the system audio tap delivered buffers with no audio data".into())));
+        assert_eq!(probe_verdict(Err("system audio tap (OSStatus 1852797029)".into()), 0, 0).unwrap().unwrap_err(), "the system audio tap did not open: system audio tap (OSStatus 1852797029)");
+        // Nothing at all (no IOProc call): the device's matter; nothing is kept.
+        assert_eq!(probe_verdict(Ok(()), 0, 0), None);
+    }
+
+    #[test]
+    fn the_start_looks_at_system_audio_once_per_copy() {
+        let ever = Memory { ever: vec![Kind::SystemAudio], identity: Some("2.0.5 aa".into()), ..Memory::default() };
+        let updated = ever.for_identity("2.0.6 bb");
+        assert!(updated.wants_probe(), "the first start after an update");
+        let looked = updated.with_system_audio(Some(Ok(())));
+        assert!(!looked.wants_probe(), "not the next start");
+        assert!(!updated.with_system_audio(None).wants_probe(), "nothing told is still looked: once");
+        let failing = updated.with_system_audio(Some(Err("no data".into())));
+        assert!(!failing.wants_probe(), "failing is not looked at again at every start");
+        assert_eq!(failing.for_identity("2.0.6 bb"), failing, "the same copy");
+        assert!(!Memory::default().for_identity("2.0.6 bb").wants_probe(), "never allowed before: no prompt unasked");
     }
 
     #[test]

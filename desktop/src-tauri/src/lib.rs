@@ -317,7 +317,7 @@ impl AppState {
 
     /// What a real look at system audio found (a recording's other side, a short tap): kept, and said by
     /// [`AppState::permissions_now`] from now on.
-    pub fn system_audio_checked(&self, result: Result<(), String>) {
+    pub fn system_audio_checked(&self, result: Option<Result<(), String>>) {
         let mut memory = self.permission_memory.lock().unwrap_or_else(|p| p.into_inner());
         let next = memory.with_system_audio(result);
         if next != *memory {
@@ -475,10 +475,9 @@ pub fn run() {
             let settings = app.state::<AppState>().settings();
             // Without a Developer ID macOS may forget permissions at an update: looked at every start (Phase 1B).
             app.state::<AppState>().permissions_now();
-            // Another copy of EchoLedger (an update, another signature) or system audio that did not record last time:
-            // looked at for real once, when it was allowed before (so no first-time prompt comes unasked).
-            let memory = app.state::<AppState>().permission_memory_now();
-            if cfg!(target_os = "macos") && (memory.verify_system_audio || memory.system_audio_failing.is_some()) && memory.ever.contains(&permissions::Kind::SystemAudio) {
+            // Another copy of EchoLedger (the first start after an update): system audio looked at for real once, when it
+            // was allowed before (`Memory::wants_probe`).
+            if cfg!(target_os = "macos") && app.state::<AppState>().permission_memory_now().wants_probe() {
                 let verifying = handle.clone();
                 tauri::async_runtime::spawn(async move { commands::verify_system_audio(&verifying).await });
             }
