@@ -9,7 +9,7 @@ Phone rules for every batch: `pm install -r` only; never uninstall, never clear 
 ## Next slot — the call choice (PLAN_CALL_CHOICE), Mac 2.0.8 and phone 2.0.8, about 45 minutes
 
 Builds:
-- **Mac:** 2.0.7, signed with the pinned identity, waiting in the lead's scratchpad. The lead installs it after "mac free".
+- **Mac:** 2.0.8, signed with the pinned identity, waiting in the lead's scratchpad. The lead installs it after "mac free".
 - **Windows:** `EchoLedger_2.0.8_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.8.
 - **Phone:** 2.0.8 (code 28), `phone-v2.0.8`. The lead installs it with `install -r` once Wireless debugging is on and `mCallState=0`.
 
