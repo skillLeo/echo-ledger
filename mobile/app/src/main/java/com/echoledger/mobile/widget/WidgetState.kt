@@ -62,6 +62,9 @@ data class WidgetState(
 
 /** The widget's words in [res]'s language (the app language): the same lines as [WidgetState]'s English ones. */
 class WidgetWords(private val res: android.content.res.Resources, private val state: WidgetState) {
+    /** The words are Urdu: the widget lines its text up at the end. */
+    val urdu: Boolean get() = res.configuration.locales[0]?.language == "ur"
+
     val statusLine: String
         get() = with(state) {
             when {

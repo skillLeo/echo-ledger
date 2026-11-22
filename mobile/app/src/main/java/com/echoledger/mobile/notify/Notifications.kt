@@ -245,7 +245,13 @@ object Notifications {
         // This view is the app's own layout: its text follows Settings › Appearance's text size (Android's own templates
         // can't; they keep the phone's).
         recordingTextSize(context)?.let { scale ->
-            RECORDING_TEXT_SP.forEach { (id, sp) -> buttons.setTextViewTextSize(id, android.util.TypedValue.COMPLEX_UNIT_SP, sp * scale) }
+            recordingTextPx(context).forEach { (id, px) ->
+                buttons.setTextViewTextSize(
+                    id,
+                    android.util.TypedValue.COMPLEX_UNIT_PX,
+                    px * scale
+                )
+            }
         }
         return NotificationCompat.Builder(context, CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_stat_rec)
@@ -285,18 +291,26 @@ object Notifications {
             .build()
     }
 
+    /** The recording view's texts, each scaled by the person's text size. */
+    internal val RECORDING_TEXT_IDS =
+        listOf(R.id.rec_title, R.id.rec_detail, R.id.rec_pause, R.id.rec_stop, R.id.rec_captions, R.id.rec_discard)
+
+    private class TextPx(val config: android.content.res.Configuration, val px: Map<Int, Float>)
+
+    @Volatile private var textPx: TextPx? = null
+
     /**
-     * The recording view's text sizes at the phone's size (the Material notification styles its layout uses: title
-     * 14 sp, the rest 12 sp), each multiplied by the person's text size.
+     * The recording view's text sizes in px as its layout's styles give them on this phone (the notification styles,
+     * at the phone's own font size): the layout inflated once per configuration and read, never assumed.
      */
-    internal val RECORDING_TEXT_SP = listOf(
-        R.id.rec_title to 14f,
-        R.id.rec_detail to 12f,
-        R.id.rec_pause to 12f,
-        R.id.rec_stop to 12f,
-        R.id.rec_captions to 12f,
-        R.id.rec_discard to 12f
-    )
+    internal fun recordingTextPx(context: Context): Map<Int, Float> {
+        val config = context.resources.configuration
+        textPx?.takeIf { it.config == config }?.let { return it.px }
+        val view = android.view.LayoutInflater.from(context).inflate(R.layout.notification_recording_actions, null)
+        val px = RECORDING_TEXT_IDS.associateWith { view.findViewById<android.widget.TextView>(it).textSize }
+        textPx = TextPx(android.content.res.Configuration(config), px)
+        return px
+    }
 
     /** Settings › Appearance's text size for the recording view; null at the phone's own size (the layout's styles stay). */
     internal fun recordingTextSize(context: Context): Float? {

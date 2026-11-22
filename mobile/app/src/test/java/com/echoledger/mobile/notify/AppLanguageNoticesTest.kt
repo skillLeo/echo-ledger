@@ -171,7 +171,7 @@ class AppLanguageNoticesTest : AppTest() {
     private fun recordingTextSizes(): Map<Int, Float> {
         val n = Notifications.recording(app, "Recording call", "Microphone")
         val view = n.bigContentView.apply(app, android.widget.FrameLayout(app))
-        return Notifications.RECORDING_TEXT_SP.associate { (id, _) -> id to view.findViewById<android.widget.TextView>(id).textSize }
+        return Notifications.RECORDING_TEXT_IDS.associateWith { view.findViewById<android.widget.TextView>(it).textSize }
     }
 
     @Test
@@ -181,9 +181,10 @@ class AppLanguageNoticesTest : AppTest() {
         runBlocking { app.graph.settings.update { it.copy(textSize = "largest") } }
         pumpUntil("largest") { app.graph.liveSettings.value?.textSize == "largest" }
         val largest = recordingTextSizes()
-        val sp = app.resources.displayMetrics.scaledDensity
-        Notifications.RECORDING_TEXT_SP.forEach { (id, size) -> assertEquals(size * 1.3f * sp, largest.getValue(id), 0.6f) }
+        // Each at 1.3 times the size its layout's style gives it on this phone (read, not assumed).
         assertTrue(phone.values.all { it > 0f })
+        assertEquals(Notifications.recordingTextPx(app), phone)
+        Notifications.RECORDING_TEXT_IDS.forEach { id -> assertEquals(phone.getValue(id) * 1.3f, largest.getValue(id), 0.6f) }
         // Its four buttons in the app language, Captions and Stop too.
         language("ur")
         val view = Notifications.recording(app, "Recording call", "Microphone").bigContentView.apply(app, android.widget.FrameLayout(app))

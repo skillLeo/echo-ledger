@@ -71,21 +71,35 @@ class WidgetLookShotsTest : AppTest() {
 
     private fun sizeOf(view: View, words: String): Float = texts(view).first { it.text.toString() == words }.textSize
 
-    @Test
-    fun atLargestTheWidgetsTextIsLargerByTheSameShareAsTheApps() {
-        val phone = draw("en", "system")
-        val largest = draw("en", "largest")
-        for (words in listOf("Ready to record calls", "Weekly sync with Omar", "EchoLedger")) {
-            assertEquals(words, sizeOf(phone, words) * 1.3f, sizeOf(largest, words), 0.6f)
-        }
-        largest.captureRoboImage(File(out, "phone-widget-largest-light.png"))
+    /** Draws and shoots the widget in the light and the dark theme (the phone's, as the launcher shows it). */
+    private fun shoot(language: String, textSize: String, name: String): View {
+        org.robolectric.RuntimeEnvironment.setQualifiers("+night")
+        draw(language, textSize).captureRoboImage(File(out, "phone-widget-$name-dark.png"))
+        org.robolectric.RuntimeEnvironment.setQualifiers("+notnight")
+        return draw(language, textSize).also { it.captureRoboImage(File(out, "phone-widget-$name-light.png")) }
     }
 
     @Test
-    fun inUrduTheWidgetSpeaksUrdu() {
-        val urdu = draw("ur", "system")
-        val all = texts(urdu).map { it.text.toString() }
-        assertTrue(all.toString(), "کالز ریکارڈ کرنے کے لیے تیار" in all)
-        urdu.captureRoboImage(File(out, "phone-widget-ur-light.png"))
+    fun atLargestTheWidgetsTextIsLargerByTheSameShareAsTheApps() {
+        val phone = draw("en", "system")
+        val largest = shoot("en", "largest", "largest")
+        for (words in listOf("Ready to record calls", "Weekly sync with Omar", "EchoLedger")) {
+            assertEquals(words, sizeOf(phone, words) * 1.3f, sizeOf(largest, words), 0.6f)
+        }
+    }
+
+    @Test
+    fun inUrduTheWidgetSpeaksUrduLinedUpAtTheEnd() {
+        val urdu = shoot("ur", "system", "ur")
+        val all = texts(urdu)
+        val status = all.first { it.text.toString() == "کالز ریکارڈ کرنے کے لیے تیار" }
+        // Lined up at the end (the launcher lays the widget out left to right on an English phone: the right edge).
+        val end = status.gravity and android.view.Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK
+        assertTrue("gravity ${status.gravity}", end == android.view.Gravity.END || end == android.view.Gravity.RIGHT)
+        assertTrue(status.width > status.layout.getLineWidth(0))
+        // In English, at the start as before.
+        val english = texts(draw("en", "system")).first { it.text.toString() == "Ready to record calls" }
+        val start = english.gravity and android.view.Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK
+        assertTrue("gravity ${english.gravity}", start != android.view.Gravity.END && start != android.view.Gravity.RIGHT)
     }
 }
