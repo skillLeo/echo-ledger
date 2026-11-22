@@ -241,7 +241,7 @@ class BackgroundWorkTest : AppTest() {
     fun `Undo on the Saved notification is a Discard with its own Undo, never a delete at once`() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val rec = app.storeRecording(id = "call-1", state = "queued", durationMs = 272_000)
-        Notifications.savedWithUndo(app, rec, "WhatsApp call")
+        Notifications.savedWithUndo(app, rec)
 
         app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_UNDO, "call-1"))
         pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }

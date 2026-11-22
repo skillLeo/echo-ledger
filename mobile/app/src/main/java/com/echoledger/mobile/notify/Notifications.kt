@@ -229,6 +229,8 @@ object Notifications {
                 R.id.rec_pause,
                 serviceAction(context, if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE, 14)
             )
+            setTextViewText(R.id.rec_stop, com.echoledger.mobile.notify.NoticeWords.say(context, "Stop"))
+            setTextViewText(R.id.rec_captions, com.echoledger.mobile.notify.NoticeWords.say(context, "Captions"))
             setOnClickPendingIntent(R.id.rec_stop, serviceAction(context, RecordingService.ACTION_STOP, 11))
             setOnClickPendingIntent(R.id.rec_captions, serviceAction(context, RecordingService.ACTION_CAPTIONS, 16))
             setTextViewText(
@@ -239,6 +241,11 @@ object Notifications {
                 R.id.rec_discard,
                 serviceAction(context, if (discarding) RecordingService.ACTION_UNDO_DISCARD else RecordingService.ACTION_DISCARD_NOW, 17)
             )
+        }
+        // This view is the app's own layout: its text follows Settings › Appearance's text size (Android's own templates
+        // can't; they keep the phone's).
+        recordingTextSize(context)?.let { scale ->
+            RECORDING_TEXT_SP.forEach { (id, sp) -> buttons.setTextViewTextSize(id, android.util.TypedValue.COMPLEX_UNIT_SP, sp * scale) }
         }
         return NotificationCompat.Builder(context, CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_stat_rec)
@@ -276,6 +283,25 @@ object Notifications {
                 serviceAction(context, if (discarding) RecordingService.ACTION_UNDO_DISCARD else RecordingService.ACTION_DISCARD_NOW, 17)
             )
             .build()
+    }
+
+    /**
+     * The recording view's text sizes at the phone's size (the Material notification styles its layout uses: title
+     * 14 sp, the rest 12 sp), each multiplied by the person's text size.
+     */
+    internal val RECORDING_TEXT_SP = listOf(
+        R.id.rec_title to 14f,
+        R.id.rec_detail to 12f,
+        R.id.rec_pause to 12f,
+        R.id.rec_stop to 12f,
+        R.id.rec_captions to 12f,
+        R.id.rec_discard to 12f
+    )
+
+    /** Settings › Appearance's text size for the recording view; null at the phone's own size (the layout's styles stay). */
+    internal fun recordingTextSize(context: Context): Float? {
+        val size = (context.applicationContext as? com.echoledger.mobile.EchoLedgerApp)?.graph?.liveSettings?.value?.textSize
+        return com.echoledger.mobile.ui.v2.shell.AppLook.scale(size ?: "system").takeIf { it != 1f }
     }
 
     /** Opens the app on the Live view of the recording in progress (the Record tab). */
@@ -344,7 +370,9 @@ object Notifications {
                 .putExtra(SaveDecisionReceiver.EXTRA_ID, rec.id),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val text = decisionText(rec, clientName)
+        // In the app language; the person's own words (names, the project) go in as they are.
+        val words = com.echoledger.mobile.notify.AppWords.resources(context)
+        val text = decisionText(words, rec, clientName)
         val public = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Save this recording?"))
@@ -352,7 +380,7 @@ object Notifications {
         val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Save this recording?"))
-            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
+            .setContentText(text)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -363,10 +391,8 @@ object Notifications {
             .setContentIntent(openPending(context))
             .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Keep"), decision(true, rec.id.hashCode()))
             .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Discard"), decision(false, rec.id.hashCode() + 1))
-        firstCaptionLine(rec.liveSegments)?.let { line ->
-            builder.setStyle(
-                NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, "$text\n$line"))
-            )
+        firstCaptionLine(words, rec.liveSegments)?.let { line ->
+            builder.setStyle(NotificationCompat.BigTextStyle().bigText("$text\n$line"))
         }
         if (decisionTimeout != "wait") builder.setTimeoutAfter(DecisionTimeoutWorker.WINDOW_SECONDS * 1000)
         // Android 13+ needs the notification permission; without it the question is in the app's Record tab only.
@@ -382,7 +408,7 @@ object Notifications {
      * "Saved · Call with Omar · 4:12" with Undo (since v1.5, a call kept automatically, when the chip cannot be shown):
      * quiet, gone after the same 6 s the upload waits.
      */
-    fun savedWithUndo(context: Context, rec: LocalRecording, title: String) {
+    fun savedWithUndo(context: Context, rec: LocalRecording) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -399,7 +425,12 @@ object Notifications {
         val duration = com.echoledger.mobile.ui.formatDuration(rec.durationMs).ifEmpty { "0:00" }
         val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Saved · $title · $duration"))
+            // The title as the person named it, or the app's words for the call, in the app language.
+            .setContentTitle(
+                com.echoledger.mobile.notify.AppWords.resources(context).let {
+                    it.getString(R.string.n_saved, recordingTitle(it, rec), duration)
+                }
+            )
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -424,7 +455,7 @@ object Notifications {
      * Discard: quiet, gone after the 5 s the file waits for ([com.echoledger.mobile.calls.Decisions.discardLater]).
      */
     @SuppressLint("MissingPermission") // checked by canPost() first
-    fun discardedWithUndo(context: Context, rec: LocalRecording, title: String) {
+    fun discardedWithUndo(context: Context, rec: LocalRecording) {
         if (!canPost(context)) return
         val undo = PendingIntent.getBroadcast(
             context,
@@ -437,7 +468,12 @@ object Notifications {
         val duration = com.echoledger.mobile.ui.formatDuration(rec.durationMs).ifEmpty { "0:00" }
         val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Discarded · $title · $duration"))
+            // The title as the person named it, or the app's words for the call, in the app language.
+            .setContentTitle(
+                com.echoledger.mobile.notify.AppWords.resources(context).let {
+                    it.getString(R.string.n_discarded, recordingTitle(it, rec), duration)
+                }
+            )
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -656,21 +692,47 @@ object Notifications {
     }
 
     /** "WhatsApp call · 4:12 · Acme", "Call with Omar Khan · 2:05" or "Voice note · 0:42". */
-    fun decisionText(rec: LocalRecording, clientName: String?): String {
+    fun decisionText(rec: LocalRecording, clientName: String?): String = decisionText(null, rec, clientName)
+
+    /**
+     * The same in [res]'s language (null: English, as it always read). The caller's name, the app's name and the
+     * project are the person's own words: they go in as they are.
+     */
+    fun decisionText(res: android.content.res.Resources?, rec: LocalRecording, clientName: String?): String {
         val app = SourceApp.from(rec.sourceApp)
         val caller = (rec.callerName ?: rec.callerNumber)?.takeIf { it.isNotBlank() && app != SourceApp.VOICE_NOTE }
         val what = when {
-            caller != null -> "Call with $caller"
-            app == SourceApp.VOICE_NOTE || app == SourceApp.PHONE_CALL -> app.label
-            else -> "${app.label} call"
+            caller != null -> res?.getString(R.string.n_call_with, caller) ?: "Call with $caller"
+            app == SourceApp.VOICE_NOTE -> res?.getString(R.string.n_voice_note) ?: app.label
+            app == SourceApp.PHONE_CALL -> res?.getString(R.string.n_phone_call) ?: app.label
+            else -> res?.getString(R.string.n_app_call, app.label) ?: "${app.label} call"
         }
         return listOfNotNull(what, formatDuration(rec.durationMs), clientName?.takeIf { it.isNotBlank() }).joinToString(" · ")
     }
 
+    /**
+     * A recording's title for the saved and discarded lines: the person's own title as it is, else the app's words for
+     * the call in [res]'s language ("Call with Omar", "WhatsApp call"), as [com.echoledger.mobile.overlay.DecisionPopup.title].
+     */
+    fun recordingTitle(res: android.content.res.Resources, rec: LocalRecording): String = rec.title?.takeIf { it.isNotBlank() }
+        ?: rec.callerName?.takeIf { it.isNotBlank() }?.let { res.getString(R.string.n_call_with, it) }
+        ?: rec.callerNumber?.takeIf { it.any(Char::isDigit) }?.let { res.getString(R.string.n_call_with, it) }
+        ?: SourceApp.from(rec.sourceApp).let {
+            if (it == SourceApp.PHONE_CALL) res.getString(R.string.n_phone_call) else res.getString(R.string.n_app_call, it.label)
+        }
+
     /** The first caption turn as "Me: …" or "Client: …", at most 140 characters. */
-    fun firstCaptionLine(segments: List<SegmentDto>): String? {
+    fun firstCaptionLine(segments: List<SegmentDto>): String? = firstCaptionLine(null, segments)
+
+    /** The same with the speaker in [res]'s language; what was said stays as it was said. */
+    fun firstCaptionLine(res: android.content.res.Resources?, segments: List<SegmentDto>): String? {
         val first = segments.filter { it.text.isNotBlank() }.minWithOrNull(compareBy({ it.startMs }, { it.channel })) ?: return null
-        val line = "${first.speaker}: ${first.text.trim()}"
+        val speaker = when (first.speaker) {
+            "Me" -> res?.getString(R.string.n_me)
+            "Client" -> res?.getString(R.string.n_client)
+            else -> null
+        } ?: first.speaker
+        val line = "$speaker: ${first.text.trim()}"
         return if (line.length <= 140) line else line.take(139) + "…"
     }
 

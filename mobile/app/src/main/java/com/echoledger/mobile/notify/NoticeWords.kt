@@ -17,7 +17,8 @@ object NoticeWords {
     /** Lines said whole or as a pattern; the English of each is read from the English resources. */
     private val ids = listOf(
         R.string.n_test, R.string.n_calls_not_recorded, R.string.n_only_voice, R.string.n_paused, R.string.n_resume, R.string.n_pause,
-        R.string.n_stop, R.string.n_undo_discard, R.string.n_discard, R.string.n_ready_whatsapp, R.string.n_capture_not_ready,
+        R.string.n_stop, R.string.n_captions, R.string.n_undo_discard, R.string.n_discard, R.string.n_ready_whatsapp,
+        R.string.n_capture_not_ready,
         R.string.n_armed_ask, R.string.n_armed_keep, R.string.n_start_shizuku, R.string.n_record_now, R.string.n_turn_off,
         R.string.n_save_question, R.string.n_keep, R.string.n_saved, R.string.n_call_saved, R.string.n_undo, R.string.n_discarded,
         R.string.n_call_discarded, R.string.n_not_ready_text, R.string.n_call_not_recorded_first, R.string.n_no_sound_first,
@@ -44,6 +45,9 @@ object NoticeWords {
     )
 
     private const val PARTS = " · "
+
+    /** The patterns whose hole is the app's own words, not the person's: "Paused · Recording call", "Translating to Urdu". */
+    private val appWordHoles = setOf(R.string.n_paused, R.string.n_lt_translating)
     private val hole = Regex("""%(\d)\$[sd]""")
 
     private class Line(val id: Int, val exact: String?, val pattern: Regex?, val numbers: Set<Int>)
@@ -74,8 +78,16 @@ object NoticeWords {
         known.firstOrNull { it.exact == text }?.let { return res.getString(it.id) }
         for (line in known) {
             val m = line.pattern?.matchEntire(text) ?: continue
+            // A line of several parts ("Both sides · auto · 2 bookmarks") is said part by part, not as one name.
+            if (line.id !in appWordHoles && m.groupValues.drop(1).any { it.contains(PARTS) }) continue
+            // A hole holds the person's own words (a contact's name, a title, a file) as they are; only the holes that
+            // hold the app's own words (a recording's state, a language) are said in the app language too.
             val args: List<Any> = m.groupValues.drop(1).mapIndexed { i, v ->
-                if (i + 1 in line.numbers) v.toIntOrNull() ?: v else say(res, en, v)
+                when {
+                    i + 1 in line.numbers -> v.toIntOrNull() ?: v
+                    line.id in appWordHoles -> say(res, en, v)
+                    else -> v
+                }
             }
             return res.getString(line.id, *args.toTypedArray())
         }

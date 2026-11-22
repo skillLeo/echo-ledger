@@ -15,7 +15,7 @@
     <string name="v2_pc_report_copied">رپورٹ کاپی ہو گئی</string>
     <string name="v2_pc_send">میرے ایڈمن کو بھیجیں</string>
     <string name="v2_pc_sending">بھیجی جا رہی ہے…</string>
-    <string name="v2_pc_report_note">رپورٹ میں اس فون کا بنانے والا، ماڈل اور Android ورژن اور اوپر کی لائنیں ہوتی ہیں۔ یہ آپ کے ایڈمن کو صرف بھیجیں پر تھپتھپانے سے جاتی ہے۔</string>
+    <string name="v2_pc_report_note">رپورٹ میں اس فون کا بنانے والا، ماڈل اور Android ورژن اور اوپر کی لائنیں ہوتی ہیں، انگریزی میں، جیسے آپ کا ایڈمن پڑھتا ہے۔ یہ آپ کے ایڈمن کو صرف بھیجیں پر تھپتھپانے سے جاتی ہے۔</string>
     <string name="v2_pc_report_note_signed_out">رپورٹ ایڈمن کو بھیجنے کے لیے سائن ان کریں۔ رپورٹ کاپی کرنا ابھی چلتا ہے۔</string>
     <string name="v2_pc_keep_running">%1$s پر EchoLedger کو چلتا رکھیں</string>
     <string name="v2_pc_open_settings">سیٹنگز کھولیں</string>

@@ -8,6 +8,7 @@
     <string name="n_paused">Paused · %1$s</string>
     <string name="n_resume">Resume</string>
     <string name="n_pause">Pause</string>
+    <string name="n_captions">Captions</string>
     <string name="n_stop">Stop</string>
     <string name="n_undo_discard">Undo discard</string>
     <string name="n_discard">Discard</string>

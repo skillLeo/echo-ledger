@@ -39,7 +39,7 @@ object PostCallPrompt {
         } else {
             UploadWorker.enqueueAfter(context, rec.id, DecisionPopup.SAVED_MS / 1000)
             val shown = overlay && DecisionPopup.show(context, rec, themeMode, DecisionPopup.Mode.SAVED, v2)
-            if (!shown) Notifications.savedWithUndo(context, rec, DecisionPopup.title(rec))
+            if (!shown) Notifications.savedWithUndo(context, rec)
         }
     }
 
