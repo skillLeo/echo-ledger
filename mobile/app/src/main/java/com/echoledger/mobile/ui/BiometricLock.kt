@@ -179,9 +179,10 @@ private tailrec fun Context.findFragmentActivity(): FragmentActivity? = when (th
 }
 
 /**
- * Who wants FLAG_SECURE on one window: the app lock's "hide content" choice ([lock]) and each secret screen showing
- * now ([screens], the two-step key and the recovery codes). The flag is on while any of them wants it, so a secret
- * screen closing never clears the lock's flag, and the lock being turned off never uncovers a secret screen.
+ * Who wants FLAG_SECURE on one window: Block screenshots of EchoLedger ([lock], the app lock's "hide content" until
+ * 2.0.5) and each secret screen showing now ([screens], the two-step key and the recovery codes). The flag is on while
+ * any of them wants it, so a secret screen closing never clears the block, and turning the block off never uncovers a
+ * secret screen.
  */
 internal class SecureHolds {
     var lock = false

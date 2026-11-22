@@ -140,10 +140,10 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         if (savedInstanceState == null) openRequest.value = intent?.getStringExtra(EXTRA_OPEN) ?: intent?.let(::linkRequest)
         if (savedInstanceState == null) signedIn(intent)
-        // Content hidden in Recents and screenshots while the app lock and its "hide content" option are on.
+        // Content hidden in Recents and screenshots while Block screenshots of EchoLedger is on (off by default).
         lifecycleScope.launch {
             vm.settingsState.collect { state ->
-                if (state is SettingsState.Loaded) window.applySecureScreen(state.settings.appLockEnabled && state.settings.secureScreen)
+                if (state is SettingsState.Loaded) window.applySecureScreen(state.settings.blockScreens)
             }
         }
         setContent {

@@ -30,8 +30,16 @@ data class AppSettings(
     val appLockEnabled: Boolean = false,
     /** How long the app may stay in the background before the lock engages again: 0, 60 000 or 300 000 ms. */
     val lockAfterMs: Long = 0L,
-    /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
+    /**
+     * Until 2.0.5: while the lock was on, hide the app's content in Recents and screenshots. Folded into [blockScreens]
+     * (a phone with the lock and this on reads as blocked); kept so older settings files still read.
+     */
     val secureScreen: Boolean = false,
+    /**
+     * Settings › Privacy & data › "Block screenshots of EchoLedger" (since 2.0.5, off by default): FLAG_SECURE on the
+     * app's own screens. Off, screenshots of the app are allowed at any time, also while recording.
+     */
+    val blockScreens: Boolean = false,
     /** What the server last said about updates, an announcement and maintenance (since v1.6, P2.7). */
     val serverNotices: com.echoledger.mobile.core.ServerNotices = com.echoledger.mobile.core.ServerNotices(),
     /** The announcement texts the person closed (their hashes), the latest 20. */
@@ -39,11 +47,16 @@ data class AppSettings(
     /** The home-screen widget shows "WhatsApp call" instead of each recording's title (since v1.6). */
     val widgetHideTitles: Boolean = false,
     /**
-     * Since v1.8.1, Settings → Privacy & data → During screen sharing ([com.echoledger.mobile.core.ShareGuard.Mode.of]):
-     * "hide" = Private, the default (FLAG_SECURE on every floating window); "show" = Show; "black_box" (the first v1.8.1
-     * builds) and any unknown value read as Private.
+     * v1.8.1 to 2.0.4, During screen sharing: "hide" (Private, the default), "black_box" (the first v1.8.1 builds) or
+     * "show". Since 2.0.5 it is only read once, to give [hideLiveWords] its first value (Show is off, the others on).
      */
     val screenShareMode: String = "hide",
+    /**
+     * Since 2.0.5, Settings › Privacy & data › "Hide EchoLedger's live words from screenshots and screen shares" (on by
+     * default; [com.echoledger.mobile.core.ShareGuard]): FLAG_SECURE on captions, Live Assist and Live Translate. The pill
+     * and the after-call card never carry it.
+     */
+    val hideLiveWords: Boolean = true,
     /** Absent in settings stored before v1.1.1, which also reset the old default "hide content" (on) to off. */
     val settingsVersion: Int = 2,
     /** What happens to a recording nobody decided on within 60 s: "keep", "discard" or "wait" (same as the desktop). */
@@ -318,13 +331,33 @@ class SettingsStore(
         val migrated = if (!raw.contains("\"onboardingDone\"") && parsed.paired) parsed.copy(onboardingDone = true) else parsed
         // Until v1.1.1 "Hide content in Recents and screenshots" was on by default; screenshots are always allowed now
         // unless the person turns the option on themselves.
-        return if (!raw.contains(
+        val versioned = if (!raw.contains(
                 "\"settingsVersion\""
             )
         ) {
             migrated.copy(secureScreen = false, settingsVersion = SETTINGS_VERSION)
         } else {
             migrated
+        }
+        // 2.0.5: the app lock's "hide content" became Block screenshots of EchoLedger. Where it was in effect (the lock
+        // on and it on) screenshots stay blocked; nobody else gets a block they didn't choose.
+        val unblocked = if (!raw.contains(
+                "\"blockScreens\""
+            )
+        ) {
+            versioned.copy(blockScreens = versioned.appLockEnabled && versioned.secureScreen)
+        } else {
+            versioned
+        }
+        // 2.0.5 (the owner's decision): During screen sharing became Hide EchoLedger's live words; Show is off, Private
+        // ("hide", or the first v1.8.1 builds' "black_box") is on.
+        return if (!raw.contains(
+                "\"hideLiveWords\""
+            )
+        ) {
+            unblocked.copy(hideLiveWords = unblocked.screenShareMode != "show")
+        } else {
+            unblocked
         }
     }
 
