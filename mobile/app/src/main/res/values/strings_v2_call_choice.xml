@@ -32,7 +32,9 @@
     <string name="cc_done_audio">Saved as audio</string>
     <string name="cc_done_deleted">Deleted</string>
     <string name="cc_grouped_audio">%1$d calls saved as audio</string>
+    <string name="cc_grouped_mixed">%1$d calls</string>
     <string name="cc_grouped_review">Review</string>
+    <string name="cc_save_audio_all">Save all as audio only</string>
     <string name="cc_quiet_saved">Saved as audio during quiet hours</string>
     <string name="cc_block_screens">Block screenshots of EchoLedger</string>
     <string name="cc_block_screens_help">Off: you can take screenshots of the app at any time. On: EchoLedger\'s own screens can\'t be captured.</string>

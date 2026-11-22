@@ -32,7 +32,9 @@
     <string name="cc_done_audio">آڈیو محفوظ ہو گئی</string>
     <string name="cc_done_deleted">حذف ہو گئی</string>
     <string name="cc_grouped_audio">%1$d کالز کی آڈیو محفوظ ہو گئی</string>
+    <string name="cc_grouped_mixed">%1$d کالز</string>
     <string name="cc_grouped_review">دیکھیں</string>
+    <string name="cc_save_audio_all">سب کی صرف آڈیو محفوظ کریں</string>
     <string name="cc_quiet_saved">خاموش اوقات میں آڈیو محفوظ ہوئی</string>
     <string name="cc_block_screens">EchoLedger کے اسکرین شاٹس روکیں</string>
     <string name="cc_block_screens_help">بند: آپ ایپ کے اسکرین شاٹس کسی بھی وقت لے سکتے ہیں۔ آن: EchoLedger کی اپنی اسکرینز کیپچر نہیں ہو سکتیں۔</string>
