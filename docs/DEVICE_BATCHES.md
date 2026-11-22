@@ -6,6 +6,45 @@ development Mac. Results go into [SCREEN_SHARE_MATRIX.md](SCREEN_SHARE_MATRIX.md
 
 Phone rules for every batch: `pm install -r` only; never uninstall, never clear data; check `mCallState=0` first.
 
+## Next slot — the call choice (PLAN_CALL_CHOICE), Mac 2.0.7 and phone 2.0.7, about 45 minutes
+
+Builds:
+- **Mac:** 2.0.7, signed with the pinned identity, waiting in the lead's scratchpad. The lead installs it after "mac free".
+- **Windows:** `EchoLedger_2.0.7_x64-setup.exe` from https://github.com/skillLeo/echo-ledger/releases/tag/v2.0.7.
+- **Phone:** 2.0.7 (code 27), `phone-v2.0.7`. The lead installs it with `install -r` once Wireless debugging is on and `mCallState=0`.
+
+**1. Mac, about 15 minutes**
+1. **Install and check permissions.**
+   - Quit EchoLedger (⌘Q) and write "mac free". The lead installs 2.0.7.
+   - Open it. Allow Microphone, Screen Recording, System Audio Recording Only, and Automation for Chrome when asked. Then quit and reopen once.
+2. **Warning check.** Before allowing System Audio (if it isn't allowed yet), start a recording with a video playing.
+   - Pass if within about 3 s the pill says "The other side isn't being recorded" with Open System Settings and Try again.
+   - Allow it, press Try again, and the warning goes.
+3. **Zoom in Chrome, 1 minute**, with the phone as the other person. The lead watches mic.wav and system.wav grow live. Pass if both sides are in the transcript.
+4. **After the meeting.** The calm card shows next to the pill:
+   - the Zoom logo, the name, "0:44 · just now";
+   - Delete and Transcribe;
+   - "Close to keep audio only".
+   Press Transcribe, then Undo, then Transcribe again.
+5. **Pill menu.** During a second short meeting, click the pill and choose "Save audio only". Pass if no card shows after it.
+6. **Library.** No banner. The header shows "N need you" with a dot. The sidebar folder counts are readable grey numbers (needs the next desktop build if not yet in 2.0.7).
+
+**2. Phone, about 25 minutes.** Check `mCallState=0` first.
+1. **Three WhatsApp calls**, each about 20 s, with "After each call: Ask me" (the default after the update):
+   - **Call 1:** Transcribe. "Transcribing…" shows with Undo.
+   - **Call 2:** Delete, then Undo within 5 s. The card comes back.
+   - **Call 3:** swipe the card away. Pass if "Saved as audio · Transcribe" shows.
+2. **Pill choice.** During a call, tap the pill and choose "Transcribe this call". Pass if no card shows after the call.
+3. **At the start.** In Settings › Recording › When to ask, choose "At the start of the call".
+   - Pass if "Recording this call · Don't record" shows for 5 s after the call connects, never while ringing, and never covers the call buttons.
+   - Set it back to "After the call".
+4. **Screenshot while recording.** Pass if the pill shows in the screenshot. With live captions on, note whether you get a black box or Samsung refuses the screenshot.
+5. **Back-to-back calls.** End two calls within 10 s. Pass if there's one grouped line, never two cards.
+
+**3. Approvals, about 5 minutes**
+- **The card, old and new side by side:** `docs/design/screens/call-choice/` (phone `old-*` / `new-*`, desktop `desktop-old-*` / `desktop-new-*`). Approve the look (VISUAL-OK) or say what to change.
+- **D12 rows:** "rows OK" (`~/Desktop/EchoLedger-row-redesign`).
+
 ## Tonight 20:00–21:30 PKT (2026-11-22) — 2.0.4 on the Mac and Windows, phone 2.0.5, about 85 minutes
 
 Builds:
