@@ -7,8 +7,7 @@ import type { PendingItem, UploadItem } from "../../lib/ipc";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, menuLabel } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { heldLine, importProgressText, pendingTitle, uploadTitle, waitingLine, waitingSummary } from "../../lib/pending";
-import { useLibraryQueue } from "../../views/main/LibraryQueue";
-import type { Notify } from "../../lib/notice";
+import type { LibraryQueueState } from "../../views/main/LibraryQueue";
 import { Banner, Button, Card, Dialog, Icons, List, ListRow, Progress, Status, TextField } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
@@ -25,14 +24,24 @@ const avatar = (item: { sourceApp: string }) => <SourceAvatar size="sm" item={{ 
  * request it was given, and must not open again for it. */
 const answered = new WeakSet<object>();
 
-export function QueueV2({ say, reviewRequest, onShown }: {
-  say: (text: string) => void;
+/**
+ * What the queue shows with its own Review (the waiting calls, the uploads that need you), or null until both lists have
+ * answered once: the Library's needs button leaves these to it, so there is one Review for each thing, and waits.
+ */
+export function queueCovers(q: LibraryQueueState): { waiting: boolean; failed: boolean } | null {
+  return q.loaded ? { waiting: q.pending.length > 0, failed: q.failed.length > 0 } : null;
+}
+
+/**
+ * The queue drawn from the Library's own copy of it (`queue`, useLibraryQueue in LibraryV2): it stays loaded and
+ * follows the core's events while this list is away (Trash, a selection, a recording open), so what the header says
+ * about it is right the moment the list is back. `openWaiting`: the Waiting place is open, so its calls are listed.
+ */
+export function QueueV2({ queue: q, reviewRequest, openWaiting = false }: {
+  queue: LibraryQueueState;
   reviewRequest?: { seq: number } | null;
-  /** What the list shows now: the Library's banner leaves these to it, so there is one Review for each. */
-  onShown?: (shown: { waiting: boolean; failed: boolean }) => void;
+  openWaiting?: boolean;
 }) {
-  const notify: Notify = (text) => say(text);
-  const q = useLibraryQueue(notify);
   const { pending, failed, verifying, importing, held, clients, busy, bulkBusy, learn } = q;
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ item: PendingItem; text: string } | null>(null);
@@ -48,6 +57,13 @@ export function QueueV2({ say, reviewRequest, onShown }: {
   useEffect(() => {
     if (open && reviewRequest) document.getElementById("queue-pending-list")?.scrollIntoView?.({ block: "nearest" });
   }, [open, reviewRequest]);
+  // The Waiting place counts these calls: opening it lists them (Hide still folds them).
+  useEffect(() => {
+    if (!openWaiting) return;
+    setOpen(true);
+    q.loadClients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openWaiting]);
   // Once nothing waits the list closes; the next recording to arrive starts with the summary again (classic's rule).
   // (Only once something has waited: the list reads its recordings after a Review request has opened it.)
   const hadWaiting = useRef(false);
@@ -58,12 +74,6 @@ export function QueueV2({ say, reviewRequest, onShown }: {
       setOpen(false);
     }
   }, [pending.length]);
-  const shows = { waiting: pending.length > 0, failed: failed.length > 0 };
-  useEffect(() => {
-    onShown?.(shows);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shows.waiting, shows.failed]);
-  useEffect(() => () => onShown?.({ waiting: false, failed: false }), []); // eslint-disable-line react-hooks/exhaustive-deps
   if (pending.length === 0 && failed.length === 0 && verifying.length === 0 && importing.length === 0 && held.length === 0) return null;
   const shown = open && pending.length > 0;
 

@@ -1,11 +1,12 @@
 // Library as the start screen (PLAN_V2_PARITY 2): Home's get-started checklist as a card that can be hidden, until
-// setup is done, and what needs action as one quiet banner that opens the right view.
+// setup is done. What needs action lives only in the Library's header: one quiet button, led by an attention dot, that
+// shows whenever something needs action and opens the right view (there is no needs-action banner).
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeItem, makePendingItem, makeStatus } from "../../test/fixtures";
+import { emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { makeItem, makePendingItem, makeStatus, makeUploadItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
-import { dismissedKey } from "./LibraryTop";
+import { DISMISSED_PREFIX, HOLD_MS } from "./LibraryTop";
 import type { Account } from "../../lib/ipc";
 
 const account = (email: string): Account => ({ name: "Ayesha Khan", email, email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
@@ -31,9 +32,50 @@ describe("the top of the Library", () => {
   });
   const show = async (status = makeStatus({ platform: "macos", pendingDecisions: 2 })) => {
     const top = { status, onSetup: vi.fn(), onReadyCheck: vi.fn(), onRecord: vi.fn(), onActivity: vi.fn() };
-    const { unmount } = render(<LibraryV2 top={top} />);
+    const { unmount, rerender } = render(<LibraryV2 top={top} />);
     await act(flushAsync);
-    return Object.assign(top, { unmount });
+    // The app's status moves on (a call waits, a decision is made): the same Library with the new counts.
+    const update = async (next: Parameters<typeof makeStatus>[0]) => {
+      rerender(<LibraryV2 top={{ ...top, status: makeStatus({ platform: "macos", ...next }) }} />);
+      await act(flushAsync);
+    };
+    return Object.assign(top, { unmount, update });
+  };
+  const actions = () => document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
+  const needs = () => actions().firstElementChild?.matches(".el-menu-anchor") ? actions().querySelector("button")! : actions().firstElementChild as HTMLElement;
+  const NEEDS = /need you|needs you|not transcribed|waiting|didn't upload|skipped|notification/;
+  /**
+   * Every change to the header's needs button once it is on screen: its words changed, or it went or was swapped for
+   * another (a count it then corrected). Being drawn is not a change. Read from the DOM's own records, so a state that
+   * a later render corrected before the test looks again is caught too.
+   */
+  const watchCorrections = () => {
+    const changes: string[] = [];
+    const host = (node: Node) => (node instanceof Element ? node : node.parentElement)?.closest(".el-needs");
+    const observer = new MutationObserver((records) => {
+      for (const r of records) {
+        const inside = host(r.target);
+        if (inside) changes.push(`changed: ${r.type === "characterData" ? `"${r.oldValue}" in ` : ""}"${inside.textContent}"`);
+        r.removedNodes.forEach((n) => {
+          const gone = n instanceof Element ? (n.matches(".el-needs") ? n : n.querySelector(".el-needs")) : null;
+          if (gone) changes.push(`went: "${gone.textContent}"`);
+        });
+      }
+    });
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true, characterDataOldValue: true });
+    return { changes, stop: () => observer.disconnect() };
+  };
+  /** A command that answers when the test says (`answer`), once per call. */
+  const later = (command: string) => {
+    const waiting: ((value: unknown) => void)[] = [];
+    respondWith(command, () => new Promise((resolve) => waiting.push(resolve)));
+    return {
+      calls: () => waiting.length,
+      answer: async (value: unknown) => {
+        await act(async () => waiting.splice(0).forEach((resolve) => resolve(value)));
+        await act(flushAsync);
+      },
+    };
   };
 
   it("the get-started card until setup is done: each step runs its fix, and Hide keeps it hidden on this computer", async () => {
@@ -51,148 +93,38 @@ describe("the top of the Library", () => {
     expect(window.localStorage.getItem("echoledger-library-setup-hidden")).toBe("1");
   });
 
-  it("one quiet banner for what needs action; Review opens the view", async () => {
+  it("no needs-action banner in the Library: the header's button is the only place it is said", async () => {
     await show();
-    const banner = screen.getByTestId("needs-action");
-    expect(banner).toHaveTextContent("2 calls wait for your decision · 1 more needs you");
-    fireEvent.click(within(banner).getByRole("button", { name: "Review" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "1 recording isn't transcribed" }));
-    expect([...document.querySelectorAll("button[data-row-id]")].map((b) => b.getAttribute("data-row-id"))).toEqual(["a"]);
-  });
-
-  it("nothing to do: no card, no banner; without `top` neither shows", async () => {
-    respond("ready_last", { ready: true, checkedAt: "2026-11-17T10:00:00Z", checks: [] });
-    respond("permissions_status", { microphone: "allowed", systemAudio: "allowed", screen: "allowed", browserAutomation: true, platform: "macos" });
-    respond("library_list", [ITEMS[1]]);
-    respond("library_refresh", [ITEMS[1]]);
-    await show(makeStatus({ platform: "macos" }));
-    expect(screen.queryByRole("region", { name: "Get started" })).toBeNull();
     expect(screen.queryByTestId("needs-action")).toBeNull();
+    expect(document.querySelector(".el-library-top .el-banner")).toBeNull();
+    expect(screen.queryByText(/wait for your decision|isn't transcribed/, { selector: ".el-banner *" })).toBeNull();
+    expect(within(actions()).getByRole("button", { name: "3 need you" })).toBe(needs());
+    // One "Review" for each thing: the queue's (the waiting calls are in the button's menu, nothing else says Review).
+    expect(screen.queryAllByRole("button", { name: /^Review/ })).toHaveLength(0);
   });
 
-  describe("the banner's × (Dismiss)", () => {
-    const KEY = dismissedKey("https://ledger.example.test", "ayesha@example.com");
-    const dismiss = () => fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" }));
-    // Starts with 2 waiting calls and 1 untranscribed recording.
-    const again = (status: Parameters<typeof makeStatus>[0]) => show(makeStatus({ platform: "macos", ...status }));
-
-    it("is a button named Dismiss that the keyboard reaches; it hides the banner and remembers what it said", async () => {
-      await show();
-      const button = within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" });
-      expect(button.tagName).toBe("BUTTON");
-      expect(button.tabIndex).toBe(0);
-      button.focus();
-      expect(document.activeElement).toBe(button);
-      dismiss();
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 2, untranscribed: 1 });
-    });
-
-    it("stays hidden after a restart with the same counts, and when a count falls", async () => {
-      const first = await again({ pendingDecisions: 2 });
-      dismiss();
-      first.unmount();
-      const same = await again({ pendingDecisions: 2 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      same.unmount();
-      await again({ pendingDecisions: 1 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 1, untranscribed: 1 });
-    });
-
-    it("comes back when a count goes up, also after it fell", async () => {
-      const first = await again({ pendingDecisions: 2 });
-      dismiss();
-      first.unmount();
-      const fewer = await again({ pendingDecisions: 1 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      fewer.unmount();
-      await again({ pendingDecisions: 2 });
-      expect(screen.getByTestId("needs-action")).toHaveTextContent("2 calls wait for your decision · 1 more needs you");
-      expect(window.localStorage.getItem(KEY)).toBeNull();
-    });
-
-    it("comes back when a new kind of notice appears", async () => {
-      const first = await again({ pendingDecisions: 2 });
-      dismiss();
-      first.unmount();
-      await again({ pendingDecisions: 2, failedUploads: 1 });
-      expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording didn't upload · 2 more need you");
-    });
-
-    it("stays hidden after a restart while the queue shows the waiting calls (it reports that once it has loaded)", async () => {
-      respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
-      const first = await again({ pendingDecisions: 2 });
-      expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording isn't transcribed");
-      dismiss();
-      first.unmount();
-      await again({ pendingDecisions: 2 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-      expect(JSON.parse(window.localStorage.getItem(KEY) ?? "null")).toEqual({ waiting: 2, untranscribed: 1 });
-    });
-
-    it("is kept per account: another account on this computer still sees the banner the first one dismissed", async () => {
-      const first = await again({ pendingDecisions: 2 });
-      dismiss();
-      first.unmount();
-      respond("account_get", account("bilal@example.com"));
-      const other = await again({ pendingDecisions: 2 });
-      expect(screen.getByTestId("needs-action")).toBeInTheDocument();
-      other.unmount();
-      respond("account_get", account("Ayesha@Example.com"));
-      await again({ pendingDecisions: 2 });
-      expect(screen.queryByTestId("needs-action")).toBeNull();
-    });
-
-    it("shows when storage is unavailable", async () => {
-      window.localStorage.setItem(KEY, JSON.stringify({ waiting: 5, untranscribed: 5 }));
-      const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-        throw new Error("no storage");
-      });
-      try {
-        await show();
-        expect(screen.getByTestId("needs-action")).toBeInTheDocument();
-      } finally {
-        get.mockRestore();
-      }
-    });
-  });
-
-  describe("the header's button while the banner is dismissed", () => {
-    const actions = () => document.querySelector(".el-page__head .el-page__actions") as HTMLElement;
-    const needs = () => actions().firstElementChild?.matches(".el-menu-anchor") ? actions().querySelector("button")! : actions().firstElementChild as HTMLElement;
-    const dismiss = () => fireEvent.click(within(screen.getByTestId("needs-action")).getByRole("button", { name: "Dismiss" }));
+  describe("the header's needs button", () => {
     afterEach(() => {
       document.documentElement.dir = "";
       vi.restoreAllMocks();
     });
 
-    it("is not there while the banner shows, and never beside it", async () => {
+    it("several kinds: \"3 need you\" first, before Trash, a menu of each kind that opens its view", async () => {
       await show();
-      expect(screen.getByTestId("needs-action")).toBeInTheDocument();
-      expect(within(actions()).queryByRole("button", { name: /need you|not transcribed/ })).toBeNull();
-      expect(within(actions()).getAllByRole("button")[0]).toHaveAccessibleName("Trash");
-    });
-
-    it("after ×, several kinds: \"3 need you\" before Trash, a menu of each kind like Review's", async () => {
-      await show();
-      dismiss();
-      expect(screen.queryByTestId("needs-action")).toBeNull();
       const button = within(actions()).getByRole("button", { name: "3 need you" });
       expect(button).toBe(needs());
       expect(button).toHaveTextContent("3 need you");
       expect(button).toHaveAttribute("aria-haspopup", "menu");
       expect(button).toHaveAttribute("title", "2 calls wait for your decision · 1 recording isn't transcribed");
+      expect(within(actions()).getAllByRole("button")[1]).toHaveAccessibleName("Trash");
       fireEvent.click(button);
       expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["2 calls wait for your decision", "1 recording isn't transcribed"]);
       fireEvent.click(screen.getByRole("menuitem", { name: "1 recording isn't transcribed" }));
       expect([...document.querySelectorAll("button[data-row-id]")].map((b) => b.getAttribute("data-row-id"))).toEqual(["a"]);
     });
 
-    it("after ×, one kind: \"1 not transcribed\" opens what Review opens, without a menu", async () => {
+    it("one kind: \"1 not transcribed\" opens what Review opens, without a menu", async () => {
       await show(makeStatus({ platform: "macos" }));
-      expect(screen.getByTestId("needs-action")).toHaveTextContent("1 recording isn't transcribed");
-      dismiss();
       const button = within(actions()).getByRole("button", { name: "1 not transcribed" });
       expect(button).toBe(needs());
       expect(button).not.toHaveAttribute("aria-haspopup");
@@ -201,28 +133,290 @@ describe("the top of the Library", () => {
       expect([...document.querySelectorAll("button[data-row-id]")].map((b) => b.getAttribute("data-row-id"))).toEqual(["a"]);
     });
 
-    it("stays after a restart while dismissed, goes when the banner comes back, and when nothing needs action", async () => {
-      const first = await show(makeStatus({ platform: "macos", pendingDecisions: 2 }));
-      dismiss();
-      first.unmount();
-      const same = await show(makeStatus({ platform: "macos", pendingDecisions: 2 }));
-      expect(within(actions()).getByRole("button", { name: "3 need you" })).toBeInTheDocument();
-      same.unmount();
-      const more = await show(makeStatus({ platform: "macos", pendingDecisions: 3 }));
-      expect(screen.getByTestId("needs-action")).toBeInTheDocument();
-      expect(within(actions()).queryByRole("button", { name: /need you|not transcribed|waiting/ })).toBeNull();
-      more.unmount();
+    it("missed calls open Activity", async () => {
       respond("library_list", [ITEMS[1]]);
       respond("library_refresh", [ITEMS[1]]);
-      await show(makeStatus({ platform: "macos" }));
-      expect(screen.queryByTestId("needs-action")).toBeNull();
+      respond("skipped_list", [{ id: "s1" }, { id: "s2" }]);
+      const top = await show(makeStatus({ platform: "macos" }));
+      fireEvent.click(within(actions()).getByRole("button", { name: "2 skipped" }));
+      expect(top.onActivity).toHaveBeenCalled();
+    });
+
+    it("leads with a small attention dot, hidden from screen readers; the words stay its name", async () => {
+      await show();
+      const dot = needs().querySelector(".el-attention-dot");
+      expect(dot).not.toBeNull();
+      expect(dot?.closest("[aria-hidden=true]")).not.toBeNull();
+      expect(needs().firstElementChild).toBe(dot?.parentElement);
+      expect(needs()).toHaveAccessibleName("3 need you");
+    });
+
+    it("shows whenever something needs action and goes at 0, as the counts change, without a ×", async () => {
+      respond("library_list", [ITEMS[1]]);
+      respond("library_refresh", [ITEMS[1]]);
+      // Calls the status counts and the queue doesn't list (their after-call card still counts down); the core reports
+      // each change twice, in its status and then in the queue's list.
+      const counting = (id: string) => makePendingItem(id, { deadlineAt: "2026-11-23T10:00:08Z" });
+      respond("pending_list", [counting("p1"), counting("p2")]);
+      const top = await show(makeStatus({ platform: "macos", pendingDecisions: 2 }));
+      expect(within(actions()).getByRole("button", { name: "2 waiting" })).toBe(needs());
+      expect(within(needs()).queryByRole("button", { name: /Dismiss|Close/ })).toBeNull();
+      await top.update({ pendingDecisions: 0 });
+      await act(() => emitEvent("pending:changed", []));
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
       expect(within(actions()).getAllByRole("button")[0]).toHaveAccessibleName("Trash");
+      await top.update({ pendingDecisions: 1 });
+      await act(() => emitEvent("pending:changed", [counting("p3")]));
+      expect(within(actions()).getByRole("button", { name: "1 waiting" })).toBe(needs());
+      // Uploads that didn't go up and that the queue doesn't list (here: its list says nothing of them), as reported.
+      await top.update({ pendingDecisions: 1, failedUploads: 2 });
+      await act(() => emitEvent("uploads:changed", []));
+      expect(within(actions()).getByRole("button", { name: "3 need you" })).toBe(needs());
+    });
+
+    it("nothing needs action: no button, Trash comes first; without `top` there is none either", async () => {
+      respond("library_list", [ITEMS[1]]);
+      respond("library_refresh", [ITEMS[1]]);
+      const first = await show(makeStatus({ platform: "macos" }));
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+      expect(within(actions()).getAllByRole("button")[0]).toHaveAccessibleName("Trash");
+      first.unmount();
+      render(<LibraryV2 />);
+      await act(flushAsync);
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+    });
+
+    it("waits for the counts: no passing number while the skipped calls load", async () => {
+      let answer: (value: unknown[]) => void = () => undefined;
+      respondWith("skipped_list", () => new Promise((resolve) => (answer = resolve)));
+      await show();
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+      await act(async () => answer([{ id: "s1" }]));
+      expect(within(actions()).getByRole("button", { name: "4 need you" })).toBe(needs());
+    });
+
+    it("waits for the queue's waiting calls: a slow list never shows a count it then corrects", async () => {
+      const watch = watchCorrections();
+      const pending = later("pending_list");
+      await show();
+      // The status says 2 calls wait, but the queue (with its own Review) may be about to show them: no count yet.
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+      await pending.answer([makePendingItem("p1"), makePendingItem("p2")]);
+      expect(screen.getByTestId("waiting-line")).toHaveTextContent("2 calls waiting");
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      await act(flushAsync);
+      expect(watch.changes).toEqual([]);
+      watch.stop();
+    });
+
+    it("waits for the queue's uploads too: a slow upload list never shows a count it then corrects", async () => {
+      const watch = watchCorrections();
+      const uploads = later("upload_list");
+      respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
+      await show(makeStatus({ platform: "macos", pendingDecisions: 2, failedUploads: 1 }));
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+      await uploads.answer([makeUploadItem("f1", { state: "failed", title: "Board call" })]);
+      expect(screen.getByRole("heading", { name: "Uploads that need you · 1" })).toBeInTheDocument();
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(watch.changes).toEqual([]);
+      watch.stop();
+    });
+
+    it("with waiting calls, Trash and back, and a selection cancelled, show the right count at once and never correct it", async () => {
+      respond("pending_list", [makePendingItem("p1"), makePendingItem("p2")]);
+      respond("upload_list", []);
+      respond("bin_list", { data: [] });
+      await show();
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      // From here on the lists answer only when the test says: what the header shows meanwhile is what it knew.
+      const pending = later("pending_list");
+      const uploads = later("upload_list");
+      fireEvent.click(within(actions()).getByRole("button", { name: "Trash" }));
+      await act(flushAsync);
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+      const watch = watchCorrections();
+      fireEvent.click(within(actions()).getByRole("button", { name: "Trash" }));
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      await act(flushAsync);
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      await pending.answer([makePendingItem("p1"), makePendingItem("p2")]);
+      await uploads.answer([]);
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(watch.changes).toEqual([]);
+      watch.stop();
+
+      fireEvent.click(within(actions()).getByRole("button", { name: "Select" }));
+      await act(flushAsync);
+      const again = watchCorrections();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      await pending.answer([makePendingItem("p1"), makePendingItem("p2")]);
+      await uploads.answer([]);
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(again.changes).toEqual([]);
+      again.stop();
+    });
+
+    describe("a waiting call reported by the status and the queue's list one after the other", () => {
+      const ALI = makePendingItem("p1", { title: "Call with Ali" });
+      afterEach(() => vi.useRealTimers());
+
+      it("the status first: held until the list says the queue shows it, never a passing \"2 need you\"", async () => {
+        respond("pending_list", []);
+        const top = await show(makeStatus({ platform: "macos" }));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        const watch = watchCorrections();
+        await top.update({ pendingDecisions: 1 });
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await act(() => emitEvent("pending:changed", [ALI]));
+        expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        expect(watch.changes).toEqual([]);
+        watch.stop();
+      });
+
+      it("the queue's list first (the call decided there): held until the status says so, never a passing \"1 waiting\"", async () => {
+        respond("pending_list", [ALI]);
+        const top = await show(makeStatus({ platform: "macos", pendingDecisions: 1 }));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        const watch = watchCorrections();
+        await act(() => emitEvent("pending:changed", []));
+        expect(screen.queryByTestId("waiting-line")).toBeNull();
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await top.update({ pendingDecisions: 0 });
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        expect(watch.changes).toEqual([]);
+        watch.stop();
+      });
+
+      it("only the status ever says it: the count shows after the hold (about a second)", async () => {
+        respond("pending_list", []);
+        const top = await show(makeStatus({ platform: "macos" }));
+        vi.useFakeTimers();
+        await top.update({ pendingDecisions: 1 });
+        await act(async () => vi.advanceTimersByTime(HOLD_MS - 50));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await act(async () => vi.advanceTimersByTime(100));
+        expect(within(actions()).getByRole("button", { name: "2 need you" })).toBe(needs());
+        expect(HOLD_MS).toBeLessThanOrEqual(1000);
+      });
+    });
+
+    it("an after-call card counting down: nothing in the header, nor in Waiting; opened instead, the queue lists it with its Review", async () => {
+      // The core counts a call as waiting only once no card counts down for it (pending.rs `waits`, recording_lifecycle
+      // the_waiting_count_and_the_waiting_list_agree_through_a_card); the queue lists the same ones (no deadlineAt).
+      const card = makePendingItem("p1", { title: "Call with Ali", deadlineAt: "2026-11-23T10:00:08Z" });
+      respond("pending_list", [card]);
+      respond("upload_list", []);
+      const top = await show(makeStatus({ platform: "macos", pendingDecisions: 0 }));
+      const watch = watchCorrections();
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(screen.queryByTestId("waiting-line")).toBeNull();
+      // Its 8 s are over with no choice: saved as audio only (chosen, applied after the confirmation): still nothing.
+      await act(() => emitEvent("pending:changed", [{ ...card, deadlineAt: "2026-11-23T10:00:15Z" }]));
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(screen.queryByTestId("waiting-line")).toBeNull();
+      // Opened in the main window instead (no card keeps it): it waits; the status and the queue say so, and the
+      // queue's own line and Review show it, so the header doesn't say it twice.
+      await top.update({ pendingDecisions: 1 });
+      await act(() => emitEvent("pending:changed", [{ ...card, deadlineAt: null }]));
+      expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(watch.changes).toEqual([]);
+      watch.stop();
+    });
+
+    describe("an upload that didn't go up, reported by the status and the queue's uploads one after the other", () => {
+      const FAILED = makeUploadItem("f1", { state: "failed", title: "Board call" });
+      afterEach(() => vi.useRealTimers());
+
+      it("the status first: held until the uploads say the queue shows it, never a passing \"2 need you\"", async () => {
+        respond("pending_list", []);
+        respond("upload_list", []);
+        const top = await show(makeStatus({ platform: "macos" }));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        const watch = watchCorrections();
+        await top.update({ failedUploads: 1 });
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await act(() => emitEvent("uploads:changed", [FAILED]));
+        expect(screen.getByRole("heading", { name: "Uploads that need you · 1" })).toBeInTheDocument();
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        expect(watch.changes).toEqual([]);
+        watch.stop();
+      });
+
+      it("the uploads first (Retry or Discard in the queue): held until the status says so, never a passing \"1 didn't upload\"", async () => {
+        respond("pending_list", []);
+        respond("upload_list", [FAILED]);
+        const top = await show(makeStatus({ platform: "macos", failedUploads: 1 }));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        const watch = watchCorrections();
+        await act(() => emitEvent("uploads:changed", [{ ...FAILED, state: "queued", lastError: null }]));
+        expect(screen.queryByRole("heading", { name: /Uploads that need you/ })).toBeNull();
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await top.update({ failedUploads: 0 });
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        expect(watch.changes).toEqual([]);
+        watch.stop();
+      });
+
+      it("only the status ever says it: the count shows after the hold", async () => {
+        respond("pending_list", []);
+        respond("upload_list", []);
+        const top = await show(makeStatus({ platform: "macos" }));
+        vi.useFakeTimers();
+        await top.update({ failedUploads: 1 });
+        await act(async () => vi.advanceTimersByTime(HOLD_MS - 50));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await act(async () => vi.advanceTimersByTime(100));
+        expect(within(actions()).getByRole("button", { name: "2 need you" })).toBe(needs());
+      });
+    });
+
+    it("a dismissal the old banner stored never hides it, and is cleared (every account's); other settings stay", async () => {
+      const keys = [`${DISMISSED_PREFIX}:https://ledger.example.test:ayesha@example.com`, `${DISMISSED_PREFIX}:https://ledger.example.test:bilal@example.com`];
+      keys.forEach((key) => window.localStorage.setItem(key, JSON.stringify({ waiting: 5, untranscribed: 5 })));
+      window.localStorage.setItem("echoledger-library-setup-hidden", "1");
+      await show();
+      expect(within(actions()).getByRole("button", { name: "3 need you" })).toBe(needs());
+      keys.forEach((key) => expect(window.localStorage.getItem(key)).toBeNull());
+      expect(window.localStorage.getItem("echoledger-library-setup-hidden")).toBe("1");
+    });
+
+    it("shows when storage is unavailable", async () => {
+      const spies = (["getItem", "key", "removeItem"] as const).map((name) => vi.spyOn(Storage.prototype, name).mockImplementation(() => {
+        throw new Error("no storage");
+      }));
+      const length = vi.spyOn(Storage.prototype, "length", "get").mockImplementation(() => {
+        throw new Error("no storage");
+      });
+      try {
+        await show();
+        expect(within(actions()).getByRole("button", { name: "3 need you" })).toBe(needs());
+      } finally {
+        [...spies, length].forEach((spy) => spy.mockRestore());
+      }
+    });
+
+    it("is away in Trash and while selecting, and back after", async () => {
+      await show();
+      fireEvent.click(within(actions()).getByRole("button", { name: "Trash" }));
+      await act(flushAsync);
+      expect(within(actions()).queryByRole("button", { name: NEEDS })).toBeNull();
+      fireEvent.click(within(actions()).getByRole("button", { name: "Trash" }));
+      await act(flushAsync);
+      expect(within(actions()).getByRole("button", { name: "3 need you" })).toBe(needs());
+      fireEvent.click(within(actions()).getByRole("button", { name: "Select" }));
+      await act(flushAsync);
+      expect(screen.queryByRole("button", { name: NEEDS })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
+      await act(flushAsync);
+      expect(within(actions()).getByRole("button", { name: "3 need you" })).toBe(needs());
     });
 
     it("in a right-to-left (Urdu) window: first on the start side, its count and words one left-to-right piece", async () => {
       document.documentElement.dir = "rtl";
       await show(makeStatus({ platform: "macos" }));
-      dismiss();
       const button = needs();
       expect(button).toHaveAccessibleName("1 not transcribed");
       const words = button.querySelector("[dir=auto]");
@@ -232,7 +426,6 @@ describe("the top of the Library", () => {
 
     it("always keeps its words (narrow windows fold other actions into More instead: headerFold.test.tsx)", async () => {
       await show(makeStatus({ platform: "macos" }));
-      dismiss();
       expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toHaveTextContent("1 not transcribed");
     });
   });

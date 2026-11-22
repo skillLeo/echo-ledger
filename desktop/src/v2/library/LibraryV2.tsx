@@ -29,10 +29,11 @@ import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type De
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
 import { SourceAvatar } from "./SourceAvatar";
-import { LibraryTop, NeedsButton, needsLabel, type LibraryTopProps } from "./LibraryTop";
+import { LibraryTop, NeedsButton, needsLabel, useLibraryNeeds, type LibraryTopProps } from "./LibraryTop";
 import { useHeaderFold, type Foldable } from "./headerFold";
 import type { NeedsAction } from "../home/HomeV2";
-import { QueueV2 } from "./QueueV2";
+import { QueueV2, queueCovers } from "./QueueV2";
+import { useLibraryQueue } from "../../views/main/LibraryQueue";
 import { addToListMenu, inPlace, listKey, ListsRow, placeGone, placeName, unreadCount, useLists, type Place } from "./lists";
 import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
@@ -87,8 +88,8 @@ export type LibraryV2Props = {
   folder?: SmartFolder | null;
   /** The folder's way back to every recording (its chip's ×, Clear all). */
   onFolder?: (folder: SmartFolder | null) => void;
-  /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
-  top?: Omit<LibraryTopProps, "items" | "onAction"> & { onActivity: () => void };
+  /** Library as the start screen (plan 2): the get-started card on top, and what needs action in the header. */
+  top?: Omit<LibraryTopProps, "items"> & { onActivity: () => void };
   /** Opens a project (the recording page's project name). */
   onOpenProject?: (id: string) => void;
   /** The recording that was open when the main window was last closed: opened again once it is known. */
@@ -146,12 +147,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const knownValues = useRef<Record<string, string>>({});
   // Sort and group, remembered per view on this computer (classic's View menu).
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
-  // What the queue shows with its own Review: the banner above it leaves those out (one Review for each thing).
-  const [queueShows, setQueueShows] = useState<{ waiting: boolean; failed: boolean }>({ waiting: false, failed: false });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
-  /** What still needs action while the banner is dismissed (LibraryTop says): the quiet button before Trash. */
-  const [needsKept, setNeedsKept] = useState<readonly NeedsAction[] | null>(null);
   // The server didn't answer a sync: the list shown is what this computer saved (classic's banner, with Retry).
   const [syncError, setSyncError] = useState<string | null>(null);
   // Show as List or Table, and the table's columns, kept on this computer (classic's).
@@ -192,6 +189,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   }, []);
 
   const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
+  // The queue at the top of the list (waiting calls, uploads), kept here rather than in the list: it stays loaded while
+  // the list is away (Trash, a selection, a recording open), so the header's needs button, which leaves to it what it
+  // shows, knows that the moment the list is back and never shows a count it then corrects.
+  const queue = useLibraryQueue(useCallback((text: string) => say(text), [say]));
 
   const load = useCallback(async () => {
     try {
@@ -563,12 +564,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const counts = items ? viewCounts(items) : null;
   // With the needs button in the header, its least-used actions fold into More where the row has no room for it
   // (headerFold.ts): Select, then Sync, then Trash. `headKeys` names the actions as the header last drew them.
-  const headRef = useRef<HTMLElement>(null);
+  // The header as drawn now (a callback ref): it goes while a recording is open, and is measured again when it is back.
+  const [headEl, setHeadEl] = useState<HTMLElement | null>(null);
   const headKeys = useRef<readonly string[]>([]);
-  const headerNeeds = !!needsKept && view !== "trash" && !selecting;
+  // What needs action (LibraryTop.tsx): the quiet button before Trash, the only place the Library says it.
+  const needs = useLibraryNeeds(top?.status ?? null, items, queueCovers(queue), { waiting: queue.pending, uploads: queue.uploads });
+  const headerNeeds = !!needs && view !== "trash" && !selecting;
   const foldable: Foldable[] = (counts?.all ?? 0) > 0 ? ["trash", "sync", "select"] : ["trash", "sync"];
-  const needsWords = needsKept ? Object.values(needsLabel(needsKept)).join(" ") : "";
-  const folded = useHeaderFold(headRef, headKeys, foldable, headerNeeds, `${syncing}|${needsWords}`);
+  const needsWords = needs ? Object.values(needsLabel(needs)).join(" ") : "";
+  const folded = useHeaderFold(headEl, headKeys, foldable, headerNeeds, `${syncing}|${needsWords}`);
   const { groups, rows: shown, matching } = useMemo(() => listOf(items),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [items, view, filters, query, choice, opened, collapsed, folder, folderIds, place, readHere]);
@@ -804,13 +808,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
   // A list chip with nothing in it (and nothing else narrowing the list) says how to fill it.
   const inList = place.startsWith("list:") && view === "all" && !query && !filtersOn;
-  /** What needs action, from the banner's Review or the header's button: missed calls are in Activity, the rest here. */
+  /** What needs action, from the header's button: missed calls are in Activity, the rest here. */
   const openNeed = (a: NeedsAction["id"]) => (a === "missed" ? top?.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"));
   // The header's actions in their order, by key (headerFold.ts measures them by it); a folded one is in More instead.
   const headerActions: [string, ReactNode][] = [];
   const add = (key: string, action: ReactNode) => headerActions.push([key, action]);
   const more: MenuItem[] = [];
-  if (needsKept && headerNeeds) add("needs", <NeedsButton actions={needsKept} onAction={openNeed} />);
+  if (needs && headerNeeds) add("needs", <NeedsButton actions={needs} onAction={openNeed} />);
   if (folded.has("trash")) more.push({ label: "Trash", icon: Icons.TrashIcon, onPick: () => setView("trash") });
   else add("trash", <Button variant="quiet" icon={Icons.TrashIcon} aria-pressed={view === "trash"} title="Recently deleted recordings"
     onClick={() => setView(view === "trash" ? "all" : "trash")}>Trash</Button>);
@@ -826,10 +830,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   if (onImport) add("import", <Button onClick={onImport}>Import</Button>);
   if (onRecord) add("record", <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>);
   headKeys.current = headerActions.map(([key]) => key);
+  // The Waiting place counts the calls waiting on this computer too (MainApp's libraryPlaces): its view lists them, in
+  // the queue above the recordings (opened), and counts them with the rest. A search or filter leaves them out.
+  const waitingHere = view === "waiting" && !query && !filtersOn && !folder ? queue.pending.length : 0;
   const subtitle = view === "trash" || !counts ? null
     : folder ? `${recordingsWord(matching)} in ${folderLabel(folder)}`
     : view === "all" && !filtersOn && !query ? `${recordingsWord(counts.all)} from your phone, this computer and the web.`
-      : `${recordingsWord(matching)} shown`;
+      : `${recordingsWord(matching + waitingHere)} shown`;
 
   return (
     <div className="el-root el-embedded" data-v2="library" ref={root}>
@@ -863,7 +870,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             </div>
           </header>
         ) : (
-          <header className="el-page__head" ref={headRef}>
+          <header className="el-page__head" ref={setHeadEl}>
             <div className="el-page__titles">
               {/* Library › the place shown (a smart folder, a view, a list); Library shows every recording again. */}
               {crumb && <Breadcrumbs crumbs={[{ label: "Library", onOpen: showEverything }, { label: crumb }]} />}
@@ -876,7 +883,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           </header>
         )}
         {top && view !== "trash" && !selecting && (
-          <LibraryTop {...top} items={items} covered={queueShows} onAction={openNeed} onQuiet={setNeedsKept} />
+          <LibraryTop {...top} items={items} />
         )}
         {view !== "trash" && syncError && items && (
           <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
@@ -890,7 +897,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             {`${folderLabel(folder)} didn't load from the server: ${folderError}${folderKnownHere(folder) ? " Showing what this computer knows meanwhile." : ""}`}
           </Banner>
         )}
-        {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} onShown={setQueueShows} />}
+        {view !== "trash" && !selecting && <QueueV2 queue={queue} reviewRequest={reviewRequest} openWaiting={view === "waiting"} />}
         <div className="el-page__tools">
           {view !== "trash" && (
             <ListsRow lists={lists ?? []} setLists={setLists} reload={reloadLists} place={place} onPlace={setPlace} unread={items ? unreadCount(items, readHere) : 0}
@@ -995,7 +1002,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             action={<Button variant="primary" onClick={() => void load()}>Try again</Button>} />
         ) : !items ? (
           <Loading label="Loading recordings">{Array.from({ length: 7 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
-        ) : counts?.all === 0 ? (
+        ) : counts?.all === 0 && waitingHere === 0 ? (
           <EmptyState icon={Icons.LibraryIcon} title="No recordings yet"
             body="Calls and meetings you record on this computer or your phone, and files you import, appear here."
             action={onImport ? <Button onClick={onImport}>Import</Button> : undefined} />
@@ -1006,7 +1013,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
           <EmptyState icon={Icons.LibraryIcon} title={place === "unread" ? "You've opened every recording" : "Nothing marked important yet"}
             body={place === "unread" ? "New recordings show here until you open them." : "Recordings you mark important show here."}
             action={<Button onClick={() => setPlace("all")}>Show all</Button>} />
-        ) : matching === 0 ? (
+        ) : matching === 0 && waitingHere > 0 ? null : matching === 0 ? (
           <EmptyState icon={Icons.SearchIcon}
             title={query || filtersOn ? "No recordings match" : view === "today" ? "Nothing recorded today" : view === "untranscribed" ? "Everything is transcribed" : `Nothing in ${VIEW_NAMES[view as ListView]}`}
             body={query ? "Try another word, or clear the search to see every recording." : filtersOn ? "Take a filter off, or clear them all to see every recording."

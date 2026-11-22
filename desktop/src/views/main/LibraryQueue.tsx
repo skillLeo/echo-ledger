@@ -65,6 +65,9 @@ export function useLibraryQueue(notify: Notify) {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [learn, setLearn] = useState<{ itemId: string; clientId: string; question: string; language: LanguageChoice } | null>(null);
 
+  // Each list has answered once (or failed to): until both have, what the queue shows is not known yet.
+  const [answered, setAnswered] = useState({ pending: false, uploads: false });
+  const answer = useCallback((list: "pending" | "uploads") => setAnswered((a) => (a[list] ? a : { ...a, [list]: true })), []);
   const pendingLoads = useRef(0);
   const reloadPending = useCallback(() => {
     pendingLoads.current++;
@@ -72,22 +75,30 @@ export function useLibraryQueue(notify: Notify) {
       (items) => {
         pendingLoads.current--;
         setPending(asList(items));
+        answer("pending");
       },
       () => {
         pendingLoads.current--;
+        answer("pending");
       },
     );
-  }, []);
+  }, [answer]);
   const reloadUploads = useCallback(() => {
-    api.uploadList().then((items) => setUploads(asList(items))).catch(() => undefined);
-  }, []);
+    api.uploadList().then((items) => setUploads(asList(items))).catch(() => undefined).finally(() => answer("uploads"));
+  }, [answer]);
 
   useEffect(() => {
     reloadPending();
     reloadUploads();
     const subs = [
-      listenTo("pending:changed", (items) => setPending(asList(items))),
-      listenTo("uploads:changed", (items) => setUploads(asList(items))),
+      listenTo("pending:changed", (items) => {
+        setPending(asList(items));
+        answer("pending");
+      }),
+      listenTo("uploads:changed", (items) => {
+        setUploads(asList(items));
+        answer("uploads");
+      }),
     ];
     return () => subs.forEach((p) => p.then((f) => f()).catch(() => undefined));
   }, [reloadPending, reloadUploads]);
@@ -263,10 +274,15 @@ export function useLibraryQueue(notify: Notify) {
   const importing = importingUploads(uploads);
   const held = heldUploads(uploads);
   return {
+    /** Both lists have answered once: what the queue shows is known. */
+    loaded: answered.pending && answered.uploads,
     pending, uploads, failed, verifying, importing, held, clients, busy, bulkBusy, learn, pendingLoads, reloadPending,
     keep, keepAudio, discard, keepAll, keepAudioAll, discardAll, rename, loadClients, assign, setLanguage, answerLearn, retry, discardUpload, discardHeld, cancelImport,
   };
 }
+
+/** The queue's lists and commands (useLibraryQueue), for a list drawn apart from where it is kept (the v2 Library). */
+export type LibraryQueueState = ReturnType<typeof useLibraryQueue>;
 
 export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
   const q = useLibraryQueue(notify);

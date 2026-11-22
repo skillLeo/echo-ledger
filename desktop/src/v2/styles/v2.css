@@ -443,6 +443,9 @@
 .el-status--setup .el-status__dot { color: var(--el-role-warning-default); }
 .el-status--recording .el-status__dot { color: var(--el-role-record-default); animation: el-pulse var(--el-component-recording-dot-pulse) ease-in-out infinite; }
 .el-status--idle .el-status__dot { color: var(--el-role-text-secondary); }
+/* Something needs you: a small dot in the accent, as the sidebar's counts that need attention (the Library header's
+   needs button leads with it). Over 3:1 on the page and on a quiet button's hover, in both themes. */
+.el-attention-dot { display: block; inline-size: var(--el-component-status-dot-size); block-size: var(--el-component-status-dot-size); border-radius: var(--el-radius-full); background: var(--el-role-accent-default); flex: none; }
 @keyframes el-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) {
   .el-status--recording .el-status__dot { animation: none; }
@@ -588,6 +591,12 @@
 .el-nav-item:hover { background: var(--el-role-border-default); color: var(--el-role-text-primary); }
 .el-nav-item[aria-current="page"] { background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); box-shadow: 0 0 0 var(--el-border-hairline) var(--el-role-border-default); }
 .el-nav-item__count { margin-inline-start: auto; }
+.el-nav-item__dot {
+  display: none; position: absolute; inset-block-start: var(--el-space-4); inset-inline-end: var(--el-space-8);
+  box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-bg-subtle);
+}
+.el-nav-item:hover .el-nav-item__dot { box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-border-default); }
+.el-nav-item[aria-current="page"] .el-nav-item__dot { box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-bg-surface); }
 
 .el-player { display: flex; align-items: center; gap: var(--el-space-12); padding: var(--el-space-12) var(--el-space-16); }
 .el-player__play.el-button { border-radius: var(--el-radius-full); min-inline-size: var(--el-space-40); min-block-size: var(--el-space-40); }
@@ -967,6 +976,8 @@ button.el-step__head { cursor: pointer; }
     position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
+  .el-sidebar:not([data-rail="off"]) .el-nav-item { position: relative; }
+  .el-sidebar:not([data-rail="off"]) .el-nav-item__dot { display: block; }
 }
 /* The rail chosen in the sidebar (its Collapse button or "["): the same, at any window width. A sidebar opened
    in a narrow window (data-rail="off") keeps its names. */
@@ -992,6 +1003,11 @@ button.el-step__head { cursor: pointer; }
   position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
   overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
+/* A count that needs attention (Activity's) is a small accent dot on the icon's top end in the rail, ringed in the row's
+   own background so it stands off the icon; the number stays for assistive tools. Place counts are under Library,
+   which the rail leaves out. */
+.el-sidebar[data-rail="on"] .el-nav-item { position: relative; }
+.el-sidebar[data-rail="on"] .el-nav-item__dot { display: block; }
 
 /* ---- Skeleton, Loading, Progress ---------------------------------------------------------------------------- */
 /* Still shapes in the hairline colour, so they read on the canvas and on a card in both themes; nothing moves. */
