@@ -230,28 +230,10 @@ describe("the top of the Library", () => {
       expect(actions().firstElementChild).toBe(button);
     });
 
-    it("where its words would put the header on another line: the icon and count, its name and tooltip keep the words", async () => {
-      // The header 400 wide; Trash, Sync and Select 100 each; the button 180 with its words (90 of them).
-      vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
-        return this.classList.contains("el-page__head") ? 400 : 0;
-      });
-      vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => 90);
-      vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-        const width = this.parentElement?.classList.contains("el-page__actions") ? (this.querySelector("[dir=auto]") ? 180 : 100)
-          : this.parentElement?.matches("[dir=auto]") ? 90 : 0;
-        return { width, height: 0, top: 0, left: 0, right: width, bottom: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
-      });
+    it("always keeps its words (narrow windows fold other actions into More instead: headerFold.test.tsx)", async () => {
       await show(makeStatus({ platform: "macos" }));
       dismiss();
-      const button = within(actions()).getByRole("button", { name: "1 not transcribed" });
-      expect(button.querySelector(".el-visually-hidden")).toHaveTextContent("not transcribed");
-      expect(button).toHaveAttribute("title", "1 recording isn't transcribed");
-    });
-
-    it("keeps its words where they fit", async () => {
-      await show(makeStatus({ platform: "macos" }));
-      dismiss();
-      expect(within(actions()).getByRole("button", { name: "1 not transcribed" }).querySelector(".el-visually-hidden")).toBeNull();
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toHaveTextContent("1 not transcribed");
     });
   });
 });

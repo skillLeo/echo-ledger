@@ -3,7 +3,7 @@
 // feedback system: the Toast, one at a time, with Undo after a delete. Selection mode (Select, a Cmd/Ctrl- or Shift-click,
 // Cmd/Ctrl+A or X) picks several; the row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
 // Lists (D14, lists.tsx): the chip row under the search shows All, Unread, Important or one of the person's lists.
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { folderKnownHere, folderLabel, inFolderHere } from "../../lib/folders";
@@ -29,7 +29,8 @@ import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type De
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
 import { SourceAvatar } from "./SourceAvatar";
-import { LibraryTop, NeedsButton, type LibraryTopProps } from "./LibraryTop";
+import { LibraryTop, NeedsButton, needsLabel, type LibraryTopProps } from "./LibraryTop";
+import { useHeaderFold, type Foldable } from "./headerFold";
 import type { NeedsAction } from "../home/HomeV2";
 import { QueueV2 } from "./QueueV2";
 import { addToListMenu, inPlace, listKey, ListsRow, placeGone, placeName, unreadCount, useLists, type Place } from "./lists";
@@ -560,6 +561,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
 
   const open = openId ? items?.find((i) => i.id === openId) ?? null : null;
   const counts = items ? viewCounts(items) : null;
+  // With the needs button in the header, its least-used actions fold into More where the row has no room for it
+  // (headerFold.ts): Select, then Sync, then Trash. `headKeys` names the actions as the header last drew them.
+  const headRef = useRef<HTMLElement>(null);
+  const headKeys = useRef<readonly string[]>([]);
+  const headerNeeds = !!needsKept && view !== "trash" && !selecting;
+  const foldable: Foldable[] = (counts?.all ?? 0) > 0 ? ["trash", "sync", "select"] : ["trash", "sync"];
+  const needsWords = needsKept ? Object.values(needsLabel(needsKept)).join(" ") : "";
+  const folded = useHeaderFold(headRef, headKeys, foldable, headerNeeds, `${syncing}|${needsWords}`);
   const { groups, rows: shown, matching } = useMemo(() => listOf(items),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [items, view, filters, query, choice, opened, collapsed, folder, folderIds, place, readHere]);
@@ -797,6 +806,26 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const inList = place.startsWith("list:") && view === "all" && !query && !filtersOn;
   /** What needs action, from the banner's Review or the header's button: missed calls are in Activity, the rest here. */
   const openNeed = (a: NeedsAction["id"]) => (a === "missed" ? top?.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"));
+  // The header's actions in their order, by key (headerFold.ts measures them by it); a folded one is in More instead.
+  const headerActions: [string, ReactNode][] = [];
+  const add = (key: string, action: ReactNode) => headerActions.push([key, action]);
+  const more: MenuItem[] = [];
+  if (needsKept && headerNeeds) add("needs", <NeedsButton actions={needsKept} onAction={openNeed} />);
+  if (folded.has("trash")) more.push({ label: "Trash", icon: Icons.TrashIcon, onPick: () => setView("trash") });
+  else add("trash", <Button variant="quiet" icon={Icons.TrashIcon} aria-pressed={view === "trash"} title="Recently deleted recordings"
+    onClick={() => setView(view === "trash" ? "all" : "trash")}>Trash</Button>);
+  if (view !== "trash") {
+    if (folded.has("sync")) more.push({ label: syncing ? "Syncing…" : "Sync", icon: Icons.RefreshIcon, disabled: syncing, onPick: () => void sync() });
+    else add("sync", <Button variant="quiet" icon={Icons.RefreshIcon} loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Sync</Button>);
+  }
+  if (view !== "trash" && (counts?.all ?? 0) > 0) {
+    if (folded.has("select")) more.push({ label: "Select", icon: Icons.SelectIcon, shortcut: `${MOD}A`, onPick: () => setSelecting(true) });
+    else add("select", <Button variant="quiet" icon={Icons.SelectIcon} title={`Select (${MOD}A selects all)`} onClick={() => setSelecting(true)}>Select</Button>);
+  }
+  if (more.length) add("more", <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon, title: "More" }} items={more} />);
+  if (onImport) add("import", <Button onClick={onImport}>Import</Button>);
+  if (onRecord) add("record", <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>);
+  headKeys.current = headerActions.map(([key]) => key);
   const subtitle = view === "trash" || !counts ? null
     : folder ? `${recordingsWord(matching)} in ${folderLabel(folder)}`
     : view === "all" && !filtersOn && !query ? `${recordingsWord(counts.all)} from your phone, this computer and the web.`
@@ -834,7 +863,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
             </div>
           </header>
         ) : (
-          <header className="el-page__head">
+          <header className="el-page__head" ref={headRef}>
             <div className="el-page__titles">
               {/* Library › the place shown (a smart folder, a view, a list); Library shows every recording again. */}
               {crumb && <Breadcrumbs crumbs={[{ label: "Library", onOpen: showEverything }, { label: crumb }]} />}
@@ -842,17 +871,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
               {subtitle && <p className="el-secondary" aria-live="polite">{subtitle}</p>}
             </div>
             <div className="el-page__actions">
-              {needsKept && view !== "trash" && <NeedsButton actions={needsKept} onAction={openNeed} />}
-              <Button variant="quiet" icon={Icons.TrashIcon} aria-pressed={view === "trash"} title="Recently deleted recordings"
-                onClick={() => setView(view === "trash" ? "all" : "trash")}>Trash</Button>
-              {view !== "trash" && (
-                <Button variant="quiet" icon={Icons.RefreshIcon} loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Sync</Button>
-              )}
-              {view !== "trash" && (counts?.all ?? 0) > 0 && (
-                <Button variant="quiet" icon={Icons.SelectIcon} title={`Select (${MOD}A selects all)`} onClick={() => setSelecting(true)}>Select</Button>
-              )}
-              {onImport && <Button onClick={onImport}>Import</Button>}
-              {onRecord && <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>}
+              {headerActions.map(([key, action]) => <Fragment key={key}>{action}</Fragment>)}
             </div>
           </header>
         )}
