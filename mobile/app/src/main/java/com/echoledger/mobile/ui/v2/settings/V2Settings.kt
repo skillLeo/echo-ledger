@@ -275,6 +275,23 @@ fun V2SettingsScreen(
 
                 "devices" -> DevicesPage(r.highlight, back)
 
+                "about" -> {
+                    val update by vm.updateStatus.collectAsState()
+                    AboutPage(
+                        settings,
+                        update,
+                        AboutActions(
+                            check = { vm.checkForUpdates() },
+                            install = { vm.installUpdate(it) },
+                            exportTo = { vm.exportSettingsTo(it) },
+                            importFrom = { vm.importSettingsFrom(it) }
+                        ),
+                        r.highlight,
+                        onSetup = { route = SettingsRoute.Page(SettingsTree.SETUP) },
+                        onBack = back
+                    )
+                }
+
                 "lock" -> AppLockPage(settings, vm::updateSettings, { vm.setWidgetHideTitles(it) }, r.highlight, back)
 
                 // Export or delete my data opens Your data on Sign-in & security, lit.
@@ -306,7 +323,8 @@ fun V2SettingsScreen(
             onOpen = { page, highlight -> route = SettingsRoute.Page(page, highlight) },
             onSignOut = { confirmSignOut = true },
             onBack = onBack,
-            modifier = modifier
+            modifier = modifier,
+            onRequest = { step -> flow = com.echoledger.mobile.ui.FlowStart(settings.plan.upgrade?.plan, step = step) }
         )
     }
     if (confirmSignOut) {
@@ -337,7 +355,9 @@ fun V2SettingsRoot(
     onSignOut: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    initialQuery: String = ""
+    initialQuery: String = "",
+    /** The line under the card opens the upgrade flow at a request's step (add the receipt, pay, its status). */
+    onRequest: (com.echoledger.mobile.ui.FlowStep) -> Unit = {}
 ) {
     val c = EchoV2.colors
     val res = LocalContext.current.resources
@@ -378,6 +398,16 @@ fun V2SettingsRoot(
                     showMinutes = settings.plan.usedMinutes == null,
                     upgrade = com.echoledger.mobile.ui.v2.shell.upgradeLook(settings.plan, signedIn),
                     onOpenPlan = { onOpen("plan", null) }
+                )
+            }
+            // One line under the card while something needs the person (classic's), each opening what it is about.
+            item {
+                StateLine(
+                    settings,
+                    (profile as? ProfileState.Ready)?.profile?.deletesAt,
+                    onOpenPlan = { onOpen("plan", null) },
+                    onOpenKey = { onOpen("key", null) },
+                    onRequest = onRequest
                 )
             }
             SettingsTree.goals.forEach { (goal, pages) ->

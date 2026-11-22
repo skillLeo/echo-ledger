@@ -50,6 +50,7 @@ object SettingsTree {
         "videos",
         "plan",
         "devices",
+        "about",
         "voice",
         "language",
         "words",

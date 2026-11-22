@@ -55,7 +55,9 @@ data class Profile(
     val retentionDays: Int? = null,
     /** The person's picture (since 2.0.0-l); null shows the initials. */
     val avatarUrl: String? = null,
-    val avatarVersion: Long? = null
+    val avatarVersion: Long? = null,
+    /** While the account is to be deleted: when (the line under the card says so). */
+    val deletesAt: String? = null
 )
 
 /** How the profile card offers Upgrade (classic's rule): filled on Free, outlined on a paid plan with one above it. */
@@ -105,7 +107,8 @@ fun profileOf(account: AccountDto?, storage: StorageDto?, plan: com.echoledger.m
     recordings = storage?.recordingsCount,
     retentionDays = storage?.retentionDays?.takeIf { it > 0 },
     avatarUrl = account?.avatarUrl,
-    avatarVersion = account?.avatarVersion
+    avatarVersion = account?.avatarVersion,
+    deletesAt = account?.deletesAt
 )
 
 /**
