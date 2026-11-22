@@ -38,6 +38,11 @@ const SURFACES = [
     ["banner", "controls-banner", PILL, async (page) => page.locator("[data-testid=start-banner]").first().waitFor()],
     ["always", "controls-always", REVIEW, async (page) => page.locator("[data-testid=call-always]").first().waitFor()],
     ["held", "controls-held", REVIEW, async (page) => page.locator("[data-testid=call-held]").first().waitFor()],
+    // The closed pill with the not-recorded warning, in its window at that size (overlay::PILL_WARNING_SIZE, 352 x 124).
+    ["pill-warning-closed", "controls-warning", PILL, async (page) => {
+      await page.locator("[data-testid=missing-permission]").first().waitFor();
+      await page.evaluate(() => { document.querySelectorAll(".screens-window")[0].style.height = "124px"; });
+    }],
     // The not-recorded warning and the menu, both under the pill.
     ["pill-warning", "controls-warning", PILL, async (page, design) => {
       await page.locator("[data-testid=missing-permission]").first().waitFor();

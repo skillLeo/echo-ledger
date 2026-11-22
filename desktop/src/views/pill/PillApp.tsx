@@ -233,13 +233,17 @@ export default function PillApp() {
   // A warning (the other side not being recorded) stays under the pill with the menu or the banner open: the window
   // grows for whichever shows, or both, so neither is clipped.
   const expanded = shown && (menu || menuV2 || banner);
-  const warning = shown && !!missing;
+  // Closed, only "not recorded" needs more room (its sentence on a line and its two buttons under it: 124 px); a one-row
+  // line that can be dismissed fits the closed pill's 84 px. With the menu or banner open, any warning keeps its row
+  // above them, so the window makes room for it too.
+  const warning = shown && !!missing && (!!notRecorded || expanded);
   const sent = useRef("false:false");
   /** Grows the window first and then lets the menu be drawn, so it is never clipped for a frame. */
   const growFirst = useCallback(async () => {
-    sent.current = `true:${warning}`;
-    await api.pillExpanded(true, warning).catch(() => undefined);
-  }, [warning]);
+    const withWarning = shown && !!missing;
+    sent.current = `true:${withWarning}`;
+    await api.pillExpanded(true, withWarning).catch(() => undefined);
+  }, [shown, missing]);
   useEffect(() => {
     const key = `${expanded}:${warning}`;
     if (sent.current === key) return;
