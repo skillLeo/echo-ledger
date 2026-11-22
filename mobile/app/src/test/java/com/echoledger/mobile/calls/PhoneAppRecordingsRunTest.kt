@@ -130,7 +130,8 @@ class PhoneAppRecordingsRunTest : AppTest() {
         val rec = app.graph.recordings.get(run(Store(mutableListOf(recording(1, c)), listOf(c))).imported.single())!!
         assertNull(rec.callerName)
         assertEquals("+923001234567", rec.callerNumber)
-        assertEquals("+923001234567", com.echoledger.mobile.ui.v2.live.callCardTitle(app.resources, rec))
+        // Isolated (FSI…PDI) so it reads left to right inside any line, as the copy deck asks for numbers.
+        assertEquals("\u2068+923001234567\u2069", com.echoledger.mobile.ui.v2.live.callCardTitle(app.resources, rec))
     }
 
     /**

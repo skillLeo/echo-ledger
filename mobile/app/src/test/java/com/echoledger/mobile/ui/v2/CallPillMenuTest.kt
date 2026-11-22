@@ -1,7 +1,13 @@
 package com.echoledger.mobile.ui.v2
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -29,6 +35,7 @@ class CallPillMenuTest : ScreenTest() {
         val transcribe = compose.onNodeWithText("Transcribe this call")
         val captions = compose.onNodeWithText("Captions", substring = true).getBoundsInRoot()
         assertTrue("first in the menu", transcribe.getBoundsInRoot().top < captions.top)
+        transcribe.assertIsNotSelected()
         transcribe.performClick()
         compose.onNodeWithText("Save audio only").performClick()
         compose.onNodeWithText("Stop and delete").performClick()
@@ -37,6 +44,21 @@ class CallPillMenuTest : ScreenTest() {
         assertTrue(events[2] is PillEvent.DiscardNow)
         // Stop and delete takes Discard's place, so the menu never has both.
         compose.onAllNodesWithText("Discard").assertCountEquals(0)
+    }
+
+    @Test
+    fun `the call's chosen line is selected for TalkBack, in v2 and in classic`() {
+        var v2 by androidx.compose.runtime.mutableStateOf(true)
+        show {
+            val state = PillState(mode = PillState.Mode.MENU, call = true, choice = Pick.AUDIO.wire)
+            if (v2) EchoV2Theme { V2RecordingPill(state, 0, "Omar", {}) } else PillToolbar(state)
+        }
+        listOf(true, false).forEach { look ->
+            v2 = look
+            compose.waitForIdle()
+            compose.onNode(hasText("Save audio only") and hasClickAction(), useUnmergedTree = false).assertIsSelected()
+            compose.onNode(hasText("Transcribe this call") and hasClickAction(), useUnmergedTree = false).assertIsNotSelected()
+        }
     }
 
     @Test

@@ -72,7 +72,14 @@ data class LocalRecording(
     /** Since v1.8.1: the reference a fresh upload uses when its first server copy could no longer be restored. */
     val clientRef: String? = null,
     /** 2.0.0-j: false after "Save audio" (kept as audio, transcribed later); true after "Transcribe"; null: as before. */
-    val transcribe: Boolean? = null
+    val transcribe: Boolean? = null,
+    /**
+     * Since 2.0.5, for state "discarding": the process whose screen shows this Delete's Undo (the after-call card, an
+     * in-app toast); null when the Undo lives in a notification, which outlives the process.
+     */
+    val undoIn: String? = null,
+    /** Since 2.0.5: back waiting because its Delete was due after the process with its Undo had gone ("Choose again"). */
+    val restoredDelete: Boolean = false
 )
 
 /**

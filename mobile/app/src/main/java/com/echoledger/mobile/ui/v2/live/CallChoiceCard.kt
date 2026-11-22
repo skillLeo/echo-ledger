@@ -36,21 +36,17 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.core.text.BidiFormatter
-import androidx.core.text.TextDirectionHeuristicsCompat
 import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.CallChoice
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LocalRecording
-import com.echoledger.mobile.ui.v2.components.EchoAvatar
 import com.echoledger.mobile.ui.v2.components.EchoButton
 import com.echoledger.mobile.ui.v2.components.EchoButtonKind
+import com.echoledger.mobile.ui.v2.components.EchoSourceLogo
 import com.echoledger.mobile.ui.v2.components.formatClock
-import com.echoledger.mobile.ui.v2.library.LibraryModel
 import com.echoledger.mobile.ui.v2.shell.sourceName
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
-import java.util.Locale
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -75,11 +71,11 @@ sealed interface CallCardScreen {
 /** The name or number the card shows for [rec] (a number kept left to right in Urdu), else the call's app. */
 fun callCardTitle(res: Resources, rec: LocalRecording): String = rec.title?.takeIf { it.isNotBlank() }
     ?: rec.callerName?.takeIf { it.isNotBlank() }
-    ?: rec.callerNumber?.takeIf { it.any(Char::isDigit) }?.let { isolated(res, it) }
+    ?: rec.callerNumber?.takeIf { it.any(Char::isDigit) }?.let { isolated(it) }
     ?: sourceName(res, rec.sourceApp)
 
-private fun isolated(res: Resources, text: String): String =
-    BidiFormatter.getInstance(res.configuration.locales[0] ?: Locale.ROOT).unicodeWrap(text, TextDirectionHeuristicsCompat.LTR)
+/** [text] isolated (FSI…PDI) inside a line of any direction, as the copy deck asks for names, apps and numbers. */
+internal fun isolated(text: String): String = "\u2068$text\u2069"
 
 /**
  * The after-call card (the call-choice plan, docs/PLAN_CALL_CHOICE.md 3): the app's logo, the name or number,
@@ -190,14 +186,17 @@ private fun AskContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
         ) {
-            EchoAvatar(icon = LibraryModel.icon(SourceApp.from(screen.sourceWire)), contentDescription = sourceName(res, screen.sourceWire))
+            // The app's own mark, as the Library's rows draw it (its installed icon, else the one icon set's glyph).
+            EchoSourceLogo(SourceApp.from(screen.sourceWire), label = sourceName(res, screen.sourceWire))
             Column(Modifier.weight(1f)) {
-                Text(screen.title, style = EchoV2.type.bodyStrong, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // A name keeps its own script's face: Latin letters in Urdu stay in the app's Latin font.
                 Text(
-                    stringResource(R.string.cc_card_meta, isolated(res, formatClock(screen.durationMs))),
-                    style = EchoV2.type.meta,
-                    color = c.textSecondary
+                    screen.title,
+                    style = EchoV2.type.content(screen.title, EchoV2.type.bodyStrong),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Text(meta(screen.durationMs), style = EchoV2.type.meta, color = c.textSecondary)
             }
         }
         // Two rows only when the two don't fit side by side (a small phone, the largest text, Urdu).
@@ -243,6 +242,30 @@ private fun AskContent(
                 EchoButton(stringResource(R.string.cc_card_always_yes), onAlwaysYes, kind = EchoButtonKind.Quiet)
             }
         }
+    }
+}
+
+/**
+ * "0:44 · just now" in the screen's language, the length isolated (FSI…PDI). Everything outside Urdu's script (the
+ * length, the dot and the spaces around it) is in the Latin face with tabular digits, so in Urdu the dot keeps its
+ * spaces on both sides instead of taking the Nastaliq font's.
+ */
+@Composable
+private fun meta(durationMs: Long): androidx.compose.ui.text.AnnotatedString {
+    val line = stringResource(R.string.cc_card_meta, isolated(formatClock(durationMs)))
+    val latin = androidx.compose.ui.text.SpanStyle(fontFamily = EchoV2.type.latin, fontFeatureSettings = "tnum")
+    return androidx.compose.ui.text.buildAnnotatedString {
+        append(line)
+        var start = -1
+        line.forEachIndexed { at, ch ->
+            val arabicScript = Character.UnicodeScript.of(ch.code) == Character.UnicodeScript.ARABIC
+            if (!arabicScript && start < 0) start = at
+            if (arabicScript && start >= 0) {
+                addStyle(latin, start, at)
+                start = -1
+            }
+        }
+        if (start >= 0) addStyle(latin, start, line.length)
     }
 }
 

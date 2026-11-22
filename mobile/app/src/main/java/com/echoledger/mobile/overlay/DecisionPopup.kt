@@ -33,7 +33,10 @@ import com.echoledger.mobile.ui.v2.live.callCardTitle
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The after-call card (the call-choice plan, 2.0.5; docs/PLAN_CALL_CHOICE.md 3), at the bottom of the screen over
@@ -44,7 +47,10 @@ import kotlinx.coroutines.launch
  * only), then one line with Undo for 5 s ([Mode.TRANSCRIBING], [Mode.AUDIO] with Transcribe, [Mode.DELETED]). Undo
  * puts the question back with nothing decided: a kept call's upload waits for the line ([Decisions.keepFor]) and a
  * deleted call's file waits for it ([Decisions.discardLater]). Calls that end while the question is still asked are all
- * kept as audio only on one line ([Mode.GROUPED], "3 calls saved as audio · Review"), never a stack of cards.
+ * kept as audio only on one line ([Mode.GROUPED], "3 calls saved as audio · Review"), never a stack of cards. A
+ * "Deleted · Undo" line is never replaced: a call that ends meanwhile is asked about once that line is over, so a Delete
+ * is never applied while its Undo is out of reach. Every step the card asks of the store runs in order on one queue.
+ * The times follow the phone's accessibility timeout (Settings › Accessibility › Time to take action).
  */
 object DecisionPopup {
     enum class Mode { ASK, TRANSCRIBING, AUDIO, DELETED, GROUPED }
@@ -65,6 +71,20 @@ object DecisionPopup {
     private var current: LocalRecording? = null
     private val grouped = mutableListOf<String>()
 
+    /** A call that ended while a Deleted line was showing: asked about when that line is over. */
+    private var waiting: Pair<LocalRecording, String>? = null
+
+    /** A choice made on the card, counted toward "Always do this?" only once its line closes without Undo. */
+    private var picked: Pick? = null
+
+    /** This card's question and line times: 8 s and 5 s, or longer when the phone asks for more time. */
+    private var askMs = ASK_MS
+    private var doneMs = DONE_MS
+
+    /** The card's store steps, in the order they were asked for, one at a time. */
+    private val steps = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+    private val order = Mutex()
+
     /** The id of the call the card is about; null when no card is showing (or for the grouped line). */
     var showingFor: String? = null
         private set
@@ -84,6 +104,12 @@ object DecisionPopup {
      */
     fun ask(context: Context, rec: LocalRecording, themeMode: String): Boolean {
         val app = context.applicationContext
+        if (isShowing && showingMode == Mode.DELETED) {
+            // Another call's Delete can still be undone: this call waits for its line to end (its own 10 s backstop is
+            // started again then, so it is never kept before it was asked).
+            waiting = rec to themeMode
+            return true
+        }
         if (isShowing && (showingMode == Mode.ASK || showingMode == Mode.GROUPED)) {
             val before = current?.takeIf { showingMode == Mode.ASK }
             before?.let { keepQuietly(app, it.id) }
@@ -103,13 +129,25 @@ object DecisionPopup {
         }
         val question = CallCardScreen.Ask(callCardTitle(app.resources, rec), rec.durationMs, rec.sourceApp, hint, always.takeIf { !hint })
         if (isShowing) {
-            // A confirmation for an earlier call gives way to the new question (one line at a time).
+            // A kept call's line gives way to the new question (one line at a time); its choice counts as made.
+            commitPick(app)
             current = rec
             showingFor = rec.id
             go(app, Mode.ASK, question)
             return true
         }
         return open(app, rec, themeMode, question)
+    }
+
+    /**
+     * "Deleted · Undo" for [rec] for [lineMs] (the pill's Stop and delete still counting down when the call ended): its
+     * Undo asks about the call again.
+     */
+    fun deleted(context: Context, rec: LocalRecording, themeMode: String, lineMs: Long): Boolean {
+        val app = context.applicationContext
+        if (!open(app, rec, themeMode, CallCardScreen.Done(Pick.DELETE))) return false
+        go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE), lineMs)
+        return true
     }
 
     /** Draws [mode] for [rec] at once (tests and screenshots): the question or one of its lines. */
@@ -142,6 +180,8 @@ object DecisionPopup {
         hide()
         val wm = app.getSystemService(WindowManager::class.java) ?: return false
         val lifecycleOwner = OverlayOwner().also { it.start() }
+        askMs = recommended(app, ASK_MS)
+        doneMs = recommended(app, DONE_MS)
         screen = first
         val compose = ComposeView(app).apply {
             // No click sounds: the card makes no sound and no vibration.
@@ -172,13 +212,15 @@ object DecisionPopup {
                         onAlwaysYes = { always(app) },
                         onReview = { review(app) },
                         still = com.echoledger.mobile.ui.reduceMotion(),
+                        askMs = askMs,
                         modifier = Modifier.padding(horizontal = EchoTokens.Space.s16, vertical = EchoTokens.Space.s8)
                     )
                 }
             }
         }
+        // As wide as the card: taps beside it reach the app below, and it sits centred in landscape too.
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             // Not focusable and not modal: touches outside the card go to the app underneath. PrivateWindows never
@@ -216,8 +258,17 @@ object DecisionPopup {
         return if (id != 0) context.resources.getDimensionPixelSize(id) else 0
     }
 
-    /** Shows [next] in the window already open and starts its time. */
-    private fun go(app: Context, mode: Mode, next: CallCardScreen) {
+    /** The phone's accessibility timeout for [ms] of controls and text, never shorter than [ms]. */
+    private fun recommended(app: Context, ms: Long): Long {
+        if (Build.VERSION.SDK_INT < 29) return ms
+        val a11y = app.getSystemService(android.view.accessibility.AccessibilityManager::class.java) ?: return ms
+        val flags = android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS or
+            android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT
+        return a11y.getRecommendedTimeoutMillis(ms.toInt(), flags).toLong().coerceAtLeast(ms)
+    }
+
+    /** Shows [next] in the window already open and starts its time ([lineMs] for a line, else the card's own). */
+    private fun go(app: Context, mode: Mode, next: CallCardScreen, lineMs: Long? = null) {
         timeout?.let(handler::removeCallbacks)
         showingMode = mode
         screen = next
@@ -227,13 +278,37 @@ object DecisionPopup {
 
             Mode.GROUPED -> Runnable {
                 grouped.clear()
-                hide()
+                close(app)
             }
 
-            else -> Runnable { hide() }
+            // A line's time is over without Undo: its choice counts, and a call that ended meanwhile is asked about.
+            else -> Runnable {
+                commitPick(app)
+                close(app)
+            }
         }
         timeout = task
-        handler.postDelayed(task, if (mode == Mode.ASK || mode == Mode.GROUPED) ASK_MS else DONE_MS)
+        handler.postDelayed(task, lineMs ?: if (mode == Mode.ASK || mode == Mode.GROUPED) askMs else doneMs)
+    }
+
+    /** The card's time is over: it goes, then a call held back by a Deleted line is asked about. */
+    private fun close(app: Context) {
+        val next = waiting
+        hide()
+        next?.let { (rec, themeMode) ->
+            io {
+                // Still waiting (its 10 s backstop may have kept it meanwhile): asked now, with its 10 s from now.
+                if (Decisions.stillWaiting(app, rec.id)) {
+                    com.echoledger.mobile.calls.DecisionTimeoutWorker.schedule(app, rec.id)
+                    handler.post { ask(app, rec, themeMode) }
+                }
+            }
+        }
+    }
+
+    private fun commitPick(app: Context) {
+        picked?.let { pick -> update(app) { CallChoice.afterPick(it, pick) } }
+        picked = null
     }
 
     /** Removes the card. Never decides anything. */
@@ -250,40 +325,43 @@ object DecisionPopup {
         current = null
         screen = null
         grouped.clear()
+        waiting = null
+        picked = null
     }
 
     internal fun transcribe(app: Context) {
         val rec = current ?: return
-        if (showingMode == Mode.ASK) streak(app, Pick.TRANSCRIBE)
+        picked = if (showingMode == Mode.ASK) Pick.TRANSCRIBE else null
         go(app, Mode.TRANSCRIBING, CallCardScreen.Done(Pick.TRANSCRIBE))
-        io { Decisions.keepFor(app, rec.id, transcribe = true, uploadAfterMs = DONE_MS) }
+        io { Decisions.keepFor(app, rec.id, transcribe = true, uploadAfterMs = doneMs) }
     }
 
     internal fun audio(app: Context, chosen: Boolean) {
         val rec = current ?: return
-        if (chosen) streak(app, Pick.AUDIO)
+        picked = if (chosen) Pick.AUDIO else null
         go(app, Mode.AUDIO, CallCardScreen.Done(Pick.AUDIO))
-        io { Decisions.keepFor(app, rec.id, transcribe = false, uploadAfterMs = DONE_MS) }
+        io { Decisions.keepFor(app, rec.id, transcribe = false, uploadAfterMs = doneMs) }
     }
 
     internal fun delete(app: Context) {
         val rec = current ?: return
-        streak(app, Pick.DELETE)
+        picked = Pick.DELETE
         go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE))
+        // The file waits for the line and a little longer; this process applies it only while its Undo is reachable.
+        val afterMs = doneMs + Decisions.DISCARD_GRACE_MS
         io {
             // Decided meanwhile (a notification, the app): nothing was deleted, so the line does not say so.
-            if (Decisions.discardLater(app, rec.id) ==
-                null
-            ) {
+            if (Decisions.discardLater(app, rec.id, afterMs = afterMs, undoHere = true) == null) {
                 handler.post { if (showingFor == rec.id && showingMode == Mode.DELETED) hide() }
             }
         }
     }
 
-    /** Undo on any line: the question again, with nothing decided and its 8 s from the start. */
+    /** Undo on any line: the question again, with nothing decided and its 8 s from the start; the choice is not counted. */
     internal fun undo(app: Context) {
         val rec = current ?: return
         val was = showingMode
+        picked = null
         val question = CallCardScreen.Ask(callCardTitle(app.resources, rec), rec.durationMs, rec.sourceApp)
         go(app, Mode.ASK, question)
         io {
@@ -311,8 +389,6 @@ object DecisionPopup {
 
     private fun keepQuietly(app: Context, id: String) = io { Decisions.keepFor(app, id, transcribe = false, uploadAfterMs = 0) }
 
-    private fun streak(app: Context, pick: Pick) = update(app) { CallChoice.afterPick(it, pick) }
-
     private fun settings(app: Context): AppSettings = (app as? EchoLedgerApp)?.graph?.liveSettings?.value ?: AppSettings()
 
     private fun update(app: Context, change: (AppSettings) -> AppSettings) {
@@ -321,6 +397,6 @@ object DecisionPopup {
     }
 
     private fun io(block: suspend () -> Unit) {
-        CoroutineScope(Dispatchers.IO).launch { runCatching { block() } }
+        steps.launch { order.withLock { runCatching { block() } } }
     }
 }

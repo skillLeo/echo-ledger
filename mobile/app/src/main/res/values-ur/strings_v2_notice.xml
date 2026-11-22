@@ -16,6 +16,8 @@
     <string name="n_capture_not_ready">کال ریکارڈنگ تیار نہیں — ٹھیک کرنے کے لیے تھپتھپائیں</string>
     <string name="n_armed_ask">کالز خود بخود ریکارڈ ہوتی ہیں؛ ہر کال کے بعد آپ فیصلہ کرتے ہیں۔</string>
     <string name="n_armed_keep">کالز خود بخود ریکارڈ ہو کر رکھی جاتی ہیں۔</string>
+    <string name="n_armed_off_title">خودکار کال ریکارڈنگ بند ہے</string>
+    <string name="n_armed_off">ہر کال کے بعد: کالز ریکارڈ نہ کریں۔</string>
     <string name="n_start_shizuku">Shizuku شروع کریں (یا سیٹ اپ والی کمانڈ چلائیں)، پھر سیٹ اپ کھولیں۔</string>
     <string name="n_record_now">ابھی ریکارڈ کریں</string>
     <string name="n_turn_off">بند کریں</string>

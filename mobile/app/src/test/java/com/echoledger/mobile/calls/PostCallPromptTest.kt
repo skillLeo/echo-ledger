@@ -57,6 +57,15 @@ class PostCallPromptTest : AppTest() {
 
     private fun after(ms: Long) = ShadowLooper.idleMainLooper(ms, TimeUnit.MILLISECONDS)
 
+    private fun discardWork(id: String) =
+        WorkManager.getInstance(app).getWorkInfosForUniqueWork(DiscardLaterWorker.workName(id)).get(10, TimeUnit.SECONDS)
+
+    private fun timeoutWork(id: String) =
+        WorkManager.getInstance(app).getWorkInfosForUniqueWork(DecisionTimeoutWorker.workName(id)).get(10, TimeUnit.SECONDS)
+
+    private fun runDiscardWork(id: String) =
+        androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!.setInitialDelayMet(discardWork(id).single().id)
+
     private fun asked(id: String = "call-1") {
         PostCallPrompt.show(app, call(id), "dark")
         assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
@@ -126,22 +135,146 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
-    fun `Delete deletes nothing until Deleted and its Undo are over, and Undo brings the question back`() {
+    fun `Delete deletes nothing until Deleted and its Undo are over, and the file outlasts the line`() {
         asked()
         DecisionPopup.delete(app)
         assertEquals(CallCardScreen.Done(Pick.DELETE), DecisionPopup.shown)
         pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
-        assertTrue("the file waits for Undo", app.graph.recordings.encryptedFile("call-1").exists())
+        assertTrue("the tap deletes nothing", app.graph.recordings.encryptedFile("call-1").exists())
+        assertTrue("it waits for nobody any more", app.graph.recordings.pendingDecisions().isEmpty())
+        assertTrue("and is not kept after ten seconds", timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+
+        after(DecisionPopup.DONE_MS + 1)
+        assertFalse("Deleted leaves after 5 s", DecisionPopup.isShowing)
+        assertTrue("the file outlasts it, so a late Undo still finds it", app.graph.recordings.encryptedFile("call-1").exists())
+
+        // WorkManager keeps the delete when the app is closed or killed meanwhile; it runs only when the time is over.
+        val work = discardWork("call-1").single()
+        assertEquals(WorkInfo.State.ENQUEUED, work.state)
+        assertTrue("its delay is at least the line's time", work.initialDelayMillis >= DecisionPopup.DONE_MS)
+        runDiscardWork("call-1")
+        pumpUntil("the call to be deleted") { app.graph.recordings.get("call-1") == null }
+        assertFalse(app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
+    @Test
+    fun `Undo on Deleted brings the question back, with its keep timer running again`() {
+        asked()
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
 
         DecisionPopup.undo(app)
         assertTrue(DecisionPopup.shown is CallCardScreen.Ask)
         pumpUntil("back") { app.peekRecording("call-1")?.state == "pending_decision" }
+        assertNull(app.peekRecording("call-1")?.discardAt)
+        pumpUntil("the delete called off") { discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED } }
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+        assertTrue("kept after 10 s again", timeoutWork("call-1").any { it.state == WorkInfo.State.ENQUEUED })
+    }
 
+    @Test
+    fun `a quick Undo right after Delete is applied after it, never before`() {
+        asked()
+        // Both taps before the store has done anything: its steps run in the order they were asked for.
+        DecisionPopup.delete(app)
+        DecisionPopup.undo(app)
+        DecisionPopup.transcribe(app)
+        pumpUntil("kept to be transcribed") { app.peekRecording("call-1")?.let { it.state == "queued" && it.transcribe == true } == true }
+        assertNull(app.peekRecording("call-1")?.discardAt)
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+        assertTrue(discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+    }
+
+    @Test
+    fun `a call that ends while Deleted shows is asked about only after that line, and the Undo stays reachable`() {
+        asked("call-1")
         DecisionPopup.delete(app)
         pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
-        runBlocking { Decisions.finishDiscard(app, "call-1") }
-        assertNull("gone after its time", app.peekRecording("call-1"))
+
+        PostCallPrompt.show(app, call("call-2"), "dark")
+        assertEquals("the Deleted line stays", DecisionPopup.Mode.DELETED, DecisionPopup.showingMode)
+        assertEquals("call-1", DecisionPopup.showingFor)
+        DecisionPopup.undo(app)
+        pumpUntil("call-1 back") { app.peekRecording("call-1")?.state == "pending_decision" }
+        assertEquals("call-1", DecisionPopup.showingFor)
+
+        // call-1 asked again, then kept as audio after its 8 s; its line ends, and call-2 is asked about.
+        after(DecisionPopup.ASK_MS + 1)
+        after(DecisionPopup.DONE_MS + 1)
+        pumpUntil("call-2 asked") { DecisionPopup.showingFor == "call-2" && DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
+        assertEquals("pending_decision", app.peekRecording("call-2")?.state)
+    }
+
+    @Test
+    fun `a call that ends while Deleted shows waits, and call-1 is deleted only when its line is over`() {
+        asked("call-1")
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        PostCallPrompt.show(app, call("call-2"), "dark")
+        after(DecisionPopup.DONE_MS + 1)
+        pumpUntil("call-2 asked") { DecisionPopup.showingFor == "call-2" }
+        assertTrue("call-1's file is still there for a late Undo", app.graph.recordings.encryptedFile("call-1").exists())
+        runDiscardWork("call-1")
+        pumpUntil("call-1 deleted") { app.graph.recordings.get("call-1") == null }
+        assertEquals("pending_decision", app.peekRecording("call-2")?.state)
+    }
+
+    @Test
+    fun `a Delete due after its process is gone brings the call back to choose again`() {
+        call()
+        runBlocking { Decisions.discardLater(app, "call-1", undoHere = true) }
+        // As after EchoLedger closed within those seconds: the call names a process that is no longer there.
+        app.graph.recordings.update("call-1") { it.copy(undoIn = "a process that has gone") }
+        runDiscardWork("call-1")
+        pumpUntil("back") { app.peekRecording("call-1")?.state == "pending_decision" }
+        val back = app.peekRecording("call-1")!!
+        assertTrue("its row says so", back.restoredDelete)
+        assertNull(back.discardAt)
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+        assertTrue("it waits for the person, not for a timer", timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+        assertTrue("nothing is sent", noUpload("call-1"))
+
+        // A notification's Delete keeps its Undo in the shade, which outlives the process: it is applied.
+        call("call-2")
+        runBlocking { Decisions.discardLater(app, "call-2") }
+        runDiscardWork("call-2")
+        pumpUntil("call-2 deleted") { app.graph.recordings.get("call-2") == null }
+        // And the hourly check follows the same rule.
+        call("call-3")
+        runBlocking { Decisions.discardLater(app, "call-3", afterMs = 60_000, undoHere = true) }
+        app.graph.recordings.update("call-3") { it.copy(undoIn = "a process that has gone") }
+        runBlocking { Decisions.finishDiscard(app, "call-3") }
+        assertEquals("pending_decision", app.peekRecording("call-3")?.state)
+    }
+
+    @Test
+    fun `a longer Undo time keeps the file that much longer`() {
+        call()
+        val now = System.currentTimeMillis()
+        val discarding = runBlocking { Decisions.discardLater(app, "call-1", nowMs = now, afterMs = 20_000) }!!
+        assertEquals(java.time.Instant.ofEpochMilli(now + 20_000).toString(), discarding.discardAt)
+        assertTrue(discardWork("call-1").single().initialDelayMillis >= 20_000)
+        // The default is unchanged.
+        call("call-2")
+        val usual = runBlocking { Decisions.discardLater(app, "call-2", nowMs = now) }!!
+        assertEquals(java.time.Instant.ofEpochMilli(now + Decisions.DISCARD_AFTER_MS).toString(), usual.discardAt)
+    }
+
+    @Test
+    fun `a decision anywhere closes the card, and only for its own call`() {
+        asked("a")
+        DecisionPopup.transcribe(app)
+        PostCallPrompt.show(app, call("b"), "dark")
+        assertEquals("b", DecisionPopup.showingFor)
+
+        runBlocking { Decisions.apply(app, "a", keep = false) }
+        ShadowLooper.idleMainLooper()
+        assertEquals("b", DecisionPopup.showingFor)
+
+        runBlocking { Decisions.apply(app, "b", keep = false) }
+        ShadowLooper.idleMainLooper()
+        assertNull(DecisionPopup.showingFor)
+        assertNull(app.graph.recordings.get("b"))
     }
 
     @Test
@@ -184,7 +317,8 @@ class PostCallPromptTest : AppTest() {
             asked(id)
             assertNull((DecisionPopup.shown as CallCardScreen.Ask).always)
             DecisionPopup.transcribe(app)
-            DecisionPopup.hide()
+            // A choice counts once its line closes without Undo.
+            after(DecisionPopup.DONE_MS + 1)
         }
         pumpUntil("three in a row") { app.graph.liveSettings.value?.callChoiceStreakCount == 3 }
         asked("call-4")
@@ -193,6 +327,22 @@ class PostCallPromptTest : AppTest() {
         pumpUntil("Transcribe every call") { app.graph.liveSettings.value?.afterEachCall == CallChoice.TRANSCRIBE }
         pumpUntil("and this call too") { app.peekRecording("call-4")?.transcribe == true }
         assertTrue(app.graph.liveSettings.value?.callChoiceAlwaysOffered == true)
+    }
+
+    @Test
+    fun `a choice taken back with Undo does not count toward Always do this`() {
+        runBlocking { app.graph.settings.update { it.copy(callChoiceHintShown = true) } }
+        asked("call-1")
+        DecisionPopup.transcribe(app)
+        DecisionPopup.undo(app)
+        DecisionPopup.delete(app)
+        DecisionPopup.undo(app)
+        DecisionPopup.hide()
+        asked("call-2")
+        DecisionPopup.transcribe(app)
+        after(DecisionPopup.DONE_MS + 1)
+        pumpUntil("one counted") { app.graph.liveSettings.value?.callChoiceStreakCount == 1 }
+        assertEquals(Pick.TRANSCRIBE.wire, app.graph.liveSettings.value?.callChoiceStreak)
     }
 
     @Test

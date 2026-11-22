@@ -22,12 +22,20 @@ object PostCallPrompt {
     const val KEEP = "keep"
     const val ASK = "ask"
 
-    /** What a call that just ended becomes ([duringCall]: chosen on the pill). Quiet hours count only for Ask me. */
-    fun outcome(context: Context, settings: AppSettings, duringCall: CallChoice.Pick? = null): CallChoice.Outcome = CallChoice.outcome(
+    /**
+     * What a call that just ended becomes ([duringCall]: chosen on the pill; [bannerShown]: At the start's banner was
+     * shown for it). Quiet hours count only for Ask me.
+     */
+    fun outcome(
+        context: Context,
+        settings: AppSettings,
+        duringCall: CallChoice.Pick? = null,
+        bannerShown: Boolean = false
+    ): CallChoice.Outcome = CallChoice.outcome(
         settings,
         duringCall,
-        quiet =
-            CallChoice.setting(settings) == CallChoice.ASK && CallChoice.quietNow(context, settings)
+        quiet = CallChoice.setting(settings) == CallChoice.ASK && CallChoice.quietNow(context, settings),
+        bannerShown = bannerShown
     )
 
     /** [rec] as [outcome] stores it: waiting for the card, or kept with or without its transcript. */

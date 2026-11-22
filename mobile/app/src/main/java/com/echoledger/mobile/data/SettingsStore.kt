@@ -373,7 +373,7 @@ class SettingsStore(
         } else {
             unblocked
         }
-        // 2.0.5: "After a call" (keep or ask) became After each call; Keep automatically is Transcribe every call.
+        // 2.0.5: "After a call" (keep or ask) became After each call: Ask me, the default, from either (as on the desktop).
         return if (!raw.contains(
                 "\"afterEachCall\""
             )

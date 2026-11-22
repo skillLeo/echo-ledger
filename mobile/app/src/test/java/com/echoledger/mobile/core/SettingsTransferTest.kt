@@ -80,7 +80,7 @@ class SettingsTransferTest {
         assertEquals(false, applied(before205(""""screenShareMode":"show"""")).hideLiveWords)
         assertEquals(true, applied(before205(""""screenShareMode":"hide""""), AppSettings(hideLiveWords = false)).hideLiveWords)
         assertEquals(true, applied(before205(""""screenShareMode":"black_box""""), AppSettings(hideLiveWords = false)).hideLiveWords)
-        assertEquals("transcribe", applied(before205(""""afterCall":"keep"""")).afterEachCall)
+        assertEquals("ask", applied(before205(""""afterCall":"keep""""), AppSettings(afterEachCall = "transcribe")).afterEachCall)
         assertEquals("ask", applied(before205(""""afterCall":"ask""""), AppSettings(afterEachCall = "audio")).afterEachCall)
         // A newer file's own choice wins over its old key.
         assertEquals(true, applied(before205(""""screenShareMode":"show","hideLiveWords":true""")).hideLiveWords)

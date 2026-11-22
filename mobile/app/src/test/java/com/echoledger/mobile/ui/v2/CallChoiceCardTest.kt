@@ -22,6 +22,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -69,8 +70,55 @@ class CallChoiceCardTest {
     private val out = File(File(System.getProperty("screenshots.dir") ?: "build/screenshots"), "call-choice")
 
     private val ask = CallCardScreen.Ask("Muneeb Quraishi", 44_000, "whatsapp")
+
+    /**
+     * WhatsApp as if it were installed, with a flat stand-in of its mark (the desktop's SourceLogos paths: its bubble and
+     * handset on its green), so the card shows an app's own icon as it does on a phone that has the app.
+     */
+    @org.junit.Before
+    fun installWhatsApp() {
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+        val pm = org.robolectric.Shadows.shadowOf(app.packageManager)
+        pm.installPackage(
+            android.content.pm.PackageInfo().apply {
+                packageName = com.echoledger.mobile.core.CallTargets.WHATSAPP
+                applicationInfo =
+                    android.content.pm.ApplicationInfo().apply { packageName = com.echoledger.mobile.core.CallTargets.WHATSAPP }
+            }
+        )
+        val size = 96
+        val mark = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(mark).apply {
+            scale(size / 24f, size / 24f)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            paint.color = android.graphics.Color.parseColor("#25D366")
+            drawCircle(12f, 12f, 12f, paint)
+            paint.color = android.graphics.Color.WHITE
+            paint.style = android.graphics.Paint.Style.STROKE
+            paint.strokeWidth = 1.5f
+            paint.strokeJoin = android.graphics.Paint.Join.ROUND
+            drawPath(androidx.core.graphics.PathParser.createPathFromPathData(BUBBLE), paint)
+            paint.style = android.graphics.Paint.Style.FILL
+            drawPath(androidx.core.graphics.PathParser.createPathFromPathData(HANDSET), paint)
+        }
+        pm.setApplicationIcon(
+            com.echoledger.mobile.core.CallTargets.WHATSAPP,
+            android.graphics.drawable.BitmapDrawable(app.resources, mark)
+        )
+        com.echoledger.mobile.ui.design.AppIcons.forget()
+    }
+
+    /** Waits for the installed icon, loaded off the main thread, before a picture is taken. */
+    private fun awaitLogo() {
+        val px = with(compose.density) { com.echoledger.mobile.ui.v2.tokens.EchoTokens.Component.avatarSize.roundToPx() }
+        compose.waitUntil(5_000) { com.echoledger.mobile.ui.design.AppIcons.cached("v2-source:WHATSAPP:$px") != null }
+        compose.waitForIdle()
+    }
     private var screen by mutableStateOf<CallCardScreen>(ask)
     private var old by mutableStateOf(false)
+
+    /** Something else of the call choice to draw instead of the card (the start banner, the pill menu). */
+    private var other by mutableStateOf<(@androidx.compose.runtime.Composable () -> Unit)?>(null)
     private var generation by mutableIntStateOf(0)
     private var started = false
 
@@ -102,6 +150,10 @@ class CallChoiceCardTest {
 
     @androidx.compose.runtime.Composable
     private fun Card() {
+        other?.let {
+            it()
+            return
+        }
         if (old) {
             V2AfterCallCard(
                 title = "Call with Muneeb Quraishi",
@@ -136,12 +188,30 @@ class CallChoiceCardTest {
     fun `the question names the call, then Delete and Transcribe, the swipe line and nothing else`() {
         show(ask)
         compose.onNodeWithText("Muneeb Quraishi").assertIsDisplayed()
-        compose.onNodeWithText("0:44 · just now", substring = true).assertIsDisplayed()
+        // The length is isolated (FSI…PDI) inside the line, in every language.
+        compose.onNodeWithText("\u20680:44\u2069 · just now").assertIsDisplayed()
         compose.onNodeWithText("Swipe away to keep audio only").assertIsDisplayed()
         compose.onNodeWithText("Delete").performClick()
         compose.onNodeWithText("Transcribe").performClick()
         assertEquals(listOf("delete", "transcribe"), events)
         listOf("Keep", "Skip", "Don't keep", "Save audio").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
+    }
+
+    @Test
+    fun `the card shows the app's own logo, a Latin name in the Latin face in Urdu, and the length isolated`() {
+        language = EchoLanguage.Urdu
+        show(ask)
+        awaitLogo()
+        compose.onNodeWithContentDescription("واٹس ایپ", substring = true).assertExists()
+        val meta = compose.onNodeWithText("0:44", substring = true).fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.Text].single()
+        assertEquals("\u20680:44\u2069 · ابھی", meta.text)
+        val latin = meta.spanStyles.single { it.item.fontFamily != null }
+        assertEquals(
+            "the length, the dot and its spaces are in the Latin face",
+            "\u20680:44\u2069 · ",
+            meta.text.substring(latin.start, latin.end)
+        )
     }
 
     @Test
@@ -208,6 +278,59 @@ class CallChoiceCardTest {
         assertTrue("$variant: the buttons overlap", apart)
     }
 
+    /**
+     * The rest of the call choice for VISUAL-OK, light and dark, English and Urdu, at the phone's text size: the three
+     * confirmation lines, the grouped line, the start banner and a call's pill menu (new-<part>-<theme>-<lang>.png).
+     */
+    @Test
+    fun `the lines, the grouped line, the start banner and the pill menu are drawn for review`() {
+        out.mkdirs()
+        val parts: List<Pair<String, (@androidx.compose.runtime.Composable () -> Unit)?>> = listOf(
+            "line-transcribing" to null,
+            "line-audio" to null,
+            "line-deleted" to null,
+            "grouped" to null,
+            "start-banner" to {
+                com.echoledger.mobile.overlay.StartBannerContent(onDontRecord = {}, modifier = Modifier.padding(horizontal = 16.dp))
+            },
+            "pill-menu" to {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                    com.echoledger.mobile.ui.v2.live.V2RecordingPill(
+                        com.echoledger.mobile.recording.PillState(
+                            mode = com.echoledger.mobile.recording.PillState.Mode.MENU,
+                            elapsedMs = 44_000,
+                            call = true,
+                            choice = Pick.AUDIO.wire
+                        ),
+                        0,
+                        "Muneeb Quraishi",
+                        {}
+                    )
+                }
+            }
+        )
+        val screens = mapOf(
+            "line-transcribing" to CallCardScreen.Done(Pick.TRANSCRIBE),
+            "line-audio" to CallCardScreen.Done(Pick.AUDIO),
+            "line-deleted" to CallCardScreen.Done(Pick.DELETE),
+            "grouped" to CallCardScreen.Grouped(3)
+        )
+        for ((name, draw) in parts) {
+            for (d in listOf(false, true)) {
+                for (l in EchoLanguage.entries) {
+                    dark = d
+                    language = l
+                    scale = 1f
+                    other = draw
+                    show(screens[name] ?: ask)
+                    val variant = "$name-${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}"
+                    compose.onRoot().captureRoboImage(File(out, "new-$variant.png"))
+                }
+            }
+        }
+        other = null
+    }
+
     @Test
     fun `it fits a 360 dp phone at every text size, light and dark, English and Urdu, and is drawn beside the old card`() {
         out.mkdirs()
@@ -219,6 +342,7 @@ class CallChoiceCardTest {
                         language = l
                         scale = s
                         show(ask, oldCard)
+                        awaitLogo()
                         val variant = "$size-${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}"
                         if (!oldCard) assertFits(variant)
                         compose.onRoot().captureRoboImage(File(out, "${if (oldCard) "old" else "new"}-$variant.png"))
@@ -226,5 +350,13 @@ class CallChoiceCardTest {
                 }
             }
         }
+    }
+
+    private companion object {
+        /** WhatsApp's bubble and handset on a 24-unit tile (desktop/src/components/SourceLogos.tsx). */
+        const val BUBBLE = "M12 4.6a7.4 7.4 0 0 0-6.4 11.1L4.6 19.4l3.8-1a7.4 7.4 0 1 0 3.6-13.8z"
+        const val HANDSET = "M9.3 7.6c.2 0 .4 0 .5.4l.7 1.7c.1.2 0 .4-.1.6l-.5.6c-.1.1-.1.3 0 .5.4.7.9 1.3 1.5 1.8.5.4 1 .7 " +
+            "1.6 1 .2.1.4 0 .5-.1l.6-.7c.2-.2.4-.2.6-.1l1.6.8c.2.1.3.3.3.5 0 .5-.2 1-.6 1.3-.5.4-1.1.6-1.7.5-1.1-.2-2.2-.7-3.1-1.4" +
+            "-1-.8-1.9-1.8-2.5-2.9-.4-.7-.5-1.5-.3-2.2.2-.4.4-.8.8-1.1.2-.2.4-.2.6-.2z"
     }
 }

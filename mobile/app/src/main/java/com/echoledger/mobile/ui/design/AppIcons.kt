@@ -26,6 +26,10 @@ object AppIcons {
         cache[key] = Slot(icon)
         return icon
     }
+
+    /** Forgets every icon (tests that install an app this process already looked for). */
+    @androidx.annotation.VisibleForTesting
+    internal fun forget() = cache.clear()
 }
 
 /** The icon under [key]: at once when cached, otherwise null until [load] has run on a background thread. */

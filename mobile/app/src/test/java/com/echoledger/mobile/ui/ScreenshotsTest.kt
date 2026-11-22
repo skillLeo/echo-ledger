@@ -893,7 +893,7 @@ class ScreenshotsTest : ScreenTest() {
         app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 125_000)
         app.storeRecording(id = "call-2", state = "pending_decision", durationMs = 36_000, startedAt = "2026-10-23T18:30:00Z")
         shoot { WaitingScreen(vm, onBack = {}) }
-        pumpUntil("the waiting calls") { runCatching { compose.onNodeWithText("Keep all").assertExists() }.isSuccess }
+        pumpUntil("the waiting calls") { runCatching { compose.onNodeWithText("Save all as audio only").assertExists() }.isSuccess }
         capture("waiting")
     }
 

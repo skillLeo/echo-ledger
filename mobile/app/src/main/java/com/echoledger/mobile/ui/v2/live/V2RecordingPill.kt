@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.R
@@ -159,12 +160,14 @@ private fun PillMenu(state: PillState, onEvent: (PillEvent) -> Unit, onHideWindo
                 MenuRow(
                     stringResource(R.string.cc_pill_transcribe),
                     icon = if (chosen == com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE) EchoIcons.Check else EchoIcons.Transcribe,
-                    onClick = { onEvent(PillEvent.Choose(com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE)) }
+                    onClick = { onEvent(PillEvent.Choose(com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE)) },
+                    selected = chosen == com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE
                 )
                 MenuRow(
                     stringResource(R.string.cc_pill_audio),
                     icon = if (chosen == com.echoledger.mobile.calls.CallChoice.Pick.AUDIO) EchoIcons.Check else EchoIcons.Mic,
-                    onClick = { onEvent(PillEvent.Choose(com.echoledger.mobile.calls.CallChoice.Pick.AUDIO)) }
+                    onClick = { onEvent(PillEvent.Choose(com.echoledger.mobile.calls.CallChoice.Pick.AUDIO)) },
+                    selected = chosen == com.echoledger.mobile.calls.CallChoice.Pick.AUDIO
                 )
                 MenuRow(
                     stringResource(R.string.cc_pill_stop_delete),
@@ -215,13 +218,15 @@ private fun PillMenu(state: PillState, onEvent: (PillEvent) -> Unit, onHideWindo
 
 /** A menu line of the pill: 48 dp, its icon and words; the whole line is the button. */
 @Composable
-private fun MenuRow(title: String, icon: ImageVector, onClick: () -> Unit) {
+private fun MenuRow(title: String, icon: ImageVector, onClick: () -> Unit, selected: Boolean? = null) {
     val c = EchoV2.colors
     Row(
         Modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
             .clickable(role = Role.Button, onClick = onClick)
+            // A call's choice says whether it is the one chosen (TalkBack: "selected").
+            .then(if (selected != null) Modifier.semantics { this.selected = selected } else Modifier)
             .padding(horizontal = EchoTokens.Space.s16),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)

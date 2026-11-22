@@ -58,7 +58,8 @@ class CallChoiceWindowsTest : AppTest() {
         val p = params(card)
         assertEquals(Gravity.BOTTOM, p.gravity and Gravity.VERTICAL_GRAVITY_MASK)
         assertTrue("above the navigation bar (${p.y} px)", p.y >= dimen("navigation_bar_height"))
-        assertEquals("the whole width, less the card's own margins", WindowManager.LayoutParams.MATCH_PARENT, p.width)
+        assertEquals("as wide as the card: taps beside it reach the app below", WindowManager.LayoutParams.WRAP_CONTENT, p.width)
+        assertEquals(Gravity.CENTER_HORIZONTAL, p.gravity and Gravity.HORIZONTAL_GRAVITY_MASK)
         assertFalse(card.isSoundEffectsEnabled)
         assertFalse(card.isHapticFeedbackEnabled)
         assertTrue("never takes focus", p.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE != 0)
@@ -73,6 +74,7 @@ class CallChoiceWindowsTest : AppTest() {
             val banner = window(FloatingWindow.START_BANNER)
             val p = params(banner)
             assertEquals(Gravity.TOP, p.gravity and Gravity.VERTICAL_GRAVITY_MASK)
+            assertEquals("as wide as the banner", WindowManager.LayoutParams.WRAP_CONTENT, p.width)
             assertTrue("under the status bar", p.y >= dimen("status_bar_height"))
             val screen = app.resources.displayMetrics.heightPixels
             // A call screen's answer and hang-up buttons are in its lower half; the banner stays in the top quarter.

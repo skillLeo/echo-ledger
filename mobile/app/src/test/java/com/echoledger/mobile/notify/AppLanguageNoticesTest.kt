@@ -35,7 +35,8 @@ class AppLanguageNoticesTest : AppTest() {
         val shown = mutableListOf<Notification>()
         shown += Notifications.recording(ctx, "Recording call with Omar", "Both sides · auto · 2 bookmarks", paused = true)
         shown += Notifications.recording(ctx, "Voice note", "Not hearing the other side for 12 s")
-        shown += Notifications.armed(ctx, ready = true, askAfterCall = true)
+        shown += Notifications.armed(ctx, ready = true)
+        shown += Notifications.armed(ctx, ready = true, afterEachCall = com.echoledger.mobile.calls.CallChoice.OFF)
         shown += Notifications.armed(ctx, ready = false)
         Notifications.showSaveDecision(ctx, rec, "Acme")
         Notifications.savedWithUndo(ctx, rec.copy(id = "rec-3"))
@@ -95,6 +96,9 @@ class AppLanguageNoticesTest : AppTest() {
         assertTrue("\u200Fدونوں طرف · خودکار · 2 بک مارکس" in all)
         assertTrue("\u200Fمحفوظ · Omar کے ساتھ کال · 4:12" in all)
         assertTrue("\u200F3 کال ریکارڈنگز لے آئی گئیں" in all)
+        // Don't record calls (2.0.5): said plainly, in Urdu too.
+        assertTrue("\u200Fخودکار کال ریکارڈنگ بند ہے" in all)
+        assertTrue("\u200Fہر کال کے بعد: کالز ریکارڈ نہ کریں۔" in all)
     }
 
     @Test
@@ -110,6 +114,8 @@ class AppLanguageNoticesTest : AppTest() {
             "3 call recordings brought in",
             "Ready to record WhatsApp calls",
             "Calls are recorded automatically; you decide after each call.",
+            "Automatic call recording is off",
+            "After each call: Don't record calls.",
             "Record now",
             "Transcribe",
             "Save audio only",
@@ -203,7 +209,7 @@ class AppLanguageNoticesTest : AppTest() {
             com.echoledger.mobile.R.id.rec_discard
         )
             .map { view.findViewById<android.widget.TextView>(it).text.toString() }
-        assertEquals(listOf("روکیں", "بند کریں", "کیپشنز", "روکیں اور حذف کریں").map { "\u200F$it" }, buttons)
+        assertEquals(listOf("روکیں", "بند کریں", "کیپشنز", "ہٹائیں").map { "\u200F$it" }, buttons)
     }
 
     @Test

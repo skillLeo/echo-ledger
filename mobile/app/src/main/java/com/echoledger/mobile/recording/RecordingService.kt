@@ -213,7 +213,10 @@ class RecordingService : LifecycleService() {
                 if (it.extraCallApps != settings.extraCallApps) graph.helper.setCallApps(CallTargets.packages(it.extraCallApps))
                 // Picked games: their mixes are armed before the game plays, and they are never call apps.
                 graph.helper.setGames(it.liveTranslate.game.games.toSet())
+                val notice = com.echoledger.mobile.calls.CallChoice.setting(it) != com.echoledger.mobile.calls.CallChoice.setting(settings)
                 settings = it
+                // After each call changed while armed and idle: the notification says what happens to calls now.
+                if (notice && armed && capture == null) goForeground(mic = false, title = "", detail = "")
             }
         }
         // Game translate starts with a picked game's voice chat and stops a minute after the game has gone (plan B3).
@@ -370,8 +373,7 @@ class RecordingService : LifecycleService() {
             Notifications.armed(
                 this,
                 ready = helperAlive(),
-                askAfterCall =
-                    com.echoledger.mobile.calls.CallChoice.setting(settings) == com.echoledger.mobile.calls.CallChoice.ASK
+                afterEachCall = com.echoledger.mobile.calls.CallChoice.setting(settings)
             )
         } else {
             Notifications.recording(
@@ -381,7 +383,8 @@ class RecordingService : LifecycleService() {
                 paused = capture?.paused == true,
                 // The clock shows recorded time (paused stretches left out).
                 startedAtMs = capture?.let { System.currentTimeMillis() - it.recordedMs() },
-                discarding = pillState.value.discarding
+                discarding = pillState.value.discarding,
+                call = capture?.fromCall == true
             )
         }
         val type = when {
@@ -1357,6 +1360,9 @@ class RecordingService : LifecycleService() {
      */
     private fun stopCapture(fromCall: Boolean, reason: String) {
         val session = capture ?: return
+        // A Stop and delete (or the banner's Don't record) still counting down: the recording is stored only to be
+        // deleted once that Undo time is over, never kept or sent.
+        val deleteAtMs = pillState.value.discardAtMs
         CaptureLog.add(this, "stopped", if (callState is CallState.InCall && !fromCall) "$reason, call still going on" else reason)
         capture = null
         isRecording = false
@@ -1370,7 +1376,7 @@ class RecordingService : LifecycleService() {
         CallNotices.onNotice = null
         val isCall = session.fromCall || fromCall
         // After each call (since 2.0.5): the pill's choice, the setting, or quiet hours decide what the call becomes.
-        val outcome = com.echoledger.mobile.calls.PostCallPrompt.outcome(this, settings, session.pick)
+        val outcome = com.echoledger.mobile.calls.PostCallPrompt.outcome(this, settings, session.pick, session.bannerShown)
         val (callState, callTranscribe) = com.echoledger.mobile.calls.CallChoice.stored(outcome)
         val shorterThanS = settings.skipCallsShorterThanS
         var skip: SkippedCalls.Reason? = null
@@ -1403,11 +1409,12 @@ class RecordingService : LifecycleService() {
                     plainSize = 0,
                     sha256 = "",
                     state = when {
+                        deleteAtMs != null -> "pending_decision"
                         skip != null -> SkippedCalls.STATE
                         isCall -> callState
                         else -> "queued"
                     },
-                    transcribe = if (isCall && skip == null) callTranscribe else null,
+                    transcribe = if (isCall && skip == null && deleteAtMs == null) callTranscribe else null,
                     skippedReason = skip?.wire,
                     skippedAt = skip?.let { Instant.now().toString() },
                     liveSegments = synchronized(session.segments) { session.segments.sortedBy { it.startMs } },
@@ -1454,7 +1461,7 @@ class RecordingService : LifecycleService() {
             }
             // Your voice only, with the Phone app's two-sided copy on its way: this one waits for it, undecided and with no
             // card, and the copy takes its place, so one call is one card and is transcribed once (since v1.8 0.3).
-            val held = stored != null && skip == null && !silent && oneSided != null && phoneAppCovers
+            val held = deleteAtMs == null && stored != null && skip == null && !silent && oneSided != null && phoneAppCovers
             // A SIM call whose own recording was lost, silent or one-sided: the Phone app's copy is looked for. Its wait is
             // added here, before the recording is held, so no release in between can let a held recording go too early.
             if (session.sourceApp == SourceApp.PHONE_CALL.wire && (stored == null || silent || oneSided != null)) {
@@ -1491,6 +1498,8 @@ class RecordingService : LifecycleService() {
             when {
                 stored == null -> journalFailed(session.id, MissedReason.UNKNOWN, "Saving the recording failed.")
 
+                deleteAtMs != null -> CallJournal.finish(this, session.id, CallJournal.Result.DISCARDED, "by you, as the call ended")
+
                 // No sound on any side: a microphone Android gave to another app during this capture, or a cause not known.
                 silent -> journalFailed(
                     session.id,
@@ -1512,6 +1521,21 @@ class RecordingService : LifecycleService() {
             if (silent && stored != null) {
                 stored.serverSessionId?.let { DiscardWorker.enqueue(this, stored.id, it) }
                 graph.recordings.delete(stored.id)
+            } else if (deleteAtMs != null && stored != null) {
+                // Its Undo is on a screen of this process: the "Deleted · Undo" line for the time that was left.
+                val leftMs = (deleteAtMs - System.currentTimeMillis()).coerceAtLeast(0)
+                val gone = kotlinx.coroutines.runBlocking {
+                    com.echoledger.mobile.calls.Decisions.discardLater(
+                        this@RecordingService,
+                        stored.id,
+                        afterMs = leftMs + com.echoledger.mobile.calls.Decisions.DISCARD_GRACE_MS,
+                        undoHere = true
+                    )
+                }
+                val look = settings.themeMode
+                if (gone != null && leftMs > 0) {
+                    main.post { com.echoledger.mobile.overlay.DecisionPopup.deleted(this, gone, look, leftMs) }
+                }
             } else if (skip != null && stored != null) {
                 // Nothing asks and nothing uploads; a server session the captions opened goes now (Restore uploads anew).
                 stored.serverSessionId?.let { sessionId ->
@@ -1529,6 +1553,8 @@ class RecordingService : LifecycleService() {
                     }
                 } else if (silent) {
                     Notifications.noAudio(this, CaptureProblems.recent(this))
+                } else if (deleteAtMs != null) {
+                    // Deleted (above): nothing asks and nothing uploads.
                 } else if (stored != null && skip == null) {
                     if (isCall && !held) {
                         // Quiet hours or Do Not Disturb: no card; the Library says why it is audio only.

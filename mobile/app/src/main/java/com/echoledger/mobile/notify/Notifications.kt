@@ -219,8 +219,20 @@ object Notifications {
         detail: String,
         paused: Boolean = false,
         startedAtMs: Long? = null,
-        discarding: Boolean = false
+        discarding: Boolean = false,
+        /** A call recording: its delete button says Stop and delete, the pill's call menu word (2.0.5); else Discard. */
+        call: Boolean = false
     ): Notification {
+        val deleteWord = com.echoledger.mobile.notify.AppWords.resources(context).let {
+            if (call) {
+                com.echoledger.mobile.notify.NoticeWords.drawn(
+                    it,
+                    it.getString(if (discarding) R.string.cc_undo else R.string.cc_pill_stop_delete)
+                )
+            } else {
+                com.echoledger.mobile.notify.NoticeWords.say(context, if (discarding) "Undo discard" else "Discard")
+            }
+        }
         val buttons = RemoteViews(context.packageName, R.layout.notification_recording_actions).apply {
             setTextViewText(R.id.rec_title, com.echoledger.mobile.notify.NoticeWords.say(context, if (paused) "Paused · $title" else title))
             setTextViewText(R.id.rec_detail, com.echoledger.mobile.notify.NoticeWords.say(context, detail))
@@ -235,12 +247,7 @@ object Notifications {
             setOnClickPendingIntent(R.id.rec_captions, serviceAction(context, RecordingService.ACTION_CAPTIONS, 16))
             setTextViewText(
                 R.id.rec_discard,
-                com.echoledger.mobile.notify.AppWords.resources(context).let {
-                    com.echoledger.mobile.notify.NoticeWords.drawn(
-                        it,
-                        it.getString(if (discarding) R.string.cc_undo else R.string.cc_pill_stop_delete)
-                    )
-                }
+                deleteWord
             )
             setOnClickPendingIntent(
                 R.id.rec_discard,
@@ -295,12 +302,7 @@ object Notifications {
             )
             .addAction(
                 0,
-                com.echoledger.mobile.notify.AppWords.resources(context).let {
-                    com.echoledger.mobile.notify.NoticeWords.drawn(
-                        it,
-                        it.getString(if (discarding) R.string.cc_undo else R.string.cc_pill_stop_delete)
-                    )
-                },
+                deleteWord,
                 serviceAction(context, if (discarding) RecordingService.ACTION_UNDO_DISCARD else RecordingService.ACTION_DISCARD_NOW, 17)
             )
             .build()
@@ -347,27 +349,40 @@ object Notifications {
     )
 
     /** Auto-record on; [ready] false: the capture helper is not running, so calls would not be recorded. */
-    fun armed(context: Context, ready: Boolean = true, askAfterCall: Boolean = false): Notification =
-        NotificationCompat.Builder(context, CHANNEL_RECORDING)
+    fun armed(
+        context: Context,
+        ready: Boolean = true,
+        /** After each call ([com.echoledger.mobile.calls.CallChoice]): Don't record calls says that nothing is recorded. */
+        afterEachCall: String = com.echoledger.mobile.calls.CallChoice.ASK
+    ): Notification {
+        val off = afterEachCall == com.echoledger.mobile.calls.CallChoice.OFF
+        return NotificationCompat.Builder(context, CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(
                 com.echoledger.mobile.notify.NoticeWords.say(
                     context,
-                    if (ready) "Ready to record WhatsApp calls" else "Call capture isn't ready — tap to fix"
+                    when {
+                        // Since 2.0.5: Don't record calls never reads as if calls were being recorded.
+                        off -> "Automatic call recording is off"
+
+                        ready -> "Ready to record WhatsApp calls"
+
+                        else -> "Call capture isn't ready — tap to fix"
+                    }
                 )
             )
             .setContentText(
                 com.echoledger.mobile.notify.NoticeWords.say(
                     context,
-                    if (ready) {
-                        // Since v1.6: what happens after a call follows the After a call setting (Keep automatically by default).
-                        if (askAfterCall) {
+                    when {
+                        off -> "After each call: Don't record calls."
+
+                        !ready -> "Start Shizuku (or run the setup command), then open Setup."
+
+                        afterEachCall == com.echoledger.mobile.calls.CallChoice.ASK ->
                             "Calls are recorded automatically; you decide after each call."
-                        } else {
-                            "Calls are recorded and kept automatically."
-                        }
-                    } else {
-                        "Start Shizuku (or run the setup command), then open Setup."
+
+                        else -> "Calls are recorded and kept automatically."
                     }
                 )
             )
@@ -388,6 +403,7 @@ object Notifications {
                 serviceAction(context, RecordingService.ACTION_DISARM, 13)
             )
             .build()
+    }
 
     /**
      * The after-call question when the card cannot be drawn (A2.7; words since 2.0.5 from docs/v2/copy/call-choice.md):

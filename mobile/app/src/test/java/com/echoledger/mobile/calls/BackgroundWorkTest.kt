@@ -97,7 +97,7 @@ class BackgroundWorkTest : AppTest() {
         val notification = Notifications.recording(app, "Recording", "Microphone")
 
         assertTrue(notification.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0)
-        assertEquals(listOf("Pause", "Stop", "Stop and delete"), notification.actions.map { it.title.toString() })
+        assertEquals(listOf("Pause", "Stop", "Discard"), notification.actions.map { it.title.toString() })
         assertEquals("Recording", shadowOf(notification).contentTitle.toString())
     }
 
@@ -107,10 +107,23 @@ class BackgroundWorkTest : AppTest() {
 
         assertEquals(listOf("Record now", "Turn off"), notification.actions.map { it.title.toString() })
         assertEquals("Ready to record WhatsApp calls", shadowOf(notification).contentTitle.toString())
-        // Keep automatically is the default since v1.5: no question after the call.
-        assertEquals("Calls are recorded and kept automatically.", shadowOf(notification).contentText.toString())
-        val asking = Notifications.armed(app, askAfterCall = true)
-        assertEquals("Calls are recorded automatically; you decide after each call.", shadowOf(asking).contentText.toString())
+        // Ask me is the default since 2.0.5: the card after the call.
+        assertEquals("Calls are recorded automatically; you decide after each call.", shadowOf(notification).contentText.toString())
+        listOf(com.echoledger.mobile.calls.CallChoice.TRANSCRIBE, com.echoledger.mobile.calls.CallChoice.AUDIO).forEach {
+            val noQuestion = Notifications.armed(app, afterEachCall = it)
+            assertEquals(it, "Calls are recorded and kept automatically.", shadowOf(noQuestion).contentText.toString())
+        }
+    }
+
+    @Test
+    fun `with Don't record calls the armed notification says plainly that calls are not recorded`() {
+        listOf(true, false).forEach { ready ->
+            val off = Notifications.armed(app, ready = ready, afterEachCall = com.echoledger.mobile.calls.CallChoice.OFF)
+            val words = "${shadowOf(off).contentTitle} ${shadowOf(off).contentText}"
+            assertEquals("Automatic call recording is off", shadowOf(off).contentTitle.toString())
+            assertEquals("After each call: Don't record calls.", shadowOf(off).contentText.toString())
+            assertTrue(words, listOf("Ready to record", "are recorded").none { it in words })
+        }
     }
 
     @Test

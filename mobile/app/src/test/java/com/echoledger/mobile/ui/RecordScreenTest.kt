@@ -251,8 +251,9 @@ class RecordScreenTest : ScreenTest() {
         compose.onNodeWithText("WhatsApp call · 1:00").assertIsDisplayed()
         compose.onNodeWithText("WhatsApp call · 2:05").assertExists()
         compose.onNodeWithText("Oct 23 · 6:30 PM").assertIsDisplayed()
-        compose.onAllNodesWithText("Keep")[0].click()
+        compose.onAllNodesWithText("Transcribe")[0].click()
         awaitUi("the first call to be queued") { app.peekRecording("call-1")?.state == "queued" }
+        assertEquals("Transcribe asks for the transcript", true, app.peekRecording("call-1")?.transcribe)
         // The row turns "queued" just before the upload work is enqueued: wait for the work, not only the row.
         awaitUi("the upload work to be enqueued") { workStates("call-1").isNotEmpty() }
 
@@ -261,7 +262,7 @@ class RecordScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `a waiting call can get a title and a client before Keep`() {
+    fun `a waiting call can get a title and a client before Transcribe`() {
         runBlocking { app.pairLocally(server) }
         server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
@@ -278,9 +279,9 @@ class RecordScreenTest : ScreenTest() {
             runCatching { compose.onNodeWithContentDescription("Project: ${client.name}").assertExists() }.isSuccess
         }
 
-        // Keep at once after typing: the title goes with the decision, not after it.
+        // Transcribe at once after typing: the title goes with the decision, not after it.
         compose.onNodeWithContentDescription("Title").performScrollTo().performTextInput("Invoice follow-up")
-        compose.onNodeWithText("Keep").performScrollTo().click()
+        compose.onNodeWithText("Transcribe").performScrollTo().click()
         pumpUntil("the recording to be queued with its title") {
             app.graph.recordings.get("call-1")?.let { it.state == "queued" && it.title == "Invoice follow-up" } == true
         }
@@ -288,12 +289,23 @@ class RecordScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `discarding a finished call deletes it after the undo time`() {
+    fun `a waiting call offers the deck's three choices, and Save audio only keeps it without a transcript`() {
         app.storeRecording(id = "call-1", state = "pending_decision")
         showWaiting()
 
-        compose.onNodeWithText("Discard").click()
-        awaitText("Discarding 1 call")
+        listOf("Keep", "Discard", "Keep all", "Discard all").forEach { compose.onAllNodesWithText(it).assertCountEquals(0) }
+        compose.onNodeWithText("Delete").assertExists()
+        compose.onNodeWithText("Save audio only").performScrollTo().click()
+        awaitUi("kept as audio only") { app.peekRecording("call-1")?.let { it.state == "queued" && it.transcribe == false } == true }
+    }
+
+    @Test
+    fun `deleting a finished call deletes it after the undo time`() {
+        app.storeRecording(id = "call-1", state = "pending_decision")
+        showWaiting()
+
+        compose.onNodeWithText("Delete").click()
+        awaitText("Deleting 1 call")
         // The screen's clock stands still from here: only the test moves it, so the undo time itself is checked.
         compose.mainClock.autoAdvance = false
         compose.mainClock.advanceTimeBy(4_700)
@@ -309,22 +321,22 @@ class RecordScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `Discard all can be undone and Keep all keeps every call`() {
+    fun `Delete all can be undone and Save all as audio only keeps every call without a transcript`() {
         app.storeRecording(id = "call-1", state = "pending_decision")
         app.storeRecording(id = "call-2", state = "pending_decision", startedAt = "2026-10-23T18:30:00Z")
         showWaiting()
 
-        compose.onNodeWithText("Discard all").click()
-        awaitText("Discarding 2 calls")
+        compose.onNodeWithText("Delete all").click()
+        awaitText("Deleting 2 calls")
         compose.onNodeWithText("Undo").click()
         compose.mainClock.advanceTimeBy(6_000)
         awaitText("2 calls waiting")
         assertNotNull(app.peekRecording("call-1"))
         assertNotNull(app.peekRecording("call-2"))
 
-        compose.onNodeWithText("Keep all").click()
-        awaitUi("both calls to be queued") {
-            listOf("call-1", "call-2").all { app.peekRecording(it)?.state == "queued" }
+        compose.onNodeWithText("Save all as audio only").click()
+        awaitUi("both calls to be queued as audio only") {
+            listOf("call-1", "call-2").all { app.peekRecording(it)?.let { r -> r.state == "queued" && r.transcribe == false } == true }
         }
     }
 

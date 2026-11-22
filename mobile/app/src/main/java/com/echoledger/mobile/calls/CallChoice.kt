@@ -70,14 +70,17 @@ object CallChoice {
     fun recordsCallsAutomatically(s: AppSettings): Boolean = setting(s) != OFF
 
     /**
-     * The old "After a call" (until 2.0.5) as After each call: Ask me stays Ask me; Keep automatically (every call kept
-     * and transcribed with no question, the old default) becomes Transcribe every call, so nobody gets a question or
-     * loses transcripts they did not choose to.
+     * The old "After a call" (until 2.0.5) as After each call: always Ask me, the plan's default, as on the desktop. An
+     * old Keep automatically (the old default) is safe there too: nobody choosing on the card keeps the audio.
      */
-    fun fromOld(afterCall: String?): String = if (afterCall == PostCallPrompt.ASK) ASK else TRANSCRIBE
+    @Suppress("UNUSED_PARAMETER")
+    fun fromOld(afterCall: String?): String = ASK
 
-    /** What a call that just ended becomes: a choice on the pill wins, then the setting, then quiet hours. */
-    fun outcome(s: AppSettings, duringCall: Pick?, quiet: Boolean): Outcome = when {
+    /**
+     * What a call that just ended becomes: a choice on the pill wins, then the setting, then quiet hours. With At the
+     * start, only a call whose banner showed ([bannerShown]) was asked; any other is asked with the card.
+     */
+    fun outcome(s: AppSettings, duringCall: Pick?, quiet: Boolean, bannerShown: Boolean = false): Outcome = when {
         duringCall == Pick.TRANSCRIBE -> Outcome.TRANSCRIBE
 
         duringCall == Pick.AUDIO -> Outcome.AUDIO
@@ -87,7 +90,7 @@ object CallChoice {
         setting(s) == AUDIO -> Outcome.AUDIO
 
         // Asked at the start (the banner), so nothing more after the call.
-        asksAtStart(s) -> Outcome.AUDIO
+        asksAtStart(s) && bannerShown -> Outcome.AUDIO
 
         quiet -> Outcome.AUDIO_QUIET
 

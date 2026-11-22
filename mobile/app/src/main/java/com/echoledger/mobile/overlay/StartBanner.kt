@@ -94,8 +94,9 @@ object StartBanner {
                 }
             }
         }
+        // As wide as the banner: taps beside it reach the call screen, and it sits centred in landscape too.
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             FloatingWindow.START_BANNER.flags,

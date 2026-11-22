@@ -62,10 +62,12 @@ class CallChoiceTest {
     }
 
     @Test
-    fun `asked at the start, the call is kept as audio only with no card after it`() {
+    fun `asked at the start, the call is kept as audio only with no card after it, unless the banner never showed`() {
         val start = set(CallChoice.ASK, CallChoice.WHEN_START)
         assertTrue(CallChoice.asksAtStart(start))
-        assertEquals(Outcome.AUDIO, CallChoice.outcome(start, null, quiet = false))
+        assertEquals(Outcome.AUDIO, CallChoice.outcome(start, null, quiet = false, bannerShown = true))
+        // No banner (no overlay permission, a call brought in from the Phone app): asked with the card after all.
+        assertEquals(Outcome.CARD, CallChoice.outcome(start, null, quiet = false, bannerShown = false))
         assertFalse("When to ask belongs to Ask me", CallChoice.asksAtStart(set(CallChoice.AUDIO, CallChoice.WHEN_START)))
     }
 
@@ -80,10 +82,15 @@ class CallChoiceTest {
     }
 
     @Test
-    fun `the old After a call becomes After each call without a question nobody chose`() {
+    fun `the old After a call becomes Ask me, the default, from every old value`() {
         assertEquals(CallChoice.ASK, CallChoice.fromOld(PostCallPrompt.ASK))
-        assertEquals(CallChoice.TRANSCRIBE, CallChoice.fromOld(PostCallPrompt.KEEP))
-        assertEquals(CallChoice.TRANSCRIBE, CallChoice.fromOld(null))
+        assertEquals("Keep automatically, the old default", CallChoice.ASK, CallChoice.fromOld(PostCallPrompt.KEEP))
+        assertEquals(CallChoice.ASK, CallChoice.fromOld(null))
+        // Safe: doing nothing on the card keeps the audio.
+        assertEquals(
+            CallChoice.Outcome.CARD,
+            CallChoice.outcome(AppSettings(afterEachCall = CallChoice.fromOld(PostCallPrompt.KEEP)), null, false)
+        )
     }
 
     @Test

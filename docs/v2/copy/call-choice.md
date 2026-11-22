@@ -41,6 +41,7 @@ placeholders; names, apps and numbers inside Urdu lines are isolated (FSI…PDI)
 | grouped_mixed | %1$d calls | %1$d کالز |
 | grouped_review | Review | دیکھیں |
 | quiet_saved | Saved as audio during quiet hours | خاموش اوقات میں آڈیو محفوظ ہوئی |
+| restored_delete | Deleted just before EchoLedger closed. Choose again. | EchoLedger بند ہونے سے ذرا پہلے حذف کی گئی تھی۔ دوبارہ منتخب کریں۔ |
 | block_screens | Block screenshots of EchoLedger | EchoLedger کے اسکرین شاٹس روکیں |
 | block_screens_help | Off: you can take screenshots of the app, except screens that show keys or recovery codes. On: EchoLedger's own screens can't be captured and are hidden in Recents. | بند: آپ ایپ کے اسکرین شاٹس لے سکتے ہیں، سوائے ان اسکرینز کے جن پر کلیدیں یا ریکوری کوڈز ہوں۔ آن: EchoLedger کی اپنی اسکرینز کیپچر نہیں ہو سکتیں اور حالیہ ایپس میں چھپی رہتی ہیں۔ |
 | hide_live_words | Hide EchoLedger's live words from screenshots and screen shares | EchoLedger کے لائیو الفاظ اسکرین شاٹس اور اسکرین شیئر سے چھپائیں |

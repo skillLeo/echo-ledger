@@ -371,9 +371,11 @@ class SettingsStoreTest : AppTest() {
     }
 
     @Test
-    fun `Keep automatically becomes Transcribe every call and Ask me stays Ask me`() = runBlocking {
+    fun `Keep automatically and Ask me both become Ask me`() = runBlocking {
         plantRaw("settings_json", "$before205,\"afterCall\":\"keep\"}")
-        assertEquals("transcribe", store.current().afterEachCall)
+        assertEquals("ask", store.current().afterEachCall)
+        plantRaw("settings_json", "$before205}")
+        assertEquals("the old default, never written, too", "ask", store.current().afterEachCall)
         plantRaw("settings_json", "$before205,\"afterCall\":\"ask\",\"decisionTimeout\":\"discard\",\"decisionTimeoutChosen\":true}")
         assertEquals("ask", store.current().afterEachCall)
         assertEquals("the old timeout is kept as it was", "discard", store.current().decisionTimeout)
