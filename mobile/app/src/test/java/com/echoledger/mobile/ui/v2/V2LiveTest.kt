@@ -20,8 +20,8 @@ import androidx.compose.ui.test.performClick
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.recording.PillEvent
 import com.echoledger.mobile.recording.PillState
-import com.echoledger.mobile.ui.v2.live.AfterCallMode
-import com.echoledger.mobile.ui.v2.live.V2AfterCallCard
+import com.echoledger.mobile.ui.v2.live.CallCardScreen
+import com.echoledger.mobile.ui.v2.live.CallChoiceCard
 import com.echoledger.mobile.ui.v2.live.V2RecordingPill
 import com.echoledger.mobile.ui.v2.live.afterCallTitle
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
@@ -83,21 +83,24 @@ class V2LiveTest {
     }
 
     @Test
-    fun theCardsDeleteAndUndoCallTheirHostAndSwitchMode() {
-        var mode by mutableStateOf(AfterCallMode.Ask)
+    fun theCardsDeleteAndUndoCallTheirHostAndSwitchToItsLine() {
+        var screen by mutableStateOf<CallCardScreen>(CallCardScreen.Ask("Omar Khan", 252_000, "whatsapp"))
         var deleted = 0
         var undone = 0
         show {
-            V2AfterCallCard(
-                "Call with Omar Khan", 252_000, "whatsapp", mode, 10_000,
-                onSave = {}, onDelete = {
+            CallChoiceCard(
+                screen,
+                onTranscribe = {},
+                onDelete = {
                     deleted++
-                    mode = AfterCallMode.Deleted
-                }, onUndo = {
+                    screen = CallCardScreen.Done(com.echoledger.mobile.calls.CallChoice.Pick.DELETE)
+                },
+                onAudio = {},
+                onUndo = {
                     undone++
-                    mode = AfterCallMode.Ask
-                }, onTitle = {},
-                countdown = false
+                    screen = CallCardScreen.Ask("Omar Khan", 252_000, "whatsapp")
+                },
+                still = true
             )
         }
         compose.onNodeWithText("Delete").performClick()
@@ -105,7 +108,7 @@ class V2LiveTest {
         compose.onNodeWithText("Deleted").assertExists()
         compose.onNodeWithText("Undo").performClick()
         assertEquals(1, undone)
-        compose.onNodeWithText("Save audio").assertExists()
+        compose.onNodeWithText("Transcribe").assertExists()
     }
 
     @Test
@@ -134,19 +137,7 @@ class V2LiveTest {
     }
 
     @Composable
-    private fun Card(title: String, mode: AfterCallMode, transcribe: Boolean) = V2AfterCallCard(
-        title = title,
-        durationMs = 252_000,
-        sourceWire = "whatsapp",
-        mode = mode,
-        visibleMs = 10_000,
-        onSave = {},
-        onDelete = {},
-        onUndo = {},
-        onTitle = {},
-        onTranscribe = if (transcribe) ({}) else null,
-        countdown = false
-    )
+    private fun Card(screen: CallCardScreen) = CallChoiceCard(screen, {}, {}, {}, {}, still = true)
 
     @Composable
     private fun Backdrop(content: @Composable () -> Unit) = Column(
@@ -171,10 +162,9 @@ class V2LiveTest {
                         V2RecordingPill(PillState(mode = PillState.Mode.DOT, elapsedMs = 134_000), 0, name, {})
                         V2RecordingPill(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, language = "UR+EN"), 0, name, {})
                     } else {
-                        val title = if (ur) "عمر خان سے کال" else "Call with Omar Khan"
-                        Card(title, AfterCallMode.Ask, transcribe = true)
-                        Card(title, AfterCallMode.Ask, transcribe = false)
-                        Card(title, AfterCallMode.Deleted, transcribe = false)
+                        Card(CallCardScreen.Ask(name, 252_000, "whatsapp", hint = true))
+                        Card(CallCardScreen.Done(com.echoledger.mobile.calls.CallChoice.Pick.AUDIO))
+                        Card(CallCardScreen.Done(com.echoledger.mobile.calls.CallChoice.Pick.DELETE))
                     }
                 }
             }

@@ -123,6 +123,7 @@ fun V2ActivityScreen(vm: MainViewModel, actions: ActivityActions, modifier: Modi
         missed = missed,
         actions = actions,
         onKeep = { vm.decide(it.id, keep = true) },
+        onSaveAudio = { vm.decide(it.id, keep = true, transcribe = false) },
         onDiscard = { batch.discard(it.id) },
         clients = clients,
         onRename = { rec, title -> vm.setPendingTitle(rec.id, title) },
@@ -153,6 +154,8 @@ fun V2ActivityContent(
     onKeep: (LocalRecording) -> Unit,
     onDiscard: (LocalRecording) -> Unit,
     onRetryUploads: () -> Unit,
+    /** Save all as audio only (2.0.5, the copy deck's bulk choice): each waiting call kept without a transcript. */
+    onSaveAudio: (LocalRecording) -> Unit = onKeep,
     onRestore: (String) -> Unit,
     onMissedRead: (String) -> Unit,
     onMissedDismiss: (String) -> Unit,
@@ -286,8 +289,8 @@ fun V2ActivityContent(
                             EchoButton(stringResource(R.string.v2_act_discard_all), {
                                 waiting.forEach(onDiscard)
                             }, kind = EchoButtonKind.Plain, icon = EchoIcons.Delete)
-                            EchoButton(stringResource(R.string.v2_act_keep_all), {
-                                waiting.forEach(onKeep)
+                            EchoButton(stringResource(R.string.cc_save_audio_all), {
+                                waiting.forEach(onSaveAudio)
                             }, kind = EchoButtonKind.Secondary)
                         }
                     }

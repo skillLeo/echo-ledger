@@ -136,13 +136,18 @@ object SettingsReset {
                 appLockEnabled = d.appLockEnabled,
                 lockAfterMs = d.lockAfterMs,
                 secureScreen = d.secureScreen,
-                widgetHideTitles = d.widgetHideTitles,
-                hideLiveWords = d.hideLiveWords
+                // Hide EchoLedger's live words lives on Privacy & data (2.0.5), so the lock's Reset leaves it alone.
+                widgetHideTitles = d.widgetHideTitles
             )
 
             "language" -> s.copy(transcriptionLanguage = d.transcriptionLanguage)
 
-            "calls" -> s.copy(decisionTimeout = d.decisionTimeout, decisionTimeoutChosen = d.decisionTimeoutChosen)
+            "calls" -> s.copy(
+                decisionTimeout = d.decisionTimeout,
+                decisionTimeoutChosen = d.decisionTimeoutChosen,
+                afterEachCall = d.afterEachCall,
+                whenToAsk = d.whenToAsk
+            )
 
             // Microphone & audio's own choices only: SIM calls and the Phone app's recordings live on Calls & meetings.
             "mic" -> s.copy(
@@ -190,6 +195,8 @@ object SettingsReset {
                 autoRecordApps = d.autoRecordApps,
                 decisionTimeout = d.decisionTimeout,
                 decisionTimeoutChosen = d.decisionTimeoutChosen,
+                afterEachCall = d.afterEachCall,
+                whenToAsk = d.whenToAsk,
                 captionsEnabled = d.captionsEnabled,
                 captionsDuringCalls = d.captionsDuringCalls,
                 captionStyle = CaptionStyle(),

@@ -146,14 +146,14 @@ class CaptureUiTest : ScreenTest() {
     @Test
     fun `the recording notification mirrors the pill, with Undo while a discard can still be taken back`() {
         val running = Notifications.recording(app, "Recording call", "Both sides", startedAtMs = 1_000L)
-        assertEquals(listOf("Pause", "Stop", "Discard"), running.actions.map { it.title.toString() })
+        assertEquals(listOf("Pause", "Stop", "Stop and delete"), running.actions.map { it.title.toString() })
         // Four buttons (Pause, Stop, Captions, Discard) sit in the expanded custom row.
         assertTrue(running.bigContentView != null)
         assertTrue(running.extras.getBoolean(android.app.Notification.EXTRA_SHOW_CHRONOMETER))
         val paused = Notifications.recording(app, "Recording call", "Both sides", paused = true)
-        assertEquals(listOf("Resume", "Stop", "Discard"), paused.actions.map { it.title.toString() })
+        assertEquals(listOf("Resume", "Stop", "Stop and delete"), paused.actions.map { it.title.toString() })
         assertEquals("Paused · Recording call", shadowOf(paused).contentTitle.toString())
         val discarding = Notifications.recording(app, "Recording call", "Both sides", discarding = true)
-        assertEquals(listOf("Pause", "Stop", "Undo discard"), discarding.actions.map { it.title.toString() })
+        assertEquals(listOf("Pause", "Stop", "Undo"), discarding.actions.map { it.title.toString() })
     }
 }

@@ -189,7 +189,7 @@ class RecordScreenTest : ScreenTest() {
     @Test
     fun `with the helper running auto record can be armed and disarmed`() {
         showRecord(caps(sdk = 34, helper = true), RecordMode.CALLS)
-        compose.onNodeWithText("Answered calls are kept automatically; unanswered and short ones are skipped").assertIsDisplayed()
+        compose.onNodeWithText("A small card after each call.").assertIsDisplayed()
         assertFalse(present("Open setup"))
 
         autoSwitch().assertIsEnabled()

@@ -85,7 +85,7 @@ class RecordingNoticeShotsTest : AppTest() {
         for (dark in listOf(false, true)) {
             RuntimeEnvironment.setQualifiers(if (dark) "+night" else "+notnight")
             val view = drawn()
-            assertEquals("${NoticeWords.RLM}ہٹانا واپس لیں", view.findViewById<TextView>(R.id.rec_discard).text.toString())
+            assertEquals("${NoticeWords.RLM}واپس لیں", view.findViewById<TextView>(R.id.rec_discard).text.toString())
             assertNothingClipped(view)
             // Taller than the 48 dp the row used to be fixed at, as its words need.
             val row = view.findViewById<TextView>(R.id.rec_discard).parent as View

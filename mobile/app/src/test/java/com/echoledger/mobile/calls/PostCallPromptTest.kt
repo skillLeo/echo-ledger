@@ -1,25 +1,16 @@
 package com.echoledger.mobile.calls
 
-import android.Manifest
 import android.app.NotificationManager
-import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertHasClickAction
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import androidx.work.testing.WorkManagerTestInitHelper
-import com.echoledger.mobile.overlay.AfterCallChip
+import com.echoledger.mobile.calls.CallChoice.Pick
 import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.peekRecording
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
-import com.echoledger.mobile.ui.EchoLedgerTheme
+import com.echoledger.mobile.ui.v2.live.CallCardScreen
+import java.time.Duration
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -27,222 +18,243 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Rule
+import org.junit.Before
 import org.junit.Test
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowLooper
 import org.robolectric.shadows.ShadowSettings
 
 /**
- * After a call (since v1.5): "Keep automatically" keeps the call and shows "Saved · … · Undo" for 6 s while the upload
- * waits; "Ask me" shows the ✓ / Discard chip and keeps the call after 10 s; without the overlay permission a
- * notification does the same job. Since v1.8.1 (bug P-003) the chip's Discard deletes nothing until "Discarded · Undo"
- * is over.
+ * After each call (the call-choice plan, 2.0.5): in Ask me the after-call card asks; Transcribe, Delete, a swipe or 8 s
+ * without a choice (audio only) each become one line with Undo for 5 s, and Undo really undoes all three: the call
+ * waits for the question again, its upload called off or its file kept. Back-to-back calls get one grouped line. The
+ * other settings, and a choice made on the pill, ask nothing. Without the overlay permission a notification asks with
+ * the same three words.
  */
 class PostCallPromptTest : AppTest() {
-    @get:Rule
-    val compose = createComposeRule()
-
-    @After
-    fun closeChip() {
-        DecisionPopup.hide()
+    @Before
+    fun allowOverlays() {
+        ShadowSettings.setCanDrawOverlays(true)
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        // Remove animations: the card's progress line stands still, so only these tests move the clock (a running
+        // animation's frames would move Robolectric's clock past the card's 8 s).
+        android.provider.Settings.Global.putFloat(app.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
     }
 
-    private fun overlayAllowed(allowed: Boolean) = ShadowSettings.setCanDrawOverlays(allowed)
+    @After
+    fun closeCard() = DecisionPopup.hide()
 
-    private fun call(id: String = "call-1", app: String = "whatsapp", state: String = "queued") =
-        this.app.storeRecording(id = id, state = state, sourceApp = app, durationMs = 272_000)
+    private fun call(id: String = "call-1", state: String = "pending_decision") =
+        app.storeRecording(id = id, state = state, sourceApp = "whatsapp", durationMs = 44_000)
 
     private fun uploadWork(id: String) = WorkManager.getInstance(app).getWorkInfosForUniqueWork("upload-$id").get(10, TimeUnit.SECONDS)
 
+    private fun waitingUpload(id: String) = uploadWork(id).any { it.state == WorkInfo.State.ENQUEUED }
+
+    private fun noUpload(id: String) = uploadWork(id).none { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
+
     private fun notifications() = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications
 
-    @Test
-    fun `keep automatically shows Saved for six seconds and the upload waits for it`() {
-        overlayAllowed(true)
-        PostCallPrompt.show(app, call(), PostCallPrompt.KEEP, "dark")
+    private fun after(ms: Long) = ShadowLooper.idleMainLooper(ms, TimeUnit.MILLISECONDS)
 
-        assertEquals("call-1", DecisionPopup.showingFor)
-        assertEquals(DecisionPopup.Mode.SAVED, DecisionPopup.showingMode)
-        assertEquals(listOf(WorkInfo.State.ENQUEUED), uploadWork("call-1").map { it.state })
-        ShadowLooper.idleMainLooper(DecisionPopup.SAVED_MS - 1, TimeUnit.MILLISECONDS)
-        assertTrue(DecisionPopup.isShowing)
-        ShadowLooper.idleMainLooper(2, TimeUnit.MILLISECONDS)
+    private fun asked(id: String = "call-1") {
+        PostCallPrompt.show(app, call(id), "dark")
+        assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
+    }
+
+    @Test
+    fun `Ask me shows the card and no notification on top of it`() {
+        asked()
+        assertTrue(DecisionPopup.shown is CallCardScreen.Ask)
+        assertEquals("one question at a time", 0, notifications().size)
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+    }
+
+    @Test
+    fun `nothing chosen for 8 seconds keeps the audio only, then Saved as audio goes after 5 seconds`() {
+        asked()
+        after(DecisionPopup.ASK_MS - 100)
+        assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
+        after(200)
+        assertEquals(CallCardScreen.Done(Pick.AUDIO), DecisionPopup.shown)
+        pumpUntil("kept as audio") { app.peekRecording("call-1")?.let { it.state == "queued" && it.transcribe == false } == true }
+        pumpUntil("its upload waits for the line") { waitingUpload("call-1") }
+        after(DecisionPopup.DONE_MS + 100)
         assertFalse(DecisionPopup.isShowing)
-        assertEquals("queued", app.peekRecording("call-1")?.state)
     }
 
     @Test
-    fun `Undo on Saved calls off the upload and discards the call only after its own Undo time`() {
-        overlayAllowed(true)
-        val rec = call()
-        PostCallPrompt.show(app, rec, PostCallPrompt.KEEP, "dark")
-
-        // The chip's Undo on "Saved" (since v1.8.1 a Discard: "Discarded · Undo" first).
-        DecisionPopup.discard(app, rec, "dark")
-        assertEquals(DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
-        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
-        assertTrue(uploadWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
-        assertTrue("nothing deleted yet", app.graph.recordings.encryptedFile("call-1").exists())
-
-        WorkManagerTestInitHelper.getTestDriver(app)!!.setInitialDelayMet(discardWork("call-1").single().id)
-        pumpUntil("the call to be deleted") { app.graph.recordings.get("call-1") == null }
-        assertFalse(app.graph.recordings.encryptedFile("call-1").exists())
+    fun `a swipe keeps the audio only, as the 8 seconds do`() {
+        asked()
+        DecisionPopup.audio(app, chosen = true)
+        assertEquals(CallCardScreen.Done(Pick.AUDIO), DecisionPopup.shown)
+        pumpUntil("kept as audio") { app.peekRecording("call-1")?.transcribe == false }
     }
 
     @Test
-    fun `Undo on Discarded after Saved keeps the call again and shows Saved`() {
-        overlayAllowed(true)
-        val rec = call()
-        PostCallPrompt.show(app, rec, PostCallPrompt.KEEP, "dark")
-        DecisionPopup.discard(app, rec, "dark")
-        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+    fun `Transcribe keeps the call to be transcribed, and its Undo asks again with nothing decided`() {
+        asked()
+        DecisionPopup.transcribe(app)
+        assertEquals(CallCardScreen.Done(Pick.TRANSCRIBE), DecisionPopup.shown)
+        pumpUntil("kept to be transcribed") { app.peekRecording("call-1")?.let { it.state == "queued" && it.transcribe == true } == true }
+        pumpUntil("its upload waits") { waitingUpload("call-1") }
 
-        DecisionPopup.undoDiscard(app, "call-1", "dark")
-        pumpUntil("Saved again") { DecisionPopup.showingMode == DecisionPopup.Mode.SAVED }
-        assertEquals("queued", app.peekRecording("call-1")?.state)
-        assertTrue(uploadWork("call-1").any { it.state == WorkInfo.State.ENQUEUED })
-        assertTrue(discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+        DecisionPopup.undo(app)
+        assertTrue(DecisionPopup.shown is CallCardScreen.Ask)
+        pumpUntil("waiting again") { app.peekRecording("call-1")?.state == "pending_decision" }
+        assertNull(app.peekRecording("call-1")?.transcribe)
+        pumpUntil("nothing is sent") { noUpload("call-1") }
+        // The question has its whole 8 s again.
+        after(DecisionPopup.ASK_MS - 100)
+        assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
     }
 
     @Test
-    fun `the v2 after-call card's Delete goes through the delayed discard`() {
-        overlayAllowed(true)
-        val rec = call(state = "pending_decision")
-        PostCallPrompt.show(
-            app,
-            rec,
-            PostCallPrompt.ASK,
-            "dark",
-            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
-        )
-        assertTrue("the v2 card", DecisionPopup.showingV2)
+    fun `Undo on Saved as audio asks again, and its Transcribe turns it into a transcript`() {
+        asked()
+        DecisionPopup.audio(app, chosen = false)
+        pumpUntil("kept as audio") { app.peekRecording("call-1")?.state == "queued" }
+        DecisionPopup.undo(app)
+        pumpUntil("waiting again") { app.peekRecording("call-1")?.state == "pending_decision" }
+        pumpUntil("nothing is sent") { noUpload("call-1") }
 
-        // The card in the after-call window itself.
-        compose.onNodeWithText("Delete").performClick()
-
-        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
-        assertTrue("nothing deleted by the tap", app.graph.recordings.encryptedFile("call-1").exists())
-        assertEquals("Deleted · Undo on the card", DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
-        assertTrue(DecisionPopup.showingV2)
-        assertEquals(WorkInfo.State.ENQUEUED, discardWork("call-1").single().state)
-    }
-
-    private fun v2Card(rec: com.echoledger.mobile.data.LocalRecording) {
-        PostCallPrompt.show(
-            app,
-            rec,
-            PostCallPrompt.ASK,
-            "dark",
-            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
-        )
-        assertTrue("the v2 card", DecisionPopup.showingV2)
+        DecisionPopup.audio(app, chosen = false)
+        pumpUntil("kept as audio") { app.peekRecording("call-1")?.transcribe == false }
+        DecisionPopup.transcribe(app)
+        assertEquals(CallCardScreen.Done(Pick.TRANSCRIBE), DecisionPopup.shown)
+        pumpUntil("to be transcribed after all") { app.peekRecording("call-1")?.transcribe == true }
     }
 
     @Test
-    fun `the v2 card's Save audio keeps the call as audio only and Transcribe keeps it to be transcribed`() {
-        overlayAllowed(true)
-        v2Card(call(state = "pending_decision"))
-        compose.onNodeWithText("Save audio").performClick()
-        pumpUntil("kept") { app.peekRecording("call-1")?.state == "queued" }
-        assertEquals("audio only (2.0.0-j)", false, app.peekRecording("call-1")?.transcribe)
-        assertFalse(DecisionPopup.isShowing)
+    fun `Delete deletes nothing until Deleted and its Undo are over, and Undo brings the question back`() {
+        asked()
+        DecisionPopup.delete(app)
+        assertEquals(CallCardScreen.Done(Pick.DELETE), DecisionPopup.shown)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertTrue("the file waits for Undo", app.graph.recordings.encryptedFile("call-1").exists())
 
-        v2Card(call(id = "call-2", state = "pending_decision"))
-        compose.onNodeWithText("Transcribe").performClick()
-        pumpUntil("kept") { app.peekRecording("call-2")?.state == "queued" }
-        assertEquals(true, app.peekRecording("call-2")?.transcribe)
+        DecisionPopup.undo(app)
+        assertTrue(DecisionPopup.shown is CallCardScreen.Ask)
+        pumpUntil("back") { app.peekRecording("call-1")?.state == "pending_decision" }
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        runBlocking { Decisions.finishDiscard(app, "call-1") }
+        assertNull("gone after its time", app.peekRecording("call-1"))
     }
 
     @Test
-    fun `with the v2 card Saved stays six seconds and the upload starts only once they are over`() {
-        overlayAllowed(true)
-        PostCallPrompt.show(
-            app,
-            call(),
-            PostCallPrompt.KEEP,
-            "dark",
-            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
-        )
-        assertTrue(DecisionPopup.showingV2)
-        val waiting = uploadWork("call-1").single()
-        assertEquals(WorkInfo.State.ENQUEUED, waiting.state)
-        assertEquals("the upload waits out the card", DecisionPopup.SAVED_MS, waiting.initialDelayMillis)
-        assertEquals(0, waiting.runAttemptCount)
-        ShadowLooper.idleMainLooper(DecisionPopup.SAVED_MS - 1, TimeUnit.MILLISECONDS)
-        assertTrue("Saved is still up at 5.999 s", DecisionPopup.isShowing)
-        assertEquals(0, uploadWork("call-1").single().runAttemptCount)
-        ShadowLooper.idleMainLooper(2, TimeUnit.MILLISECONDS)
-        assertFalse("gone after 6 s", DecisionPopup.isShowing)
-        // Six seconds on, the upload's delay is over and it runs.
-        val driver = androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!
-        // (The test phone has no network: its constraint is met by hand, as it would be on a phone that has one.)
-        driver.setAllConstraintsMet(waiting.id)
-        assertEquals("still waiting for its delay", 0, uploadWork("call-1").single().runAttemptCount)
-        driver.setInitialDelayMet(waiting.id)
-        pumpUntil("the upload to start") {
-            uploadWork("call-1").single().let { it.runAttemptCount > 0 || it.state != WorkInfo.State.ENQUEUED }
+    fun `back-to-back calls get one grouped line, never a stack of cards`() {
+        asked("call-1")
+        PostCallPrompt.show(app, call("call-2"), "dark")
+        assertEquals(DecisionPopup.Mode.GROUPED, DecisionPopup.showingMode)
+        assertEquals(CallCardScreen.Grouped(2), DecisionPopup.shown)
+        PostCallPrompt.show(app, call("call-3"), "dark")
+        assertEquals(CallCardScreen.Grouped(3), DecisionPopup.shown)
+        listOf("call-1", "call-2", "call-3").forEach { id ->
+            pumpUntil("$id kept as audio") { app.peekRecording(id)?.let { it.state == "queued" && it.transcribe == false } == true }
+        }
+        assertEquals("one window", 1, com.echoledger.mobile.overlay.PrivateWindows.count)
+    }
+
+    @Test
+    fun `a confirmation still showing gives way to the next call's question`() {
+        asked("call-1")
+        DecisionPopup.transcribe(app)
+        PostCallPrompt.show(app, call("call-2"), "dark")
+        assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
+        assertEquals("call-2", DecisionPopup.showingFor)
+    }
+
+    @Test
+    fun `the first card shows the hint once`() {
+        asked("call-1")
+        assertEquals(true, (DecisionPopup.shown as CallCardScreen.Ask).hint)
+        pumpUntil("remembered") { app.graph.liveSettings.value?.callChoiceHintShown == true }
+        DecisionPopup.hide()
+        asked("call-2")
+        assertEquals(false, (DecisionPopup.shown as CallCardScreen.Ask).hint)
+    }
+
+    @Test
+    fun `after three identical choices the next card offers Always do this once, and Yes sets the setting`() {
+        runBlocking { app.graph.settings.update { it.copy(callChoiceHintShown = true) } }
+        listOf("call-1", "call-2", "call-3").forEach { id ->
+            asked(id)
+            assertNull((DecisionPopup.shown as CallCardScreen.Ask).always)
+            DecisionPopup.transcribe(app)
+            DecisionPopup.hide()
+        }
+        pumpUntil("three in a row") { app.graph.liveSettings.value?.callChoiceStreakCount == 3 }
+        asked("call-4")
+        assertEquals(Pick.TRANSCRIBE, (DecisionPopup.shown as CallCardScreen.Ask).always)
+        DecisionPopup.always(app)
+        pumpUntil("Transcribe every call") { app.graph.liveSettings.value?.afterEachCall == CallChoice.TRANSCRIBE }
+        pumpUntil("and this call too") { app.peekRecording("call-4")?.transcribe == true }
+        assertTrue(app.graph.liveSettings.value?.callChoiceAlwaysOffered == true)
+    }
+
+    @Test
+    fun `Transcribe every call and Save audio only ask nothing and send the call`() {
+        listOf(CallChoice.Outcome.TRANSCRIBE to true, CallChoice.Outcome.AUDIO to false).forEachIndexed { i, (outcome, transcribe) ->
+            val rec = PostCallPrompt.stored(call("call-$i", state = "recording"), outcome)
+            assertEquals("queued", rec.state)
+            assertEquals(transcribe, rec.transcribe)
+            app.graph.recordings.update(rec.id) { rec }
+            PostCallPrompt.show(app, rec, "dark")
+            assertFalse(DecisionPopup.isShowing)
+            pumpUntil("sent") { uploadWork(rec.id).isNotEmpty() }
+        }
+        assertEquals(0, notifications().size)
+    }
+
+    @Test
+    fun `a choice made on the pill suppresses the card`() {
+        val settings = app.graph.settings.let { runBlocking { it.current() } }
+        listOf(Pick.TRANSCRIBE, Pick.AUDIO).forEach { pick ->
+            val outcome = PostCallPrompt.outcome(app, settings, duringCall = pick)
+            val rec = PostCallPrompt.stored(call("pill-${pick.wire}", state = "recording"), outcome)
+            PostCallPrompt.show(app, rec, "dark")
+            assertFalse(DecisionPopup.isShowing)
         }
     }
 
     @Test
-    fun `the v2 card says Saved with Undo for six seconds when calls are kept automatically, and Undo is the delayed discard`() {
-        overlayAllowed(true)
-        val rec = call()
-        PostCallPrompt.show(
-            app,
-            rec,
-            PostCallPrompt.KEEP,
-            "dark",
-            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
-        )
-        assertTrue(DecisionPopup.showingV2)
-        assertEquals(DecisionPopup.Mode.SAVED, DecisionPopup.showingMode)
-        compose.onNodeWithText("Saved").assertExists()
-        // The upload waits out the card's six seconds (the same timer as classic's chip, tested above).
-        assertTrue(DecisionPopup.isShowing)
-        assertEquals(DecisionPopup.SAVED_MS, 6_000L)
-        compose.onNodeWithText("Undo").performClick()
-        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
-        assertEquals("Deleted · Undo", DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
-        assertTrue("nothing deleted by the tap", app.graph.recordings.encryptedFile("call-1").exists())
+    fun `Do Not Disturb saves the audio only with no card`() {
+        val nm = app.getSystemService(NotificationManager::class.java)
+        shadowOf(nm).setNotificationPolicyAccessGranted(true)
+        nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+        val settings = runBlocking { app.graph.settings.current() }
+        assertTrue(CallChoice.quietNow(app, settings))
+        assertEquals(CallChoice.Outcome.AUDIO_QUIET, PostCallPrompt.outcome(app, settings))
+        nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
+        assertFalse("quiet hours are off by default", settings.quietHours)
+        assertEquals(CallChoice.Outcome.CARD, PostCallPrompt.outcome(app, settings))
     }
 
     @Test
-    fun `without the flag the after-call chip is the classic one`() {
-        overlayAllowed(true)
-        PostCallPrompt.show(app, call(state = "pending_decision"), PostCallPrompt.ASK, "dark")
-        assertFalse(DecisionPopup.showingV2)
+    fun `calls saved during quiet hours are remembered for the Library by their local and server ids`() {
+        QuietSaved.clear(app)
+        assertFalse(QuietSaved.has(app, "local-1", null))
+        QuietSaved.mark(app, "local-1")
+        assertTrue(QuietSaved.has(app, "server-9", "local-1"))
+        assertFalse(QuietSaved.has(app, "server-9", null))
     }
 
     @Test
-    fun `a longer Undo time keeps the file that much longer`() {
-        call(state = "pending_decision")
-        val now = System.currentTimeMillis()
-        val discarding = runBlocking { Decisions.discardLater(app, "call-1", nowMs = now, afterMs = 20_000) }!!
-        assertEquals(java.time.Instant.ofEpochMilli(now + 20_000).toString(), discarding.discardAt)
-        assertTrue(discardWork("call-1").single().initialDelayMillis >= 20_000)
-        // The default is unchanged.
-        call("call-2", state = "pending_decision")
-        val usual = runBlocking { Decisions.discardLater(app, "call-2", nowMs = now) }!!
-        assertEquals(java.time.Instant.ofEpochMilli(now + Decisions.DISCARD_AFTER_MS).toString(), usual.discardAt)
-    }
-
-    @Test
-    fun `a call brought back by Undo waits for a decision with its timer running again`() {
-        call(state = "pending_decision")
-        runBlocking { Decisions.discardLater(app, "call-1") }
-        assertTrue(timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
-
-        // Undo through the core alone (no chip or notification shows it again).
-        runBlocking { Decisions.undoDiscard(app, "call-1") }
-        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
-        assertTrue("kept after 10 s again", timeoutWork("call-1").any { it.state == WorkInfo.State.ENQUEUED })
+    fun `without the overlay permission a notification asks with Transcribe, Save audio only and Delete`() {
+        ShadowSettings.setCanDrawOverlays(false)
+        PostCallPrompt.show(app, call(), "dark")
+        assertFalse(DecisionPopup.isShowing)
+        val asked = notifications().single()
+        assertEquals(listOf("Transcribe", "Save audio only", "Delete"), asked.actions.map { it.title.toString() })
+        listOf("Keep", "Discard", "Skip").forEach { word -> assertTrue(asked.actions.none { it.title.toString() == word }) }
     }
 
     @Test
     fun `the final delete and an Undo never interleave`() {
-        call(state = "pending_decision")
+        call()
         runBlocking { Decisions.discardLater(app, "call-1") }
         val inUndo = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)
@@ -266,190 +278,21 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
-    fun `ask me shows the chip and keeps the call after ten seconds without a tap`() {
-        overlayAllowed(true)
-        PostCallPrompt.show(app, call(state = "pending_decision"), PostCallPrompt.ASK, "dark")
-        assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
-        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
-
-        ShadowLooper.idleMainLooper(DecisionPopup.ASK_KEEP_MS + 1, TimeUnit.MILLISECONDS)
+    fun `a call sent meanwhile is not taken back by Undo`() {
+        asked()
+        DecisionPopup.transcribe(app)
         pumpUntil("kept") { app.peekRecording("call-1")?.state == "queued" }
-        assertFalse(DecisionPopup.isShowing)
-    }
-
-    @Test
-    fun `a decision anywhere closes the chip, and only for its own call`() {
-        overlayAllowed(true)
-        PostCallPrompt.show(app, call("a", state = "pending_decision"), PostCallPrompt.ASK, "dark")
-        PostCallPrompt.show(app, call("b", state = "pending_decision"), PostCallPrompt.ASK, "dark")
-        assertEquals("b", DecisionPopup.showingFor)
-
-        runBlocking { Decisions.apply(app, "a", keep = false) }
-        ShadowLooper.idleMainLooper()
-        assertEquals("b", DecisionPopup.showingFor)
-
-        runBlocking { Decisions.apply(app, "b", keep = false) }
-        ShadowLooper.idleMainLooper()
-        assertNull(DecisionPopup.showingFor)
-        assertNull(app.graph.recordings.get("b"))
-    }
-
-    @Test
-    fun `without the overlay permission a quiet notification with Undo does the job`() {
-        overlayAllowed(false)
-        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-
-        PostCallPrompt.show(app, call(), PostCallPrompt.KEEP, "dark")
-
-        assertFalse(DecisionPopup.isShowing)
-        val posted = notifications().single()
-        assertEquals("Saved · WhatsApp call · 4:32", shadowOf(posted).contentTitle.toString())
-        assertEquals(listOf("Undo"), posted.actions.map { it.title.toString() })
-        assertEquals(DecisionPopup.SAVED_MS, posted.timeoutAfter)
-    }
-
-    @Test
-    fun `ask me without the overlay permission asks in a notification that keeps after ten seconds`() {
-        overlayAllowed(false)
-        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-
-        PostCallPrompt.show(app, call(state = "pending_decision"), PostCallPrompt.ASK, "dark")
-
-        val posted = notifications().single()
-        assertEquals(listOf("Keep", "Discard"), posted.actions.map { it.title.toString() })
-        assertEquals(DecisionTimeoutWorker.WINDOW_SECONDS * 1000, posted.timeoutAfter)
-    }
-
-    @Test
-    fun `a voice note gets no chip`() {
-        overlayAllowed(true)
-        PostCallPrompt.show(app, call("note-1", "voice_note"), PostCallPrompt.KEEP, "dark")
-        assertFalse(DecisionPopup.isShowing)
-    }
-
-    @Test
-    fun `the chip says who the call was with and its buttons call back`() {
-        val rec = call().copy(callerName = "Omar")
-        assertEquals("Call with Omar", DecisionPopup.title(rec))
-        assertEquals("Phone call", DecisionPopup.title(call(app = "phone_call")))
-        var kept = 0
-        var discarded = 0
-        var titled = 0
-        compose.setContent {
-            EchoLedgerTheme("light") {
-                AfterCallChip(
-                    "Call with Omar",
-                    252_000,
-                    DecisionPopup.Mode.ASK,
-                    10_000,
-                    onKeep = { kept++ },
-                    onDiscard = { discarded++ },
-                    onUndo = {},
-                    onTitle = { titled++ }
-                )
-            }
-        }
-
-        compose.onNodeWithText("Call with Omar · 4:12").performClick()
-        compose.onNodeWithContentDescription("Keep").performClick()
-        compose.onNodeWithText("Discard").performClick()
-        assertEquals(1, titled)
-        assertEquals(1, kept)
-        assertEquals(1, discarded)
-    }
-
-    @Test
-    fun `the chip's Discard is a trash with its word, never an x that reads as close`() {
-        var discarded = 0
-        compose.setContent {
-            EchoLedgerTheme("dark") {
-                AfterCallChip("Call with Omar", 252_000, DecisionPopup.Mode.ASK, 10_000, onKeep = {}, onDiscard = {
-                    discarded++
-                }, onUndo = {}, onTitle = {})
-            }
-        }
-
-        compose.onNodeWithText("Discard").assertIsDisplayed().assertHasClickAction().performClick()
-        assertEquals(1, discarded)
-    }
-
-    @Test
-    fun `Discarded names the call and offers Undo`() {
-        var undone = 0
-        compose.setContent {
-            EchoLedgerTheme("dark") {
-                AfterCallChip("Call with Omar", 252_000, DecisionPopup.Mode.DISCARDED, DecisionPopup.DISCARDED_MS, onKeep = {
-                }, onDiscard = {}, onUndo = { undone++ }, onTitle = {})
-            }
-        }
-
-        compose.onNodeWithText("Discarded · Call with Omar · 4:12").assertIsDisplayed()
-        compose.onNodeWithText("Undo").performClick()
-        assertEquals(1, undone)
-        compose.onAllNodesWithText("Discard").assertCountEquals(0)
-    }
-
-    private fun discardWork(id: String) =
-        WorkManager.getInstance(app).getWorkInfosForUniqueWork(DiscardLaterWorker.workName(id)).get(10, TimeUnit.SECONDS)
-
-    private fun timeoutWork(id: String) =
-        WorkManager.getInstance(app).getWorkInfosForUniqueWork(DecisionTimeoutWorker.workName(id)).get(10, TimeUnit.SECONDS)
-
-    @Test
-    fun `Discard on the chip deletes nothing until Discarded and its Undo time are over`() {
-        overlayAllowed(true)
-        val rec = call(state = "pending_decision")
-        PostCallPrompt.show(app, rec, PostCallPrompt.ASK, "dark")
-
-        DecisionPopup.discard(app, rec, "dark")
-        assertEquals(DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
-        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
-        assertTrue("the tap deletes nothing", app.graph.recordings.encryptedFile("call-1").exists())
-        assertTrue("it waits for nobody any more", app.graph.recordings.pendingDecisions().isEmpty())
-        assertTrue("and is not kept after ten seconds", timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
-
-        ShadowLooper.idleMainLooper(DecisionPopup.DISCARDED_MS + 1, TimeUnit.MILLISECONDS)
-        assertFalse("Discarded leaves after 5 s", DecisionPopup.isShowing)
-        assertTrue("the file outlasts it, so a late Undo still finds it", app.graph.recordings.encryptedFile("call-1").exists())
-
-        // WorkManager keeps the delete when the app is closed or killed meanwhile; it runs only when the time is over.
-        val work = discardWork("call-1").single()
-        assertEquals(WorkInfo.State.ENQUEUED, work.state)
-        assertTrue(work.initialDelayMillis >= DecisionPopup.DISCARDED_MS)
-        WorkManagerTestInitHelper.getTestDriver(app)!!.setInitialDelayMet(work.id)
-        pumpUntil("the call to be deleted") { app.graph.recordings.get("call-1") == null }
-        assertFalse(app.graph.recordings.encryptedFile("call-1").exists())
-    }
-
-    @Test
-    fun `Undo on Discarded puts the call back on its chip, which keeps it after ten seconds as before`() {
-        overlayAllowed(true)
-        val rec = call(state = "pending_decision")
-        PostCallPrompt.show(app, rec, PostCallPrompt.ASK, "dark")
-        DecisionPopup.discard(app, rec, "dark")
-        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
-
-        DecisionPopup.undoDiscard(app, "call-1", "dark")
-        pumpUntil("the chip to ask again") { DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
-        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
-        assertNull(app.peekRecording("call-1")?.discardAt)
-        assertTrue(discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
-        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
-
-        ShadowLooper.idleMainLooper(DecisionPopup.ASK_KEEP_MS + 1, TimeUnit.MILLISECONDS)
-        pumpUntil("kept") { app.peekRecording("call-1")?.state == "queued" }
-    }
-
-    @Test
-    fun `a call already sent meanwhile is not shown as discarded`() {
-        overlayAllowed(true)
-        val rec = call(state = "pending_decision")
-        PostCallPrompt.show(app, rec, PostCallPrompt.ASK, "dark")
         app.graph.recordings.update("call-1") { it.copy(state = "uploaded") }
-
-        DecisionPopup.discard(app, rec, "dark")
-        pumpUntil("the chip to go") { !DecisionPopup.isShowing }
+        DecisionPopup.undo(app)
+        pumpUntil("the card to go") { !DecisionPopup.isShowing }
         assertEquals("uploaded", app.peekRecording("call-1")?.state)
-        assertTrue(discardWork("call-1").isEmpty())
+    }
+
+    @Test
+    fun `a voice note gets no card`() {
+        val note = app.storeRecording(id = "note-1", state = "pending_decision", sourceApp = "voice_note", durationMs = 5_000)
+        PostCallPrompt.show(app, note, "dark")
+        assertFalse(DecisionPopup.isShowing)
+        after(Duration.ofSeconds(1).toMillis())
     }
 }

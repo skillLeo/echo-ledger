@@ -235,7 +235,12 @@ object Notifications {
             setOnClickPendingIntent(R.id.rec_captions, serviceAction(context, RecordingService.ACTION_CAPTIONS, 16))
             setTextViewText(
                 R.id.rec_discard,
-                com.echoledger.mobile.notify.NoticeWords.say(context, if (discarding) "Undo discard" else "Discard")
+                com.echoledger.mobile.notify.AppWords.resources(context).let {
+                    com.echoledger.mobile.notify.NoticeWords.drawn(
+                        it,
+                        it.getString(if (discarding) R.string.cc_undo else R.string.cc_pill_stop_delete)
+                    )
+                }
             )
             setOnClickPendingIntent(
                 R.id.rec_discard,
@@ -290,7 +295,12 @@ object Notifications {
             )
             .addAction(
                 0,
-                com.echoledger.mobile.notify.NoticeWords.say(context, if (discarding) "Undo discard" else "Discard"),
+                com.echoledger.mobile.notify.AppWords.resources(context).let {
+                    com.echoledger.mobile.notify.NoticeWords.drawn(
+                        it,
+                        it.getString(if (discarding) R.string.cc_undo else R.string.cc_pill_stop_delete)
+                    )
+                },
                 serviceAction(context, if (discarding) RecordingService.ACTION_UNDO_DISCARD else RecordingService.ACTION_DISCARD_NOW, 17)
             )
             .build()
@@ -380,21 +390,24 @@ object Notifications {
             .build()
 
     /**
-     * Post-call question with Keep / Discard (A2.7): a heads-up notification with the same preview as the desktop
-     * review card. Never shown before or during a call. With "Keep waiting" it stays until the user decides.
+     * The after-call question when the card cannot be drawn (A2.7; words since 2.0.5 from docs/v2/copy/call-choice.md):
+     * Transcribe, Save audio only and Delete, with the same preview as the desktop review card. Never shown before or
+     * during a call. Nobody choosing keeps the audio only after [DecisionTimeoutWorker.WINDOW_SECONDS].
      */
-    fun showSaveDecision(context: Context, rec: LocalRecording, clientName: String?, decisionTimeout: String) {
-        fun decision(keep: Boolean, code: Int) = PendingIntent.getBroadcast(
+    fun showSaveDecision(context: Context, rec: LocalRecording, clientName: String?) {
+        fun decision(keep: Boolean, transcribe: Boolean?, code: Int) = PendingIntent.getBroadcast(
             context,
             code,
             Intent(context, SaveDecisionReceiver::class.java)
                 .setAction(if (keep) SaveDecisionReceiver.ACTION_KEEP else SaveDecisionReceiver.ACTION_DISCARD)
-                .putExtra(SaveDecisionReceiver.EXTRA_ID, rec.id),
+                .putExtra(SaveDecisionReceiver.EXTRA_ID, rec.id)
+                .apply { transcribe?.let { putExtra(SaveDecisionReceiver.EXTRA_TRANSCRIBE, it) } },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         // In the app language; the person's own words (names, the project) go in as they are.
         val words = com.echoledger.mobile.notify.AppWords.resources(context)
         val text = com.echoledger.mobile.notify.NoticeWords.drawn(words, decisionText(words, rec, clientName))
+        fun choice(id: Int) = com.echoledger.mobile.notify.NoticeWords.drawn(words, words.getString(id))
         val public = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Save this recording?"))
@@ -411,12 +424,13 @@ object Notifications {
             .setSilent(true)
             .setAutoCancel(true)
             .setContentIntent(openPending(context))
-            .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Keep"), decision(true, rec.id.hashCode()))
-            .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Discard"), decision(false, rec.id.hashCode() + 1))
+            .addAction(0, choice(R.string.cc_transcribe), decision(true, true, rec.id.hashCode()))
+            .addAction(0, choice(R.string.cc_save_audio_only), decision(true, false, rec.id.hashCode() + 3))
+            .addAction(0, choice(R.string.cc_delete), decision(false, null, rec.id.hashCode() + 1))
         firstCaptionLine(words, rec.liveSegments)?.let { line ->
             builder.setStyle(NotificationCompat.BigTextStyle().bigText("$text\n$line"))
         }
-        if (decisionTimeout != "wait") builder.setTimeoutAfter(DecisionTimeoutWorker.WINDOW_SECONDS * 1000)
+        builder.setTimeoutAfter(DecisionTimeoutWorker.WINDOW_SECONDS * 1000)
         // Android 13+ needs the notification permission; without it the question is in the app's Record tab only.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -466,7 +480,7 @@ object Notifications {
             )
             .setSilent(true)
             .setAutoCancel(true)
-            .setTimeoutAfter(com.echoledger.mobile.overlay.DecisionPopup.SAVED_MS)
+            .setTimeoutAfter(com.echoledger.mobile.overlay.DecisionPopup.DONE_MS)
             .setContentIntent(openApp(context))
             .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Undo"), undo)
         runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
@@ -508,7 +522,11 @@ object Notifications {
                     CHANNEL_DECISIONS
                 ).setSmallIcon(
                     R.drawable.ic_stat_rec
-                ).setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Call discarded")).build()
+                ).setContentTitle(
+                    com.echoledger.mobile.notify.AppWords.resources(context).let {
+                        com.echoledger.mobile.notify.NoticeWords.drawn(it, it.getString(R.string.cc_done_deleted))
+                    }
+                ).build()
             )
             .setSilent(true)
             .setAutoCancel(true)

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -152,6 +153,26 @@ private fun PillMenu(state: PillState, onEvent: (PillEvent) -> Unit, onHideWindo
             state.warning?.let {
                 Text(it, style = EchoV2.type.meta, color = c.warning, modifier = Modifier.padding(horizontal = EchoTokens.Space.s16))
             }
+            // A call (since 2.0.5): what happens to it, chosen here, so nothing asks after it.
+            if (state.call) {
+                val chosen = com.echoledger.mobile.calls.CallChoice.Pick.of(state.choice)
+                MenuRow(
+                    stringResource(R.string.cc_pill_transcribe),
+                    icon = if (chosen == com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE) EchoIcons.Check else EchoIcons.Transcribe,
+                    onClick = { onEvent(PillEvent.Choose(com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE)) }
+                )
+                MenuRow(
+                    stringResource(R.string.cc_pill_audio),
+                    icon = if (chosen == com.echoledger.mobile.calls.CallChoice.Pick.AUDIO) EchoIcons.Check else EchoIcons.Mic,
+                    onClick = { onEvent(PillEvent.Choose(com.echoledger.mobile.calls.CallChoice.Pick.AUDIO)) }
+                )
+                MenuRow(
+                    stringResource(R.string.cc_pill_stop_delete),
+                    icon = EchoIcons.Delete,
+                    onClick = { onEvent(PillEvent.DiscardNow(System.currentTimeMillis())) }
+                )
+                HorizontalDivider(color = c.borderDefault, modifier = Modifier.padding(vertical = EchoTokens.Space.s4))
+            }
             MenuRow(
                 stringResource(if (state.captions) R.string.v2_live_pill_captions_off else R.string.v2_live_pill_captions),
                 icon = EchoIcons.Transcribe,
@@ -167,11 +188,13 @@ private fun PillMenu(state: PillState, onEvent: (PillEvent) -> Unit, onHideWindo
                 icon = EchoIcons.Ask,
                 onClick = { onEvent(PillEvent.NextLanguage) }
             )
-            MenuRow(
-                stringResource(R.string.v2_live_pill_discard),
-                icon = EchoIcons.Delete,
-                onClick = { onEvent(PillEvent.DiscardNow(System.currentTimeMillis())) }
-            )
+            if (!state.call) {
+                MenuRow(
+                    stringResource(R.string.v2_live_pill_discard),
+                    icon = EchoIcons.Delete,
+                    onClick = { onEvent(PillEvent.DiscardNow(System.currentTimeMillis())) }
+                )
+            }
             MenuRow(
                 stringResource(if (state.stopArmed) R.string.v2_live_pill_stop_again else R.string.v2_live_pill_stop),
                 icon = EchoIcons.Record,

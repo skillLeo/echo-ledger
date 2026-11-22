@@ -33,8 +33,6 @@ import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
-import com.echoledger.mobile.overlay.AfterCallChip
-import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.overlay.PillDot
 import com.echoledger.mobile.overlay.PillToolbar
 import com.echoledger.mobile.overlay.PillView
@@ -943,13 +941,18 @@ class ScreenshotsTest : ScreenTest() {
                 PillDot(PillState(mode = PillState.Mode.DOT))
                 PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, language = "UR"))
                 PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, stopArmedTicks = 2))
-                AfterCallChip("Call with Omar", 252_000, DecisionPopup.Mode.SAVED, 6_000, onKeep = {
-                }, onDiscard = {}, onUndo = {}, onTitle = {})
-                AfterCallChip("WhatsApp call", 272_000, DecisionPopup.Mode.ASK, 10_000, onKeep = {
-                }, onDiscard = {}, onUndo = {}, onTitle = {})
-                // Since v1.8.1 (P-003): after Discard, the call can come back for 5 s before anything is deleted.
-                AfterCallChip("WhatsApp call", 272_000, DecisionPopup.Mode.DISCARDED, DecisionPopup.DISCARDED_MS, onKeep = {
-                }, onDiscard = {}, onUndo = {}, onTitle = {})
+                // Since 2.0.5 (the call-choice plan): a call's menu starts with its three choices.
+                PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, call = true, choice = "audio"))
+                // The after-call card and two of its lines (CallChoiceCardTest has every size and language).
+                com.echoledger.mobile.ui.v2.theme.EchoV2Theme(darkTheme = themeMode == "dark") {
+                    listOf(
+                        com.echoledger.mobile.ui.v2.live.CallCardScreen.Ask("Omar Khan", 252_000, "whatsapp"),
+                        com.echoledger.mobile.ui.v2.live.CallCardScreen.Done(com.echoledger.mobile.calls.CallChoice.Pick.AUDIO),
+                        com.echoledger.mobile.ui.v2.live.CallCardScreen.Done(com.echoledger.mobile.calls.CallChoice.Pick.DELETE)
+                    ).forEach { screen ->
+                        com.echoledger.mobile.ui.v2.live.CallChoiceCard(screen, {}, {}, {}, {}, still = true)
+                    }
+                }
             }
         }
         capture("pill")

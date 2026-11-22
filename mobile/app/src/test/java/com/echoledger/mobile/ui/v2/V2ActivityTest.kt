@@ -39,6 +39,7 @@ class V2ActivityTest : ScreenTest() {
     private val fixes = mutableListOf<MissedFix>()
     private val restored = mutableListOf<String>()
     private val kept = mutableListOf<String>()
+    private val savedAsAudio = mutableListOf<String>()
     private val discarded = mutableListOf<String>()
     private val missedRead = mutableListOf<String>()
     private var answer: ActivityResponse? = null
@@ -82,6 +83,7 @@ class V2ActivityTest : ScreenTest() {
                     missed = missedItems,
                     actions = ActivityActions(onOpenRecording = { opened += it }, onFix = { fixes += it }, onOpenUntranscribed = {}),
                     onKeep = { kept += it.id },
+                    onSaveAudio = { savedAsAudio += it.id },
                     onDiscard = { discarded += it.id },
                     onRetryUploads = {},
                     onRestore = { restored += it },
@@ -171,14 +173,16 @@ class V2ActivityTest : ScreenTest() {
     }
 
     @Test
-    fun severalCallsWaitingHaveKeepAllAndDiscardAll() {
+    fun severalCallsWaitingHaveSaveAllAsAudioOnlyAndDeleteAll() {
         answer = ActivityResponse()
         val calls = listOf(HomeFixtures.waiting("r-a", "Omar", 60_000), HomeFixtures.waiting("r-b", "Sana", 90_000))
         show(waiting = calls)
-        await("Keep all")
-        compose.onNode(hasText("Keep all") and hasClickAction()).performClick()
-        assertEquals(listOf("r-a", "r-b"), kept)
-        compose.onNode(hasText("Discard all") and hasClickAction()).performClick()
+        // The copy deck's bulk choice (2.0.5): the audio is kept, nothing is transcribed by itself.
+        await("Save all as audio only")
+        compose.onNode(hasText("Save all as audio only") and hasClickAction()).performClick()
+        assertEquals(listOf("r-a", "r-b"), savedAsAudio)
+        assertEquals("no transcript by itself", emptyList<String>(), kept)
+        compose.onNode(hasText("Delete all") and hasClickAction()).performClick()
         assertEquals(listOf("r-a", "r-b"), discarded)
     }
 

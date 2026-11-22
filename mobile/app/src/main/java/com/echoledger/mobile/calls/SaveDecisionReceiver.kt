@@ -29,7 +29,13 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 when (intent.action) {
-                    ACTION_KEEP -> Decisions.apply(context, id, keep = true)
+                    // Transcribe or Save audio only (since 2.0.5); an older notification's Keep keeps it as before.
+                    ACTION_KEEP -> Decisions.apply(
+                        context,
+                        id,
+                        keep = true,
+                        transcribe = if (intent.hasExtra(EXTRA_TRANSCRIBE)) intent.getBooleanExtra(EXTRA_TRANSCRIBE, false) else null
+                    )
 
                     // Undo on "Saved · …" is a Discard too: "Discarded · Undo" first, the file only after that.
                     ACTION_DISCARD, ACTION_UNDO -> discard(context, id)
@@ -57,8 +63,7 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         Notifications.cancelDecision(context, id)
         val back = Decisions.undoDiscard(context, id) ?: return
         val settings = (context.applicationContext as EchoLedgerApp).graph.settings.current()
-        val flags = com.echoledger.mobile.ui.v2.shell.UiFlags(settings.uiFlags, settings.uiClassic)
-        withContext(Dispatchers.Main) { PostCallPrompt.again(context, back, settings.themeMode, flags) }
+        withContext(Dispatchers.Main) { PostCallPrompt.again(context, back, settings.themeMode) }
     }
 
     companion object {
@@ -71,6 +76,9 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         /** Since v1.8.1: Undo on "Discarded · …" (Discard in the notification). */
         const val ACTION_UNDO_DISCARD = "com.echoledger.mobile.UNDO_DISCARD"
         const val EXTRA_ID = "recording_id"
+
+        /** With [ACTION_KEEP] (since 2.0.5): true for Transcribe, false for Save audio only. */
+        const val EXTRA_TRANSCRIBE = "transcribe"
     }
 }
 
@@ -93,6 +101,44 @@ object Decisions {
             graph.recordings.delete(recordingId)
         }
         WidgetStateStore.refresh(context)
+    }
+
+    /**
+     * The after-call card's Transcribe or Save audio only (since 2.0.5): kept, with its transcript or as audio only, and
+     * sent after [uploadAfterMs] so the card's Undo ([undoKeep]) still finds it here; 0 sends it now. A call on its way
+     * out stays so (only its own Undo brings it back). Null when the call is gone or is no longer the person's to decide.
+     */
+    suspend fun keepFor(context: Context, recordingId: String, transcribe: Boolean, uploadAfterMs: Long): LocalRecording? {
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        Notifications.cancelDecision(context, recordingId)
+        DecisionTimeoutWorker.cancel(context, recordingId)
+        val kept = graph.recordings.update(recordingId) {
+            if (it.state == WAITING || it.state == KEPT) it.copy(state = KEPT, transcribe = transcribe) else it
+        }?.takeIf { it.state == KEPT } ?: return null
+        if (uploadAfterMs >
+            0
+        ) {
+            UploadWorker.enqueueDelayed(context, recordingId, uploadAfterMs)
+        } else {
+            UploadWorker.enqueue(context, recordingId)
+        }
+        WidgetStateStore.refresh(context)
+        return kept
+    }
+
+    /**
+     * Undo on "Transcribing…" or "Saved as audio" (since 2.0.5): the call waits for the question again, its upload called
+     * off and nothing decided. Null when it was sent meanwhile or is gone.
+     */
+    suspend fun undoKeep(context: Context, recordingId: String): LocalRecording? {
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        UploadWorker.cancel(context, recordingId)
+        val back = graph.recordings.update(recordingId) {
+            if (it.state == KEPT) it.copy(state = WAITING, transcribe = null) else it
+        }?.takeIf { it.state == WAITING } ?: return null
+        DecisionTimeoutWorker.schedule(context, recordingId)
+        WidgetStateStore.refresh(context)
+        return back
     }
 
     /**

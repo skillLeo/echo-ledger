@@ -11,9 +11,10 @@ import com.echoledger.mobile.EchoLedgerApp
 import java.util.concurrent.TimeUnit
 
 /**
- * "Ask me" after a call (since v1.5): nobody tapping ✓ or ✕ keeps the call after [WINDOW_SECONDS]. The chip does
- * this itself; this run is the backstop for the notification (no overlay permission, or the chip was cleared). No wake
- * locks or alarms: WorkManager schedules it.
+ * "Ask me" after a call: nobody choosing keeps the call as audio only after [WINDOW_SECONDS] (since 2.0.5; it was
+ * kept and transcribed until then), as the after-call card does after its 8 s. The card does this itself; this run is
+ * the backstop for the notification (no overlay permission, or the card was cleared). No wake locks or alarms:
+ * WorkManager schedules it.
  */
 class DecisionTimeoutWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -21,7 +22,7 @@ class DecisionTimeoutWorker(context: Context, params: WorkerParameters) : Corout
         val graph = (applicationContext as EchoLedgerApp).graph
         val recording = graph.recordings.get(id) ?: return Result.success()
         if (recording.state != "pending_decision") return Result.success()
-        Decisions.apply(applicationContext, id, keep = true)
+        Decisions.apply(applicationContext, id, keep = true, transcribe = false)
         return Result.success()
     }
 

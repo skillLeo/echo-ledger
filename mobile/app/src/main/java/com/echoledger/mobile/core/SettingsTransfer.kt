@@ -39,6 +39,8 @@ object SettingsTransfer {
         "decisionTimeoutChosen",
         "undecidedKeepHours",
         "afterCall",
+        "afterEachCall",
+        "whenToAsk",
         "skipCallsShorterThanS",
         "autoRecordApps",
         "extraCallApps",
@@ -96,6 +98,10 @@ object SettingsTransfer {
         "lockAfterMs",
         "secureScreen",
         "blockScreens",
+        "callChoiceHintShown",
+        "callChoiceStreak",
+        "callChoiceStreakCount",
+        "callChoiceAlwaysOffered",
         "settingsVersion",
         "onboardingDone",
         "themeMode",
@@ -153,7 +159,16 @@ object SettingsTransfer {
                 applied++
             }
         }
-        val settings = decode(merged) ?: return Result.Rejected(NOT_A_SETTINGS_FILE)
+        val decoded = decode(merged) ?: return Result.Rejected(NOT_A_SETTINGS_FILE)
+        // A file from before 2.0.5 carries the old choices only: they arrive as the store's migration reads them.
+        val settings = decoded.let {
+            val mode = (incoming["screenShareMode"] as? JsonPrimitive)?.contentOrNull
+            if (mode != null && "hideLiveWords" !in incoming) it.copy(hideLiveWords = mode != "show") else it
+        }.let {
+            val afterCall = (incoming["afterCall"] as? JsonPrimitive)?.contentOrNull
+            val old = afterCall?.takeIf { "afterEachCall" !in incoming }
+            if (old != null) it.copy(afterEachCall = com.echoledger.mobile.calls.CallChoice.fromOld(old)) else it
+        }
         val clean = settings.copy(
             captionStyle = settings.captionStyle.sanitized(),
             dictationReplacements = DictationText.cleanReplacements(settings.dictationReplacements),

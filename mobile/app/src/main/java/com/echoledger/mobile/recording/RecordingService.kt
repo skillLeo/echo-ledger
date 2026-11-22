@@ -367,7 +367,12 @@ class RecordingService : LifecycleService() {
     /** Enters (or updates) the foreground state. Returns false when the system refuses; never crashes. */
     private fun goForeground(mic: Boolean, title: String, detail: String): Boolean {
         val notification = if (!mic && capture == null) {
-            Notifications.armed(this, ready = helperAlive(), askAfterCall = settings.afterCall == "ask")
+            Notifications.armed(
+                this,
+                ready = helperAlive(),
+                askAfterCall =
+                    com.echoledger.mobile.calls.CallChoice.setting(settings) == com.echoledger.mobile.calls.CallChoice.ASK
+            )
         } else {
             Notifications.recording(
                 this,
@@ -643,6 +648,11 @@ class RecordingService : LifecycleService() {
             }
             // The missed-recording detector looks at this call once its recording is saved.
             com.echoledger.mobile.calls.MissedRecordingWorker.soon(this)
+        }
+        if (event is CallEvent.CallStarted && !com.echoledger.mobile.calls.CallChoice.recordsCallsAutomatically(settings)) {
+            // After each call: Don't record calls (since 2.0.5). Record and the pill still record a call by hand.
+            CallJournal.finish(this, event.recordingId, CallJournal.Result.NOT_WANTED, CallJournal.NotWanted.CALLS_OFF)
+            return
         }
         if (event is CallEvent.CallStarted && event.app == SourceApp.PHONE_CALL) {
             // SIM calls follow "Record phone calls" (since v1.2): off, ask each time, or always.
@@ -1030,7 +1040,11 @@ class RecordingService : LifecycleService() {
                 settings.uiClassic
             ).isOn(com.echoledger.mobile.ui.v2.shell.UiFlags.RECORDING_CONTROLS)
         pillState.value =
-            PillState(mode = if (settings.pillDot) PillState.Mode.DOT else PillState.Mode.PILL, language = Languages.chip(session.language))
+            PillState(
+                mode = if (settings.pillDot) PillState.Mode.DOT else PillState.Mode.PILL,
+                language = Languages.chip(session.language),
+                call = session.fromCall
+            )
         captionFeed.value = CaptionFeed()
         publish(session)
         showControls()
@@ -1057,6 +1071,7 @@ class RecordingService : LifecycleService() {
     }
 
     private fun hideControls() {
+        com.echoledger.mobile.overlay.StartBanner.hide()
         pill?.hide()
         pill = null
         panel?.hide()
@@ -1077,12 +1092,23 @@ class RecordingService : LifecycleService() {
         for (effect in effects) {
             when (effect) {
                 PillEffect.Pause -> session?.let { pause(it) }
+
                 PillEffect.Resume -> session?.let { resume(it) }
+
                 PillEffect.ShowCaptions -> showCaptions(session)
+
                 PillEffect.HideCaptions -> closeCaptionPanel()
+
                 PillEffect.NextLanguage -> session?.let { setLanguage(it, Languages.next(it.language)) }
+
                 PillEffect.Stop -> session?.let { stopCapture(fromCall = false, reason = "Stop on the recording controls (tapped twice)") }
+
                 PillEffect.Discard -> session?.let { discardNow(it) }
+
+                is PillEffect.Chose -> session?.let {
+                    it.pick = effect.pick
+                    CaptureLog.add(this, "call choice", "${effect.pick.wire} (on the pill)")
+                }
             }
         }
         // Not after Stop or Discard: the recording notification must not come back.
@@ -1244,6 +1270,20 @@ class RecordingService : LifecycleService() {
     private val ticker = object : Runnable {
         override fun run() {
             val session = capture ?: return
+            // At the start of the call (since 2.0.5): once the call has connected, never while it rings.
+            if (com.echoledger.mobile.overlay.StartBanner.due(
+                    settings,
+                    session.fromCall,
+                    session.gate?.answered == true,
+                    session.bannerShown
+                )
+            ) {
+                session.bannerShown = true
+                com.echoledger.mobile.overlay.StartBanner.show(this@RecordingService, settings.themeMode) {
+                    CaptureLog.add(this@RecordingService, "call choice", "Don't record (the banner)")
+                    onPillEvent(PillEvent.DiscardNow(System.currentTimeMillis()))
+                }
+            }
             if (!session.soundLogged && !session.silenceLogged && session.ageMs() >= 5_000) {
                 session.silenceLogged = true
                 CaptureLog.add(
@@ -1329,7 +1369,9 @@ class RecordingService : LifecycleService() {
         val endedMs = System.currentTimeMillis()
         CallNotices.onNotice = null
         val isCall = session.fromCall || fromCall
-        val afterCall = settings.afterCall
+        // After each call (since 2.0.5): the pill's choice, the setting, or quiet hours decide what the call becomes.
+        val outcome = com.echoledger.mobile.calls.PostCallPrompt.outcome(this, settings, session.pick)
+        val (callState, callTranscribe) = com.echoledger.mobile.calls.CallChoice.stored(outcome)
         val shorterThanS = settings.skipCallsShorterThanS
         var skip: SkippedCalls.Reason? = null
         thread(name = "el-finish") {
@@ -1362,9 +1404,10 @@ class RecordingService : LifecycleService() {
                     sha256 = "",
                     state = when {
                         skip != null -> SkippedCalls.STATE
-                        isCall -> PostCallPrompt.stateFor(afterCall)
+                        isCall -> callState
                         else -> "queued"
                     },
+                    transcribe = if (isCall && skip == null) callTranscribe else null,
                     skippedReason = skip?.wire,
                     skippedAt = skip?.let { Instant.now().toString() },
                     liveSegments = synchronized(session.segments) { session.segments.sortedBy { it.startMs } },
@@ -1488,13 +1531,11 @@ class RecordingService : LifecycleService() {
                     Notifications.noAudio(this, CaptureProblems.recent(this))
                 } else if (stored != null && skip == null) {
                     if (isCall && !held) {
-                        PostCallPrompt.show(
-                            this,
-                            stored,
-                            afterCall,
-                            themeMode,
-                            com.echoledger.mobile.ui.v2.shell.UiFlags(settings.uiFlags, settings.uiClassic)
-                        )
+                        // Quiet hours or Do Not Disturb: no card; the Library says why it is audio only.
+                        if (outcome == com.echoledger.mobile.calls.CallChoice.Outcome.AUDIO_QUIET) {
+                            com.echoledger.mobile.calls.QuietSaved.mark(this, stored.id)
+                        }
+                        PostCallPrompt.show(this, stored, themeMode)
                         oneSided?.takeUnless { phoneAppCovers }?.let { Notifications.onlyYourVoice(this, it) }
                     } else if (!isCall) {
                         UploadWorker.enqueue(this, stored.id)
@@ -1581,6 +1622,12 @@ class RecordingService : LifecycleService() {
 
         /** Since v1.5: holds a ringing call's audio until it is answered; null when everything is kept (recorded by hand). */
         @Volatile var gate: ConnectGate? = null
+
+        /** Chosen on the pill during the call (since 2.0.5): no question after it. */
+        @Volatile var pick: com.echoledger.mobile.calls.CallChoice.Pick? = null
+
+        /** "Recording this call" has been shown for this call (At the start of the call). */
+        var bannerShown = false
 
         /** The call app's package (null for a SIM call or a recording by hand), to match its call notifications. */
         var callPackage: String? = null

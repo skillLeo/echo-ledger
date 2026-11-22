@@ -32,9 +32,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.R
+import com.echoledger.mobile.calls.CallChoice
 import com.echoledger.mobile.calls.PhoneAppRecordings
 import com.echoledger.mobile.calls.PhoneCallLog
-import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.calls.SkippedCalls
 import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.PhoneCalls
@@ -89,19 +89,24 @@ fun CallsPage(
         EchoTopBar(stringResource(R.string.v2_set_page_calls), onBack = onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Column(Modifier.highlightedIf(highlight == "calls.after")) {
-                EchoSectionHeader(stringResource(R.string.v2_calls_after_call))
-                EchoRadio(
-                    settings.afterCall == PostCallPrompt.KEEP,
-                    { update { it.copy(afterCall = PostCallPrompt.KEEP) } },
-                    stringResource(R.string.v2_calls_keep_auto),
-                    supporting = stringResource(R.string.v2_calls_keep_auto_help)
-                )
-                EchoRadio(
-                    settings.afterCall == PostCallPrompt.ASK,
-                    { update { it.copy(afterCall = PostCallPrompt.ASK) } },
-                    stringResource(R.string.v2_calls_ask_me),
-                    supporting = stringResource(R.string.v2_calls_ask_me_help)
-                )
+                // After each call and When to ask (since 2.0.5, the call-choice plan): the deck's words.
+                EchoSectionHeader(stringResource(R.string.cc_setting_title))
+                val current = CallChoice.setting(settings)
+                CallChoice.SETTING_WORDS.forEach { (value, label, help) ->
+                    EchoRadio(current == value, {
+                        update { it.copy(afterEachCall = value) }
+                    }, stringResource(label), supporting = stringResource(help))
+                }
+                EchoSectionHeader(stringResource(R.string.cc_when_title))
+                val asking = current == CallChoice.ASK
+                CallChoice.WHEN_WORDS.forEach { (value, label) ->
+                    EchoRadio(
+                        CallChoice.whenToAsk(settings) == value,
+                        { update { it.copy(whenToAsk = value) } },
+                        stringResource(label),
+                        enabled = asking
+                    )
+                }
                 EchoSectionHeader(stringResource(R.string.v2_calls_skip_title))
                 Note(stringResource(R.string.v2_calls_skip_help))
                 SkippedCalls.SHORTER_THAN_CHOICES.forEach { seconds ->
@@ -158,8 +163,7 @@ fun CallsPage(
                             !caps.helperInBuild -> R.string.v2_calls_autorecord_not_in_build
                             !caps.callCaptureSupportedByOs -> R.string.v2_calls_autorecord_needs_android
                             !caps.helperConnected -> R.string.v2_calls_autorecord_setup_first
-                            settings.afterCall == com.echoledger.mobile.calls.PostCallPrompt.ASK -> R.string.v2_calls_autorecord_ask
-                            else -> R.string.v2_calls_autorecord_keep
+                            else -> CallChoice.SETTING_WORDS.first { it.first == CallChoice.setting(settings) }.third
                         }
                     ),
                     enabled = caps.canCaptureCalls

@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.robolectric.Shadows.shadowOf
@@ -372,6 +373,24 @@ class RecordingServiceTest : AppTest() {
         assertEquals("zoom", call.app)
         assertEquals(listOf("detected", "armed"), call.stages.map { it.stage })
         assertEquals(CallJournal.Failure("started", "mic_busy", com.echoledger.mobile.calls.MissedReason.MIC_BUSY.detail), call.failure)
+        assertFalse(RecordingService.isRecording)
+    }
+
+    @Test
+    fun `with Don't record calls a call is not recorded, and the journal says why`() {
+        runBlocking { app.graph.settings.update { it.copy(afterEachCall = com.echoledger.mobile.calls.CallChoice.OFF) } }
+        val helper = RefusingHelper()
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+
+        helper.listener!!.onCallStarted("us.zoom.videomeetings")
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals(CallJournal.Result.NOT_WANTED.wire, call.result)
+        assertEquals(CallJournal.NotWanted.CALLS_OFF, call.note)
+        assertNull("nothing was asked of the helper", call.failure)
         assertFalse(RecordingService.isRecording)
     }
 

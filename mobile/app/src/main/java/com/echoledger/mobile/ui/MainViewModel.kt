@@ -1541,10 +1541,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be updated.") }
     }
 
-    /** Keep or Discard; a [title] typed on the card is stored first, in the same step, so the upload always carries it. */
-    fun decide(id: String, keep: Boolean, title: String? = null) = viewModelScope.launch(Dispatchers.IO) {
+    /**
+     * Keep or Discard; a [title] typed on the card is stored first, in the same step, so the upload always carries it.
+     * [transcribe] false keeps the audio only (Save all as audio only, 2.0.5); null leaves the server's default.
+     */
+    fun decide(id: String, keep: Boolean, title: String? = null, transcribe: Boolean? = null) = viewModelScope.launch(Dispatchers.IO) {
         if (keep && title != null) graph.recordings.update(id) { it.copy(title = title.trim().take(200).ifBlank { null }) }
-        Decisions.apply(getApplication(), id, keep)
+        Decisions.apply(getApplication(), id, keep, transcribe)
         reloadLocal()
     }
 

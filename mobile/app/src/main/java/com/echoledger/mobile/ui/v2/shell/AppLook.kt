@@ -41,14 +41,20 @@ object AppLook {
 }
 
 /**
- * The person's app language, text size and font for what v2 draws outside the app's window (the recording pill, the
- * after-call card, the Live Assist card), as the shell gives its pages; dark, as those windows are drawn. It starts
+ * The person's app language and text size for what v2 draws outside the app's window (the recording pill, the
+ * after-call card, the Live Assist card), as the shell gives its pages; dark unless [dark] says otherwise (the
+ * after-call card follows the app's theme). Always the app's own font, never the phone's (a handwritten system font made
+ * the after-call card hard to read over other apps; the call-choice plan, 2.0.5). It starts
  * from the app's hot copy of the stored settings ([settings]), so nothing waits while it draws. Just after a cold start,
  * before the store has been read once, it draws nothing (a few frames: the read was asked for, off the main thread)
  * rather than the phone's look; if the store has not answered after [OVERLAY_WAIT_MS], the phone's own look.
  */
 @Composable
-fun OverlayLook(settings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?>?, content: @Composable () -> Unit) {
+fun OverlayLook(
+    settings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?>?,
+    dark: Boolean = true,
+    content: @Composable () -> Unit
+) {
     val flow = androidx.compose.runtime.remember(settings) { settings ?: kotlinx.coroutines.flow.MutableStateFlow(null) }
     val stored = flow.collectAsState().value
     var waited by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -59,9 +65,9 @@ fun OverlayLook(settings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobil
     if (stored == null && !waited) return
     val look = stored ?: com.echoledger.mobile.data.AppSettings()
     com.echoledger.mobile.ui.v2.theme.EchoV2Theme(
-        darkTheme = true,
+        darkTheme = dark,
         language = AppLook.language(look.appLanguage, com.echoledger.mobile.ui.v2.theme.systemEchoLanguage()),
-        phoneFont = look.phoneFont
+        phoneFont = false
     ) {
         AppLook.TextSize(look.textSize, content)
     }

@@ -66,10 +66,24 @@ data class AppSettings(
     /** Since 1.3.2: calls still waiting for Keep or Discard after this many hours are kept (24, 72, or 0 = never). */
     val undecidedKeepHours: Int = 24,
     /**
-     * Since v1.5, after a call: "keep" (default: kept at once, a small "Saved · Undo" for 6 s) or "ask" (a small chip
-     * with ✓ and ✕ that keeps the call after 10 s). Settings from before v1.5 have no value and keep automatically.
+     * v1.5 to 2.0.4, after a call: "keep" (kept and transcribed at once) or "ask" (a small chip). Since 2.0.5 it is only
+     * read once, to give [afterEachCall] its first value ([com.echoledger.mobile.calls.CallChoice.fromOld]).
      */
     val afterCall: String = "keep",
+    /**
+     * Since 2.0.5, Settings › Recording › After each call ([com.echoledger.mobile.calls.CallChoice]): "ask" (Ask me, the
+     * default), "transcribe", "audio" or "off" (Don't record calls: automatic call recording only).
+     */
+    val afterEachCall: String = "ask",
+    /** Since 2.0.5, When to ask (with Ask me): "after" the call (recommended, the default) or at the "start" of it. */
+    val whenToAsk: String = "after",
+    /** The after-call card has shown its first-time hint ("You can change this in Settings › After each call."). */
+    val callChoiceHintShown: Boolean = false,
+    /** The card's last choice ("transcribe", "audio" or "delete") and how many times in a row it was made. */
+    val callChoiceStreak: String? = null,
+    val callChoiceStreakCount: Int = 0,
+    /** "Always do this?" was offered (once). */
+    val callChoiceAlwaysOffered: Boolean = false,
     /** Since v1.5: automatic call recordings shorter than this are skipped (0 = never). */
     val skipCallsShorterThanS: Int = 10,
     /** The server's `api_version` ("1.1") from the last config; null for a v1 server or before the first fetch. */
@@ -351,13 +365,22 @@ class SettingsStore(
         }
         // 2.0.5 (the owner's decision): During screen sharing became Hide EchoLedger's live words; Show is off, Private
         // ("hide", or the first v1.8.1 builds' "black_box") is on.
-        return if (!raw.contains(
+        val live = if (!raw.contains(
                 "\"hideLiveWords\""
             )
         ) {
             unblocked.copy(hideLiveWords = unblocked.screenShareMode != "show")
         } else {
             unblocked
+        }
+        // 2.0.5: "After a call" (keep or ask) became After each call; Keep automatically is Transcribe every call.
+        return if (!raw.contains(
+                "\"afterEachCall\""
+            )
+        ) {
+            live.copy(afterEachCall = com.echoledger.mobile.calls.CallChoice.fromOld(live.afterCall))
+        } else {
+            live
         }
     }
 

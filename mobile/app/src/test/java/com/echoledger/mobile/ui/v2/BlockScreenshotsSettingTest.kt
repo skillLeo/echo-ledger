@@ -4,6 +4,7 @@ import android.content.res.Configuration
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasText
@@ -14,8 +15,10 @@ import androidx.compose.ui.test.performClick
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.SettingsIndex
 import com.echoledger.mobile.core.ShareGuard
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.testsupport.simulateScreenLock
 import com.echoledger.mobile.ui.v2.settings.PrivacyPage
 import com.echoledger.mobile.ui.v2.settings.SettingsTree
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
@@ -34,7 +37,8 @@ import org.junit.Test
  */
 class BlockScreenshotsSettingTest : ScreenTest() {
     private val label = "Block screenshots of EchoLedger"
-    private val help = "Off: you can take screenshots of the app at any time. On: EchoLedger's own screens can't be captured."
+    private val help = "Off: you can take screenshots of the app, except screens that show keys or recovery codes. " +
+        "On: EchoLedger's own screens can't be captured and are hidden in Recents."
     private val live = "Hide EchoLedger's live words from screenshots and screen shares"
     private val liveHelp = "On: captions, Live Assist and Live Translate show as a black box in screenshots, screen recordings and " +
         "screen shares. The recording pill and the after-call card always show. Off: everything shows."
@@ -94,6 +98,28 @@ class BlockScreenshotsSettingTest : ScreenTest() {
         listOf(R.string.cc_block_screens, R.string.cc_block_screens_help, R.string.cc_hide_live_words, R.string.cc_hide_live_words_help)
             .forEach { id -> compose.onNodeWithText(ur.getString(id), useUnmergedTree = true).assertExists() }
         assertEquals("EchoLedger کے لائیو الفاظ اسکرین شاٹس اور اسکرین شیئر سے چھپائیں", ur.getString(R.string.cc_hide_live_words))
+    }
+
+    @Test
+    fun `with the lock on a search for widget titles lands on a line that is there`() {
+        app.simulateScreenLock(true)
+        show {
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.echoledger.mobile.ui.v2.shell.LocalEchoToasts provides com.echoledger.mobile.ui.v2.components.rememberEchoToastState()
+            ) {
+                com.echoledger.mobile.ui.v2.settings.AppLockPage(
+                    AppSettings(appLockEnabled = true),
+                    {},
+                    {},
+                    highlight = "lock.hide",
+                    onBack = {}
+                )
+            }
+        }
+        compose.onNodeWithText(
+            "Hide recording titles on the widget: with App lock on, the widget shows no recordings at all.",
+            useUnmergedTree = true
+        ).assertIsDisplayed()
     }
 
     @Test

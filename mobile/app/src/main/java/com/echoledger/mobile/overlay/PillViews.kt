@@ -14,13 +14,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ClosedCaption
 import androidx.compose.material.icons.rounded.ClosedCaptionDisabled
 import androidx.compose.material.icons.rounded.Delete
@@ -212,6 +215,26 @@ internal fun PillToolbar(s: PillState, modifier: Modifier = Modifier, header: Mo
             )
         }
         val showHint: (String) -> Unit = { hint = it }
+        // A call (since 2.0.5): what happens to it, chosen here, so nothing asks after it.
+        if (s.call) {
+            Column(Modifier.padding(top = 2.dp)) {
+                CallChoiceRow(
+                    androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_pill_transcribe),
+                    s.choice == com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE.wire
+                ) {
+                    onEvent(PillEvent.Choose(com.echoledger.mobile.calls.CallChoice.Pick.TRANSCRIBE))
+                }
+                CallChoiceRow(
+                    androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_pill_audio),
+                    s.choice == com.echoledger.mobile.calls.CallChoice.Pick.AUDIO.wire
+                ) {
+                    onEvent(PillEvent.Choose(com.echoledger.mobile.calls.CallChoice.Pick.AUDIO))
+                }
+                CallChoiceRow(androidx.compose.ui.res.stringResource(com.echoledger.mobile.R.string.cc_pill_stop_delete), false) {
+                    onEvent(PillEvent.DiscardNow(System.currentTimeMillis()))
+                }
+            }
+        }
         val captionsIcon = if (s.captions) Icons.Rounded.ClosedCaptionDisabled else Icons.Rounded.ClosedCaption
         val pauseIcon = if (s.paused) Icons.Rounded.PlayArrow else Icons.Rounded.Pause
         Row(Modifier.padding(top = 2.dp)) {
@@ -220,8 +243,10 @@ internal fun PillToolbar(s: PillState, modifier: Modifier = Modifier, header: Mo
             PillButton(Icons.Rounded.Stop, if (s.stopArmed) "Tap again to stop recording" else "Stop", showHint, PILL_REC, s.stopArmed) {
                 onEvent(PillEvent.Stop)
             }
-            PillButton(Icons.Rounded.Delete, "Discard now", showHint, PILL_WARN) {
-                onEvent(PillEvent.DiscardNow(System.currentTimeMillis()))
+            if (!s.call) {
+                PillButton(Icons.Rounded.Delete, "Discard now", showHint, PILL_WARN) {
+                    onEvent(PillEvent.DiscardNow(System.currentTimeMillis()))
+                }
             }
             PillButton(Icons.Rounded.RemoveCircleOutline, "Shrink to a dot", showHint) { onEvent(PillEvent.ShrinkToDot) }
             PillButton(Icons.Rounded.VisibilityOff, "Hide controls (keeps recording)", showHint) { onEvent(PillEvent.HideControls) }
@@ -231,6 +256,23 @@ internal fun PillToolbar(s: PillState, modifier: Modifier = Modifier, header: Mo
                 com.echoledger.mobile.core.ShareGuard.setHidden(true)
             }
         }
+    }
+}
+
+/** One line of a call's choices in the toolbar: 44 dp high, its words, a check once chosen. */
+@Composable
+private fun CallChoiceRow(label: String, chosen: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = EchoType.Bundled.labelL, color = PILL_TEXT, modifier = Modifier.weight(1f))
+        if (chosen) Icon(Icons.Rounded.Check, contentDescription = null, tint = PILL_TEXT, modifier = Modifier.size(18.dp))
     }
 }
 

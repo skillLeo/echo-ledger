@@ -24,7 +24,7 @@
     <string name="n_saved">محفوظ · %1$s · %2$s</string>
     <string name="n_call_saved">کال محفوظ ہو گئی</string>
     <string name="n_undo">واپس لیں</string>
-    <string name="n_discarded">ہٹا دی گئی · %1$s · %2$s</string>
+    <string name="n_discarded">حذف ہو گئی · %1$s · %2$s</string>
     <string name="n_call_discarded">کال ہٹا دی گئی</string>
     <string name="n_not_ready_text">یہ کال ریکارڈ نہیں ہو رہی کیونکہ کال ریکارڈ کرنے والا ہیلپر نہیں چل رہا۔ سیٹ اپ کھول کر اسے شروع کرنے کے لیے تھپتھپائیں۔</string>
     <string name="n_call_not_recorded_first">یہ کال ریکارڈ نہیں ہو سکی۔</string>

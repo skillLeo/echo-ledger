@@ -161,7 +161,7 @@ object SettingsTree {
     val itemTitles: Map<String, Int> = mapOf(
         "calls.autorecord" to R.string.v2_set_item_calls_autorecord,
         "calls.auto" to R.string.v2_set_item_calls_auto,
-        "calls.after" to R.string.v2_set_item_calls_after,
+        "calls.after" to R.string.cc_setting_title,
         "mic.source" to R.string.v2_set_item_mic_source,
         "mic.test" to R.string.v2_set_item_mic_test,
         "mic.permissions" to R.string.v2_set_item_mic_permissions,

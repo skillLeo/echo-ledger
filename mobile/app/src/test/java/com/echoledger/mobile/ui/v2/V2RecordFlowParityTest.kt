@@ -302,7 +302,7 @@ class V2RecordFlowParityTest : ScreenTest() {
         press(project.name)
         pumpUntil("filed") { app.graph.recordings.get("call-1")?.clientId == project.id }
         shows(project.name)
-        press("Keep")
+        press("Transcribe")
         pumpUntil("kept") { app.graph.recordings.get("call-1")?.state == "queued" }
         val kept = app.graph.recordings.get("call-1")!!
         assertEquals("Rate for 40 cartons", kept.title)
@@ -338,11 +338,11 @@ class V2RecordFlowParityTest : ScreenTest() {
             )
         }
         compose.waitForIdle()
-        compose.onAllNodesWithText("Keep").assertCountEquals(0)
+        compose.onAllNodesWithText("Transcribe").assertCountEquals(0)
         // The card's title (DecisionPopup opens the app at "pending"): in the v2 shell that is Activity.
         open = 1
         shows("Activity")
-        shows("Keep")
+        shows("Transcribe")
         compose.onAllNodes(hasText("WhatsApp", substring = true) and hasClickAction()).onFirst()
             .performSemanticsAction(SemanticsActions.OnClick)
         shows("Rename")

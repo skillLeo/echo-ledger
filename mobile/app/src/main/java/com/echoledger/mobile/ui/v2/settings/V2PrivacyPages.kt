@@ -147,6 +147,8 @@ fun AppLockPage(
                 }
             }
             // Hiding the app's content in screenshots and Recents is Privacy & data's Block screenshots now (2.0.5).
+            // Widget titles: with the lock on the widget shows no recordings, so a search for them lands on this line.
+            Note(stringResource(R.string.v2_priv_lock_widget_locked), Modifier.highlightedIf(highlight == "lock.hide"))
         } else {
             // With the lock on the widget shows no recordings, so its titles matter only while it's off.
             EchoSwitch(

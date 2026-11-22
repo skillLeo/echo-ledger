@@ -244,6 +244,7 @@ class MainActivity : FragmentActivity() {
         var showWaiting by rememberSaveable { mutableStateOf(false) }
         // In the v2 shell the calls waiting for Keep or Discard are in Activity (with Rename and Project there).
         var shellActivity by rememberSaveable { mutableIntStateOf(0) }
+        var shellLibrary by rememberSaveable { mutableIntStateOf(0) }
 
         // The tab a Record page was opened from through the New sheet: Back goes there (since v1.8.1, bug P-026).
         var recordReturnTab by rememberSaveable { mutableStateOf<String?>(null) }
@@ -395,6 +396,13 @@ class MainActivity : FragmentActivity() {
                 showItem(null)
                 showSetup = false
                 tab = TAB_ACTIVITY
+            }
+            if (open == OPEN_LIBRARY) {
+                showItem(null)
+                showSetup = false
+                showWaiting = false
+                tab = TAB_LIBRARY
+                shellLibrary++
             }
             // Since v1.8 (0.3): a settings page (the Phone app's recordings waiting for the person).
             open?.takeIf { it.startsWith(OPEN_SETTINGS_PREFIX) }?.let {
@@ -943,7 +951,8 @@ class MainActivity : FragmentActivity() {
                                 readyFix = if (turnOn) ReadyFix.TURN_ON else null
                                 showReady = true
                             },
-                            openActivity = shellActivity
+                            openActivity = shellActivity,
+                            openLibrary = shellLibrary
                         )
                     }
                 }
@@ -1030,6 +1039,9 @@ class MainActivity : FragmentActivity() {
 
         /** Opens the Record tab, where recordings waiting for Keep / Discard are listed. */
         const val OPEN_PENDING = "pending"
+
+        /** The Library (since 2.0.5): the after-call card's Review on "3 calls saved as audio". */
+        const val OPEN_LIBRARY = "library"
 
         /** Setup (call capture): from "Call capture isn't ready" and "Run capture test". */
         const val OPEN_SETUP = "setup"

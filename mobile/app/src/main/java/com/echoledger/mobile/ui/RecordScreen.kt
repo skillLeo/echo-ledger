@@ -74,7 +74,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.core.DeviceCheck
 import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.core.PlanState
@@ -115,10 +114,16 @@ internal fun AutoRecordCallsRow(capabilities: Capabilities, settings: com.echole
         "Auto-record calls",
         summary = when {
             !capabilities.helperInBuild -> Capabilities.NOT_IN_THIS_BUILD
+
             !capabilities.callCaptureSupportedByOs -> "Needs Android 12 or newer"
+
             !capabilities.helperConnected -> "Enable call capture in Setup first"
-            settings.afterCall == PostCallPrompt.ASK -> "The after-call card asks after each call; kept after 10 s"
-            else -> "Answered calls are kept automatically; unanswered and short ones are skipped"
+
+            else -> androidx.compose.ui.res.stringResource(
+                com.echoledger.mobile.calls.CallChoice.SETTING_WORDS.first {
+                    it.first == com.echoledger.mobile.calls.CallChoice.setting(settings)
+                }.third
+            )
         },
         onClick = if (capabilities.helperConnected || !capabilities.helperInBuild) null else onSetup,
         trailing = {

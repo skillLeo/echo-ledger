@@ -1,93 +1,71 @@
 package com.echoledger.mobile.overlay
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.PixelFormat
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.WindowInsets
 import android.view.WindowManager
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.MainActivity
+import com.echoledger.mobile.calls.CallChoice
+import com.echoledger.mobile.calls.CallChoice.Pick
 import com.echoledger.mobile.calls.Decisions
 import com.echoledger.mobile.core.ShareGuard
-import com.echoledger.mobile.core.SourceApp
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LocalRecording
-import com.echoledger.mobile.ui.EchoLedgerTheme
-import com.echoledger.mobile.ui.LocalEchoType
-import com.echoledger.mobile.ui.Motion
-import com.echoledger.mobile.ui.Space
-import com.echoledger.mobile.ui.design.SuccessCheck
-import com.echoledger.mobile.ui.design.tabular
-import com.echoledger.mobile.ui.formatDuration
-import com.echoledger.mobile.ui.reduceMotion
+import com.echoledger.mobile.ui.v2.live.CallCardScreen
+import com.echoledger.mobile.ui.v2.live.CallChoiceCard
+import com.echoledger.mobile.ui.v2.live.callCardTitle
+import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * The small chip after a call (since v1.5, replaces the v1.3 card), at the bottom of the screen over whatever app is
- * open (SYSTEM_ALERT_WINDOW). It never takes focus and leaves the screen around it alone.
- * - [Mode.SAVED] ("After a call: Keep automatically"): "Saved · Call with Omar · 4:12 · Undo" for [SAVED_MS]; the
- *   upload waits that long, so nothing has left the phone; since v1.8.1 its Undo is a Discard ("Discarded · Undo").
- * - [Mode.ASK] ("Ask me"): the title with ✓ Keep and a labelled Discard (a trash, never an "×" that reads as close);
- *   the title opens the app to rename it or pick a client; after [ASK_KEEP_MS] without a tap the call is kept.
- * - [Mode.DISCARDED] (since v1.8.1, bug P-003): after Discard, "Discarded · Call with Omar · 4:12 · Undo" for
- *   [DISCARDED_MS]. Nothing is deleted meanwhile ([Decisions.discardLater]); Undo puts the ✓ / Discard chip back.
- * VERIFY ON DEVICE (OEM overlay policies vary).
+ * The after-call card (the call-choice plan, 2.0.5; docs/PLAN_CALL_CHOICE.md 3), at the bottom of the screen over
+ * whatever app is open (SYSTEM_ALERT_WINDOW), above the navigation bar and inside the safe area. It never takes focus,
+ * leaves the screen around it alone, and makes no sound.
+ *
+ * One window for one call at a time ([Mode]): the question ([Mode.ASK]: Delete, Transcribe, a swipe or 8 s for audio
+ * only), then one line with Undo for 5 s ([Mode.TRANSCRIBING], [Mode.AUDIO] with Transcribe, [Mode.DELETED]). Undo
+ * puts the question back with nothing decided: a kept call's upload waits for the line ([Decisions.keepFor]) and a
+ * deleted call's file waits for it ([Decisions.discardLater]). Calls that end while the question is still asked are all
+ * kept as audio only on one line ([Mode.GROUPED], "3 calls saved as audio · Review"), never a stack of cards.
  */
 object DecisionPopup {
-    enum class Mode { SAVED, ASK, DISCARDED }
+    enum class Mode { ASK, TRANSCRIBING, AUDIO, DELETED, GROUPED }
 
-    const val SAVED_MS = 6_000L
-    const val ASK_KEEP_MS = 10_000L
-    const val DISCARDED_MS = 5_000L
+    /** How long the question waits, and how long a confirmation line stays. */
+    const val ASK_MS = CallChoice.CARD_MS
+    const val DONE_MS = CallChoice.DONE_MS
+
+    /** Kept for the delayed delete: a Delete's "Deleted · Undo" line. */
+    const val DISCARDED_MS = DONE_MS
 
     private val handler = Handler(Looper.getMainLooper())
     private var view: ComposeView? = null
     private var owner: OverlayOwner? = null
     private var windowManager: WindowManager? = null
     private var timeout: Runnable? = null
+    private var screen by mutableStateOf<CallCardScreen?>(null)
+    private var current: LocalRecording? = null
+    private val grouped = mutableListOf<String>()
 
-    /** The id of the recording the chip is about; null when no chip is showing. */
+    /** The id of the call the card is about; null when no card is showing (or for the grouped line). */
     var showingFor: String? = null
         private set
 
@@ -96,31 +74,79 @@ object DecisionPopup {
 
     val isShowing: Boolean get() = view != null
 
-    /** "Call with Omar", else a phone call's number ("Call with +92 300 1234567"), else "WhatsApp call" / "Phone call". */
-    fun title(rec: LocalRecording): String = rec.title?.takeIf { it.isNotBlank() }
-        ?: rec.callerName?.takeIf { it.isNotBlank() }?.let { "Call with $it" }
-        ?: rec.callerNumber?.takeIf { it.any(Char::isDigit) }?.let { "Call with $it" }
-        ?: SourceApp.from(rec.sourceApp).let { if (it == SourceApp.PHONE_CALL) "Phone call" else "${it.label} call" }
-
-    /** The chip on screen is the v2 after-call card (`ui_v2.after_call`). */
-    var showingV2: Boolean = false
-        private set
+    /** What the card shows now (tests). */
+    internal val shown: CallCardScreen? get() = screen
 
     /**
-     * Shows the chip; false when it could not be added (the caller then relies on the notification). [v2]: the v2
-     * after-call card (`ui_v2.after_call`, since 2.0.0-a) with the same decisions and the same delayed delete.
+     * Asks about [rec] after its call. A question still on screen for another call means back-to-back calls: both are
+     * kept as audio only on the grouped line. False when the card could not be added (the caller then asks in a
+     * notification).
      */
-    fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode, v2: Boolean = false): Boolean {
-        hide()
+    fun ask(context: Context, rec: LocalRecording, themeMode: String): Boolean {
         val app = context.applicationContext
+        if (isShowing && (showingMode == Mode.ASK || showingMode == Mode.GROUPED)) {
+            val before = current?.takeIf { showingMode == Mode.ASK }
+            before?.let { keepQuietly(app, it.id) }
+            keepQuietly(app, rec.id)
+            if (before != null) grouped += before.id
+            grouped += rec.id
+            current = null
+            showingFor = null
+            go(app, Mode.GROUPED, CallCardScreen.Grouped(grouped.size))
+            return true
+        }
+        val settings = settings(app)
+        val always = CallChoice.alwaysOffer(settings)
+        val hint = !settings.callChoiceHintShown
+        if (hint || always != null) {
+            update(app) { if (hint) it.copy(callChoiceHintShown = true) else it.copy(callChoiceAlwaysOffered = true) }
+        }
+        val question = CallCardScreen.Ask(callCardTitle(app.resources, rec), rec.durationMs, rec.sourceApp, hint, always.takeIf { !hint })
+        if (isShowing) {
+            // A confirmation for an earlier call gives way to the new question (one line at a time).
+            current = rec
+            showingFor = rec.id
+            go(app, Mode.ASK, question)
+            return true
+        }
+        return open(app, rec, themeMode, question)
+    }
+
+    /** Draws [mode] for [rec] at once (tests and screenshots): the question or one of its lines. */
+    internal fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode): Boolean {
+        val app = context.applicationContext
+        hide()
+        val shown = when (mode) {
+            Mode.ASK -> CallCardScreen.Ask(callCardTitle(app.resources, rec), rec.durationMs, rec.sourceApp)
+            Mode.TRANSCRIBING -> CallCardScreen.Done(Pick.TRANSCRIBE)
+            Mode.AUDIO -> CallCardScreen.Done(Pick.AUDIO)
+            Mode.DELETED -> CallCardScreen.Done(Pick.DELETE)
+            Mode.GROUPED -> CallCardScreen.Grouped(2)
+        }
+        return open(app, rec, themeMode, shown)
+    }
+
+    private fun modeOf(shown: CallCardScreen): Mode = when (shown) {
+        is CallCardScreen.Ask -> Mode.ASK
+
+        is CallCardScreen.Grouped -> Mode.GROUPED
+
+        is CallCardScreen.Done -> when (shown.pick) {
+            Pick.TRANSCRIBE -> Mode.TRANSCRIBING
+            Pick.AUDIO -> Mode.AUDIO
+            Pick.DELETE -> Mode.DELETED
+        }
+    }
+
+    private fun open(app: Context, rec: LocalRecording, themeMode: String, first: CallCardScreen): Boolean {
+        hide()
         val wm = app.getSystemService(WindowManager::class.java) ?: return false
         val lifecycleOwner = OverlayOwner().also { it.start() }
-        val visibleMs = when (mode) {
-            Mode.SAVED -> SAVED_MS
-            Mode.ASK -> ASK_KEEP_MS
-            Mode.DISCARDED -> DISCARDED_MS
-        }
+        screen = first
         val compose = ComposeView(app).apply {
+            // No click sounds: the card makes no sound and no vibration.
+            isSoundEffectsEnabled = false
+            isHapticFeedbackEnabled = false
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
@@ -130,62 +156,29 @@ object DecisionPopup {
                     PrivateDot(onShow = { ShareGuard.setHidden(false) })
                     return@setContent
                 }
-                val openWaiting = {
-                    hide()
-                    app.startActivity(
-                        android.content.Intent(app, com.echoledger.mobile.MainActivity::class.java)
-                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            .putExtra(com.echoledger.mobile.MainActivity.EXTRA_OPEN, com.echoledger.mobile.MainActivity.OPEN_PENDING)
-                    )
+                val shown = screen ?: return@setContent
+                val dark = when (themeMode) {
+                    "light" -> false
+                    "dark" -> true
+                    else -> isSystemInDarkTheme()
                 }
-                if (v2) {
-                    val actions = v2Actions(app, rec, themeMode, mode, openWaiting)
-                    com.echoledger.mobile.ui.v2.shell.OverlayLook(com.echoledger.mobile.ui.v2.shell.overlaySettings(app)) {
-                        com.echoledger.mobile.ui.v2.live.V2AfterCallCard(
-                            title = com.echoledger.mobile.ui.v2.live.afterCallTitle(app.resources, rec),
-                            durationMs = rec.durationMs,
-                            sourceWire = rec.sourceApp,
-                            mode = v2Mode(mode),
-                            visibleMs = visibleMs,
-                            onSave = actions.onSave,
-                            onDelete = actions.onDelete,
-                            onUndo = actions.onUndo,
-                            onTitle = actions.onTitle,
-                            onTranscribe = actions.onTranscribe
-                        )
-                    }
-                    return@setContent
-                }
-                EchoLedgerTheme(themeMode) {
-                    AfterCallChip(
-                        title = title(rec),
-                        durationMs = rec.durationMs,
-                        mode = mode,
-                        visibleMs = visibleMs,
-                        onKeep = { decide(app, rec.id, keep = true) },
-                        onDiscard = { discard(app, rec, themeMode) },
-                        // Undo on "Saved" is a Discard too (since v1.8.1): "Discarded · Undo" first, the file after it.
-                        onUndo = { if (mode == Mode.DISCARDED) undoDiscard(app, rec.id, themeMode) else discard(app, rec, themeMode) },
-                        onTitle = {
-                            hide()
-                            app.startActivity(
-                                android.content.Intent(app, com.echoledger.mobile.MainActivity::class.java)
-                                    .addFlags(
-                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-                                    )
-                                    .putExtra(
-                                        com.echoledger.mobile.MainActivity.EXTRA_OPEN,
-                                        com.echoledger.mobile.MainActivity.OPEN_PENDING
-                                    )
-                            )
-                        }
+                com.echoledger.mobile.ui.v2.shell.OverlayLook(com.echoledger.mobile.ui.v2.shell.overlaySettings(app), dark = dark) {
+                    CallChoiceCard(
+                        screen = shown,
+                        onTranscribe = { transcribe(app) },
+                        onDelete = { delete(app) },
+                        onAudio = { audio(app, chosen = true) },
+                        onUndo = { undo(app) },
+                        onAlwaysYes = { always(app) },
+                        onReview = { review(app) },
+                        still = com.echoledger.mobile.ui.reduceMotion(),
+                        modifier = Modifier.padding(horizontal = EchoTokens.Space.s16, vertical = EchoTokens.Space.s8)
                     )
                 }
             }
         }
-        val metrics = app.resources.displayMetrics
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             // Not focusable and not modal: touches outside the card go to the app underneath. PrivateWindows never
@@ -194,28 +187,56 @@ object DecisionPopup {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = (BOTTOM_MARGIN_DP * metrics.density).toInt()
+            // Above the navigation bar (gestures or buttons) and any cutout, inside the safe area.
+            y = bottomInsetPx(app, wm)
             title = FloatingWindow.AFTER_CALL_CARD.title
         }
         if (!PrivateWindows.add(wm, compose, params)) {
             lifecycleOwner.stop()
+            screen = null
             return false
         }
         view = compose
         owner = lifecycleOwner
         windowManager = wm
+        current = rec
         showingFor = rec.id
-        showingMode = mode
-        showingV2 = v2
-        // Saved: the chip only goes (the call is kept already); Discarded too (the file goes a little later). Ask: nobody
-        // chose, so the call is kept.
-        val task = Runnable { if (mode == Mode.ASK) decide(app, rec.id, keep = true) else hide() }
-        timeout = task
-        handler.postDelayed(task, visibleMs)
+        go(app, modeOf(first), first)
         return true
     }
 
-    /** Removes the chip. Never decides anything. */
+    /** The navigation bar and cutout below the card, in pixels: where the safe area ends. */
+    internal fun bottomInsetPx(context: Context, wm: WindowManager): Int {
+        if (Build.VERSION.SDK_INT >= 30) {
+            val insets = wm.currentWindowMetrics.windowInsets
+                .getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars() or WindowInsets.Type.displayCutout())
+            if (insets.bottom > 0) return insets.bottom
+        }
+        val id = context.resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        return if (id != 0) context.resources.getDimensionPixelSize(id) else 0
+    }
+
+    /** Shows [next] in the window already open and starts its time. */
+    private fun go(app: Context, mode: Mode, next: CallCardScreen) {
+        timeout?.let(handler::removeCallbacks)
+        showingMode = mode
+        screen = next
+        val task = when (mode) {
+            // Nobody chose: the call is kept as audio only, which the line then says.
+            Mode.ASK -> Runnable { audio(app, chosen = false) }
+
+            Mode.GROUPED -> Runnable {
+                grouped.clear()
+                hide()
+            }
+
+            else -> Runnable { hide() }
+        }
+        timeout = task
+        handler.postDelayed(task, if (mode == Mode.ASK || mode == Mode.GROUPED) ASK_MS else DONE_MS)
+    }
+
+    /** Removes the card. Never decides anything. */
     fun hide() {
         timeout?.let(handler::removeCallbacks)
         timeout = null
@@ -226,231 +247,80 @@ object DecisionPopup {
         windowManager = null
         showingFor = null
         showingMode = null
-        showingV2 = false
+        current = null
+        screen = null
+        grouped.clear()
     }
 
-    private fun decide(context: Context, id: String, keep: Boolean, transcribe: Boolean? = null) {
-        hide()
-        CoroutineScope(Dispatchers.IO).launch { Decisions.apply(context, id, keep, transcribe) }
+    internal fun transcribe(app: Context) {
+        val rec = current ?: return
+        if (showingMode == Mode.ASK) streak(app, Pick.TRANSCRIBE)
+        go(app, Mode.TRANSCRIBING, CallCardScreen.Done(Pick.TRANSCRIBE))
+        io { Decisions.keepFor(app, rec.id, transcribe = true, uploadAfterMs = DONE_MS) }
     }
 
-    /** The chip's Discard: "Discarded · … · Undo" at once; the file goes only when that is over. */
-    internal fun discard(context: Context, rec: LocalRecording, themeMode: String, v2: Boolean = false) {
-        show(context, rec, themeMode, Mode.DISCARDED, v2)
-        CoroutineScope(Dispatchers.IO).launch {
-            // Decided meanwhile (a notification, the app): nothing was discarded, so the chip does not say so.
-            if (Decisions.discardLater(context, rec.id) == null) {
-                handler.post { if (showingFor == rec.id && showingMode == Mode.DISCARDED) hide() }
-            }
-        }
+    internal fun audio(app: Context, chosen: Boolean) {
+        val rec = current ?: return
+        if (chosen) streak(app, Pick.AUDIO)
+        go(app, Mode.AUDIO, CallCardScreen.Done(Pick.AUDIO))
+        io { Decisions.keepFor(app, rec.id, transcribe = false, uploadAfterMs = DONE_MS) }
     }
 
-    /**
-     * Undo on "Discarded": the call is back on its chip as after the call: asked again (kept by itself after 10 s), or
-     * "Saved" again for a call that was kept.
-     */
-    internal fun undoDiscard(context: Context, id: String, themeMode: String, v2: Boolean = false) {
-        hide()
-        CoroutineScope(Dispatchers.IO).launch {
-            val back = Decisions.undoDiscard(context, id) ?: return@launch
-            val flags = if (v2) {
-                com.echoledger.mobile.ui.v2.shell.UiFlags(
-                    mapOf(com.echoledger.mobile.ui.v2.shell.UiFlags.AFTER_CALL to true)
-                )
-            } else {
+    internal fun delete(app: Context) {
+        val rec = current ?: return
+        streak(app, Pick.DELETE)
+        go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE))
+        io {
+            // Decided meanwhile (a notification, the app): nothing was deleted, so the line does not say so.
+            if (Decisions.discardLater(app, rec.id) ==
                 null
-            }
-            handler.post {
-                com.echoledger.mobile.calls.PostCallPrompt.again(
-                    context,
-                    back,
-                    themeMode,
-                    flags ?: com.echoledger.mobile.ui.v2.shell.UiFlags.Off
-                )
-            }
-        }
-    }
-
-    /** What the v2 card's buttons do: the chip's own decisions, Delete through the delayed discard. */
-    internal class CardActions(
-        val onSave: () -> Unit,
-        val onTranscribe: () -> Unit,
-        val onDelete: () -> Unit,
-        val onUndo: () -> Unit,
-        val onTitle: () -> Unit
-    )
-
-    internal fun v2Actions(app: Context, rec: LocalRecording, themeMode: String, mode: Mode, onTitle: () -> Unit) = CardActions(
-        // Save audio (2.0.0-j): kept as audio only, transcribed later from the Library; Transcribe: kept and transcribed.
-        onSave = { decide(app, rec.id, keep = true, transcribe = false) },
-        onTranscribe = { decide(app, rec.id, keep = true, transcribe = true) },
-        // Delete is the delayed discard: "Deleted · Undo", the file only after that.
-        onDelete = { discard(app, rec, themeMode, v2 = true) },
-        onUndo = {
-            if (mode ==
-                Mode.DISCARDED
             ) {
-                undoDiscard(app, rec.id, themeMode, v2 = true)
-            } else {
-                discard(app, rec, themeMode, v2 = true)
-            }
-        },
-        onTitle = onTitle
-    )
-
-    /** The v2 card's mode for the chip's: Ask, Saved, and Discarded as "Deleted". */
-    internal fun v2Mode(mode: Mode): com.echoledger.mobile.ui.v2.live.AfterCallMode = when (mode) {
-        Mode.ASK -> com.echoledger.mobile.ui.v2.live.AfterCallMode.Ask
-        Mode.SAVED -> com.echoledger.mobile.ui.v2.live.AfterCallMode.Saved
-        Mode.DISCARDED -> com.echoledger.mobile.ui.v2.live.AfterCallMode.Deleted
-    }
-
-    private const val BOTTOM_MARGIN_DP = 72
-}
-
-/**
- * The chip itself: pill-sized, the control pill's near-black look in both themes, one line ("Saved · Call with Omar ·
- * 4:12" or "Discarded · …" with Undo, or the title and length with Discard and ✓), and a thin line that shows how long
- * it stays.
- */
-@Composable
-fun AfterCallChip(
-    title: String,
-    durationMs: Long,
-    mode: DecisionPopup.Mode,
-    visibleMs: Long,
-    onKeep: () -> Unit,
-    onDiscard: () -> Unit,
-    onUndo: () -> Unit,
-    onTitle: () -> Unit
-) {
-    val type = LocalEchoType.current
-    val shape = RoundedCornerShape(50)
-    val left = remember { Animatable(1f) }
-    LaunchedEffect(visibleMs) { left.animateTo(0f, tween(visibleMs.toInt(), easing = LinearEasing)) }
-    // Since v1.5 (Phase 7): the chip rises into place and a kept call's check pops in; with Remove animations on,
-    // both are simply there.
-    val still = reduceMotion()
-    val shown = remember { Animatable(if (still) 1f else 0f) }
-    LaunchedEffect(Unit) { if (!still) shown.animateTo(1f, tween(Motion.SLOW, easing = Motion.EaseOut)) }
-    val duration = formatDuration(durationMs).ifEmpty { "0:00" }
-    Column(
-        Modifier
-            .graphicsLayer {
-                alpha = shown.value
-                translationY = (1f - shown.value) * 24.dp.toPx()
-            }
-            .widthIn(max = 420.dp)
-            .clip(shape)
-            .background(PillColors.background)
-            .border(1.dp, PillColors.hairline, shape)
-            .semantics {
-                contentDescription = when (mode) {
-                    DecisionPopup.Mode.SAVED -> "Saved: $title"
-                    DecisionPopup.Mode.ASK -> "Keep $title?"
-                    DecisionPopup.Mode.DISCARDED -> "Discarded: $title"
-                }
-            }
-    ) {
-        Row(
-            Modifier.padding(start = Space.s4, end = Space.s1, top = Space.s1, bottom = Space.s1),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val label = when (mode) {
-                DecisionPopup.Mode.SAVED -> "Saved · $title · $duration"
-                DecisionPopup.Mode.ASK -> "$title · $duration"
-                DecisionPopup.Mode.DISCARDED -> "Discarded · $title · $duration"
-            }
-            when (mode) {
-                DecisionPopup.Mode.SAVED -> SuccessCheck(PillColors.accent, Modifier.padding(end = Space.s2))
-
-                DecisionPopup.Mode.DISCARDED -> Icon(
-                    Icons.Rounded.Delete,
-                    contentDescription = null,
-                    tint = PillColors.muted,
-                    modifier = Modifier.padding(end = Space.s2).size(18.dp)
-                )
-
-                DecisionPopup.Mode.ASK -> Unit
-            }
-            Text(
-                label,
-                style = type.labelL.tabular(),
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    // Asking: the title opens the waiting call to rename it or pick a client (a kept call is in the Library).
-                    .clickable(
-                        enabled = mode == DecisionPopup.Mode.ASK,
-                        role = Role.Button,
-                        onClickLabel = "Rename or pick a project",
-                        onClick = onTitle
-                    )
-                    .padding(vertical = Space.s2)
-            )
-            if (mode != DecisionPopup.Mode.ASK) {
-                Text(
-                    "Undo",
-                    style = type.labelL,
-                    color = PillColors.accent,
-                    modifier = Modifier
-                        .padding(start = Space.s2)
-                        .clip(RoundedCornerShape(50))
-                        .clickable(role = Role.Button, onClick = onUndo)
-                        .padding(horizontal = Space.s3, vertical = Space.s2)
-                )
-            } else {
-                // A trash with its word (since v1.8.1): an "×" read as close, yet it deleted the call.
-                ChipTextButton(Icons.Rounded.Delete, "Discard", onDiscard)
-                ChipIcon(Icons.Rounded.Check, "Keep", onKeep, primary = true)
+                handler.post { if (showingFor == rec.id && showingMode == Mode.DELETED) hide() }
             }
         }
-        Box(Modifier.fillMaxWidth().height(2.dp).background(PillColors.hairline)) {
-            Box(Modifier.fillMaxWidth(left.value).height(2.dp).background(PillColors.accent))
+    }
+
+    /** Undo on any line: the question again, with nothing decided and its 8 s from the start. */
+    internal fun undo(app: Context) {
+        val rec = current ?: return
+        val was = showingMode
+        val question = CallCardScreen.Ask(callCardTitle(app.resources, rec), rec.durationMs, rec.sourceApp)
+        go(app, Mode.ASK, question)
+        io {
+            val back = if (was == Mode.DELETED) Decisions.undoDiscard(app, rec.id) else Decisions.undoKeep(app, rec.id)
+            // Too late (sent already, or gone): the question has nothing left to ask.
+            if (back == null) handler.post { if (showingFor == rec.id && showingMode == Mode.ASK) hide() }
         }
     }
-}
 
-@Composable
-private fun ChipIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, primary: Boolean = false) {
-    Box(
-        Modifier
-            .padding(start = Space.s1)
-            .size(40.dp)
-            .clip(CircleShape)
-            .background(if (primary) PillColors.accentFill else Color.Transparent)
-            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
-            .semantics { contentDescription = label },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+    /** "Always do this? Yes": After each call becomes that choice, and this call gets it too. */
+    internal fun always(app: Context) {
+        val pick = (screen as? CallCardScreen.Ask)?.always ?: return
+        update(app) { it.copy(afterEachCall = CallChoice.settingFor(pick)) }
+        if (pick == Pick.TRANSCRIBE) transcribe(app) else audio(app, chosen = false)
     }
-}
 
-/** A chip button with its word beside its icon ("Discard"), white on the pill, 40 dp high. */
-@Composable
-private fun ChipTextButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .padding(start = Space.s1)
-            .heightIn(min = 40.dp)
-            .clip(RoundedCornerShape(50))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = Space.s3),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-        Text(label, style = LocalEchoType.current.labelL, color = Color.White, maxLines = 1, modifier = Modifier.padding(start = Space.s1))
+    internal fun review(app: Context) {
+        hide()
+        app.startActivity(
+            Intent(app, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_LIBRARY)
+        )
     }
-}
 
-/** The control pill's colours (near-black with a hairline), the same in light and dark. */
-private object PillColors {
-    val background = Color(0xEB111113)
-    val hairline = Color(0x33FFFFFF)
-    val muted = Color(0xB3FFFFFF)
-    val accent = Color(0xFF9EB1FF)
-    val accentFill = Color(0xFF3E63DD)
+    private fun keepQuietly(app: Context, id: String) = io { Decisions.keepFor(app, id, transcribe = false, uploadAfterMs = 0) }
+
+    private fun streak(app: Context, pick: Pick) = update(app) { CallChoice.afterPick(it, pick) }
+
+    private fun settings(app: Context): AppSettings = (app as? EchoLedgerApp)?.graph?.liveSettings?.value ?: AppSettings()
+
+    private fun update(app: Context, change: (AppSettings) -> AppSettings) {
+        val graph = (app as? EchoLedgerApp)?.graph ?: return
+        io { graph.settings.update(change) }
+    }
+
+    private fun io(block: suspend () -> Unit) {
+        CoroutineScope(Dispatchers.IO).launch { runCatching { block() } }
+    }
 }

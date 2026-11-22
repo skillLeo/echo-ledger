@@ -158,7 +158,7 @@ class V2ShellTest : ScreenTest() {
         shell(UiFlags(mapOf("ui_v2.shell" to true, "ui_v2.home" to true, "ui_v2.library" to true)))
         // Home's Needs action is Activity now: the bell in Library's header.
         compose.onNodeWithContentDescription("Activity", substring = true).performClick()
-        compose.waitUntil(5_000) { runCatching { compose.onAllNodesWithText("Discard")[ids.size - 1].fetchSemanticsNode() }.isSuccess }
+        compose.waitUntil(5_000) { runCatching { compose.onAllNodesWithText("Delete")[ids.size - 1].fetchSemanticsNode() }.isSuccess }
         compose.mainClock.autoAdvance = false
     }
 
@@ -196,7 +196,7 @@ class V2ShellTest : ScreenTest() {
     private fun advanceTo(wallMs: Long) = compose.mainClock.advanceTimeBy(wallMs - clock())
 
     private fun discard(index: Int = 0) =
-        compose.onAllNodesWithText("Discard", useUnmergedTree = true)[index].performScrollTo().performClick()
+        compose.onAllNodesWithText("Delete", useUnmergedTree = true)[index].performScrollTo().performClick()
 
     @Test
     fun homeDiscardIsTheDelayedDiscardAndUndoBringsTheCallBack() {
@@ -208,7 +208,7 @@ class V2ShellTest : ScreenTest() {
         compose.onNodeWithText("Undo").performClick()
         settle { state() == "pending_decision" && vm.pending.value.any { it.id == "r-omar" && it.state == "pending_decision" } }
         // When nobody undoes it, the discard worker ends it.
-        untilShown("Discard")
+        untilShown("Delete")
         discard()
         settle { state() == "discarding" }
         runWorker(DiscardLaterWorker::class.java, "r-omar")
