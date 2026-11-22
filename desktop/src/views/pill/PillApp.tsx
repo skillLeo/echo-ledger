@@ -223,9 +223,8 @@ export default function PillApp() {
   // Dismissed is for what was on the line: something new going missing during the recording is said again.
   const missingKinds = (live?.missing ?? []).map((m) => `${m.kind}:${m.sentence}`).join();
   useEffect(() => setMissingDismissed(false), [missingKinds]);
-  // The other side not being recorded (2.0.6) stays until it is heard: no dismiss. Not heard (neutral) can be dismissed.
-  const otherSide = shown ? otherSideNotRecorded(live?.missing) : null;
-  const notRecorded = otherSide?.otherSide === "permission" ? otherSide : null;
+  // The other side not being recorded (2.0.6) stays until it is heard: no dismiss.
+  const notRecorded = shown ? otherSideNotRecorded(live?.missing) : null;
   const missing = shown && (!missingDismissed || notRecorded) ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
   const banner = shown && !!live?.startBanner;
@@ -384,7 +383,7 @@ export default function PillApp() {
               elapsed, name: caller || label, paused, captions: live.captions, language: languageChip(live.language), error,
               screens: live.screens ? { on: live.screens.on, count: live.screens.count } : null,
               call: live.mode === "call", choice: live.callChoice ?? null, banner,
-              warning: missing ? { text: missing, sentence: otherSide?.sentence ?? live.missing?.[0]?.sentence ?? missing, notRecorded: !!notRecorded } : null,
+              warning: missing ? { text: missing, sentence: notRecorded?.sentence ?? live.missing?.[0]?.sentence ?? missing, notRecorded: !!notRecorded } : null,
             }}
             actions={{
               onCaptions: toggleCaptions, onPause: togglePause, onStop: stop, onScreens: toggleScreens,
@@ -408,7 +407,7 @@ export default function PillApp() {
       </span>
     </div>
   ) : (
-    <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={otherSide?.sentence ?? live?.missing?.[0]?.sentence}>
+    <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={live?.missing?.[0]?.sentence}>
       <WarningIcon size={14} />
       <span className="mark-text">{missing}</span>
       <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setMissingDismissed(true)}><MinimizeIcon size={14} /></button>

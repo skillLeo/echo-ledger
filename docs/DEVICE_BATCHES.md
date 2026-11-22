@@ -33,7 +33,11 @@ Not in tonight's batch:
 **2. Phone (S25), about 25 minutes.** Check `mCallState=0` first.
 1. **A WhatsApp call, 1 minute.**
    - The pill shows; the recording saves; the title is in Roman Urdu if you spoke Urdu.
-   - Take a screenshot while the pill shows. On 2.0.5 it is still blocked; this confirms the fix that comes next.
+   - Take a screenshot while the pill shows. Since 20:20 the phone has **2.0.6** (code 26): the screenshot must work, with the pill visible in it. Then check Settings › Privacy & data:
+   - "Hide EchoLedger's live words from screenshots and screen shares" is on;
+   - "Block screenshots of EchoLedger" is off;
+   - "During screen sharing" is gone.
+   With live captions on, a screenshot shows a black box where the captions are, or Samsung refuses it; note which.
 2. **Settings › Microphone & audio › Reset.** Pass if SIM calls and the Phone app's recordings stay as they were (Calls & meetings page).
 3. **Settings › Plan & usage.** The plan card and the meters. **Your data:** Export my data reaches "ready" or says why. **About:** version 2.0.5.
 4. **Urdu notifications.** Set the app language to Urdu, then make a short call.

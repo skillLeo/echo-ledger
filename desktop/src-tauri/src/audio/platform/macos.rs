@@ -538,10 +538,32 @@ fn audio_processes() -> Vec<AudioProcess> {
     read_audio_processes().unwrap_or_default()
 }
 
-/// Whether an app other than EchoLedger runs audio output now (`kAudioProcessPropertyIsRunningOutput`).
+/// Whether an app other than EchoLedger runs audio output now (`kAudioProcessPropertyIsRunningOutput`). Reads the
+/// process list and each one's pid and is-running-output only (no bundle names), stopping at the first that plays;
+/// callers ask it at most every 5 s (`audio::health::PlayingCache`). False when Core Audio does not answer.
 pub fn others_playing() -> bool {
     let own = std::process::id();
-    audio_processes().iter().any(|p| p.output && p.pid != own)
+    // SAFETY: Core Audio's property reads on its own objects, into buffers of the sizes it gives.
+    unsafe {
+        let system_object = kAudioObjectSystemObject as AudioObjectID;
+        let addr = address(kAudioHardwarePropertyProcessObjectList, kAudioObjectPropertyScopeGlobal);
+        let mut size: u32 = 0;
+        if AudioObjectGetPropertyDataSize(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size)) != 0 {
+            return false;
+        }
+        let count = size as usize / std::mem::size_of::<AudioObjectID>();
+        if count == 0 {
+            return false;
+        }
+        let mut ids = vec![0 as AudioObjectID; count];
+        if AudioObjectGetPropertyData(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size), NonNull::new_unchecked(ids.as_mut_ptr().cast())) != 0 {
+            return false;
+        }
+        ids.into_iter().any(|id| {
+            get_u32(id, kAudioProcessPropertyIsRunningOutput, kAudioObjectPropertyScopeGlobal, None) == Some(1)
+                && get_u32(id, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal, None).is_some_and(|pid| pid != own)
+        })
+    }
 }
 
 /// What the person reads when Core Audio could not be asked (its status code goes to the log only).

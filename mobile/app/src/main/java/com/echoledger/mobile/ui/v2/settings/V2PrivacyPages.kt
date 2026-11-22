@@ -34,7 +34,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.R
-import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LimitDto
 import com.echoledger.mobile.data.StorageDto
@@ -147,13 +146,7 @@ fun AppLockPage(
                     EchoRadio(lockAfter == ms, { update { it.copy(lockAfterMs = ms) } }, stringResource(words.getValue(ms)))
                 }
             }
-            EchoSwitch(
-                checked = settings.secureScreen,
-                onCheckedChange = { v -> update { it.copy(secureScreen = v) } },
-                label = stringResource(R.string.v2_priv_lock_hide),
-                supporting = stringResource(R.string.v2_priv_lock_hide_line),
-                modifier = Modifier.highlightedIf(highlight == "lock.hide")
-            )
+            // Hiding the app's content in screenshots and Recents is Privacy & data's Block screenshots now (2.0.5).
         } else {
             // With the lock on the widget shows no recordings, so its titles matter only while it's off.
             EchoSwitch(
@@ -175,8 +168,10 @@ internal val LOCK_REASONS: Map<String, Int> = mapOf(
 )
 
 /**
- * Privacy & data: recording consent (I understand), the floating windows during a screen share (Private or Show), and
- * Export or delete my data (on Sign-in & security, [onOpenPage]).
+ * Privacy & data: recording consent (I understand), Block screenshots of EchoLedger (off by default: the app's own
+ * screens), Hide EchoLedger's live words from screenshots and screen shares (on by default: captions, Live Assist and
+ * Live Translate; the pill and the after-call card always show), and Export or delete my data (on Sign-in & security,
+ * [onOpenPage]).
  */
 @Composable
 fun PrivacyPage(
@@ -197,25 +192,20 @@ fun PrivacyPage(
                 label = stringResource(R.string.v2_priv_consent_ok)
             )
         }
-        Column(Modifier.highlightedIf(highlight == "privacy.share")) {
-            EchoSectionHeader(stringResource(R.string.v2_set_item_privacy_share))
-            Note(stringResource(R.string.v2_priv_share_line))
-            val current = ShareGuard.Mode.of(settings.screenShareMode)
-            Column(Modifier.padding(horizontal = EchoTokens.Space.s12)) {
-                listOf(
-                    Triple(ShareGuard.Mode.PRIVATE, R.string.v2_priv_share_private, R.string.v2_priv_share_private_line),
-                    Triple(ShareGuard.Mode.SHOW, R.string.v2_priv_share_show, R.string.v2_priv_share_show_line)
-                ).forEach { (mode, label, line) ->
-                    EchoRadio(
-                        current == mode,
-                        { update { it.copy(screenShareMode = mode.wire) } },
-                        stringResource(label),
-                        supporting = stringResource(line)
-                    )
-                }
-            }
-            Note(stringResource(R.string.v2_priv_share_note))
-        }
+        EchoSwitch(
+            checked = settings.blockScreens,
+            onCheckedChange = { v -> update { it.copy(blockScreens = v) } },
+            label = stringResource(R.string.cc_block_screens),
+            supporting = stringResource(R.string.cc_block_screens_help),
+            modifier = Modifier.highlightedIf(highlight == "privacy.block")
+        )
+        EchoSwitch(
+            checked = settings.hideLiveWords,
+            onCheckedChange = { v -> update { it.copy(hideLiveWords = v) } },
+            label = stringResource(R.string.cc_hide_live_words),
+            supporting = stringResource(R.string.cc_hide_live_words_help),
+            modifier = Modifier.highlightedIf(highlight == "privacy.share")
+        )
         EchoButton(
             stringResource(R.string.v2_priv_export),
             { onOpenPage("account") },

@@ -101,13 +101,20 @@ object SettingsIndex {
         item("notifications.activity", "notifications", "notifications", "Activity notifications", "alerts bell transcript ready notify"),
         item("notifications.quiet", "notifications", "notifications", "Quiet hours", "do not disturb night silent from to"),
         item("lock.app", "lock", "app-lock", "App lock", "fingerprint face unlock screen lock pin security biometric"),
-        item("lock.hide", "lock", "app-lock", "Hide in recent apps", "screenshots recents secure privacy widget titles home screen"),
+        item("lock.hide", "lock", "app-lock", "Widget titles", "widget titles home screen hide privacy"),
+        item(
+            "privacy.block",
+            "privacy",
+            "screen-share",
+            "Block screenshots of EchoLedger",
+            "screenshot screenshots block secure recents capture hide content"
+        ),
         item(
             "privacy.share",
             "privacy",
             "screen-share",
-            "During screen sharing",
-            "screen share recording cast meeting floating windows private black box show hide dot"
+            "Hide EchoLedger's live words from screenshots and screen shares",
+            "screen share sharing recording cast meeting floating windows captions live assist translate black box private"
         ),
         item("storage.space", "storage", "storage", "Space used", "storage disk space full free up delete"),
         item("storage.kept", "storage", "storage", "How long recordings are kept", "retention deleted bin days"),

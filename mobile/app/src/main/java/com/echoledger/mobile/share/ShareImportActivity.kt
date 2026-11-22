@@ -33,7 +33,7 @@ class ShareImportActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch {
             (application as EchoLedgerApp).graph.settings.settings.collect { settings ->
-                window.applySecureScreen(settings.appLockEnabled && settings.secureScreen)
+                window.applySecureScreen(settings.blockScreens)
             }
         }
         val shared = ShareIntentParser.parse(intent)

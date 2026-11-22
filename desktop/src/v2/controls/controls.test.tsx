@@ -125,7 +125,7 @@ describe("the recording pill", () => {
     fireEvent.click(within(row).getByRole("button", { name: "Try again" }));
     expect([a.onOpenSettings.mock.calls.length, a.onRetrySystem.mock.calls.length]).toEqual([1, 1]);
     expect(within(row).queryByRole("button", { name: "Dismiss warning" }), "not recorded: never dismissed").toBeNull();
-    rerender(<RecordingPill model={{ ...MODEL, warning: { ...warning, text: "Can't hear the other side", notRecorded: false } }} actions={a} />);
+    rerender(<RecordingPill model={{ ...MODEL, warning: { ...warning, text: "No microphone: recording the other side", sentence: "The microphone is off for EchoLedger.", notRecorded: false } }} actions={a} />);
     fireEvent.click(within(screen.getByTestId("missing-permission")).getByRole("button", { name: "Dismiss warning" }));
     expect(a.onDismissWarning).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Open System Settings" })).toBeNull();

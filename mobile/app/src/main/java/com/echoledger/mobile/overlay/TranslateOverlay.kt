@@ -164,7 +164,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             } else {
                 BoxGeometry.defaultBox(safe, (84 * density).toInt(), (520 * density).toInt())
             }
-        // Every window here opens and changes through PrivateWindows: FLAG_SECURE unless During screen sharing is Show.
+        // Every window here opens and changes through PrivateWindows: FLAG_SECURE while live words are hidden.
         val params = WindowManager.LayoutParams(
             rect.width,
             rect.height,
@@ -189,6 +189,8 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         }
         text = view
         boxParams = params
+        // A screen share Android reported as this first window opened (the callback starts with it): no frame with text.
+        private = !ShareGuard.textVisible.value
         attachDrag(view)
         if (this.showGrip) addGrip()
         applyBox()

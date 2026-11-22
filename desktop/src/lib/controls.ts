@@ -100,9 +100,8 @@ export function askSeconds(ask: AskPayload): number {
 }
 
 /**
- * What the recording itself found about a call's other side (2.0.6): not recorded (a tap that failed or gives buffers
- * with no data: System Audio Recording) or not heard (only silence for 30 s while another app plays sound). None
- * otherwise.
+ * A call's other side the recording itself found not recorded (2.0.6): a tap that failed or gives buffers with no
+ * data (System Audio Recording). None otherwise.
  */
 export function otherSideNotRecorded(missing: MissingPermission[] | undefined): MissingPermission | null {
   return (missing ?? []).find((m) => !!m.otherSide) ?? null;
@@ -112,7 +111,7 @@ export function otherSideNotRecorded(missing: MissingPermission[] | undefined): 
 export function missingShort(missing: MissingPermission[] | undefined, mode?: RecordingState["mode"]): string | null {
   const kinds = (missing ?? []).map((m) => m.kind);
   const found = otherSideNotRecorded(missing);
-  if (found && !kinds.includes("microphone")) return found.otherSide === "silent" ? "Can't hear the other side" : "The other side isn't being recorded";
+  if (found && !kinds.includes("microphone")) return "The other side isn't being recorded";
   if (kinds.includes("microphone") && kinds.includes("system_audio")) return "Nothing is being recorded: no permission";
   // A note has one side, so without it nothing is being recorded.
   if ((mode === "mic_note" && kinds.includes("microphone")) || (mode === "voice_note" && kinds.includes("system_audio"))) return "Nothing is being recorded: no permission";
