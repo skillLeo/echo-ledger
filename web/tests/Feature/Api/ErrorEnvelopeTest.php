@@ -251,6 +251,15 @@ function produceError(object $test, string $code): TestResponse
             return $test->postJson('/api/lists', ['name' => 'clients']);
         case 'list_not_found':
             return $test->patchJson('/api/lists/nobody', ['name' => 'Somebody']);
+        // Since 2.0.0-p: saved views.
+        case 'views_limit':
+            foreach (range(1, 30) as $i) {
+                $test->postJson('/api/views', ['name' => "View {$i}"])->assertCreated();
+            }
+
+            return $test->postJson('/api/views', ['name' => 'One more']);
+        case 'view_not_found':
+            return $test->patchJson('/api/views/'.str_repeat('Z', 26), ['name' => 'Somebody']);
         case 'too_many_labels':
             $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
 
@@ -327,7 +336,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(58);
+        ->and(count(documentedErrorCodes()))->toBe(60);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

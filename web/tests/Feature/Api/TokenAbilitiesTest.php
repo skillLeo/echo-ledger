@@ -81,6 +81,13 @@ function abilityRoutes(): array
         'order lists' => ['PUT', '/api/lists/order', 'sessions:write'],
         'change list' => ['PATCH', "/api/lists/{$id}", 'sessions:write'],
         'delete list' => ['DELETE', "/api/lists/{$id}", 'sessions:write'],
+        // Since 2.0.0-p: saved views and the filter panel's counts.
+        'views' => ['GET', '/api/views', 'library:read'],
+        'make view' => ['POST', '/api/views', 'sessions:write'],
+        'order views' => ['PUT', '/api/views/order', 'sessions:write'],
+        'change view' => ['PATCH', "/api/views/{$id}", 'sessions:write'],
+        'delete view' => ['DELETE', "/api/views/{$id}", 'sessions:write'],
+        'library facets' => ['GET', '/api/library/facets', 'library:read'],
         'bulk export' => ['POST', '/api/sessions/export', 'library:read'],
         'smart views' => ['GET', '/api/library/views', 'library:read'],
         'create client' => ['POST', '/api/clients', 'sessions:write'],

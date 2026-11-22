@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\PackController;
 use App\Http\Controllers\Api\PromoCodeController;
 use App\Http\Controllers\Api\RecordingController;
 use App\Http\Controllers\Api\RequestLinkController;
+use App\Http\Controllers\Api\SavedViewController;
 use App\Http\Controllers\Api\ScreenController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SecurityController;
@@ -161,6 +162,11 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::put('lists/order', [ListController::class, 'order'])->middleware($own)->name('api.lists.order');
             Route::patch('lists/{key}', [ListController::class, 'update'])->middleware($own)->where('key', '.+')->name('api.lists.update');
             Route::delete('lists/{key}', [ListController::class, 'destroy'])->middleware($own)->where('key', '.+')->name('api.lists.destroy');
+            // Since 2.0.0-p: saved views (My views). Any role keeps their own: a view changes nothing of the workspace.
+            Route::post('views', [SavedViewController::class, 'store'])->name('api.views.store');
+            Route::put('views/order', [SavedViewController::class, 'order'])->name('api.views.order');
+            Route::patch('views/{id}', [SavedViewController::class, 'update'])->name('api.views.update');
+            Route::delete('views/{id}', [SavedViewController::class, 'destroy'])->name('api.views.destroy');
             Route::post('clients', [OrganiseController::class, 'storeClient'])->middleware($own)->name('api.clients.store');
             Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->middleware($own)->name('api.clients.update');
             // Projects (v1.5): deleting one sends its recordings to the Inbox and its subfolders up a level.
@@ -258,6 +264,9 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::middleware('abilities:library:read')->group(function (): void {
             Route::get('library', [LibraryController::class, 'index'])->name('api.library');
             Route::get('library/views', [OrganiseController::class, 'views'])->name('api.library.views');
+            // Since 2.0.0-p: the filter panel's counts, and the person's saved views.
+            Route::get('library/facets', [LibraryController::class, 'facets'])->name('api.library.facets');
+            Route::get('views', [SavedViewController::class, 'index'])->name('api.views');
             Route::post('sessions/transcribe-estimate', [TranscribeLaterController::class, 'estimate'])->name('api.sessions.transcribe.estimate');
             Route::get('bin', [BinController::class, 'index'])->name('api.bin');
             Route::get('storage', [BinController::class, 'storage'])->name('api.storage');

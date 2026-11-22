@@ -39,6 +39,7 @@ use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
 use App\Services\Entitlements\PromoCodes;
 use App\Services\InterfaceFlags;
+use App\Services\Library\LibraryFacets;
 use App\Services\MailSettings;
 use App\Services\RecordingCipher;
 use App\Services\Screens\ClaudeScreenDescriber;
@@ -182,6 +183,8 @@ class AppServiceProvider extends ServiceProvider
         AuditLog::listen();
         // The activity centre (B18).
         ActivityFeed::listen();
+        // Since 2.0.0-p: the Library's filter counts are read again once a recording of the person changes.
+        LibraryFacets::listen();
         Event::listen(JobProcessing::class, function (JobProcessing $event): void {
             // Filament's mails for changing an email are queued notifications.
             if (in_array($event->job->payload()['data']['commandName'] ?? null, [SendQueuedMailable::class, SendQueuedNotifications::class], true)) {

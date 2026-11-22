@@ -64,6 +64,11 @@
         "label_colors": {},
         "expires_at": "2026-12-21T02:08:11+00:00",
         "transcribe_estimate": null,
+        "facets": {
+            "source": "whatsapp",
+            "status": "transcribed",
+            "language": "en"
+        },
         "updated_at": "2026-11-21T02:08:17+00:00"
     }
 }
