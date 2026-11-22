@@ -354,6 +354,7 @@ fn finished_recording(root: &Path, name: &str) -> FinishedRecording {
     }
     let started_at = Utc.with_ymd_and_hms(2026, 10, 25, 8, 0, 0).unwrap();
     FinishedRecording {
+        capture_notes: Vec::new(),
         markers: vec![MarkerDto { at_ms: 5_000, tag: Some("Budget".into()), note: None }],
         pauses: vec![PauseDto { at_ms: 7_000, paused_ms: 3_000 }],
         info: RecordingInfo {
@@ -1014,4 +1015,38 @@ fn skipped_calls_are_deleted_with_their_files_after_24_hours() {
     assert_eq!(files.purge(now + chrono::Duration::hours(24)).unwrap(), vec!["new".to_string()]);
     assert!(files.load().items.is_empty());
     assert!(UploadQueue::load(&files.uploads).items.is_empty(), "nothing was ever uploaded");
+}
+
+// ---- the other side's frames, for the 3-second check (2.0.6) ---------------------------------------------------------
+
+#[test]
+fn the_recorder_counts_what_the_other_side_delivered_and_whether_it_was_more_than_digital_silence() {
+    use desktop_lib::audio::{RecorderLink, recorder_loop};
+    let dir = tempfile::tempdir().unwrap();
+    let recorder = Recorder::create(dir.path(), false).unwrap();
+    let link = RecorderLink::default();
+    let (tx, rx) = std::sync::mpsc::channel();
+    // The microphone hears sound; the tap delivers nothing for a while (macOS holding it back).
+    for chunk in tone(Channel::Mic, 0.0, 1.0) {
+        tx.send(chunk).unwrap();
+    }
+    let silent = AudioChunk { channel: Channel::System, samples: vec![0.0; 1_600], ts_ns: Some(1_000_000_000), discontinuity: false };
+    tx.send(silent).unwrap();
+    let watched = link.clone();
+    let worker = std::thread::spawn(move || recorder_loop(recorder, rx, &watched));
+    let until = Instant::now() + Duration::from_secs(5);
+    while link.system_frames.load(std::sync::atomic::Ordering::Relaxed) < 1_600 && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(link.system_frames.load(std::sync::atomic::Ordering::Relaxed), 1_600, "digital silence is frames");
+    assert!(link.system_signal.lock().unwrap().is_none(), "but no signal");
+    assert!(link.mic_heard.lock().unwrap().is_some());
+    for chunk in tone(Channel::System, 1.1, 0.5) {
+        tx.send(chunk).unwrap();
+    }
+    drop(tx);
+    let output = worker.join().unwrap().unwrap();
+    assert!(link.system_signal.lock().unwrap().is_some(), "the other side heard");
+    assert_eq!(link.system_frames.load(std::sync::atomic::Ordering::Relaxed), 1_600 + 5 * 1_600);
+    assert!(output.duration_ms >= 1_000);
 }

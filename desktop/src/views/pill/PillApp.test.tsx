@@ -555,6 +555,24 @@ describe("Screens chip (v1.5)", () => {
       expect(screen.getByTestId("missing-permission")).toBeInTheDocument();
     });
 
+    it("the other side not being recorded (2.0.6): stays, opens System Audio Recording and tries again", async () => {
+      const notRecorded = [{ kind: "system_audio" as const, sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger." }];
+      respond("capture_retry_system", true);
+      await renderPill(makeRecordingState({ missing: notRecorded }));
+      await emitEvent("pill:visibility", true);
+      const warning = screen.getByTestId("missing-permission");
+      expect(warning).toHaveTextContent("The other side isn't being recorded");
+      expect(warning).toHaveAttribute("title", notRecorded[0].sentence);
+      expect(within(warning).queryByRole("button", { name: "Dismiss warning" })).toBeNull();
+      fireEvent.click(within(warning).getByRole("button", { name: "Allow" }));
+      expect(callsOf("open_privacy_settings")).toEqual([{ kind: "system_audio" }]);
+      fireEvent.click(within(warning).getByRole("button", { name: "Try again" }));
+      expect(callsOf("capture_retry_system")).toHaveLength(1);
+      // Heard again: the line goes.
+      await emitEvent("recording:state", makeRecordingState({ missing: [] }));
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+    });
+
     it("hears a prompt answered after the start, and says more when more goes during the recording", async () => {
       const noMic = [{ kind: "microphone" as const, sentence: "The microphone is off for EchoLedger: a recording will have the other side of the call, not your voice." }];
       await renderPill(makeRecordingState({ missing: [] }));

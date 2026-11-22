@@ -8,6 +8,7 @@ import { useWindowShown } from "../../lib/visibility";
 import { AlertIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { Notice } from "../../components/Notice";
+import { otherSideNotRecorded } from "../../lib/controls";
 import { StateBanner } from "../../components/StateBanner";
 import { useBannerTurn } from "../../components/BannerSlot";
 
@@ -234,6 +235,37 @@ export function PermissionBanner({ recordingRef }: { recordingRef: string | null
         );
       })}
     </div>
+  );
+}
+
+/**
+ * The main window, while a call records: its other side isn't being recorded although macOS seemed to allow it (the
+ * core's 3-second check, 2.0.6). It stays until the other side is heard: Open System Settings goes to System Audio
+ * Recording, Try again opens the system side once more (after a try that did not help, the line says to quit and
+ * reopen EchoLedger).
+ */
+export function OtherSideBanner() {
+  const [warning, setWarning] = useState<MissingPermission | null>(null);
+  useEffect(() => {
+    const un = listenTo("recording:state", (state) => setWarning(state.active ? otherSideNotRecorded(state.missing) : null));
+    return () => {
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
+  // Closed by hand it stays closed until its words change (a try that did not help says to quit and reopen).
+  const [closed, setClosed] = useState<string | null>(null);
+  const shown = useBannerTurn("other-side", !!warning && closed !== warning.sentence);
+  if (!shown || !warning) return null;
+  const open = () => void api.openPrivacySettings("system_audio").catch(() => undefined);
+  return (
+    <Notice kind="banner" tone="danger" className="banner danger" role="alert" testId="other-side-not-recorded" icon={<AlertIcon size={16} />} timeoutMs={null}
+      onOpen={open} openLabel={`${warning.sentence} Open System Settings`} onDismiss={() => setClosed(warning.sentence)}
+      actions={<>
+        <button type="button" className="btn compact" onClick={open}>Open System Settings</button>
+        <button type="button" className="btn compact" onClick={() => void api.captureRetrySystem().catch(() => undefined)}>Try again</button>
+      </>}>
+      <span>{warning.sentence}</span>
+    </Notice>
   );
 }
 

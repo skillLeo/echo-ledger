@@ -356,3 +356,107 @@ fn microphone_consent_any_deny_blocks() {
     assert_eq!(consent_from(&[None, None, None]), "unknown");
     assert_eq!(consent_from(&[None, allow, None]), "allowed");
 }
+
+// ---- The other side of a call, checked within 3 s (2.0.6) --------------------------------------------------------
+
+mod system_side {
+    use desktop_lib::audio::health::{DIGITAL_SILENCE, SYSTEM_CHECK_AFTER_MS, SystemProblem, SystemSide, SystemVerdict, SystemWatch, has_signal, system_side_problem};
+    use desktop_lib::audio::platform::{Streams, open_keeping_mic};
+    use desktop_lib::audio::{RecordingMode};
+    use desktop_lib::permissions::{Access, Kind, Permissions, SYSTEM_NOT_RECORDED, SYSTEM_NOT_RECORDED_REOPEN, missing_with};
+
+    const CALL: Streams = Streams { mic: true, system: true };
+    const ON: Permissions = Permissions { microphone: Access::Allowed, system_audio: Access::Allowed, screen: Access::Allowed };
+
+    fn side(running_ms: u64, frames: u64, signal: bool, mic_heard: bool) -> SystemSide {
+        SystemSide { running_ms, failure: None, frames, signal, mic_heard }
+    }
+
+    #[test]
+    fn a_failed_tap_keeps_the_microphone_and_says_why_at_once() {
+        // The tap does not open (OSStatus from AudioHardwareCreateProcessTap): the call records the microphone alone.
+        let mut asked = Vec::new();
+        let (stream, failure) = open_keeping_mic(CALL, |with_tap| {
+            asked.push(with_tap);
+            if with_tap { Err("system audio tap (OSStatus 560947818); allow System Audio Recording".to_string()) } else { Ok("microphone only") }
+        })
+        .expect("the recording starts");
+        assert_eq!(asked, [true, false], "with the tap first, then without it");
+        assert_eq!(stream, "microphone only", "the microphone is kept");
+        let failure = failure.expect("the reason is kept");
+        // The check says it at once, before the 3 s.
+        let problem = system_side_problem(&SystemSide { failure: Some(failure.clone()), ..side(0, 0, false, false) }).expect("said at once");
+        assert_eq!(problem, SystemProblem::Failed(failure));
+        assert!(problem.reason().starts_with("the system audio tap did not open: system audio tap (OSStatus 560947818)"));
+        assert!(problem.is_certain());
+        // The warning the pill and the main window show, in place of any other line about system audio.
+        let missing = missing_with(RecordingMode::Call, &ON, Some(SYSTEM_NOT_RECORDED));
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].kind, Kind::SystemAudio);
+        assert_eq!(missing[0].sentence, "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.");
+    }
+
+    #[test]
+    fn what_opens_with_its_tap_or_is_not_a_call_is_left_as_it_was() {
+        assert_eq!(open_keeping_mic(CALL, |_| Ok::<_, String>(7)).unwrap(), (7, None));
+        let mut asked = 0;
+        let note = open_keeping_mic(Streams { mic: false, system: true }, |_| {
+            asked += 1;
+            Err::<u8, _>("no tap".to_string())
+        });
+        assert_eq!(note.unwrap_err(), "no tap", "a voice note of this computer's sound has nothing without its tap");
+        assert_eq!(asked, 1);
+        let both = open_keeping_mic(CALL, |_| Err::<u8, _>("no device".to_string()));
+        assert_eq!(both.unwrap_err(), "no device", "the microphone alone could not open either: the recording's error");
+    }
+
+    #[test]
+    fn no_frames_for_3_s_while_the_microphone_hears_sound_is_said() {
+        assert_eq!(SYSTEM_CHECK_AFTER_MS, 3_000);
+        assert_eq!(system_side_problem(&side(2_999, 0, false, true)), None, "not before 3 s");
+        let problem = system_side_problem(&side(3_000, 0, false, true)).expect("said at 3 s");
+        assert_eq!(problem, SystemProblem::NoFrames);
+        assert_eq!(problem.reason(), "the system audio tap delivered no audio in 3 s");
+        assert!(problem.is_certain());
+        assert_eq!(system_side_problem(&side(3_000, 0, false, false)), Some(SystemProblem::NoFrames), "no frames at all is wrong whatever the microphone hears");
+        // Only digital silence while the microphone hears sound: said, but not taken as certain (nobody may have spoken).
+        let silence = system_side_problem(&side(3_000, 48_000, false, true)).expect("said");
+        assert_eq!(silence, SystemProblem::DigitalSilence);
+        assert!(!silence.is_certain());
+        assert_eq!(system_side_problem(&side(3_000, 48_000, false, false)), None, "both quiet: nothing to tell");
+        assert_eq!(system_side_problem(&side(3_000, 48_000, true, true)), None, "the other side is heard");
+        assert!(!has_signal(&[0.0, DIGITAL_SILENCE, -DIGITAL_SILENCE]));
+        assert!(has_signal(&[0.0, 0.001]));
+    }
+
+    #[test]
+    fn the_warning_is_said_once_clears_when_the_other_side_is_heard_and_says_reopen_after_a_try() {
+        let mut watch = SystemWatch::default();
+        assert_eq!(watch.look(&side(1_000, 0, false, true)), SystemVerdict::Same);
+        assert_eq!(watch.sentence(), None);
+        assert_eq!(watch.look(&side(3_000, 0, false, true)), SystemVerdict::Missing(SystemProblem::NoFrames));
+        assert_eq!(watch.sentence(), Some(SYSTEM_NOT_RECORDED));
+        assert_eq!(watch.look(&side(4_000, 0, false, true)), SystemVerdict::Same, "said once");
+        // Try again: the check starts afresh; still nothing, and the warning says to quit and reopen.
+        watch.retried = true;
+        watch.problem = None;
+        assert_eq!(watch.look(&side(500, 0, false, true)), SystemVerdict::Same);
+        assert_eq!(watch.look(&side(3_000, 0, false, true)), SystemVerdict::Missing(SystemProblem::NoFrames));
+        assert_eq!(watch.sentence(), Some(SYSTEM_NOT_RECORDED_REOPEN));
+        assert!(SYSTEM_NOT_RECORDED_REOPEN.contains("quit and reopen EchoLedger"));
+        // The other side is heard: the warning goes, and system audio counts as working.
+        assert_eq!(watch.look(&side(5_000, 16_000, true, true)), SystemVerdict::Recording);
+        assert_eq!(watch.sentence(), None);
+        assert_eq!(watch.look(&side(6_000, 32_000, true, true)), SystemVerdict::Same);
+    }
+
+    #[test]
+    fn the_warning_never_hides_that_nothing_is_recorded() {
+        let none = Permissions { microphone: Access::Denied, system_audio: Access::Denied, ..ON };
+        let missing = missing_with(RecordingMode::Call, &none, Some(SYSTEM_NOT_RECORDED));
+        assert_eq!(missing.iter().map(|m| m.kind).collect::<Vec<_>>(), [Kind::Microphone, Kind::SystemAudio]);
+        assert!(missing.iter().all(|m| m.sentence.contains("nothing to record")));
+        assert!(missing_with(RecordingMode::MicNote, &ON, Some(SYSTEM_NOT_RECORDED)).is_empty(), "a note has no other side");
+        assert!(missing_with(RecordingMode::Call, &ON, None).is_empty());
+    }
+}

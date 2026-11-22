@@ -2934,8 +2934,28 @@ pub async fn permission_request(app: AppHandle, kind: crate::permissions::Kind) 
     let refused = crate::mac_check::refusal(app.state::<AppState>().capture.is_recording(), crate::dictation::is_active(&app), false);
     if refused.is_none() {
         tauri::async_runtime::spawn_blocking(move || crate::permissions::request(kind)).await.map_err(|e| AppError::msg(e.to_string()))?;
+        if kind == crate::permissions::Kind::SystemAudio {
+            verify_system_audio(&app).await;
+        }
     }
     permissions_status(app).await
+}
+
+/// Records system audio for a moment to see whether macOS lets this copy of EchoLedger through, and keeps the answer
+/// (the privacy call can say yes for a copy macOS no longer lets record). Only while nothing records, and only when the
+/// privacy call says yes: otherwise it says what is missing itself.
+pub async fn verify_system_audio(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if state.capture.is_recording() || crate::dictation::is_active(app) || crate::permissions::read().system_audio != crate::permissions::Access::Allowed {
+        return;
+    }
+    let checked = app.clone();
+    if let Ok(result) = tauri::async_runtime::spawn_blocking(crate::permissions::probe_system_audio).await {
+        if let Err(why) = &result {
+            eprintln!("[echoledger] permissions: macOS says system audio is allowed, but {why}");
+        }
+        checked.state::<AppState>().system_audio_checked(result);
+    }
 }
 
 /// "Quit & reopen": Screen Recording allowed in System Settings while EchoLedger ran takes effect when it opens again.
@@ -3132,13 +3152,24 @@ pub fn privacy_settings_url(kind: &str, macos: bool) -> Option<&'static str> {
     match (kind, macos) {
         ("microphone", false) => Some("ms-settings:privacy-microphone"),
         ("microphone", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"),
-        ("system_audio", true) | ("screen", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"),
+        // System Audio Recording has a pane of its own (macOS 14.4+).
+        ("system_audio", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture"),
+        ("screen", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"),
         ("screen", false) => Some("ms-settings:privacy-graphicscapturewithoutborder"),
         ("automation", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"),
         ("sound", true) => Some("x-apple.systempreferences:com.apple.Sound-Settings.extension"),
         ("software_update", true) => Some("x-apple.systempreferences:com.apple.Software-Update-Settings.extension"),
         _ => None,
     }
+}
+
+/// "Try again" on "The other side isn't being recorded": opens the system side of the running call again. False when
+/// only quitting and reopening EchoLedger would (the warning then says so).
+#[tauri::command]
+pub fn capture_retry_system(app: AppHandle) -> bool {
+    let tried = crate::actions::retry_system_audio(&app);
+    crate::actions::emit_recording_state(&app);
+    tried
 }
 
 #[tauri::command]

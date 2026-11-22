@@ -65,6 +65,10 @@ pub struct MacBackend {
     stop: Arc<AtomicBool>,
     log: DeviceLog,
     watcher: Option<JoinHandle<()>>,
+    /// Why the system side could not open (`MacHost`).
+    system_failure: Arc<std::sync::Mutex<Option<String>>>,
+    /// Asks the watcher to open the stream again with a new tap.
+    retry: Arc<AtomicBool>,
 }
 
 fn address(selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope) -> AudioObjectPropertyAddress {
@@ -193,11 +197,12 @@ unsafe fn device_with_uid(uid: &str) -> Option<AudioObjectID> {
 
 /// Which input buffer of the aggregate is the microphone (pure). The sub-devices' streams come in list order and the
 /// tap's last, and the output device is listed first, so a USB headset used as output puts its own microphone's streams
-/// ahead of another chosen microphone. The same device for both is listed once.
-pub fn mic_buffer(buffers: usize, output_input_streams: usize, same_device: bool) -> Option<usize> {
+/// ahead of another chosen microphone. The same device for both is listed once. `tap`: the aggregate has the tap (all
+/// but a call whose tap could not open, `open_keeping_mic`).
+pub fn mic_buffer(buffers: usize, output_input_streams: usize, same_device: bool, tap: bool) -> Option<usize> {
     let at = if same_device { 0 } else { output_input_streams };
-    // The last buffer is the tap's.
-    (at + 1 < buffers).then_some(at)
+    // With a tap, the last buffer is the tap's.
+    (at + usize::from(tap) < buffers).then_some(at)
 }
 
 /// The sub-devices of the aggregate (pure): the output first, the microphone after it when it is another device.
@@ -213,6 +218,20 @@ pub fn subdevice_uids<'a>(output: &'a str, mic: Option<&'a str>) -> Vec<&'a str>
 struct MacHost {
     streams: Streams,
     tx: Sender<AudioChunk>,
+    /// Why the stream open now has no system side (its tap could not open); the microphone records on.
+    system_failure: Arc<std::sync::Mutex<Option<String>>>,
+}
+
+impl MacHost {
+    /// Opens a stream on `route`: with its tap, else for a call without it, so the microphone still records.
+    fn open_on(&self, route: &Route) -> Result<Stream, CaptureError> {
+        let (stream, failure) = super::open_keeping_mic(self.streams, |with_tap| {
+            let streams = if with_tap { self.streams } else { Streams { mic: true, system: false } };
+            unsafe { open_stream(route, streams, self.tx.clone(), with_tap) }
+        })?;
+        *self.system_failure.lock().unwrap_or_else(|p| p.into_inner()) = failure;
+        Ok(stream)
+    }
 }
 
 impl CaptureHost for MacHost {
@@ -227,7 +246,7 @@ impl CaptureHost for MacHost {
     }
 
     fn open(&mut self, route: &Route) -> Result<Stream, String> {
-        unsafe { open_stream(route, self.streams, self.tx.clone()) }.map_err(|e| e.to_string())
+        self.open_on(route).map_err(|e| e.to_string())
     }
 
     fn close(&mut self, stream: Stream) {
@@ -250,13 +269,15 @@ impl CaptureHost for MacHost {
 impl MacBackend {
     /// Opens the first stream (its error is the recording's) and watches the devices from then on.
     pub fn start(streams: Streams, tx: Sender<AudioChunk>) -> Result<Self, CaptureError> {
-        let mut host = MacHost { streams, tx };
+        let system_failure = Arc::new(std::sync::Mutex::new(None));
+        let mut host = MacHost { streams, tx, system_failure: system_failure.clone() };
         let route = host.want();
-        let first = unsafe { open_stream(&route, streams, host.tx.clone()) }?;
+        let first = host.open_on(&route)?;
         let mut supervisor = Supervisor::new(first, route, streams.mic, streams.system, Instant::now());
         let stop = Arc::new(AtomicBool::new(false));
+        let retry = Arc::new(AtomicBool::new(false));
         let log = DeviceLog::default();
-        let (watching, notices) = (stop.clone(), log.clone());
+        let (watching, notices, retrying) = (stop.clone(), log.clone(), retry.clone());
         let watcher = std::thread::Builder::new()
             .name("el-audio-devices".into())
             .spawn(move || {
@@ -264,6 +285,10 @@ impl MacBackend {
                     for _ in 0..10 {
                         if watching.load(Ordering::SeqCst) {
                             break 'watch;
+                        }
+                        if retrying.swap(false, Ordering::SeqCst) {
+                            // System Audio Recording allowed meanwhile: a new tap, on the same devices.
+                            supervisor.restart(&mut host, Instant::now());
                         }
                         std::thread::sleep(Duration::from_millis(100));
                     }
@@ -276,12 +301,13 @@ impl MacBackend {
                 }
             })
             .map_err(|e| CaptureError::Device(e.to_string()))?;
-        Ok(Self { stop, log, watcher: Some(watcher) })
+        Ok(Self { stop, log, watcher: Some(watcher), system_failure, retry })
     }
 }
 
-/// Builds the tap and the aggregate device on `route` and starts them.
-unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>) -> Result<Stream, CaptureError> {
+/// Builds the tap and the aggregate device on `route` and starts them. Without `with_tap` (a call whose tap could not
+/// open) the aggregate has the devices only and records the microphone.
+unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>, with_tap: bool) -> Result<Stream, CaptureError> {
     let system_object = kAudioObjectSystemObject as AudioObjectID;
     let output_uid = route.output.clone().ok_or_else(|| CaptureError::Device("no default output device".into()))?;
     let input_uid = route.mic.clone().filter(|_| streams.mic);
@@ -298,9 +324,11 @@ unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>) -
     unsafe { description.setPrivate(true) };
     let tap_uid = unsafe { description.UUID() }.UUIDString().to_string();
     let mut tap: AudioObjectID = 0;
-    let status = unsafe { AudioHardwareCreateProcessTap(Some(&description), &mut tap) };
-    if status != 0 {
-        return Err(CaptureError::Permission(format!("system audio tap (OSStatus {status}); allow System Audio Recording")));
+    if with_tap {
+        let status = unsafe { AudioHardwareCreateProcessTap(Some(&description), &mut tap) };
+        if status != 0 {
+            return Err(CaptureError::Permission(format!("system audio tap (OSStatus {status}); allow System Audio Recording")));
+        }
     }
 
     // Aggregate: output as main sub-device, optional mic sub-device (drift-compensated), tap (drift-compensated).
@@ -320,7 +348,7 @@ unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>) -
     );
     let sub_refs: Vec<&CFDictionary<CFString, CFType>> = subdevices.iter().map(|d| &**d).collect();
     let sub_array = CFArray::from_objects(&sub_refs);
-    let tap_array = CFArray::from_objects(&[&*tap_entry]);
+    let tap_array = if with_tap { CFArray::from_objects(&[&*tap_entry]) } else { CFArray::from_objects(&[] as &[&CFDictionary<CFString, CFType>]) };
     let aggregate_uid = uuid::Uuid::new_v4().to_string();
     let keys = [
         &*cfstr(kAudioAggregateDeviceUIDKey),
@@ -335,12 +363,14 @@ unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>) -
     let name = CFString::from_str(&format!("{AGGREGATE_PREFIX}{pid}"));
     let uid_value = CFString::from_str(&aggregate_uid);
     let main_value = CFString::from_str(&output_uid);
-    let values: [&CFType; 8] = [&uid_value, &name, &main_value, yes, no, yes, sub_array.as_ref(), tap_array.as_ref()];
+    let values: [&CFType; 8] = [&uid_value, &name, &main_value, yes, no, if with_tap { yes } else { no }, sub_array.as_ref(), tap_array.as_ref()];
     let dictionary = CFDictionary::<CFString, CFType>::from_slices(&keys, &values);
     let mut aggregate: AudioObjectID = 0;
     let status = unsafe { AudioHardwareCreateAggregateDevice(dictionary.as_opaque(), NonNull::from(&mut aggregate)) };
     if status != 0 {
-        unsafe { AudioHardwareDestroyProcessTap(tap) };
+        if with_tap {
+            unsafe { AudioHardwareDestroyProcessTap(tap) };
+        }
         return Err(CaptureError::Device(format!("aggregate device (OSStatus {status})")));
     }
 
@@ -366,8 +396,8 @@ unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>) -
                 let samples = unsafe { std::slice::from_raw_parts(b.mData as *const f32, b.mDataByteSize as usize / 4) };
                 downmix_to_mono(samples, b.mNumberChannels as usize)
             };
-            let mic = mic_buffer(buffers.len(), output_inputs, same_device).filter(|_| has_mic).map(read).unwrap_or_default();
-            let system = buffers.len().checked_sub(1).map(read).unwrap_or_default();
+            let mic = mic_buffer(buffers.len(), output_inputs, same_device, with_tap).filter(|_| has_mic).map(read).unwrap_or_default();
+            let system = buffers.len().checked_sub(1).filter(|_| with_tap).map(read).unwrap_or_default();
             let ts_ns = unsafe { AudioConvertHostTimeToNanos(in_time.as_ref().mHostTime) };
             let _ = raw_tx.send(RawPacket { mic, system, ts_ns });
         },
@@ -378,13 +408,15 @@ unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>) -
     if status != 0 {
         unsafe {
             AudioHardwareDestroyAggregateDevice(aggregate);
-            AudioHardwareDestroyProcessTap(tap);
+            if with_tap {
+                AudioHardwareDestroyProcessTap(tap);
+            }
         }
         return Err(CaptureError::Device(format!("IOProc (OSStatus {status})")));
     }
 
     let want_mic = streams.mic && has_mic;
-    let want_system = streams.system;
+    let want_system = streams.system && with_tap;
     let finish = Arc::new(AtomicBool::new(false));
     let finishing = finish.clone();
     let worker = std::thread::Builder::new()
@@ -433,7 +465,9 @@ fn close_stream(mut stream: Stream) {
         AudioDeviceStop(stream.aggregate, stream.proc_id);
         AudioDeviceDestroyIOProcID(stream.aggregate, stream.proc_id);
         AudioHardwareDestroyAggregateDevice(stream.aggregate);
-        AudioHardwareDestroyProcessTap(stream.tap);
+        if stream.tap != 0 {
+            AudioHardwareDestroyProcessTap(stream.tap);
+        }
     }
     drop(stream.block.take());
     stream.finish.store(true, Ordering::SeqCst);
@@ -456,6 +490,15 @@ impl CaptureBackend for MacBackend {
 
     fn take_notices(&mut self) -> Vec<DeviceNotice> {
         self.log.take()
+    }
+
+    fn system_failure(&self) -> Option<String> {
+        self.system_failure.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    fn retry_system(&mut self) -> bool {
+        self.retry.store(true, Ordering::SeqCst);
+        true
     }
 }
 
@@ -772,16 +815,20 @@ mod tests {
     #[test]
     fn the_microphone_is_found_among_the_aggregate_s_buffers() {
         // Speakers (no input streams) + built-in microphone + tap.
-        assert_eq!(mic_buffer(2, 0, false), Some(0));
+        assert_eq!(mic_buffer(2, 0, false, true), Some(0));
         // A USB headset as output, with its own microphone stream, and another microphone chosen: the headset's comes first.
-        assert_eq!(mic_buffer(3, 1, false), Some(1));
+        assert_eq!(mic_buffer(3, 1, false, true), Some(1));
         // The headset's microphone itself (the same device, listed once) + tap.
-        assert_eq!(mic_buffer(2, 1, true), Some(0));
+        assert_eq!(mic_buffer(2, 1, true, true), Some(0));
         // Only the tap: no microphone to read.
-        assert_eq!(mic_buffer(1, 0, false), None);
-        assert_eq!(mic_buffer(0, 0, false), None);
+        assert_eq!(mic_buffer(1, 0, false, true), None);
+        assert_eq!(mic_buffer(0, 0, false, true), None);
         // A microphone that did not make it into the aggregate is never read from the tap's buffer.
-        assert_eq!(mic_buffer(1, 1, false), None);
+        assert_eq!(mic_buffer(1, 1, false, true), None);
+        // A call whose tap could not open: the devices only, and the microphone is still read.
+        assert_eq!(mic_buffer(1, 0, false, false), Some(0));
+        assert_eq!(mic_buffer(2, 1, false, false), Some(1));
+        assert_eq!(mic_buffer(0, 0, false, false), None);
     }
 
     #[test]

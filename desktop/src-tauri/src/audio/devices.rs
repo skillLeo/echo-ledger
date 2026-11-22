@@ -259,6 +259,15 @@ impl<S> Supervisor<S> {
         self.stream.take()
     }
 
+    /// Closes the open stream so the next tick opens it again on the same devices (System Audio Recording was allowed
+    /// during the recording): not a failure, and no news about the devices.
+    pub fn restart<H: CaptureHost<Stream = S>>(&mut self, host: &mut H, now: Instant) {
+        if let Some(stream) = self.stream.take() {
+            host.close(stream);
+        }
+        self.next_try = Some(now);
+    }
+
     /// Why the open stream must go, if it must.
     fn change<H: CaptureHost<Stream = S>>(&self, host: &H, want: &Route, now: Instant) -> Option<Change> {
         let stream = self.stream.as_ref()?;

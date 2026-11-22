@@ -99,9 +99,18 @@ export function askSeconds(ask: AskPayload): number {
   return Number.isFinite(ask.seconds) && ask.seconds > 0 ? ask.seconds : 8;
 }
 
+/**
+ * A call recording whose other side is not being recorded although it was let to (the core's 3-second check: a tap
+ * that failed or delivers nothing, 2.0.6): its warning, or none.
+ */
+export function otherSideNotRecorded(missing: MissingPermission[] | undefined): MissingPermission | null {
+  return (missing ?? []).find((m) => m.kind === "system_audio" && m.sentence.startsWith("The other side")) ?? null;
+}
+
 /** What the pill and the captions say when the system does not let a recording use something (one short line). */
 export function missingShort(missing: MissingPermission[] | undefined, mode?: RecordingState["mode"]): string | null {
   const kinds = (missing ?? []).map((m) => m.kind);
+  if (otherSideNotRecorded(missing) && !kinds.includes("microphone")) return "The other side isn't being recorded";
   if (kinds.includes("microphone") && kinds.includes("system_audio")) return "Nothing is being recorded: no permission";
   // A note has one side, so without it nothing is being recorded.
   if ((mode === "mic_note" && kinds.includes("microphone")) || (mode === "voice_note" && kinds.includes("system_audio"))) return "Nothing is being recorded: no permission";

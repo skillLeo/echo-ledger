@@ -161,6 +161,19 @@ pub struct Memory {
     /// still reads it was reopened and macOS did not apply it, so reopening again would not help either.
     #[serde(default)]
     pub reopen_since: Option<u64>,
+    /// The copy of EchoLedger this memory was made by ([`identity`]: its version and code signature). macOS keeps a
+    /// permission for one signature: another copy (an update signed otherwise) may find what was granted gone while the
+    /// privacy call still says yes, so what was granted is forgotten when it changes ([`Memory::for_identity`]).
+    #[serde(default)]
+    pub identity: Option<String>,
+    /// Why system audio did not record although macOS's privacy call allowed it: a tap that could not open or delivered
+    /// nothing (`audio::health::SystemProblem::is_certain`). While set, system audio counts as off ([`Memory::overlay`]);
+    /// it goes when system audio is heard again or a check finds it working.
+    #[serde(default)]
+    pub system_audio_failing: Option<String>,
+    /// System audio must be checked for real (a short tap, [`probe_system_audio`]): this copy has not used it yet.
+    #[serde(default)]
+    pub verify_system_audio: bool,
 }
 
 const KINDS: [Kind; 3] = [Kind::Microphone, Kind::SystemAudio, Kind::Screen];
@@ -168,6 +181,38 @@ const KINDS: [Kind; 3] = [Kind::Microphone, Kind::SystemAudio, Kind::Screen];
 impl Memory {
     pub fn path(data_dir: &Path) -> PathBuf {
         data_dir.join("permissions.json")
+    }
+
+    /// This memory for the copy of EchoLedger running now (pure): another version or code signature than the one that
+    /// made it forgets what was granted and what was failing, so the permission step asks again, and system audio is
+    /// checked for real. What was ever granted stays (D-120's "allowed before").
+    pub fn for_identity(&self, identity: &str) -> Memory {
+        if self.identity.as_deref() == Some(identity) {
+            return self.clone();
+        }
+        Memory {
+            granted: Vec::new(),
+            notice: Vec::new(),
+            ever: self.ever.clone(),
+            reopen_since: None,
+            identity: Some(identity.to_string()),
+            system_audio_failing: None,
+            verify_system_audio: true,
+        }
+    }
+
+    /// What the system says, with what EchoLedger found itself (pure): system audio that did not record counts as off,
+    /// whatever the privacy call says.
+    pub fn overlay(&self, now: Permissions) -> Permissions {
+        match &self.system_audio_failing {
+            Some(_) => Permissions { system_audio: Access::Denied, ..now },
+            None => now,
+        }
+    }
+
+    /// What a real look at system audio found (pure): `Err` why it did not record, `Ok` it did.
+    pub fn with_system_audio(&self, result: Result<(), String>) -> Memory {
+        Memory { system_audio_failing: result.err(), verify_system_audio: false, ..self.clone() }
     }
 
     pub fn load(path: &Path) -> Self {
@@ -263,6 +308,65 @@ impl Memory {
     }
 }
 
+/// The running copy of EchoLedger: its version and, on a Mac, its code signature's hash (another build or signing
+/// identity is another copy to macOS's privacy settings).
+pub fn identity() -> String {
+    let version = env!("CARGO_PKG_VERSION");
+    #[cfg(target_os = "macos")]
+    {
+        format!("{version} {}", macos::code_hash().unwrap_or_else(|| "unsigned".into()))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        version.to_string()
+    }
+}
+
+/// The sentence of a call recording whose other side is not being recorded (`audio::health::system_side_problem`).
+pub const SYSTEM_NOT_RECORDED: &str = "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.";
+/// The same once trying again did not help: macOS applies it when EchoLedger opens again.
+pub const SYSTEM_NOT_RECORDED_REOPEN: &str = "The other side still isn't being recorded. Allow System Audio Recording for EchoLedger, then quit and reopen EchoLedger.";
+
+/// What a running recording is missing (pure): what the system says ([`missing_during`]) and, for a call whose other
+/// side is not being recorded, that sentence in place of any other about system audio.
+pub fn missing_with(mode: RecordingMode, permissions: &Permissions, not_recorded: Option<&str>) -> Vec<Missing> {
+    let mut out = missing_during(mode, permissions);
+    if let (RecordingMode::Call, Some(sentence)) = (mode, not_recorded) {
+        // Both sides off already says nothing is recorded.
+        if !out.iter().any(|m| m.kind == Kind::Microphone) {
+            out.retain(|m| m.kind != Kind::SystemAudio);
+            out.push(missing(Kind::SystemAudio, sentence));
+        }
+    }
+    out
+}
+
+/// Records system audio for a moment to see whether macOS lets it through: `Err` why not. The privacy call can say
+/// yes for a copy macOS no longer lets record (another signature), and a tap then delivers nothing (blocking, ~1.5 s).
+pub fn probe_system_audio() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use crate::audio::types::Channel;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut backend = crate::audio::platform::start(crate::audio::platform::Streams { mic: false, system: true }, tx).map_err(|e| e.to_string())?;
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(1_500);
+        let mut frames = 0_usize;
+        while let Some(left) = until.checked_duration_since(std::time::Instant::now()) {
+            match rx.recv_timeout(left) {
+                Ok(chunk) if chunk.channel == Channel::System => frames += chunk.samples.len(),
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+        backend.stop();
+        if frames == 0 { Err("the system audio tap delivered no audio".into()) } else { Ok(()) }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(())
+    }
+}
+
 /// Whether this computer tells "not asked yet" apart from "told no" for system audio and Screen Recording: on a Mac, the
 /// privacy call that reads it is there. Windows has no such permissions.
 pub fn can_tell_not_asked() -> bool {
@@ -313,6 +417,44 @@ mod tests {
 
     fn call(permissions: &Permissions) -> StartCheck {
         check_start(RecordingMode::Call, permissions)
+    }
+
+    #[test]
+    fn another_copy_of_echoledger_asks_for_its_permissions_again() {
+        let granted = Memory {
+            granted: vec![Kind::Microphone, Kind::SystemAudio, Kind::Screen],
+            ever: vec![Kind::Microphone, Kind::SystemAudio, Kind::Screen],
+            identity: Some("2.0.3 0a1b".into()),
+            ..Memory::default()
+        };
+        // The same copy: nothing changes.
+        assert_eq!(granted.for_identity("2.0.3 0a1b"), granted);
+        // An update signed otherwise (2.0.3 ad hoc → 2.0.4 with the pinned identity): what was granted is asked again and
+        // system audio is checked for real; what was ever allowed stays.
+        for next in ["2.0.4 9f8e", "2.0.3 9f8e", "2.0.4 0a1b"] {
+            let fresh = granted.for_identity(next);
+            assert!(fresh.granted.is_empty(), "{next}");
+            assert!(fresh.verify_system_audio, "{next}");
+            assert_eq!(fresh.identity.as_deref(), Some(next));
+            assert_eq!(fresh.ever, granted.ever);
+        }
+        // A memory from before 2.0.6 has no identity: the same.
+        let old: Memory = serde_json::from_str(r#"{"granted":["microphone","system_audio","screen"],"notice":[]}"#).unwrap();
+        assert!(old.for_identity("2.0.6 abcd").granted.is_empty());
+        assert!(!identity().is_empty());
+    }
+
+    #[test]
+    fn system_audio_that_did_not_record_counts_as_off_until_it_does() {
+        let memory = Memory::default().with_system_audio(Err("the system audio tap delivered no audio in 3 s".into()));
+        assert_eq!(memory.overlay(ON).system_audio, Access::Denied, "Setup and the Mac check say it is missing");
+        assert_eq!(memory.overlay(ON).microphone, Access::Allowed);
+        assert_eq!(missing_now(&memory.overlay(ON), false)[0].kind, Kind::SystemAudio);
+        let saved: Memory = serde_json::from_str(&serde_json::to_string(&memory).unwrap()).unwrap();
+        assert_eq!(saved.system_audio_failing.as_deref(), Some("the system audio tap delivered no audio in 3 s"), "kept across a restart");
+        let working = memory.with_system_audio(Ok(()));
+        assert_eq!(working.overlay(ON), ON);
+        assert!(!working.verify_system_audio);
     }
 
     #[test]
