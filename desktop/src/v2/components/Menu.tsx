@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type ReactNode, type Ref } from "react";
+import { createPortal } from "react-dom";
 import { Button, Icon, type ButtonProps, type IconType } from "./Button";
 import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
 
@@ -45,17 +46,79 @@ type ListProps = {
   listRef?: Ref<HTMLUListElement>;
   /** A sub-menu shown in place under its item (its parent scrolls, so a flyout would be cut off). */
   inline?: boolean;
+  /**
+   * What opened it (a button's menu): the list then floats in its own layer above the app (the sidebar, a panel that
+   * clips, a dialog), under or over this element, aligned to its `align` edge (placeMenu).
+   */
+  anchor?: HTMLElement | null;
+  align?: "start" | "end";
 };
 
 /** The gap a menu keeps from the window's edges. */
 const EDGE = 8;
+/** The gap between a button and its menu. */
+const GAP = 4;
 const rtl = (el: Element | null) => !!el && getComputedStyle(el).direction === "rtl";
+
+type Box = { left: number; top: number; right: number; bottom: number };
+export type MenuPlace = { left: number; top: number; up: boolean; room?: number };
+
+/**
+ * Where a button's menu goes (pure; viewport coordinates). Under its button, or over it when it doesn't fit below and
+ * there is more room above (taller than its room, it scrolls). Aligned to the button's `align` edge (end: the menu's
+ * end under the button's end; in right to left the ends are on the left); when that would run out of `region` (the
+ * part of the window the button is in: the page beside the sidebar), the other edge; when neither fits, moved just far
+ * enough to stay inside. A menu wider than the region stays inside the window instead (it floats above the rest).
+ * Always EDGE from the window's edges.
+ */
+export function placeMenu({ anchor, size, region, view, align, rtl: rightToLeft }: {
+  anchor: Box; size: { width: number; height: number }; region: Box; view: { width: number; height: number }; align: "start" | "end"; rtl: boolean;
+}): MenuPlace {
+  const win = { left: EDGE, right: view.width - EDGE };
+  const inside = { left: Math.max(region.left, win.left), right: Math.min(region.right, win.right) };
+  const room = size.width <= inside.right - inside.left ? inside : win;
+  const startLeft = rightToLeft ? anchor.right - size.width : anchor.left;
+  const endLeft = rightToLeft ? anchor.left : anchor.right - size.width;
+  const fits = (left: number) => left >= room.left && left + size.width <= room.right;
+  const [first, second] = align === "end" ? [endLeft, startLeft] : [startLeft, endLeft];
+  const left = fits(first) ? first : fits(second) ? second : Math.max(room.left, Math.min(first, room.right - size.width));
+  const below = view.height - EDGE - (anchor.bottom + GAP);
+  const above = anchor.top - GAP - EDGE;
+  const up = size.height > below && above > below;
+  const space = Math.floor(up ? above : below);
+  const height = Math.min(size.height, space);
+  return {
+    left: Math.round(Math.max(win.left, left)),
+    top: Math.round(up ? anchor.top - GAP - height : anchor.bottom + GAP),
+    up,
+    room: size.height > space ? space : undefined,
+  };
+}
+
+/** The part of the window `el` is shown in: its nearest ancestor that clips (a scrolling panel, the sidebar). */
+function regionOf(el: HTMLElement): Box {
+  for (let at = el.parentElement; at && at !== document.body; at = at.parentElement) {
+    const style = getComputedStyle(at);
+    if (/auto|scroll|hidden|clip/.test(`${style.overflow} ${style.overflowX} ${style.overflowY}`)) return at.getBoundingClientRect();
+  }
+  return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+}
+
+/**
+ * A floating list's own layer, at the end of the page and above everything (the sidebar, a panel that clips, a
+ * dialog), in the language and direction of where it opened, with the v2 look.
+ */
+function Layer({ from, children }: { from: Element | null; children: ReactNode }) {
+  const dir = from ? getComputedStyle(from).direction : undefined;
+  const lang = from?.closest("[lang]")?.getAttribute("lang") ?? undefined;
+  return createPortal(<div className="el-root el-embedded el-layer" dir={dir === "rtl" ? "rtl" : dir ? "ltr" : undefined} lang={lang}>{children}</div>, document.body);
+}
 
 /**
  * The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level.
  * Exported for openers of their own (SplitButton); a page uses Menu or ContextMenu.
  */
-export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false }: ListProps) {
+export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false, anchor, align = "end" }: ListProps) {
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
   const own = useRef<HTMLUListElement | null>(null);
@@ -69,9 +132,30 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
   // bottom. A button's menu with no room below opens upwards when there is more room above (a ⋮ on the last rows). A
   // list taller than its room scrolls inside it; its sub-menus then open in place under their item.
   const [fit, setFit] = useState<{ flip?: boolean; up?: boolean; shift?: number; room?: number }>({});
+  // A button's menu floats: placed from its button (placeMenu), and again when the window or a page under it moves.
+  const floating = !!anchor;
+  const [place, setPlace] = useState<MenuPlace | null>(null);
   useLayoutEffect(() => {
     const el = own.current;
-    if (!el || inline) return;
+    if (!el || !anchor) return;
+    const put = () => {
+      const box = el.getBoundingClientRect();
+      const size = { width: box.width, height: Math.max(box.height, el.scrollHeight) };
+      const next = placeMenu({ anchor: anchor.getBoundingClientRect(), size, region: regionOf(anchor), view: { width: window.innerWidth, height: window.innerHeight }, align, rtl: rtl(anchor) });
+      setPlace((now) => (now && now.left === next.left && now.top === next.top && now.up === next.up && now.room === next.room ? now : next));
+    };
+    put();
+    window.addEventListener("resize", put);
+    document.addEventListener("scroll", put, true);
+    return () => {
+      window.removeEventListener("resize", put);
+      document.removeEventListener("scroll", put, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor]);
+  useLayoutEffect(() => {
+    const el = own.current;
+    if (!el || inline || floating) return;
     const box = el.getBoundingClientRect();
     if (!box.height) return;
     const bottom = window.innerHeight - EDGE;
@@ -100,10 +184,12 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
     // Measured once, when the list opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const room = floating ? place?.room : fit.room;
   const fitted: CSSProperties = {
     ...style,
+    ...(floating ? { left: place?.left ?? 0, top: place?.top ?? 0 } : {}),
     ...(fit.shift ? { transform: `translateY(-${fit.shift}px)` } : {}),
-    ...(fit.room ? { maxBlockSize: `${fit.room}px`, overflowY: "auto" } : {}),
+    ...(room ? { maxBlockSize: `${room}px`, overflowY: "auto" } : {}),
   };
   useEffect(() => {
     if (sub !== null) return;
@@ -150,7 +236,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
           className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
           data-active={i === active || undefined}
-          onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
+          onMouseEnter={() => { setActive(i); if (!room) setSub(item.items ? i : null); }}
           onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
           {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
             : ticks && <span className="el-menu__check" aria-hidden="true" />}
@@ -161,17 +247,17 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           {item.items && <Icon icon={ChevronEndIcon} directional />}
         </div>
         {subOpen && item.items && (
-          <MenuList label={item.label} items={item.items} className={`el-menu el-menu--sub${fit.room ? " el-menu--inline" : ""}`} initial={0}
-            inline={!!fit.room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
+          <MenuList label={item.label} items={item.items} className={`el-menu el-menu--sub${room ? " el-menu--inline" : ""}`} initial={0}
+            inline={!!room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
         )}
       </li>
       </Fragment>
     );
   };
 
-  return (
-    <ul className={`${className}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
-      onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={fit.up || undefined}>
+  const list = (
+    <ul className={`${className}${floating ? " el-menu--floating" : ""}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
+      onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={(floating ? place?.up : fit.up) || undefined}>
       {runs(items).map(({ group, from, to }) => {
         const rows = items.slice(from, to).map((item, k) => row(item, from + k));
         if (!group) return rows;
@@ -188,6 +274,7 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
       })}
     </ul>
   );
+  return floating ? <Layer from={anchor ?? null}>{list}</Layer> : list;
 }
 
 /** Consecutive items with the same `group` (none: ungrouped), as index ranges [from, to). */
@@ -225,16 +312,19 @@ export function Menu({ label, items: given, button, chip }: {
   const make = () => (typeof given === "function" ? given() : given);
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
+  // The list floats in a layer of its own (MenuList's anchor), outside the button's element.
+  const list = useRef<HTMLUListElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
+      if (!root.current?.contains(e.target as Node) && !list.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
   }, [open]);
 
+  // Esc, and Tab too: the list floats elsewhere in the page, so focus goes back to the button (Tab then moves on from it).
   const close = () => {
     setOpen(false);
     opener.current?.focus();
@@ -267,7 +357,8 @@ export function Menu({ label, items: given, button, chip }: {
       )}
       {open && (
         <MenuList label={label} items={typeof given === "function" ? open.items : given} id={`${id}-menu`} className={chip ? "el-menu el-menu--start" : "el-menu el-menu--end"} initial={open.at}
-          onBack={close} onLeave={() => setOpen(false)} onPick={pick} />
+          anchor={root.current} align={chip ? "start" : "end"} listRef={list}
+          onBack={close} onLeave={close} onPick={pick} />
       )}
     </div>
   );
@@ -302,9 +393,11 @@ export function ContextMenu({ label, items, at, onClose }: { label: string; item
     back.current?.focus();
   };
   return (
-    <MenuList label={label} items={items} className="el-menu el-menu--context" initial={0} listRef={list}
-      style={{ left: place.x, top: place.y }}
-      onBack={close} onLeave={onClose} onPick={(item) => { close(); item.onPick?.(); }} />
+    <Layer from={back.current}>
+      <MenuList label={label} items={items} className="el-menu el-menu--context" initial={0} listRef={list}
+        style={{ left: place.x, top: place.y }}
+        onBack={close} onLeave={onClose} onPick={(item) => { close(); item.onPick?.(); }} />
+    </Layer>
   );
 }
 

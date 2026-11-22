@@ -182,6 +182,8 @@
   inset-block-start: calc(100% + var(--el-space-4));
   inset-inline-start: 0;
   min-inline-size: 100%;
+  /* A long item wraps (to two lines) inside this width rather than being cut. */
+  max-inline-size: calc(var(--el-space-64) * 5);
   max-block-size: calc(var(--el-space-64) * 9);
   overflow-y: auto;
   padding: var(--el-space-4);
@@ -193,6 +195,7 @@
 .el-menu__option {
   display: flex; align-items: center; gap: var(--el-space-8);
   min-block-size: var(--el-component-field-height);
+  padding-block: var(--el-space-4);
   padding-inline: var(--el-space-8);
   border-radius: var(--el-radius-sm);
   cursor: pointer;
@@ -211,7 +214,7 @@
 .el-menu__section { display: contents; }
 .el-menu__section > ul { margin: 0; padding: 0; }
 .el-menu__section:first-child .el-menu__group { padding-block-start: var(--el-space-4); }
-.el-menu__label { flex: 1; }
+.el-menu__label { flex: 1; min-inline-size: 0; white-space: normal; overflow-wrap: anywhere; }
 .el-menu__icon-space { inline-size: var(--el-space-16); flex: none; }
 .el-menu__shortcut { font-family: inherit; color: var(--el-role-text-secondary); padding-inline-start: var(--el-space-16); }
 .el-menu__option[aria-disabled="true"] { color: var(--el-role-text-disabled); cursor: default; }
@@ -221,6 +224,11 @@
 .el-menu--inline { position: static; inset: auto; transform: none; min-inline-size: 0; border: 0; box-shadow: none; padding: 0; padding-inline-start: var(--el-space-16); background: transparent; }
 .el-menu[data-up] { inset-block-start: auto; inset-block-end: calc(100% + var(--el-space-4)); }
 .el-menu--context { position: fixed; inset: auto; min-inline-size: calc(var(--el-space-64) * 3.5); }
+/* A button's menu, a right-click's: in their own layer at the end of the page, above the app shell (the sidebar, a
+   panel that clips) and its dialogs, placed from the button (Menu.tsx placeMenu). Never wider than the window. */
+.el-layer { position: fixed; inset-block-start: 0; inset-inline-start: 0; inline-size: 0; block-size: 0; z-index: var(--el-layer-overlay); background: transparent; }
+.el-menu--floating, .el-menu--floating[data-up] { position: fixed; inset: auto; }
+.el-menu--floating, .el-menu--context { max-inline-size: min(calc(var(--el-space-64) * 5), calc(100% - var(--el-space-16))); }
 
 /* ---- ListRow ------------------------------------------------------------------------------------------------ */
 .el-list { display: flex; flex-direction: column; }
