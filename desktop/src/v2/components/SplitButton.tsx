@@ -30,11 +30,13 @@ export function SplitButton({ label, icon, onClick, mainLabel, menuLabel, items,
   const [open, setOpen] = useState<false | { at: number }>(false);
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
+  // The list floats in a layer of its own (the shared Menu's), outside the button's element.
+  const list = useRef<HTMLUListElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
+      if (!root.current?.contains(e.target as Node) && !list.current?.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("pointerdown", away);
     return () => document.removeEventListener("pointerdown", away);
@@ -63,7 +65,8 @@ export function SplitButton({ label, icon, onClick, mainLabel, menuLabel, items,
       </button>
       {open && (
         <MenuList label={menuLabel} items={items} id={`${id}-menu`} className="el-menu el-menu--start" initial={open.at}
-          onBack={close} onLeave={() => setOpen(false)} onPick={(item) => { close(); item.onPick?.(); }} />
+          anchor={root.current} align="start" listRef={list}
+          onBack={close} onLeave={close} onPick={(item) => { close(); item.onPick?.(); }} />
       )}
     </div>
   );

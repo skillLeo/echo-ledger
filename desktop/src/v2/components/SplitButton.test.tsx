@@ -44,13 +44,35 @@ describe("SplitButton", () => {
     expect(more).toHaveAttribute("aria-expanded", "true");
     expect(more).toHaveAttribute("aria-controls", menu.id);
     expect(copyText).not.toHaveBeenCalled();
-    // The menu is a child of the split's own anchor, so it lines up with both parts.
+    // The menu floats in its own layer above the page (it is never cut off by a panel), and is placed from the
+    // split's own anchor, the whole button, so it lines up with both parts: under it, from its start edge.
     const split = view.container.querySelector(".el-split")!;
     expect(split).toHaveClass("el-menu-anchor");
-    expect(menu.parentElement).toBe(split);
+    expect(split.contains(menu)).toBe(false);
+    expect(menu.closest(".el-layer")).not.toBeNull();
+    expect(menu).toHaveClass("el-menu--floating");
     expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Copy text", "Copy with timestamps", "Copy for AI"]);
     fireEvent.click(more);
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("the menu is placed from the whole split: under it, its start edge under the split's start", () => {
+    const { more, view } = setup();
+    const split = view.container.querySelector(".el-split")!;
+    const rect = (left: number, top: number, width: number, height: number) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+    const spy = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      if (this === split) return rect(300, 100, 120, 36);
+      if (this.matches("[role=menu]")) return rect(0, 0, 224, 120);
+      return rect(0, 0, 0, 0);
+    });
+    try {
+      fireEvent.click(more);
+      const menu = screen.getByRole("menu", { name: "More copy options" });
+      expect(menu.style.left).toBe("300px");
+      expect(menu.style.top).toBe("140px");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("a pick closes the menu, gives focus back to the chevron and runs the action", () => {
