@@ -270,6 +270,25 @@ describe("recording pill", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  it("closed, the window grows to 124 only for not recorded; a one-row warning that can be dismissed stays at 84", async () => {
+    const noSystemAudio = [{ kind: "system_audio" as const, sentence: "System audio is off for EchoLedger: a recording will have your voice, not the other side of the call." }];
+    await renderPill(makeRecordingState({ missing: noSystemAudio }));
+    expect(screen.getByTestId("missing-permission")).toHaveTextContent("No system audio: recording your voice only");
+    expect(screen.getByRole("button", { name: "Dismiss warning" })).toBeInTheDocument();
+    await flushAsync();
+    expect(callsOf("pill_expanded"), "a one-row line: the closed size, nothing asked").toEqual([]);
+    // With the menu open it keeps its row above the menu, so the window makes room for both.
+    fireEvent.click(screen.getByTestId("pill-choice"));
+    await flushAsync();
+    expect(callsOf("pill_expanded")).toEqual([{ expanded: true, warning: true }]);
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(callsOf("pill_expanded").at(-1)).toEqual({ expanded: false, warning: false }));
+    // Not recorded, closed: the window grows for its sentence and buttons.
+    const notRecorded = [{ kind: "system_audio" as const, sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.", otherSide: "permission" as const }];
+    await emitEvent("recording:state", makeRecordingState({ missing: notRecorded }));
+    await waitFor(() => expect(callsOf("pill_expanded").at(-1)).toEqual({ expanded: false, warning: true }));
+  });
+
   it("doing nothing records: the banner goes when the core says its 5 s are over", async () => {
     await renderPill(makeRecordingState({ startBanner: true }));
     expect(screen.getByTestId("start-banner")).toBeInTheDocument();
