@@ -369,15 +369,29 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
-    fun `a death between the posted Undo and the store leaves only an Undo that finds nothing`() {
+    fun `a death between the posted Undo and the store leaves the call to choose again, never kept by its backstop`() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         call()
+        // Asked in a notification: its 10 s backstop runs.
+        DecisionTimeoutWorker.schedule(app, "call-1")
         Decisions.afterUndoPosted = { throw IllegalStateException("the process died here") }
         assertTrue(runCatching { runBlocking { Decisions.discardWithNotification(app, "call-1") } }.isFailure)
 
         assertEquals("the Undo was posted first", listOf("Deleted · WhatsApp call · 0:44"), undoLines())
-        assertEquals("nothing was deleted or scheduled", "pending_decision", app.peekRecording("call-1")?.state)
+        val left = app.peekRecording("call-1")!!
+        assertEquals("nothing was deleted or scheduled", "pending_decision", left.state)
+        assertTrue("left to the person: Choose again", left.restoredDelete)
         assertTrue(discardWork("call-1").isEmpty())
+        assertTrue("its backstop was called off before the post", timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+        // A backstop that runs all the same (one already on its way) keeps nothing.
+        runBlocking {
+            androidx.work.testing.TestListenableWorkerBuilder<DecisionTimeoutWorker>(app)
+                .setInputData(androidx.work.workDataOf(DecisionTimeoutWorker.KEY_ID to "call-1"))
+                .build()
+                .doWork()
+        }
+        assertEquals("never kept by itself", "pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue("never sent", noUpload("call-1"))
 
         // Its Undo finds nothing deleted: the call still waits, with its file, and is simply asked about again.
         Decisions.afterUndoPosted = {}
@@ -389,26 +403,57 @@ class PostCallPromptTest : AppTest() {
         pumpUntil("asked again") { DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
         assertTrue(undoLines().isEmpty())
         assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertFalse("the Undo took the delete back: an ordinary question again", app.peekRecording("call-1")!!.restoredDelete)
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
     }
 
     @Test
-    fun `with no notification permission the card's fallback Delete keeps its Undo with this process`() {
+    fun `with no notification permission a Delete behind a busy card waits for its own line, never deleted unseen`() {
         shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         asked("call-1")
         DecisionPopup.delete(app)
         pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
 
         assertFalse(DecisionPopup.deleted(app, call("call-2"), "dark", 3_000))
-        pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        assertEquals("call-1's line stays", "call-1", DecisionPopup.showingFor)
+        assertTrue("held behind it", DecisionPopup.answersFor("call-2"))
+        pumpUntil("left to the person meanwhile") { app.peekRecording("call-2")?.restoredDelete == true }
+        assertEquals("nothing deleted while no Undo can be seen", "pending_decision", app.peekRecording("call-2")?.state)
+        assertTrue(discardWork("call-2").isEmpty())
         assertTrue("no notification could be posted", undoLines().isEmpty())
-        assertEquals("so a lost process brings it back to choose again", Decisions.PROCESS, app.peekRecording("call-2")?.undoIn)
 
-        // As after EchoLedger closed: the delete comes due, and the call waits again instead of going unseen.
-        app.graph.recordings.update("call-2") { it.copy(undoIn = "a process that has gone") }
-        runDiscardWork("call-2")
-        pumpUntil("back") { app.peekRecording("call-2")?.state == "pending_decision" }
-        assertTrue(app.peekRecording("call-2")!!.restoredDelete)
+        // call-1's line ends: call-2's own "Deleted · Undo" shows, and only now is its delete stored, with this Undo.
+        after(DecisionPopup.DONE_MS + 1)
+        pumpUntil("call-2's line") { DecisionPopup.showingFor == "call-2" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED }
+        pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        assertEquals(Decisions.PROCESS, app.peekRecording("call-2")?.undoIn)
+        assertFalse(app.peekRecording("call-2")!!.restoredDelete)
+        assertTrue("a whole line's time", discardWork("call-2").single().initialDelayMillis >= DecisionPopup.DONE_MS)
+
+        DecisionPopup.undo(app)
+        pumpUntil("call-2 back") { app.peekRecording("call-2")?.state == "pending_decision" }
+        assertFalse(app.peekRecording("call-2")!!.restoredDelete)
+    }
+
+    @Test
+    fun `with no notification permission and no overlay a Delete leaves the call to choose again`() {
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        ShadowSettings.setCanDrawOverlays(false)
+        assertFalse(DecisionPopup.deleted(app, call("call-1"), "dark", 3_000))
+        assertFalse(DecisionPopup.isShowing)
+        pumpUntil("left to the person") { app.peekRecording("call-1")?.restoredDelete == true }
+        assertEquals("nothing deleted", "pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue(discardWork("call-1").isEmpty())
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+        // Never kept by itself either.
+        runBlocking {
+            androidx.work.testing.TestListenableWorkerBuilder<DecisionTimeoutWorker>(app)
+                .setInputData(androidx.work.workDataOf(DecisionTimeoutWorker.KEY_ID to "call-1"))
+                .build()
+                .doWork()
+        }
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue(noUpload("call-1"))
     }
 
     @Test

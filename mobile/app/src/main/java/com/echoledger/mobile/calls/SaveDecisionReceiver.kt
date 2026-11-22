@@ -202,18 +202,34 @@ object Decisions {
     /**
      * A Delete whose Undo is a notification (the post-call notification's Delete, the card's fallback when it cannot show
      * the line): "Deleted · Undo" is posted first, in place of the question, then the store is written, so a process
-     * that dies in between leaves only an Undo that finds nothing. When the notification could not be posted (no
-     * permission, Android refused it) the Undo is this process's ([PROCESS]): a lost process brings the call back to
-     * choose again instead of deleting it unseen. Null when there was nothing to delete (the posted Undo goes too).
+     * that dies in between leaves only an Undo that finds nothing. Before the post a waiting call is marked "Choose
+     * again" ([chooseAgain]: its 10 s backstop off), so a death at any point before the store's write leaves it to the
+     * person, never kept or sent by itself; [discardLater] and [undoDiscard] clear the mark. When the notification could
+     * not be posted (no permission, Android refused it) the Undo is this process's ([PROCESS]): a lost process brings
+     * the call back to choose again instead of deleting it unseen. Null when there was nothing to delete (the posted
+     * Undo goes too).
      */
     suspend fun discardWithNotification(context: Context, recordingId: String): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         val rec = graph.recordings.get(recordingId)?.takeIf { it.state in DISCARDABLE } ?: return null
+        if (rec.state == WAITING) chooseAgain(context, recordingId)
         val posted = Notifications.discardedWithUndo(context, rec)
         afterUndoPosted()
         val discarding = discardLater(context, recordingId, undoHere = !posted, widget = false, keepNotification = posted)
         if (discarding == null && posted) Notifications.cancelDecision(context, recordingId)
         return discarding
+    }
+
+    /**
+     * A waiting call left to the person ([LocalRecording.restoredDelete], "Choose again"): its 10 s backstop and any
+     * upload called off, so it is never kept or sent by itself. Null when it no longer waits.
+     */
+    suspend fun chooseAgain(context: Context, recordingId: String): LocalRecording? {
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        DecisionTimeoutWorker.cancel(context, recordingId)
+        UploadWorker.cancel(context, recordingId)
+        return graph.recordings.update(recordingId) { if (it.state == WAITING) it.copy(restoredDelete = true) else it }
+            ?.takeIf { it.state == WAITING }
     }
 
     /** Between the posted Undo and the store's write (tests stand a process's death in here). */
@@ -232,16 +248,20 @@ object Decisions {
         // restores it first ([com.echoledger.mobile.net.UploadWorker]).
         val serverDelete = graph.recordings.get(recordingId)?.serverCopy?.let { DiscardWorker.cancelBeforeItRuns(context, recordingId) }
         val back = graph.recordings.update(recordingId) {
-            if (it.state == DISCARDING) {
-                it.copy(
+            when {
+                it.state == DISCARDING -> it.copy(
                     state = it.discardedFrom ?: WAITING,
                     discardAt = null,
                     discardedFrom = null,
                     undoIn = null,
+                    restoredDelete = false,
                     restoreServerCopy = serverDelete == DiscardWorker.Stopped.MAYBE_RAN
                 )
-            } else {
-                it
+
+                // A delete whose store was never written (the process died after its Undo was posted): taken back too.
+                it.state == WAITING && it.restoredDelete -> it.copy(restoredDelete = false)
+
+                else -> it
             }
         }?.takeIf { it.state == WAITING || it.state == KEPT } ?: return null
         // Waiting again: its "kept after 10 s" runs again too, whoever shows the question, so it never waits without one.

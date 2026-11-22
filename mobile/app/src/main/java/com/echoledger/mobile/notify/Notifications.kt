@@ -113,7 +113,7 @@ object Notifications {
             .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, category.channelId)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-    private fun canPost(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+    fun canPost(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     /** Settings → Notifications → Test: one notification of that kind, marked as a test. */
