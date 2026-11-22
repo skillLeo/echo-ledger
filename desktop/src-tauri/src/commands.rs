@@ -902,8 +902,10 @@ pub struct SettingsPatch {
     /// Full replacement of the user rules (built-ins are never stored).
     site_rules: Option<Vec<crate::detect::sites::SiteRule>>,
     browser_automation: Option<bool>,
-    /// `keep` (Saved · Undo) or `ask` (the chip).
+    /// `ask` (the card), `always_transcribe` or `always_audio` (v1.5's `keep` reads as `ask`).
     after_call: Option<crate::settings::AfterCall>,
+    /// "When to ask" under Ask me: `after` (the card) or `start` (the banner beside the pill).
+    ask_when: Option<crate::settings::AskWhen>,
     /// 0, 5, 10, 20 or 30; anything else is refused.
     skip_calls_shorter_than_s: Option<u32>,
     /// 2, 3 or 5; anything else is refused.
@@ -968,6 +970,7 @@ impl SettingsPatch {
         if let Some(v) = self.browser_automation { s.browser_automation = v; }
         // Choosing After a call answers the one-time notice about it.
         if let Some(v) = self.after_call { s.after_call = v; s.after_call_notice = false; }
+        if let Some(v) = self.ask_when { s.ask_when = v; }
         if let Some(v) = self.skip_calls_shorter_than_s && crate::skipped::SHORTER_THAN_CHOICES.contains(&v) { s.skip_calls_shorter_than_s = v; }
         if let Some(v) = self.caption_lines { s.caption_lines = v; }
         if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }
@@ -1419,6 +1422,10 @@ pub struct RecordingState {
     pub device_note: Option<crate::audio::devices::DeviceNote>,
     /// Who the call is with, once its meeting window's title says (since v1.2's caller names); none until then.
     pub caller_name: Option<String>,
+    /// Chosen on the pill's menu: what happens when the call ends (no card then).
+    pub call_choice: Option<crate::after_call::CallChoice>,
+    /// "Recording this call · Don't record" shows beside the pill (its first 5 s, "At the start of the call").
+    pub start_banner: bool,
 }
 
 /// `main:navigate`: which view the main window opens on.
@@ -1457,6 +1464,8 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
         missing: if info.is_some() { state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()).clone() } else { Vec::new() },
         device_note: if info.is_some() { state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()) } else { None },
         caller_name: info.as_ref().and_then(|i| crate::pending::running_caller_name(state.recording_caller.lock().unwrap_or_else(|p| p.into_inner()).as_ref(), &i.client_ref)),
+        call_choice: info.as_ref().and_then(|i| crate::actions::call_choice_of(&state, &i.client_ref)),
+        start_banner: info.as_ref().is_some_and(|i| crate::actions::start_banner_shows(&state, &i.client_ref)),
     }
 }
 
@@ -3363,10 +3372,49 @@ pub fn after_call_discard(app: AppHandle, id: String) -> AppResult<()> {
     crate::actions::discard_from_chip(&app, &id)
 }
 
-/// Undo on "Discarded": the recording is back on its chip.
+/// Undo on "Deleted": the call is back on its card.
 #[tauri::command]
 pub fn after_call_discard_undo(app: AppHandle, id: String) -> AppResult<()> {
-    crate::actions::undo_chip_discard(&app, &id)
+    crate::actions::call_undo(&app, &id)
+}
+
+/// The card's answer: `transcribe`, `audio` (its ×, Esc or a swipe: Save audio only) or `delete`. Applied once the
+/// confirmation's 5 s are over.
+#[tauri::command]
+pub fn call_card_answer(app: AppHandle, id: String, choice: crate::after_call::CallChoice) -> AppResult<()> {
+    crate::actions::card_answer(&app, &id, choice)
+}
+
+/// Undo on any confirmation: the call is back on its card, nothing was uploaded or deleted.
+#[tauri::command]
+pub fn call_undo(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::call_undo(&app, &id)
+}
+
+/// Transcribe on "Saved as audio".
+#[tauri::command]
+pub fn call_done_transcribe(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::done_transcribe(&app, &id)
+}
+
+/// "Always do this?" › Yes: After each call becomes `value`.
+#[tauri::command]
+pub fn call_always(app: AppHandle, id: String, value: crate::settings::AfterEachCall) -> AppResult<()> {
+    crate::actions::call_always(&app, &id, value)
+}
+
+/// The grouped card: Review (the Library) or × (`review: false`).
+#[tauri::command]
+pub fn call_group_close(app: AppHandle, review: bool) {
+    if review { crate::actions::group_review(&app) } else { crate::actions::group_close(&app) }
+}
+
+/// The pill's menu during a call: `transcribe` (Transcribe this call), `audio` (Save audio only) or `delete` (Stop and
+/// delete; also the start banner's Don't record).
+#[tauri::command]
+pub async fn call_choice(app: AppHandle, choice: crate::after_call::CallChoice) -> AppResult<AppStatus> {
+    crate::actions::call_choice_now(&app, choice).await?;
+    Ok(status(&app))
 }
 
 #[tauri::command]

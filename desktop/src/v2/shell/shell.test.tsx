@@ -280,13 +280,13 @@ describe("the shell", () => {
 });
 
 describe("the After a call notice in the new shell", () => {
-  it("says it once, with Always transcribe; closing keeps Ask me", async () => {
+  it("says it once, with Transcribe every call; closing keeps Ask me", async () => {
     const { AfterCallNoticeV2 } = await import("./AfterCallNotice");
     respond("after_call_notice_answer", makeStatus());
     const onStatus = vi.fn();
     const { rerender } = render(<AfterCallNoticeV2 text="After a call, EchoLedger now asks what to do." onStatus={onStatus} />);
     expect(screen.getByTestId("after-call-notice-v2")).toHaveTextContent("After a call, EchoLedger now asks what to do.");
-    fireEvent.click(screen.getByRole("button", { name: "Always transcribe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe every call" }));
     await act(flushAsync);
     expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }]);
     expect(onStatus).toHaveBeenCalled();

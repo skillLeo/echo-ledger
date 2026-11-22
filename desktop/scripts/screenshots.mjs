@@ -143,8 +143,7 @@ const SCREENS = [
   }],
   ["controls", "controls", async (page) => {
     await page.waitForSelector(".rec-pill");
-    await page.waitForSelector(".after-pill.saved");
-    await page.waitForSelector(".after-pill.chip");
+    await page.waitForSelector(".call-card");
     await page.waitForSelector(".overlay-card .caption-line");
   }],
   // D-013, D-014, D-040, D-041, D-044, D-052, D-062: no internal, debug or vendor text.
@@ -291,18 +290,16 @@ const SCREENS = [
       await page.getByRole("alertdialog", { name: "Revoke this link?" }).waitFor();
     }, viewport],
   ]),
-  // D-105: the chip's Discard is a labelled trash, and Discard says Discarded with Undo for 6 s.
+  // The call choice: Delete says Deleted with Undo for 5 s (one message at a time).
   ["controls-discarded", "controls-discarded", async (page) => {
-    await page.waitForSelector(".after-pill.discarded");
-    await page.waitForSelector(".after-pill.chip");
+    await page.waitForSelector("[data-testid=call-done]");
   }],
   ["controls-discarded-narrow", "controls-discarded", async (page) => {
-    await page.waitForSelector(".after-pill.discarded");
-    await page.waitForSelector(".after-pill.chip");
+    await page.waitForSelector("[data-testid=call-done]");
   }, { width: 860, height: 560 }],
   ["controls-bluetooth", "controls-bluetooth", async (page) => {
     await page.waitForSelector("[data-testid=bluetooth-notice]");
-    await page.waitForSelector(".after-pill.chip");
+    await page.waitForSelector(".call-card");
   }],
   // Phase 1B: what runs on a Mac and on an old Windows, and what a recording says about what it holds.
   ["controls-permission", "controls-permission", async (page) => page.waitForSelector("[data-testid=missing-permission]")],

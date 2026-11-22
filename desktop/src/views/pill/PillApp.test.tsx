@@ -9,6 +9,9 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 vi.mock("@tauri-apps/api/webviewWindow", async () => (await import("../../test/tauri")).windowModule);
 
+/** The menu items' words, in order (menuitem and menuitemradio). */
+const menuItems = (root: Element) => [...root.querySelectorAll("[role^=menuitem]")].map((i) => i.textContent);
+
 class NoopResizeObserver {
   observe() {}
   unobserve() {}
@@ -58,9 +61,10 @@ describe("recording pill", () => {
     expect(screen.getByText("Zoom")).toBeInTheDocument();
     const bars = screen.getByTestId("pill-meters").querySelectorAll(".rec-meter > span");
     expect([...bars].map((b) => (b as HTMLElement).style.transform)).toEqual(["scaleY(0.4)", "scaleY(0.8)"]);
-    for (const name of ["Pause recording", "Stop recording", "Cancel recording", "Turn captions on", "Hide controls"]) {
+    for (const name of ["Pause recording", "Stop recording", "Turn captions on", "Hide controls"]) {
       expect(button(name)).toHaveAttribute("title", name);
     }
+    expect(screen.queryByRole("button", { name: "Cancel recording" }), "Stop and delete is on the menu now, with Undo").toBeNull();
   });
 
   it("the language chip steps to the next language and tells the core, which reconnects captions", async () => {
@@ -140,35 +144,73 @@ describe("recording pill", () => {
     expect(callsOf("cancel_recording")).toHaveLength(0);
   });
 
-  it("Cancel asks 'Discard?' and Yes calls cancelRecording", async () => {
+  it("a press on REC and the timer opens the call choice's menu; Stop and delete ends it at once, with Undo after", async () => {
+    respond("call_choice", makeStatus());
     await renderPill();
-    fireEvent.click(button("Cancel recording"));
-    expect(screen.getByText("Discard?")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Stop recording" })).not.toBeInTheDocument();
-    expect(callsOf("cancel_recording")).toHaveLength(0);
+    const opener = screen.getByTestId("pill-choice");
+    expect(opener).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(opener);
+    expect(opener).toHaveAttribute("aria-expanded", "true");
+    const menu = screen.getByRole("menu", { name: "After each call" });
+    expect(menuItems(menu)).toEqual(["Transcribe this call", "Save audio only", "Stop and delete"]);
+    expect(menu).toHaveAttribute("data-hit");
     respond("recording_state", makeRecordingState({ active: false }));
-    fireEvent.click(button("Yes"));
-    await waitFor(() => expect(callsOf("cancel_recording")).toHaveLength(1));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Stop and delete" }));
+    expect(pill()).not.toBeInTheDocument();
+    await waitFor(() => expect(callsOf("call_choice")).toEqual([{ choice: "delete" }]));
     expect(callsOf("stop_recording")).toHaveLength(0);
+    expect(callsOf("cancel_recording")).toHaveLength(0);
+  });
+
+  it("Transcribe this call and Save audio only go to the core and stay marked; the recording goes on", async () => {
+    respond("call_choice", recordingStatus());
+    await renderPill();
+    respond("recording_state", makeRecordingState({ callChoice: "transcribe" }));
+    fireEvent.click(screen.getByTestId("pill-choice"));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Transcribe this call" }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    await waitFor(() => expect(callsOf("call_choice")).toEqual([{ choice: "transcribe" }]));
     await flushAsync();
+    expect(pill()).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("pill-choice"));
+    expect(screen.getByRole("menuitemradio", { name: "Transcribe this call" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menuitemradio", { name: "Save audio only" })).toHaveAttribute("aria-checked", "false");
+    respond("recording_state", makeRecordingState({ callChoice: "audio" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Save audio only" }));
+    await waitFor(() => expect(callsOf("call_choice")).toEqual([{ choice: "transcribe" }, { choice: "audio" }]));
+    expect(callsOf("stop_recording")).toHaveLength(0);
+  });
+
+  it("Escape closes the menu without choosing; a voice note's menu has only Stop and delete", async () => {
+    await renderPill();
+    fireEvent.click(screen.getByTestId("pill-choice"));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(callsOf("call_choice")).toHaveLength(0);
+    await emitEvent("recording:state", makeRecordingState({ mode: "mic_note", sourceApp: "voice_note" }));
+    fireEvent.click(screen.getByTestId("pill-choice"));
+    expect(menuItems(document.body)).toEqual(["Stop and delete"]);
+  });
+
+  it("At the start of the call: Recording this call · Don't record for its first 5 s; Don't record stops and deletes", async () => {
+    respond("call_choice", makeStatus());
+    await renderPill(makeRecordingState({ startBanner: true }));
+    const banner = screen.getByTestId("start-banner");
+    expect(banner).toHaveTextContent("Recording this call");
+    expect(banner).toHaveAttribute("data-hit");
+    respond("recording_state", makeRecordingState({ active: false }));
+    fireEvent.click(within(banner).getByRole("button", { name: "Don't record" }));
+    await waitFor(() => expect(callsOf("call_choice")).toEqual([{ choice: "delete" }]));
     expect(pill()).not.toBeInTheDocument();
   });
 
-  it("Cancel then No restores the buttons without discarding", async () => {
-    await renderPill();
-    fireEvent.click(button("Cancel recording"));
-    fireEvent.click(button("No"));
-    expect(screen.queryByText("Discard?")).not.toBeInTheDocument();
-    expect(button("Stop recording")).toBeInTheDocument();
-    expect(callsOf("cancel_recording")).toHaveLength(0);
-  });
-
-  it("Escape answers No to the discard question", async () => {
-    await renderPill();
-    fireEvent.click(button("Cancel recording"));
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByText("Discard?")).not.toBeInTheDocument();
-    expect(callsOf("cancel_recording")).toHaveLength(0);
+  it("doing nothing records: the banner goes when the core says its 5 s are over", async () => {
+    await renderPill(makeRecordingState({ startBanner: true }));
+    expect(screen.getByTestId("start-banner")).toBeInTheDocument();
+    await emitEvent("recording:state", makeRecordingState({ startBanner: false, elapsedMs: 70_000 }));
+    expect(screen.queryByTestId("start-banner")).not.toBeInTheDocument();
+    expect(pill()).toBeInTheDocument();
+    expect(callsOf("call_choice")).toHaveLength(0);
   });
 
   it("Captions calls toggleCaptions and reports its pressed state", async () => {

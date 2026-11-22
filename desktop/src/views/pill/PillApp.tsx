@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState, type ScreenHoldReason, type ScreensPill } from "../../lib/ipc";
+import { announceReady, api, errorMessage, listenTo, type CallChoice, type FarSidePayload, type MarkPayload, type RecordingState, type ScreenHoldReason, type ScreensPill } from "../../lib/ipc";
+import { CALL_WORDS, PILL_MENU } from "../../lib/callChoice";
 import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
@@ -9,7 +10,7 @@ import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
 import { elapsedAt, formatTimer, isTwoChannel, meterLevel, missingShort, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { BLUETOOTH_NOTE } from "../../lib/microphone";
 import { CaptionsIcon, MicIcon, MonitorIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
-import { BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon, WarningIcon } from "../../components/ControlIcons";
+import { BookmarkIcon, CheckIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon, WarningIcon } from "../../components/ControlIcons";
 import "../controls.css";
 import { useRisingCount, useUiFlags } from "../../v2/flags";
 
@@ -52,11 +53,14 @@ export function screensChipText(screens: ScreensPill): string {
   return `Screens ${SCREEN_HOLD_TEXT[screens.reason ?? "starting"]} · ${kept}. Click to pause screens`;
 }
 
-type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark" | "language" | "screens";
+type Action = "pause" | "stop" | "cancel" | "choice" | "captions" | "hide" | "mark" | "language" | "screens";
 
 /**
- * Loom-style recording controls in the 352 x 84 `pill` window: REC + timer, source, Me/Client levels, Pause/Resume,
- * Stop ("After a call" decides what follows), Cancel with an inline confirm, Mark, the language chip, Captions on/off and Hide. Under the pill, a
+ * Loom-style recording controls in the 352 x 148 `pill` window: REC + timer, source, Me/Client levels, Pause/Resume,
+ * Stop ("After each call" decides what follows), Mark, the language chip, Captions on/off and Hide. A press on REC and
+ * the timer opens the call choice's menu under the pill: Transcribe this call, Save audio only (a call only) and Stop
+ * and delete; a choice made there means no card after the call. With "At the start of the call", "Recording this call ·
+ * Don't record" shows under the pill for 5 s. Under the pill, a
  * bookmark (from here or the shortcut) shows its tag presets and Undo for a few seconds, a call that has not heard
  * the other side for 30 s shows a warning, and a recording from a Bluetooth microphone says once that accuracy is lower
  * with it. While screen moments can be kept (v1.5) the Screens chip says whether they are on and pauses them in one
@@ -72,7 +76,7 @@ export default function PillApp() {
   const [visible, setVisible] = useState(false);
   const [anchor, setAnchor] = useState<TimerAnchor | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [confirming, setConfirming] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mark, setMark] = useState<MarkPayload | null>(null);
   const [markAt, setMarkAt] = useState(0);
@@ -103,7 +107,7 @@ export default function PillApp() {
     const keep = closing.current;
     setVisible((was) => (show && keep ? was : show));
     if (!state.active) {
-      setConfirming(false);
+      setMenu(false);
       setMark(null);
       setFarSide(null);
       bluetoothShown.current = false;
@@ -152,7 +156,7 @@ export default function PillApp() {
       listenTo("pill:visibility", (show) => {
         setVisible(show);
         if (show) void refresh();
-        else setConfirming(false);
+        else setMenu(false);
       }),
     ];
     announceReady(subscriptions, () => alive);
@@ -179,15 +183,15 @@ export default function PillApp() {
     return () => window.clearTimeout(timer);
   }, [error]);
 
-  // The window cannot take focus, so Escape only reaches it in a plain browser; it still means "No".
+  // The window cannot take focus, so Escape only reaches it in a plain browser; it closes the menu.
   useEffect(() => {
-    if (!confirming) return;
+    if (!menu) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setConfirming(false);
+      if (e.key === "Escape") setMenu(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [confirming]);
+  }, [menu]);
 
   // The bookmark tray closes by itself; tagging keeps it open a little longer.
   useEffect(() => {
@@ -219,9 +223,10 @@ export default function PillApp() {
   useEffect(() => setMissingDismissed(false), [missingKinds]);
   const missing = shown && !missingDismissed ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
-  const tray = mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : limitNotice && shown ? "limit" : screensNotice && shown && live?.screens?.on ? "screens" : null;
+  const banner = shown && !!live?.startBanner;
+  const tray = menu && shown ? "menu" : banner ? "start" : mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : limitNotice && shown ? "limit" : screensNotice && shown && live?.screens?.on ? "screens" : null;
   const concealed = useConcealed();
-  useHitRegions([shown, confirming, tray, concealed]);
+  useHitRegions([shown, menu, tray, concealed]);
 
   /** Runs one command at a time; on failure shows the message and resyncs with the core. */
   const run = async (action: Action, command: () => Promise<unknown>) => {
@@ -258,12 +263,19 @@ export default function PillApp() {
     void run("stop", api.stopRecording);
   };
 
-  const confirmCancel = () => {
+  /** The menu's choice (and the banner's Don't record): Stop and delete ends the recording now, with Undo after it;
+   * Transcribe this call and Save audio only are what happens when the call ends (no card then). */
+  const choose = (choice: CallChoice) => {
     if (busy.current) return;
-    closing.current = true;
-    setConfirming(false);
-    setVisible(false);
-    void run("cancel", api.cancelRecording);
+    setMenu(false);
+    if (choice === "delete") {
+      closing.current = true;
+      setVisible(false);
+      void run("cancel", () => api.callChoice("delete"));
+      return;
+    }
+    patch({ callChoice: choice });
+    void run("choice", () => api.callChoice(choice));
   };
 
   const toggleCaptions = () => {
@@ -344,10 +356,11 @@ export default function PillApp() {
             model={{
               elapsed, name: caller || label, paused, captions: live.captions, language: languageChip(live.language), error,
               screens: live.screens ? { on: live.screens.on, count: live.screens.count } : null,
+              call: live.mode === "call", choice: live.callChoice ?? null, banner,
             }}
             actions={{
               onCaptions: toggleCaptions, onPause: togglePause, onStop: stop, onScreens: toggleScreens,
-              onCapture: () => void run("screens", captureNowV2), onLanguage: cycleLanguage, onDiscard: confirmCancel,
+              onCapture: () => void run("screens", captureNowV2), onLanguage: cycleLanguage, onChoice: choose,
             }} />
         </Suspense>
       </div>
@@ -358,11 +371,14 @@ export default function PillApp() {
     <div className="pill-root">
       <div className={`rec-pill${paused ? " paused" : ""}`} data-hit data-testid="recording-pill" role="toolbar"
         aria-label="Recording controls" onMouseDown={startDrag} onMouseMove={afterDrag}>
-        <span className="rec-status">
-          <span className="rec-dot" aria-hidden="true" />
-          <span className="rec-state">{paused ? "Paused" : "REC"}</span>
-        </span>
-        <span className="rec-timer" data-testid="pill-timer">{elapsed}</span>
+        <button type="button" className="rec-choice" data-testid="pill-choice" aria-haspopup="menu" aria-expanded={menu} aria-controls="rec-menu"
+          aria-label={`${paused ? "Paused" : "Recording"} ${elapsed}. ${menu ? "Hide" : "Show"} what happens to this recording`} onClick={() => setMenu(!menu)}>
+          <span className="rec-status">
+            <span className="rec-dot" aria-hidden="true" />
+            <span className="rec-state">{paused ? "Paused" : "REC"}</span>
+          </span>
+          <span className="rec-timer" data-testid="pill-timer">{elapsed}</span>
+        </button>
         {error ? (
           <span className="rec-source rec-error" role="alert" title={error}><span className="rec-label">{error}</span></span>
         ) : (
@@ -371,26 +387,18 @@ export default function PillApp() {
             <span className="rec-label">{label}</span>
           </span>
         )}
-        {isTwoChannel(live.mode) && !confirming && (
+        {isTwoChannel(live.mode) && (
           <span className="rec-meters" data-testid="pill-meters">
             <span className="rec-meter me" title="Me" aria-hidden="true"><span style={fillHeight(meterLevel(me))} /></span>
             <span className="rec-meter client" title="Client" aria-hidden="true"><span style={fillHeight(meterLevel(client))} /></span>
           </span>
         )}
-        {confirming ? (
-          <span className="rec-confirm" role="group" aria-label="Discard this recording?">
-            <span className="rec-confirm-q">Discard?</span>
-            <button type="button" className="rec-text-btn danger" onClick={confirmCancel}>Yes</button>
-            <button type="button" className="rec-text-btn" onClick={() => setConfirming(false)}>No</button>
-          </span>
-        ) : (
-          <span className="rec-actions">
+        <span className="rec-actions">
             <PrivacyBadge compact />
             <PillButton label={paused ? "Resume recording" : "Pause recording"} onClick={togglePause}>
               {paused ? <PlayIcon size={14} /> : <PauseIcon size={14} />}
             </PillButton>
             <PillButton label="Stop recording" className="stop" onClick={stop}><StopIcon size={14} /></PillButton>
-            <PillButton label="Cancel recording" onClick={() => setConfirming(true)}><TrashIcon size={15} /></PillButton>
             <PillButton label="Bookmark this moment" onClick={markNow}><BookmarkIcon size={15} /></PillButton>
             <button type="button" className="rec-lang" data-testid="pill-language" onClick={cycleLanguage}
               aria-label={`Language: ${languageLabel(live.language)}. Click to change`} title={`Language: ${languageLabel(live.language)} (click to change)`}>
@@ -406,9 +414,27 @@ export default function PillApp() {
               <CaptionsIcon size={15} />
             </PillButton>
             <PillButton label="Hide controls" onClick={hide}><MinimizeIcon size={15} /></PillButton>
-          </span>
-        )}
+        </span>
       </div>
+      {tray === "menu" && (
+        <div className="rec-menu" id="rec-menu" lang="en" data-hit role="menu" aria-label={CALL_WORDS.setting_title} data-testid="pill-menu">
+          {PILL_MENU.filter((m) => live.mode === "call" || m.choice === "delete").map((m) => (
+            <button key={m.choice} type="button" role={m.choice === "delete" ? "menuitem" : "menuitemradio"}
+              aria-checked={m.choice === "delete" ? undefined : live.callChoice === m.choice} className={`rec-menu-item${m.choice === "delete" ? " danger" : ""}`}
+              onClick={() => choose(m.choice)}>
+              <span className="rec-menu-mark" aria-hidden="true">{live.callChoice === m.choice ? <CheckIcon size={14} /> : m.choice === "delete" ? <TrashIcon size={14} /> : null}</span>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {tray === "start" && (
+        <div className="mark-tray note" lang="en" data-hit data-testid="start-banner" role="status">
+          <span className="rec-dot" aria-hidden="true" />
+          <span className="mark-text" dir="auto">{CALL_WORDS.start_banner}</span>
+          <button type="button" className="rec-text-btn" onClick={() => choose("delete")}>{CALL_WORDS.dont_record}</button>
+        </div>
+      )}
       {tray === "mark" && mark && (
         <div className="mark-tray" data-hit data-testid="mark-tray" role="group" aria-label="Bookmark">
           <span className="mark-done">Bookmarked {formatTimer(mark.atMs)}</span>

@@ -11,7 +11,7 @@ import DictationApp from "./views/dictation/DictationApp";
 import { MacCheckCard } from "./views/main/MacCheck";
 import { PermissionStep } from "./views/main/Permissions";
 import { emitEvent, flushAsync, pushChannelMessage, resetTauriMock, respondAll, setWindowLabel } from "./test/tauri";
-import { makeAfterCallState, makeChipItem, makeItem, makePendingItem, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeTranscript, makeUploadItem } from "./test/fixtures";
+import { makeAfterCallState, makeChipItem, makeItem, makePendingItem, makeRecordingState, makeCallDone, makeSettings, makeStatus, makeTranscript, makeUploadItem } from "./test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("./test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("./test/tauri")).eventModule);
@@ -49,7 +49,7 @@ beforeEach(() => {
     share_list: { data: [] },
     transcript_revisions: { data: [] },
     recording_state: makeRecordingState({ active: true, captions: true }),
-    after_call_state: makeAfterCallState({ saved: makeSavedToast(), ask: makeChipItem("p1") }),
+    after_call_state: makeAfterCallState({ hint: true, ask: makeChipItem("p1") }),
     overlay_set_hit_regions: null,
     subscribe_captions: null,
   });
@@ -78,8 +78,13 @@ describe("screen-reader names (C7)", () => {
     expect(unnamed()).toEqual([]);
   });
 
-  it("names every control of the caption overlay, the pill, the after-call toast and chip and the dictation bar", async () => {
-    for (const [label, View] of [["overlay", OverlayApp], ["pill", PillApp], ["review", ReviewApp], ["dictation", DictationApp]] as const) {
+  it("names every control of the caption overlay, the pill and its menu, the after-call card, its confirmations and the dictation bar", async () => {
+    const review = [
+      makeAfterCallState({ hint: true, ask: makeChipItem("p1") }),
+      makeAfterCallState({ done: makeCallDone({ kind: "audio", offerAlways: "always_audio" }) }),
+      makeAfterCallState({ group: { count: 3, until: new Date(Date.now() + 8000).toISOString() } }),
+    ];
+    for (const [label, View, state] of [["overlay", OverlayApp, null], ["pill", PillApp, null], ...review.map((s) => ["review", ReviewApp, s] as const), ["dictation", DictationApp, null]] as const) {
       setWindowLabel(label);
       render(<View />);
       await flushAsync();
@@ -87,7 +92,11 @@ describe("screen-reader names (C7)", () => {
         await pushChannelMessage({ kind: "status", live: true, recording: true, provider: "assemblyai", message: null });
         await emitEvent("overlay:visibility", true);
       }
-      if (label === "review") await emitEvent("aftercall:state", makeAfterCallState({ saved: makeSavedToast(), ask: makeChipItem("p1") }));
+      if (label === "pill") {
+        fireEvent.click(screen.getByTestId("pill-choice"));
+        expect(screen.getByRole("menu")).toBeInTheDocument();
+      }
+      if (state) await emitEvent("aftercall:state", state);
       await act(async () => undefined);
       expect(unnamed(), label).toEqual([]);
       cleanup();

@@ -1555,6 +1555,11 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .set-trail.disclosure.open { transform: rotate(-90deg); }
 .set-sub { display: block; font-size: var(--text-xs); line-height: 16px; color: var(--text-muted); }
 .set-main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+/* A choice of a few with a help line each (After each call): one radio per row. */
+.set-choices { margin: 0; padding: 0; border: 0; min-width: 0; }
+.set-choices > .set-choice:first-of-type::before { display: none; }
+.set-choice { cursor: pointer; align-items: flex-start; }
+.set-choice input[type="radio"] { flex: none; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
 .set-main .set-title { flex: none; }
 .set-two { min-height: 60px; }
 .set-danger .set-title { color: var(--danger); }

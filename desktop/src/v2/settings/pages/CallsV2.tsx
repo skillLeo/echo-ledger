@@ -1,5 +1,6 @@
 // Settings › Calls & meetings in the new look, with today's data and rules (CaptureSettings.tsx): auto-record and
-// each call app, unknown apps, browser tabs on a Mac; what happens after a call and which short calls are skipped; the
+// each call app, unknown apps, browser tabs on a Mac; After each call (the call choice: four choices with their help
+// lines, and When to ask under Ask me) and which short calls are skipped; the
 // call sites (built-in rules, the person's own, never-record); and why a call wasn't recorded, read while on screen.
 import { useEffect, useState } from "react";
 import { api, type MicUser, type NotRecordedMic, type Settings, type SiteRule } from "../../../lib/ipc";
@@ -9,9 +10,10 @@ import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } f
 import { useWindowShown } from "../../../lib/visibility";
 import { sourceAppLabel } from "../../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../../lib/sites";
-import { AUTO_RECORD_APPS, afterCallHint, appRecords } from "../../../views/main/CaptureSettings";
+import { AUTO_RECORD_APPS, appRecords } from "../../../views/main/CaptureSettings";
+import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../../lib/callChoice";
 import { Button, Card, Icons, List, ListRow, Select, Status, TextField, Toggle } from "../../components";
-import { Group, LinkSetting, ResetDefaults, SelectSetting, SwitchSetting, type Patch } from "./rows";
+import { ChoiceSetting, Group, LinkSetting, ResetDefaults, SelectSetting, SwitchSetting, type Patch } from "./rows";
 
 const optionDefault = (id: string) => setting(id).options?.find((o) => o.default)?.value ?? "";
 
@@ -38,8 +40,15 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
         <SwitchSetting id="calls.ask_unknown" on={settings.askUnknownApps} onChange={(v) => void patch({ askUnknownApps: v })} />
         {platform === "macos" && <SwitchSetting id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Group>
-      <Group title="After a call" footer={<><p>{afterCallHint(settings.afterCall, platform)}</p><p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p></>}>
-        <SelectSetting<Settings["afterCall"]> id="calls.after" value={settings.afterCall} onChange={(v) => void patch({ afterCall: v })} />
+      <Group title={CALL_WORDS.setting_title}>
+        <ChoiceSetting id="calls.after" value={afterEachCallOf(settings)} options={AFTER_EACH_CALL_OPTIONS} onChange={(v) => void patch(afterEachCallPatch(v))} />
+      </Group>
+      {afterEachCallOf(settings) === "ask" && (
+        <Group title={CALL_WORDS.when_title}>
+          <ChoiceSetting id="calls.ask_when" value={settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS} onChange={(v) => void patch({ askWhen: v })} />
+        </Group>
+      )}
+      <Group footer={<p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p>}>
         <SelectSetting id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => ({ value: String(s), label }))}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Group>
@@ -51,7 +60,7 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
         <div className="el-settings-v2__reset"><Button variant="quiet" onClick={onConsent}>Read the recording consent notice</Button></div>
       )}
       <ResetDefaults page="Calls & meetings" onReset={() => void patch({
-        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"],
+        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"], askWhen: optionDefault("calls.ask_when") as Settings["askWhen"],
         skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
       })} />
     </>

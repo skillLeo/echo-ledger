@@ -26,6 +26,17 @@ export interface TranscribeEstimate {
   items: { id: string; minutes: number }[];
 }
 export type AfterCall = "ask" | "always_transcribe" | "always_audio";
+/** "When to ask" under Ask me (the call choice): after the call (the card) or at the start (the banner by the pill). */
+export type AskWhen = "after" | "start";
+/** "After each call" as Settings shows it: `off` is Don't record calls (autoMode off; afterCall is kept under it). */
+export type AfterEachCall = "ask" | "always_transcribe" | "always_audio" | "off";
+/** The three choices of the card and the pill's menu (`delete` is "Stop and delete" on the pill). */
+export type CallChoice = "transcribe" | "audio" | "delete";
+/** The same choice made on the card this many times in a row ("Always do this?" after 3). */
+export interface CardStreak {
+  choice: CallChoice;
+  count: number;
+}
 /** Why an automatic call was skipped quietly (v1.5): shorter than the setting, or nobody spoke on either side. */
 export type SkipReason = "too_short" | "no_speech";
 export type TrayState = "idle" | "recording" | "paused" | "uploading" | "attention";
@@ -409,6 +420,10 @@ export interface Settings {
   consentAcknowledged: boolean;
   afterCall: AfterCall;
   afterCallNotice: boolean;
+  askWhen: AskWhen; // "When to ask" under Ask me
+  cardHintSeen: boolean; // the card's first-time line was shown
+  cardStreak: CardStreak | null; // the same card choice in a row
+  alwaysOffered: boolean; // "Always do this?" was offered (once)
   skipCallsShorterThanS: number;
   askUnknownApps: boolean;
   siteRules: SiteRule[];
@@ -539,6 +554,7 @@ export interface SettingsPatch {
   consentAcknowledged?: boolean;
   overlayCorner?: Corner;
   afterCall?: AfterCall;
+  askWhen?: AskWhen;
   skipCallsShorterThanS?: number;
   askUnknownApps?: boolean;
   siteRules?: SiteRule[];
@@ -1373,6 +1389,10 @@ export interface RecordingState {
   deviceNote?: DeviceNote | null;
   /** Who the call is with, once its meeting window's title says; null until then. */
   callerName?: string | null;
+  /** Chosen on the pill's menu: what happens when the call ends (no card then). */
+  callChoice?: CallChoice | null;
+  /** "Recording this call · Don't record" beside the pill (its first 5 s, "At the start of the call"). */
+  startBanner?: boolean;
 }
 
 /** Why screen moments are paused (since v1.5): by the person, the recording paused, the meeting window minimised or
@@ -1478,8 +1498,10 @@ export interface ProjectScreensPage {
 /** Export → Meeting pack: the print page (Save as PDF in the browser) or a ZIP with the pictures. */
 export type MeetingPackFormat = "pdf" | "zip";
 
-/** "Saved · Call with Omar · 4:12 · Undo": a recording kept at once after a call; `until` is when the toast goes. */
-export interface SavedToast {
+/** "Transcribing…", "Saved as audio · Transcribe", "Deleted", each with Undo; `until` is when it goes and the choice is
+ * applied. `offerAlways`: "Always do this?" [Yes] sets After each call to it (offered once). */
+export interface CallDone {
+  kind: CallChoice;
   id: string;
   title: string | null;
   callerName: string | null;
@@ -1487,14 +1509,22 @@ export interface SavedToast {
   mode: "call" | "voice_note" | "mic_note";
   durationMs: number;
   until: string;
+  offerAlways: AfterEachCall | null;
 }
 
-/** What the after-call window shows: the Saved toast and the Ask-me chip (its item's `deadlineAt` is when it keeps). */
+/** "3 calls saved as audio · Review": back-to-back calls, never a stack of cards. */
+export interface CallGroup {
+  count: number;
+  until: string;
+}
+
+/** What the after-call window shows, one at a time: the card (its item's `deadlineAt` is when it saves the audio only),
+ * one confirmation, or the grouped card. `hint`: the card's first time ever. */
 export interface AfterCallState {
-  saved: SavedToast | null;
-  /** "Discarded · <title> · Undo" after the chip's Discard, while its files can still come back. */
-  discarded: SavedToast | null;
   ask: PendingItem | null;
+  hint: boolean;
+  done: CallDone | null;
+  group: CallGroup | null;
 }
 
 /** A short or silent automatic call kept on this computer for 24 h (Activity's "Skipped 3 short calls"). Times are RFC 3339 UTC. */
@@ -1963,13 +1993,25 @@ export const api = {
   setRecordingLanguage: (language: TranscriptionLanguage | null) => invoke<void>("set_recording_language", { language }),
   /** Opens a waiting recording in the main window (from the chip: with its title open); its chip stops counting. */
   pendingOpen: (id: string, rename: boolean) => invoke<void>("pending_open", { id, rename }),
-  /** What the after-call window shows now (the Saved toast and the Ask-me chip). */
+  /** What the after-call window shows now (the card, a confirmation or the grouped card). */
   afterCallState: () => invoke<AfterCallState>("after_call_state"),
+  /** The card's answer: Transcribe, Save audio only (its ×, Esc or a swipe) or Delete; applied after its 5 s Undo. */
+  callCardAnswer: (id: string, choice: CallChoice) => invoke<void>("call_card_answer", { id, choice }),
+  /** Undo on a confirmation: the call is back on its card. */
+  callUndo: (id: string) => invoke<void>("call_undo", { id }),
+  /** Transcribe on "Saved as audio". */
+  callDoneTranscribe: (id: string) => invoke<void>("call_done_transcribe", { id }),
+  /** "Always do this?" › Yes. */
+  callAlways: (id: string, value: AfterEachCall) => invoke<void>("call_always", { id, value }),
+  /** The grouped card: Review (opens the Library) or its ×. */
+  callGroupClose: (review: boolean) => invoke<void>("call_group_close", { review }),
+  /** The pill's menu during a call: Transcribe this call, Save audio only, or Stop and delete. */
+  callChoice: (choice: CallChoice) => invoke<AppStatus>("call_choice", { choice }),
   /** Undo on the Saved toast: the recording goes (to Recently deleted once it is uploaded). */
   savedUndo: (id: string) => invoke<void>("saved_undo", { id }),
-  /** Discard on the after-call chip: the files stay until its Undo time is over. */
+  /** Delete on the after-call card (older windows): the files stay until its Undo time is over. */
   afterCallDiscard: (id: string) => invoke<void>("after_call_discard", { id }),
-  /** Undo on "Discarded": the recording is back on its chip. */
+  /** Undo on "Deleted": the call is back on its card. */
   afterCallDiscardUndo: (id: string) => invoke<void>("after_call_discard_undo", { id }),
   /** Short or silent automatic calls skipped in the last 24 h, newest first. */
   skippedList: () => invoke<SkippedItem[]>("skipped_list"),

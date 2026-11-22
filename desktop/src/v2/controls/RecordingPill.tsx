@@ -1,9 +1,13 @@
 // The recording pill in the new look (ui_v2.recording_controls, v1.8 P1.3): "● 02:14 · Omar"; a press opens the
-// controls: Captions, Pause, Stop, Screens on/off and Capture now, Language, Discard. Captions are off by default (the
-// core's choice). Media controls never mirror. The window never takes focus, so everything works on click; [data-hit]
-// marks what the core keeps clickable.
+// controls (Captions, Pause, Stop, Screens on/off and Capture now, Language) and, under the pill, the call choice's
+// menu: Transcribe this call, Save audio only, Stop and delete (a voice note has only Stop and delete). A choice made
+// there means no card after the call. With "At the start of the call", "Recording this call · Don't record" shows
+// under the pill for 5 s. Captions are off by default (the core's choice). Media controls never mirror. The window
+// never takes focus, so everything works on click; [data-hit] marks what the core keeps clickable.
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import type { CallChoice } from "../../lib/ipc";
+import { CALL_WORDS, PILL_MENU } from "../../lib/callChoice";
 import { Button, Icons, Status } from "../components";
 import { PauseIcon, PlayIcon } from "../components/icons";
 import { RecordDotIcon, StopIcon } from "../../components/ControlIcons";
@@ -21,6 +25,12 @@ export type PillModel = {
   screens: { on: boolean; count: number } | null;
   /** A failed action's sentence, shown in place of the name for a moment. */
   error?: string | null;
+  /** A call (the menu offers Transcribe this call and Save audio only); false for a voice note. */
+  call?: boolean;
+  /** Chosen on the menu during this call. */
+  choice?: CallChoice | null;
+  /** "Recording this call · Don't record" (its first 5 s, "At the start of the call"). */
+  banner?: boolean;
 };
 
 export type PillActions = {
@@ -30,7 +40,8 @@ export type PillActions = {
   onScreens: () => void;
   onCapture: () => void;
   onLanguage: () => void;
-  onDiscard: () => void;
+  /** The menu's choice; `delete` is Stop and delete (also the banner's Don't record). */
+  onChoice: (choice: CallChoice) => void;
 };
 
 /** How long the pill marks a kept screen (the flash, or the still highlight under Reduce motion). */
@@ -57,7 +68,6 @@ export function useScreenCaptured(): { count: number; seq: number } | null {
 
 export function RecordingPill({ model, actions, defaultOpen = false }: { model: PillModel; actions: PillActions; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [confirming, setConfirming] = useState(false);
   const captured = useScreenCaptured();
   const [marked, setMarked] = useState(false);
   useEffect(() => {
@@ -66,42 +76,67 @@ export function RecordingPill({ model, actions, defaultOpen = false }: { model: 
     const timer = window.setTimeout(() => setMarked(false), CAPTURE_MARK_MS);
     return () => window.clearTimeout(timer);
   }, [captured]);
+  // Escape closes the menu (when the window has focus, as in a browser).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
   const status = model.paused ? `Paused ${model.elapsed}` : `Recording ${model.elapsed}`;
+  const choose = (choice: CallChoice) => {
+    setOpen(false);
+    actions.onChoice(choice);
+  };
+  const items = PILL_MENU.filter((m) => model.call !== false || m.choice === "delete");
 
   return (
-    <div className={`el-pill${marked ? " el-pill--captured" : ""}`} data-hit role="toolbar" aria-label="Recording controls" data-testid="recording-pill-v2">
-      <span className="el-visually-hidden" role="status">
-        {captured ? `Screen kept. ${captured.count} ${captured.count === 1 ? "screen" : "screens"} in this recording.` : ""}
-      </span>
-      <button type="button" className="el-pill__summary" aria-expanded={open} aria-controls="el-pill-controls"
-        aria-label={`${status}, ${model.name}. ${open ? "Hide" : "Show"} the controls`} onClick={() => { setOpen(!open); setConfirming(false); }}>
-        <Status kind={model.paused ? "idle" : "recording"}><span className="el-num">{model.elapsed}</span></Status>
-        <span className="el-pill__sep" aria-hidden="true">·</span>
-        <span className={`el-pill__name${model.error ? " el-pill__name--error" : ""}`} dir="auto">{model.error ?? model.name}</span>
-      </button>
-      {open && !confirming && (
-        <div className="el-pill__controls" id="el-pill-controls">
-          <Button size="sm" variant="quiet" icon={Icons.CaptionsIcon} aria-label="Captions" aria-pressed={model.captions} title="Captions" onClick={actions.onCaptions} />
-          <Button size="sm" variant="quiet" icon={model.paused ? PlayIcon : PauseIcon} aria-label={model.paused ? "Resume" : "Pause"} title={model.paused ? "Resume" : "Pause"} onClick={actions.onPause} />
-          <Button size="sm" variant="quiet" icon={StopIcon} aria-label="Stop and save" title="Stop and save" onClick={actions.onStop} />
-          {model.screens && (
-            <>
-              <Button size="sm" variant="quiet" icon={Icons.ScreenIcon} aria-label={model.screens.on ? `Screens on, ${model.screens.count} kept. Pause screens` : "Screens paused. Turn screens on"}
-                aria-pressed={model.screens.on} title={model.screens.on ? "Pause screens" : "Turn screens on"} onClick={actions.onScreens} />
-              <Button size="sm" variant="quiet" icon={RecordDotIcon} aria-label="Capture the screen now" title="Capture now" disabled={!model.screens.on} onClick={actions.onCapture} />
-            </>
-          )}
-          <Button size="sm" variant="quiet" aria-label={`Language: ${model.language}. Change`} title="Language" onClick={actions.onLanguage}>{model.language}</Button>
-          <Button size="sm" variant="quiet" icon={Icons.TrashIcon} aria-label="Discard this recording" title="Discard" onClick={() => setConfirming(true)} />
+    <div className="el-pill-stack">
+      <div className={`el-pill${marked ? " el-pill--captured" : ""}`} data-hit role="toolbar" aria-label="Recording controls" data-testid="recording-pill-v2">
+        <span className="el-visually-hidden" role="status">
+          {captured ? `Screen kept. ${captured.count} ${captured.count === 1 ? "screen" : "screens"} in this recording.` : ""}
+        </span>
+        <button type="button" className="el-pill__summary" aria-expanded={open} aria-controls="el-pill-controls" aria-haspopup="menu"
+          aria-label={`${status}, ${model.name}. ${open ? "Hide" : "Show"} the controls`} onClick={() => setOpen(!open)}>
+          <Status kind={model.paused ? "idle" : "recording"}><span className="el-num">{model.elapsed}</span></Status>
+          <span className="el-pill__sep" aria-hidden="true">·</span>
+          <span className={`el-pill__name${model.error ? " el-pill__name--error" : ""}`} dir="auto">{model.error ?? model.name}</span>
+        </button>
+        {open && (
+          <div className="el-pill__controls" id="el-pill-controls">
+            <Button size="sm" variant="quiet" icon={Icons.CaptionsIcon} aria-label="Captions" aria-pressed={model.captions} title="Captions" onClick={actions.onCaptions} />
+            <Button size="sm" variant="quiet" icon={model.paused ? PlayIcon : PauseIcon} aria-label={model.paused ? "Resume" : "Pause"} title={model.paused ? "Resume" : "Pause"} onClick={actions.onPause} />
+            <Button size="sm" variant="quiet" icon={StopIcon} aria-label="Stop and save" title="Stop and save" onClick={actions.onStop} />
+            {model.screens && (
+              <>
+                <Button size="sm" variant="quiet" icon={Icons.ScreenIcon} aria-label={model.screens.on ? `Screens on, ${model.screens.count} kept. Pause screens` : "Screens paused. Turn screens on"}
+                  aria-pressed={model.screens.on} title={model.screens.on ? "Pause screens" : "Turn screens on"} onClick={actions.onScreens} />
+                <Button size="sm" variant="quiet" icon={RecordDotIcon} aria-label="Capture the screen now" title="Capture now" disabled={!model.screens.on} onClick={actions.onCapture} />
+              </>
+            )}
+            <Button size="sm" variant="quiet" aria-label={`Language: ${model.language}. Change`} title="Language" onClick={actions.onLanguage}>{model.language}</Button>
+          </div>
+        )}
+      </div>
+      {open ? (
+        <div className="el-pill-menu" lang="en" role="menu" aria-label={CALL_WORDS.setting_title} data-hit data-testid="pill-menu">
+          {items.map((m) => (
+            <button key={m.choice} type="button" role={m.choice === "delete" ? "menuitem" : "menuitemradio"}
+              aria-checked={m.choice === "delete" ? undefined : model.choice === m.choice}
+              className={`el-pill-menu__item${m.choice === "delete" ? " el-pill-menu__item--danger" : ""}`} onClick={() => choose(m.choice)}>
+              <span className="el-pill-menu__mark" aria-hidden="true">{model.choice === m.choice ? <Icons.CheckIcon /> : m.choice === "delete" ? <Icons.TrashIcon /> : null}</span>
+              {m.label}
+            </button>
+          ))}
         </div>
-      )}
-      {confirming && (
-        <div className="el-pill__controls" role="group" aria-label="Discard this recording?">
-          <span className="el-pill__ask">Discard this recording?</span>
-          <Button size="sm" variant="danger" onClick={() => { setConfirming(false); actions.onDiscard(); }}>Discard</Button>
-          <Button size="sm" variant="quiet" onClick={() => setConfirming(false)}>Keep recording</Button>
+      ) : model.banner ? (
+        <div className="el-pill-banner" lang="en" data-hit role="status" data-testid="start-banner">
+          <span dir="auto">{CALL_WORDS.start_banner}</span>
+          <Button size="sm" variant="quiet" onClick={() => actions.onChoice("delete")}>{CALL_WORDS.dont_record}</Button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

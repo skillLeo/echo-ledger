@@ -13,7 +13,7 @@ import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeCallDone, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
 import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
@@ -422,15 +422,21 @@ const commands: Record<string, (args: Args) => unknown> = {
     bluetoothMic: bluetooth,
     missing: screen === "controls-permission" ? [NO_SYSTEM_AUDIO] : screen === "controls-nothing" ? [{ kind: "microphone", sentence: NOTHING_TO_RECORD }, { kind: "system_audio", sentence: NOTHING_TO_RECORD }] : [],
     deviceNote: screen === "controls-device" ? { text: "Microphone changed to AirPods Pro. Still recording.", warning: false } : null,
+    // "At the start of the call": the banner beside the pill.
+    startBanner: screen === "controls-banner",
+    callChoice: screen === "controls-card" ? "transcribe" : null,
   }),
-  // The after-call window: "Saved · … · Undo" over the Ask-me chip (its line at 6 of 10 s); both stay for the picture.
-  after_call_state: () =>
-    makeAfterCallState({
-      saved: screen === "controls-discarded" ? null : makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
-      // "controls-discarded": the chip's Discard pressed a moment ago, with its Undo.
-      discarded: screen === "controls-discarded" ? makeSavedToast({ id: PENDING[0].id, callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }) : null,
-      ask: makeChipItem(PENDING[1].id, { ...PENDING[1], deadlineAt: new Date(Date.now() + 6_000).toISOString() }),
-    }),
+  // The after-call window (the call choice), one thing at a time: the card (with its first-time line on
+  // "controls-card"), a confirmation, the grouped card, or "Always do this?". Each stays for the picture.
+  after_call_state: () => {
+    const call = { ...PENDING[1], title: null, clientId: null, clientName: null, callerName: "Muneeb Quraishi", sourceApp: "whatsapp", durationMs: 44_000 };
+    const until = new Date(Date.now() + 3_600_000).toISOString();
+    if (screen === "controls-done") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "audio", until }) });
+    if (screen === "controls-discarded") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "delete", until }) });
+    if (screen === "controls-always") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "transcribe", until, offerAlways: "always_transcribe" }) });
+    if (screen === "controls-group") return makeAfterCallState({ group: { count: 3, until } });
+    return makeAfterCallState({ hint: screen === "controls-card", ask: makeChipItem(call.id, { ...call, deadlineAt: new Date(Date.now() + 5_000).toISOString() }) });
+  },
   privacy_status: () => privacyStatus(),
   privacy_concealed: () => false,
   privacy_diagnostics: () => "",
@@ -499,8 +505,8 @@ async function render() {
   const { emit } = await import("@tauri-apps/api/event");
   root.render(
     <div className="screens-canvas">
-      <div className="screens-window" style={{ width: 352, height: 84 }}><PillApp /></div>
-      <div className="screens-window" style={{ width: 360, height: 168 }}><ReviewApp /></div>
+      <div className="screens-window" style={{ width: 352, height: 148 }}><PillApp /></div>
+      <div className="screens-window" style={{ width: 360, height: 240 }}><ReviewApp /></div>
       <div className="screens-window" style={{ width: 560, height: 150 }}><OverlayApp /></div>
     </div>,
   );

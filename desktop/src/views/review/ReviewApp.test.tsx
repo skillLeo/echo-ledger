@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ReviewApp from "./ReviewApp";
-import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondAll, respondWith, setWindowLabel } from "../../test/tauri";
-import { makeAfterCallState, makeAskPayload, makeChipItem, makeSavedToast } from "../../test/fixtures";
+import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondAll, setWindowLabel } from "../../test/tauri";
+import { makeAfterCallState, makeAskPayload, makeCallDone, makeChipItem } from "../../test/fixtures";
 import type { AfterCallState } from "../../lib/ipc";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -23,309 +23,121 @@ async function renderWindow(initial: AfterCallState = makeAfterCallState()) {
   return view;
 }
 
-// What is shown: a toast or chip on its way out (`.leaving`, 150 ms) is no longer shown.
-const toast = () => document.querySelector<HTMLElement>("[data-testid=saved-toast]:not(.leaving)");
-const chip = () => document.querySelector<HTMLElement>("[data-testid=keep-chip]:not(.leaving):not(.kept)");
-const keptChip = () => document.querySelector<HTMLElement>("[data-testid=keep-chip].kept");
+// What is shown: the card, a confirmation, the grouped card.
+const chip = () => document.querySelector<HTMLElement>("[data-testid=keep-chip]");
+const done = () => screen.queryByTestId("call-done");
 const askChip = () => screen.queryByTestId("ask-chip");
 const button = (name: string | RegExp) => screen.getByRole("button", { name });
-
-/** Every class `el` goes through from now on, in order; call the result for the list. The same element all the way. */
-function classesOf(el: Element) {
-  const before: string[] = [];
-  const observer = new MutationObserver((records) => records.forEach((r) => before.push(r.oldValue ?? "")));
-  observer.observe(el, { attributes: true, attributeFilter: ["class"], attributeOldValue: true });
-  return () => {
-    observer.takeRecords().forEach((r) => before.push(r.oldValue ?? ""));
-    observer.disconnect();
-    return [...before, el.className].map((c) => c.replace(/\s+/g, " ").trim());
-  };
-}
-
-/** A command that returns when the test says so: the core's events come before its commands return. */
-function waitingCommand(command: string) {
-  let resolve: () => void = () => undefined;
-  respondWith(command, () => new Promise<void>((r) => { resolve = r; }));
-  return { finish: () => act(async () => resolve()) };
-}
 
 function setup() {
   resetTauriMock();
   setWindowLabel("review");
   vi.stubGlobal("ResizeObserver", NoopResizeObserver);
-  respondAll({ overlay_set_hit_regions: undefined, saved_undo: undefined, pending_keep: undefined, pending_discard: undefined, after_call_discard: undefined, after_call_discard_undo: undefined, pending_open: undefined, ask_answer: undefined });
+  respondAll({
+    overlay_set_hit_regions: undefined, pending_open: undefined, ask_answer: undefined, call_card_answer: undefined, call_undo: undefined,
+    call_done_transcribe: undefined, call_always: undefined, call_group_close: undefined,
+  });
 }
 
-describe("Saved toast (Always transcribe, Always save audio)", () => {
+describe("the card (Ask me, after the call)", () => {
   beforeEach(setup);
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
-  it("reads what to show when the window starts: one line, Saved · title · length · Undo", async () => {
-    await renderWindow(makeAfterCallState({ saved: makeSavedToast({ callerName: "Omar", durationMs: 252_000 }) }));
-    expect(toast()).toHaveTextContent("Saved·Call with Omar·4:12Undo");
-    expect(toast()).toHaveAccessibleName("Saved: Call with Omar");
-    expect(button("Undo")).toBeInTheDocument();
-    expect(chip()).not.toBeInTheDocument();
+  it("reads what to show when the window starts: the logo, the name and 0:44 · just now, Delete and Transcribe", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", { callerName: "Muneeb Quraishi", durationMs: 44_000 }) }));
+    const card = chip()!;
+    expect(card).toHaveTextContent("Muneeb Quraishi");
+    expect(card).toHaveTextContent("0:44 · just now");
+    expect(card).toHaveTextContent("Swipe away to keep audio only");
+    // One filled button, Transcribe; Delete is a quiet text button; the × saves the audio only.
+    expect(button("Transcribe")).toHaveClass("ctl-btn", "primary");
+    expect(button("Delete")).toHaveClass("call-text-btn");
+    expect(button("Save audio only")).toBeInTheDocument();
+    expect(card.querySelectorAll(".primary")).toHaveLength(1);
+    expect(card.textContent).not.toMatch(/\b(Keep|Skip|Discard)\b/);
   });
 
-  it("names the recording by its title, else the app, and a voice note as one", async () => {
-    await renderWindow(makeAfterCallState({ saved: makeSavedToast({ title: "Budget review", callerName: "Omar" }) }));
-    expect(toast()).toHaveTextContent("Budget review");
-    await emitEvent("aftercall:state", makeAfterCallState({ saved: makeSavedToast({ id: "rec-2", callerName: null, sourceApp: "zoom" }) }));
-    expect(toast()).toHaveTextContent("Saved·Zoom·4:12");
-    await emitEvent("aftercall:state", makeAfterCallState({ saved: makeSavedToast({ id: "rec-3", callerName: null, sourceApp: "voice_note", mode: "mic_note", durationMs: 42_000 }) }));
-    expect(toast()).toHaveTextContent("Saved·Voice note·0:42");
+  it("names the call by its title, else who it was with, else Call, readable in its own direction", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", { title: null, callerName: null }) }));
+    expect(chip()).toHaveTextContent(/^Call/);
+    await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2", { title: "عمر کے ساتھ ملاقات", callerName: "Omar" }) }));
+    const title = chip()!.querySelector(".call-card-title")!;
+    expect(title).toHaveTextContent("عمر کے ساتھ ملاقات");
+    expect(title).toHaveAttribute("dir", "auto");
   });
 
-  it("keeps a long or Urdu title on one line, readable in its own direction", async () => {
-    const long = "Quarterly planning with the whole Northwind team about the second phase of the website and its budget";
-    await renderWindow(makeAfterCallState({ saved: makeSavedToast({ title: "کال اسلم کے ساتھ" }) }));
-    const urdu = screen.getByText("کال اسلم کے ساتھ");
-    expect(urdu).toHaveAttribute("dir", "auto");
-    await emitEvent("aftercall:state", makeAfterCallState({ saved: makeSavedToast({ id: "rec-2", title: long }) }));
-    expect(screen.getByText(long)).toHaveAttribute("title", long);
-    expect(screen.getByText(long)).toHaveClass("after-title");
-  });
-
-  it("Undo takes the recording back and the toast goes", async () => {
-    await renderWindow(makeAfterCallState({ saved: makeSavedToast({ id: "rec-9" }) }));
-    fireEvent.click(button("Undo"));
-    await waitFor(() => expect(callsOf("saved_undo")).toEqual([{ id: "rec-9" }]));
-    await flushAsync();
-    expect(toast()).not.toBeInTheDocument();
-  });
-
-  it("shows why Undo did not work and keeps Undo there", async () => {
-    fail("saved_undo", "Network error: the server could not be reached");
-    await renderWindow(makeAfterCallState({ saved: makeSavedToast() }));
-    fireEvent.click(button("Undo"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Network error: the server could not be reached");
-    expect(button("Undo")).toBeInTheDocument();
-  });
-
-  it("goes by itself when its six seconds are over", async () => {
-    // Rendered first: waitFor drains with a real setTimeout, which a faked one would never run.
-    await renderWindow();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    vi.setSystemTime(new Date("2026-11-04T10:00:00Z"));
-    await emitEvent("aftercall:state", makeAfterCallState({ saved: makeSavedToast({}, Date.now()) }));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_900);
-    });
-    expect(toast()).toBeInTheDocument();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(200);
-    });
-    expect(toast()).not.toBeInTheDocument();
-    expect(callsOf("saved_undo")).toHaveLength(0);
-  });
-
-  it("leaves over 150 ms when it goes: marked leaving, no longer a hit region, then gone (v1.5)", async () => {
-    await renderWindow(makeAfterCallState({ saved: makeSavedToast() }));
-    const shown = screen.getByTestId("saved-toast");
-    expect(shown).toHaveAttribute("data-hit");
-    await emitEvent("aftercall:state", makeAfterCallState());
-    const leaving = screen.getByTestId("saved-toast");
-    expect(leaving).toBe(shown); // the same element: it never blinks out before it leaves
-    expect(leaving).toHaveClass("leaving");
-    expect(leaving).not.toHaveAttribute("data-hit");
-    expect(leaving).toHaveAttribute("aria-hidden", "true");
-    await waitFor(() => expect(screen.queryByTestId("saved-toast")).not.toBeInTheDocument());
-  });
-
-  it("goes at once with reduced motion, and the check is simply there", async () => {
-    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("reduced-motion"), media: query, addEventListener() {}, removeEventListener() {} }));
-    await renderWindow(makeAfterCallState({ saved: makeSavedToast() }));
-    expect(screen.getByTestId("saved-toast").querySelector("[data-testid=success-check]")).not.toBeNull();
-    await emitEvent("aftercall:state", makeAfterCallState());
-    expect(screen.queryByTestId("saved-toast")).not.toBeInTheDocument();
-  });
-
-  it("follows the core: a newer toast replaces it and an empty state hides it", async () => {
-    await renderWindow();
-    expect(toast()).not.toBeInTheDocument();
-    await emitEvent("aftercall:state", makeAfterCallState({ saved: makeSavedToast({ id: "a", callerName: "Omar" }) }));
-    expect(toast()).toHaveTextContent("Call with Omar");
-    await emitEvent("aftercall:state", makeAfterCallState({ saved: makeSavedToast({ id: "b", callerName: "Sara" }) }));
-    expect(toast()).toHaveTextContent("Call with Sara");
-    await emitEvent("aftercall:state", makeAfterCallState());
-    expect(toast()).not.toBeInTheDocument();
-  });
-});
-
-describe("Ask-me chip", () => {
-  beforeEach(setup);
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-  });
-
-  it("shows the title and length with Keep and Discard, pill-size", async () => {
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", { callerName: "Omar" }) }));
-    expect(chip()).toHaveAccessibleName("Keep Call with Omar?");
-    expect(button(/^Call with Omar/)).toHaveTextContent("Call with Omar·4:12");
-    expect(button("Keep")).toBeInTheDocument();
-    expect(button("Discard")).toBeInTheDocument();
-    expect(toast()).not.toBeInTheDocument();
-  });
-
-  it("names Discard in words beside a trash, never a ×, and says Undo is there", async () => {
+  it("Transcribe and Delete send the card's answer; the core applies it after its Undo time", async () => {
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
-    const discard = button("Discard");
-    expect(discard).toHaveTextContent(/^Discard$/);
-    expect(discard.querySelector("svg")).not.toBeNull();
-    expect(discard).toHaveAttribute("title", "Discard (Undo for 6 s)");
-    expect(chip()!.textContent).not.toMatch(/[×✕]/);
+    fireEvent.click(button("Transcribe"));
+    await flushAsync();
+    fireEvent.click(button("Delete"));
+    await flushAsync();
+    expect(callsOf("call_card_answer")).toEqual([{ id: "p1", choice: "transcribe" }, { id: "p1", choice: "delete" }]);
+    expect(callsOf("pending_keep")).toEqual([]);
   });
 
-  it("✓ keeps and Discard discards the recording, and the chip goes", async () => {
+  it("the ×, Esc and a swipe away save the audio only", async () => {
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
-    fireEvent.click(button("Keep"));
-    await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }]));
+    fireEvent.click(button("Save audio only"));
     await flushAsync();
-    expect(chip()).not.toBeInTheDocument();
-    // Kept: a check pops in and the chip says so, takes no clicks, then leaves by itself.
-    expect(keptChip()).toHaveTextContent(/^Kept·/);
-    expect(keptChip()!.querySelector("[data-testid=success-check]")).not.toBeNull();
-    expect(keptChip()).not.toHaveAttribute("data-hit");
-    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
+    fireEvent.keyDown(window, { key: "Escape" });
+    await flushAsync();
+    const card = chip()!;
+    fireEvent.pointerDown(card, { button: 0, clientX: 200, pointerId: 1 });
+    fireEvent.pointerMove(card, { clientX: 260, pointerId: 1 });
+    fireEvent.pointerUp(card, { clientX: 260, pointerId: 1 });
+    await flushAsync();
+    expect(callsOf("call_card_answer")).toHaveLength(2);
+    fireEvent.pointerDown(card, { button: 0, clientX: 200, pointerId: 1 });
+    fireEvent.pointerMove(card, { clientX: 100, pointerId: 1 });
+    fireEvent.pointerUp(card, { clientX: 100, pointerId: 1 });
+    await flushAsync();
+    expect(callsOf("call_card_answer")).toEqual([1, 2, 3].map(() => ({ id: "p1", choice: "audio" })));
+  });
 
+  it("8 s with no choice: the core sends Saved as audio, with Transcribe and Undo", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
+    await emitEvent("aftercall:state", makeAfterCallState({ done: makeCallDone({ id: "p1", kind: "audio" }) }));
+    expect(chip()).not.toBeInTheDocument();
+    expect(done()).toHaveTextContent("Saved as audio");
+    fireEvent.click(button("Transcribe"));
+    await flushAsync();
+    expect(callsOf("call_done_transcribe")).toEqual([{ id: "p1" }]);
+  });
+
+  it("the first card ever says where to change it", async () => {
+    await renderWindow(makeAfterCallState({ hint: true, ask: makeChipItem("p1") }));
+    expect(screen.getByTestId("call-hint")).toHaveTextContent("You can change this in Settings › After each call.");
     await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2") }));
-    fireEvent.click(button("Discard"));
-    // The chip's own discard: the core keeps the files for Undo (never the immediate pending_discard).
-    await waitFor(() => expect(callsOf("after_call_discard")).toEqual([{ id: "p2" }]));
-    expect(callsOf("pending_discard")).toEqual([]);
-    await flushAsync();
-    expect(chip()).not.toBeInTheDocument();
+    expect(screen.queryByTestId("call-hint")).not.toBeInTheDocument();
   });
 
-  it("says Audio saved, with the check, when the core saves the chip by itself once its time is up, and not when it goes earlier", async () => {
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 12_500) }));
-    await emitEvent("aftercall:state", makeAfterCallState());
-    expect(keptChip()).toHaveTextContent(/^Audio saved·/);
-    expect(keptChip()).toHaveAccessibleName(/^Audio saved: /);
-    expect(keptChip()).not.toHaveTextContent(/Kept/);
-    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
-
-    await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2") }));
-    await emitEvent("aftercall:state", makeAfterCallState());
-    expect(keptChip()).toBeNull();
-  });
-
-  it("goes straight from the chip to Kept when the core's empty state comes before Keep returns, as it does in the core", async () => {
-    const keep = waitingCommand("pending_keep");
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
-    const shown = chip()!;
-    const classes = classesOf(shown);
-    fireEvent.click(button("Keep"));
-    await flushAsync();
-    await emitEvent("aftercall:state", makeAfterCallState());
-    // It says Kept once Keep has worked, not before; until then it stays as it is.
-    expect(chip()).toBe(shown);
-    await keep.finish();
-    expect(keptChip()).toBe(shown);
-    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
-    expect(classes()).toEqual(["after-pill chip", "after-pill chip kept", "after-pill chip kept leaving"]);
-  });
-
-  it("never says Kept when Keep fails, and the chip stays with the reason", async () => {
-    fail("pending_keep", "This recording is no longer waiting.");
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
-    const classes = classesOf(chip()!);
-    fireEvent.click(button("Keep"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("This recording is no longer waiting.");
-    expect(classes().filter((c) => c.includes("kept"))).toEqual([]);
-    expect(chip()).toBeInTheDocument();
-  });
-
-  it("goes straight from the chip to Kept when the core keeps it by itself: it never starts to leave first", async () => {
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 12_500) }));
-    const shown = chip()!;
-    const classes = classesOf(shown);
-    await emitEvent("aftercall:state", makeAfterCallState());
-    expect(keptChip()).toBe(shown);
-    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
-    expect(classes()).toEqual(["after-pill chip", "after-pill chip kept", "after-pill chip kept leaving"]);
-  });
-
-  it.each([
-    ["Discard", "Discard", "after_call_discard"],
-    ["its title", /rename or choose a project/, "pending_open"],
-  ] as const)("leaves without saying Kept when the person answered with %s, also when its time ran out meanwhile", async (_how, name, command) => {
-    const answer = waitingCommand(command);
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 12_500) }));
-    const classes = classesOf(chip()!);
-    fireEvent.click(button(name));
-    await flushAsync();
-    await emitEvent("aftercall:state", makeAfterCallState());
-    await answer.finish();
-    expect(keptChip()).toBeNull();
-    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument());
-    expect(classes()).toEqual(["after-pill chip", "after-pill chip leaving"]);
-  });
-
-  it("still shows the core's Audio saved after an answer that failed", async () => {
-    fail("after_call_discard", "Could not discard.");
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 12_500) }));
-    fireEvent.click(button("Discard"));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not discard.");
-    await emitEvent("aftercall:state", makeAfterCallState());
-    expect(keptChip()).toHaveTextContent(/^Audio saved·/);
-  });
-
-  it("a new chip ends the kept one's moment, and only the kept one says Kept", async () => {
+  it("the name opens the recording in the main window with its title field", async () => {
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", { callerName: "Omar" }) }));
-    fireEvent.click(button("Keep"));
-    await waitFor(() => expect(keptChip()).toHaveTextContent("Omar"));
-    await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2", { callerName: "Sara" }) }));
-    expect(keptChip()).toBeNull();
-    expect(chip()).toHaveTextContent("Sara");
-    await emitEvent("aftercall:state", makeAfterCallState());
-    expect(keptChip()).toBeNull();
-    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument());
-  });
-
-  it("the title opens the recording in the main window with its title field", async () => {
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
-    fireEvent.click(button(/rename or choose a project/));
-    await waitFor(() => expect(callsOf("pending_open")).toEqual([{ id: "p1", rename: true }]));
+    fireEvent.click(button(/^Omar, .*Rename or choose a project$/));
     await flushAsync();
-    expect(chip()).not.toBeInTheDocument();
-    expect(callsOf("pending_keep")).toHaveLength(0);
+    expect(callsOf("pending_open")).toEqual([{ id: "p1", rename: true }]);
   });
 
-  it("labels the countdown with what happens at its end", async () => {
-    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", { deadlineAt: new Date(Date.now() + 9_400).toISOString() }) }));
-    const timer = screen.getByRole("timer");
-    expect(timer).toHaveAccessibleName("Saves the audio in 10 s");
-    expect(timer).toHaveAttribute("title", "Saves the audio in 10 s");
-  });
-
-  it("draws the timer line over the time that is left, from where it is", async () => {
+  it("draws the 8 s line over the time that is left, from where it is", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-04T10:00:04Z"));
-    const item = makeChipItem("p1", { deadlineAt: "2026-11-04T10:00:10Z" });
+    const item = makeChipItem("p1", { deadlineAt: "2026-11-04T10:00:08Z" });
     const { container } = await renderWindow(makeAfterCallState({ ask: item }));
-    const line = container.querySelector<HTMLElement>(".after-progress > span")!;
-    expect(line.style.animationDuration).toBe("6s");
+    const line = container.querySelector<HTMLElement>(".call-card-line > span")!;
+    expect(line.style.animationDuration).toBe("4s");
     expect(line.style.getPropertyValue("--from")).toBe("0.5");
   });
 
-  it("keeps the chip and says why when an answer fails", async () => {
-    fail("pending_keep", "This recording is no longer waiting.");
+  it("keeps the card and says why when an answer fails", async () => {
+    fail("call_card_answer", "This recording is no longer waiting.");
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
-    fireEvent.click(button("Keep"));
+    fireEvent.click(button("Transcribe"));
     expect(await screen.findByRole("alert")).toHaveTextContent("This recording is no longer waiting.");
     expect(chip()).toBeInTheDocument();
-  });
-
-  it("shows with a Saved toast of another recording, the chip nearest the tray", async () => {
-    const { container } = await renderWindow(makeAfterCallState({ saved: makeSavedToast({ mode: "mic_note", sourceApp: "voice_note" }), ask: makeChipItem("p1") }));
-    const pills = [...container.querySelectorAll(".after-stack > .after-pill")].map((el) => el.getAttribute("data-testid"));
-    expect(pills).toEqual(["saved-toast", "keep-chip"]);
   });
 
   it("removes its event listeners on unmount", async () => {
@@ -334,6 +146,69 @@ describe("Ask-me chip", () => {
     unmount();
     await waitFor(() => expect(listenerCount("aftercall:state")).toBe(0));
     expect(listenerCount("ask:show")).toBe(0);
+  });
+});
+
+describe("the confirmation (one at a time, Undo for 5 s)", () => {
+  beforeEach(setup);
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each([
+    ["transcribe", "Transcribing…", false],
+    ["audio", "Saved as audio", true],
+    ["delete", "Deleted", false],
+  ] as const)("after %s it says %s with Undo, and Undo brings the card back", async (kind, words, transcribe) => {
+    await renderWindow(makeAfterCallState({ done: makeCallDone({ id: "p1", kind, callerName: "Omar" }) }));
+    expect(done()).toHaveTextContent(words);
+    expect(done()).toHaveTextContent("Omar");
+    expect(screen.queryByRole("button", { name: "Transcribe" }) !== null).toBe(transcribe);
+    fireEvent.click(button("Undo"));
+    await flushAsync();
+    expect(callsOf("call_undo")).toEqual([{ id: "p1" }]);
+    await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p1") }));
+    expect(done()).not.toBeInTheDocument();
+    expect(chip()).toBeInTheDocument();
+  });
+
+  it("says so when Undo comes too late", async () => {
+    fail("call_undo", "Too late to undo: it was already done.");
+    await renderWindow(makeAfterCallState({ done: makeCallDone({ id: "p1", kind: "delete" }) }));
+    fireEvent.click(button("Undo"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too late to undo: it was already done.");
+  });
+
+  it("after 3 same choices offers Always do this? once; Yes sets it", async () => {
+    await renderWindow(makeAfterCallState({ done: makeCallDone({ id: "p1", kind: "audio", offerAlways: "always_audio" }) }));
+    expect(screen.getByTestId("call-always")).toHaveTextContent("Always do this?");
+    fireEvent.click(button("Yes"));
+    await flushAsync();
+    expect(callsOf("call_always")).toEqual([{ id: "p1", value: "always_audio" }]);
+  });
+
+  it("never shows two things at once: the card comes first, then the grouped card, then a confirmation", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1"), group: { count: 2, until: new Date(Date.now() + 8000).toISOString() }, done: makeCallDone() }));
+    expect(chip()).toBeInTheDocument();
+    expect(done()).not.toBeInTheDocument();
+    expect(screen.queryByTestId("call-group")).not.toBeInTheDocument();
+  });
+});
+
+describe("back-to-back calls", () => {
+  beforeEach(setup);
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("one grouped card says how many were saved as audio; Review opens the Library, × closes it", async () => {
+    await renderWindow(makeAfterCallState({ group: { count: 3, until: new Date(Date.now() + 8000).toISOString() } }));
+    expect(screen.getByTestId("call-group")).toHaveTextContent("3 calls saved as audio");
+    expect(document.querySelectorAll("[data-testid=keep-chip], [data-testid=call-group]")).toHaveLength(1);
+    fireEvent.click(button("Review"));
+    await flushAsync();
+    expect(screen.queryByTestId("call-group")).not.toBeInTheDocument();
+    await emitEvent("aftercall:state", makeAfterCallState({ group: { count: 4, until: new Date(Date.now() + 8000).toISOString() } }));
+    expect(screen.getByTestId("call-group")).toHaveTextContent("4 calls saved as audio");
+    fireEvent.click(button("Close"));
+    await flushAsync();
+    expect(callsOf("call_group_close")).toEqual([{ review: true }, { review: false }]);
   });
 });
 
@@ -443,48 +318,19 @@ describe("after-call hit regions", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("reports the toast while it is shown and nothing after it is gone", async () => {
+  it("reports the confirmation while it is shown and nothing after it is gone", async () => {
     await renderWindow();
-    await emitEvent("aftercall:state", makeAfterCallState({ saved: makeSavedToast() }));
+    await emitEvent("aftercall:state", makeAfterCallState({ done: makeCallDone() }));
     await waitFor(() => expect(lastRegions()).toEqual(pillRegion));
     await emitEvent("aftercall:state", makeAfterCallState());
     await waitFor(() => expect(lastRegions()).toEqual([]));
   });
 
-  it("reports the chip while it is shown", async () => {
+  it("reports the card while it is shown", async () => {
     await renderWindow();
     await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p1") }));
     await waitFor(() => expect(lastRegions()).toEqual(pillRegion));
     await emitEvent("aftercall:state", makeAfterCallState());
     await waitFor(() => expect(lastRegions()).toEqual([]));
-  });
-});
-
-describe("Discarded toast (after the chip's Discard)", () => {
-  beforeEach(setup);
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-  });
-
-  const discarded = () => document.querySelector<HTMLElement>("[data-testid=discarded-toast]:not(.leaving)");
-
-  it("says Discarded with the title and Undo, and Undo puts the chip back", async () => {
-    await renderWindow(makeAfterCallState({ discarded: makeSavedToast({ id: "p1", callerName: "Omar", durationMs: 252_000 }) }));
-    expect(discarded()).toHaveTextContent("Discarded·Call with Omar·4:12Undo");
-    expect(discarded()).toHaveAccessibleName("Discarded: Call with Omar");
-    fireEvent.click(within(discarded()!).getByRole("button", { name: "Undo" }));
-    await waitFor(() => expect(callsOf("after_call_discard_undo")).toEqual([{ id: "p1" }]));
-    // The core sends the chip back, counting again.
-    await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p1", { callerName: "Omar" }) }));
-    await waitFor(() => expect(discarded()).not.toBeInTheDocument());
-    expect(chip()).toHaveAccessibleName("Keep Call with Omar?");
-  });
-
-  it("says so when Undo comes too late", async () => {
-    fail("after_call_discard_undo", "Too late to undo: this recording was already discarded.");
-    await renderWindow(makeAfterCallState({ discarded: makeSavedToast({ id: "p1" }) }));
-    fireEvent.click(within(discarded()!).getByRole("button", { name: "Undo" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Too late to undo");
   });
 });

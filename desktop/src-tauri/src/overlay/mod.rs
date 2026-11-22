@@ -34,8 +34,14 @@ pub const RESCUED: [&str; 6] = [OVERLAY, DICTATION, PILL, REVIEW, ASSIST, crate:
 pub const ASSIST: &str = crate::privacy::ASSIST;
 
 const DICTATION_SIZE: (f64, f64) = (420.0, 110.0);
-pub const PILL_SIZE: (f64, f64) = (352.0, 84.0);
-pub const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
+/// The pill on top, and under it the room for its menu (the call choice), the start banner, the bookmark tray or a
+/// warning; the rest of the window lets clicks through.
+pub const PILL_SIZE: (f64, f64) = (352.0, 148.0);
+/// How much of the pill window the pill itself takes (the after-call card goes right under it).
+pub const PILL_VISIBLE_LOGICAL: f64 = 48.0;
+/// The after-call card (the call choice: the card with its first-time line, a confirmation or the grouped card) and
+/// the unknown-app chip.
+pub const REVIEW_SIZE: (f64, f64) = (360.0, 240.0);
 /// The pill and the after-call card grow with the system's text size (D-141), up to twice their size.
 pub const TEXT_SCALE_MAX: f64 = 2.0;
 
@@ -73,7 +79,7 @@ pub fn fit_to_text_size<R: Runtime>(app: &AppHandle<R>, label: &str) {
         return;
     }
     if label == REVIEW {
-        dock_on_primary(&window, Corner::BottomRight);
+        place_beside_pill(app, &window);
     } else if let Some(((x, y), _)) = before {
         // Frames are in physical pixels on Windows, in points on a Mac.
         let unit = if cfg!(target_os = "macos") { 1.0 } else { scale };
@@ -238,9 +244,41 @@ pub fn create_overlay<R: Runtime>(app: &AppHandle<R>, label: &str, setup: Overla
         PILL => place_pill(&window, setup.pill_position),
         // Top-centre, under the webcam, until the person drags it elsewhere (L4).
         ASSIST => place_pill(&window, setup.assist_card_position),
-        _ => dock_on_primary(&window, Corner::BottomRight),
+        _ => place_beside_pill(app, &window),
     }
     Ok(())
+}
+
+/// Puts the after-call window next to the recording pill (the call choice): under the pill where it is now, else
+/// where it would open (its saved position or top-centre), above it when there is no room below.
+pub fn place_beside_pill<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
+    let (Some(desk), Some((_, size))) = (Desk::read(window), frame_of(window)) else { return };
+    let logical = scaled_size(PILL_SIZE, text_scale());
+    let logical = (logical.0 as u32, logical.1 as u32);
+    let pill = match app.get_webview_window(PILL).and_then(|p| frame_of(&p)) {
+        Some(frame) => frame,
+        None => {
+            let saved = app.try_state::<crate::AppState>().and_then(|s| s.settings().pill_position);
+            let Some(at) = pill_origin_scaled(saved, &desk.areas, desk.primary, logical, 1.0, PILL_MARGIN_LOGICAL) else { return };
+            (at, size_at(logical, 1.0, desk.holding(at).1))
+        }
+    };
+    let (area, scale) = desk.holding(centre(pill.0, pill.1));
+    let visible = (PILL_VISIBLE_LOGICAL * text_scale().clamp(1.0, TEXT_SCALE_MAX) * scale).round() as u32;
+    let size = size_at(size, frame_scale(window), scale);
+    put(window, geometry::beside_pill(area, pill.0, pill.1, visible, size, margin_units(scale, 4.0)));
+}
+
+/// [`fit_to_text_size`] and [`place_beside_pill`] for the after-call window, on a task of its own (they wait for the
+/// main thread): each time it shows something, so it follows the pill wherever it was dragged.
+fn place_review_later(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        fit_to_text_size(&app, REVIEW);
+        if let Some(window) = app.get_webview_window(REVIEW) {
+            place_beside_pill(&app, &window);
+        }
+    });
 }
 
 fn top_center_corner(corner: Corner) -> Corner {
@@ -363,15 +401,6 @@ pub fn nearest_corner_of<R: Runtime>(window: &WebviewWindow<R>) -> Option<Corner
     let (position, size) = frame_of(window)?;
     let (area, _) = desk.holding(centre(position, size));
     Some(nearest_corner(area, position, size))
-}
-
-/// Docks a window into `corner` of the primary monitor's work area (the after-call window: bottom-right, near the
-/// tray, 18 px).
-fn dock_on_primary<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
-    let (Some(desk), Some((_, size))) = (Desk::read(window), frame_of(window)) else { return };
-    let (area, scale) = desk.primary();
-    // Built on another display than the primary, the window takes the primary's scale once there.
-    put(window, dock(area, size_at(size, frame_scale(window), scale), corner, margin_units(scale, MARGIN_LOGICAL)));
 }
 
 /// The Live Translate window (v1.3; hidden from screen sharing like the other floating windows since v1.8.1): top-centre for a game's voice chat, bottom-centre for a video's subtitles, on
@@ -616,7 +645,7 @@ pub fn show_after_call(app: &AppHandle, state: &crate::after_call::AfterCallStat
         });
     } else {
         lifecycle::show(app, REVIEW, "after_call");
-        fit_to_text_size_later(app, REVIEW);
+        place_review_later(app);
         lifecycle::emit(app, REVIEW, "aftercall:state", state);
     }
 }
@@ -647,10 +676,10 @@ mod tests {
     fn the_pill_and_the_after_call_card_grow_with_the_text_size_up_to_twice() {
         assert_eq!(scaled_size(PILL_SIZE, 1.0), PILL_SIZE, "100 %");
         assert_eq!(scaled_size(REVIEW_SIZE, 1.0), REVIEW_SIZE);
-        assert_eq!(scaled_size(PILL_SIZE, 2.0), (704.0, 168.0), "200 %");
-        assert_eq!(scaled_size(REVIEW_SIZE, 2.0), (720.0, 336.0));
-        assert_eq!(scaled_size(REVIEW_SIZE, 1.5), (540.0, 252.0));
-        assert_eq!(scaled_size(REVIEW_SIZE, 2.25), (720.0, 336.0), "Windows goes to 225 %: the card stops at twice");
+        assert_eq!(scaled_size(PILL_SIZE, 2.0), (704.0, 296.0), "200 %");
+        assert_eq!(scaled_size(REVIEW_SIZE, 2.0), (720.0, 480.0));
+        assert_eq!(scaled_size(REVIEW_SIZE, 1.5), (540.0, 360.0));
+        assert_eq!(scaled_size(REVIEW_SIZE, 2.25), (720.0, 480.0), "Windows goes to 225 %: the card stops at twice");
         assert_eq!(scaled_size(PILL_SIZE, 0.5), PILL_SIZE, "never smaller than at 100 %");
         assert_eq!(scaled_size(PILL_SIZE, f64::NAN), PILL_SIZE);
     }
@@ -660,7 +689,7 @@ mod tests {
         let at_100 = scaled_size(PILL_SIZE, 1.0);
         assert!(needs_resize(at_100, scaled_size(PILL_SIZE, 1.5)), "the text grew while it was shown");
         assert!(!needs_resize(scaled_size(PILL_SIZE, 1.5), scaled_size(PILL_SIZE, 1.5)), "then left alone at each check");
-        assert!(!needs_resize((352.4, 83.6), at_100), "a scale's rounding is no change");
+        assert!(!needs_resize((352.4, 147.6), at_100), "a scale's rounding is no change");
         assert!(needs_resize(scaled_size(REVIEW_SIZE, 2.0), scaled_size(REVIEW_SIZE, 1.0)), "and back when it shrank");
     }
 

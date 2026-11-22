@@ -1,6 +1,6 @@
-// A3.3 / v1.5: jsdom cannot lay out or animate, so these tests pin the CSS contract of the pill and the after-call
-// toast and chip: sizes that fit their windows, the 180 ms ease-out slide-in, no motion with reduced motion, and
-// transparent window backgrounds. The look on a real screen is a manual QA step.
+// A3.3 / v1.5 / the call choice: jsdom cannot lay out or animate, so these tests pin the CSS contract of the pill and
+// the after-call card: sizes that fit their windows, a solid surface, the 200 ms slide-in, no motion with reduced motion,
+// and transparent window backgrounds. The look on a real screen is a manual QA step.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
@@ -70,82 +70,58 @@ describe("recording pill styles", () => {
   });
 });
 
-describe("after-call styles", () => {
-  it("puts the toast and chip bottom-right in the 360 x 168 window, one 36 px pill row each", () => {
+describe("after-call styles (the call choice)", () => {
+  it("puts the card at the top of the window, centred, next to the pill", () => {
     const root = styleOf("review-root");
     expect(root.padding).toBe("10px");
-    expect(root.justifyContent).toBe("flex-end");
-    expect(root.alignItems).toBe("flex-end");
-    const pill = styleOf("after-pill", "review-root");
-    expect(pill.height).toBe("36px");
-    expect(pill.borderRadius).toBe("18px");
-    expect(pill.display).toBe("flex");
-    expect(pill.maxWidth).toBe("340px");
-    expect(pill.borderWidth).toBe("1px");
+    expect(root.justifyContent).toBe("center");
+    expect(root.alignItems).toBe("flex-start");
+    expect(styleOf("call-card", "review-root").maxWidth).toBe("100%");
   });
 
-  it("uses the recording pill's dark surface in both themes", () => {
-    const rule = topLevelRule(".after-pill");
-    expect(rule?.style.getPropertyValue("--ctl-surface").trim()).toBe("var(--pill-bg)");
-    expect(rule?.style.getPropertyValue("--ctl-text").trim()).toBe("var(--pill-text)");
+  it("is a solid surface from the theme, never see-through, radius 16, in the app's font", () => {
+    const rule = topLevelRule(".call-card")!;
+    expect(rule.style.background).toBe("var(--surface)");
+    expect(rule.style.getPropertyValue("backdrop-filter")).toBe("");
+    expect(rule.style.borderRadius).toBe("16px");
+    expect(rule.style.fontFamily).toBe("var(--font-sans)");
+    expect(rule.style.color).toBe("var(--text)");
   });
 
-  it("keeps the chip's app icon a 20 px circle, not the main window's shell grid", () => {
-    // Regression: the icon was "after-icon app", and styles.css's `.app` (the 232 px sidebar grid) pushed it over the
-    // title. Both stylesheets load in the after-call window.
-    const icon = styleOf("after-icon source", "after-pill");
-    expect(icon.width).toBe("20px");
-    expect(icon.display).toBe("grid");
-    expect(icon.gridTemplateColumns).toBe("none");
-    expect(styleOf("after-icon app", "after-pill").gridTemplateColumns, "what the old class picked up").toBe("var(--sidebar-w, 240px) minmax(0, 1fr)");
-    const ok = styleOf("after-icon ok", "after-pill");
-    expect(ok.width).toBe("20px");
+  it("has one filled button: Delete and the confirmations' actions are quiet text buttons", () => {
+    const quiet = topLevelRule(".call-text-btn {") ?? topLevelRule(".call-text-btn");
+    expect(quiet?.style.background).toBe("transparent");
   });
 
-  it("ellipsises a long title and keeps the length in tabular digits", () => {
-    const title = styleOf("after-title", "after-pill");
+  it("ellipsises a long name and keeps the length in tabular digits", () => {
+    const title = styleOf("call-card-title", "call-card");
     expect(title.textOverflow).toBe("ellipsis");
     expect(title.whiteSpace).toBe("nowrap");
-    expect(styleOf("after-duration", "after-pill").fontVariantNumeric).toBe("tabular-nums");
+    expect(styleOf("call-card-meta", "call-card").fontVariantNumeric).toBe("tabular-nums");
   });
 
-  it("rises in over 300 ms, decelerating, from 12 px below, like the ask chip (v1.5: the phone's enter)", () => {
-    for (const className of ["after-pill", "ask-chip"]) {
-      const s = styleOf(className, "review-root");
-      expect(s.animationName).toBe("ctl-slide-in");
-      expect(s.animationDuration).toBe("var(--motion-slow)");
-      expect(s.animationTimingFunction).toBe("var(--ease-out)");
-    }
+  it("slides in over 200 ms, decelerating, like the ask chip", () => {
+    const card = styleOf("call-card", "review-root");
+    expect(card.animationName).toBe("ctl-slide-in");
+    expect(card.animationDuration).toBe("var(--motion-base)");
+    expect(card.animationTimingFunction).toBe("var(--ease-out)");
     const keyframes = [...style.sheet!.cssRules].find((r): r is CSSKeyframesRule => r instanceof CSSKeyframesRule && r.name === "ctl-slide-in");
-    expect(keyframes?.cssRules[0].cssText.replace(/\s+/g, " ")).toContain("transform: translateY(12px)");
     expect(keyframes?.cssRules[0].cssText).toContain("opacity: 0");
   });
 
-  it("leaves over 150 ms, accelerating, moving down and fading, and takes no clicks while it goes", () => {
-    const leaving = styleOf("after-pill leaving", "review-root");
-    expect(leaving.animationName).toBe("ctl-slide-out");
-    expect(leaving.animationDuration).toBe("var(--motion-fast)");
-    expect(leaving.animationTimingFunction).toBe("var(--ease-in)");
-    expect(leaving.pointerEvents).toBe("none");
-    const keyframes = [...style.sheet!.cssRules].find((r): r is CSSKeyframesRule => r instanceof CSSKeyframesRule && r.name === "ctl-slide-out");
-    const last = keyframes?.cssRules[keyframes.cssRules.length - 1].cssText.replace(/\s+/g, " ");
-    expect(last).toContain("translateY(8px)");
-    expect(last).toContain("opacity: 0");
-  });
-
-  it("counts the chip down with a thin line that starts from what is left", () => {
-    const keyframes = [...style.sheet!.cssRules].find((r): r is CSSKeyframesRule => r instanceof CSSKeyframesRule && r.name === "after-countdown");
+  it("counts the 8 s down with a thin line that starts from what is left", () => {
+    const keyframes = [...style.sheet!.cssRules].find((r): r is CSSKeyframesRule => r instanceof CSSKeyframesRule && r.name === "call-line");
     expect(keyframes?.cssRules[0].cssText).toContain("var(--from");
-    expect(styleOf("after-progress", "after-pill").height).toBe("2px");
+    expect(styleOf("call-card-line", "call-card").height).toBe("3px");
   });
 
-  it("does not move or count down with reduced motion", () => {
+  it("does not move and the line stops with reduced motion", () => {
     const reduced = rulesIn("prefers-reduced-motion");
-    const pills = reduced.find((r) => r.selectorText.includes(".after-pill"));
-    expect(pills?.style.animation).toBe("none");
-    expect(pills?.selectorText).toContain(".ask-chip");
-    const lines = reduced.find((r) => r.selectorText.includes(".after-progress"));
-    expect(lines?.style.display).toBe("none");
+    const cards = reduced.find((r) => r.selectorText.includes(".call-card") && !r.selectorText.includes("line"));
+    expect(cards?.style.animation).toBe("none");
+    expect(cards?.selectorText).toContain(".ask-chip");
+    const line = reduced.find((r) => r.selectorText.includes(".call-card-line"));
+    expect(line?.style.animation).toBe("none");
   });
 });
 

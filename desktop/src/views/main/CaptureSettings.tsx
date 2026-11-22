@@ -27,7 +27,8 @@ import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSam
 import { SKIP_SHORTER_THAN } from "../../lib/pending";
 import { CALL_APPS, setting } from "../../lib/settingsRegistry";
 import { SourceAppIcon } from "../../components/Icons";
-import { EntityRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, SliderRow, SwitchRow, rowAttrs } from "./SettingsControls";
+import { ChoiceListRow, EntityRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, SliderRow, SwitchRow, rowAttrs } from "./SettingsControls";
+import { AFTER_EACH_CALL_OPTIONS, ASK_WHEN_OPTIONS, CALL_WORDS, afterEachCallOf, afterEachCallPatch } from "../../lib/callChoice";
 
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 
@@ -49,16 +50,6 @@ export function callAppsValue(settings: Pick<Settings, "autoMode" | "autoRecordA
 
 const options = (id: string) => (setting(id).options ?? []).map((o) => [o.value, o.label] as const);
 const optionDefault = (id: string) => setting(id).options?.find((o) => o.default)?.value ?? "";
-
-const AFTER_CALL_HINT: Record<Settings["afterCall"], string> = {
-  always_transcribe: "Each call is saved and transcribed at once. A small “Saved, Undo” shows near the tray for a few seconds.",
-  always_audio: "Each call is saved at once as audio only (not transcribed; transcribe it later from the Library). A small “Saved, Undo” shows near the tray for a few seconds.",
-  ask: "A small prompt near the tray asks Keep or Discard, and saves the audio by itself after 12 seconds (not transcribed; transcribe it later from the Library).",
-};
-/** A Mac has no tray: the window is in the corner of the screen. */
-export function afterCallHint(choice: Settings["afterCall"], platform: string): string {
-  return platform === "macos" ? AFTER_CALL_HINT[choice].replace("near the tray", "in the corner of the screen") : AFTER_CALL_HINT[choice];
-}
 
 /** Recording › Calls & meetings. */
 export function CallsPage({ settings, patch, platform, onSites, consentRead, onConsent }: {
@@ -87,8 +78,15 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         <SwitchRow id="calls.ask_unknown" on={settings.askUnknownApps} onChange={(v) => void patch({ askUnknownApps: v })} />
         {platform === "macos" && <SwitchRow id="calls.browser_tabs" on={settings.browserAutomation} onChange={(v) => void patch({ browserAutomation: v })} />}
       </Section>
-      <Section title="After a call" footer={<><p>{afterCallHint(settings.afterCall, platform)}</p><p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p></>}>
-        <SelectRow id="calls.after" value={settings.afterCall} options={options("calls.after") as readonly (readonly [Settings["afterCall"], string])[]} onChange={(v) => void patch({ afterCall: v })} />
+      <Section title={CALL_WORDS.setting_title}>
+        <ChoiceListRow id="calls.after" value={afterEachCallOf(settings)} options={AFTER_EACH_CALL_OPTIONS} onChange={(v) => void patch(afterEachCallPatch(v))} />
+      </Section>
+      {afterEachCallOf(settings) === "ask" && (
+        <Section title={CALL_WORDS.when_title}>
+          <ChoiceListRow id="calls.ask_when" value={settings.askWhen ?? "after"} options={ASK_WHEN_OPTIONS} onChange={(v) => void patch({ askWhen: v })} />
+        </Section>
+      )}
+      <Section footer={<p>Automatic calls this short, or where nobody spoke, are skipped quietly. Activity can bring them back for 24 hours.</p>}>
         <SelectRow id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => [String(s), label] as const)}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Section>
@@ -100,7 +98,7 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         <div className="set-reset"><button type="button" className="btn text" onClick={onConsent}>Read the recording consent notice</button></div>
       )}
       <ResetRow page="Calls & meetings" onReset={() => void patch({
-        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"],
+        autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"], askWhen: optionDefault("calls.ask_when") as Settings["askWhen"],
         skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
       })} />
     </>

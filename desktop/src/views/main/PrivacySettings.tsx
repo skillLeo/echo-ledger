@@ -42,6 +42,10 @@ export function sharePrivacyTop(hiding: ShareHiding | null | undefined, badge: P
   return [SHARE_PRIVACY_INTRO, ...(badge ? [LAST_CHECK_SENTENCE[badge]] : []), ...(hiding === "floating" ? [SHARE_PRIVACY_FLOATING] : [])];
 }
 
+/** "Hide EchoLedger from screen sharing"'s help line: the system hides a window from screen sharing and from
+ * screenshots with one flag, on macOS and on Windows alike (the call choice plan, lead decision). Nothing else changes. */
+export const HIDES_SCREENSHOTS_TOO = setting("share_privacy.hiding").description ?? "";
+
 /** The one-window tip and the limits, in the words the plan gives them. */
 export const ONE_WINDOW_TIP = "Share one window or a tab for the strongest privacy.";
 export const LIMITS = "Not hidden from cameras, projectors, Remote Desktop, or monitoring software on your computer.";
@@ -165,6 +169,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
   const barHolds = hiddenReason(status) === "share_bar";
   const shortcut = settings.shortcuts.hide_all ? <span className="kbd">{prettyShortcut(settings.shortcuts.hide_all, status?.platform ?? "windows")}</span> : "No shortcut";
   const footer = [
+    HIDES_SCREENSHOTS_TOO,
     status?.hiding === "off" ? "Everything EchoLedger shows can be seen by people watching your screen share." : null,
   ].filter(Boolean) as string[];
   const lines = status?.lines ?? [];

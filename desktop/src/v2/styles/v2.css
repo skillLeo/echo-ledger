@@ -496,6 +496,8 @@
 .el-check-box > .el-check:checked + .el-icon { visibility: visible; }
 .el-radio-group { display: flex; flex-direction: column; gap: var(--el-space-8); border: 0; margin: 0; padding: 0; }
 .el-radio-group > legend { padding: 0; margin-block-end: var(--el-space-4); font-weight: var(--el-text-body-strong-weight); }
+.el-choice-setting { list-style: none; padding: var(--el-space-12) var(--el-space-16); }
+.el-choice-setting .el-radio-group { gap: var(--el-space-12); }
 
 /* ---- EmptyState --------------------------------------------------------------------------------------------- */
 .el-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--el-space-8); padding: var(--el-space-48) var(--el-space-24); }
@@ -718,25 +720,89 @@ button.el-step__head { cursor: pointer; }
 .el-pill__controls { display: inline-flex; align-items: center; gap: var(--el-space-2); padding-inline-start: var(--el-space-4); border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-pill__controls .el-button[aria-pressed="true"] { background: var(--el-role-accent-soft); color: var(--el-role-accent-text); }
 .el-pill__ask { padding-inline: var(--el-space-8); }
-.el-aftercall-stack { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-8); }
+/* The call choice: the card, a confirmation or the grouped card, next to the pill. A solid surface, radius 16, the
+   app's font; it slides in over 200 ms and its 8 s line is the only animation; both stop under Reduce motion. */
+.el-aftercall-stack { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-8); inline-size: 100%; min-inline-size: 0; box-sizing: border-box; padding: var(--el-space-8); }
 .el-aftercall-stack .el-toast-region { position: static; }
 .el-aftercall {
-  display: flex; flex-direction: column; gap: var(--el-space-12);
-  padding: var(--el-space-12);
+  display: flex; flex-direction: column; gap: var(--el-space-8);
+  box-sizing: border-box; inline-size: 100%; max-inline-size: 100%;
+  padding: var(--el-space-12) var(--el-space-16);
   background: var(--el-role-bg-overlay);
+  color: var(--el-role-text-primary);
+  font-family: var(--el-font-family-sans);
   border: var(--el-border-hairline) solid var(--el-role-border-default);
-  border-radius: var(--el-component-card-radius);
+  border-radius: var(--el-radius-sheet);
   box-shadow: var(--el-shadow-2);
+  touch-action: pan-y;
+  animation: el-aftercall-in var(--el-motion-base) var(--el-motion-ease-out) both;
 }
+@keyframes el-aftercall-in { from { transform: translateY(calc(var(--el-space-12) * -1)); opacity: 0; } }
 .el-aftercall__head { display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: 0; }
+.el-aftercall__logo { display: inline-flex; flex: none; align-items: center; justify-content: center; inline-size: var(--el-space-32); block-size: var(--el-space-32); border-radius: var(--el-radius-full); background: var(--el-role-bg-subtle); }
 .el-aftercall__name {
-  display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0;
-  padding: 0; border: 0; background: transparent; text-align: start; cursor: pointer;
+  display: flex; flex: 1; flex-direction: column; align-items: flex-start; min-inline-size: 0;
+  padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer;
 }
 .el-aftercall__name:hover .el-aftercall__title { text-decoration: underline; }
 .el-aftercall__title { font-weight: var(--el-text-body-strong-weight); max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.el-aftercall__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
-.el-aftercall .el-progress { block-size: var(--el-space-2); }
+.el-aftercall__close { flex: none; margin-inline-end: calc(var(--el-space-8) * -1); }
+.el-aftercall__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
+.el-aftercall__line { display: block; block-size: var(--el-space-2); border-radius: var(--el-radius-full); background: var(--el-role-bg-subtle); overflow: hidden; }
+.el-aftercall__line > span {
+  display: block; block-size: 100%; background: var(--el-role-accent-default); transform-origin: left center;
+  animation: el-aftercall-line linear both;
+}
+[dir="rtl"] .el-aftercall__line > span { transform-origin: right center; }
+@keyframes el-aftercall-line { from { transform: scaleX(var(--from, 1)); } to { transform: scaleX(0); } }
+.el-aftercall__swipe { margin: 0; }
+/* The desktop's words are English (lang="en"): English metrics, also in a window laid out right to left. */
+.el-aftercall:lang(en), .el-pill-menu:lang(en), .el-pill-banner:lang(en) { font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
+.el-aftercall:lang(en) .el-caption { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
+.el-aftercall p { margin: 0; }
+.el-aftercall--done { gap: var(--el-space-4); padding-block: var(--el-space-8); }
+.el-aftercall__done { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-aftercall__done-text { display: flex; flex: 1; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; overflow: hidden; white-space: nowrap; }
+.el-aftercall__done-text > :first-child { flex: none; }
+.el-aftercall__done-name { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
+.el-aftercall__done > .el-button { flex: none; }
+@media (prefers-reduced-motion: reduce) {
+  .el-aftercall { animation: none; }
+  .el-aftercall__line > span { animation: none; transform: scaleX(var(--from, 1)); }
+}
+
+/* The pill's menu (Transcribe this call, Save audio only, Stop and delete) and the start banner, under the pill. */
+.el-pill-stack { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4); }
+.el-pill-menu {
+  display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: calc(var(--el-space-64) * 3);
+  padding: var(--el-space-4);
+  background: var(--el-role-bg-overlay);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-radius-lg);
+  box-shadow: var(--el-shadow-2);
+}
+.el-pill-menu__item {
+  display: flex; align-items: center; gap: var(--el-space-8);
+  min-block-size: calc(var(--el-space-24) + var(--el-space-4));
+  padding-inline: var(--el-space-8);
+  border: 0; border-radius: var(--el-radius-md); background: transparent; color: var(--el-role-text-primary);
+  font: inherit; text-align: start; cursor: pointer;
+}
+.el-pill-menu__item:hover { background: var(--el-role-bg-subtle); }
+.el-pill-menu__item[aria-checked="true"] { color: var(--el-role-accent-text); font-weight: var(--el-text-body-strong-weight); }
+.el-pill-menu__item--danger { color: var(--el-role-danger-default); }
+.el-pill-menu__mark { display: inline-flex; inline-size: var(--el-space-16); }
+.el-pill-banner {
+  display: inline-flex; align-items: center; gap: var(--el-space-8);
+  padding: var(--el-space-2) var(--el-space-4) var(--el-space-2) var(--el-space-12);
+  background: var(--el-role-bg-overlay);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-radius-full);
+  box-shadow: var(--el-shadow-2);
+  white-space: nowrap;
+  animation: el-aftercall-in var(--el-motion-base) var(--el-motion-ease-out) both;
+}
+@media (prefers-reduced-motion: reduce) { .el-pill-banner { animation: none; } }
 
 /* ---- Live Assist card (a floating layer) ------------------------------------------------------------------- */
 .el-assist-root { display: flex; justify-content: center; padding: var(--el-space-8); }

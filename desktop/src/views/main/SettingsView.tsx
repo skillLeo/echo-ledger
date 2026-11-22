@@ -24,6 +24,7 @@ import { PlanUsagePage, ThisMonth, TranscriptionKeyPage, canUpgrade } from "./Up
 import { AccountHeader, StateRow, stateRow } from "./ProfileCard";
 import { MacCheckCard } from "./MacCheck";
 import { ShareCheckPage, SharePrivacyPage, sharePrivacyValue } from "./PrivacySettings";
+import { afterEachCallOf } from "../../lib/callChoice";
 
 /** Root rows that are a single setting but open a page of their own on the desktop (a select needs room). */
 const ROW_PAGES: ReadonlySet<string> = new Set(["transcription.language"]);
@@ -296,7 +297,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
     if (entry.page === null) return valueOf(entry.id);
     if (!s) return "";
     const choice: Record<string, string | undefined> = {
-      "calls.after": s.afterCall, "calls.skip_short": String(s.skipCallsShorterThanS), "captions.size": s.captionStyle.size, "captions.lines": String(s.captionLines),
+      "calls.after": afterEachCallOf(s), "calls.ask_when": s.askWhen, "calls.skip_short": String(s.skipCallsShorterThanS), "captions.size": s.captionStyle.size, "captions.lines": String(s.captionLines),
       "captions.position": s.overlayCorner, "captions.width": s.captionStyle.width, "captions.autohide": String(s.captionStyle.autoHideSeconds), "screen.target": s.screenTarget,
       "voice.shortcut_mode": s.dictationMode, "voice.output": s.dictationOutput, "appearance.theme": themeChoice, "appearance.sidebar": prefs.sidebarStyle,
       "appearance.density": prefs.density, "appearance.clock": prefs.clock, "lock.after": String(s.lockAfterMinutes),
