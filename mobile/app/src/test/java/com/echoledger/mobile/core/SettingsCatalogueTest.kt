@@ -1,5 +1,6 @@
 package com.echoledger.mobile.core
 
+import com.echoledger.mobile.data.AppSettings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -96,5 +97,28 @@ class SettingsCatalogueTest {
         assertEquals("system", general.themeMode)
         assertEquals("pairing stays", "01DEVICE", general.deviceId)
         assertEquals("toggle", SettingsReset.reset(SettingsGroup.VoiceNotes, custom).dictationMode)
+    }
+
+    @Test
+    fun microphoneResetLeavesTheCallsPagesSettingsAlone() {
+        val custom = AppSettings(
+            micSource = "mic",
+            recordingKbps = 64,
+            inputDevice = "usb",
+            farSideWarning = !AppSettings().farSideWarning,
+            phoneCalls = "always",
+            phoneAppImport = false,
+            deletePhoneAppCopy = true
+        )
+        val mic = SettingsReset.resetPage("mic", SettingsGroup.Calls, custom)
+        val d = AppSettings()
+        assertEquals(d.micSource, mic.micSource)
+        assertEquals(d.recordingKbps, mic.recordingKbps)
+        assertEquals(null, mic.inputDevice)
+        assertEquals(d.farSideWarning, mic.farSideWarning)
+        // SIM calls and the Phone app's recordings live on Calls & meetings.
+        assertEquals("always", mic.phoneCalls)
+        assertEquals(false, mic.phoneAppImport)
+        assertEquals(true, mic.deletePhoneAppCopy)
     }
 }

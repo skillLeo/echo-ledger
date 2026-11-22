@@ -137,6 +137,8 @@ fun MicPage(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { refresh++ }
     val choices = remember(refresh) { inputChoices(context) }
     val items = remember(refresh, helperConnected, settings.phoneCalls) { micPermissionItems(context, helperConnected, settings) }
+    // Read again on resume, as the permission rows are: back from Android's settings, the test can start.
+    val micAllowed = remember(refresh) { granted(context, Manifest.permission.RECORD_AUDIO) }
     val pad = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(stringResource(R.string.v2_set_page_mic), onBack = onBack)
@@ -173,7 +175,7 @@ fun MicPage(
                 Note(stringResource(R.string.v2_mic_helper_note))
             }
             Column(Modifier.highlightedIf(highlight == "mic.test")) {
-                MicTest(settings.inputDevice, recording, recordTest, playBack)
+                MicTest(settings.inputDevice, recording, micAllowed, recordTest, playBack)
             }
             EchoSwitch(
                 settings.farSideWarning,
@@ -228,6 +230,7 @@ private fun <T> Choices(setting: String, options: List<Pair<T, Int>>, selected: 
 private fun MicTest(
     inputDevice: String?,
     recording: Boolean,
+    micAllowed: Boolean,
     recordTest: suspend (Context, String?, (Float) -> Unit) -> MicTestResult,
     playBack: (ShortArray) -> AudioTrack?
 ) {
@@ -258,7 +261,7 @@ private fun MicTest(
                     testing = false
                 }
             },
-            enabled = !recording && granted(context, Manifest.permission.RECORD_AUDIO),
+            enabled = !recording && micAllowed,
             loading = testing,
             loadingText = stringResource(R.string.v2_mic_testing),
             kind = EchoButtonKind.Secondary

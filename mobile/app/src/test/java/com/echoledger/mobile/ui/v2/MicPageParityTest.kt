@@ -22,6 +22,10 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.recording.InputChoice
 import com.echoledger.mobile.recording.MicTestResult
@@ -35,7 +39,9 @@ import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.robolectric.Shadows.shadowOf
 
@@ -56,11 +62,22 @@ class MicPageParityTest : ScreenTest() {
     private var setupOpened = 0
     private val samples = ShortArray(16) { (it * 100).toShort() }
     private var heard = true
-    private var epoch by mutableIntStateOf(0)
 
-    /** Opens the page again (as coming back to it does): the connected microphones and permissions are read anew. */
-    private fun remount() {
-        epoch++
+    /** The activity's lifecycle as the page sees it, so coming back from Android's settings can be played. */
+    private val owner = object : LifecycleOwner {
+        val registry = LifecycleRegistry(this)
+        override val lifecycle: Lifecycle get() = registry
+    }
+
+    @Before
+    fun resumed() {
+        owner.registry.currentState = Lifecycle.State.RESUMED
+    }
+
+    /** Away to Android's settings and back: the page reads the microphones and permissions again on resume. */
+    private fun comeBack() {
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        owner.registry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         compose.waitForIdle()
     }
 
@@ -69,29 +86,27 @@ class MicPageParityTest : ScreenTest() {
             SettingsScreen(vm, onSetup = {}, openPage = "mic")
         } else {
             EchoV2Theme(darkTheme = false, language = language) {
-                androidx.compose.runtime.key(epoch) {
-                    CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
-                        val s by vm.settings.collectAsState()
-                        MicPage(
-                            s,
-                            vm::updateSettings,
-                            highlight = null,
-                            onBack = {},
-                            helperConnected = false,
-                            recording = recording,
-                            onSetup = { setupOpened++ },
-                            inputChoices = { choices },
-                            recordTest = { _, key, onLevel ->
-                                testedWith = key
-                                onLevel(0.2f)
-                                MicTestResult(if (heard) 0.5f else 0f, heard, samples)
-                            },
-                            playBack = {
-                                played = it
-                                null
-                            }
-                        )
-                    }
+                CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState(), LocalLifecycleOwner provides owner) {
+                    val s by vm.settings.collectAsState()
+                    MicPage(
+                        s,
+                        vm::updateSettings,
+                        highlight = null,
+                        onBack = {},
+                        helperConnected = false,
+                        recording = recording,
+                        onSetup = { setupOpened++ },
+                        inputChoices = { choices },
+                        recordTest = { _, key, onLevel ->
+                            testedWith = key
+                            onLevel(0.2f)
+                            MicTestResult(if (heard) 0.5f else 0f, heard, samples)
+                        },
+                        playBack = {
+                            played = it
+                            null
+                        }
+                    )
                 }
             }
         }
@@ -168,9 +183,11 @@ class MicPageParityTest : ScreenTest() {
         // The chosen microphone was unplugged: the page says the phone chooses one.
         assertTrue(!shown("That microphone is not connected, so the phone chooses one."))
         choices = listOf(InputChoice("builtin", "Phone microphone"))
-        remount()
+        comeBack()
         pumpUntil("not connected") { shown("That microphone is not connected, so the phone chooses one.") }
-        // Reset asks, then puts every microphone choice back.
+        // Reset asks, then puts every microphone choice back; the SIM-call settings (Calls & meetings') stay.
+        vm.updateSettings { it.copy(phoneCalls = "always", phoneAppImport = false, deletePhoneAppCopy = true) }
+        pumpUntil("calls settings") { vm.settings.value.phoneCalls == "always" }
         press("Reset to defaults")
         compose.onAllNodes(hasText("Reset") and hasClickAction() and hasAnyAncestor(isDialog())).onLast()
             .performSemanticsAction(SemanticsActions.OnClick)
@@ -179,6 +196,10 @@ class MicPageParityTest : ScreenTest() {
             s.micSource == d.micSource && s.recordingKbps == d.recordingKbps && s.inputDevice == null &&
                 s.farSideWarning == d.farSideWarning
         }
+        val kept = vm.settings.value
+        assertEquals("always", kept.phoneCalls)
+        assertFalse(kept.phoneAppImport)
+        assertTrue(kept.deletePhoneAppCopy)
     }
 
     @Test
@@ -190,7 +211,7 @@ class MicPageParityTest : ScreenTest() {
         showBoth()
         compose.onAllNodes(hasText("Test 10 s") and hasClickAction()).onFirst().assertIsNotEnabled()
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
-        remount()
+        comeBack()
         compose.waitForIdle()
         compose.onAllNodes(hasText("Test 10 s") and hasClickAction()).onFirst().assertIsEnabled()
         press("Test 10 s")
@@ -231,7 +252,7 @@ class MicPageParityTest : ScreenTest() {
         assertEquals(1, setupOpened)
         // Allowed: no Fix, the word Allowed.
         shadowOf(app).grantPermissions(Manifest.permission.RECORD_AUDIO)
-        remount()
+        comeBack()
         compose.waitForIdle()
         assertTrue(compose.onAllNodes(hasContentDescription("Fix Microphone")).fetchSemanticsNodes().isEmpty())
         assertTrue(shown("Allowed"))
