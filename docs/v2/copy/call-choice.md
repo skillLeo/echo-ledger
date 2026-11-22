@@ -8,6 +8,7 @@ placeholders; names, apps and numbers inside Urdu lines are isolated (FSI…PDI)
 |---|---|---|
 | transcribe | Transcribe | ٹرانسکرپٹ بنائیں |
 | save_audio_only | Save audio only | صرف آڈیو محفوظ کریں |
+| save_audio_all | Save all as audio only | سب کی صرف آڈیو محفوظ کریں |
 | delete | Delete | حذف کریں |
 | dont_record | Don't record | ریکارڈ نہ کریں |
 | undo | Undo | واپس لیں |
