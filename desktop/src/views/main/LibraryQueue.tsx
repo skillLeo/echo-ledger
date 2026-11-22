@@ -415,6 +415,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                       </div>
                     </div>
                     {item.firstLine && <div className="item-preview">{item.firstLine}</div>}
+                    {item.restoredDelete && <div className="item-preview queue-restored" data-testid="restored-delete" dir="auto">{CALL_WORDS.restored_delete}</div>}
                     {learn?.itemId === item.id && (
                       <div className="queue-learn" role="group" aria-label="Remember the language">
                         <span className="small">{learn.question}</span>

@@ -1159,6 +1159,8 @@ fn a_delete_pending_at_quit_is_back_in_the_waiting_list_at_start_not_deleted() {
     let back = files.load();
     let del = back.find("del").expect("still here");
     assert!(del.waits() && del.chosen().is_none(), "in the waiting list, for Transcribe, Save audio only or Delete");
+    assert!(del.item().restored_delete, "its row says it was deleted just before EchoLedger closed");
+    assert!(!back.find("tr").is_some_and(|d| d.item().restored_delete), "only that one");
     assert_eq!(back.ui_items().iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["del"]);
     assert!(files.discard_due(start + chrono::Duration::days(1)).0.is_empty(), "nothing deletes it by itself");
     assert!(root.path().join("recordings/del/recording.flac").exists(), "its audio is whole");

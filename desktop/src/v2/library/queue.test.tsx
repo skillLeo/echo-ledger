@@ -105,6 +105,14 @@ describe("waiting recordings at the top of the v2 Library", () => {
     expect(screen.queryByTestId("library-queue")).toBeNull();
   });
 
+  it("a recording whose Delete was still waiting when EchoLedger closed says so on its row, with all three choices", async () => {
+    await show([makePendingItem("p1", { title: "Came back", restoredDelete: true }), makePendingItem("p2", { title: "Plain" })]);
+    fireEvent.click(review());
+    expect(within(rowOf("Came back")).getByTestId("restored-delete")).toHaveTextContent("Deleted just before EchoLedger closed. Choose again.");
+    expect(within(rowOf("Plain")).queryByTestId("restored-delete")).toBeNull();
+    for (const name of ["Transcribe", "Save audio only", "Delete"]) expect(within(rowOf("Came back")).getByRole("button", { name })).toBeInTheDocument();
+  });
+
   it("Save audio only, for one and for all, keeps the audio without a transcript", async () => {
     await show([makePendingItem("p1", { title: "One" }), makePendingItem("p2", { title: "Two" }), makePendingItem("p3", { title: "Three" })]);
     fireEvent.click(review());

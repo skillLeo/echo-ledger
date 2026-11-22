@@ -1341,6 +1341,8 @@ export interface PendingItem {
   callerName?: string | null;
   /** Screens kept for this recording on this computer (the after-call card's "3 screens"). */
   screens?: number;
+  /** Back in the waiting list because its Delete was still waiting when EchoLedger closed (restored_delete). */
+  restoredDelete?: boolean;
 }
 
 /** A kept recording in the upload queue. */

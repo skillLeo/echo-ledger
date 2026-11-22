@@ -398,20 +398,22 @@ export default function PillApp() {
     );
   }
 
-  const missingRow = missing && (
+  // The other side not being recorded: the sentence on a line of its own, whole, and its two buttons under it.
+  const missingRow = missing && (notRecorded ? (
+    <div className="mark-tray warn stacked" lang="en" data-hit data-testid="missing-permission" role="alert" title={notRecorded.sentence}>
+      <span className="mark-line"><WarningIcon size={14} /><span className="mark-text whole">{missing}</span></span>
+      <span className="mark-buttons">
+        <button type="button" className="rec-text-btn" title={notRecorded.sentence} onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Open System Settings</button>
+        <button type="button" className="rec-text-btn" onClick={() => void api.captureRetrySystem().catch(() => undefined)}>Try again</button>
+      </span>
+    </div>
+  ) : (
     <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={otherSide?.sentence ?? live?.missing?.[0]?.sentence}>
       <WarningIcon size={14} />
       <span className="mark-text">{missing}</span>
-      {notRecorded ? (
-        <>
-          <button type="button" className="rec-text-btn" title={notRecorded.sentence} onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Open System Settings</button>
-          <button type="button" className="rec-text-btn" onClick={() => void api.captureRetrySystem().catch(() => undefined)}>Try again</button>
-        </>
-      ) : (
-        <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setMissingDismissed(true)}><MinimizeIcon size={14} /></button>
-      )}
+      <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setMissingDismissed(true)}><MinimizeIcon size={14} /></button>
     </div>
-  );
+  ));
 
   return (
     <div className="pill-root">

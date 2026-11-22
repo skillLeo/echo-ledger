@@ -88,6 +88,9 @@ pub struct PendingItem {
     pub caller_name: Option<String>,
     /// Screens kept for this recording on this computer (the after-call card's "3 screens"); they upload with it.
     pub screens: usize,
+    /// Back in the waiting list because its Delete was still waiting when EchoLedger closed: "Deleted just before
+    /// EchoLedger closed. Choose again." on its row.
+    pub restored_delete: bool,
 }
 
 /// The name of who the running recording `client_ref` is with, from the caller noted for it (none for a caller noted
@@ -180,6 +183,9 @@ pub struct PendingDecision {
     /// is over (`choose`); none while the card asks or the recording waits.
     #[serde(default)]
     chosen: Option<crate::after_call::CallChoice>,
+    /// Its Delete was not applied before the app closed, so it was put back in the waiting list at start.
+    #[serde(default)]
+    restored_delete: bool,
 }
 
 impl PendingDecision {
@@ -222,6 +228,7 @@ impl PendingDecision {
             recovered: false,
             discard_at: None,
             chosen: None,
+            restored_delete: false,
         }
     }
 
@@ -323,6 +330,7 @@ impl PendingDecision {
             recovered: true,
             discard_at: None,
             chosen: None,
+            restored_delete: false,
         }
     }
 
@@ -348,6 +356,7 @@ impl PendingDecision {
             language: self.language.clone(),
             caller_name: self.caller_name().map(str::to_string),
             screens: 0,
+            restored_delete: self.restored_delete,
         }
     }
 
@@ -648,6 +657,7 @@ impl DecisionFiles {
             d.discard_at = None;
             d.chosen = None;
             d.keep_at = None;
+            d.restored_delete = true;
             back.push(d.id.clone());
         }
         if !back.is_empty() {

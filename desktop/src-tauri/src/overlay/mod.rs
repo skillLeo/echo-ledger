@@ -38,9 +38,13 @@ const DICTATION_SIZE: (f64, f64) = (420.0, 110.0);
 /// that; only while the call choice's menu or the start banner shows does it grow to [`PILL_OPEN_SIZE`].
 pub const PILL_SIZE: (f64, f64) = (352.0, 84.0);
 /// The pill window while its menu (Transcribe this call, Save audio only, Stop and delete) or the start banner shows.
-pub const PILL_OPEN_SIZE: (f64, f64) = (352.0, 148.0);
-/// One warning row under the pill (the other side not being recorded, 2.0.6), kept above the open menu or banner.
-pub const PILL_WARNING_ROW: f64 = 40.0;
+/// (Room for a pill a little taller with a right-to-left name in Urdu metrics too.)
+pub const PILL_OPEN_SIZE: (f64, f64) = (352.0, 156.0);
+/// The warning under the pill (the other side not being recorded, 2.0.6): its sentence on a line of its own and its two
+/// buttons under it, kept above the open menu or banner.
+pub const PILL_WARNING_ROW: f64 = 72.0;
+/// The pill window closed with that warning under it.
+pub const PILL_WARNING_SIZE: (f64, f64) = (352.0, 124.0);
 /// How much of the pill window the pill itself takes (the after-call card goes right under it).
 pub const PILL_VISIBLE_LOGICAL: f64 = 48.0;
 /// The after-call window for a confirmation, a short grouped card or the unknown-app chip; it grows only for what it
@@ -78,7 +82,8 @@ fn set_review_height(height: f64) {
 /// tray), room for the menu or the start banner while open, and a row more for a warning shown with them.
 pub fn pill_base(open: bool, warning: bool) -> (f64, f64) {
     match (open, warning) {
-        (false, _) => PILL_SIZE,
+        (false, false) => PILL_SIZE,
+        (false, true) => PILL_WARNING_SIZE,
         (true, false) => PILL_OPEN_SIZE,
         (true, true) => (PILL_OPEN_SIZE.0, PILL_OPEN_SIZE.1 + PILL_WARNING_ROW),
     }
@@ -798,10 +803,12 @@ mod tests {
         use crate::after_call::{AfterCallState, CallChoice, CallDone, CallGroup};
         // The pill: its old size while the menu is closed, room for the menu only while it is open.
         assert_eq!(pill_base(false, false), (352.0, 84.0));
-        assert_eq!(pill_base(false, true), (352.0, 84.0), "a warning alone fits under the pill, as before");
-        assert_eq!(pill_base(true, false), (352.0, 148.0));
-        assert_eq!(pill_base(true, true), (352.0, 188.0), "the menu and the warning both, neither clipped");
-        assert_eq!(scaled_size(pill_base(true, false), 2.0), (704.0, 296.0), "at 200 % text too");
+        assert_eq!(pill_base(false, true), (352.0, 124.0), "the warning's sentence and its buttons under the pill");
+        assert_eq!(pill_base(true, false), (352.0, 156.0));
+        assert_eq!(pill_base(true, true), (352.0, 228.0), "the menu and the warning both, neither clipped");
+        assert_eq!(scaled_size(pill_base(true, false), 2.0), (704.0, 312.0), "at 200 % text too");
+        assert_eq!(scaled_size(pill_base(true, true), 2.0), (704.0, 456.0), "both at 200 % text: twice in each direction");
+        assert_eq!(scaled_size(pill_base(false, true), 2.0), (704.0, 248.0));
         // The after-call window: its old size for a confirmation, the grouped card or nothing; taller only for the card.
         let done = CallDone {
             kind: CallChoice::Audio, id: "a".into(), title: None, caller_name: None, source_app: "whatsapp".into(),
@@ -824,7 +831,7 @@ mod tests {
         let card = crate::pending::PendingItem {
             id: "a".into(), source_app: "whatsapp".into(), auto: true, mode: crate::audio::RecordingMode::Call, title: None, client_id: None,
             client_name: None, started_at: String::new(), ended_at: String::new(), duration_ms: 44_000, first_line: None,
-            deadline_at: None, language: None, caller_name: None, screens: 0,
+            deadline_at: None, language: None, caller_name: None, screens: 0, restored_delete: false,
         };
         assert_eq!(review_base(&AfterCallState { ask: Some(card.clone()), hint: true, ..Default::default() }), (360.0, 240.0), "room for the card and its first-time line");
         let held = vec![CallDone { kind: CallChoice::Delete, ..done.clone() }, done.clone()];

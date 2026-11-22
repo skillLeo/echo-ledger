@@ -70,6 +70,20 @@ describe("recording pill styles", () => {
   });
 });
 
+describe("the not-recorded warning under the pill", () => {
+  it("keeps its sentence whole on a line of its own, with the buttons under it, and nothing under the pill squeezes the pill", () => {
+    const row = styleOf("mark-tray warn stacked", "pill-root");
+    expect(row.flexDirection).toBe("column");
+    expect(row.height).toBe("auto");
+    expect(row.overflow).toBe("visible");
+    const text = styleOf("mark-text whole", "mark-tray");
+    expect(text.whiteSpace).toBe("normal");
+    expect(text.textOverflow).toBe("clip");
+    expect(text.overflow).toBe("visible");
+    expect(topLevelRule(".pill-root > *")?.style.flexShrink).toBe("0");
+  });
+});
+
 describe("after-call styles (the call choice)", () => {
   it("puts the card at the top of the window, centred, next to the pill", () => {
     const root = styleOf("review-root");

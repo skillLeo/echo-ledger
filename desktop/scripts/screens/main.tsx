@@ -510,7 +510,7 @@ async function render() {
   const { emit } = await import("@tauri-apps/api/event");
   root.render(
     <div className="screens-canvas">
-      <div className="screens-window" style={{ width: 352, height: 188 }}><PillApp /></div>
+      <div className="screens-window" style={{ width: 352, height: 228 }}><PillApp /></div>
       <div className="screens-window" style={{ width: 360, height: 340 }}><ReviewApp /></div>
       <div className="screens-window" style={{ width: 560, height: 150 }}><OverlayApp /></div>
     </div>,

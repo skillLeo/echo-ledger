@@ -135,7 +135,10 @@ export function QueueV2({ say, reviewRequest, onShown }: {
                   const isBusy = bulkBusy || busy === item.id;
                   return (
                     <ListRow key={item.id} title={title} strong leading={avatar(item)}
-                      meta={meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
+                      meta={item.restoredDelete ? <>
+                        {meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
+                        <span className="el-queue-restored" data-testid="restored-delete" dir="auto">{CALL_WORDS.restored_delete}</span>
+                      </> : meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
                       control={<span className="el-page__actions" role="group" aria-label={title} data-testid={`pending-${item.id}`}>
                         <Menu label={`More for ${title}`} items={() => more(item)} button={{ size: "sm", variant: "quiet", icon: Icons.MoreIcon, disabled: isBusy }} />
                         <Button size="sm" disabled={isBusy} onClick={() => void q.discard(item)}>Delete</Button>

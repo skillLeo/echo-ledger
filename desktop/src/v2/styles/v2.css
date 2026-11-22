@@ -761,7 +761,7 @@ button.el-step__head { cursor: pointer; }
 /* Taller than the window allows (many Delete rows): the window's root scrolls (controls.css .review-root), every row
    still there. */
 /* The desktop's words are English (lang="en"): English metrics, also in a window laid out right to left. */
-.el-aftercall:lang(en), .el-pill-menu:lang(en), .el-pill-banner:lang(en) { font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
+.el-aftercall:lang(en), .el-pill-menu:lang(en), .el-pill-banner:lang(en), .el-pill-warning:lang(en) { font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
 .el-aftercall:lang(en) .el-caption { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
 .el-aftercall p { margin: 0; }
 .el-aftercall--done { gap: var(--el-space-4); padding-block: var(--el-space-8); }
@@ -780,7 +780,8 @@ button.el-step__head { cursor: pointer; }
 }
 
 /* The pill's menu (Transcribe this call, Save audio only, Stop and delete) and the start banner, under the pill. */
-.el-pill-stack { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4); max-inline-size: 100%; min-inline-size: 0; }
+.el-pill-stack { display: flex; flex-direction: column; align-items: center; gap: var(--el-space-4); max-inline-size: 100%; min-inline-size: 0; flex-shrink: 0; }
+.el-pill-stack > * { flex-shrink: 0; }
 .el-pill-menu {
   display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: calc(var(--el-space-64) * 3);
   padding: var(--el-space-4);
@@ -800,6 +801,9 @@ button.el-step__head { cursor: pointer; }
 .el-pill-menu__item[aria-checked="true"] { color: var(--el-role-accent-text); font-weight: var(--el-text-body-strong-weight); }
 .el-pill-menu__item--danger { color: var(--el-role-danger-default); }
 .el-pill-menu__mark { display: inline-flex; inline-size: var(--el-space-16); }
+/* A waiting recording put back after a Delete that was still waiting when EchoLedger closed: its own line. */
+.el-queue-restored { display: block; color: var(--el-role-warning-default); }
+
 /* The other side not being recorded (2.0.6): a warning row under the pill, kept above the open menu or banner. */
 .el-pill-warning {
   display: flex; align-items: center; gap: var(--el-space-4); box-sizing: border-box; max-inline-size: 100%; min-inline-size: 0;
@@ -811,9 +815,14 @@ button.el-step__head { cursor: pointer; }
   box-shadow: var(--el-shadow-2);
   white-space: nowrap;
 }
-.el-pill-warning > svg { flex: none; color: var(--el-role-warning-default); }
+.el-pill-warning__line { display: flex; flex: 1 1 auto; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-pill-warning__line > svg { flex: none; color: var(--el-role-warning-default); }
 .el-pill-warning__text { flex: 1 1 auto; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; }
 .el-pill-warning > .el-button { flex: none; }
+/* The other side not being recorded: the sentence on a line of its own, never cut, and its two buttons under it. */
+.el-pill-warning--stacked { flex-direction: column; align-items: stretch; gap: var(--el-space-2); padding: var(--el-space-4) var(--el-space-8); border-radius: var(--el-radius-lg); white-space: normal; }
+.el-pill-warning--stacked .el-pill-warning__text { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+.el-pill-warning__buttons { display: flex; justify-content: flex-end; gap: var(--el-space-4); }
 .el-pill-banner {
   display: inline-flex; align-items: center; gap: var(--el-space-8);
   padding: var(--el-space-2) var(--el-space-4) var(--el-space-2) var(--el-space-12);

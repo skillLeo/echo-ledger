@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { AfterCallState, PendingItem, RecordingState } from "../../lib/ipc";
-import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { RecordingPill, type PillActions, type PillModel } from "./RecordingPill";
 import { AfterCallCard } from "./AfterCallCard";
 import { AfterCallStack } from "./AfterCallStack";
@@ -129,6 +129,25 @@ describe("the recording pill", () => {
     fireEvent.click(within(screen.getByTestId("missing-permission")).getByRole("button", { name: "Dismiss warning" }));
     expect(a.onDismissWarning).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Open System Settings" })).toBeNull();
+  });
+
+  it("puts the not-recorded sentence on a line of its own, whole (no ellipsis), with its two buttons under it", async () => {
+    const warning = { text: "The other side isn't being recorded", sentence: "Allow System Audio Recording for EchoLedger.", notRecorded: true };
+    render(<RecordingPill model={{ ...MODEL, warning }} actions={actions()} />);
+    const row = screen.getByTestId("missing-permission");
+    const text = row.querySelector(".el-pill-warning__text")!;
+    expect(text).toHaveTextContent("The other side isn't being recorded");
+    const buttons = row.querySelector(".el-pill-warning__buttons")!;
+    expect(text.compareDocumentPosition(buttons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(buttons as HTMLElement).getAllByRole("button").map((b) => b.textContent)).toEqual(["Open System Settings", "Try again"]);
+    expect(row).toHaveClass("el-pill-warning--stacked");
+    const { readFileSync } = await import("node:fs");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    expect(css).toMatch(/\.el-pill-warning--stacked \{ flex-direction: column;/);
+    expect(css).toMatch(/\.el-pill-warning--stacked \.el-pill-warning__text \{ overflow: visible; text-overflow: clip; white-space: normal;/);
+    expect(css).toMatch(/\.el-pill-stack > \* \{ flex-shrink: 0; \}/);
   });
 
   it("At the start of the call: Recording this call · Don't record beside the pill; doing nothing records", () => {
@@ -352,6 +371,26 @@ describe("the windows with the flags", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
     expect(screen.getByTestId("missing-permission")).toBeInTheDocument();
     expect(callsOf("pill_expanded").at(-1)).toEqual({ expanded: true, warning: true });
+  });
+
+  it("ui_v2.recording_controls: the new pill's menu is drawn only once the window has grown for it", async () => {
+    respond("ui_flags", { ui_flags: { "ui_v2.recording_controls": true } });
+    respond("recording_state", REC);
+    respond("set_hit_regions", null);
+    respond("window_ready", null);
+    let grown: () => void = () => undefined;
+    respondWith("pill_expanded", () => new Promise<void>((r) => { grown = r; }));
+    render(<PillApp />);
+    await act(flushAsync);
+    await act(() => emitEvent("pill:visibility", true));
+    await act(flushAsync);
+    fireEvent.click(await screen.findByRole("button", { name: /Show the controls$/ }));
+    await act(flushAsync);
+    expect(callsOf("pill_expanded")).toEqual([{ expanded: true, warning: false }]);
+    expect(screen.queryByRole("menu"), "not drawn before the window has room").toBeNull();
+    await act(async () => grown());
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    expect(callsOf("pill_expanded"), "asked once, before; never again after the draw").toHaveLength(1);
   });
 
   it("ui_v2.after_call draws the new card in the after-call window", async () => {

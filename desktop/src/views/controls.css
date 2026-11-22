@@ -49,6 +49,8 @@
 /* Width budget inside 300 px: dot + timer ~ 60, source icon 14, meters 8, six 28 px buttons 168, gaps and padding
    ~ 40. The source name and "REC" stay for screen readers and the tooltip; "Paused" and errors stay visible. */
 .pill-root { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: var(--space-1); padding: 4px; font-size: var(--text-xs); }
+/* Nothing under the pill squeezes it: the window grows for what it shows instead (overlay::pill_base). */
+.pill-root > * { flex-shrink: 0; }
 
 .rec-pill {
   display: flex;
@@ -202,6 +204,12 @@
 .mark-tray .rec-dot { flex: none; }
 /* A row's actions keep their words on one line; the row's text gives way (ellipsis), never the buttons. */
 .mark-tray .rec-text-btn { flex: none; white-space: nowrap; }
+/* The other side not being recorded: the sentence on a line of its own, never cut, and its buttons under it. */
+.mark-tray.stacked { flex-direction: column; align-items: stretch; height: auto; gap: var(--space-1); padding: 6px var(--space-2) 6px var(--space-3); border-radius: var(--radius-field); overflow: visible; }
+.mark-tray.stacked .mark-line { display: flex; align-items: flex-start; gap: var(--space-1); }
+.mark-tray.stacked .mark-line > svg { flex: none; margin-top: 2px; }
+.mark-tray .mark-text.whole { overflow: visible; white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
+.mark-tray.stacked .mark-buttons { display: flex; gap: var(--space-1); justify-content: flex-end; }
 
 /* Bookmark tray (B3) and the silent-other-side warning (B5), under the pill for a few seconds. */
 .mark-tray {

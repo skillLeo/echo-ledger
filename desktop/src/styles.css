@@ -433,6 +433,8 @@ select.chip option { color: var(--text); background: var(--surface); }
 .item-sub { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-sub > span:not(.pill) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .item-preview { color: var(--text-muted); font-size: var(--text-xs); line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; padding-left: 60px; }
+/* A waiting recording put back after a Delete that was still waiting when EchoLedger closed. */
+.item-preview.queue-restored { color: var(--warning); }
 /* App tiles: 44 px, radius 12, the app's colour at 12 %. */
 .avatar { position: relative; width: 44px; height: 44px; border-radius: var(--radius-field); display: grid; place-items: center; flex: none; --tile: var(--tile-voice); background: color-mix(in srgb, var(--tile) 13%, transparent); color: var(--tile); }
 .avatar.app-video { --tile: var(--tile-video); }

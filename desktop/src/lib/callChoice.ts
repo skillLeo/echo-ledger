@@ -37,6 +37,7 @@ export const CALL_WORDS = {
   done_audio: "Saved as audio",
   done_deleted: "Deleted",
   grouped_review: "Review",
+  restored_delete: "Deleted just before EchoLedger closed. Choose again.",
 } as const;
 
 /** "0:44 · just now" (card_meta). */

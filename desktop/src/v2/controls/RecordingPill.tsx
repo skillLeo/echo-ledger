@@ -142,14 +142,17 @@ export function RecordingPill({ model, actions, defaultOpen = false, onMenu, bef
         )}
       </div>
       {model.warning && (
-        <div className="el-pill-warning" data-hit role="alert" data-testid="missing-permission" title={model.warning.sentence}>
-          <Icons.WarningIcon />
-          <span className="el-pill-warning__text" dir="auto">{model.warning.text}</span>
+        <div className={`el-pill-warning${model.warning.notRecorded ? " el-pill-warning--stacked" : ""}`} lang="en" data-hit role="alert" data-testid="missing-permission" title={model.warning.sentence}>
+          <span className="el-pill-warning__line">
+            <Icons.WarningIcon />
+            <span className="el-pill-warning__text" dir="auto">{model.warning.text}</span>
+          </span>
           {model.warning.notRecorded ? (
-            <>
+            // The sentence keeps its own line, whole; the two buttons go under it.
+            <span className="el-pill-warning__buttons">
               <Button size="sm" variant="quiet" title={model.warning.sentence} onClick={actions.onOpenSettings}>Open System Settings</Button>
               <Button size="sm" variant="quiet" onClick={actions.onRetrySystem}>Try again</Button>
-            </>
+            </span>
           ) : (
             <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Dismiss warning" title="Dismiss" onClick={actions.onDismissWarning} />
           )}

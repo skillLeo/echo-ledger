@@ -155,6 +155,13 @@ describe("Waiting recordings", () => {
     expect(callsOf("pending_keep")).toHaveLength(0);
   });
 
+  it("a recording whose Delete was still waiting when EchoLedger closed says so on its row", async () => {
+    await renderLibrary([makePendingItem("p1", { restoredDelete: true }), makePendingItem("p2")]);
+    expect(within(row("p1")).getByTestId("restored-delete")).toHaveTextContent("Deleted just before EchoLedger closed. Choose again.");
+    expect(within(row("p2")).queryByTestId("restored-delete")).toBeNull();
+    for (const name of ["Transcribe", "Save audio only", "Delete"]) expect(within(row("p1")).getByRole("button", { name })).toBeInTheDocument();
+  });
+
   it("Save audio only keeps one as audio, not transcribed", async () => {
     const { notify } = await renderLibrary([makePendingItem("p1")]);
     fireEvent.click(within(row("p1")).getByRole("button", { name: "Save audio only" }));
