@@ -12,6 +12,7 @@ import type { Notify } from "../../lib/notice";
 import { Banner, Button, Card, Dialog, Icons, List, ListRow, Progress, Status, TextField } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
+import { CALL_WORDS } from "../../lib/callChoice";
 
 const MAX_TITLE_CHARS = 200;
 
@@ -113,8 +114,9 @@ export function QueueV2({ say, reviewRequest, onShown }: {
           {shown && (
             <div id="queue-pending-list" className="el-library-top">
               <div className="el-page__actions">
-                <Button size="sm" variant="primary" disabled={bulkBusy} onClick={() => void q.keepAll()}>Keep all</Button>
-                <Button size="sm" disabled={bulkBusy} onClick={() => void q.discardAll()}>Discard all</Button>
+                <Button size="sm" variant="primary" disabled={bulkBusy} onClick={() => void q.keepAll()}>Transcribe all</Button>
+                <Button size="sm" disabled={bulkBusy} onClick={() => void q.keepAudioAll()}>{CALL_WORDS.save_audio_all}</Button>
+                <Button size="sm" disabled={bulkBusy} onClick={() => void q.discardAll()}>Delete all</Button>
               </div>
               {learn && (
                 <div role="group" aria-label="Remember the language">
@@ -133,11 +135,15 @@ export function QueueV2({ say, reviewRequest, onShown }: {
                   const isBusy = bulkBusy || busy === item.id;
                   return (
                     <ListRow key={item.id} title={title} strong leading={avatar(item)}
-                      meta={meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
+                      meta={item.restoredDelete ? <>
+                        {meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
+                        <span className="el-queue-restored" data-testid="restored-delete" dir="auto">{CALL_WORDS.restored_delete}</span>
+                      </> : meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName, item.firstLine)}
                       control={<span className="el-page__actions" role="group" aria-label={title} data-testid={`pending-${item.id}`}>
                         <Menu label={`More for ${title}`} items={() => more(item)} button={{ size: "sm", variant: "quiet", icon: Icons.MoreIcon, disabled: isBusy }} />
-                        <Button size="sm" disabled={isBusy} onClick={() => void q.discard(item)}>Discard</Button>
-                        <Button size="sm" disabled={isBusy} onClick={() => void q.keep(item)}>Keep</Button>
+                        <Button size="sm" disabled={isBusy} onClick={() => void q.discard(item)}>Delete</Button>
+                        <Button size="sm" disabled={isBusy} onClick={() => void q.keepAudio(item)}>{CALL_WORDS.save_audio_only}</Button>
+                        <Button size="sm" disabled={isBusy} onClick={() => void q.keep(item)}>Transcribe</Button>
                       </span>} />
                   );
                 })}

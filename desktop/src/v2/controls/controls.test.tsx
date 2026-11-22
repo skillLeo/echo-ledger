@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { AfterCallState, PendingItem, RecordingState } from "../../lib/ipc";
-import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { RecordingPill, type PillActions, type PillModel } from "./RecordingPill";
-import { AfterCallCard, cardTitle, timeLeftText } from "./AfterCallCard";
+import { AfterCallCard } from "./AfterCallCard";
 import { AfterCallStack } from "./AfterCallStack";
 import PillApp from "../../views/pill/PillApp";
 import ReviewApp from "../../views/review/ReviewApp";
@@ -12,11 +12,14 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 vi.mock("@tauri-apps/api/webviewWindow", async () => (await import("../../test/tauri")).windowModule);
 
+/** The menu items' words, in order (menuitem and menuitemradio). */
+const menuItems = (root: Element) => [...root.querySelectorAll("[role^=menuitem]")].map((i) => i.textContent);
+
 beforeEach(() => resetTauriMock());
 
 const MODEL: PillModel = { elapsed: "02:14", name: "Omar", paused: false, captions: false, language: "UR+EN", screens: { on: true, count: 3 } };
 const actions = (): PillActions => ({
-  onCaptions: vi.fn(), onPause: vi.fn(), onStop: vi.fn(), onScreens: vi.fn(), onCapture: vi.fn(), onLanguage: vi.fn(), onDiscard: vi.fn(),
+  onCaptions: vi.fn(), onPause: vi.fn(), onStop: vi.fn(), onScreens: vi.fn(), onCapture: vi.fn(), onLanguage: vi.fn(), onChoice: vi.fn(),
 });
 
 describe("a kept screen on the pill (screens:captured)", () => {
@@ -46,22 +49,26 @@ describe("a kept screen on the pill (screens:captured)", () => {
 });
 
 describe("the recording pill", () => {
-  it("reads '● 02:14 · Omar' and opens its controls on a press", () => {
+  it("reads '● 02:14 · Omar' and opens its controls and the call choice's menu on a press", () => {
     render(<RecordingPill model={MODEL} actions={actions()} />);
     const summary = screen.getByRole("button", { name: "Recording 02:14, Omar. Show the controls" });
     expect(summary).toHaveAttribute("aria-expanded", "false");
     expect(summary).toHaveTextContent("02:14·Omar");
     expect(screen.queryByRole("button", { name: "Captions" })).toBeNull();
+    expect(screen.queryByRole("menu")).toBeNull();
     fireEvent.click(summary);
     expect(summary).toHaveAttribute("aria-expanded", "true");
-    for (const name of ["Captions", "Pause", "Stop and save", "Capture the screen now", "Language: UR+EN. Change", "Discard this recording"]) {
+    for (const name of ["Captions", "Pause", "Stop and save", "Capture the screen now", "Language: UR+EN. Change"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
     expect(screen.getByRole("button", { name: "Captions" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: /^Screens on, 3 kept/ })).toHaveAttribute("aria-pressed", "true");
+    const menu = screen.getByRole("menu", { name: "After each call" });
+    expect(menuItems(menu)).toEqual(["Transcribe this call", "Save audio only", "Stop and delete"]);
+    expect(menu.textContent).not.toMatch(/\b(Keep|Skip|Discard)\b/);
   });
 
-  it("each control runs its action; Discard asks first", () => {
+  it("each control runs its action; the menu's choice goes to the core and closes the menu", () => {
     const a = actions();
     render(<RecordingPill model={MODEL} actions={a} defaultOpen />);
     fireEvent.click(screen.getByRole("button", { name: "Captions" }));
@@ -71,13 +78,86 @@ describe("the recording pill", () => {
     fireEvent.click(screen.getByRole("button", { name: "Capture the screen now" }));
     fireEvent.click(screen.getByRole("button", { name: "Language: UR+EN. Change" }));
     expect([a.onCaptions, a.onPause, a.onStop, a.onScreens, a.onCapture, a.onLanguage].map((f) => (f as ReturnType<typeof vi.fn>).mock.calls.length)).toEqual([1, 1, 1, 1, 1, 1]);
-    fireEvent.click(screen.getByRole("button", { name: "Discard this recording" }));
-    const ask = screen.getByRole("group", { name: "Discard this recording?" });
-    fireEvent.click(within(ask).getByRole("button", { name: "Keep recording" }));
-    expect(a.onDiscard).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Discard this recording" }));
-    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
-    expect(a.onDiscard).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Transcribe this call" }));
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Show the controls$/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Save audio only" }));
+    fireEvent.click(screen.getByRole("button", { name: /Show the controls$/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Stop and delete" }));
+    expect((a.onChoice as ReturnType<typeof vi.fn>).mock.calls).toEqual([["transcribe"], ["audio"], ["delete"]]);
+  });
+
+  it("ticks nothing before a choice is made", () => {
+    render(<RecordingPill model={{ ...MODEL, choice: null }} actions={actions()} defaultOpen />);
+    for (const name of ["Transcribe this call", "Save audio only"]) expect(screen.getByRole("menuitemradio", { name })).toHaveAttribute("aria-checked", "false");
+    expect(document.querySelector(".el-pill-menu__mark svg[data-check], .el-pill-menu [aria-checked=true]")).toBeNull();
+  });
+
+  it("marks the choice made during the call; Escape closes the menu; a voice note offers only Stop and delete", () => {
+    const { unmount } = render(<RecordingPill model={{ ...MODEL, choice: "audio" }} actions={actions()} defaultOpen />);
+    expect(screen.getByRole("menuitemradio", { name: "Save audio only" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menuitemradio", { name: "Transcribe this call" })).toHaveAttribute("aria-checked", "false");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    unmount();
+    render(<RecordingPill model={{ ...MODEL, call: false }} actions={actions()} defaultOpen />);
+    expect(menuItems(document.body)).toEqual(["Stop and delete"]);
+  });
+
+  it("says when its menu opens and closes, so the window grows only while it shows", () => {
+    const onMenu = vi.fn();
+    render(<RecordingPill model={MODEL} actions={actions()} onMenu={onMenu} />);
+    expect(onMenu.mock.calls).toEqual([[false]]);
+    fireEvent.click(screen.getByRole("button", { name: /Show the controls$/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Save audio only" }));
+    expect(onMenu.mock.calls).toEqual([[false], [true], [false]]);
+  });
+
+  it("carries the not-recorded warning and the menu together, the warning right under the pill", () => {
+    const a = { ...actions(), onOpenSettings: vi.fn(), onRetrySystem: vi.fn(), onDismissWarning: vi.fn() };
+    const warning = { text: "The other side isn't being recorded", sentence: "Allow System Audio Recording for EchoLedger.", notRecorded: true };
+    const { rerender } = render(<RecordingPill model={{ ...MODEL, warning }} actions={a} defaultOpen />);
+    const row = screen.getByTestId("missing-permission");
+    const menu = screen.getByRole("menu");
+    expect(row.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(row).toHaveAttribute("data-hit");
+    fireEvent.click(within(row).getByRole("button", { name: "Open System Settings" }));
+    fireEvent.click(within(row).getByRole("button", { name: "Try again" }));
+    expect([a.onOpenSettings.mock.calls.length, a.onRetrySystem.mock.calls.length]).toEqual([1, 1]);
+    expect(within(row).queryByRole("button", { name: "Dismiss warning" }), "not recorded: never dismissed").toBeNull();
+    rerender(<RecordingPill model={{ ...MODEL, warning: { ...warning, text: "No microphone: recording the other side", sentence: "The microphone is off for EchoLedger.", notRecorded: false } }} actions={a} />);
+    fireEvent.click(within(screen.getByTestId("missing-permission")).getByRole("button", { name: "Dismiss warning" }));
+    expect(a.onDismissWarning).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Open System Settings" })).toBeNull();
+  });
+
+  it("puts the not-recorded sentence on a line of its own, whole (no ellipsis), with its two buttons under it", async () => {
+    const warning = { text: "The other side isn't being recorded", sentence: "Allow System Audio Recording for EchoLedger.", notRecorded: true };
+    render(<RecordingPill model={{ ...MODEL, warning }} actions={actions()} />);
+    const row = screen.getByTestId("missing-permission");
+    const text = row.querySelector(".el-pill-warning__text")!;
+    expect(text).toHaveTextContent("The other side isn't being recorded");
+    const buttons = row.querySelector(".el-pill-warning__buttons")!;
+    expect(text.compareDocumentPosition(buttons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(buttons as HTMLElement).getAllByRole("button").map((b) => b.textContent)).toEqual(["Open System Settings", "Try again"]);
+    expect(row).toHaveClass("el-pill-warning--stacked");
+    const { readFileSync } = await import("node:fs");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    expect(css).toMatch(/\.el-pill-warning--stacked \{ flex-direction: column;/);
+    expect(css).toMatch(/\.el-pill-warning--stacked \.el-pill-warning__text \{ overflow: visible; text-overflow: clip; white-space: normal;/);
+    expect(css).toMatch(/\.el-pill-stack > \* \{ flex-shrink: 0; \}/);
+  });
+
+  it("At the start of the call: Recording this call · Don't record beside the pill; doing nothing records", () => {
+    const a = actions();
+    render(<RecordingPill model={{ ...MODEL, banner: true }} actions={a} />);
+    const banner = screen.getByTestId("start-banner");
+    expect(banner).toHaveTextContent("Recording this call");
+    expect(banner).toHaveAttribute("data-hit");
+    fireEvent.click(within(banner).getByRole("button", { name: "Don't record" }));
+    expect((a.onChoice as ReturnType<typeof vi.fn>).mock.calls).toEqual([["delete"]]);
   });
 
   it("paused says so; without screens there is no screens control; an error replaces the name", () => {
@@ -90,77 +170,168 @@ describe("the recording pill", () => {
 
 const ITEM: PendingItem = {
   id: "p1", sourceApp: "whatsapp", auto: true, mode: "call", title: null, clientId: null, clientName: null,
-  startedAt: "2026-11-17T10:00:00Z", endedAt: "2026-11-17T10:04:12Z", durationMs: 252_000, firstLine: null,
+  startedAt: "2026-11-17T10:00:00Z", endedAt: "2026-11-17T10:00:44Z", durationMs: 44_000, firstLine: null,
   deadlineAt: new Date(Date.parse("2026-11-17T10:04:20Z") + 8_000).toISOString(), callerName: "Omar Farooq",
 };
 
-describe("the after-call card", () => {
-  it("names the call with its length and the screens kept, and offers Transcribe, Save audio and Delete", () => {
-    const a = { onTranscribe: vi.fn(), onSaveAudio: vi.fn(), onDelete: vi.fn(), onOpen: vi.fn() };
+describe("the after-call card (the call choice)", () => {
+  const cardActions = () => ({ onTranscribe: vi.fn(), onSaveAudio: vi.fn(), onDelete: vi.fn(), onOpen: vi.fn() });
+
+  it("the logo, the name and 0:44 · just now; Delete quiet, Transcribe the one filled button; the × saves the audio only", () => {
+    const a = cardActions();
     render(<AfterCallCard item={ITEM} screens={3} actions={a} now={Date.parse("2026-11-17T10:04:20Z")} />);
-    const card = screen.getByRole("region", { name: "After the call: Call with Omar Farooq · 4:12" });
-    expect(within(card).getByText("3 screens")).toBeInTheDocument();
-    const buttons = within(card).getAllByRole("button").map((b) => b.textContent);
-    expect(buttons.slice(1)).toEqual(["Transcribe", "Save audio", "Delete"]);
+    const card = screen.getByRole("region", { name: "Omar Farooq" });
+    expect(card).toHaveTextContent("0:44 · just now · 3 screens");
+    expect(card).toHaveTextContent("Close to keep audio only");
+    expect(card).toHaveAccessibleDescription("Close to keep audio only");
+    expect(card.querySelector(".el-aftercall__logo .source-logo"), "WhatsApp's own logo, as in the Library").not.toBeNull();
+    const buttons = within(card).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent);
+    expect(buttons).toEqual(["Omar Farooq, 0:44 · just now, 3 screens. Rename or choose a project", "Save audio only", "Delete", "Transcribe"]);
     expect(within(card).getByRole("button", { name: "Transcribe" })).toHaveClass("el-button--primary");
+    expect(within(card).getByRole("button", { name: "Delete" })).toHaveClass("el-button--quiet");
+    expect(card.querySelectorAll(".el-button--primary")).toHaveLength(1);
     fireEvent.click(within(card).getByRole("button", { name: /Rename or choose a project$/ }));
     fireEvent.click(within(card).getByRole("button", { name: "Transcribe" }));
-    fireEvent.click(within(card).getByRole("button", { name: "Save audio" }));
     fireEvent.click(within(card).getByRole("button", { name: "Delete" }));
-    expect([a.onOpen, a.onTranscribe, a.onSaveAudio, a.onDelete].map((f) => f.mock.calls.length)).toEqual([1, 1, 1, 1]);
-    expect(within(card).getByRole("progressbar", { name: "Time to answer" })).toHaveAttribute("aria-valuetext", "Saves the audio in 8 seconds");
+    fireEvent.click(within(card).getByRole("button", { name: "Save audio only" }));
+    expect([a.onOpen, a.onTranscribe, a.onDelete, a.onSaveAudio].map((f) => f.mock.calls.length)).toEqual([1, 1, 1, 1]);
+    expect(card.textContent).not.toMatch(/\b(Keep|Skip|Discard)\b/);
   });
 
-  it("words and titles", () => {
-    expect(cardTitle({ ...ITEM, callerName: null, sourceApp: "zoom" })).toBe("Zoom · 4:12");
-    expect(cardTitle({ ...ITEM, mode: "voice_note", durationMs: 48_000 })).toBe("Voice note · 0:48");
-    expect(timeLeftText(1)).toBe("Saves the audio in 1 second");
-    expect(timeLeftText(0)).toBe("Saving the audio");
+  it("Esc and a swipe away save the audio only; a short drag goes back", () => {
+    const a = cardActions();
+    render(<AfterCallCard item={ITEM} actions={a} />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    const card = screen.getByTestId("after-call-card");
+    fireEvent.pointerDown(card, { button: 0, clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(card, { clientX: 140, pointerId: 1 });
+    expect(card.style.transform).toBe("translateX(40px)");
+    fireEvent.pointerUp(card, { clientX: 140, pointerId: 1 });
+    expect(a.onSaveAudio).toHaveBeenCalledTimes(1);
+    expect(card.style.transform).toBe("");
+    fireEvent.pointerDown(card, { button: 0, clientX: 300, pointerId: 1 });
+    fireEvent.pointerMove(card, { clientX: 200, pointerId: 1 });
+    fireEvent.pointerUp(card, { clientX: 200, pointerId: 1 });
+    expect(a.onSaveAudio).toHaveBeenCalledTimes(2);
+  });
+
+  it("the 8 s line starts from the time left; the first card says where to change it; the name or Call", () => {
+    const { container, rerender } = render(<AfterCallCard item={ITEM} hint actions={cardActions()} now={Date.parse("2026-11-17T10:04:24Z")} />);
+    const line = container.querySelector<HTMLElement>(".el-aftercall__line > span")!;
+    expect(line.style.animationDuration).toBe("4s");
+    expect(line.style.getPropertyValue("--from")).toBe("0.5");
+    expect(screen.getByTestId("call-hint")).toHaveTextContent("You can change this in Settings › After each call.");
+    rerender(<AfterCallCard item={{ ...ITEM, callerName: null }} actions={cardActions()} />);
+    expect(screen.getByRole("region", { name: "Call" })).toBeInTheDocument();
+    expect(screen.queryByTestId("call-hint")).toBeNull();
   });
 });
 
 describe("the after-call stack", () => {
-  const STATE: AfterCallState = { saved: null, discarded: null, ask: ITEM };
+  const STATE: AfterCallState = { ask: ITEM, hint: false, held: [], done: null, group: null };
+  const done = (kind: "transcribe" | "audio" | "delete", offerAlways: "always_audio" | null = null) => ({
+    kind, id: "p1", title: null, callerName: "Omar Farooq", sourceApp: "whatsapp", mode: "call" as const, durationMs: 44_000, until: "2026-11-17T10:05:00Z", offerAlways,
+  });
 
-  it("Transcribe keeps the call; Save audio keeps it as audio only", async () => {
-    respond("pending_keep", null);
-    respond("pending_keep_audio", null);
-    const onGone = vi.fn();
-    const { rerender } = render(<AfterCallStack state={STATE} onGone={onGone} />);
+  it("each answer goes to the core as the card's choice: Transcribe, Save audio only (×) and Delete", async () => {
+    respond("call_card_answer", null);
+    render(<AfterCallStack state={STATE} onGone={() => undefined} />);
+    for (const name of ["Transcribe", "Save audio only", "Delete"]) {
+      fireEvent.click(screen.getByRole("button", { name }));
+      await act(flushAsync);
+    }
+    expect(callsOf("call_card_answer")).toEqual([{ id: "p1", choice: "transcribe" }, { id: "p1", choice: "audio" }, { id: "p1", choice: "delete" }]);
+    expect(callsOf("pending_keep")).toEqual([]);
+  });
+
+  it("says why when an answer fails, and the card stays", async () => {
+    fail("call_card_answer", "This recording is no longer waiting.");
+    render(<AfterCallStack state={STATE} onGone={() => undefined} />);
     fireEvent.click(screen.getByRole("button", { name: "Transcribe" }));
     await act(flushAsync);
-    expect(callsOf("pending_keep")).toEqual([{ id: "p1" }]);
-    expect(onGone).toHaveBeenCalledWith("ask");
-    rerender(<AfterCallStack state={{ ...STATE, ask: { ...ITEM, id: "p2" } }} onGone={onGone} />);
-    fireEvent.click(screen.getByRole("button", { name: "Save audio" }));
-    await act(flushAsync);
-    expect(callsOf("pending_keep_audio")).toEqual([{ id: "p2" }]);
+    expect(screen.getByRole("alert")).toHaveTextContent("This recording is no longer waiting.");
+    expect(screen.getByTestId("after-call-card")).toBeInTheDocument();
   });
 
-  it("an older core without audio-only says so on the card", async () => {
-    fail("pending_keep_audio", "This version of EchoLedger can't save audio only yet.");
-    render(<AfterCallStack state={STATE} onGone={() => undefined} />);
-    fireEvent.click(screen.getByRole("button", { name: "Save audio" }));
+  it.each([["transcribe", "Transcribing…"], ["audio", "Saved as audio"], ["delete", "Deleted"]] as const)("after %s: %s with Undo, which goes to the core", async (kind, words) => {
+    respond("call_undo", null);
+    respond("call_done_transcribe", null);
+    render(<AfterCallStack state={{ ...STATE, ask: null, done: done(kind) }} onGone={() => undefined} />);
+    const line = screen.getByTestId("call-done");
+    expect(line).toHaveTextContent(words);
+    expect(line).toHaveTextContent("Omar Farooq");
+    expect(within(line).queryByRole("button", { name: "Transcribe" }) !== null).toBe(kind === "audio");
+    if (kind === "audio") {
+      fireEvent.click(within(line).getByRole("button", { name: "Transcribe" }));
+      await act(flushAsync);
+      expect(callsOf("call_done_transcribe")).toEqual([{ id: "p1" }]);
+    }
+    fireEvent.click(within(line).getByRole("button", { name: "Undo" }));
     await act(flushAsync);
-    expect(screen.getByRole("alert")).toHaveTextContent("can't save audio only yet");
+    expect(callsOf("call_undo")).toEqual([{ id: "p1" }]);
   });
 
-  it("Delete goes through the Toast with Undo", async () => {
-    respond("after_call_discard", null);
-    respond("after_call_discard_undo", null);
+  it("Always do this? [Yes] once, under the confirmation, naming the setting it sets", async () => {
+    respond("call_always", null);
+    const { rerender } = render(<AfterCallStack state={{ ...STATE, ask: null, done: { ...done("transcribe"), offerAlways: "always_transcribe" } }} onGone={() => undefined} />);
+    expect(screen.getByTestId("call-always")).toHaveTextContent("Always do this? Transcribe every call");
+    rerender(<AfterCallStack state={{ ...STATE, ask: null, done: done("delete") }} onGone={() => undefined} />);
+    expect(screen.queryByTestId("call-always")).toBeNull();
+    rerender(<AfterCallStack state={{ ...STATE, ask: null, done: done("audio", "always_audio") }} onGone={() => undefined} />);
+    expect(screen.getByTestId("call-always")).toHaveTextContent("Always do this? Save audio only");
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+    await act(flushAsync);
+    expect(callsOf("call_always")).toEqual([{ id: "p1", value: "always_audio" }]);
+  });
+
+  it("a new call inside the 5 s keeps the earlier Undo: each call in the grouped card has its own, and Stop and delete's too", async () => {
+    respond("call_undo", null);
+    respond("call_done_transcribe", null);
+    const calls = [{ ...done("audio"), id: "a", callerName: "Omar Khan" }, { ...done("delete"), id: "b", callerName: "A very long name that would not fit beside its buttons at all" }];
+    render(<AfterCallStack state={{ ask: null, hint: false, held: [], done: null, group: { count: 2, until: "2026-11-17T10:05:00Z", calls } }} onGone={() => undefined} />);
+    const rows = screen.getAllByTestId("call-group-row");
+    expect(rows.map((r) => r.textContent)).toEqual(["Saved as audioOmar KhanTranscribeUndo", "DeletedA very long name that would not fit beside its buttons at allUndo"]);
+    expect(screen.getByTestId("call-group")).not.toHaveTextContent("calls saved as audio");
+    fireEvent.click(within(rows[1]).getByRole("button", { name: "Undo: A very long name that would not fit beside its buttons at all" }));
+    await act(flushAsync);
+    fireEvent.click(within(rows[0]).getByRole("button", { name: "Transcribe" }));
+    await act(flushAsync);
+    expect(callsOf("call_undo")).toEqual([{ id: "b" }]);
+    expect(callsOf("call_done_transcribe")).toEqual([{ id: "a" }]);
+    // The name has a line of its own under what was done, never squeezed beside the buttons.
+    expect(rows[1].querySelector(".el-aftercall__done-text")!.children).toHaveLength(2);
+  });
+
+  it("the reopened card keeps the rest of the group under it, every Delete with its Undo; 5 calls show the oldest Delete", async () => {
+    respond("call_undo", null);
+    const del = { ...done("delete"), id: "del", callerName: "Muneeb" };
+    render(<AfterCallStack state={{ ask: ITEM, hint: false, held: [del], done: null, group: null }} onGone={() => undefined} />);
+    expect(screen.getByTestId("call-held")).toHaveTextContent("DeletedMuneeb");
+    fireEvent.click(screen.getByRole("button", { name: "Undo: Muneeb" }));
+    await act(flushAsync);
+    expect(callsOf("call_undo")).toEqual([{ id: "del" }]);
+  });
+
+  it("every Delete row shows; only kept rows fold into +N more; a mixed group says how many calls", () => {
+    const calls = [{ ...done("delete"), id: "d1", callerName: "Oldest" }, ...["a1", "a2", "a3", "a4"].map((id) => ({ ...done("audio"), id, callerName: id }))];
+    render(<AfterCallStack state={{ ask: null, hint: false, held: [], done: null, group: { count: 5, until: "2026-11-17T10:05:00Z", calls } }} onGone={() => undefined} />);
+    expect(screen.getAllByTestId("call-group-row").map((r) => r.querySelector(".el-aftercall__done-name")!.textContent)).toEqual(["Oldest", "a3", "a4"]);
+    expect(screen.getByTestId("call-more")).toHaveTextContent("+2 more");
+    expect(screen.getByTestId("call-group").querySelector(".el-aftercall__headline")).toHaveTextContent(/^5 calls$/);
+  });
+
+  it("back to back: one grouped card, never a stack; Review opens the Library", async () => {
+    respond("call_group_close", null);
     const onGone = vi.fn();
-    const { rerender } = render(<AfterCallStack state={STATE} onGone={onGone} />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const all = ["g1", "g2", "g3"].map((id) => ({ ...done("audio"), id }));
+    render(<AfterCallStack state={{ ask: null, hint: false, held: [], done: done("audio"), group: { count: 3, until: "2026-11-17T10:05:00Z", calls: all } }} onGone={onGone} />);
+    expect(screen.getByTestId("call-group")).toHaveTextContent("3 calls saved as audio");
+    expect(screen.getAllByTestId("call-group-row")).toHaveLength(3);
+    expect(screen.queryByTestId("call-done")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
     await act(flushAsync);
-    expect(callsOf("after_call_discard")).toEqual([{ id: "p1" }]);
-    const gone = { id: "p1", title: null, callerName: "Omar Farooq", sourceApp: "whatsapp", mode: "call" as const, durationMs: 252_000, until: "2026-11-17T10:05:00Z" };
-    rerender(<AfterCallStack state={{ saved: null, discarded: gone, ask: null }} onGone={onGone} />);
-    const toast = screen.getByRole("status", { name: "Notifications" });
-    expect(toast).toHaveTextContent("Deleted · Call with Omar Farooq · 4:12");
-    fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
-    await act(flushAsync);
-    expect(callsOf("after_call_discard_undo")).toEqual([{ id: "p1" }]);
-    expect(onGone).toHaveBeenCalledWith("discarded");
+    expect(callsOf("call_group_close")).toEqual([{ review: true }]);
+    expect(onGone).toHaveBeenCalledWith("group");
   });
 });
 
@@ -183,9 +354,48 @@ describe("the windows with the flags", () => {
     expect(screen.queryByTestId("recording-pill")).toBeNull();
   });
 
+  it("ui_v2.recording_controls: the new pill shows the core's not-recorded warning and grows for it with the menu", async () => {
+    respond("ui_flags", { ui_flags: { "ui_v2.recording_controls": true } });
+    const missing = [{ kind: "system_audio" as const, sentence: "The other side isn't being recorded. Allow System Audio Recording for EchoLedger.", otherSide: "permission" as const }];
+    respond("recording_state", { ...REC, missing });
+    respond("set_hit_regions", null);
+    respond("window_ready", null);
+    respond("pill_expanded", null);
+    render(<PillApp />);
+    await act(flushAsync);
+    await act(() => emitEvent("pill:visibility", true));
+    await act(flushAsync);
+    expect(await screen.findByTestId("missing-permission")).toHaveTextContent("The other side isn't being recorded");
+    fireEvent.click(screen.getByRole("button", { name: /Show the controls$/ }));
+    await act(flushAsync);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByTestId("missing-permission")).toBeInTheDocument();
+    expect(callsOf("pill_expanded").at(-1)).toEqual({ expanded: true, warning: true });
+  });
+
+  it("ui_v2.recording_controls: the new pill's menu is drawn only once the window has grown for it", async () => {
+    respond("ui_flags", { ui_flags: { "ui_v2.recording_controls": true } });
+    respond("recording_state", REC);
+    respond("set_hit_regions", null);
+    respond("window_ready", null);
+    let grown: () => void = () => undefined;
+    respondWith("pill_expanded", () => new Promise<void>((r) => { grown = r; }));
+    render(<PillApp />);
+    await act(flushAsync);
+    await act(() => emitEvent("pill:visibility", true));
+    await act(flushAsync);
+    fireEvent.click(await screen.findByRole("button", { name: /Show the controls$/ }));
+    await act(flushAsync);
+    expect(callsOf("pill_expanded")).toEqual([{ expanded: true, warning: false }]);
+    expect(screen.queryByRole("menu"), "not drawn before the window has room").toBeNull();
+    await act(async () => grown());
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    expect(callsOf("pill_expanded"), "asked once, before; never again after the draw").toHaveLength(1);
+  });
+
   it("ui_v2.after_call draws the new card in the after-call window", async () => {
     respond("ui_flags", { ui_flags: { "ui_v2.after_call": true } });
-    respond("after_call_state", { saved: null, discarded: null, ask: ITEM });
+    respond("after_call_state", { ask: ITEM, hint: false, held: [], done: null, group: null });
     respond("set_hit_regions", null);
     respond("window_ready", null);
     render(<ReviewApp />);
@@ -223,22 +433,22 @@ describe("flags reach the overlay windows on their next show", () => {
     expect(callsOf("ui_flags")).toHaveLength(3);
   });
 
-  it("the after-call window: switching back to classic between two shows draws the classic chip next time", async () => {
+  it("the after-call window: switching back to classic between two shows draws the classic card next time", async () => {
     respond("ui_flags", { ui_flags: { "ui_v2.after_call": true } });
-    respond("after_call_state", { saved: null, discarded: null, ask: null });
+    respond("after_call_state", { ask: null, hint: false, held: [], done: null, group: null });
     respond("set_hit_regions", null);
     respond("window_ready", null);
     render(<ReviewApp />);
     await act(flushAsync);
-    await act(() => emitEvent("aftercall:state", { saved: null, discarded: null, ask: ITEM }));
+    await act(() => emitEvent("aftercall:state", { ask: ITEM, hint: false, held: [], done: null, group: null }));
     await act(flushAsync);
     expect(await screen.findByTestId("after-call-card")).toBeInTheDocument();
     respond("ui_flags", { ui_flags: {}, ui_classic: true });
-    await act(() => emitEvent("aftercall:state", { saved: null, discarded: null, ask: null }));
+    await act(() => emitEvent("aftercall:state", { ask: null, hint: false, held: [], done: null, group: null }));
     await act(flushAsync);
-    await act(() => emitEvent("aftercall:state", { saved: null, discarded: null, ask: { ...ITEM, id: "p9" } }));
+    await act(() => emitEvent("aftercall:state", { ask: { ...ITEM, id: "p9" }, hint: false, held: [], done: null, group: null }));
     await act(flushAsync);
     expect(screen.queryByTestId("after-call-card")).toBeNull();
-    expect(document.querySelector(".review-root")!.textContent).toMatch(/Call with Omar Farooq/);
+    expect(document.querySelector(".review-root .call-card")!.textContent).toMatch(/Omar Farooq/);
   });
 });

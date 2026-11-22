@@ -341,7 +341,7 @@ fn after_a_call_applies_to_calls_and_voice_notes_are_always_kept() {
     assert_eq!(AfterCall::Ask.keeps_at_once(), None, "the card asks");
     assert_eq!(AfterCall::AlwaysTranscribe.keeps_at_once(), Some(true));
     assert_eq!(AfterCall::AlwaysAudio.keeps_at_once(), Some(false), "kept at once, not transcribed");
-    assert_eq!(pending::CHIP_SECONDS, 12, "v1.8 P1: no answer within 12 s saves the audio");
+    assert_eq!(pending::CHIP_SECONDS, 8, "the call choice: no answer within 8 s saves the audio only (it was 12 s)");
 }
 
 // ---- pending store -----------------------------------------------------------------------------------------------
@@ -1015,6 +1015,159 @@ fn skipped_calls_are_deleted_with_their_files_after_24_hours() {
     assert_eq!(files.purge(now + chrono::Duration::hours(24)).unwrap(), vec!["new".to_string()]);
     assert!(files.load().items.is_empty());
     assert!(UploadQueue::load(&files.uploads).items.is_empty(), "nothing was ever uploaded");
+}
+
+// ---- the call choice: chosen now, applied after its Undo time --------------------------------------------------------
+
+#[test]
+fn a_choice_waits_for_its_undo_time_and_undo_brings_the_card_back_for_all_three() {
+    use desktop_lib::after_call::CallChoice;
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    let card = now + chrono::Duration::seconds(pending::CHIP_SECONDS);
+    let applied = now + chrono::Duration::seconds(5);
+    for choice in [CallChoice::Transcribe, CallChoice::Audio, CallChoice::Delete] {
+        files.add(decision(root.path(), "a", Some("01SESSIONAAAAAAAAAAAAAAAAA"), now).keeping_at(card)).unwrap();
+        let chosen = files.choose("a", choice, applied).unwrap();
+        assert_eq!(chosen.chosen(), Some(choice));
+        // Within the 5 s nothing is uploaded or deleted.
+        assert!(files.keep_due(now + chrono::Duration::seconds(4)).unwrap().is_empty(), "{choice:?}: not kept yet");
+        assert!(files.discard_due(now + chrono::Duration::seconds(4)).0.is_empty(), "{choice:?}: not deleted yet");
+        assert!(UploadQueue::load(&files.uploads).items.is_empty());
+        assert!(root.path().join("recordings/a/recording.flac").exists());
+        // Undo: back on its card, counting again, every file and the server session there.
+        let again = now + chrono::Duration::seconds(12);
+        let back = files.ask_again("a", again).unwrap();
+        assert_eq!((back.chosen(), back.keep_at(), back.discarding()), (None, Some(again), false), "{choice:?}");
+        assert!(DiscardQueue::load(&files.discards).items.is_empty(), "{choice:?}: no server delete queued");
+        // The next choice starts from a fresh call.
+        files.discard("a").unwrap();
+        let _ = std::fs::remove_file(&files.discards);
+    }
+}
+
+#[test]
+fn each_choice_is_applied_when_its_time_is_over() {
+    use desktop_lib::after_call::CallChoice;
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    let card = now + chrono::Duration::seconds(pending::CHIP_SECONDS);
+    let applied = now + chrono::Duration::seconds(5);
+    for id in ["t", "a", "d"] {
+        files.add(decision(root.path(), id, None, now).keeping_at(card)).unwrap();
+    }
+    files.choose("t", CallChoice::Transcribe, applied).unwrap();
+    files.choose("a", CallChoice::Audio, applied).unwrap();
+    files.discard_later("d", applied).unwrap();
+    let mut kept = files.keep_due(applied).unwrap();
+    kept.sort();
+    assert_eq!(kept, ["a", "t"]);
+    let queued: Vec<(String, bool)> = UploadQueue::load(&files.uploads).items.iter().map(|i| (i.client_ref.clone(), i.transcribe)).collect();
+    assert!(queued.contains(&("ref-t".to_string(), true)) && queued.contains(&("ref-a".to_string(), false)), "Transcribe is transcribed, Save audio only is not: {queued:?}");
+    let (gone, failed) = files.discard_due(applied);
+    assert!(failed.is_empty());
+    assert_eq!(gone.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["d"]);
+    assert!(!root.path().join("recordings/d").exists(), "Delete: its files are gone");
+    assert_eq!(files.ask_again("t", card).unwrap_err().to_string(), pending::NOT_WAITING, "too late to undo once applied");
+}
+
+#[test]
+fn eight_seconds_with_no_choice_save_the_audio_only_after_its_confirmation() {
+    use desktop_lib::after_call::CallChoice;
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    let card = now + chrono::Duration::seconds(pending::CHIP_SECONDS);
+    files.add(decision(root.path(), "a", None, now).keeping_at(card)).unwrap();
+    let confirm = card + chrono::Duration::seconds(5);
+    assert!(!files.time_out_card("a", now + chrono::Duration::seconds(7), confirm).unwrap(), "still counting");
+    assert!(files.time_out_card("a", card, confirm).unwrap(), "8 s: Saved as audio, with Transcribe and Undo");
+    assert_eq!(files.load().find("a").unwrap().chosen(), Some(CallChoice::Audio));
+    assert!(!files.time_out_card("a", confirm, confirm).unwrap(), "once only");
+    assert!(files.keep_due(card).unwrap().is_empty(), "not saved while its Undo shows");
+    assert_eq!(files.keep_due(confirm).unwrap(), ["a"]);
+    assert!(!UploadQueue::load(&files.uploads).items[0].transcribe, "audio only");
+    // Transcribe on "Saved as audio" in time: transcribed instead.
+    files.add(decision(root.path(), "b", None, now).keeping_at(card)).unwrap();
+    files.time_out_card("b", card, confirm).unwrap();
+    files.choose("b", CallChoice::Transcribe, confirm).unwrap();
+    assert_eq!(files.keep_due(confirm).unwrap(), ["b"]);
+    assert!(UploadQueue::load(&files.uploads).items.iter().any(|i| i.client_ref == "ref-b" && i.transcribe));
+}
+
+#[test]
+fn the_waiting_lists_delete_waits_for_its_undo_and_undo_puts_it_back_in_the_list() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    for id in ["a", "b"] {
+        files.add(decision(root.path(), id, None, now)).unwrap();
+    }
+    let at = now + chrono::Duration::seconds(7);
+    files.discard_later("a", at).unwrap();
+    files.discard_later("b", at).unwrap();
+    assert!(files.load().ui_items().is_empty(), "both leave the list at once");
+    assert!(files.discard_due(now + chrono::Duration::seconds(6)).0.is_empty(), "nothing goes while Undo shows");
+    let back = files.restore_waiting("a").unwrap();
+    assert!(back.waits(), "a waits in the list again");
+    assert_eq!(files.load().ui_items().iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["a"]);
+    let (gone, _) = files.discard_due(at);
+    assert_eq!(gone.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["b"], "only b, once its time is over");
+    assert_eq!(files.restore_waiting("b").unwrap_err().to_string(), pending::NOT_WAITING, "too late for b");
+    assert!(root.path().join("recordings/a/recording.flac").exists());
+}
+
+#[test]
+fn a_grouped_delete_paused_under_a_reopened_card_is_not_applied_at_the_groups_time() {
+    use desktop_lib::after_call::CallChoice;
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    let group_time = now + chrono::Duration::seconds(10);
+    files.add(decision(root.path(), "del", None, now)).unwrap();
+    files.add(decision(root.path(), "aud", None, now)).unwrap();
+    files.discard_later("del", group_time).unwrap();
+    files.choose("aud", CallChoice::Audio, group_time).unwrap();
+    // Undo on the Audio row: its card is back for 8 s, and the Delete under it waits past the card and its group.
+    let card = now + chrono::Duration::seconds(pending::CHIP_SECONDS);
+    files.ask_again("aud", card).unwrap();
+    let paused = card + chrono::Duration::seconds(9);
+    files.discard_later("del", paused).unwrap();
+    assert!(files.discard_due(group_time).0.is_empty(), "not at the group's old time: its row is still on screen");
+    assert!(root.path().join("recordings/del/recording.flac").exists());
+    // Its Undo still finds it, until its paused time.
+    assert!(files.restore_waiting("del").is_ok());
+}
+
+#[test]
+fn a_delete_pending_at_quit_is_back_in_the_waiting_list_at_start_not_deleted() {
+    use desktop_lib::after_call::CallChoice;
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    // Before the quit: Delete chosen on the card (pending its Undo), Transcribe and Save audio only chosen on others.
+    files.add(decision(root.path(), "del", Some("01SESSIONAAAAAAAAAAAAAAAAA"), now).chosen_at(CallChoice::Delete, now + chrono::Duration::seconds(7))).unwrap();
+    files.add(decision(root.path(), "tr", None, now).chosen_at(CallChoice::Transcribe, now + chrono::Duration::seconds(5))).unwrap();
+    files.add(decision(root.path(), "au", None, now).chosen_at(CallChoice::Audio, now + chrono::Duration::seconds(5))).unwrap();
+    // The app quits; it starts again a minute later.
+    let start = now + chrono::Duration::minutes(1);
+    let kept = files.keep_due(start).unwrap();
+    assert_eq!(kept.len(), 2, "Transcribe and Save audio only are applied as before: {kept:?}");
+    assert_eq!(files.restore_unapplied_deletes().unwrap(), ["del"]);
+    let back = files.load();
+    let del = back.find("del").expect("still here");
+    assert!(del.waits() && del.chosen().is_none(), "in the waiting list, for Transcribe, Save audio only or Delete");
+    assert!(del.item().restored_delete, "its row says it was deleted just before EchoLedger closed");
+    assert!(!back.find("tr").is_some_and(|d| d.item().restored_delete), "only that one");
+    assert_eq!(back.ui_items().iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["del"]);
+    assert!(files.discard_due(start + chrono::Duration::days(1)).0.is_empty(), "nothing deletes it by itself");
+    assert!(root.path().join("recordings/del/recording.flac").exists(), "its audio is whole");
+    assert!(DiscardQueue::load(&files.discards).items.is_empty(), "and its server session is not queued for deletion");
+    let queued: Vec<(String, bool)> = UploadQueue::load(&files.uploads).items.iter().map(|i| (i.client_ref.clone(), i.transcribe)).collect();
+    assert!(queued.contains(&("ref-tr".to_string(), true)) && queued.contains(&("ref-au".to_string(), false)));
+    assert!(files.restore_unapplied_deletes().unwrap().is_empty(), "once");
 }
 
 // ---- the other side's frames, for the 3-second check (2.0.6) ---------------------------------------------------------

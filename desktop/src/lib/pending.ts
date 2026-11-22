@@ -15,10 +15,19 @@ export function discardAllQuestion(count: number) {
 
 const recordings = (count: number) => `${count} recording${count === 1 ? "" : "s"}`;
 
-/** Confirmation before every waiting recording is thrown away at once (one item reads like a single Discard). */
+/** The waiting list's Delete (the call choice's words, docs/v2/copy/call-choice.md): the question before one or several
+ * waiting recordings are deleted. Undo stays on the notice after it for a few seconds, so nothing goes at once. */
+export const DELETE_WAITING_QUESTION = { title: "Delete this recording?", body: "You can undo it for a few seconds.", confirm: "Delete", tone: "danger" } as const;
+export function deleteWaitingQuestion(count: number) {
+  return count === 1 ? DELETE_WAITING_QUESTION : { title: `Delete all ${recordings(count)}?`, body: "You can undo it for a few seconds.", confirm: "Delete all", tone: "danger" as const };
+}
 
-/** The notice after Keep all / Discard all ("Kept 3 recordings"). */
-export const bulkNotice = (verb: "Kept" | "Discarded", count: number): string => `${verb} ${recordings(count)}`;
+/** The notice after Delete / Delete all, with its Undo: "Deleted · Undo", "Deleted 3 recordings · Undo". */
+export const deletedNotice = (count: number): string => (count === 1 ? "Deleted · Undo" : `Deleted ${recordings(count)} · Undo`);
+
+/** The notice after Transcribe all, Save audio only for all, or a failed upload's Discard all. */
+export const bulkNotice = (verb: "Transcribing" | "Saved as audio" | "Discarded", count: number): string =>
+  verb === "Saved as audio" ? `Saved ${recordings(count)} as audio` : `${verb} ${recordings(count)}`;
 
 const isCall = (item: PendingItem) => item.mode === "call" && item.sourceApp !== "voice_note";
 

@@ -37,6 +37,10 @@ fn customised() -> Settings {
         consent_acknowledged: true,
         after_call: AfterCall::Ask,
         after_call_notice: true,
+        ask_when: crate::settings::AskWhen::Start,
+        card_hint_seen: true,
+        card_streak: Some(crate::after_call::CardStreak { choice: crate::after_call::CallChoice::Audio, count: 2 }),
+        always_offered: true,
         skip_calls_shorter_than_s: 30,
         caption_lines: 5,
         pill_position: Some(PillPosition { x: -1_520, y: 64 }),
@@ -160,8 +164,10 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "activityNotifications",
             "afterCall",
             "afterCallNotice",
+            "alwaysOffered",
             "appLock",
             "askUnknownApps",
+            "askWhen",
             "assistCardPosition",
             "autoMode",
             "autoRecordApps",
@@ -170,6 +176,8 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "captionLines",
             "captionStyle",
             "captionsOnRecord",
+            "cardHintSeen",
+            "cardStreak",
             "clientId",
             "consentAcknowledged",
             "deviceId",
@@ -209,7 +217,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 50, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 54, "section 4.7 of the IPC contract, with the call choice's four keys");
     assert_eq!(v["mainShareHide"], json!({"until": {"kind": "at", "at_ms": 1_795_000_000_000_i64}, "sinceMs": 1_794_999_100_000_i64}));
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
@@ -659,7 +667,7 @@ fn keep_automatically_becoming_ask_me_is_told_once() {
         assert!(!Settings::from_value(json!({"afterCall": choice})).after_call_notice, "{choice}: nothing changed for them");
     }
     assert!(!Settings::from_value(json!({})).after_call_notice, "a new install has nothing to be told");
-    assert!(crate::settings::AFTER_CALL_NOTICE.ends_with("choose Always transcribe"));
+    assert!(crate::settings::AFTER_CALL_NOTICE.ends_with("choose Transcribe every call"), "it names the button");
 }
 
 #[test]
@@ -805,4 +813,46 @@ fn installs_paired_before_the_wizard_count_as_set_up() {
     assert!(!Settings::from_value(json!({"deviceId": null})).onboarding_done);
     assert!(!Settings::from_value(json!({"deviceId": "01JB8Q3R0Z5V1K7M9N2P4S6T8W", "onboardingDone": false})).onboarding_done, "an explicit value wins");
     assert!(!Settings::default().onboarding_done);
+}
+
+#[test]
+fn after_each_call_migrates_every_earlier_choice_without_losing_one() {
+    // The call choice reads the files people have today: their After a call becomes the same After each call, "Record
+    // calls automatically" off reads as Don't record calls, and the choice under it is kept for when calls are recorded
+    // again. Nothing is rewritten: the keys stay as they were.
+    let cases = [
+        (json!({"afterCall": "ask"}), AfterEachCall::Ask),
+        (json!({"afterCall": "always_transcribe"}), AfterEachCall::AlwaysTranscribe),
+        (json!({"afterCall": "always_audio"}), AfterEachCall::AlwaysAudio),
+        (json!({"afterCall": "keep"}), AfterEachCall::Ask),
+        (json!({"askBeforeSaving": "never", "decisionTimeout": "keep"}), AfterEachCall::Ask),
+        (json!({}), AfterEachCall::Ask),
+        (json!({"autoMode": false, "afterCall": "always_audio"}), AfterEachCall::Off),
+    ];
+    for (file, want) in cases {
+        let s = Settings::from_value(file.clone());
+        assert_eq!(s.after_each_call(), want, "{file}");
+        assert_eq!((s.ask_when, s.card_hint_seen, s.card_streak, s.always_offered), (AskWhen::After, false, None, false), "{file}: new keys start at their defaults");
+    }
+    let mut off = Settings::from_value(json!({"autoMode": false, "afterCall": "always_audio"}));
+    assert_eq!(off.after_call, AfterCall::AlwaysAudio, "kept under Don't record calls");
+    off.set_after_each_call(AfterEachCall::Off);
+    assert_eq!((off.auto_mode, off.after_call), (false, AfterCall::AlwaysAudio));
+    off.auto_mode = true; // the tray's "Record calls automatically" turned on again
+    assert_eq!(off.after_each_call(), AfterEachCall::AlwaysAudio, "the choice comes back");
+    for value in [AfterEachCall::Ask, AfterEachCall::AlwaysTranscribe, AfterEachCall::AlwaysAudio, AfterEachCall::Off] {
+        let mut s = Settings { after_call_notice: true, ..Settings::default() };
+        s.set_after_each_call(value);
+        assert_eq!(s.after_each_call(), value);
+        assert!(!s.after_call_notice, "choosing answers the one-time notice");
+    }
+    // The new keys survive a save; an unknown "When to ask" costs only that key.
+    let d = dir();
+    let path = d.path().join("settings.json");
+    Settings { ask_when: AskWhen::Start, ..Settings::default() }.save(&path).unwrap();
+    let file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(file["askWhen"], "start");
+    assert_eq!(Settings::load(&path).ask_when, AskWhen::Start);
+    let odd = Settings::from_value(json!({"askWhen": "sometimes", "afterCall": "always_transcribe"}));
+    assert_eq!((odd.ask_when, odd.after_call), (AskWhen::After, AfterCall::AlwaysTranscribe));
 }

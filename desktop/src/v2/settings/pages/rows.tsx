@@ -6,7 +6,7 @@ import { api, type Settings, type SettingsPatch } from "../../../lib/ipc";
 import { setting } from "../../../lib/settingsRegistry";
 import { confirmAction } from "../../../lib/confirm";
 import { highlightSetting } from "../../../views/main/SettingsControls";
-import { Button, Card, Icons, List, ListRow, Loading, Segmented, Select, SkeletonRow, Toggle } from "../../components";
+import { Button, Card, Icons, List, ListRow, Loading, Radio, Segmented, Select, SkeletonRow, Toggle } from "../../components";
 
 export type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 export type Patch = (p: SettingsPatch) => Promise<boolean>;
@@ -102,6 +102,28 @@ export function SelectSetting<T extends string>({ id, value, options = optionsOf
   return (
     <ListRow compact anchor={id} title={s.title} meta={s.description}
       control={<Select label={s.title} hideLabel value={value} options={options} disabled={disabled} onChange={(v) => onChange(v as T)} className="el-setting__select" />} />
+  );
+}
+
+/** One choice of a few, each on its own row with its help line under its name (After each call): radios, so the arrow
+ * keys move between them; the group's heading names it, and the group carries the name for screen readers. */
+export function ChoiceSetting<T extends string>({ id, value, options, onChange }: {
+  id: string;
+  value: T;
+  options: readonly { value: T; label: string; hint?: string }[];
+  onChange: (value: T) => void;
+}) {
+  const s = setting(id);
+  const name = useId();
+  return (
+    <li className="el-choice-setting" id={`setting-${id}`} data-setting={id} tabIndex={-1}>
+      <fieldset className="el-radio-group">
+        <legend className="el-visually-hidden">{s.title}</legend>
+        {options.map((o) => (
+          <Radio key={o.value} name={name} value={o.value} label={o.label} hint={o.hint} checked={o.value === value} onChange={() => onChange(o.value)} />
+        ))}
+      </fieldset>
+    </li>
   );
 }
 

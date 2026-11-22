@@ -111,8 +111,12 @@ pub struct AppState {
     pub pill_hidden: AtomicBool,
     /// Captions were on when the recording was paused, so resume reopens them (sockets close on pause, A5.3).
     pub captions_on_resume: AtomicBool,
-    /// The after-call window (v1.5): the Saved toast, the chip, and what Undo needs.
+    /// The after-call window (the call choice): the card, the one confirmation or the grouped card, and what Undo needs.
     pub after_call: Mutex<after_call::Surfaces>,
+    /// The choice made on the pill's menu for the running recording (its client_ref): no card when it ends.
+    pub call_choice: Mutex<Option<(String, after_call::CallChoice)>>,
+    /// "Recording this call · Don't record" beside the pill: the recording it is for and when it started.
+    pub start_banner: Mutex<Option<(String, Instant)>>,
     /// The current recording's microphone is Bluetooth (v1.5): the pill says "Accuracy is lower with Bluetooth mics".
     pub bluetooth_mic: AtomicBool,
     /// The once-a-second `recording:state` task is running.
@@ -211,6 +215,8 @@ impl AppState {
             pill_hidden: AtomicBool::new(false),
             captions_on_resume: AtomicBool::new(false),
             after_call: Mutex::new(after_call::Surfaces::default()),
+            call_choice: Mutex::new(None),
+            start_banner: Mutex::new(None),
             bluetooth_mic: AtomicBool::new(false),
             ticker_running: AtomicBool::new(false),
             capture_test: AtomicBool::new(false),
@@ -820,6 +826,15 @@ pub fn run() {
             commands::saved_undo,
             commands::after_call_discard,
             commands::after_call_discard_undo,
+            commands::call_card_answer,
+            commands::call_undo,
+            commands::call_done_transcribe,
+            commands::call_always,
+            commands::call_group_close,
+            commands::call_choice,
+            commands::pill_expanded,
+            commands::pending_delete,
+            commands::pending_delete_undo,
             commands::skipped_list,
             commands::recovered_sessions,
             commands::skipped_restore,
