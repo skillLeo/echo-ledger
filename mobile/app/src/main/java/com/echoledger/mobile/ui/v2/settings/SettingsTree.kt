@@ -49,6 +49,7 @@ object SettingsTree {
         "games",
         "videos",
         "plan",
+        "devices",
         "voice",
         "language",
         "words",

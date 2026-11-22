@@ -343,11 +343,14 @@ class PrivacyPagesParityTest : ScreenTest() {
         compose.onNode(hasText("Recordings are deleted after 30 days unless kept.")).assertExists()
         vm.updateSettings { it.copy(trashKeepHours = 48) }
         waitFor("Deleted recordings can be restored for 48 hours.")
-        // Privacy & data's Export or delete my data opens Sign-in & security (its classic page for now).
+        // Privacy & data's Export or delete my data opens Your data (v2, under Sign-in & security) with the export lit.
         press("Back")
         press("Privacy & data")
         press("Export or delete my data")
-        compose.onNode(hasText("classic account")).assertExists()
+        waitFor("Export my data")
+        assertTrue(compose.onAllNodes(hasText("classic account")).fetchSemanticsNodes().isEmpty())
+        val lit = androidx.compose.ui.test.SemanticsMatcher.expectValue(com.echoledger.mobile.ui.v2.settings.Highlighted, true)
+        compose.onNode(lit and androidx.compose.ui.test.hasAnyDescendant(hasText("Export my data")), useUnmergedTree = true).assertExists()
     }
 
     private fun waitFor(words: String) = compose.waitUntil(10_000) { compose.onAllNodes(hasText(words)).fetchSemanticsNodes().isNotEmpty() }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 Your data page (export, sign out everywhere, delete) and Devices' recent activity. values/ is English, values-ur/ Urdu. -->
+<resources>
+    <string name="v2_data_title">Your data</string>
+    <string name="v2_data_export_help">One ZIP with every recording\'s audio, transcripts, screens, project files and notes.</string>
+    <string name="v2_data_export">Export my data</string>
+    <string name="v2_data_making">Making the export… (you also get an email when it is ready)</string>
+    <string name="v2_data_download">Download the export</string>
+    <string name="v2_data_export_failed">The export could not be made.</string>
+    <string name="v2_data_try_again">Try again</string>
+    <string name="v2_data_signin">Sign-in</string>
+    <string name="v2_data_everywhere">Sign out everywhere…</string>
+    <string name="v2_data_everywhere_title">Sign out everywhere?</string>
+    <string name="v2_data_everywhere_body">Every phone, computer and console session of this account is signed out, this phone too. Recordings waiting to upload stay on this phone.</string>
+    <string name="v2_data_sign_out">Sign out</string>
+    <string name="v2_data_delete">Delete my account…</string>
+    <string name="v2_data_delete_title">Delete your account?</string>
+    <string name="v2_data_delete_body">Your recordings, transcripts, screens, files and projects are deleted after 7 days. Until then you can keep the account by signing in to the console.</string>
+    <string name="v2_data_code">Code from your authenticator app</string>
+    <string name="v2_data_password">Your password</string>
+    <string name="v2_data_elsewhere_google">Signed in with Google and no password? Delete the account on the web page: sign in there with Google and confirm.</string>
+    <string name="v2_data_elsewhere">No password or code to hand? Delete the account on the web page instead.</string>
+    <string name="v2_data_on_web">Delete on the web page</string>
+    <string name="v2_data_delete_confirm">Delete</string>
+    <string name="v2_data_deletes_on">This account will be deleted on %1$s. Sign in on the console and choose Keep my account to stop it.</string>
+    <string name="v2_dev_activity">Recent activity</string>
+    <string name="v2_dev_activity_none">Nothing recorded yet.</string>
+    <string name="v2_dev_by_console">Console</string>
+    <string name="v2_dev_by_app">EchoLedger</string>
+    <string name="v2_dev_by_device">A device</string>
+    <string name="v2_dev_load_failed">Couldn\'t load your devices. Check the connection.</string>
+</resources>

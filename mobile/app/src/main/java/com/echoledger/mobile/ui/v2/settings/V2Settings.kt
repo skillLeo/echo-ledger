@@ -256,11 +256,25 @@ fun V2SettingsScreen(
 
                 "key" -> KeyPage(vm, settings.plan, r.highlight, back)
 
-                "account" -> AccountSettingsPage(settings.serverUrl, r.highlight, openClassicPage, { vm.unpair() }, back)
+                "account" -> AccountSettingsPage(
+                    settings.serverUrl,
+                    r.highlight,
+                    DataActions(
+                        account = { vm.account() },
+                        startExport = { vm.startExport() },
+                        exportStatus = { vm.exportStatus(it) },
+                        signOutEverywhere = { vm.signOutEverywhere() },
+                        deleteAccount = { password, code -> vm.deleteAccount(password, code) }
+                    ),
+                    { vm.unpair() },
+                    back
+                )
+
+                "devices" -> DevicesPage(r.highlight, back)
 
                 "lock" -> AppLockPage(settings, vm::updateSettings, { vm.setWidgetHideTitles(it) }, r.highlight, back)
 
-                // Export or delete my data opens the account's classic page, where they are.
+                // Export or delete my data opens Your data on Sign-in & security, lit.
                 "privacy" -> PrivacyPage(settings, vm::updateSettings, r.highlight, { page ->
                     route = SettingsRoute.Page(page, if (page == "account") "account.export" else null)
                 }, back)

@@ -27,6 +27,7 @@ import com.echoledger.mobile.ui.v2.components.EchoButtonKind
 import com.echoledger.mobile.ui.v2.components.EchoDialog
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
+import com.echoledger.mobile.ui.v2.settings.highlightedIf
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.util.Locale
@@ -60,7 +61,16 @@ private sealed interface SessionAsk {
  * workspace the person belongs to (Rename, Sign out; this phone is marked and signs out from Settings).
  */
 @Composable
-fun SessionsPage(security: AccountSecurityDto, onChanged: () -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun SessionsPage(
+    security: AccountSecurityDto,
+    onChanged: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** Settings › Devices: the account's recent activity under the devices (classic's Devices and activity). */
+    activity: Boolean = false,
+    /** A search result lit the devices. */
+    lit: Boolean = false
+) {
     val res = LocalContext.current.resources
     val locale = res.configuration.locales[0] ?: Locale.getDefault()
     val actions = accountActions()
@@ -100,7 +110,7 @@ fun SessionsPage(security: AccountSecurityDto, onChanged: () -> Unit, onBack: ()
                 )
             })
         }
-        EchoSectionHeader(stringResource(R.string.v2_acct_s_devices))
+        EchoSectionHeader(stringResource(R.string.v2_acct_s_devices), Modifier.highlightedIf(lit))
         security.devices.forEach { d ->
             val title = if (d.current) "${AccountFormat.isolate(d.name)} · $thisPhone" else AccountFormat.isolate(d.name)
             EchoSettingRow(title, subtitle = deviceLine(res, d, locale))
@@ -125,6 +135,7 @@ fun SessionsPage(security: AccountSecurityDto, onChanged: () -> Unit, onBack: ()
                 }
             }
         }
+        if (activity) RecentActivity(security.events)
     }
 
     when (val a = ask) {
@@ -170,3 +181,27 @@ fun SessionsPage(security: AccountSecurityDto, onChanged: () -> Unit, onBack: ()
         null -> Unit
     }
 }
+
+/** Recent activity (classic's): what happened and who did it, newest first, the last 15. */
+@Composable
+private fun RecentActivity(events: List<com.echoledger.mobile.data.SecurityEventDto>) {
+    EchoSectionHeader(stringResource(R.string.v2_dev_activity))
+    if (events.isEmpty()) FormColumn { HelpLine(stringResource(R.string.v2_dev_activity_none)) }
+    val console = stringResource(R.string.v2_dev_by_console)
+    val app = stringResource(R.string.v2_dev_by_app)
+    val aDevice = stringResource(R.string.v2_dev_by_device)
+    events.take(ACTIVITY_SHOWN).forEach { e ->
+        val who = when (e.actor) {
+            "device" -> e.device?.let(AccountFormat::isolate) ?: aDevice
+            "web" -> console
+            else -> app
+        }
+        EchoSettingRow(
+            "${e.summary.ifBlank { e.label }} · $who",
+            subtitle = com.echoledger.mobile.ui.v2.library.LibraryModel.latinDigits(com.echoledger.mobile.ui.formatWhen(e.at)),
+            content = true
+        )
+    }
+}
+
+private const val ACTIVITY_SHOWN = 15
