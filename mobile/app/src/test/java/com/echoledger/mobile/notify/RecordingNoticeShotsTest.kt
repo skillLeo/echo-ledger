@@ -85,7 +85,7 @@ class RecordingNoticeShotsTest : AppTest() {
         for (dark in listOf(false, true)) {
             RuntimeEnvironment.setQualifiers(if (dark) "+night" else "+notnight")
             val view = drawn()
-            assertEquals("ہٹانا واپس لیں", view.findViewById<TextView>(R.id.rec_discard).text.toString())
+            assertEquals("${NoticeWords.RLM}ہٹانا واپس لیں", view.findViewById<TextView>(R.id.rec_discard).text.toString())
             assertNothingClipped(view)
             // Taller than the 48 dp the row used to be fixed at, as its words need.
             val row = view.findViewById<TextView>(R.id.rec_discard).parent as View
@@ -111,5 +111,42 @@ class RecordingNoticeShotsTest : AppTest() {
             after.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
                 android.content.res.Configuration.UI_MODE_NIGHT_YES
         )
+    }
+
+    private fun left(view: View, id: Int): Int = IntArray(2).also { view.findViewById<View>(id).getLocationInWindow(it) }[0]
+
+    @Test
+    fun inUrduOnAnEnglishPhonePauseIsOnTheRightAndInEnglishOnTheLeft() {
+        largestUrdu()
+        val urdu = drawn()
+        assertTrue(left(urdu, R.id.rec_pause) > left(urdu, R.id.rec_discard))
+        assertTrue(left(urdu, R.id.rec_stop) > left(urdu, R.id.rec_captions))
+        runBlocking { app.graph.settings.update { it.copy(appLanguage = "en") } }
+        pumpUntil("English") { app.graph.liveSettings.value?.appLanguage == "en" }
+        val english = drawn()
+        assertTrue(left(english, R.id.rec_pause) < left(english, R.id.rec_discard))
+    }
+
+    @Test
+    fun aPhoneFontChangeReachesTheViewWithoutBuildingItAgain() {
+        largestUrdu()
+        val notification = Notifications.recording(app, "Recording call with Omar", "Microphone")
+        fun titlePx(): Float {
+            val view = notification.bigContentView.apply(app, FrameLayout(app))
+            return view.findViewById<TextView>(R.id.rec_title).textSize
+        }
+        fun expected(): Float = android.util.TypedValue.applyDimension(
+            android.util.TypedValue.COMPLEX_UNIT_SP,
+            Notifications.recordingTextSp(app).getValue(R.id.rec_title) * 1.3f,
+            app.resources.displayMetrics
+        )
+        val before = titlePx()
+        assertEquals(expected(), before, 0.6f)
+        // The phone's font goes up after the notification was posted: the same notification draws larger, as Android
+        // draws that size at the new font (it scales large fonts non-linearly).
+        RuntimeEnvironment.setFontScale(1.5f)
+        val after = titlePx()
+        assertTrue("$after > $before", after > before + 1f)
+        assertEquals(expected(), after, 0.6f)
     }
 }

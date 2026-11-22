@@ -90,11 +90,11 @@ class AppLanguageNoticesTest : AppTest() {
         assertEquals(emptyList<String>(), english)
         // A few exactly.
         val all = posted.flatMap { words(it) }
-        assertTrue("یہ ریکارڈنگ محفوظ کریں؟" in all)
-        assertTrue("رکی ہوئی · Omar کے ساتھ کال ریکارڈ ہو رہی ہے" in all)
-        assertTrue("دونوں طرف · خودکار · 2 بک مارکس" in all)
-        assertTrue("محفوظ · Omar کے ساتھ کال · 4:12" in all)
-        assertTrue("3 کال ریکارڈنگز لے آئی گئیں" in all)
+        assertTrue("\u200Fیہ ریکارڈنگ محفوظ کریں؟" in all)
+        assertTrue("\u200Fرکی ہوئی · Omar کے ساتھ کال ریکارڈ ہو رہی ہے" in all)
+        assertTrue("\u200Fدونوں طرف · خودکار · 2 بک مارکس" in all)
+        assertTrue("\u200Fمحفوظ · Omar کے ساتھ کال · 4:12" in all)
+        assertTrue("\u200F3 کال ریکارڈنگز لے آئی گئیں" in all)
     }
 
     @Test
@@ -155,16 +155,16 @@ class AppLanguageNoticesTest : AppTest() {
         Notifications.showSaveDecision(app, client, "Client", "keep")
         Notifications.savedWithUndo(app, titled)
         val all = shadowOf(manager).allNotifications.flatMap { words(it) }
-        assertTrue(all.toString(), "Client کے ساتھ کال · 4:12 · Client" in all)
-        assertTrue(all.toString(), "محفوظ · Bilal Traders weekly call · 4:12" in all)
+        assertTrue(all.toString(), "\u200FClient کے ساتھ کال · 4:12 · Client" in all)
+        assertTrue(all.toString(), "\u200Fمحفوظ · Bilal Traders weekly call · 4:12" in all)
         val recording = Notifications.recording(app, "Recording call with Client", "Microphone")
-        assertEquals("Client کے ساتھ کال ریکارڈ ہو رہی ہے", recording.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
+        assertEquals("\u200FClient کے ساتھ کال ریکارڈ ہو رہی ہے", recording.extras.getCharSequence(Notification.EXTRA_TITLE).toString())
         val en = AppWords.resources(app, "en")
         val ur = AppWords.resources(app, "ur")
-        assertEquals("Client کے ساتھ کال", NoticeWords.say(ur, en, "Call with Client"))
-        assertEquals("Bilal Traders weekly call کال", NoticeWords.say(ur, en, "Bilal Traders weekly call call"))
+        assertEquals("\u200FClient کے ساتھ کال", NoticeWords.say(ur, en, "Call with Client"))
+        assertEquals("\u200FBilal Traders weekly call کال", NoticeWords.say(ur, en, "Bilal Traders weekly call call"))
         // The app's own words in a hole still are (a paused recording's state).
-        assertEquals("رکی ہوئی · Client کے ساتھ کال ریکارڈ ہو رہی ہے", NoticeWords.say(ur, en, "Paused · Recording call with Client"))
+        assertEquals("\u200Fرکی ہوئی · Client کے ساتھ کال ریکارڈ ہو رہی ہے", NoticeWords.say(ur, en, "Paused · Recording call with Client"))
     }
 
     /** The recording view's text as Android lays it out (its own layout, applied to a view). */
@@ -183,7 +183,13 @@ class AppLanguageNoticesTest : AppTest() {
         val largest = recordingTextSizes()
         // Each at 1.3 times the size its layout's style gives it on this phone (read, not assumed).
         assertTrue(phone.values.all { it > 0f })
-        assertEquals(Notifications.recordingTextPx(app), phone)
+        Notifications.recordingTextSp(app).forEach { (id, sp) ->
+            assertEquals(
+                android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, sp, app.resources.displayMetrics),
+                phone.getValue(id),
+                0.6f
+            )
+        }
         Notifications.RECORDING_TEXT_IDS.forEach { id -> assertEquals(phone.getValue(id) * 1.3f, largest.getValue(id), 0.6f) }
         // Its four buttons in the app language, Captions and Stop too.
         language("ur")
@@ -195,7 +201,7 @@ class AppLanguageNoticesTest : AppTest() {
             com.echoledger.mobile.R.id.rec_discard
         )
             .map { view.findViewById<android.widget.TextView>(it).text.toString() }
-        assertEquals(listOf("روکیں", "بند کریں", "کیپشنز", "ہٹائیں"), buttons)
+        assertEquals(listOf("روکیں", "بند کریں", "کیپشنز", "ہٹائیں").map { "\u200F$it" }, buttons)
     }
 
     @Test
@@ -213,5 +219,49 @@ class AppLanguageNoticesTest : AppTest() {
         val after = manager.getNotificationChannel(NotifyCategory.RECORDING.channelId)
         assertEquals(NotificationManager.IMPORTANCE_MIN, after.importance)
         assertTrue(after.shouldVibrate())
+    }
+
+    private fun rightToLeft(text: String) = !java.text.Bidi(text, java.text.Bidi.DIRECTION_DEFAULT_LEFT_TO_RIGHT).baseIsLeftToRight()
+
+    @Test
+    fun everyUrduLineReadsRightToLeftEvenWhenItStartsWithALatinName() {
+        language("ur")
+        postEverything()
+        val drawn = posted.flatMap { words(it) }
+        assertTrue(drawn.size > 40)
+        assertEquals(emptyList<String>(), drawn.filterNot(::rightToLeft))
+        // Lines that start with a name: right to left with the mark, as drawn (and the name kept as it was).
+        val call = Notifications.recording(
+            app,
+            "Recording call with Omar",
+            "Microphone"
+        ).extras.getCharSequence(Notification.EXTRA_TITLE).toString()
+        assertEquals("${NoticeWords.RLM}Omar کے ساتھ کال ریکارڈ ہو رہی ہے", call)
+        assertTrue(rightToLeft(call))
+        // Without the mark the same words would read left to right: the reason for it.
+        assertTrue(!rightToLeft(call.removePrefix(NoticeWords.RLM)))
+        // The recording view (the app's own layout) too, and it is laid out right to left with Pause at the right.
+        val view = Notifications.recording(
+            app,
+            "Recording call with Omar",
+            "Microphone"
+        ).bigContentView.apply(app, android.widget.FrameLayout(app))
+        val title = view.findViewById<android.widget.TextView>(com.echoledger.mobile.R.id.rec_title).text.toString()
+        assertTrue(rightToLeft(title))
+        assertEquals(android.view.View.LAYOUT_DIRECTION_RTL, view.layoutDirection)
+    }
+
+    @Test
+    fun theMarkIsOnlyInWhatIsDrawnNeverInWordsThatAreCopiedOrShared() {
+        language("ur")
+        val rec2 = rec.copy(callerName = "Omar")
+        // The English words the app copies, shares or sends (the card, the decision line, the device report) carry none.
+        assertTrue(Notifications.decisionText(rec2, "Acme").none { it == '\u200F' })
+        assertTrue(com.echoledger.mobile.overlay.DecisionPopup.title(rec2).none { it == '\u200F' })
+        assertTrue(Notifications.decisionText(AppWords.resources(app, "ur"), rec2, "Acme").none { it == '\u200F' })
+        // In English nothing is ever marked.
+        language("en")
+        postEverything()
+        assertTrue(posted.flatMap { words(it) }.none { it.contains('\u200F') })
     }
 }
