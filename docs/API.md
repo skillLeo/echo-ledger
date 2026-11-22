@@ -318,7 +318,8 @@ account in the console (Profile → Devices → "Sign in a device", the QR of `P
   /api/account/export/{id}` → `{"id", "status": "making" | "ready" | "failed", "url": "…" | null, "expires_at"}`:
   one ZIP with every recording's audio, transcripts (all views made), screens, project files and notes, and a
   `manifest.json`; since 2.0.0-c also a `live-assist/` folder (settings, preps, and every Live Assist session with its
-  lines, suggestions, facts, summary, report and usage, from every workspace). The link works for 24 hours; the account's email gets it too.
+  lines, suggestions, facts, summary, report and usage, from every workspace), and since 2.0.0-p a `library.json` with
+  the person's lists and saved views of every workspace (the manifest's `library` names it). The link works for 24 hours; the account's email gets it too.
 
 ### Workspaces, roles and privacy (since v1.5)
 Every account has its own personal workspace (it is the owner). A team is a workspace with members; a person can
@@ -1060,7 +1061,9 @@ Query: `since` (ISO-8601 with any offset; items with `updated_at >= since`, **in
 (sessions with a bookmark of that tag) and `bookmarked=1` (sessions with any bookmark; both since v1.1), `view`, `tz`,
 `label` and `pinned` (since v1.1, see "Organising the library"), `important` (since 2.0.0-i), and since 2.0.0-p
 `filters` and `q` (the Library's filters and its search, see "Library filters (since 2.0.0-p)"; with either, only
-recordings they keep are listed, never tombstones: leave them out when syncing).
+recordings they keep are listed, never tombstones: leave them out when syncing). `view=needs_you` with `filters` or `q`
+keeps its waiting calls. With `folder=shared` (what others sent you), `view=needs_you`, `view=unread`, `filters` and
+`q` are refused, `422 validation_failed` naming the field: they are for the person's own recordings.
 Returns every session of the owner from **every** device, except sessions still in status `recording` (listed only
 when `status=recording`, `view=waiting` or, since 2.0.0-p, `view=needs_you` is given).
 ```json
@@ -1298,7 +1301,9 @@ filters, the search and how the list is shown, never a recording or any of its w
   ["last_7_days"]}, "source": {"op": "is", "values": ["whatsapp"]}}, "search": "invoice", "sort": "newest", "group":
   "date", "density": "comfortable", "position": 0, "client_ref": "3f2b…", "created_at": "…", "updated_at": "…"}`.
   `name` is trimmed to single spaces, 1 to 60 characters (two views may share a name). `filters` is a filter set as
-  in "Library filters" (`{}` for none), kept as the server cleaned it. `search` is up to 200 characters, `null` for none.
+  in "Library filters" (`{}` for none), kept as the server cleaned it. A view is read forgivingly: a section or option
+  withdrawn since it was saved is left out of `filters` (a section left with no value goes), while what is sent is
+  checked strictly. `search` is up to 200 characters, `null` for none.
   `sort` is `newest` (default), `oldest`, `longest`, `shortest`, `name` or `opened` (recently opened); `group` is
   `date` (default), `source`, `project`, `language`, `status`, `device` or `none`; `density` is `comfortable` (default)
   or `compact`. An app that offers fewer shows a sort it lacks as Newest and a group as Date, and keeps the value.

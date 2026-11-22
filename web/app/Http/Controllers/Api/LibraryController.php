@@ -66,6 +66,18 @@ final class LibraryController extends Controller
         $serverTime = now();
         // The `shared` folder (since v1.5) is what others sent this person, from their workspaces, read-only.
         $shared = ($data['folder'] ?? null) === 'shared';
+        // Since 2.0.0-p: Needs you and Unread are places of the person's own library, and the filters and the search
+        // count only it: with `folder=shared` each is refused, never ignored (docs/API.md "Library filters").
+        $place = in_array($data['view'] ?? null, self::MORE_VIEWS, true) ? (string) $data['view'] : null;
+        $searching = LibraryFacets::cleanQuery($data['q'] ?? null) !== null;
+        if ($shared) {
+            foreach (['view' => $place !== null, 'filters' => $filters !== [], 'q' => $searching] as $field => $asked) {
+                if ($asked) {
+                    $message = 'Needs you, Unread, the filters and the search are for your own recordings, not for what was shared with you.';
+                    throw new ApiError(422, 'validation_failed', $message, ['errors' => [$field => [$message]]]);
+                }
+            }
+        }
         $query = ($shared ? $teammates->sharedSessions($device->user) : CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id))->with([
             'device', 'client', 'markers:id,capture_session_id,tag,at_ms', 'labels',
             // Since B6 without the transcripts' lines and search copy, which a row never reads.
@@ -114,18 +126,13 @@ final class LibraryController extends Controller
         if ($request->boolean('bookmarked')) {
             $query->whereHas('markers');
         }
-        if (! empty($data['view']) && ! $shared) {
-            match ($data['view']) {
-                // Since 2.0.0-p: what needs the person (LibraryFilters::needsYou), waiting calls included.
-                'needs_you' => $facets->applyNeedsYou($query, $device->workspace_id, $device->user_id),
-                'unread' => $query->whereDoesntHave('opens', fn ($q) => $q->where('user_id', $device->user_id)),
-                default => $organiser->applyView($query, $data['view'], $data['tz'] ?? null),
-            };
-        } elseif (! empty($data['view'])) {
-            $organiser->applyView($query, $data['view'], $data['tz'] ?? null);
+        if ($place !== null || $filters !== [] || $searching) {
+            // Since 2.0.0-p: the place (Needs you keeps its waiting calls, also with filters or a search), the filters
+            // and the search, as GET /api/library/facets counts them.
+            $facets->apply($query, $device->workspace_id, $device->user_id, $filters, $data['q'] ?? null, $data['tz'] ?? null, $place ?? 'all');
         }
-        if (($filters !== [] || LibraryFacets::cleanQuery($data['q'] ?? null) !== null) && ! $shared) {
-            $facets->apply($query, $device->workspace_id, $device->user_id, $filters, $data['q'] ?? null, $data['tz'] ?? null);
+        if (! empty($data['view']) && $place === null) {
+            $organiser->applyView($query, $data['view'], $data['tz'] ?? null);
         }
         if (! empty($data['label'])) {
             $query->whereHas('labels', fn ($q) => $q->whereRaw('LOWER(label) = ?', [mb_strtolower(trim($data['label']))]));
