@@ -37,6 +37,7 @@ placeholders; names, apps and numbers inside Urdu lines are isolated (FSI…PDI)
 | done_audio | Saved as audio | آڈیو محفوظ ہو گئی |
 | done_deleted | Deleted | حذف ہو گئی |
 | grouped_audio | %1$d calls saved as audio | %1$d کالز کی آڈیو محفوظ ہو گئی |
+| grouped_mixed | %1$d calls | %1$d کالز |
 | grouped_review | Review | دیکھیں |
 | quiet_saved | Saved as audio during quiet hours | خاموش اوقات میں آڈیو محفوظ ہوئی |
 | block_screens | Block screenshots of EchoLedger | EchoLedger کے اسکرین شاٹس روکیں |
