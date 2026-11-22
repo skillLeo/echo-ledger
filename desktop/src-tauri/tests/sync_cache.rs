@@ -364,6 +364,62 @@ async fn the_next_refresh_sends_since_and_applies_tombstones_and_updates() {
     );
 }
 
+/// Titles changed on the server reach recordings already saved here on the next sync: an automatic title in Urdu
+/// letters written again in Roman Urdu (U19, `echoledger:roman-titles` bumps `updated_at`) and a rename from another
+/// device, each with its `title_auto` and `title_source`, kept in the saved file too.
+#[tokio::test]
+async fn titles_changed_on_the_server_replace_the_saved_ones_on_the_next_sync() {
+    let calls = Arc::new(Mutex::new(0usize));
+    let counter = calls.clone();
+    let server = MockServer::start(Router::new().route("GET", "/api/library", move |_, _| {
+        let n = {
+            let mut c = counter.lock().unwrap();
+            *c += 1;
+            *c
+        };
+        Action::Reply(if n == 1 {
+            page(
+                vec![
+                    json!({"id": "a", "deleted": false, "updated_at": "2026-11-20T08:00:00+00:00", "started_at": "2026-11-20T07:00:00+00:00", "title": "بل کی ادائیگی", "title_auto": true, "title_source": "auto"}),
+                    json!({"id": "b", "deleted": false, "updated_at": "2026-11-20T08:00:00+00:00", "started_at": "2026-11-20T06:00:00+00:00", "title": "Recording", "title_auto": false, "title_source": "app"}),
+                ],
+                None,
+                "2026-11-20T09:00:00+00:00",
+            )
+        } else {
+            page(
+                vec![
+                    json!({"id": "a", "deleted": false, "updated_at": "2026-11-21T02:00:00+00:00", "started_at": "2026-11-20T07:00:00+00:00", "title": "Bill ki adaigi", "title_auto": true, "title_source": "auto"}),
+                    json!({"id": "b", "deleted": false, "updated_at": "2026-11-21T03:00:00+00:00", "started_at": "2026-11-20T06:00:00+00:00", "title": "Qureshi Textiles, March shipment", "title_auto": false, "title_source": "own"}),
+                ],
+                None,
+                "2026-11-21T04:00:00+00:00",
+            )
+        })
+    }));
+    let c = client(&server);
+    let mut cache = LibraryCache::default();
+    cache.refresh(&c).await.unwrap();
+    assert_eq!(title(&cache.items, "a"), "بل کی ادائیگی");
+    assert_eq!(cache.refresh(&c).await.unwrap(), 2);
+
+    let field = |items: &[LibraryItem], id: &str, key: &str| items.iter().find(|i| i.id == id).and_then(|i| i.rest.get(key)).cloned();
+    assert_eq!(ids(&cache.items), ["a", "b"], "the same two recordings, nothing added");
+    assert_eq!(title(&cache.items, "a"), "Bill ki adaigi");
+    assert_eq!(field(&cache.items, "a", "title_auto"), Some(json!(true)));
+    assert_eq!(field(&cache.items, "a", "title_source"), Some(json!("auto")));
+    assert_eq!(title(&cache.items, "b"), "Qureshi Textiles, March shipment");
+    assert_eq!(field(&cache.items, "b", "title_auto"), Some(json!(false)));
+    assert_eq!(field(&cache.items, "b", "title_source"), Some(json!("own")));
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("library.json");
+    cache.save(&path).unwrap();
+    let saved = LibraryCache::load(&path);
+    assert_eq!(title(&saved.items, "a"), "Bill ki adaigi");
+    assert_eq!(field(&saved.items, "b", "title_source"), Some(json!("own")));
+}
+
 #[tokio::test]
 async fn a_page_that_fails_leaves_the_sync_position_unchanged() {
     let server = MockServer::start(Router::new().route("GET", "/api/library", |r, _| {
