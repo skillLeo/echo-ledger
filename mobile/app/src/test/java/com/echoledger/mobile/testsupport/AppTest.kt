@@ -87,7 +87,11 @@ abstract class AppTest {
 
     @After
     fun releaseApp() {
-        // The call choice's windows live for the process: one a test left open never holds this test's app.
+        // The call choice's windows live for the process: one a test left open never holds this test's app, and no card
+        // step it asked for reaches the next test.
+        runCatching { com.echoledger.mobile.overlay.DecisionPopup.hide() }
+        runCatching { com.echoledger.mobile.overlay.DecisionPopup.drainForTest() }
+        runCatching { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle() }
         runCatching { com.echoledger.mobile.overlay.DecisionPopup.hide() }
         runCatching { com.echoledger.mobile.overlay.StartBanner.hide() }
         activities.asReversed().forEach { runCatching { it.pause().stop().destroy() } }

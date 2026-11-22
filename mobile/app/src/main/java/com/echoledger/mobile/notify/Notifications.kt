@@ -113,7 +113,7 @@ object Notifications {
             .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, category.channelId)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-    private fun canPost(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+    fun canPost(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     /** Settings → Notifications → Test: one notification of that kind, marked as a test. */
@@ -503,12 +503,13 @@ object Notifications {
     }
 
     /**
-     * "Discarded · Call with Omar · 4:12" with Undo (since v1.8.1, bug P-006), in place of the question after its
-     * Discard: quiet, gone after the 5 s the file waits for ([com.echoledger.mobile.calls.Decisions.discardLater]).
+     * "Deleted · Call with Omar · 4:12" with Undo (since v1.8.1, bug P-006), in place of the question after its
+     * Delete: quiet, gone after the 5 s the file waits for ([com.echoledger.mobile.calls.Decisions.discardLater]).
+     * False when it could not be posted (no permission, or Android refused it): then nobody can see this Undo.
      */
     @SuppressLint("MissingPermission") // checked by canPost() first
-    fun discardedWithUndo(context: Context, rec: LocalRecording) {
-        if (!canPost(context)) return
+    fun discardedWithUndo(context: Context, rec: LocalRecording): Boolean {
+        if (!canPost(context)) return false
         val undo = PendingIntent.getBroadcast(
             context,
             rec.id.hashCode() + 3,
@@ -549,7 +550,7 @@ object Notifications {
             .setTimeoutAfter(com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS)
             .setContentIntent(openApp(context))
             .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Undo"), undo)
-        runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
+        return runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }.isSuccess
     }
 
     /** A call started while the capture helper is not running: say so during the call, with the way to fix it. */

@@ -81,7 +81,10 @@ object DecisionPopup {
     private val grouped = mutableListOf<String>()
 
     /** Calls that ended while a Deleted line was showing, in order: asked about when that line is over. */
-    private val waiting = java.util.concurrent.CopyOnWriteArrayList<Pair<LocalRecording, String>>()
+    private val waiting = java.util.concurrent.CopyOnWriteArrayList<Held>()
+
+    /** A call held behind the line on screen: its question, or ([deleteLineMs]) its own "Deleted · Undo" line. */
+    private class Held(val rec: LocalRecording, val themeMode: String, val deleteLineMs: Long? = null)
 
     /** When the line or question on screen ends ([SystemClock.uptimeMillis]). */
     private var endsAt = 0L
@@ -110,14 +113,14 @@ object DecisionPopup {
      * The card still answers for [id]: asking about it, or holding it behind a Deleted line. Its 10 s backstop
      * ([com.echoledger.mobile.calls.DecisionTimeoutWorker]) then waits instead of keeping it. Any thread.
      */
-    fun answersFor(id: String): Boolean = (showingFor == id && showingMode == Mode.ASK) || waiting.any { it.first.id == id }
+    fun answersFor(id: String): Boolean = (showingFor == id && showingMode == Mode.ASK) || waiting.any { it.rec.id == id }
 
     /**
      * How long [id]'s backstop waits: the question's time and a little more, after the line it is held behind (main
      * thread, right after [ask]).
      */
     fun backstopMs(id: String): Long {
-        val behind = if (waiting.any { it.first.id == id }) (endsAt - android.os.SystemClock.uptimeMillis()).coerceAtLeast(0) else 0L
+        val behind = if (waiting.any { it.rec.id == id }) (endsAt - android.os.SystemClock.uptimeMillis()).coerceAtLeast(0) else 0L
         return behind + askMs + BACKSTOP_GRACE_MS
     }
 
@@ -136,7 +139,7 @@ object DecisionPopup {
         if (isShowing && showingMode == Mode.DELETED) {
             // Another call's Delete can still be undone: this call waits for its line to end (its backstop waits too,
             // [answersFor], so it is never kept before it was asked).
-            waiting += rec to themeMode
+            waiting += Held(rec, themeMode)
             return true
         }
         if (isShowing && (showingMode == Mode.ASK || showingMode == Mode.GROUPED)) {
@@ -170,12 +173,15 @@ object DecisionPopup {
 
     /**
      * "Deleted · Undo" for [rec] for [lineMs] (the pill's Stop and delete still counting down when the call ended): its
-     * Undo asks about the call again.
+     * Undo asks about the call again. A Delete is never applied without an Undo the person can see:
+     * - the card free: the line on the card;
+     * - else, notifications allowed: the Undo in a notification, which outlives the process;
+     * - else, the card busy: the line waits behind the one on screen, as a held question does;
+     * - else (no overlay, no notification): the call is left to the person to choose again, nothing deleted.
      */
     fun deleted(context: Context, rec: LocalRecording, themeMode: String, lineMs: Long): Boolean {
         val app = context.applicationContext
-        // Never over another call's question or Deleted line: then the Undo goes in a notification, which outlives the
-        // process, and the delete follows that notification's time.
+        // Never over another call's question or Deleted line.
         val busy = isShowing && showingMode in setOf(Mode.ASK, Mode.GROUPED, Mode.DELETED)
         if (!busy) commitPick(app)
         val shown = !busy && open(app, rec, themeMode, CallCardScreen.Done(Pick.DELETE))
@@ -186,17 +192,21 @@ object DecisionPopup {
             }) { gone ->
                 if (gone == null) handler.post { if (showingFor == rec.id && showingMode == Mode.DELETED) hide() }
             }
-        } else {
+        } else if (com.echoledger.mobile.notify.Notifications.canPost(app)) {
             // The Undo notification goes out in the same uncancellable step as the delete it can take back, before
             // anything that can wait (the widget), so the delete is never due without its Undo.
             step(app, { deleteWithNotification(app, rec.id) })
+        } else {
+            // No notification can carry its Undo. Meanwhile the call is left to the person ("Choose again"), so it is
+            // never kept, sent or deleted by itself; a busy card shows its line once the line on screen is over.
+            if (busy) waiting += Held(rec, themeMode, deleteLineMs = lineMs)
+            step(app, { Decisions.chooseAgain(app, rec.id) })
         }
         return shown
     }
 
     /** A delete whose Undo is a notification: the call on its way out and its "Deleted · Undo" posted, in one step. */
-    private suspend fun deleteWithNotification(app: Context, id: String): LocalRecording? =
-        Decisions.discardLater(app, id, widget = false)?.also { com.echoledger.mobile.notify.Notifications.discardedWithUndo(app, it) }
+    private suspend fun deleteWithNotification(app: Context, id: String): LocalRecording? = Decisions.discardWithNotification(app, id)
 
     /** Draws [mode] for [rec] at once (tests and screenshots): the question or one of its lines. */
     internal fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode): Boolean {
@@ -226,6 +236,8 @@ object DecisionPopup {
 
     private fun open(app: Context, rec: LocalRecording, themeMode: String, first: CallCardScreen): Boolean {
         hide()
+        // Without "Display over other apps" there is no card (Android would refuse the window anyway).
+        if (!android.provider.Settings.canDrawOverlays(app)) return false
         val wm = app.getSystemService(WindowManager::class.java) ?: return false
         val lifecycleOwner = OverlayOwner().also { it.start() }
         askMs = recommended(app, ASK_MS)
@@ -345,14 +357,22 @@ object DecisionPopup {
     private fun close(app: Context) {
         val next = waiting.toList()
         hide()
-        // In the order they ended: the first is asked, any later one joins it on the grouped line (back-to-back calls).
-        next.forEach { (rec, themeMode) ->
-            // Still waiting (decided meanwhile in a notification or the app: nothing to ask).
+        // In the order they ended: the first shows, any later question joins it on the grouped line (back-to-back calls)
+        // and any later Deleted line waits for the one before it.
+        next.forEach { held ->
+            val rec = held.rec
+            // Still waiting (decided meanwhile in a notification or the app: nothing to show).
             step(app, { Decisions.stillWaiting(app, rec.id) }, widget = false) { still ->
                 if (still == true) {
                     handler.post {
-                        ask(app, rec, themeMode)
-                        com.echoledger.mobile.calls.DecisionTimeoutWorker.schedule(app, rec.id, backstopMs(rec.id))
+                        val lineMs = held.deleteLineMs
+                        if (lineMs != null) {
+                            // Its own line now, with a whole line's time for the Undo.
+                            deleted(app, rec, held.themeMode, maxOf(lineMs, doneMs))
+                        } else {
+                            ask(app, rec, held.themeMode)
+                            com.echoledger.mobile.calls.DecisionTimeoutWorker.schedule(app, rec.id, backstopMs(rec.id))
+                        }
                     }
                 }
             }
@@ -451,27 +471,31 @@ object DecisionPopup {
 
     /**
      * One step on the queue, in the order the card asked for them. Its [change] (the store, the workers, the Undo
-     * notification) always runs to its end, uncancellable; only what comes after it (the widget, then [after], the
-     * card's own follow-up) is given up after [stepTimeoutMs], so a slow widget never holds up the next step.
+     * notification) always runs to its end, uncancellable. Then the card's own follow-up ([after]), and the widget only
+     * last: each is given up after [stepTimeoutMs], so a slow widget never delays or skips the follow-up, nor holds up
+     * the next step.
      */
     private fun <T> step(app: Context, change: suspend () -> T, widget: Boolean = true, after: suspend (T?) -> Unit = {}) {
         steps.launch {
             order.withLock {
                 val result = runCatching { withContext(NonCancellable) { change() } }.getOrNull()
-                runCatching {
-                    withTimeoutOrNull(stepTimeoutMs) {
-                        if (widget) refreshWidget(app)
-                        after(result)
-                    }
-                }
+                runCatching { withTimeoutOrNull(stepTimeoutMs) { after(result) } }
+                if (widget) runCatching { withTimeoutOrNull(stepTimeoutMs) { refreshWidget(app) } }
             }
         }
     }
 
-    /** The home-screen widget's refresh after a card step (tests stand in a slow one). */
-    @androidx.annotation.VisibleForTesting
-    internal var refreshWidget: suspend (Context) -> Unit = { com.echoledger.mobile.widget.WidgetStateStore.refresh(it) }
+    /** The home-screen widget's refresh after a card step ([Decisions.refreshWidget]; tests stand in a slow one). */
+    private suspend fun refreshWidget(app: Context) = Decisions.refreshWidget(app)
 
     @androidx.annotation.VisibleForTesting
     internal var stepTimeoutMs = STEP_TIMEOUT_MS
+
+    /** Waits until every step asked for so far has run (tests: none reaches the next test's card). */
+    @androidx.annotation.VisibleForTesting
+    internal fun drainForTest(timeoutMs: Long = 15_000) {
+        val done = java.util.concurrent.CountDownLatch(1)
+        steps.launch { order.withLock { done.countDown() } }
+        done.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
 }

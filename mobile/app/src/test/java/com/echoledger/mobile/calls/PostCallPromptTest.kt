@@ -41,12 +41,17 @@ class PostCallPromptTest : AppTest() {
         android.provider.Settings.Global.putFloat(app.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
     }
 
-    private val usualRefresh = DecisionPopup.refreshWidget
+    private val usualRefresh = Decisions.refreshWidget
 
     @After
     fun closeCard() {
         DecisionPopup.hide()
-        DecisionPopup.refreshWidget = usualRefresh
+        // Every step this test asked for runs now, under its own stand-ins, and what it posts goes with this test.
+        DecisionPopup.drainForTest()
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        DecisionPopup.hide()
+        Decisions.refreshWidget = usualRefresh
+        Decisions.afterUndoPosted = {}
         DecisionPopup.stepTimeoutMs = 30_000L
     }
 
@@ -331,13 +336,19 @@ class PostCallPromptTest : AppTest() {
         assertTrue(discardWork("call-3").single().initialDelayMillis >= 3_000)
     }
 
+    /** The shade's "Deleted · …" lines that offer Undo. */
+    private fun undoLines(): List<String> = notifications()
+        .filter { n -> n.actions.orEmpty().any { it.title.toString() == "Undo" } }
+        .map { shadowOf(it).contentTitle.toString() }
+
     @Test
     fun `a step cut short while the widget refreshes has already posted the Undo, before the delete is due`() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
-        // A widget refresh that never ends: the step's time runs out there.
-        val refreshing = java.util.concurrent.CountDownLatch(1)
-        DecisionPopup.refreshWidget = {
-            refreshing.countDown()
+        // A widget refresh that never ends: each step's time runs out there. When call-2's step reaches it (call-2 is on
+        // its way out by then), what the shade holds is kept.
+        val atCall2Refresh = java.util.concurrent.atomic.AtomicReference<List<String>>()
+        Decisions.refreshWidget = {
+            if (app.peekRecording("call-2")?.state == Decisions.DISCARDING) atCall2Refresh.compareAndSet(null, undoLines())
             kotlinx.coroutines.awaitCancellation()
         }
         DecisionPopup.stepTimeoutMs = 300
@@ -345,18 +356,129 @@ class PostCallPromptTest : AppTest() {
         DecisionPopup.delete(app)
         // call-2 ends while call-1's Deleted line shows: its "Deleted · Undo" goes in a notification.
         assertFalse(DecisionPopup.deleted(app, call("call-2"), "dark", 3_000))
-        assertTrue("the step reached the widget", refreshing.await(10, TimeUnit.SECONDS))
 
-        pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        pumpUntil("call-2's step to reach the widget") { atCall2Refresh.get() != null }
+        assertEquals("its Undo was in the shade before the widget began", listOf("Deleted · WhatsApp call · 0:44"), atCall2Refresh.get())
         val due = java.time.Instant.parse(app.peekRecording("call-2")!!.discardAt).toEpochMilli()
-        val undo = notifications().firstOrNull { n -> n.actions.orEmpty().any { it.title.toString() == "Undo" } }
-        assertTrue("the Undo was posted with the delete, not after the widget", undo != null)
         assertTrue("and before the delete is due", System.currentTimeMillis() < due)
-        assertNull(app.peekRecording("call-2")?.undoIn)
+        assertNull("the shade outlives the process: nothing to bring back", app.peekRecording("call-2")?.undoIn)
 
-        // The cut-short step held up nothing: the next one (Undo on call-1) still runs.
+        // The cut-short steps held up nothing: the next one (Undo on call-1) still runs.
         DecisionPopup.undo(app)
         pumpUntil("call-1 back") { app.peekRecording("call-1")?.state == "pending_decision" }
+    }
+
+    @Test
+    fun `a death between the posted Undo and the store leaves the call to choose again, never kept by its backstop`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        call()
+        // Asked in a notification: its 10 s backstop runs.
+        DecisionTimeoutWorker.schedule(app, "call-1")
+        Decisions.afterUndoPosted = { throw IllegalStateException("the process died here") }
+        assertTrue(runCatching { runBlocking { Decisions.discardWithNotification(app, "call-1") } }.isFailure)
+
+        assertEquals("the Undo was posted first", listOf("Deleted · WhatsApp call · 0:44"), undoLines())
+        val left = app.peekRecording("call-1")!!
+        assertEquals("nothing was deleted or scheduled", "pending_decision", left.state)
+        assertTrue("left to the person: Choose again", left.restoredDelete)
+        assertTrue(discardWork("call-1").isEmpty())
+        assertTrue("its backstop was called off before the post", timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+        // A backstop that runs all the same (one already on its way) keeps nothing.
+        runBlocking {
+            androidx.work.testing.TestListenableWorkerBuilder<DecisionTimeoutWorker>(app)
+                .setInputData(androidx.work.workDataOf(DecisionTimeoutWorker.KEY_ID to "call-1"))
+                .build()
+                .doWork()
+        }
+        assertEquals("never kept by itself", "pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue("never sent", noUpload("call-1"))
+
+        // Its Undo finds nothing deleted: the call still waits, with its file, and is simply asked about again.
+        Decisions.afterUndoPosted = {}
+        app.sendBroadcast(
+            android.content.Intent(app, SaveDecisionReceiver::class.java)
+                .setAction(SaveDecisionReceiver.ACTION_UNDO_DISCARD)
+                .putExtra(SaveDecisionReceiver.EXTRA_ID, "call-1")
+        )
+        pumpUntil("asked again") { DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
+        assertTrue(undoLines().isEmpty())
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertFalse("the Undo took the delete back: an ordinary question again", app.peekRecording("call-1")!!.restoredDelete)
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
+    @Test
+    fun `with no notification permission a Delete behind a busy card waits for its own line, never deleted unseen`() {
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        asked("call-1")
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+
+        assertFalse(DecisionPopup.deleted(app, call("call-2"), "dark", 3_000))
+        assertEquals("call-1's line stays", "call-1", DecisionPopup.showingFor)
+        assertTrue("held behind it", DecisionPopup.answersFor("call-2"))
+        pumpUntil("left to the person meanwhile") { app.peekRecording("call-2")?.restoredDelete == true }
+        assertEquals("nothing deleted while no Undo can be seen", "pending_decision", app.peekRecording("call-2")?.state)
+        assertTrue(discardWork("call-2").isEmpty())
+        assertTrue("no notification could be posted", undoLines().isEmpty())
+
+        // call-1's line ends: call-2's own "Deleted · Undo" shows, and only now is its delete stored, with this Undo.
+        after(DecisionPopup.DONE_MS + 1)
+        pumpUntil("call-2's line") { DecisionPopup.showingFor == "call-2" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED }
+        pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        assertEquals(Decisions.PROCESS, app.peekRecording("call-2")?.undoIn)
+        assertFalse(app.peekRecording("call-2")!!.restoredDelete)
+        assertTrue("a whole line's time", discardWork("call-2").single().initialDelayMillis >= DecisionPopup.DONE_MS)
+
+        DecisionPopup.undo(app)
+        pumpUntil("call-2 back") { app.peekRecording("call-2")?.state == "pending_decision" }
+        assertFalse(app.peekRecording("call-2")!!.restoredDelete)
+    }
+
+    @Test
+    fun `with no notification permission and no overlay a Delete leaves the call to choose again`() {
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        ShadowSettings.setCanDrawOverlays(false)
+        assertFalse(DecisionPopup.deleted(app, call("call-1"), "dark", 3_000))
+        assertFalse(DecisionPopup.isShowing)
+        pumpUntil("left to the person") { app.peekRecording("call-1")?.restoredDelete == true }
+        assertEquals("nothing deleted", "pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue(discardWork("call-1").isEmpty())
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+        // Never kept by itself either.
+        runBlocking {
+            androidx.work.testing.TestListenableWorkerBuilder<DecisionTimeoutWorker>(app)
+                .setInputData(androidx.work.workDataOf(DecisionTimeoutWorker.KEY_ID to "call-1"))
+                .build()
+                .doWork()
+        }
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue(noUpload("call-1"))
+    }
+
+    @Test
+    fun `the card's follow-up runs before the widget, so a slow widget never delays or skips it`() {
+        // A widget refresh that takes the whole step time.
+        val refreshing = java.util.concurrent.CountDownLatch(1)
+        val ended = java.util.concurrent.CountDownLatch(1)
+        Decisions.refreshWidget = {
+            try {
+                refreshing.countDown()
+                kotlinx.coroutines.awaitCancellation()
+            } finally {
+                ended.countDown()
+            }
+        }
+        DecisionPopup.stepTimeoutMs = 3_000
+        asked()
+        // Sent meanwhile: the Delete finds nothing to delete, and the follow-up takes the Deleted line away.
+        app.graph.recordings.update("call-1") { it.copy(state = "uploaded") }
+        DecisionPopup.delete(app)
+        pumpUntil("the follow-up, well before the step time", timeoutMs = 1_500) { !DecisionPopup.isShowing }
+        assertTrue("the widget came after it", refreshing.await(5, TimeUnit.SECONDS))
+        assertEquals("uploaded", app.peekRecording("call-1")?.state)
+        // The slow widget is given up after the step time, and the queue moves on.
+        assertTrue(ended.await(10, TimeUnit.SECONDS))
     }
 
     @Test
