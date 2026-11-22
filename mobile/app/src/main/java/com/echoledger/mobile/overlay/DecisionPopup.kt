@@ -140,7 +140,7 @@ object DecisionPopup {
                 }
                 if (v2) {
                     val actions = v2Actions(app, rec, themeMode, mode, openWaiting)
-                    com.echoledger.mobile.ui.v2.theme.EchoV2Theme(darkTheme = true) {
+                    com.echoledger.mobile.ui.v2.shell.OverlayLook(com.echoledger.mobile.ui.v2.shell.overlaySettings(app)) {
                         com.echoledger.mobile.ui.v2.live.V2AfterCallCard(
                             title = com.echoledger.mobile.ui.v2.live.afterCallTitle(app.resources, rec),
                             durationMs = rec.durationMs,

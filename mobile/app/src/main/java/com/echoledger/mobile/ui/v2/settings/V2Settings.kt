@@ -177,6 +177,8 @@ fun V2SettingsScreen(
     var profile by remember { mutableStateOf<ProfileState>(ProfileState.Loading) }
     var attempt by remember { mutableIntStateOf(0) }
     var confirmSignOut by remember { mutableStateOf(false) }
+    // The upgrade flow (choose, pay, promo code, receipt, status), over whichever page opened it.
+    var flow by remember { mutableStateOf<com.echoledger.mobile.ui.FlowStart?>(null) }
     LaunchedEffect(attempt) {
         profile = ProfileState.Loading
         val account = vm.accountQuietly()
@@ -185,6 +187,11 @@ fun V2SettingsScreen(
             if (account == null && storage == null) ProfileState.Error else ProfileState.Ready(profileOf(account, storage, settings.plan))
     }
     androidx.activity.compose.BackHandler(enabled = route != SettingsRoute.Root) { route = SettingsRoute.Root }
+    // The upgrade flow in the new design (plans, payment details, promo code, receipt, status) over the page that opened it.
+    flow?.let { start ->
+        com.echoledger.mobile.ui.v2.plan.V2UpgradeFlow(vm, start.planKey, start.feature, start.step, given = settings.plan) { flow = null }
+        return
+    }
     when (val r = route) {
         is SettingsRoute.Page -> {
             val back = { route = SettingsRoute.Root }
@@ -194,6 +201,34 @@ fun V2SettingsScreen(
                 "notifications" -> NotificationsPage(settings, vm::updateSettings, r.highlight, back)
 
                 "captions" -> CaptionsPage(settings, vm::updateSettings, r.highlight, back)
+
+                "plan" -> PlanPage(
+                    settings.plan,
+                    r.highlight,
+                    back,
+                    onOpenKey = { route = SettingsRoute.Page("key") },
+                    onFlow = { flow = it },
+                    cancelRequest = { id -> vm.cancelUpgradeRequest(id).error },
+                    loadRequest = { vm.loadUpgradeRequest() }
+                )
+
+                "games" -> GamesPage(settings, vm::updateSettings, r.highlight, back)
+
+                "videos" -> VideosPage(settings, vm::updateSettings, r.highlight, back)
+
+                "mic" -> {
+                    val helper by vm.helper.collectAsState()
+                    val live by com.echoledger.mobile.recording.RecordingService.live.collectAsState()
+                    MicPage(
+                        settings,
+                        vm::updateSettings,
+                        r.highlight,
+                        back,
+                        helperConnected = helper.connected,
+                        recording = live.active,
+                        onSetup = { route = SettingsRoute.Page(SettingsTree.SETUP) }
+                    )
+                }
 
                 "voice" -> {
                     val context = androidx.compose.ui.platform.LocalContext.current
@@ -221,11 +256,45 @@ fun V2SettingsScreen(
 
                 "key" -> KeyPage(vm, settings.plan, r.highlight, back)
 
-                "account" -> AccountSettingsPage(settings.serverUrl, r.highlight, openClassicPage, { vm.unpair() }, back)
+                "account" -> {
+                    val accountCalls = com.echoledger.mobile.ui.v2.account.accountActions()
+                    AccountSettingsPage(
+                        settings.serverUrl,
+                        r.highlight,
+                        DataActions(
+                            account = { vm.account() },
+                            startExport = { vm.startExport() },
+                            exportStatus = { vm.exportStatus(it) },
+                            signOutEverywhere = { vm.signOutEverywhere() },
+                            deleteAccount = { password, code -> accountCalls.deleteAccount(password, code) }
+                        ),
+                        { vm.unpair() },
+                        back
+                    )
+                }
+
+                "devices" -> DevicesPage(r.highlight, back)
+
+                "about" -> {
+                    val update by vm.updateStatus.collectAsState()
+                    AboutPage(
+                        settings,
+                        update,
+                        AboutActions(
+                            check = { vm.checkForUpdates() },
+                            install = { vm.installUpdate(it) },
+                            exportTo = { vm.exportSettingsTo(it) },
+                            importFrom = { vm.importSettingsFrom(it) }
+                        ),
+                        r.highlight,
+                        onSetup = { route = SettingsRoute.Page(SettingsTree.SETUP) },
+                        onBack = back
+                    )
+                }
 
                 "lock" -> AppLockPage(settings, vm::updateSettings, { vm.setWidgetHideTitles(it) }, r.highlight, back)
 
-                // Export or delete my data opens the account's classic page, where they are.
+                // Export or delete my data opens Your data on Sign-in & security, lit.
                 "privacy" -> PrivacyPage(settings, vm::updateSettings, r.highlight, { page ->
                     route = SettingsRoute.Page(page, if (page == "account") "account.export" else null)
                 }, back)
@@ -254,7 +323,8 @@ fun V2SettingsScreen(
             onOpen = { page, highlight -> route = SettingsRoute.Page(page, highlight) },
             onSignOut = { confirmSignOut = true },
             onBack = onBack,
-            modifier = modifier
+            modifier = modifier,
+            onRequest = { step -> flow = com.echoledger.mobile.ui.FlowStart(settings.plan.upgrade?.plan, step = step) }
         )
     }
     if (confirmSignOut) {
@@ -285,7 +355,9 @@ fun V2SettingsRoot(
     onSignOut: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    initialQuery: String = ""
+    initialQuery: String = "",
+    /** The line under the card opens the upgrade flow at a request's step (add the receipt, pay, its status). */
+    onRequest: (com.echoledger.mobile.ui.FlowStep) -> Unit = {}
 ) {
     val c = EchoV2.colors
     val res = LocalContext.current.resources
@@ -326,6 +398,16 @@ fun V2SettingsRoot(
                     showMinutes = settings.plan.usedMinutes == null,
                     upgrade = com.echoledger.mobile.ui.v2.shell.upgradeLook(settings.plan, signedIn),
                     onOpenPlan = { onOpen("plan", null) }
+                )
+            }
+            // One line under the card while something needs the person (classic's), each opening what it is about.
+            item {
+                StateLine(
+                    settings,
+                    (profile as? ProfileState.Ready)?.profile?.deletesAt,
+                    onOpenPlan = { onOpen("plan", null) },
+                    onOpenKey = { onOpen("key", null) },
+                    onRequest = onRequest
                 )
             }
             SettingsTree.goals.forEach { (goal, pages) ->

@@ -17,7 +17,6 @@ import com.echoledger.mobile.assist.AssistHub
 import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.ui.v2.assist.AssistAdapter
 import com.echoledger.mobile.ui.v2.assist.V2AssistHost
-import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -73,7 +72,7 @@ internal object AssistCardWindow {
                     PrivateDot(onShow = { ShareGuard.setHidden(false) })
                     return@setContent
                 }
-                EchoV2Theme(darkTheme = true) {
+                com.echoledger.mobile.ui.v2.shell.OverlayLook(com.echoledger.mobile.ui.v2.shell.overlaySettings(app)) {
                     V2AssistHost(adapter, Modifier.widthIn(max = MAX_WIDTH_DP.dp).padding(horizontal = 12.dp))
                 }
             }

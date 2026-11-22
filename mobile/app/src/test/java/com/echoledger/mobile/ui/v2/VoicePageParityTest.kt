@@ -173,6 +173,18 @@ class VoicePageParityTest : ScreenTest() {
             s.afterShare == "open" && s.dictationMode == DICTATION_TAP && s.dictationCleanup && s.dictationSounds
         }
         assertTrue(vm.settings.value.dictationSnippets.any { it.trigger == "insert bank" })
+        assertTrue(vm.settings.value.dictationReplacements.any { it.from == "bilal traders" && it.to == "Bilal Traders" })
+    }
+
+    @Test
+    fun classicsSettingsListSaysHoldToTalkWhenItIsChosen() {
+        // Classic's own list read the value "hold", which the app never stores; it stores "push_to_talk".
+        vm.updateSettings { it.copy(dictationMode = DICTATION_HOLD) }
+        pumpUntil("hold") { vm.settings.value.dictationMode == "push_to_talk" }
+        page = 0
+        show { SettingsScreen(vm, onSetup = {}) }
+        pumpUntil("Hold to talk on the list") { compose.onAllNodesWithText("Hold to talk").fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(compose.onAllNodesWithText("Tap to start").fetchSemanticsNodes().isEmpty())
     }
 
     @Test

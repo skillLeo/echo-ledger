@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 About settings page and the line under the profile card. values/ is English, values-ur/ Urdu. -->
+<resources>
+    <string name="v2_ab_version">EchoLedger %1$s</string>
+    <string name="v2_ab_server">Server %1$s</string>
+    <string name="v2_ab_server_api">Server %1$s · API %2$s</string>
+    <string name="v2_ab_check">Check for updates</string>
+    <string name="v2_ab_checking">Looking for updates…</string>
+    <string name="v2_ab_newest">You have the newest version.</string>
+    <string name="v2_ab_ready">EchoLedger %1$s is ready to install (%2$s).</string>
+    <string name="v2_ab_update">Update</string>
+    <string name="v2_ab_downloading">Downloading the update… %1$d %%</string>
+    <string name="v2_ab_allow_help">Allow EchoLedger to install apps (Android asks once), then tap Update again.</string>
+    <string name="v2_ab_allow">Allow</string>
+    <string name="v2_ab_installing">Installing the update: confirm on Android\'s screen.</string>
+    <string name="v2_ab_try_again">Try again</string>
+    <string name="v2_ab_transfer">Your settings</string>
+    <string name="v2_ab_transfer_help">Save your preferences to a file or load them on another phone. The file never holds your pairing, token or lock.</string>
+    <string name="v2_ab_export">Export settings</string>
+    <string name="v2_ab_import">Import settings</string>
+    <string name="v2_ab_phone">This phone</string>
+    <string name="v2_ab_setup_guide">Setup guide</string>
+    <string name="v2_st_deletes">Your account will be deleted on %1$s.</string>
+    <string name="v2_st_receipt">We need another receipt for %1$s</string>
+    <string name="v2_st_waiting">%1$s requested. Waiting for your payment</string>
+    <string name="v2_st_checking">Checking your payment for %1$s</string>
+    <string name="v2_st_ends">%1$s ends on %2$s</string>
+    <string name="v2_st_key">Set up free transcription (2 minutes)</string>
+</resources>

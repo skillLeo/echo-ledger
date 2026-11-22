@@ -92,5 +92,8 @@ class AccountActions(private val api: suspend () -> ApiClient?) {
 
     suspend fun signOutBrowser(id: String): AccountResult<Unit> = run { it.signOutBrowser(id) }
 
+    /** `DELETE /api/account` with the password or the authenticator code: when it will be deleted. */
+    suspend fun deleteAccount(password: String?, otp: String?): AccountResult<String?> = run { it.deleteAccount(password, otp) }
+
     suspend fun avatarImage(url: String): ByteArray? = run { it.avatarImage(url) }.valueOrNull
 }

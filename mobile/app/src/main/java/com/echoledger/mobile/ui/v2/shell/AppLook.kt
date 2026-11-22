@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2.shell
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
@@ -36,3 +37,26 @@ object AppLook {
         CompositionLocalProvider(LocalDensity provides Density(density.density, density.fontScale * factor), content = content)
     }
 }
+
+/**
+ * The person's app language, text size and font for what v2 draws outside the app's window (the recording pill, the
+ * after-call card, the Live Assist card), as the shell gives its pages; dark, as those windows are drawn. It starts
+ * from the app's hot copy of the stored settings ([settings], read when the app started), so nothing waits while it
+ * draws; until the store has been read once it shows the phone's own language and size, and follows each change after.
+ */
+@Composable
+fun OverlayLook(settings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?>?, content: @Composable () -> Unit) {
+    val flow = androidx.compose.runtime.remember(settings) { settings ?: kotlinx.coroutines.flow.MutableStateFlow(null) }
+    val look = flow.collectAsState().value ?: com.echoledger.mobile.data.AppSettings()
+    com.echoledger.mobile.ui.v2.theme.EchoV2Theme(
+        darkTheme = true,
+        language = AppLook.language(look.appLanguage, com.echoledger.mobile.ui.v2.theme.systemEchoLanguage()),
+        phoneFont = look.phoneFont
+    ) {
+        AppLook.TextSize(look.textSize, content)
+    }
+}
+
+/** The app's stored settings, kept hot, for a window outside the activity. */
+fun overlaySettings(context: android.content.Context): kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?>? =
+    (context.applicationContext as? com.echoledger.mobile.EchoLedgerApp)?.graph?.liveSettings

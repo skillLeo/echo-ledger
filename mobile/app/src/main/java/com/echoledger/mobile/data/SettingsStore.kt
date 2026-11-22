@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.Serializable
 
 private val Context.dataStore by preferencesDataStore(name = "echoledger_settings")
@@ -226,7 +227,15 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
         val SETUP_SEEN = booleanPreferencesKey("setup_seen")
     }
 
-    val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }
+    private val latestValue = kotlinx.coroutines.flow.MutableStateFlow<AppSettings?>(null)
+
+    /**
+     * The settings as last read or saved, at once and without touching the store (null before the first read): what
+     * draws outside the activity (the recording pill, the after-call card, the Live Assist card) starts from it.
+     */
+    val latest: kotlinx.coroutines.flow.StateFlow<AppSettings?> get() = latestValue
+
+    val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }.onEach { latestValue.value = it }
 
     suspend fun current(): AppSettings = settings.first()
 
@@ -237,7 +246,10 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
             prefs[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), next)
             saved = next
         }
-        saved?.let(onSaved)
+        saved?.let {
+            latestValue.value = it
+            onSaved(it)
+        }
     }
 
     suspend fun saveToken(token: String) {
