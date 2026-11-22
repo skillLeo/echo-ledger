@@ -85,14 +85,13 @@ pub struct Missing {
     pub other_side: Option<OtherSide>,
 }
 
-/// What the recording found about its other side (`audio::health::SystemProblem`).
+/// What the recording found about its other side (`audio::health::SystemProblem`). A long silence is not this: it is
+/// the 30-second "not hearing the other side" warning (`audio::health::FarSideMonitor`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OtherSide {
     /// Not recorded: the tap did not open or carries no data. System Audio Recording is named, with its settings.
     Permission,
-    /// Only silence for a long while although another app plays sound: neutral words, never the permission.
-    Silent,
 }
 
 const NO_MICROPHONE: &str = "The microphone is off for EchoLedger: a recording will have the other side of the call, not your voice.";
@@ -358,11 +357,8 @@ pub const SYSTEM_NOT_RECORDED: &str = "The other side isn't being recorded. Allo
 /// The same once trying again did not help: macOS applies it when EchoLedger opens again.
 pub const SYSTEM_NOT_RECORDED_REOPEN: &str = "The other side still isn't being recorded. Allow System Audio Recording for EchoLedger, then quit and reopen EchoLedger.";
 
-/// The neutral words for a call that hears only silence from its other side while another app plays sound.
-pub const OTHER_SIDE_SILENT: &str = "Can't hear the other side. Check the call's speaker or output device.";
-
-/// What a running recording is missing (pure): what the system says ([`missing_during`]) and what the recording found
-/// about its other side. Not recorded takes the place of any other line about system audio; not heard is added.
+/// What a running recording is missing (pure): what the system says ([`missing_during`]) and, for a call whose other
+/// side is not being recorded, that line in place of any other about system audio.
 pub fn missing_with(mode: RecordingMode, permissions: &Permissions, warning: Option<(OtherSide, &str)>) -> Vec<Missing> {
     let mut out = missing_during(mode, permissions);
     let Some((found, sentence)) = warning.filter(|_| mode == RecordingMode::Call) else { return out };
@@ -370,9 +366,7 @@ pub fn missing_with(mode: RecordingMode, permissions: &Permissions, warning: Opt
     if out.iter().any(|m| m.kind == Kind::Microphone) {
         return out;
     }
-    if found == OtherSide::Permission {
-        out.retain(|m| m.kind != Kind::SystemAudio);
-    }
+    out.retain(|m| m.kind != Kind::SystemAudio);
     out.push(Missing { kind: Kind::SystemAudio, sentence: sentence.to_string(), other_side: Some(found) });
     out
 }

@@ -362,11 +362,12 @@ fn microphone_consent_any_deny_blocks() {
 mod system_side {
     use desktop_lib::audio::RecordingMode;
     use desktop_lib::audio::health::{
-        DIGITAL_SILENCE, SILENT_WHILE_PLAYING_MS, SYSTEM_CHECK_AFTER_MS, SystemProblem, SystemSide, SystemVerdict, SystemWatch, has_signal, needs_playing_check,
-        system_side_problem,
+        DIGITAL_SILENCE, FAR_SIDE_SILENT_MS, FarSideMonitor, PLAYING_EVERY, PlayingCache, SYSTEM_CHECK_AFTER_MS, SystemProblem, SystemSide, SystemVerdict, SystemWatch,
+        far_side_enabled, has_signal, system_side_problem,
     };
+    use std::time::{Duration, Instant};
     use desktop_lib::audio::platform::{Streams, open_keeping_mic};
-    use desktop_lib::permissions::{Access, Kind, OTHER_SIDE_SILENT, OtherSide, Permissions, SYSTEM_NOT_RECORDED, SYSTEM_NOT_RECORDED_REOPEN, missing_with};
+    use desktop_lib::permissions::{Access, Kind, OtherSide, Permissions, SYSTEM_NOT_RECORDED, SYSTEM_NOT_RECORDED_REOPEN, missing_with};
 
     const CALL: Streams = Streams { mic: true, system: true };
     const ON: Permissions = Permissions { microphone: Access::Allowed, system_audio: Access::Allowed, screen: Access::Allowed };
@@ -374,33 +375,101 @@ mod system_side {
     const PER_S: u64 = 16_000;
 
     /// An allowed tap with nothing to hear: zero-valued frames, for `ms`.
-    fn zeros(ms: u64, mic_heard: bool, others_playing: Option<bool>) -> SystemSide {
-        SystemSide { running_ms: ms, frames: ms * PER_S / 1_000, mic_heard, others_playing, ..SystemSide::default() }
+    fn zeros(ms: u64, mic_heard: bool) -> SystemSide {
+        SystemSide { running_ms: ms, frames: ms * PER_S / 1_000, mic_heard, ..SystemSide::default() }
     }
     /// A tap macOS does not let through: buffers with no data, no frames.
     fn empty(ms: u64) -> SystemSide {
         SystemSide { running_ms: ms, empty_buffers: ms / 10, mic_heard: true, ..SystemSide::default() }
     }
     fn heard(ms: u64) -> SystemSide {
-        SystemSide { signal: true, ..zeros(ms, true, None) }
+        SystemSide { signal: true, ..zeros(ms, true) }
     }
 
     #[test]
     fn you_speak_first_and_nothing_plays_no_warning() {
-        // You speak, the other person is muted or not there yet, nothing plays: zeros, never a warning, however long.
+        // You speak, the other person is muted or not there yet, nothing plays: zeros, never this warning, however long.
         for ms in [3_000, 10_000, 30_000, 120_000] {
-            assert_eq!(system_side_problem(&zeros(ms, true, Some(false))), None, "{ms} ms");
-            assert_eq!(system_side_problem(&zeros(ms, true, None)), None, "{ms} ms, not read");
+            assert_eq!(system_side_problem(&zeros(ms, true)), None, "{ms} ms");
         }
         let mut watch = SystemWatch::default();
         for ms in (0..=60_000).step_by(1_000) {
-            assert_eq!(watch.look(&zeros(ms, true, Some(false))), SystemVerdict::Same, "{ms} ms");
+            assert_eq!(watch.look(&zeros(ms, true)), SystemVerdict::Same, "{ms} ms");
         }
         assert_eq!(watch.warning(), None);
-        // The process list is read only once the zeros have lasted 30 s.
-        assert!(!needs_playing_check(&zeros(29_999, true, None)));
-        assert!(needs_playing_check(&zeros(30_000, true, None)));
-        assert!(!needs_playing_check(&empty(30_000)), "no data is decided without it");
+    }
+
+    /// A long silence is the one 30-second "not hearing the other side" warning: under the person's setting, and on a
+    /// Mac only while another app plays sound (a tap with nothing to hear gives zeros).
+    #[test]
+    fn a_long_silence_is_the_far_side_warning_under_its_setting() {
+        let asked = std::cell::Cell::new(0);
+        let playing = |answer: bool| {
+            asked.set(asked.get() + 1);
+            answer
+        };
+        // Under 30 s the process list is not even read.
+        assert!(far_side_enabled(true, Some(FAR_SIDE_SILENT_MS - 1), true, || playing(false)));
+        assert!(far_side_enabled(true, None, true, || playing(false)));
+        assert_eq!(asked.get(), 0);
+        // 30 s of silence on a Mac: only while another app plays sound.
+        assert!(far_side_enabled(true, Some(FAR_SIDE_SILENT_MS), true, || playing(true)));
+        assert!(!far_side_enabled(true, Some(FAR_SIDE_SILENT_MS), true, || playing(false)));
+        assert_eq!(asked.get(), 2);
+        // The person's setting off: never, and nothing is read.
+        assert!(!far_side_enabled(false, Some(120_000), true, || playing(true)));
+        assert_eq!(asked.get(), 2);
+        // Windows' loopback delivers nothing while nothing plays: as before.
+        assert!(far_side_enabled(true, Some(120_000), false, || playing(false)));
+        assert_eq!(asked.get(), 2);
+        // Through the monitor: said once at 30 s while another app plays, cleared when it stops.
+        let mut monitor = FarSideMonitor::default();
+        let mut tick = |ms: u64, plays: bool| monitor.tick(Some(ms), far_side_enabled(true, Some(ms), true, || plays));
+        assert_eq!(tick(29_000, true), None);
+        assert!(tick(30_000, true).is_some_and(|p| p.silent));
+        assert_eq!(tick(31_000, true), None, "once");
+        assert!(tick(32_000, false).is_some_and(|p| !p.silent), "nothing plays any more: taken back");
+        let mut quiet = FarSideMonitor::default();
+        assert_eq!(quiet.tick(Some(60_000), far_side_enabled(true, Some(60_000), true, || false)), None, "you speak, nothing plays: never");
+    }
+
+    #[test]
+    fn whether_another_app_plays_is_read_at_most_every_5_s() {
+        assert_eq!(PLAYING_EVERY, Duration::from_secs(5));
+        let start = Instant::now();
+        let mut cache = PlayingCache::default();
+        let mut reads = 0;
+        let mut at = |s: u64, answer: bool| {
+            cache.get(start + Duration::from_secs(s), || {
+                reads += 1;
+                answer
+            })
+        };
+        assert!(at(0, true));
+        for s in 1..5 {
+            assert!(at(s, false), "kept for 5 s");
+        }
+        assert!(!at(5, false), "read again");
+        assert!(!at(9, true));
+        assert_eq!(reads, 2);
+    }
+
+    #[test]
+    fn a_look_from_before_the_other_side_was_heard_never_shows_the_warning_again() {
+        let mut watch = SystemWatch::default();
+        let missing = watch.look(&empty(3_000));
+        assert_eq!(missing, SystemVerdict::Missing(SystemProblem::NoData));
+        assert!(watch.still(&missing));
+        // The other side speaks before the job of that look runs: its verdict is old, and dropped.
+        let heard_now = watch.look(&heard(3_500));
+        assert_eq!(heard_now, SystemVerdict::Recording);
+        assert!(!watch.still(&missing), "no flash of the warning after the other side spoke");
+        assert!(watch.still(&heard_now));
+        // And the other way: a "recording" from before it went missing again never clears the warning.
+        let again = watch.look(&SystemSide { failure: Some("tap gone".into()), ..empty(0) });
+        assert!(matches!(again, SystemVerdict::Missing(SystemProblem::Failed(_))));
+        assert!(!watch.still(&heard_now));
+        assert!(watch.still(&SystemVerdict::Same));
     }
 
     #[test]
@@ -408,7 +477,6 @@ mod system_side {
         assert_eq!(system_side_problem(&empty(2_999)), None, "not before 3 s");
         let problem = system_side_problem(&empty(3_000)).expect("said at 3 s");
         assert_eq!(problem, SystemProblem::NoData);
-        assert!(problem.names_permission());
         assert_eq!(problem.reason(), "the system audio tap delivered buffers with no audio data for 3 s");
         let mut watch = SystemWatch::default();
         assert_eq!(watch.look(&empty(3_000)), SystemVerdict::Missing(SystemProblem::NoData));
@@ -417,29 +485,6 @@ mod system_side {
         // No IOProc call at all is the device's matter (the supervisor says it), not the permission.
         assert_eq!(system_side_problem(&SystemSide { running_ms: 10_000, ..SystemSide::default() }), None);
         assert_eq!(SYSTEM_CHECK_AFTER_MS, 3_000);
-    }
-
-    #[test]
-    fn zeros_while_an_app_plays_for_30_s_is_the_neutral_warning() {
-        assert_eq!(SILENT_WHILE_PLAYING_MS, 30_000);
-        assert_eq!(system_side_problem(&zeros(29_999, false, Some(true))), None);
-        let problem = system_side_problem(&zeros(30_000, false, Some(true))).expect("said at 30 s");
-        assert_eq!(problem, SystemProblem::Silent);
-        assert!(!problem.names_permission(), "never the permission");
-        assert!(problem.reason().contains("only silence for 30 s while another app was playing sound"));
-        let mut watch = SystemWatch::default();
-        assert_eq!(watch.look(&zeros(30_000, true, Some(true))), SystemVerdict::Missing(SystemProblem::Silent));
-        let (kind, words) = watch.warning().unwrap();
-        assert_eq!(kind, OtherSide::Silent);
-        assert_eq!(words, "Can't hear the other side. Check the call's speaker or output device.");
-        assert!(!words.contains("System Audio Recording"));
-        // Added beside what the system says; System Audio Recording is not named.
-        let missing = missing_with(RecordingMode::Call, &ON, Some((OtherSide::Silent, OTHER_SIDE_SILENT)));
-        assert_eq!(missing.len(), 1);
-        assert_eq!(missing[0].other_side, Some(OtherSide::Silent));
-        // Heard: it goes.
-        assert_eq!(watch.look(&heard(31_000)), SystemVerdict::Recording);
-        assert_eq!(watch.warning(), None);
     }
 
     #[test]
@@ -457,7 +502,6 @@ mod system_side {
         let problem = system_side_problem(&SystemSide { failure: Some(failure.clone()), ..SystemSide::default() }).expect("said at once");
         assert_eq!(problem, SystemProblem::Failed(failure));
         assert!(problem.reason().starts_with("the system audio tap did not open: system audio tap (OSStatus 560947818)"));
-        assert!(problem.names_permission());
         let missing = missing_with(RecordingMode::Call, &ON, Some((OtherSide::Permission, SYSTEM_NOT_RECORDED)));
         assert_eq!(missing.len(), 1);
         assert_eq!((missing[0].kind, missing[0].sentence.as_str(), missing[0].other_side), (Kind::SystemAudio, SYSTEM_NOT_RECORDED, Some(OtherSide::Permission)));

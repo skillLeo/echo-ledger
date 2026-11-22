@@ -1,22 +1,21 @@
-// What the after-call window shows in the new look: the card for a call waiting for an answer, and one Toast at a time
-// for a call saved by itself or deleted, each with Undo. The core decides what is there (`aftercall:state`); this only
-// draws it and sends the answers.
+// What the after-call window shows in the new look, one thing at a time (the call choice): the card for a call waiting
+// for a choice, one confirmation with Undo, or the grouped card for back-to-back calls. The core decides what is there
+// (`aftercall:state`); this only draws it and sends the answers.
 import { useState } from "react";
-import { api, errorMessage, type AfterCallState } from "../../lib/ipc";
-import { ToastRegion } from "../components";
-import { AfterCallCard, DeletedToast, SavedToastV2 } from "./AfterCallCard";
-import { keepAudioOnly } from "./commands";
+import { api, errorMessage, type AfterCallState, type AfterEachCall, type CallChoice } from "../../lib/ipc";
+import { AfterCallCard, CallDoneCard, CallGroupCard } from "./AfterCallCard";
 
 export function AfterCallStack({ state, screens = 0, onGone }: {
   state: AfterCallState;
   /** Screen moments of the call the card is about. */
   screens?: number;
-  /** A toast or card the person dismissed: the window drops it before the core's next state. */
-  onGone: (part: "saved" | "discarded" | "ask") => void;
+  /** A part the person answered: the window drops it before the core's next state. */
+  onGone: (part: "ask" | "done" | "group") => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const act = async (fn: () => Promise<unknown>, part?: "ask" | "saved" | "discarded") => {
+  const act = async (fn: () => Promise<unknown>, part?: "ask" | "done" | "group") => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -29,30 +28,30 @@ export function AfterCallStack({ state, screens = 0, onGone }: {
     }
   };
   const item = state.ask;
-  const toast = state.discarded ?? state.saved;
+  const done = state.done;
+  const answer = (choice: CallChoice) => item && void act(() => api.callCardAnswer(item.id, choice));
   return (
     <div className="el-root el-embedded el-aftercall-stack">
-      {item && (
-        <AfterCallCard key={item.id} item={item} screens={screens} busy={busy} error={error}
+      {item ? (
+        <AfterCallCard key={item.id} item={item} hint={state.hint} held={state.held ?? []} screens={screens || item.screens || 0} busy={busy} error={error}
           actions={{
-            onTranscribe: () => void act(() => api.pendingKeep(item.id), "ask"),
-            onSaveAudio: () => void act(() => keepAudioOnly(item.id), "ask"),
-            onDelete: () => void act(() => api.afterCallDiscard(item.id)),
-            onOpen: () => void act(() => api.pendingOpen(item.id, true)),
+            onRowUndo: (id) => void act(() => api.callUndo(id)),
+            onRowTranscribe: (id) => void act(() => api.callDoneTranscribe(id)),
+            onTranscribe: () => answer("transcribe"),
+            onSaveAudio: () => answer("audio"),
+            onDelete: () => answer("delete"),
+            onOpen: () => void act(() => api.pendingOpen(item.id, true), "ask"),
           }} />
-      )}
-      {toast && (
-        <div data-hit>
-          <ToastRegion inline>
-            {state.discarded ? (
-              <DeletedToast item={state.discarded} onUndo={() => void act(() => api.afterCallDiscardUndo(state.discarded!.id))} onClose={() => onGone("discarded")} />
-            ) : (
-              <SavedToastV2 item={toast} onUndo={() => void act(() => api.savedUndo(toast.id), "saved")} onClose={() => onGone("saved")} />
-            )}
-          </ToastRegion>
-        </div>
-      )}
-      {!item && error && <p className="el-field__error" role="alert">{error}</p>}
+      ) : state.group ? (
+        <CallGroupCard group={state.group} busy={busy} error={error} onReview={() => void act(() => api.callGroupClose(true), "group")}
+          onClose={() => void act(() => api.callGroupClose(false), "group")} onUndo={(id) => void act(() => api.callUndo(id))}
+          onTranscribe={(id) => void act(() => api.callDoneTranscribe(id))} />
+      ) : done ? (
+        <CallDoneCard key={`${done.id}-${done.kind}`} done={done} busy={busy} error={error}
+          onUndo={() => void act(() => api.callUndo(done.id))}
+          onTranscribe={() => void act(() => api.callDoneTranscribe(done.id))}
+          onAlways={(value: AfterEachCall) => void act(() => api.callAlways(done.id, value))} />
+      ) : error ? <p className="el-field__error" role="alert">{error}</p> : null}
     </div>
   );
 }

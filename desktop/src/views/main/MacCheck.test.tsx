@@ -234,10 +234,10 @@ describe("Help & diagnostics in Settings", () => {
     expect(screen.queryByText("⌘W")).not.toBeInTheDocument();
   });
 
-  it("says where the after-call window is on each computer", async () => {
+  it("says what the after-call card is the same way on each computer: it shows next to the pill, never near a tray", async () => {
     await renderSettings("macos");
     open("Calls & meetings");
-    expect(screen.getByText(/in the corner of the screen/)).toBeInTheDocument();
-    expect(screen.queryByText(/near the tray/)).not.toBeInTheDocument();
+    expect(screen.getByText("A small card after each call.")).toBeInTheDocument();
+    expect(screen.queryByText(/near the tray|in the corner of the screen/)).not.toBeInTheDocument();
   });
 });

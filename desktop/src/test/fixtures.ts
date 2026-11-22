@@ -14,7 +14,8 @@ import type {
   PrivacyStatus,
   RecordingInfo,
   RecordingState,
-  SavedToast,
+  CallDone,
+  CallGroup,
   ScreenMoment,
   Segment,
   SkippedItem,
@@ -118,6 +119,10 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     consentAcknowledged: false,
     afterCall: "ask",
     afterCallNotice: false,
+    askWhen: "after",
+    cardHintSeen: true,
+    cardStreak: null,
+    alwaysOffered: false,
     skipCallsShorterThanS: 10,
     askUnknownApps: false,
     siteRules: [],
@@ -217,22 +222,31 @@ export function makePendingItem(id = "pend-1", overrides: Partial<PendingItem> =
 }
 
 /** "Saved · Call with Omar · 4:12 · Undo", on screen for another 6 s from `now`. */
-export function makeSavedToast(overrides: Partial<SavedToast> = {}, now = Date.now()): SavedToast {
+/** A confirmation after a choice ("Transcribing…", "Saved as audio", "Deleted"), shown until 5 s from `now`. */
+export function makeCallDone(overrides: Partial<CallDone> = {}, now = Date.now()): CallDone {
   return {
+    kind: "transcribe",
     id: "rec-1",
     title: null,
     callerName: "Omar",
     sourceApp: "whatsapp",
     mode: "call",
     durationMs: 252_000,
-    until: new Date(now + 6_000).toISOString(),
+    until: new Date(now + 5_000).toISOString(),
+    offerAlways: null,
     ...overrides,
   };
 }
 
-/** The Ask-me chip of a WhatsApp call, whose audio is saved by itself (not transcribed) 12 s from `now`. */
+/** The grouped card for back-to-back calls: each call with what happens to it (the newest last), for 8 s from `now`. */
+export function makeCallGroup(calls: CallDone[], now = Date.now()): CallGroup {
+  const until = new Date(now + 8_000).toISOString();
+  return { count: calls.length, until, calls: calls.map((c) => ({ ...c, until })) };
+}
+
+/** The card of a WhatsApp call, whose audio is saved by itself (not transcribed) 8 s from `now`. */
 export function makeChipItem(id = "pend-1", overrides: Partial<PendingItem> = {}, now = Date.now()): PendingItem {
-  return makePendingItem(id, { sourceApp: "whatsapp", durationMs: 252_000, deadlineAt: new Date(now + 12_000).toISOString(), ...overrides });
+  return makePendingItem(id, { sourceApp: "whatsapp", durationMs: 252_000, deadlineAt: new Date(now + 8_000).toISOString(), ...overrides });
 }
 
 /** A 6-second WhatsApp call skipped as too short, restorable until a day after 09:12 on 24 Oct 2026. */
@@ -251,7 +265,7 @@ export function makeSkippedItem(id = "skip-1", overrides: Partial<SkippedItem> =
 }
 
 export function makeAfterCallState(overrides: Partial<AfterCallState> = {}): AfterCallState {
-  return { saved: null, discarded: null, ask: null, ...overrides };
+  return { ask: null, hint: false, held: [], done: null, group: null, ...overrides };
 }
 
 export function makeAskPayload(overrides: Partial<AskPayload> = {}): AskPayload {

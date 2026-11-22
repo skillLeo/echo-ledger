@@ -425,9 +425,10 @@ fn a_running_recording_looks_at_its_permissions_again() {
     let check = &actions[actions.find("fn check_system_side").unwrap()..actions.find("fn system_side_changed").unwrap()];
     assert!(check.contains("spawn_blocking(move || system_side_changed(&app, verdict))"));
     assert!(!check.contains("permissions_now"), "no system read on the ticker");
-    // Whether another app plays sound (the process list) is read beside the ticker too.
-    let playing = &check[check.find("others_playing()").unwrap() - 200..check.find("others_playing()").unwrap()];
-    assert!(playing.contains("spawn_blocking"));
+    // The process list is read by the detection loop's thread, at most every 5 s, never on the ticker.
+    assert!(!check.contains("others_playing"));
+    let detect = include_str!("../src/detect/mod.rs");
+    assert!(detect.contains("lock(&detect.playing).get(Instant::now(), crate::audio::platform::others_playing)"));
 }
 
 /// The sound tests hold `capture_test`; a real call that starts during one must not lose its screen moments for it.

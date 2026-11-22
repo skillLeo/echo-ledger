@@ -258,7 +258,6 @@ impl CaptureController {
             empty_buffers: backend.system_empty_buffers().saturating_sub(active.system_empty_before),
             signal: after(&active.link.system_signal),
             mic_heard: after(&active.link.mic_heard),
-            others_playing: None,
         })
     }
 

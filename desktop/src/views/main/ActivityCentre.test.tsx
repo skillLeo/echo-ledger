@@ -87,12 +87,12 @@ describe("activity page (B18)", () => {
     expect(await screen.findByText(/Nothing yet/)).toBeInTheDocument();
   });
 
-  it("puts what needs the person first: calls waiting for Keep or Discard and failed transcriptions", async () => {
+  it("puts what needs the person first: calls waiting to be transcribed or deleted and failed transcriptions", async () => {
     respond("pending_list", [makePendingItem("p1")]);
     respond("activity_list", { data: [{ id: "n3", kind: "transcript_failed", title: "Transcription failed", body: "Call with Omar", session_id: "s3", read: false, at: "2026-10-28T09:00:00Z" }, ...ITEMS], unread_count: 2 });
     const { onReview } = renderPage(makeStatus({ pendingDecisions: 1 }));
     const needs = await screen.findByRole("region", { name: "Needs action" });
-    expect(await within(needs).findByText("Keep or discard?")).toBeInTheDocument();
+    expect(await within(needs).findByText("Transcribe or delete?")).toBeInTheDocument();
     expect(within(needs).getByText("Transcription failed")).toBeInTheDocument();
     // The card says what waits once the core's list is in (the status only has the count).
     await waitFor(() => expect(within(needs).queryByText("1 waiting for your decision")).not.toBeInTheDocument());

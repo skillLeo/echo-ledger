@@ -9,9 +9,10 @@ use serde_json::Value;
 use crate::overlay::geometry::{Corner, PillPosition};
 use crate::shortcuts::{Action, default_map};
 
-/// "After a call" (contract 1.8.0-e, the same on every app): a call is transcribed only with the person's permission.
-/// `ask` (default): the after-call card asks, and with no answer within 12 s saves the audio, not transcribed;
-/// `always_transcribe`: kept and transcribed at once ("Saved · … · Undo"); `always_audio`: kept at once as audio only.
+/// "After each call" (contract 1.8.0-e; the call choice, docs/v2/copy/call-choice.md): a call is transcribed only with
+/// the person's permission. `ask` (Ask me, default): the card asks, and with no answer within 8 s saves the audio only;
+/// `always_transcribe` (Transcribe every call) and `always_audio` (Save audio only): no question, "Transcribing…" or
+/// "Saved as audio" with Undo for 5 s. Don't record calls is `auto_mode` off ([`AfterEachCall`]).
 /// v1.5's "Keep automatically" (`keep`) and "Ask me" both become `ask`: permission first.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -34,8 +35,30 @@ impl AfterCall {
     }
 }
 
+/// "When to ask" under Ask me (the call choice): after the call (the card, default) or at the start of the call (a 5 s
+/// "Recording this call · Don't record" banner beside the pill; with no choice the call is saved as audio only).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AskWhen {
+    #[default]
+    After,
+    Start,
+}
+
+/// "After each call" as Settings shows it: one choice of four. "Don't record calls" (`off`) is "Record calls
+/// automatically" turned off (`auto_mode`): nothing is recorded by itself, a call recorded by hand still is, and the
+/// choice made before (`after_call`) is kept for it and comes back when calls are recorded again.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AfterEachCall {
+    Ask,
+    AlwaysTranscribe,
+    AlwaysAudio,
+    Off,
+}
+
 /// What the person reads once when v1.5's "Keep automatically" became Ask me.
-pub const AFTER_CALL_NOTICE: &str = "After a call now asks before transcribing. To transcribe every call as before, choose Always transcribe";
+pub const AFTER_CALL_NOTICE: &str = "After each call now asks before transcribing. To transcribe every call as before, choose Transcribe every call";
 
 /// "Hide EchoLedger from screen sharing" (v1.8.1, `privacy`): every window, only the floating ones, or none.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -282,11 +305,20 @@ pub struct Settings {
     pub client_id: Option<String>,
     /// One-time consent acknowledgement for recording calls (shown once, never nags).
     pub consent_acknowledged: bool,
-    /// What happens when a call ends: kept at once with Undo, or asked about with a chip that keeps it after 10 s.
+    /// What happens when a call ends ("After each call", with `auto_mode` for Don't record calls): the card asks
+    /// (Ask me), or the call is transcribed or saved as audio only without a question.
     pub after_call: AfterCall,
-    /// v1.5's "Keep automatically" became Ask me (contract 1.8.0-e): the person is told once, with Always transcribe one
+    /// v1.5's "Keep automatically" became Ask me (contract 1.8.0-e): the person is told once, with Transcribe every call one
     /// tap away ([`AFTER_CALL_NOTICE`]). Cleared once answered.
     pub after_call_notice: bool,
+    /// "When to ask" under Ask me (the call choice).
+    pub ask_when: AskWhen,
+    /// The card's first-time line ("You can change this in Settings › After each call.") was shown.
+    pub card_hint_seen: bool,
+    /// The same choice made on the card this many times in a row ("Always do this?" after 3).
+    pub card_streak: Option<crate::after_call::CardStreak>,
+    /// "Always do this?" was offered (once, ever).
+    pub always_offered: bool,
     /// Automatic call recordings shorter than this many seconds are skipped quietly (0 = never; v1.5, `skipped`).
     pub skip_calls_shorter_than_s: u32,
     /// Offer the "Record / Ignore / Always ignore" chip when an unrecognised app or site holds the mic and plays audio.
@@ -371,6 +403,10 @@ impl Default for Settings {
             // first (contract 1.8.0-e). The old keys are read and ignored.
             after_call: AfterCall::Ask,
             after_call_notice: false,
+            ask_when: AskWhen::After,
+            card_hint_seen: false,
+            card_streak: None,
+            always_offered: false,
             skip_calls_shorter_than_s: crate::skipped::DEFAULT_SHORTER_THAN_S,
             ask_unknown_apps: false,
             site_rules: Vec::new(),
@@ -412,6 +448,30 @@ pub fn screen_target_or_default(value: Option<&str>) -> &'static str {
 }
 
 impl Settings {
+    /// "After each call" as Settings shows it (Don't record calls when calls are not recorded by themselves).
+    pub fn after_each_call(&self) -> AfterEachCall {
+        if !self.auto_mode {
+            return AfterEachCall::Off;
+        }
+        match self.after_call {
+            AfterCall::Ask => AfterEachCall::Ask,
+            AfterCall::AlwaysTranscribe => AfterEachCall::AlwaysTranscribe,
+            AfterCall::AlwaysAudio => AfterEachCall::AlwaysAudio,
+        }
+    }
+
+    /// Chooses "After each call": Don't record calls turns automatic recording off and keeps the choice made before;
+    /// any other value records calls again with that choice. Choosing answers the one-time notice about it.
+    pub fn set_after_each_call(&mut self, value: AfterEachCall) {
+        match value {
+            AfterEachCall::Off => self.auto_mode = false,
+            AfterEachCall::Ask => (self.auto_mode, self.after_call) = (true, AfterCall::Ask),
+            AfterEachCall::AlwaysTranscribe => (self.auto_mode, self.after_call) = (true, AfterCall::AlwaysTranscribe),
+            AfterEachCall::AlwaysAudio => (self.auto_mode, self.after_call) = (true, AfterCall::AlwaysAudio),
+        }
+        self.after_call_notice = false;
+    }
+
     /// Loads `settings.json`. A missing, empty or non-object file gives the defaults; inside an object, one bad
     /// value never discards the rest of the file (see [`Settings::from_value`]).
     pub fn load(path: &Path) -> Self {
