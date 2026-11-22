@@ -246,8 +246,9 @@ export function MenuList({ label, items, id, className, initial, onBack, onLeave
           {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
             : ticks && <span className="el-menu__check" aria-hidden="true" />}
           {item.icon ? <Icon icon={item.icon} /> : item.checked === undefined && <span className="el-menu__icon-space" aria-hidden="true" />}
-          {/* An item's words keep their own order in a right-to-left window ("3 recordings…", not "…recordings 3"). */}
-          <span className="el-menu__label" dir="auto">{item.label}</span>
+          {/* An item's words keep their own order in a right-to-left window ("3 recordings…", not "…recordings 3"), set
+              apart in a <bdi>; the label itself follows the menu's side, so they sit by their icon. */}
+          <span className="el-menu__label"><bdi>{item.label}</bdi></span>
           {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
           {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
           {item.items && <Icon icon={ChevronEndIcon} directional />}

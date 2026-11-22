@@ -224,12 +224,18 @@ describe("an item's words in a right-to-left window", () => {
   afterEach(() => {
     document.documentElement.dir = "";
   });
-  it("keep their own order: each label reads by its own direction (dir=auto)", () => {
+  it("keep their own order, set apart in a <bdi>, while the label follows the menu's side (no direction of its own)", () => {
     document.documentElement.dir = "rtl";
     render(<Menu label="Needs action" button={{ text: "6 need you" }} items={NEEDS.map((n) => ({ ...n, onPick: () => undefined }))} />);
     fireEvent.click(screen.getByRole("button", { name: "6 need you" }));
     const labels = [...screen.getByRole("menu").querySelectorAll(".el-menu__label")];
     expect(labels.map((l) => l.textContent)).toEqual(NEEDS.map((n) => n.label));
-    for (const l of labels) expect(l).toHaveAttribute("dir", "auto");
+    for (const l of labels) {
+      expect(l).not.toHaveAttribute("dir");
+      expect(l.firstElementChild?.tagName).toBe("BDI");
+      expect(l.firstElementChild?.textContent).toBe(l.textContent);
+    }
+    // The menu's layer takes the window's direction, so its labels sit on its start side, by their icons.
+    expect(screen.getByRole("menu").closest(".el-layer")).toHaveAttribute("dir", "rtl");
   });
 });
