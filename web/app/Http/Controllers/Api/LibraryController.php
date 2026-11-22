@@ -15,6 +15,8 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
 use App\Models\Transcript;
+use App\Services\Library\LibraryFacets;
+use App\Services\Library\LibraryFilters;
 use App\Services\LibraryOrganiser;
 use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\Teammates;
@@ -28,8 +30,11 @@ use Throwable;
 
 final class LibraryController extends Controller
 {
+    /** Since 2.0.0-p: the views `view` also takes beside LibraryOrganiser::VIEWS (counted by LibraryFacets). */
+    public const MORE_VIEWS = ['needs_you', 'unread'];
+
     /** GET /api/library — every session of the owner, from every device, plus tombstones when `since` is given. */
-    public function index(Request $request, LibraryOrganiser $organiser, ProjectTree $projects, Teammates $teammates): JsonResponse
+    public function index(Request $request, LibraryOrganiser $organiser, ProjectTree $projects, Teammates $teammates, LibraryFacets $facets): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
@@ -43,7 +48,7 @@ final class LibraryController extends Controller
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
             'tag' => ['nullable', 'string', 'max:40'],
             'bookmarked' => ['nullable', 'boolean'],
-            'view' => ['nullable', Rule::in(LibraryOrganiser::VIEWS)],
+            'view' => ['nullable', Rule::in([...LibraryOrganiser::VIEWS, ...self::MORE_VIEWS])],
             'tz' => ['nullable', 'timezone:all'],
             'label' => ['nullable', 'string', 'max:40'],
             'pinned' => ['nullable', 'boolean'],
@@ -52,7 +57,10 @@ final class LibraryController extends Controller
             // Since v1.5: a smart folder, and a project's subfolders with `client_id`.
             'folder' => ['nullable', Rule::in(LibraryOrganiser::FOLDERS)],
             'include_subfolders' => ['nullable', 'boolean'],
+            // Since 2.0.0-p: the Library's filters (docs/API.md "Library filters") and its search box.
+            'q' => ['nullable', 'string', 'max:200'],
         ]);
+        $filters = LibraryFilters::normalize($request->input('filters'));
         $cursor = empty($data['cursor']) ? null : self::decodeCursor($data['cursor']);
 
         $serverTime = now();
@@ -65,13 +73,15 @@ final class LibraryController extends Controller
             // Only this user's own "opened" row: whether to show the unopened dot (since v1.3).
             'opens' => fn ($q) => $q->where('user_id', $device->user_id),
         ])->withCount('screens');
+        // Since 2.0.0-p: the item's `facets.status` reads whether an upload failed, with the rows.
+        LibraryItemResource::withUploadFailed($query);
 
         if (! empty($data['since'])) {
             // Any offset names an instant; the stored timestamps are UTC. Inclusive: server_time has whole seconds, so a
             // change in the same second as the previous sync is delivered again rather than lost (clients merge by id).
             $query->withTrashed()->where('updated_at', '>=', Carbon::parse($data['since'])->utc());
         }
-        if (empty($data['status']) && ($data['view'] ?? null) !== 'waiting') {
+        if (empty($data['status']) && ! in_array($data['view'] ?? null, ['waiting', 'needs_you'], true)) {
             // Open sessions (still recording) may yet be discarded: listed only when asked for; tombstones always sync.
             $query->where(fn ($q) => $q->whereNotNull('deleted_at')->orWhere('status', '!=', SessionStatus::Recording->value));
         }
@@ -104,8 +114,18 @@ final class LibraryController extends Controller
         if ($request->boolean('bookmarked')) {
             $query->whereHas('markers');
         }
-        if (! empty($data['view'])) {
+        if (! empty($data['view']) && ! $shared) {
+            match ($data['view']) {
+                // Since 2.0.0-p: what needs the person (LibraryFilters::needsYou), waiting calls included.
+                'needs_you' => $facets->applyNeedsYou($query, $device->workspace_id, $device->user_id),
+                'unread' => $query->whereDoesntHave('opens', fn ($q) => $q->where('user_id', $device->user_id)),
+                default => $organiser->applyView($query, $data['view'], $data['tz'] ?? null),
+            };
+        } elseif (! empty($data['view'])) {
             $organiser->applyView($query, $data['view'], $data['tz'] ?? null);
+        }
+        if (($filters !== [] || LibraryFacets::cleanQuery($data['q'] ?? null) !== null) && ! $shared) {
+            $facets->apply($query, $device->workspace_id, $device->user_id, $filters, $data['q'] ?? null, $data['tz'] ?? null);
         }
         if (! empty($data['label'])) {
             $query->whereHas('labels', fn ($q) => $q->whereRaw('LOWER(label) = ?', [mb_strtolower(trim($data['label']))]));
@@ -133,6 +153,32 @@ final class LibraryController extends Controller
             'data' => LibraryItemResource::collection($items)->resolve($request),
             'next_cursor' => $page->nextCursor()?->encode(),
             'server_time' => $serverTime->toAtomString(),
+            // Since 2.0.0-p: how many times the person's saved views changed; another number than last time means read
+            // GET /api/views again.
+            'views_version' => (int) $device->user->views_version,
+        ]);
+    }
+
+    /**
+     * GET /api/library/facets (since 2.0.0-p): for the filters and the search, how many recordings they keep and how
+     * many each option of each section would keep (its own section's filter left out), with "Needs you".
+     */
+    public function facets(Request $request, LibraryFacets $facets): JsonResponse
+    {
+        /** @var Device $device */
+        $device = $request->user();
+        $data = $request->validate([
+            'q' => ['nullable', 'string', 'max:200'],
+            'tz' => ['nullable', 'timezone:all'],
+        ]);
+        $filters = LibraryFilters::normalize($request->input('filters'));
+
+        return response()->json([
+            ...$facets->facets($device->workspace_id, $device->user_id, $filters, $data['q'] ?? null, $data['tz'] ?? null),
+            // The sidebar's Library views, whatever the filters.
+            'library' => $facets->libraryCounts($device->workspace_id, $device->user_id),
+            'filters' => (object) array_map(fn (array $f): object => (object) $f, $filters),
+            'views_version' => (int) $device->user->views_version,
         ]);
     }
 

@@ -7,6 +7,7 @@ namespace App\Services\Sharing;
 use App\Enums\SessionStatus;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Enums\UploadStatus;
 use App\Exceptions\ApiError;
 use App\Http\Controllers\Api\ConfigController;
 use App\Mail\ShareReceivedMail;
@@ -412,8 +413,10 @@ final class Teammates
     public function payloads(Collection $items, callable $sessionPayload): array
     {
         $items->loadMissing(['captureSession.transcripts', 'captureSession.markers:id,capture_session_id,tag,at_ms', 'captureSession.labels']);
-        // Since v1.5 each recording's screen_count, counted for all of them at once.
-        (new Collection($items->pluck('captureSession')->filter()->values()->all()))->loadCount('screens');
+        // Since v1.5 each recording's screen_count, counted for all of them at once; since 2.0.0-p whether an upload of it
+        // failed (its `facets.status`), for all of them at once too.
+        (new Collection($items->pluck('captureSession')->filter()->values()->all()))->loadCount('screens')
+            ->loadExists(['recordings as upload_failed' => fn ($r) => $r->where('upload_status', UploadStatus::Failed->value)]);
         /** @var Collection<int, Client> $projects */
         $projects = new Collection($items->where('kind', 'project')->pluck('client')->filter()->unique('id')->values()->all());
         $projects->loadCount('keyterms');

@@ -10,9 +10,11 @@ use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
+use App\Models\SavedView;
 use App\Models\User;
 use App\Policies\CaptureSessionPolicy;
 use App\Policies\DevicePolicy;
+use App\Policies\SavedViewPolicy;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Gate;
@@ -98,11 +100,13 @@ it('lists the console pages in the navigation for a super admin', function () {
 });
 
 it('registers only the B20 role policies: recordings and devices; scoping rests on workspace-scoped queries', function () {
+    // Since 2.0.0-p also saved views: their maker's alone.
     expect(Gate::getPolicyFor(CaptureSession::class))->toBeInstanceOf(CaptureSessionPolicy::class)
         ->and(Gate::getPolicyFor(Device::class))->toBeInstanceOf(DevicePolicy::class)
+        ->and(Gate::getPolicyFor(SavedView::class))->toBeInstanceOf(SavedViewPolicy::class)
         ->and(Gate::getPolicyFor(Client::class))->toBeNull();
     expect(collect(glob(app_path('Policies/*.php')))->map(fn (string $f): string => basename($f))->sort()->values()->all())
-        ->toBe(['CaptureSessionPolicy.php', 'DevicePolicy.php', 'WorkspacePolicy.php']);
+        ->toBe(['CaptureSessionPolicy.php', 'DevicePolicy.php', 'SavedViewPolicy.php', 'WorkspacePolicy.php']);
 });
 
 it('scopes every resource query to the signed-in admin', function () {

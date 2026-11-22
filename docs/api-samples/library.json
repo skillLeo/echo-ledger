@@ -57,6 +57,11 @@
             "label_colors": {},
             "expires_at": "2026-12-21T02:08:16+00:00",
             "transcribe_estimate": null,
+            "facets": {
+                "source": "voice_note",
+                "status": "transcribed",
+                "language": "en"
+            },
             "updated_at": "2026-11-21T02:08:17+00:00"
         },
         {
@@ -124,6 +129,11 @@
             "label_colors": {},
             "expires_at": "2026-12-21T02:08:16+00:00",
             "transcribe_estimate": null,
+            "facets": {
+                "source": "whatsapp_business",
+                "status": "transcribed",
+                "language": "en"
+            },
             "updated_at": "2026-11-21T02:08:16+00:00"
         },
         {
@@ -186,6 +196,11 @@
             "label_colors": {},
             "expires_at": "2026-12-21T02:08:15+00:00",
             "transcribe_estimate": null,
+            "facets": {
+                "source": "google_meet",
+                "status": "transcribed",
+                "language": "en"
+            },
             "updated_at": "2026-11-21T02:08:16+00:00"
         },
         {
@@ -253,6 +268,11 @@
             "label_colors": {},
             "expires_at": "2026-12-21T02:08:13+00:00",
             "transcribe_estimate": null,
+            "facets": {
+                "source": "zoom",
+                "status": "transcribed",
+                "language": "en"
+            },
             "updated_at": "2026-11-21T02:08:15+00:00"
         },
         {
@@ -320,9 +340,15 @@
             "label_colors": {},
             "expires_at": "2026-12-21T02:08:11+00:00",
             "transcribe_estimate": null,
+            "facets": {
+                "source": "whatsapp",
+                "status": "transcribed",
+                "language": "en"
+            },
             "updated_at": "2026-11-21T02:08:13+00:00"
         }
     ],
     "next_cursor": null,
-    "server_time": "2026-11-21T02:08:17+00:00"
+    "server_time": "2026-11-21T02:08:17+00:00",
+    "views_version": 0
 }
