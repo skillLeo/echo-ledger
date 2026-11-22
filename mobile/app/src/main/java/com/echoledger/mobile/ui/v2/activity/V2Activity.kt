@@ -697,7 +697,7 @@ private fun WaitingCall(
             title = title,
             // A Delete lost when EchoLedger closed says so (2.0.5): the call is back to choose again.
             meta = listOfNotNull(
-                stringResource(if (rec.restoredDelete) R.string.cc_restored_delete else R.string.v2_home_waiting_decision),
+                stringResource(com.echoledger.mobile.calls.CallChoice.chooseAgainWords(rec) ?: R.string.v2_home_waiting_decision),
                 project
             ).joinToString(" · "),
             metaEnd = { Text(formatClock(rec.durationMs + 500), style = EchoV2.type.mono, color = c.textSecondary) },

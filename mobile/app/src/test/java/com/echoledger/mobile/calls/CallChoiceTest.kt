@@ -82,6 +82,20 @@ class CallChoiceTest {
     }
 
     @Test
+    fun `a call left to choose again says why`() {
+        val rec = com.echoledger.mobile.data.LocalRecording(
+            id = "r", sourceApp = "whatsapp", startedAt = "2026-11-22T10:00:00Z", endedAt = "2026-11-22T10:01:00Z", durationMs = 60_000,
+            mime = "audio/ogg", codec = "opus", channels = 2, sampleRate = 48_000, plainSize = 1, sha256 = "x", state = "pending_decision"
+        )
+        assertNull("an ordinary waiting call", CallChoice.chooseAgainWords(rec))
+        assertEquals(com.echoledger.mobile.R.string.cc_restored_delete, CallChoice.chooseAgainWords(rec.copy(restoredDelete = true)))
+        assertEquals(
+            com.echoledger.mobile.R.string.cc_not_deleted_yet,
+            CallChoice.chooseAgainWords(rec.copy(restoredDelete = true, notDeletedYet = true))
+        )
+    }
+
+    @Test
     fun `the old After a call becomes Ask me, the default, from every old value`() {
         assertEquals(CallChoice.ASK, CallChoice.fromOld(PostCallPrompt.ASK))
         assertEquals("Keep automatically, the old default", CallChoice.ASK, CallChoice.fromOld(PostCallPrompt.KEEP))

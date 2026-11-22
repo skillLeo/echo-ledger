@@ -45,11 +45,11 @@ class PostCallPromptTest : AppTest() {
 
     @After
     fun closeCard() {
-        DecisionPopup.hide()
+        DecisionPopup.resetForTest()
         // Every step this test asked for runs now, under its own stand-ins, and what it posts goes with this test.
         DecisionPopup.drainForTest()
         shadowOf(android.os.Looper.getMainLooper()).idle()
-        DecisionPopup.hide()
+        DecisionPopup.resetForTest()
         Decisions.refreshWidget = usualRefresh
         Decisions.afterUndoPosted = {}
         DecisionPopup.stepTimeoutMs = 30_000L
@@ -240,6 +240,7 @@ class PostCallPromptTest : AppTest() {
         pumpUntil("back") { app.peekRecording("call-1")?.state == "pending_decision" }
         val back = app.peekRecording("call-1")!!
         assertTrue("its row says so", back.restoredDelete)
+        assertFalse("deleted just before EchoLedger closed", back.notDeletedYet)
         assertNull(back.discardAt)
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
         assertTrue("it waits for the person, not for a timer", timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
@@ -381,6 +382,7 @@ class PostCallPromptTest : AppTest() {
         val left = app.peekRecording("call-1")!!
         assertEquals("nothing was deleted or scheduled", "pending_decision", left.state)
         assertTrue("left to the person: Choose again", left.restoredDelete)
+        assertFalse("its words: deleted just before EchoLedger closed", left.notDeletedYet)
         assertTrue(discardWork("call-1").isEmpty())
         assertTrue("its backstop was called off before the post", timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
         // A backstop that runs all the same (one already on its way) keeps nothing.
@@ -442,6 +444,7 @@ class PostCallPromptTest : AppTest() {
         assertFalse(DecisionPopup.deleted(app, call("call-1"), "dark", 3_000))
         assertFalse(DecisionPopup.isShowing)
         pumpUntil("left to the person") { app.peekRecording("call-1")?.restoredDelete == true }
+        assertTrue("its words: not deleted yet (EchoLedger did not close)", app.peekRecording("call-1")!!.notDeletedYet)
         assertEquals("nothing deleted", "pending_decision", app.peekRecording("call-1")?.state)
         assertTrue(discardWork("call-1").isEmpty())
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
@@ -454,6 +457,44 @@ class PostCallPromptTest : AppTest() {
         }
         assertEquals("pending_decision", app.peekRecording("call-1")?.state)
         assertTrue(noUpload("call-1"))
+    }
+
+    @Test
+    fun `a Deleted line held behind the card shows when the card goes for any reason, never dropped`() {
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        asked("call-1")
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertFalse(DecisionPopup.deleted(app, call("call-2"), "dark", 3_000))
+        pumpUntil("held, not deleted yet") { app.peekRecording("call-2")?.notDeletedYet == true }
+
+        // A decision made elsewhere for the call on the card takes the card away.
+        runBlocking { Decisions.apply(app, "call-1", keep = false) }
+        pumpUntil("call-2's own line") { DecisionPopup.showingFor == "call-2" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED }
+        pumpUntil("call-2 on its way out, with this Undo") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        val gone = app.peekRecording("call-2")!!
+        assertEquals(Decisions.PROCESS, gone.undoIn)
+        assertFalse(gone.restoredDelete || gone.notDeletedYet)
+
+        // And a plain hide of that line, with another held behind it, shows the next one too.
+        assertFalse(DecisionPopup.deleted(app, call("call-3"), "dark", 3_000))
+        DecisionPopup.hide()
+        pumpUntil("call-3's own line") { DecisionPopup.showingFor == "call-3" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED }
+    }
+
+    @Test
+    fun `a call that no longer waits is never marked to choose again, and keeps its upload`() {
+        call(state = "queued")
+        com.echoledger.mobile.net.UploadWorker.enqueue(app, "call-1")
+        assertNull(runBlocking { Decisions.chooseAgain(app, "call-1", notDeletedYet = true) })
+        val kept = app.peekRecording("call-1")!!
+        assertFalse(kept.restoredDelete || kept.notDeletedYet)
+        assertTrue("its upload stays", waitingUpload("call-1"))
+
+        call("call-2")
+        DecisionTimeoutWorker.schedule(app, "call-2")
+        assertTrue(runBlocking { Decisions.chooseAgain(app, "call-2", notDeletedYet = true) }!!.restoredDelete)
+        assertTrue("a waiting call's backstop goes", timeoutWork("call-2").all { it.state == WorkInfo.State.CANCELLED })
     }
 
     @Test

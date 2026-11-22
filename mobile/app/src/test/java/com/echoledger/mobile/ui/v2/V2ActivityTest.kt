@@ -187,6 +187,18 @@ class V2ActivityTest : ScreenTest() {
     }
 
     @Test
+    fun aCallLeftToChooseAgainSaysWhy() {
+        answer = ActivityResponse()
+        val calls = listOf(
+            HomeFixtures.waiting("r-a", "Omar", 60_000).copy(restoredDelete = true),
+            HomeFixtures.waiting("r-b", "Sana", 90_000).copy(restoredDelete = true, notDeletedYet = true)
+        )
+        show(waiting = calls)
+        await("Deleted just before EchoLedger closed. Choose again.")
+        await("Not deleted yet. Choose again.")
+    }
+
+    @Test
     fun allCaughtUpAndCouldNotLoadWithRetry() {
         answer = null
         show()
