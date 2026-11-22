@@ -195,8 +195,7 @@ object DecisionPopup {
     }
 
     /** A delete whose Undo is a notification: the call on its way out and its "Deleted · Undo" posted, in one step. */
-    private suspend fun deleteWithNotification(app: Context, id: String): LocalRecording? =
-        Decisions.discardLater(app, id, widget = false)?.also { com.echoledger.mobile.notify.Notifications.discardedWithUndo(app, it) }
+    private suspend fun deleteWithNotification(app: Context, id: String): LocalRecording? = Decisions.discardWithNotification(app, id)
 
     /** Draws [mode] for [rec] at once (tests and screenshots): the question or one of its lines. */
     internal fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode): Boolean {
@@ -451,27 +450,31 @@ object DecisionPopup {
 
     /**
      * One step on the queue, in the order the card asked for them. Its [change] (the store, the workers, the Undo
-     * notification) always runs to its end, uncancellable; only what comes after it (the widget, then [after], the
-     * card's own follow-up) is given up after [stepTimeoutMs], so a slow widget never holds up the next step.
+     * notification) always runs to its end, uncancellable. Then the card's own follow-up ([after]), and the widget only
+     * last: each is given up after [stepTimeoutMs], so a slow widget never delays or skips the follow-up, nor holds up
+     * the next step.
      */
     private fun <T> step(app: Context, change: suspend () -> T, widget: Boolean = true, after: suspend (T?) -> Unit = {}) {
         steps.launch {
             order.withLock {
                 val result = runCatching { withContext(NonCancellable) { change() } }.getOrNull()
-                runCatching {
-                    withTimeoutOrNull(stepTimeoutMs) {
-                        if (widget) refreshWidget(app)
-                        after(result)
-                    }
-                }
+                runCatching { withTimeoutOrNull(stepTimeoutMs) { after(result) } }
+                if (widget) runCatching { withTimeoutOrNull(stepTimeoutMs) { refreshWidget(app) } }
             }
         }
     }
 
-    /** The home-screen widget's refresh after a card step (tests stand in a slow one). */
-    @androidx.annotation.VisibleForTesting
-    internal var refreshWidget: suspend (Context) -> Unit = { com.echoledger.mobile.widget.WidgetStateStore.refresh(it) }
+    /** The home-screen widget's refresh after a card step ([Decisions.refreshWidget]; tests stand in a slow one). */
+    private suspend fun refreshWidget(app: Context) = Decisions.refreshWidget(app)
 
     @androidx.annotation.VisibleForTesting
     internal var stepTimeoutMs = STEP_TIMEOUT_MS
+
+    /** Waits until every step asked for so far has run (tests: none reaches the next test's card). */
+    @androidx.annotation.VisibleForTesting
+    internal fun drainForTest(timeoutMs: Long = 15_000) {
+        val done = java.util.concurrent.CountDownLatch(1)
+        steps.launch { order.withLock { done.countDown() } }
+        done.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+    }
 }

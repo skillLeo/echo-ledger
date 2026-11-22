@@ -15,6 +15,7 @@ import com.echoledger.mobile.widget.WidgetStateStore
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -51,8 +52,10 @@ class SaveDecisionReceiver : BroadcastReceiver() {
     private suspend fun discard(context: Context, id: String) {
         // The chip for the same call goes too, so its ten seconds never keep a call on its way out.
         withContext(Dispatchers.Main) { if (DecisionPopup.showingFor == id) DecisionPopup.hide() }
-        val discarding = Decisions.discardLater(context, id) ?: return
-        Notifications.discardedWithUndo(context, discarding)
+        // "Deleted · Undo" and the call on its way out in one uncancellable step, before anything that can wait: the
+        // delete is never due without its Undo, and a slow widget never shortens it.
+        withContext(NonCancellable) { Decisions.discardWithNotification(context, id) } ?: return
+        Decisions.refreshWidget(context)
     }
 
     /**
@@ -169,10 +172,12 @@ object Decisions {
          */
         undoHere: Boolean = false,
         /** False: the caller refreshes the widget itself, after its own steps that must not be cut short. */
-        widget: Boolean = true
+        widget: Boolean = true,
+        /** True: the call's notification is already its "Deleted · Undo" ([discardWithNotification]) and stays. */
+        keepNotification: Boolean = false
     ): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
-        Notifications.cancelDecision(context, recordingId)
+        if (!keepNotification) Notifications.cancelDecision(context, recordingId)
         DecisionTimeoutWorker.cancel(context, recordingId)
         UploadWorker.cancel(context, recordingId)
         val at = Instant.ofEpochMilli(nowMs + afterMs).toString()
@@ -193,6 +198,27 @@ object Decisions {
         if (widget) WidgetStateStore.refresh(context)
         return discarding
     }
+
+    /**
+     * A Delete whose Undo is a notification (the post-call notification's Delete, the card's fallback when it cannot show
+     * the line): "Deleted · Undo" is posted first, in place of the question, then the store is written, so a process
+     * that dies in between leaves only an Undo that finds nothing. When the notification could not be posted (no
+     * permission, Android refused it) the Undo is this process's ([PROCESS]): a lost process brings the call back to
+     * choose again instead of deleting it unseen. Null when there was nothing to delete (the posted Undo goes too).
+     */
+    suspend fun discardWithNotification(context: Context, recordingId: String): LocalRecording? {
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        val rec = graph.recordings.get(recordingId)?.takeIf { it.state in DISCARDABLE } ?: return null
+        val posted = Notifications.discardedWithUndo(context, rec)
+        afterUndoPosted()
+        val discarding = discardLater(context, recordingId, undoHere = !posted, widget = false, keepNotification = posted)
+        if (discarding == null && posted) Notifications.cancelDecision(context, recordingId)
+        return discarding
+    }
+
+    /** Between the posted Undo and the store's write (tests stand a process's death in here). */
+    @androidx.annotation.VisibleForTesting
+    internal var afterUndoPosted: () -> Unit = {}
 
     /**
      * Undo on "Discarded · …" (since v1.8.1): the call is back as before the tap, waiting for Keep or Discard, or kept
@@ -267,6 +293,10 @@ object Decisions {
         .filter { it.state == DISCARDING }
         .filter { (runCatching { Instant.parse(it.discardAt) }.getOrNull() ?: Instant.EPOCH) <= now }
         .map { it.id }
+
+    /** The home-screen widget's refresh after a decision (tests stand in a slow one). */
+    @androidx.annotation.VisibleForTesting
+    internal var refreshWidget: suspend (Context) -> Unit = { WidgetStateStore.refresh(it) }
 
     /** Restore of a skipped call (since v1.5): it is kept like any other call and uploads now. */
     suspend fun restoreSkipped(context: Context, recordingId: String) {
