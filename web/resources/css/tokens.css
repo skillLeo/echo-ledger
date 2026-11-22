@@ -38,6 +38,7 @@
   --el-breakpoint-rail: 780px;
   --el-breakpoint-medium: 1024px;
   --el-breakpoint-wide: 1440px;
+  --el-breakpoint-panel: 1280px;
   --el-layer-base: 0;
   --el-layer-sticky: 10;
   --el-layer-dock: 15;
