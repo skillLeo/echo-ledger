@@ -1110,3 +1110,30 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
   titles untouched; a dry run now finds 0).
 - **Open:** `ECHOLEDGER_ANDROID_FINGERPRINTS` is empty on production, so phone App Links and phone passkeys stay off
   until the release key's SHA-256 is set in `.env`. hPanel cron for `schedule:run` still to be confirmed by Hassam.
+
+## 2026-11-22 10:30 PKT — releases 2.0.4 (both apps) and phone 2.0.5; phone parity closed
+
+- **Merged to v1.1:** phone parity P7–P11 (348d8d9a), P12 (2d1aa723), P13 (c1412db8), P14 (3e87ff81), each reviewed
+  to "approve" and run on the full phone suite. Failures in the full runs were load flakes only, and each passed alone:
+  SystemBarsThemeTest, OnboardingTest and V2LibraryFlowParityTest (P-103, P-107).
+- **Parity (docs/v2/audit/parity.csv):** desktop 603/603, web 152/152, phone 284/285. PH-REC-032 stays partial on
+  purpose. Stated exceptions are in the rows:
+  - notifications drawn by Android's own templates keep the phone's text size;
+  - Activity titles come from the server in English;
+  - the widget keeps the phone's direction.
+- **2.0.4:** release/v2.0.4 7aedfb46, tag v2.0.4.
+  - Desktop: CI built Windows and Mac (signed with the pinned EchoLedger Development Signing; check-mac-signature
+    --pinned passes).
+  - Mac: installed to /Applications without opening it. The earlier 2.0.3 was ad hoc (D-168, silent mic) and is kept
+    in ~/EchoLedger-backups. macOS asks for mic and screen permission once.
+  - Phone: 2.0.4 (code 24) installed with `install -r`, data kept.
+- **Phone 2.0.5 (code 25):** release/v2.0.5 8a25e681, tag phone-v2.0.5. No v* tag, so no desktop builds; desktop
+  stays 2.0.4. Installed with `install -r` (no call, nothing recording); auto-record re-armed.
+- **Backlog:** P-104..P-107 (P14 review minors and flakes) are in docs/v2/audit/bugs.csv.
+- **Needs Hassam:**
+  - open EchoLedger 2.0.4 on the Mac, allow mic and screen, test one call;
+  - D12 "rows OK";
+  - the 20:00 walkthrough, then "ship";
+  - confirm the hPanel cron;
+  - send the release key's SHA-256 for ECHOLEDGER_ANDROID_FINGERPRINTS;
+  - change the VPS root password.
