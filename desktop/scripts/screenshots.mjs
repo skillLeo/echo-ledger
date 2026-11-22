@@ -677,10 +677,24 @@ const SCREENS = [
     await page.getByRole("list", { name: "Library places" }).waitFor();
     await page.locator(".el-nav-item--place .el-nav-item__count").first().waitFor();
   }],
+  // A place as the current row (Waiting), and a place under the pointer (Inbox): its quiet count on that row.
+  ["v2-sidebar-current", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    const places = page.getByRole("list", { name: "Library places" });
+    await places.getByRole("button", { name: /^Waiting, / }).click();
+    await places.locator(".el-nav-item--place[aria-current=page]").waitFor();
+  }],
+  ["v2-sidebar-hover", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    const places = page.getByRole("list", { name: "Library places" });
+    await places.getByRole("button", { name: /^Inbox, / }).hover();
+    return { keepPointer: true };
+  }],
+  // The icon rail: Activity's count (it needs you) is a small accent dot on the bell; place counts stay out.
   ["v2-sidebar-rail", `library&uiflags=${V2_FLAGS}`, async (page) => {
     await page.getByRole("list", { name: "Library places" }).waitFor();
+    // The fixture opens a recording: its Back (the last "Library" in the window) shows the list.
+    await page.getByRole("button", { name: "Library", exact: true }).last().click();
     await page.getByRole("button", { name: "Collapse sidebar" }).click();
-    await page.locator(".el-sidebar[data-rail=on]").waitFor();
+    await page.locator(".el-sidebar[data-rail=on] .el-nav-item__dot").waitFor();
   }],
 ];
 
@@ -798,9 +812,9 @@ async function openHelp(page) {
   if (outside.length) throw new Error(`Help's buttons are not on screen: ${outside.join(", ")}`);
 }
 
-async function shoot(page, file) {
-  // No hover state left from the last click (a row's menu button, a tooltip).
-  await page.mouse.move(0, 0);
+async function shoot(page, file, keepPointer = false) {
+  // No hover state left from the last click (a row's menu button, a tooltip), unless the hover is the picture.
+  if (!keepPointer) await page.mouse.move(0, 0);
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(400);
   await page.screenshot({ path: file });
@@ -826,8 +840,9 @@ try {
       const [screenName, ...extra] = screen.split("&");
       await page.goto(`${base}scripts/screens/index.html?screen=${screenName}&theme=${theme}${extra.length ? `&${extra.join("&")}` : ""}`);
       try {
-        await prepare(page);
-        await shoot(page, join(out, `desktop-${name}-${theme}.png`));
+        // A screen whose picture is a hover says so (`{ keepPointer: true }`): the pointer stays where it left it.
+        const kept = await prepare(page);
+        await shoot(page, join(out, `desktop-${name}-${theme}.png`), kept?.keepPointer === true);
       } catch (e) {
         // One screen that cannot be reached says so and the rest are still taken; the run fails at the end.
         failed.push(`${name}-${theme}`);

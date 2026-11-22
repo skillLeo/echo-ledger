@@ -39,13 +39,18 @@ export function Sidebar({ label, brand, brandEnd, children, footer, rail, width 
   );
 }
 
-/** One place in the sidebar; the current page is marked for assistive tools too. */
+/**
+ * One place in the sidebar; the current page is marked for assistive tools too. Its count needs attention (Activity's
+ * "needs you"): the accent pill, and in the icon rail, where the count is only for assistive tools, a small accent dot
+ * on the icon.
+ */
 export function NavItem({ icon, label, current, count, onClick }: { icon: IconType; label: string; current?: boolean; count?: number; onClick?: () => void }) {
   return (
     <button type="button" className="el-nav-item" aria-current={current ? "page" : undefined} onClick={onClick} title={label}>
       <Icon icon={icon} size="md" />
       <span className="el-nav-item__label">{label}</span>
       {count !== undefined && <span className="el-nav-item__count el-caption el-num">{count}</span>}
+      {count !== undefined && count > 0 && <span className="el-attention-dot el-nav-item__dot" aria-hidden="true" />}
     </button>
   );
 }
