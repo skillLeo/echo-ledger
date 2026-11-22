@@ -212,6 +212,29 @@ class BackgroundWorkTest : AppTest() {
         WorkManager.getInstance(app).getWorkInfosForUniqueWork(DiscardLaterWorker.workName(id)).get(10, TimeUnit.SECONDS)
 
     @Test
+    fun `the notification's Delete posts its Undo before the widget refreshes`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val rec = app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 272_000)
+        Notifications.showSaveDecision(app, rec, clientName = null)
+        // What the shade holds the moment the widget starts to refresh.
+        val atRefresh = java.util.concurrent.atomic.AtomicReference<List<String>>()
+        val usual = Decisions.refreshWidget
+        Decisions.refreshWidget = { context ->
+            atRefresh.compareAndSet(null, posted().map { shadowOf(it).contentTitle.toString() })
+            usual(context)
+        }
+        try {
+            app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_DISCARD, "call-1"))
+            pumpUntil("the widget to refresh") { atRefresh.get() != null }
+            assertEquals("Deleted · Undo was already in the shade", listOf("Deleted · WhatsApp call · 4:32"), atRefresh.get())
+            val due = java.time.Instant.parse(app.peekRecording("call-1")!!.discardAt).toEpochMilli()
+            assertTrue("before the delete is due", System.currentTimeMillis() < due)
+        } finally {
+            Decisions.refreshWidget = usual
+        }
+    }
+
+    @Test
     fun `Delete from the notification says Deleted with Undo and deletes only when that is over (P-006)`() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val rec = app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 272_000)

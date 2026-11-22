@@ -15,6 +15,7 @@ import com.echoledger.mobile.widget.WidgetStateStore
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -51,8 +52,12 @@ class SaveDecisionReceiver : BroadcastReceiver() {
     private suspend fun discard(context: Context, id: String) {
         // The chip for the same call goes too, so its ten seconds never keep a call on its way out.
         withContext(Dispatchers.Main) { if (DecisionPopup.showingFor == id) DecisionPopup.hide() }
-        val discarding = Decisions.discardLater(context, id) ?: return
-        Notifications.discardedWithUndo(context, discarding)
+        // The call on its way out and its "Deleted · Undo" in one uncancellable step, before anything that can wait: the
+        // delete is never due without its Undo, and a slow widget never shortens it.
+        withContext(NonCancellable) {
+            Decisions.discardLater(context, id, widget = false)?.also { Notifications.discardedWithUndo(context, it) }
+        } ?: return
+        Decisions.refreshWidget(context)
     }
 
     /**
@@ -267,6 +272,10 @@ object Decisions {
         .filter { it.state == DISCARDING }
         .filter { (runCatching { Instant.parse(it.discardAt) }.getOrNull() ?: Instant.EPOCH) <= now }
         .map { it.id }
+
+    /** The home-screen widget's refresh after a decision (tests stand in a slow one). */
+    @androidx.annotation.VisibleForTesting
+    internal var refreshWidget: suspend (Context) -> Unit = { WidgetStateStore.refresh(it) }
 
     /** Restore of a skipped call (since v1.5): it is kept like any other call and uploads now. */
     suspend fun restoreSkipped(context: Context, recordingId: String) {

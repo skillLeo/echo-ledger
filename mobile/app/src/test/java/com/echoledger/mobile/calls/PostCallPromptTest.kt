@@ -41,12 +41,12 @@ class PostCallPromptTest : AppTest() {
         android.provider.Settings.Global.putFloat(app.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
     }
 
-    private val usualRefresh = DecisionPopup.refreshWidget
+    private val usualRefresh = Decisions.refreshWidget
 
     @After
     fun closeCard() {
         DecisionPopup.hide()
-        DecisionPopup.refreshWidget = usualRefresh
+        Decisions.refreshWidget = usualRefresh
         DecisionPopup.stepTimeoutMs = 30_000L
     }
 
@@ -336,7 +336,7 @@ class PostCallPromptTest : AppTest() {
         shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         // A widget refresh that never ends: the step's time runs out there.
         val refreshing = java.util.concurrent.CountDownLatch(1)
-        DecisionPopup.refreshWidget = {
+        Decisions.refreshWidget = {
             refreshing.countDown()
             kotlinx.coroutines.awaitCancellation()
         }
@@ -347,16 +347,43 @@ class PostCallPromptTest : AppTest() {
         assertFalse(DecisionPopup.deleted(app, call("call-2"), "dark", 3_000))
         assertTrue("the step reached the widget", refreshing.await(10, TimeUnit.SECONDS))
 
-        pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        // The delete and its Undo are one step: the notification follows the store's change at once, never the widget.
+        pumpUntil("the Undo in the shade", timeoutMs = 2_000) {
+            notifications().any { n -> n.actions.orEmpty().any { it.title.toString() == "Undo" } }
+        }
         val due = java.time.Instant.parse(app.peekRecording("call-2")!!.discardAt).toEpochMilli()
-        val undo = notifications().firstOrNull { n -> n.actions.orEmpty().any { it.title.toString() == "Undo" } }
-        assertTrue("the Undo was posted with the delete, not after the widget", undo != null)
-        assertTrue("and before the delete is due", System.currentTimeMillis() < due)
+        assertEquals(Decisions.DISCARDING, app.peekRecording("call-2")?.state)
+        assertTrue("posted before the delete is due", System.currentTimeMillis() < due)
         assertNull(app.peekRecording("call-2")?.undoIn)
 
         // The cut-short step held up nothing: the next one (Undo on call-1) still runs.
         DecisionPopup.undo(app)
         pumpUntil("call-1 back") { app.peekRecording("call-1")?.state == "pending_decision" }
+    }
+
+    @Test
+    fun `the card's follow-up runs before the widget, so a slow widget never delays or skips it`() {
+        // A widget refresh that takes the whole step time.
+        val refreshing = java.util.concurrent.CountDownLatch(1)
+        val ended = java.util.concurrent.CountDownLatch(1)
+        Decisions.refreshWidget = {
+            try {
+                refreshing.countDown()
+                kotlinx.coroutines.awaitCancellation()
+            } finally {
+                ended.countDown()
+            }
+        }
+        DecisionPopup.stepTimeoutMs = 3_000
+        asked()
+        // Sent meanwhile: the Delete finds nothing to delete, and the follow-up takes the Deleted line away.
+        app.graph.recordings.update("call-1") { it.copy(state = "uploaded") }
+        DecisionPopup.delete(app)
+        pumpUntil("the follow-up, well before the step time", timeoutMs = 1_500) { !DecisionPopup.isShowing }
+        assertTrue("the widget came after it", refreshing.await(5, TimeUnit.SECONDS))
+        assertEquals("uploaded", app.peekRecording("call-1")?.state)
+        // The slow widget is given up after the step time, and the queue moves on.
+        assertTrue(ended.await(10, TimeUnit.SECONDS))
     }
 
     @Test

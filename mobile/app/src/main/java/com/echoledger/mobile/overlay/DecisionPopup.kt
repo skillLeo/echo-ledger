@@ -451,26 +451,22 @@ object DecisionPopup {
 
     /**
      * One step on the queue, in the order the card asked for them. Its [change] (the store, the workers, the Undo
-     * notification) always runs to its end, uncancellable; only what comes after it (the widget, then [after], the
-     * card's own follow-up) is given up after [stepTimeoutMs], so a slow widget never holds up the next step.
+     * notification) always runs to its end, uncancellable. Then the card's own follow-up ([after]), and the widget only
+     * last: each is given up after [stepTimeoutMs], so a slow widget never delays or skips the follow-up, nor holds up
+     * the next step.
      */
     private fun <T> step(app: Context, change: suspend () -> T, widget: Boolean = true, after: suspend (T?) -> Unit = {}) {
         steps.launch {
             order.withLock {
                 val result = runCatching { withContext(NonCancellable) { change() } }.getOrNull()
-                runCatching {
-                    withTimeoutOrNull(stepTimeoutMs) {
-                        if (widget) refreshWidget(app)
-                        after(result)
-                    }
-                }
+                runCatching { withTimeoutOrNull(stepTimeoutMs) { after(result) } }
+                if (widget) runCatching { withTimeoutOrNull(stepTimeoutMs) { refreshWidget(app) } }
             }
         }
     }
 
-    /** The home-screen widget's refresh after a card step (tests stand in a slow one). */
-    @androidx.annotation.VisibleForTesting
-    internal var refreshWidget: suspend (Context) -> Unit = { com.echoledger.mobile.widget.WidgetStateStore.refresh(it) }
+    /** The home-screen widget's refresh after a card step ([Decisions.refreshWidget]; tests stand in a slow one). */
+    private suspend fun refreshWidget(app: Context) = Decisions.refreshWidget(app)
 
     @androidx.annotation.VisibleForTesting
     internal var stepTimeoutMs = STEP_TIMEOUT_MS
