@@ -22,7 +22,10 @@ data class WidgetState(
     /** The latest recordings, newest first, up to six (since v1.6); none while App lock is on. */
     val recent: List<WidgetRow> = emptyList(),
     /** The Ready check's chip (since v1.6): `READY`, `NOT_READY`, `OFF`, or null when this phone records no calls. */
-    val ready: String? = null
+    val ready: String? = null,
+    /** Settings › Appearance's app language (`system`, `en`, `ur`) and text size, as the v2 screens use them. */
+    val language: String = "system",
+    val textSize: String = "system"
 ) {
     val statusLine: String
         get() = when {
@@ -55,4 +58,37 @@ data class WidgetState(
     }
 
     private val reviewText: String get() = "$pendingDecisions to review"
+}
+
+/** The widget's words in [res]'s language (the app language): the same lines as [WidgetState]'s English ones. */
+class WidgetWords(private val res: android.content.res.Resources, private val state: WidgetState) {
+    val statusLine: String
+        get() = with(state) {
+            when {
+                !paired -> res.getString(com.echoledger.mobile.R.string.w2_pair)
+                recording -> res.getString(com.echoledger.mobile.R.string.w2_recording)
+                pendingDecisions > 0 -> review
+                notReady -> res.getString(com.echoledger.mobile.R.string.w2_not_ready)
+                locked -> res.getString(com.echoledger.mobile.R.string.w2_locked)
+                armed -> res.getString(com.echoledger.mobile.R.string.w2_armed)
+                else -> res.getString(com.echoledger.mobile.R.string.w2_tap)
+            }
+        }
+
+    val reviewLine: String? get() = review.takeIf { state.reviewLine != null }
+
+    val buttonLabel: String get() = res.getString(
+        if (state.recording) com.echoledger.mobile.R.string.w2_stop else com.echoledger.mobile.R.string.w2_record
+    )
+
+    val readyLabel: String?
+        get() = when (state.readyLabel?.let { state.ready }) {
+            "READY" -> res.getString(com.echoledger.mobile.R.string.w2_calls_ready)
+            "NOT_READY" -> res.getString(com.echoledger.mobile.R.string.w2_calls_not_ready)
+            "OFF" -> res.getString(com.echoledger.mobile.R.string.w2_calls_off)
+            else -> null
+        }
+
+    private val review: String
+        get() = res.getQuantityString(com.echoledger.mobile.R.plurals.w2_to_review, state.pendingDecisions, state.pendingDecisions)
 }

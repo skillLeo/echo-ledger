@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The home-screen widget's words, in the app language. values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="w2_pair">Open EchoLedger to pair</string>
+    <string name="w2_recording">Recording…</string>
+    <string name="w2_not_ready">Not ready: tap to fix</string>
+    <string name="w2_locked">Locked</string>
+    <string name="w2_armed">Ready to record calls</string>
+    <string name="w2_tap">Tap to record</string>
+    <string name="w2_stop">Stop</string>
+    <string name="w2_record">Record</string>
+    <string name="w2_calls_ready">Calls: Ready</string>
+    <string name="w2_calls_not_ready">Calls: Not ready</string>
+    <string name="w2_calls_off">Calls: Off</string>
+    <string name="w2_failed">Transcription failed</string>
+    <string name="w2_uploading_pct">Uploading %1$d%%</string>
+    <plurals name="w2_to_review">
+        <item quantity="one">%1$d to review</item>
+        <item quantity="other">%1$d to review</item>
+    </plurals>
+</resources>

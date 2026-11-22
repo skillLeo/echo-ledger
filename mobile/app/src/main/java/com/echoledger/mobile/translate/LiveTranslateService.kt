@@ -412,9 +412,13 @@ class LiveTranslateService :
                 NOTIFICATION_PROBLEM_ID,
                 NotificationCompat.Builder(this, CHANNEL)
                     .setSmallIcon(R.drawable.ic_stat_rec)
-                    .setContentTitle(mode.label)
-                    .setContentText(text)
-                    .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                    .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, mode.label))
+                    .setContentText(com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, text))
+                    .setStyle(
+                        NotificationCompat.BigTextStyle().bigText(
+                            com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, text)
+                        )
+                    )
                     .setSilent(true)
                     .setAutoCancel(true)
                     .setContentIntent(tap)
@@ -656,26 +660,45 @@ class LiveTranslateService :
         val hidden = (::machine.isInitialized && machine.state == BoxState.HIDDEN) || ShareGuard.hiddenByUser.value
         val builder = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle(mode.label)
-            .setContentText(if (paused) "Paused" else "Translating to ${TranslateLanguages.label(target)}")
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, mode.label))
+            .setContentText(
+                com.echoledger.mobile.notify.NoticeWords.say(
+                    this@LiveTranslateService,
+                    if (paused) "Paused" else "Translating to ${TranslateLanguages.label(target)}"
+                )
+            )
             .setOngoing(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(open(this))
-            .addAction(0, if (paused) "Resume" else "Pause", action(if (paused) ACTION_RESUME else ACTION_PAUSE, 1))
+            .addAction(
+                0,
+                com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, if (paused) "Resume" else "Pause"),
+                action(if (paused) ACTION_RESUME else ACTION_PAUSE, 1)
+            )
         // Edit and Lock only while the box can be seen: hidden or private, Show comes first.
-        if (ShareGuard.textVisible.value) builder.addAction(0, if (editing) "Lock" else "Edit", action(ACTION_EDIT, 2))
+        if (ShareGuard.textVisible.value) {
+            builder.addAction(
+                0,
+                com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, if (editing) "Lock" else "Edit"),
+                action(ACTION_EDIT, 2)
+            )
+        }
         return builder
-            .addAction(0, if (hidden) "Show" else "Hide", action(if (hidden) ACTION_SHOW else ACTION_HIDE, 3))
-            .addAction(0, "Stop", action(ACTION_STOP, 4))
+            .addAction(
+                0,
+                com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, if (hidden) "Show" else "Hide"),
+                action(if (hidden) ACTION_SHOW else ACTION_HIDE, 3)
+            )
+            .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, "Stop"), action(ACTION_STOP, 4))
             .build()
     }
 
     private fun simple(text: String): Notification = NotificationCompat.Builder(this, CHANNEL)
         .setSmallIcon(R.drawable.ic_stat_rec)
-        .setContentTitle(mode.label)
-        .setContentText(text)
-        .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+        .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, mode.label))
+        .setContentText(com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, text))
+        .setStyle(NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(this@LiveTranslateService, text)))
         .setSilent(true)
         .setAutoCancel(true)
         .setContentIntent(open(this))

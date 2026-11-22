@@ -67,9 +67,10 @@ class RecordWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val state = WidgetStateStore.load(context)
-        provideContent {
-            GlanceTheme(colors = widgetColors(state.dynamicColour)) { WidgetContent(state) }
-        }
+        // Settings › Appearance's app language and text size, as the v2 screens use them (kept with the state).
+        val words = WidgetWords(com.echoledger.mobile.notify.AppWords.resources(context, state.language), state)
+        val scale = com.echoledger.mobile.ui.v2.shell.AppLook.scale(state.textSize)
+        provideContent { WidgetLook(words, scale) { GlanceTheme(colors = widgetColors(state.dynamicColour)) { WidgetContent(state) } } }
     }
 
     companion object {
@@ -81,6 +82,22 @@ class RecordWidget : GlanceAppWidget() {
         val LARGE = DpSize(250.dp, 250.dp)
     }
 }
+
+/** The widget's words in the app language, and its text size on top of the phone's (Settings › Appearance). */
+internal val LocalWidgetWords = androidx.compose.runtime.staticCompositionLocalOf<WidgetWords?> { null }
+internal val LocalWidgetScale = androidx.compose.runtime.staticCompositionLocalOf { 1f }
+
+/** Draws [content] with the widget's words and its text size ([LocalWidgetWords], [LocalWidgetScale]). */
+@Composable
+internal fun WidgetLook(words: WidgetWords, scale: Float, content: @Composable () -> Unit) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalWidgetWords provides words, LocalWidgetScale provides scale, content = content)
+}
+
+/** A widget text size at the person's text size (Settings › Appearance), on top of the phone's own. */
+internal fun widgetTextSize(sp: Int, scale: Float): Float = sp * scale
+
+@Composable
+private fun sized(sp: Int) = widgetTextSize(sp, LocalWidgetScale.current).sp
 
 /** EchoLedger's light and dark tokens, or the wallpaper's colours (Android 12+) when the app uses them. */
 internal fun widgetColors(dynamic: Boolean): ColorProviders = if (dynamic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -181,16 +198,16 @@ private fun RecentRow(row: WidgetRow) {
         Text(
             row.title,
             maxLines = 1,
-            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = sized(13), fontWeight = FontWeight.Medium)
         )
-        Text(row.line, maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
+        Text(row.line, maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sized(12)))
     }
 }
 
 /** The Ready check's dot (since v1.6): green when calls are recorded, red when not, grey when switched off. */
 @Composable
 private fun ReadyDot(state: WidgetState) {
-    val label = state.readyLabel ?: return
+    val label = LocalWidgetWords.current?.readyLabel ?: state.readyLabel ?: return
     val colour = when (state.ready) {
         "READY" -> androidx.glance.color.ColorProvider(day = READY_DAY, night = READY_NIGHT)
         "NOT_READY" -> GlanceTheme.colors.error
@@ -210,7 +227,7 @@ private fun AppName(state: WidgetState) {
         Text(
             "EchoLedger",
             maxLines = 1,
-            style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Medium, fontSize = sized(13))
         )
     }
 }
@@ -218,11 +235,11 @@ private fun AppName(state: WidgetState) {
 @Composable
 private fun StatusText(state: WidgetState, maxLines: Int) {
     Text(
-        state.statusLine,
+        (LocalWidgetWords.current?.statusLine ?: state.statusLine),
         maxLines = maxLines,
         style = TextStyle(
             color = if (state.recording) GlanceTheme.colors.error else GlanceTheme.colors.onSurfaceVariant,
-            fontSize = 12.sp,
+            fontSize = sized(12),
             fontWeight = if (state.recording) FontWeight.Medium else FontWeight.Normal
         ),
         modifier = when {
@@ -236,11 +253,11 @@ private fun StatusText(state: WidgetState, maxLines: Int) {
 
 @Composable
 private fun ReviewText(state: WidgetState) {
-    state.reviewLine?.let {
+    (LocalWidgetWords.current?.reviewLine ?: state.reviewLine)?.let {
         Text(
             it,
             maxLines = 1,
-            style = TextStyle(color = GlanceTheme.colors.primary, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+            style = TextStyle(color = GlanceTheme.colors.primary, fontSize = sized(12), fontWeight = FontWeight.Medium),
             modifier = GlanceModifier.clickable(openPending())
         )
     }
@@ -250,10 +267,14 @@ private fun ReviewText(state: WidgetState) {
 private fun LastRecording(state: WidgetState) {
     if (!state.showsContent) return
     state.lastTitle?.let {
-        Text(it, maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium))
+        Text(
+            it,
+            maxLines = 1,
+            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = sized(13), fontWeight = FontWeight.Medium)
+        )
     }
     state.lastPreview?.let {
-        Text(it, maxLines = 2, style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
+        Text(it, maxLines = 2, style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = sized(12)))
     }
 }
 
@@ -265,7 +286,7 @@ private fun RecordButton(state: WidgetState, size: Dp) {
     val toggle = RecordingService.intent(context, RecordingService.ACTION_TOGGLE, from = "home-screen widget")
     CircleIconButton(
         imageProvider = ImageProvider(if (state.recording) R.drawable.ic_widget_stop else R.drawable.ic_stat_rec),
-        contentDescription = state.buttonLabel,
+        contentDescription = LocalWidgetWords.current?.buttonLabel ?: state.buttonLabel,
         onClick = actionStartService(toggle, isForegroundService = true),
         modifier = GlanceModifier.size(size),
         backgroundColor = if (state.recording) GlanceTheme.colors.error else GlanceTheme.colors.primary,
@@ -314,6 +335,7 @@ object WidgetStateStore {
         // (since v1.6) a recording is named by its app only and no transcript text is kept.
         val shown = if (settings.appLockEnabled) emptyList() else graph.library.items.value.filter { !it.deleted }
         val latest = shown.firstOrNull()
+        val words = com.echoledger.mobile.notify.AppWords.resources(context, settings.appLanguage)
         save(
             context,
             WidgetState(
@@ -325,15 +347,25 @@ object WidgetStateStore {
                 pendingDecisions = graph.recordings.pendingDecisions().size,
                 locked = settings.appLockEnabled,
                 dynamicColour = settings.dynamicColour,
-                recent = recentRows(shown, settings.widgetHideTitles, java.time.LocalDate.now()),
-                ready = com.echoledger.mobile.recording.ReadinessWatch.lastChip(context)
+                recent = recentRows(shown, settings.widgetHideTitles, java.time.LocalDate.now(), words),
+                ready = com.echoledger.mobile.recording.ReadinessWatch.lastChip(context),
+                language = settings.appLanguage,
+                textSize = settings.textSize
             )
         )
         runCatching { RecordWidget().updateAll(context) }
     }
 
     /** The latest six, newest first: the title (or the app with [hideTitles]), and the progress, a problem or the time. */
-    fun recentRows(items: List<com.echoledger.mobile.data.LibraryItem>, hideTitles: Boolean, today: java.time.LocalDate): List<WidgetRow> =
+    fun recentRows(
+        items: List<com.echoledger.mobile.data.LibraryItem>,
+        hideTitles: Boolean,
+        today: java.time.LocalDate,
+        /** The app language's words (the v2 Library's); null: classic's English rows. */
+        res: android.content.res.Resources? = null
+    ): List<WidgetRow> = if (res != null) {
+        localRows(items, hideTitles, res)
+    } else {
         items.sortedByDescending { it.startedAt.orEmpty() }.take(6).map { item ->
             val app = com.echoledger.mobile.core.SourceApp.from(item.sourceApp)
             val generic = com.echoledger.mobile.ui.design.untitled(app)
@@ -348,4 +380,41 @@ object WidgetStateStore {
             }
             WidgetRow(item.id, title, line)
         }
+    }
+
+    /** The latest six in the app language: as the v2 Library says a row's app, progress, problem and time. */
+    private fun localRows(
+        items: List<com.echoledger.mobile.data.LibraryItem>,
+        hideTitles: Boolean,
+        res: android.content.res.Resources
+    ): List<WidgetRow> {
+        val text = com.echoledger.mobile.ui.v2.shell.V2Text.from(res)
+        val locale = res.configuration.locales[0] ?: java.util.Locale.getDefault()
+        val now = java.time.ZonedDateTime.now()
+        return items.sortedByDescending { it.startedAt.orEmpty() }.take(6).map { item ->
+            val generic = text.sourceName(item.sourceApp)
+            val title = if (hideTitles) generic else item.title?.takeIf { it.isNotBlank() } ?: generic
+            val stage = com.echoledger.mobile.core.RowProgress.of(item)
+            val line = when (com.echoledger.mobile.core.ItemStatus.of(item)) {
+                com.echoledger.mobile.core.ItemStatus.FAILED -> res.getString(R.string.w2_failed)
+
+                com.echoledger.mobile.core.ItemStatus.NO_AUDIO -> res.getString(R.string.v2_lib_row_no_audio)
+
+                else -> when (stage?.step) {
+                    com.echoledger.mobile.core.RowProgress.Step.UPLOADING ->
+                        stage.percent?.let { res.getString(R.string.w2_uploading_pct, it) } ?: res.getString(R.string.v2_uploading)
+
+                    com.echoledger.mobile.core.RowProgress.Step.TRANSCRIBING -> listOfNotNull(
+                        res.getString(R.string.v2_transcribing),
+                        com.echoledger.mobile.ui.v2.library.transcribingDetails(res, item.transcript?.finalProgress)
+                    ).joinToString(" · ")
+
+                    null -> com.echoledger.mobile.ui.v2.library.LibraryModel.time(item, now, text, locale)
+
+                    else -> com.echoledger.mobile.ui.v2.library.conversionWords(res, item).orEmpty()
+                }
+            }
+            WidgetRow(item.id, title, line)
+        }
+    }
 }

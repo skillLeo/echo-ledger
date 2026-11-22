@@ -66,7 +66,10 @@ object Notifications {
             NotifyCategory.USAGE,
             NotifyCategory.OTHER
         )
+        // In the app language (re-made when it changes: Android keeps each channel's settings, only its name changes).
+        val words = com.echoledger.mobile.notify.AppWords.resources(context)
         val channels = NotifyCategory.entries.map { category ->
+            val (name, line) = com.echoledger.mobile.notify.NoticeWords.channel(words, category)
             val importance = when (category.level) {
                 NotifyCategory.Level.LOW -> NotificationManager.IMPORTANCE_LOW
                 NotifyCategory.Level.DEFAULT -> NotificationManager.IMPORTANCE_DEFAULT
@@ -76,19 +79,19 @@ object Notifications {
             val blocked = oldActivityBlocked && category in serverKinds
             NotificationChannel(
                 category.channelId,
-                category.title,
+                name,
                 if (blocked) NotificationManager.IMPORTANCE_NONE else importance
             ).apply {
-                description = category.description
+                description = line
                 lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 if (category == NotifyCategory.RECORDING || category == NotifyCategory.LIVE_TRANSLATE) setShowBadge(false)
             }
         } + NotificationChannel(
             CHANNEL_DECISIONS,
-            context.getString(R.string.channel_decisions),
+            words.getString(R.string.c_decisions),
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = context.getString(R.string.channel_decisions_desc)
+            description = words.getString(R.string.c_decisions_d)
             setSound(null, null)
             enableVibration(false)
             lockscreenVisibility = Notification.VISIBILITY_PRIVATE
@@ -117,11 +120,15 @@ object Notifications {
     @SuppressLint("MissingPermission") // checked by canPost() first
     fun test(context: Context, category: NotifyCategory): Boolean {
         if (!canPost(context)) return false
+        val (title, body) = com.echoledger.mobile.notify.NoticeWords.test(
+            com.echoledger.mobile.notify.AppWords.resources(context),
+            category
+        )
         val builder = NotificationCompat.Builder(context, category.channelId)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle(category.testTitle)
-            .setContentText(category.testBody)
-            .setSubText("Test")
+            .setContentTitle(title)
+            .setContentText(body)
+            .setSubText(com.echoledger.mobile.notify.NoticeWords.say(context, "Test"))
             .setAutoCancel(true)
             .setContentIntent(openApp(context))
             .setTimeoutAfter(TEST_TIMEOUT_MS)
@@ -139,10 +146,11 @@ object Notifications {
     @SuppressLint("MissingPermission") // checked by canPost() first
     fun readinessAlert(context: Context, problem: ReadyProblem) {
         if (!canPost(context)) return
-        val text = problem.detail
+        // In the app language: Setup & health's words for the problem (English: the Ready check's own).
+        val (title, text, fix) = com.echoledger.mobile.notify.NoticeWords.readiness(context, problem)
         val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Calls are not being recorded: ${problem.title.replaceFirstChar { it.lowercase() }}")
+            .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -150,7 +158,7 @@ object Notifications {
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setContentIntent(openReady(context))
-        problem.fix?.let { builder.addAction(0, it.label, openReady(context, it.name)) }
+        problem.fix?.let { builder.addAction(0, fix ?: it.label, openReady(context, it.name)) }
         runCatching { NotificationManagerCompat.from(context).notify(READINESS_ID, builder.build()) }
     }
 
@@ -160,9 +168,9 @@ object Notifications {
         if (!canPost(context)) return
         val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Only your voice was recorded")
-            .setContentText(why)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(why))
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Only your voice was recorded"))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, why))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, why)))
             .setAutoCancel(true)
             .setContentIntent(openReady(context))
         runCatching { NotificationManagerCompat.from(context).notify(ONE_SIDED_ID, builder.build()) }
@@ -214,16 +222,19 @@ object Notifications {
         discarding: Boolean = false
     ): Notification {
         val buttons = RemoteViews(context.packageName, R.layout.notification_recording_actions).apply {
-            setTextViewText(R.id.rec_title, if (paused) "Paused · $title" else title)
-            setTextViewText(R.id.rec_detail, detail)
-            setTextViewText(R.id.rec_pause, if (paused) "Resume" else "Pause")
+            setTextViewText(R.id.rec_title, com.echoledger.mobile.notify.NoticeWords.say(context, if (paused) "Paused · $title" else title))
+            setTextViewText(R.id.rec_detail, com.echoledger.mobile.notify.NoticeWords.say(context, detail))
+            setTextViewText(R.id.rec_pause, com.echoledger.mobile.notify.NoticeWords.say(context, if (paused) "Resume" else "Pause"))
             setOnClickPendingIntent(
                 R.id.rec_pause,
                 serviceAction(context, if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE, 14)
             )
             setOnClickPendingIntent(R.id.rec_stop, serviceAction(context, RecordingService.ACTION_STOP, 11))
             setOnClickPendingIntent(R.id.rec_captions, serviceAction(context, RecordingService.ACTION_CAPTIONS, 16))
-            setTextViewText(R.id.rec_discard, if (discarding) "Undo discard" else "Discard")
+            setTextViewText(
+                R.id.rec_discard,
+                com.echoledger.mobile.notify.NoticeWords.say(context, if (discarding) "Undo discard" else "Discard")
+            )
             setOnClickPendingIntent(
                 R.id.rec_discard,
                 serviceAction(context, if (discarding) RecordingService.ACTION_UNDO_DISCARD else RecordingService.ACTION_DISCARD_NOW, 17)
@@ -231,8 +242,8 @@ object Notifications {
         }
         return NotificationCompat.Builder(context, CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle(if (paused) "Paused · $title" else title)
-            .setContentText(detail)
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, if (paused) "Paused · $title" else title))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, detail))
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setCustomBigContentView(buttons)
             .setCustomHeadsUpContentView(buttons)
@@ -251,13 +262,17 @@ object Notifications {
             .setContentIntent(openLive(context))
             .addAction(
                 0,
-                if (paused) "Resume" else "Pause",
+                com.echoledger.mobile.notify.NoticeWords.say(context, if (paused) "Resume" else "Pause"),
                 serviceAction(context, if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE, 14)
             )
-            .addAction(0, "Stop", serviceAction(context, RecordingService.ACTION_STOP, 11))
             .addAction(
                 0,
-                if (discarding) "Undo discard" else "Discard",
+                com.echoledger.mobile.notify.NoticeWords.say(context, "Stop"),
+                serviceAction(context, RecordingService.ACTION_STOP, 11)
+            )
+            .addAction(
+                0,
+                com.echoledger.mobile.notify.NoticeWords.say(context, if (discarding) "Undo discard" else "Discard"),
                 serviceAction(context, if (discarding) RecordingService.ACTION_UNDO_DISCARD else RecordingService.ACTION_DISCARD_NOW, 17)
             )
             .build()
@@ -277,18 +292,26 @@ object Notifications {
     fun armed(context: Context, ready: Boolean = true, askAfterCall: Boolean = false): Notification =
         NotificationCompat.Builder(context, CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle(if (ready) "Ready to record WhatsApp calls" else "Call capture isn't ready — tap to fix")
+            .setContentTitle(
+                com.echoledger.mobile.notify.NoticeWords.say(
+                    context,
+                    if (ready) "Ready to record WhatsApp calls" else "Call capture isn't ready — tap to fix"
+                )
+            )
             .setContentText(
-                if (ready) {
-                    // Since v1.6: what happens after a call follows the After a call setting (Keep automatically by default).
-                    if (askAfterCall) {
-                        "Calls are recorded automatically; you decide after each call."
+                com.echoledger.mobile.notify.NoticeWords.say(
+                    context,
+                    if (ready) {
+                        // Since v1.6: what happens after a call follows the After a call setting (Keep automatically by default).
+                        if (askAfterCall) {
+                            "Calls are recorded automatically; you decide after each call."
+                        } else {
+                            "Calls are recorded and kept automatically."
+                        }
                     } else {
-                        "Calls are recorded and kept automatically."
+                        "Start Shizuku (or run the setup command), then open Setup."
                     }
-                } else {
-                    "Start Shizuku (or run the setup command), then open Setup."
-                }
+                )
             )
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -296,8 +319,16 @@ object Notifications {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openApp(context))
-            .addAction(0, "Record now", serviceAction(context, RecordingService.ACTION_TOGGLE, 12))
-            .addAction(0, "Turn off", serviceAction(context, RecordingService.ACTION_DISARM, 13))
+            .addAction(
+                0,
+                com.echoledger.mobile.notify.NoticeWords.say(context, "Record now"),
+                serviceAction(context, RecordingService.ACTION_TOGGLE, 12)
+            )
+            .addAction(
+                0,
+                com.echoledger.mobile.notify.NoticeWords.say(context, "Turn off"),
+                serviceAction(context, RecordingService.ACTION_DISARM, 13)
+            )
             .build()
 
     /**
@@ -316,12 +347,12 @@ object Notifications {
         val text = decisionText(rec, clientName)
         val public = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Save this recording?")
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Save this recording?"))
             .build()
         val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Save this recording?")
-            .setContentText(text)
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Save this recording?"))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -330,10 +361,12 @@ object Notifications {
             .setSilent(true)
             .setAutoCancel(true)
             .setContentIntent(openPending(context))
-            .addAction(0, "Keep", decision(true, rec.id.hashCode()))
-            .addAction(0, "Discard", decision(false, rec.id.hashCode() + 1))
+            .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Keep"), decision(true, rec.id.hashCode()))
+            .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Discard"), decision(false, rec.id.hashCode() + 1))
         firstCaptionLine(rec.liveSegments)?.let { line ->
-            builder.setStyle(NotificationCompat.BigTextStyle().bigText("$text\n$line"))
+            builder.setStyle(
+                NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, "$text\n$line"))
+            )
         }
         if (decisionTimeout != "wait") builder.setTimeoutAfter(DecisionTimeoutWorker.WINDOW_SECONDS * 1000)
         // Android 13+ needs the notification permission; without it the question is in the app's Record tab only.
@@ -366,7 +399,7 @@ object Notifications {
         val duration = com.echoledger.mobile.ui.formatDuration(rec.durationMs).ifEmpty { "0:00" }
         val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Saved · $title · $duration")
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Saved · $title · $duration"))
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -374,13 +407,15 @@ object Notifications {
                 NotificationCompat.Builder(
                     context,
                     CHANNEL_DECISIONS
-                ).setSmallIcon(R.drawable.ic_stat_rec).setContentTitle("Call saved").build()
+                ).setSmallIcon(
+                    R.drawable.ic_stat_rec
+                ).setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Call saved")).build()
             )
             .setSilent(true)
             .setAutoCancel(true)
             .setTimeoutAfter(com.echoledger.mobile.overlay.DecisionPopup.SAVED_MS)
             .setContentIntent(openApp(context))
-            .addAction(0, "Undo", undo)
+            .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Undo"), undo)
         runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
     }
 
@@ -402,7 +437,7 @@ object Notifications {
         val duration = com.echoledger.mobile.ui.formatDuration(rec.durationMs).ifEmpty { "0:00" }
         val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Discarded · $title · $duration")
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Discarded · $title · $duration"))
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -410,13 +445,15 @@ object Notifications {
                 NotificationCompat.Builder(
                     context,
                     CHANNEL_DECISIONS
-                ).setSmallIcon(R.drawable.ic_stat_rec).setContentTitle("Call discarded").build()
+                ).setSmallIcon(
+                    R.drawable.ic_stat_rec
+                ).setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Call discarded")).build()
             )
             .setSilent(true)
             .setAutoCancel(true)
             .setTimeoutAfter(com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS)
             .setContentIntent(openApp(context))
-            .addAction(0, "Undo", undo)
+            .addAction(0, com.echoledger.mobile.notify.NoticeWords.say(context, "Undo"), undo)
         runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
     }
 
@@ -430,9 +467,9 @@ object Notifications {
         val text = "This call is not being recorded because the capture helper is not running. Tap to open Setup and start it."
         val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Call capture isn't ready — tap to fix")
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Call capture isn't ready — tap to fix"))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, text)))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(openSetup(context))
@@ -449,14 +486,17 @@ object Notifications {
         ) {
             return
         }
+        // Each sentence in the app language (they are joined by a space, not said as one line).
         val first = if (callNotRecorded) "This call could not be recorded." else "The recording had no sound, so it was not kept."
         val text = listOfNotNull(first, reason?.let { "Reason: $it" }, "Open Setup, Call capture and restart the helper, then test a call.")
-            .joinToString(" ")
+            .joinToString(" ") { com.echoledger.mobile.notify.NoticeWords.say(context, it) }
         val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle(if (callNotRecorded) "Call not recorded" else "No audio was captured")
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentTitle(
+                com.echoledger.mobile.notify.NoticeWords.say(context, if (callNotRecorded) "Call not recorded" else "No audio was captured")
+            )
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, text)))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(openSetup(context))
@@ -489,9 +529,9 @@ object Notifications {
         )
         val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Import the Phone app's recording?")
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Import the Phone app's recording?"))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, text)))
             .setAutoCancel(true)
             .setContentIntent(open)
         runCatching { NotificationManagerCompat.from(context).notify(TO_CHECK_ID, builder.build()) }
@@ -517,8 +557,8 @@ object Notifications {
         val text = "From the Phone app. They're in your Library."
         val builder = NotificationCompat.Builder(context, NotifyCategory.RECORDING.channelId)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle(title)
-            .setContentText(text)
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, title))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -542,9 +582,9 @@ object Notifications {
         val text = "Your call at $time was kept with your voice only. Keep or discard the Phone app's copy in Record."
         val builder = NotificationCompat.Builder(context, NotifyCategory.RECORDING.channelId)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("The Phone app's copy has both sides")
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "The Phone app's copy has both sides"))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, text)))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setSilent(true)
@@ -566,9 +606,9 @@ object Notifications {
         if (!canPost(context)) return
         val builder = NotificationCompat.Builder(context, NotifyCategory.RECORDING.channelId)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Phone call not recorded")
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Phone call not recorded"))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, text)))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setSilent(true)
             .setAutoCancel(true)
@@ -596,14 +636,18 @@ object Notifications {
         val text = "Tell the other person before you record."
         val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Record this phone call?")
-            .setContentText(text)
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Record this phone call?"))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setAutoCancel(true)
-            .addAction(0, "Record", serviceAction(context, RecordingService.ACTION_RECORD_PHONE_CALL, 16))
+            .addAction(
+                0,
+                com.echoledger.mobile.notify.NoticeWords.say(context, "Record"),
+                serviceAction(context, RecordingService.ACTION_RECORD_PHONE_CALL, 16)
+            )
         runCatching { NotificationManagerCompat.from(context).notify(ASK_PHONE_CALL_ID, builder.build()) }
     }
 
@@ -646,9 +690,9 @@ object Notifications {
         val text = "Android stopped auto-record, so calls are not being recorded. Tap to turn it back on."
         val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Auto-record is off — tap to turn it on")
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Auto-record is off — tap to turn it on"))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, text)))
             .setSilent(true)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
@@ -701,9 +745,9 @@ object Notifications {
         )
         val notification = NotificationCompat.Builder(context, category.channelId)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, title))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, body))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(com.echoledger.mobile.notify.NoticeWords.say(context, body)))
             .setContentIntent(open)
             .setSilent(silent)
             .setAutoCancel(true)
@@ -729,8 +773,8 @@ object Notifications {
         )
         val builder = NotificationCompat.Builder(context, NotifyCategory.UPLOADS.channelId)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("Shared voice note")
-            .setContentText(text)
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(context, "Shared voice note"))
+            .setContentText(com.echoledger.mobile.notify.NoticeWords.say(context, text))
             .setSilent(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(open)

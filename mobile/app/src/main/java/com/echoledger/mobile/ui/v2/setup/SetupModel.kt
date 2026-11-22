@@ -179,6 +179,20 @@ object HealthChecks {
     /** A Ready check problem's title in the screen's language ("The helper stopped when the phone restarted"); null for one it doesn't know. */
     fun failWords(problemKey: String): Int? = helperWords[problemKey]?.first ?: otherWords[problemKey]
 
+    private val otherWhy = mapOf(
+        "microphone" to R.string.v2_setup_why_microphone,
+        "storage" to R.string.v2_setup_why_storage,
+        "notifications" to R.string.v2_setup_why_notifications,
+        "battery" to R.string.v2_setup_why_battery,
+        "sign_in" to R.string.v2_setup_why_signin,
+        "caller_names" to R.string.v2_setup_why_callers,
+        "one_sided" to R.string.v2_setup_why_last_call,
+        "auto_record_off" to R.string.v2_setup_why_auto
+    )
+
+    /** Why a Ready check problem matters, in the screen's language (storage's takes the MB free); null for one it doesn't know. */
+    fun whyWords(problemKey: String): Int? = helperWords[problemKey]?.second ?: otherWhy[problemKey]
+
     fun of(f: SetupFacts): List<HealthCheck> {
         val r = f.ready
         val readiness = Readiness.evaluate(r)

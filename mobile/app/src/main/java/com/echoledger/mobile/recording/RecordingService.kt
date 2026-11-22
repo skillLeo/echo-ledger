@@ -285,8 +285,13 @@ class RecordingService : LifecycleService() {
             com.echoledger.mobile.translate.LiveTranslateService.NOTIFICATION_PROBLEM_ID,
             androidx.core.app.NotificationCompat.Builder(this, com.echoledger.mobile.translate.LiveTranslateService.CHANNEL)
                 .setSmallIcon(com.echoledger.mobile.R.drawable.ic_stat_rec)
-                .setContentTitle("Game translate")
-                .setContentText("Your game's voice chat started. Tap to translate it.")
+                .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(this@RecordingService, "Game translate"))
+                .setContentText(
+                    com.echoledger.mobile.notify.NoticeWords.say(
+                        this@RecordingService,
+                        "Your game's voice chat started. Tap to translate it."
+                    )
+                )
                 .setContentIntent(tap)
                 .setAutoCancel(true)
                 .setSilent(true)
