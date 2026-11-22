@@ -9,6 +9,7 @@ import { reviewDuration } from "./controls";
 export const CALL_WORDS = {
   transcribe: "Transcribe",
   save_audio_only: "Save audio only",
+  save_audio_all: "Save all as audio only",
   delete: "Delete",
   dont_record: "Don't record",
   undo: "Undo",

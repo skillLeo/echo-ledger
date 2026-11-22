@@ -25,6 +25,7 @@ import {
 import { AlertIcon, AppTileIcon, HourglassIcon, ImportIcon, appKind } from "../../components/Icons";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { confirmAction } from "../../lib/confirm";
+import { CALL_WORDS } from "../../lib/callChoice";
 
 /** A `main:navigate` request to bring one waiting recording into view, optionally with its title open for editing. */
 export interface PendingFocus {
@@ -369,7 +370,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             <div id="queue-pending-list" className="queue-list">
               <div className="queue-actions queue-bulk">
                 <button type="button" className="btn primary compact" disabled={bulkBusy} onClick={() => void keepAll()}>Transcribe all</button>
-                <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void keepAudioAll()}>Save all as audio only</button>
+                <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void keepAudioAll()}>{CALL_WORDS.save_audio_all}</button>
                 <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void discardAll()}>Delete all</button>
               </div>
               {pending.map((item) => {
@@ -450,7 +451,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                     {/* As on the after-call card: Delete on the left, Save audio only, Transcribe (the one primary action) on the right. */}
                     <div className="queue-actions decide">
                       <button type="button" className="btn" disabled={isBusy} onClick={() => void discard(item)}>Delete</button>
-                      <button type="button" className="btn" disabled={isBusy} onClick={() => void keepAudio(item)}>Save audio only</button>
+                      <button type="button" className="btn" disabled={isBusy} onClick={() => void keepAudio(item)}>{CALL_WORDS.save_audio_only}</button>
                       <button type="button" className="btn primary" disabled={isBusy} onClick={() => void keep(item)}>Transcribe</button>
                     </div>
                   </div>

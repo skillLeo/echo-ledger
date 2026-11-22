@@ -748,7 +748,9 @@ mod tests {
         assert!(!answer.contains("keep_decision_as(") && !answer.contains(".discard(id)"), "nothing is kept or deleted by the click");
         let restore = &actions[actions.find("pub fn restore_pending(").unwrap()..];
         let restore = &restore[..restore.find("\n}\n").unwrap()];
-        assert!(restore.contains("keep_due(app);") && restore.contains("discard_due(app);"), "a restart applies only what is due and waits for the rest");
+        assert!(restore.contains("keep_due(app);"), "a restart applies the kept choices that are due");
+        assert!(restore.contains("restore_unapplied_deletes()") && !restore.contains("discard_due(app)"),
+            "a Delete whose Undo could no longer be shown goes back to the waiting list, never applied at start");
         let commands = code("commands.rs");
         let discard = &commands[commands.find("pub fn after_call_discard(").unwrap()..];
         assert!(discard[..discard.find("\n}\n").unwrap()].contains("crate::actions::discard_from_chip(&app, &id)"), "an older window's Delete goes the same way");

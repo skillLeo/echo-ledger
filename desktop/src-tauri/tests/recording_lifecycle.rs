@@ -1139,3 +1139,30 @@ fn a_grouped_delete_paused_under_a_reopened_card_is_not_applied_at_the_groups_ti
     // Its Undo still finds it, until its paused time.
     assert!(files.restore_waiting("del").is_ok());
 }
+
+#[test]
+fn a_delete_pending_at_quit_is_back_in_the_waiting_list_at_start_not_deleted() {
+    use desktop_lib::after_call::CallChoice;
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    // Before the quit: Delete chosen on the card (pending its Undo), Transcribe and Save audio only chosen on others.
+    files.add(decision(root.path(), "del", Some("01SESSIONAAAAAAAAAAAAAAAAA"), now).chosen_at(CallChoice::Delete, now + chrono::Duration::seconds(7))).unwrap();
+    files.add(decision(root.path(), "tr", None, now).chosen_at(CallChoice::Transcribe, now + chrono::Duration::seconds(5))).unwrap();
+    files.add(decision(root.path(), "au", None, now).chosen_at(CallChoice::Audio, now + chrono::Duration::seconds(5))).unwrap();
+    // The app quits; it starts again a minute later.
+    let start = now + chrono::Duration::minutes(1);
+    let kept = files.keep_due(start).unwrap();
+    assert_eq!(kept.len(), 2, "Transcribe and Save audio only are applied as before: {kept:?}");
+    assert_eq!(files.restore_unapplied_deletes().unwrap(), ["del"]);
+    let back = files.load();
+    let del = back.find("del").expect("still here");
+    assert!(del.waits() && del.chosen().is_none(), "in the waiting list, for Transcribe, Save audio only or Delete");
+    assert_eq!(back.ui_items().iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["del"]);
+    assert!(files.discard_due(start + chrono::Duration::days(1)).0.is_empty(), "nothing deletes it by itself");
+    assert!(root.path().join("recordings/del/recording.flac").exists(), "its audio is whole");
+    assert!(DiscardQueue::load(&files.discards).items.is_empty(), "and its server session is not queued for deletion");
+    let queued: Vec<(String, bool)> = UploadQueue::load(&files.uploads).items.iter().map(|i| (i.client_ref.clone(), i.transcribe)).collect();
+    assert!(queued.contains(&("ref-tr".to_string(), true)) && queued.contains(&("ref-au".to_string(), false)));
+    assert!(files.restore_unapplied_deletes().unwrap().is_empty(), "once");
+}

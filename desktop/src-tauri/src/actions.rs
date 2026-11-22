@@ -1304,16 +1304,23 @@ fn schedule_keep(app: &AppHandle, at: chrono::DateTime<Utc>) {
 }
 
 /// At start: a recording whose chip time ran out while the app was closed is kept as its chip promised (audio only, or
-/// kept and transcribed for a chip shown before v1.8), one whose chip still counts (a restart within 12 s) gets its
-/// timer (`keep_due`); a chip's Discard is finished once its Undo time is over
-/// (`discard_due`). Recordings that wait for the person stay as they are, whatever
-/// the setting. Skipped calls past their 24 hours are deleted; the others get their timers.
+/// kept and transcribed for a chip shown before v1.8), one whose chip still counts (a restart within 8 s) gets its
+/// timer, and a pending Transcribe or Save audio only is applied when due (`keep_due`). A Delete chosen before the quit
+/// and not applied is never applied out of sight: it goes back to the Library's waiting list
+/// (`restore_unapplied_deletes`). Recordings that wait for the person stay as they are, whatever the setting. Skipped
+/// calls past their 24 hours are deleted; the others get their timers.
 pub fn restore_pending(app: &AppHandle) {
     keep_due(app);
-    // A chip's Discard whose Undo time ran out while the app was closed is finished now; one still within it (a
-    // restart within seconds) waits for the rest of its time.
-    discard_due(app);
     let state = app.state::<crate::AppState>();
+    let back = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).restore_unapplied_deletes()
+    };
+    match back {
+        Ok(ids) if !ids.is_empty() => eprintln!("[echoledger] {} deletion(s) not applied before the quit wait in the Library again", ids.len()),
+        Ok(_) => {}
+        Err(e) => eprintln!("[echoledger] putting unapplied deletions back in the waiting list: {e}"),
+    }
     purge_skipped(app);
     for call in SkippedFiles::in_dir(&state.data_dir).load().items {
         schedule_purge(app, call.expires_at());

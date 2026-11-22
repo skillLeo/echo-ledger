@@ -638,6 +638,24 @@ impl DecisionFiles {
         self.update(id, |d| apply_choice(d, choice, at))
     }
 
+    /// At start: every Delete chosen before the app quit and not applied yet (its Undo can no longer be shown) goes back to
+    /// the waiting list instead, for Transcribe, Save audio only or Delete there; nothing of it was deleted. Returns their
+    /// ids. Pending Transcribe and Save audio only choices are left to `keep_due`: their audio is kept either way.
+    pub fn restore_unapplied_deletes(&self) -> AppResult<Vec<String>> {
+        let mut store = self.load();
+        let mut back = Vec::new();
+        for d in store.items.iter_mut().filter(|d| d.discard_at.is_some()) {
+            d.discard_at = None;
+            d.chosen = None;
+            d.keep_at = None;
+            back.push(d.id.clone());
+        }
+        if !back.is_empty() {
+            store.save(&self.pending)?;
+        }
+        Ok(back)
+    }
+
     /// Undo on the waiting list's Delete: the recording waits in the list again, as before. An error when its files
     /// already went.
     pub fn restore_waiting(&self, id: &str) -> AppResult<PendingDecision> {
