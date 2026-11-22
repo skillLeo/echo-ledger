@@ -568,7 +568,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const [headEl, setHeadEl] = useState<HTMLElement | null>(null);
   const headKeys = useRef<readonly string[]>([]);
   // What needs action (LibraryTop.tsx): the quiet button before Trash, the only place the Library says it.
-  const needs = useLibraryNeeds(top?.status ?? null, items, queueCovers(queue), queue.pending);
+  const needs = useLibraryNeeds(top?.status ?? null, items, queueCovers(queue), { waiting: queue.pending, uploads: queue.uploads });
   const headerNeeds = !!needs && view !== "trash" && !selecting;
   const foldable: Foldable[] = (counts?.all ?? 0) > 0 ? ["trash", "sync", "select"] : ["trash", "sync"];
   const needsWords = needs ? Object.values(needsLabel(needs)).join(" ") : "";

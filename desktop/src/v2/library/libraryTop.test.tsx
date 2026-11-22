@@ -6,7 +6,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makePendingItem, makeStatus, makeUploadItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
-import { DISMISSED_PREFIX, WAITING_HOLD_MS } from "./LibraryTop";
+import { DISMISSED_PREFIX, HOLD_MS } from "./LibraryTop";
 import type { Account } from "../../lib/ipc";
 
 const account = (email: string): Account => ({ name: "Ayesha Khan", email, email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
@@ -168,7 +168,9 @@ describe("the top of the Library", () => {
       await top.update({ pendingDecisions: 1 });
       await act(() => emitEvent("pending:changed", [counting("p3")]));
       expect(within(actions()).getByRole("button", { name: "1 waiting" })).toBe(needs());
+      // Uploads that didn't go up and that the queue doesn't list (here: its list says nothing of them), as reported.
       await top.update({ pendingDecisions: 1, failedUploads: 2 });
+      await act(() => emitEvent("uploads:changed", []));
       expect(within(actions()).getByRole("button", { name: "3 need you" })).toBe(needs());
     });
 
@@ -292,11 +294,82 @@ describe("the top of the Library", () => {
         const top = await show(makeStatus({ platform: "macos" }));
         vi.useFakeTimers();
         await top.update({ pendingDecisions: 1 });
-        await act(async () => vi.advanceTimersByTime(WAITING_HOLD_MS - 50));
+        await act(async () => vi.advanceTimersByTime(HOLD_MS - 50));
         expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
         await act(async () => vi.advanceTimersByTime(100));
         expect(within(actions()).getByRole("button", { name: "2 need you" })).toBe(needs());
-        expect(WAITING_HOLD_MS).toBeLessThanOrEqual(1000);
+        expect(HOLD_MS).toBeLessThanOrEqual(1000);
+      });
+    });
+
+    it("an after-call card counting down: nothing in the header, nor in Waiting; opened instead, the queue lists it with its Review", async () => {
+      // The core counts a call as waiting only once no card counts down for it (pending.rs `waits`, recording_lifecycle
+      // the_waiting_count_and_the_waiting_list_agree_through_a_card); the queue lists the same ones (no deadlineAt).
+      const card = makePendingItem("p1", { title: "Call with Ali", deadlineAt: "2026-11-23T10:00:08Z" });
+      respond("pending_list", [card]);
+      respond("upload_list", []);
+      const top = await show(makeStatus({ platform: "macos", pendingDecisions: 0 }));
+      const watch = watchCorrections();
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(screen.queryByTestId("waiting-line")).toBeNull();
+      // Its 8 s are over with no choice: saved as audio only (chosen, applied after the confirmation): still nothing.
+      await act(() => emitEvent("pending:changed", [{ ...card, deadlineAt: "2026-11-23T10:00:15Z" }]));
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(screen.queryByTestId("waiting-line")).toBeNull();
+      // Opened in the main window instead (no card keeps it): it waits; the status and the queue say so, and the
+      // queue's own line and Review show it, so the header doesn't say it twice.
+      await top.update({ pendingDecisions: 1 });
+      await act(() => emitEvent("pending:changed", [{ ...card, deadlineAt: null }]));
+      expect(screen.getByTestId("waiting-line")).toHaveTextContent("1 call waiting");
+      expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+      expect(watch.changes).toEqual([]);
+      watch.stop();
+    });
+
+    describe("an upload that didn't go up, reported by the status and the queue's uploads one after the other", () => {
+      const FAILED = makeUploadItem("f1", { state: "failed", title: "Board call" });
+      afterEach(() => vi.useRealTimers());
+
+      it("the status first: held until the uploads say the queue shows it, never a passing \"2 need you\"", async () => {
+        respond("pending_list", []);
+        respond("upload_list", []);
+        const top = await show(makeStatus({ platform: "macos" }));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        const watch = watchCorrections();
+        await top.update({ failedUploads: 1 });
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await act(() => emitEvent("uploads:changed", [FAILED]));
+        expect(screen.getByRole("heading", { name: "Uploads that need you · 1" })).toBeInTheDocument();
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        expect(watch.changes).toEqual([]);
+        watch.stop();
+      });
+
+      it("the uploads first (Retry or Discard in the queue): held until the status says so, never a passing \"1 didn't upload\"", async () => {
+        respond("pending_list", []);
+        respond("upload_list", [FAILED]);
+        const top = await show(makeStatus({ platform: "macos", failedUploads: 1 }));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        const watch = watchCorrections();
+        await act(() => emitEvent("uploads:changed", [{ ...FAILED, state: "queued", lastError: null }]));
+        expect(screen.queryByRole("heading", { name: /Uploads that need you/ })).toBeNull();
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await top.update({ failedUploads: 0 });
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        expect(watch.changes).toEqual([]);
+        watch.stop();
+      });
+
+      it("only the status ever says it: the count shows after the hold", async () => {
+        respond("pending_list", []);
+        respond("upload_list", []);
+        const top = await show(makeStatus({ platform: "macos" }));
+        vi.useFakeTimers();
+        await top.update({ failedUploads: 1 });
+        await act(async () => vi.advanceTimersByTime(HOLD_MS - 50));
+        expect(within(actions()).getByRole("button", { name: "1 not transcribed" })).toBe(needs());
+        await act(async () => vi.advanceTimersByTime(100));
+        expect(within(actions()).getByRole("button", { name: "2 need you" })).toBe(needs());
       });
     });
 
