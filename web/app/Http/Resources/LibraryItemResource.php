@@ -6,17 +6,20 @@ namespace App\Http\Resources;
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Enums\UploadStatus;
 use App\Http\Controllers\Api\SessionController;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Services\Library\LibraryFilters;
 use App\Services\LibraryOrganiser;
 use App\Services\RetentionPolicy;
 use App\Services\TranscribeLater;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -132,8 +135,35 @@ final class LibraryItemResource extends JsonResource
             // Only for the person whose recording it is: the minutes left are theirs, never a sender's (a recording a
             // teammate sent shows none).
             'transcribe_estimate' => self::asksOwner($request, $session) ? app(TranscribeLater::class)->estimate($session) : null,
+            // Since 2.0.0-p: the recording's Source, Status and Language in the Library's filters (docs/API.md "Library
+            // filters"), so every app counts with the same words.
+            'facets' => LibraryFilters::itemFacets($session, self::uploadFailed($session), $final?->status->value, $final?->language),
             'updated_at' => $session->updated_at->toAtomString(),
         ];
+    }
+
+    /**
+     * Reads, with the rows, whether an upload of each recording failed (the Status `failed`), so a page of items costs
+     * one query more instead of one an item.
+     *
+     * @template TBuilder of Builder<CaptureSession>
+     *
+     * @param  TBuilder  $query
+     * @return TBuilder
+     */
+    public static function withUploadFailed(Builder $query): Builder
+    {
+        return $query->withExists(['recordings as upload_failed' => fn (Builder $r): Builder => $r->where('upload_status', UploadStatus::Failed->value)]);
+    }
+
+    /** Whether an upload of the recording failed: read with the rows (withUploadFailed), else asked now. */
+    private static function uploadFailed(CaptureSession $session): bool
+    {
+        if (array_key_exists('upload_failed', $session->getAttributes())) {
+            return (bool) $session->getAttribute('upload_failed');
+        }
+
+        return $session->recordings()->where('upload_status', UploadStatus::Failed->value)->exists();
     }
 
     /** Whether the person asking (a device's, or the signed-in console user) made [$session], in its workspace. */

@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Enums\SessionStatus;
 use App\Enums\TranscriptKind;
+use App\Enums\UploadStatus;
 use App\Models\CaptureSession;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\Screen;
@@ -56,6 +57,30 @@ final class LibrarySearch
     public function searchIn(Builder $base, string $query, int $limit = 20, int $page = 1): array
     {
         $terms = self::terms($query);
+        $folded = array_values(array_unique(array_map(UrduText::fold(...), $terms)));
+        $sessions = $this->page($this->matching($base, $query), $limit, $page);
+
+        $more = $sessions->count() > $limit;
+        $items = $sessions->take($limit)->values();
+        $screens = $this->matchingScreens($items->map(fn (CaptureSession $s): string => $s->id)->all(), $folded);
+        $hits = [];
+        foreach ($items as $session) {
+            $hits[$session->id] = self::hitsFor($session, $terms, $screens[$session->id] ?? []);
+        }
+
+        return ['items' => $items, 'hits' => $hits, 'more' => $more];
+    }
+
+    /**
+     * [$base] narrowed to the recordings the words find: every word in the title shown, a transcript or a screen
+     * moment (since 2.0.0-p also the Library's search box and its filter counts). Sets [$engine].
+     *
+     * @param  Builder<CaptureSession>  $base
+     * @return Builder<CaptureSession>
+     */
+    public function matching(Builder $base, string $query): Builder
+    {
+        $terms = self::terms($query);
         // Transcripts are searched in their folded form (Urdu spelling variants made one, App\Support\UrduText), with
         // folded terms; titles keep the original letters and the original terms.
         $folded = array_values(array_unique(array_map(UrduText::fold(...), $terms)));
@@ -81,17 +106,8 @@ final class LibrarySearch
                 report($e);
             }
         }
-        $sessions = $this->page($matching, $limit, $page);
 
-        $more = $sessions->count() > $limit;
-        $items = $sessions->take($limit)->values();
-        $screens = $this->matchingScreens($items->map(fn (CaptureSession $s): string => $s->id)->all(), $folded);
-        $hits = [];
-        foreach ($items as $session) {
-            $hits[$session->id] = self::hitsFor($session, $terms, $screens[$session->id] ?? []);
-        }
-
-        return ['items' => $items, 'hits' => $hits, 'more' => $more];
+        return $matching;
     }
 
     /**
@@ -284,7 +300,9 @@ final class LibrarySearch
     {
         $query = CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson()
             ->where('status', '!=', SessionStatus::Recording->value)
-            ->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels'])->withCount('screens');
+            ->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels'])->withCount('screens')
+            // Since 2.0.0-p: each item's `facets.status` with the rows, not one query an item.
+            ->withExists(['recordings as upload_failed' => fn (Builder $r): Builder => $r->where('upload_status', UploadStatus::Failed->value)]);
         foreach (['client_id', 'source_app', 'source_device', 'status'] as $field) {
             if (! empty($filters[$field])) {
                 $query->where($field, $filters[$field]);

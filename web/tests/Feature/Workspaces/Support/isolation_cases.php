@@ -10,6 +10,7 @@ use App\Models\MissedRecording;
 use App\Models\Passkey;
 use App\Models\Screen;
 use App\Models\SentItem;
+use App\Models\SavedView;
 use App\Models\SessionLabel;
 use App\Models\SessionMarker;
 use App\Models\ShareCheckResult;
@@ -18,6 +19,7 @@ use App\Models\UpgradeRequestProof;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
+use App\Services\Library\SavedViews;
 use App\Services\InterfaceFlags;
 use App\Services\ShareLinks;
 use App\Services\Sharing\RequestLinks;
@@ -147,6 +149,9 @@ function isoWorld(bool $sameWorkspace = false): array
     $transcript = Fx::transcript($session, 'BOBSECRETTRANSCRIPT spoken here');
     $marker = SessionMarker::query()->create(['capture_session_id' => $session->id, 'at_ms' => 1000, 'note' => 'BOBSECRETNOTE', 'source' => 'device']);
     SessionLabel::query()->create(['capture_session_id' => $session->id, 'label' => 'bobsecretlabel']);
+    // Since 2.0.0-p: Bob's saved view, its name and search his own.
+    $bobView = app(SavedViews::class)->create((int) $session->workspace_id, $bob->id, ['name' => 'BOB-SECRET-TITLE view', 'search' => 'BOBSECRETTRANSCRIPT',
+        'filters' => ['labels' => ['op' => 'is', 'values' => ['bobsecretlabel']]]])['view'];
     $screen = Screen::query()->create(['workspace_id' => $session->workspace_id, 'capture_session_id' => $session->id, 'at_ms' => 1000, 'width' => 1, 'height' => 1,
         'trigger' => 'manual', 'sha256' => str_repeat('b', 64), 'mime' => 'image/png', 'bytes' => 1, 'ocr_text' => 'BOBSECRETNOTE on the screen']);
     ['link' => $share, 'url' => $shareUrl] = app(ShareLinks::class)->create($session, 3600, null, false, 'Bob');
@@ -180,7 +185,7 @@ function isoWorld(bool $sameWorkspace = false): array
     $bobPasskey = Passkey::query()->create(['user_id' => $bob->id, 'name' => 'BOB-SECRET-DEVICE passkey', 'credential_id' => 'bob-credential', 'credential' => '{}']);
     app('auth')->forgetGuards();
 
-    return compact('bobPasskey', 'alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
+    return compact('bobView', 'bobPasskey', 'alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession', 'bobInvitation', 'bobLink');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
@@ -307,6 +312,17 @@ function isoApiCases(array $b): array
         'api.transcripts.restore' => ['POST', "/api/transcripts/{$t}/restore", ['revision_id' => 1], 404],
         'api.library' => ['GET', '/api/library?since=1970-01-01T00:00:00Z&limit=100&include_deleted=1', [], 'list'],
         'api.library.views' => ['GET', '/api/library/views', [], 'list'],
+        // Since 2.0.0-p: the filter counts (never Bob's projects, labels or recordings) and saved views (never his).
+        // The id Alice named comes back as she sent it (her filter, with no name and nothing counted), and nothing else of Bob's.
+        'api.library.facets' => ['GET', '/api/library/facets?filters='.urlencode((string) json_encode(['project' => ['op' => 'is', 'values' => [$b['client']->id]]])), [],
+            fn (TestResponse $r): bool => $r->status() === 200 && $r->json('total') === 0 && collect($r->json('sections.project'))->firstWhere('value', $b['client']->id) === ['value' => $b['client']->id, 'count' => 0, 'name' => null, 'color' => null, 'parent_id' => null],
+            [$b['client']->id]],
+        'api.views' => ['GET', '/api/views', [], 'list'],
+        'api.views.store' => ['POST', '/api/views', ['name' => 'Alice view'], fn (TestResponse $r): bool => $r->status() === 201
+            && unscoped(fn (): bool => SavedView::query()->withoutGlobalScopes()->where('user_id', $b['bob']->id)->pluck('name')->all() === ['BOB-SECRET-TITLE view'])],
+        'api.views.update' => ['PATCH', "/api/views/{$b['bobView']['id']}", ['name' => 'hijacked'], 404],
+        'api.views.destroy' => ['DELETE', "/api/views/{$b['bobView']['id']}", [], 404],
+        'api.views.order' => ['PUT', '/api/views/order', ['ids' => [$b['bobView']['id']]], fn (TestResponse $r): bool => $r->status() === 422],
         'api.bin' => ['GET', '/api/bin', [], 'list'],
         'api.storage' => ['GET', '/api/storage', [], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('recordings_count') === 1],
         'api.activity' => ['GET', '/api/activity', [], 'list'],

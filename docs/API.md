@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-o (2026-11-22, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-p (2026-11-23, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-p (proposed 2026-11-23, accepted when merged; the Library's filters and views, see "Library filters (since 2.0.0-p)" and "Saved views (since 2.0.0-p)"): one definition of every Library filter (Date, Source, Device, Project, Language, Status, Labels, Marked, Bookmarks, each with "is" and "is not", and the search) and of "Needs you", the same on the server, the desktop and the phone, with a shared test file of recordings and their counts (`web/tests/Fixtures/library-facets.json`). `GET /api/library` takes `filters` and `q`, and `view=needs_you` / `view=unread`; its answer carries `views_version`. Every library item carries `facets` (its Source, Status and Language). New `GET /api/library/facets` (the filter panel's counts, Needs you and the sidebar's counts) and saved views: `GET`/`POST /api/views`, `PATCH`/`DELETE /api/views/{id}`, `PUT /api/views/order`, at most 30 a person. New codes `views_limit`, `view_not_found`. Only additions: older apps ignore them.
 2.0.0-o (proposed 2026-11-22, accepted when merged; B12, see "Ask about a recording and across recordings (since 2.0.0-o)"): Ask beyond one project. `POST /api/sessions/{id}/ask` asks about one recording of the person's (its transcript and its notes) and `POST /api/ask` across all of their own recordings in the workspace, with the request, answer, citations, throttle, plan feature and AI budget of `POST /api/clients/{id}/ask`. New code `409 no_transcript` (nothing transcribed to ask about). Every Segment carries `language` (the line's language when the engine knew it: `ur`, `en`, `ar`…; `null` otherwise and on every line before 2.0.0-o), so the apps can skip a language's lines; `POST /api/sessions/{id}/transcripts` takes it too. Only additions: older apps ignore them.
 2.0.0-n (proposed 2026-11-21, accepted when merged; U19 "Roman Urdu by default"): `views.status` (a transcript's `views`, `GET /api/transcripts/{id}/views` and a library item's `transcript.views`) is `making` from the moment a finished transcript's default view is on its way, also before its job has started (`progress` is `{}` until the job counts the lines), so apps show "Converting to Roman Urdu…" at once; a `making` that moved no line for 20 minutes, and a view that never started within 20 minutes of the transcript (until 24 hours after it, `none` then), is `failed` (`error` "Converting took too long. Try again."), never busy for ever, and `POST` starts it again. A library item's `transcript.views` counts only views made (or failed) after the transcript's last edit. A library item's `transcript.preview` is in the default view once it is `ready`, and the new `transcript.preview_view` (`"roman"` | `"urdu"` | `"english"` | `"original"`) says which, so rows need not fetch the views. A recording that opens in Roman Urdu gets its automatic title in Roman Urdu, and an automatic title in Urdu letters is written again in Roman Urdu when the view is made. No other field changes.
 2.0.0-m (proposed 2026-11-21, accepted when merged): lists (B11, see "Lists (since 2.0.0-m)"). A person's lists are their labels with a name, a colour and a place in the apps' row, kept by the server so every device shows the same ones: `GET /api/lists`, `POST /api/lists` (an empty list), `PATCH` and `DELETE /api/lists/{key}` (rename or delete changes every recording of the person in one transaction) and `PUT /api/lists/order`. Labelling a recording makes its list when it is new (never for a label spelt All, Unread or Important, which stays a plain label). `GET /api/library/views` gives the labels in list order. A label's colour is its list's (`PUT /api/labels/color` and `label_colors` answer as before). New codes `name_reserved`, `list_exists`, `list_not_found`. Only additions: older apps ignore them.
@@ -134,6 +135,8 @@ Every addition below is marked **(since v1.1)**.
 | 422 | `name_reserved` | Since 2.0.0-m: a list can't be called All, Unread or Important (in English or Urdu: سب, نہ پڑھی گئی, اہم) | Ask for another name |
 | 409 | `list_exists` | Since 2.0.0-m: the person already has a list of that name (capitals and spaces ignored); `name` is that list's | Say "You already have a list called …" |
 | 404 | `list_not_found` | Since 2.0.0-m: no list of the person's has this key | Refresh the lists |
+| 422 | `views_limit` | Since 2.0.0-p: the person already keeps 30 saved views in this workspace (`limit`: 30); nothing was saved | Say "You can keep up to 30 views. Delete one to save another." |
+| 404 | `view_not_found` | Since 2.0.0-p: no saved view of the person's has this id (another person's view answers the same) | Read `GET /api/views` again |
 | 429 | `rate_limited` | Throttled; `Retry-After` is always set | Wait `Retry-After` seconds |
 | 502 | `provider_error` | `stt/token`: the provider refused or could not be reached | Retry later |
 | 503 | `provider_not_configured` | `stt/token`: provider key or region missing. Since 1.8.1-b the `message` is "Live captions are not set up on the server yet. Ask your admin." (or "Dictation …" for dictation); it never names an engine | Show the message; retry later |
@@ -1055,9 +1058,11 @@ A bookmark added after the call: `{"at_ms": 61250, "tag": "Decision", "note": "S
 Query: `since` (ISO-8601 with any offset; items with `updated_at >= since`, **including tombstones**), `source`
 (comma list of `phone,desktop,web`), `source_app`, `client_id`, `status`, `cursor`, `limit` (1–100, default 50), `tag`
 (sessions with a bookmark of that tag) and `bookmarked=1` (sessions with any bookmark; both since v1.1), `view`, `tz`,
-`label` and `pinned` (since v1.1, see "Organising the library"), and `important` (since 2.0.0-i).
+`label` and `pinned` (since v1.1, see "Organising the library"), `important` (since 2.0.0-i), and since 2.0.0-p
+`filters` and `q` (the Library's filters and its search, see "Library filters (since 2.0.0-p)"; with either, only
+recordings they keep are listed, never tombstones: leave them out when syncing).
 Returns every session of the owner from **every** device, except sessions still in status `recording` (listed only
-when `status=recording` is given).
+when `status=recording`, `view=waiting` or, since 2.0.0-p, `view=needs_you` is given).
 ```json
 {"data": [
    {"id": "01JB…", "client_ref": "3f2b…", "deleted": false,
@@ -1070,11 +1075,16 @@ when `status=recording` is given).
                    "live_transcript_id": "01JB…", "preview": "first 160 characters…", "preview_view": "roman"},
     "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"], "opened": false,
     "important": false, "label_colors": {"Invoice": "#16a34a"}, "expires_at": "2026-12-14T09:00:00+00:00",
+    "facets": {"source": "zoom", "status": "transcribed", "language": "en"},
     "updated_at": "…"},
    {"id": "01JC…", "client_ref": "9a1d…", "deleted": true, "updated_at": "…"}
  ],
- "next_cursor": null, "server_time": "2026-10-24T09:05:00+00:00"}
+ "next_cursor": null, "server_time": "2026-10-24T09:05:00+00:00", "views_version": 4}
 ```
+`facets` (since 2.0.0-p): the recording's value in the Library's Source, Status and Language filters, worked out by the
+server as "Library filters" says; the apps count with these instead of working them out again. `views_version` (since
+2.0.0-p): a number that changes whenever the person's saved views change (0 before the first one); when it differs from
+the one stored, read `GET /api/views` again (see "Saved views").
 Sync rule **(since v1.1: inclusive boundary)**:
 - `server_time` is taken when the query starts. Store it and send it as `since` next time.
 - `since` is inclusive (`>=`), so an item changed in the same second as the previous sync is delivered again on
@@ -1095,6 +1105,9 @@ recording itself.
 Smart views (`view` on `GET /api/library`): `today` and `this_week` (calendar day or Monday-based week of `started_at`
 in `tz`, an IANA zone, default the console's display zone), `waiting` (still `recording`: the phone or computer has
 not decided Keep or Discard), `bookmarked`, `failed` (session `failed` or an upload that failed) and `pinned`.
+Since 2.0.0-p also `needs_you` ("Needs you" as "Library filters" defines it, waiting calls included) and `unread` (the
+asking person has not opened it: `opened` false). `GET /api/library/views` is unchanged; the counts of these two are in
+`GET /api/library/facets` (`library`).
 `label` matches a recording label ignoring capitals; `pinned=1` / `pinned=0` filter by pin.
 
 ### `GET /api/library/views?tz=` — `library:read` (since v1.1)
@@ -1189,6 +1202,138 @@ that lost the label). `404 list_not_found`.
 ### `PUT /api/lists/order` — `sessions:write` (since 2.0.0-m)
 `{"keys": ["family", "clients", "home"]}` → `200 {"data": [<list>]}` in the new order. `keys` names every list of the
 person exactly once (as keys or names, capitals ignored); a list left out, named twice, or not the person's →
+`422 validation_failed` and nothing moves.
+
+### Library filters (since 2.0.0-p)
+The Library's filter panel, its pills, the sidebar's views and saved views all use this one definition, on the server
+(the web console and `GET /api/library/facets`), the desktop and the phone (each counting from its synced library).
+`web/tests/Fixtures/library-facets.json` holds about forty recordings and, for 28 filter sets, the list and every count
+the three must get; each app's tests read it.
+
+**A filter set** is a JSON object with one entry per section in use, in any order (the server answers them in the order
+below): `{"source": {"op": "is", "values": ["whatsapp", "zoom"]}, "date": {"op": "is_not", "values": ["this_month"]}}`.
+`op` is `is` (the default) or `is_not`; `values` is a list of 1 to 50 of the section's options. Sections combine with
+AND, the values of one section with OR: "is" keeps a recording that has at least one of the values, "is not" one that
+has none of them (a recording without labels is "Labels is not Clients"). An empty `values`, or Date `any` (Any time),
+is no filter. A section or option the server does not know is `422 validation_failed` naming the field
+(`filters.source.values`); an app ignores a section or option it does not know in a view it reads.
+`GET /api/library` and `GET /api/library/facets` take it as `filters`, the JSON text (URL-encoded) or the same in
+brackets (`filters[source][op]=is&filters[source][values][]=zoom`).
+
+| Section | Options (`values`) | A recording's value |
+|---|---|---|
+| `date` | one of `today`, `last_7_days`, `this_month`, `custom` (with `from` and/or `to`, `YYYY-MM-DD`) | `started_at` in the zone `tz` (an IANA zone, default the console's display zone; the apps use the device's): Today is the calendar day; Last 7 days is today and the 6 days before; This month the calendar month; `custom` from the start of `from` to the end of `to`, both days included, either end open when left out. Nothing after today is in Today or Last 7 days |
+| `source` | `whatsapp`, `whatsapp_business`, `google_meet`, `zoom`, `microsoft_teams`, `phone_call`, `telegram`, `signal`, `messenger`, `instagram`, `skype`, `slack`, `discord`, `voice_note`, `imported`, `other` | `facets.source`: `imported` for a file that came in as a file (imported on a device, uploaded on the console, sent through a request link), whatever app it names; else its `source_app`, with `whatsapp_web` as `whatsapp`. A teammate's copy saved here is its app |
+| `device` (was "Recorded on") | `phone`, `desktop`, `web` | `source_device` |
+| `project` | `none` (no project) and project ids | `client.id`, and every project above it: "Project is Acme" keeps Acme's subfolders too. An id that is not one of the person's projects (gone, or someone else's) matches nothing |
+| `language` | the offered codes (`en`, `ur`, `ar`, `fr`, `de`, `es`, `it`, `pt`, `nl`, `tr`, `ru`) and `unknown` | `facets.language`: the language the final transcript was written in, else the one chosen for the recording (`language`), else `unknown`; old and engine spellings read as the offered codes (`en+ur` and Hindi are `ur`, `ar-EG` is `ar`, a code not offered is passed over) |
+| `status` | `transcribed`, `not_transcribed`, `processing`, `failed` | `facets.status`, the first that holds: `failed` (the session `failed`, an upload of it failed, or its final transcript `failed`), `transcribed` (its final transcript `completed`), `processing` (the session `uploading` or `processing`, or its final transcript `pending`, `submitted`, `processing` or `awaiting_device`), else `not_transcribed` (`audio_only`, or kept without a finished transcript) |
+| `labels` | label keys (a label in lower case; any capitals are accepted and kept in lower case) | `labels`, capitals ignored as lists are |
+| `marked` | `pinned`, `important`, `keep_forever` | `pinned`, `important`, `keep` (a recording can have several) |
+| `bookmarks` | `any` (any bookmark) and bookmark tags (in lower case; any capitals are accepted) | `any` when `marker_count` > 0, and each of `tags` in lower case (the web's "Has bookmarks" and "Bookmark tag", the apps' Bookmark chip) |
+
+**Search** (`q`, 2 to 200 characters; shorter, or only punctuation, is no search): the recordings `GET /api/search`
+finds, every word in the title shown or every word in one transcript (or screen moment), capitals ignored. The apps
+search what they hold the same way: every word in the title, or every word in the transcript text.
+
+**What is counted:** the person's own recordings in the device's workspace, not in Trash and not still `recording`
+(those are only in Needs you); never a teammate's or another workspace's (Shared with me is its own list).
+
+**"Needs you"**, one recording at most once, the first that holds:
+1. `waiting`: a call waiting for Keep or Discard (session `recording`; on the phone and the desktop also the after-call
+   card still open, and "Choose again").
+2. `failed`: Status `failed` (an upload or a transcript that failed, or the recording failed).
+3. `stuck`: Status `processing`, and it ended (`ended_at`, else `started_at`) 24 hours ago or more.
+The server knows what reached it. Only the apps know their own: an upload that failed or waits on the device (never
+reached the server), a call waiting on the device's card, and an upload stuck on the device for 24 hours; each app adds
+those to the server's, never counting one recording twice.
+
+The sidebar's Library views: **All** (no filter), **Needs you** (`view=needs_you`), **Unread** (`view=unread`),
+**Important** (`important=1`, or Marked is Important), **Not transcribed** (Status is Not transcribed), **Audio only**
+(`status=audio_only`) and **Shared** (Shared with me, My links, Request links).
+
+### `GET /api/library/facets` — `library:read` (since 2.0.0-p)
+The filter panel's counts. Query: `filters`, `q`, `tz` as above.
+```json
+{"total": 23,
+ "sections": {
+   "date": [{"value": "today", "count": 3}, {"value": "last_7_days", "count": 9}, {"value": "this_month", "count": 20}],
+   "source": [{"value": "whatsapp", "count": 7}, {"value": "zoom", "count": 3}],
+   "device": [{"value": "phone", "count": 15}, {"value": "desktop", "count": 8}],
+   "project": [{"value": "none", "count": 4},
+               {"value": "01JB…", "count": 6, "name": "Acme", "color": "#8b5cf6", "parent_id": null},
+               {"value": "01JC…", "count": 2, "name": "Invoices", "color": "#26978f", "parent_id": "01JB…"}],
+   "language": [{"value": "ur", "count": 12}, {"value": "unknown", "count": 1}],
+   "status": [{"value": "transcribed", "count": 20}, {"value": "not_transcribed", "count": 2},
+              {"value": "processing", "count": 0}, {"value": "failed", "count": 1}],
+   "labels": [{"value": "clients", "count": 3, "name": "Clients", "color": "#e15f56"}],
+   "marked": [{"value": "pinned", "count": 2}, {"value": "important", "count": 1}, {"value": "keep_forever", "count": 0}],
+   "bookmarks": [{"value": "any", "count": 4}, {"value": "decision", "count": 2}]},
+ "needs_you": {"count": 6, "failed": 2, "waiting": 3, "stuck": 1},
+ "library": {"all": 40, "needs_you": 6, "unread": 4, "important": 3, "not_transcribed": 3, "audio_only": 2},
+ "filters": {"source": {"op": "is", "values": ["whatsapp"]}},
+ "views_version": 4}
+```
+- `total`: what the filters and the search keep (what `GET /api/library` with them lists).
+- **The facet rule:** each section's counts apply the search and every *other* section's filter, never its own, so every
+  option stays selectable: with Source is WhatsApp and Device is Desktop, Source counts each app's recordings on the
+  desktop and Device counts where the WhatsApp calls were made. A recording counts once in each option it has (in each
+  of Acme and its subfolder, in each of its labels).
+- **Options**, in the panel's order: Date's three, Status's four, Marked's three and Bookmarks' `any` always; Source,
+  Device and Language the values one of the person's recordings has (in the order of the table above, `unknown` last);
+  Bookmarks then the tags the recordings' bookmarks have, by name; Project `none` then
+  every project of the person as a tree (each folder before its subfolders, by name; `parent_id` null at the top); Labels
+  every list of the person in list order (empty ones too), then labels carried without a list, by key; and in every
+  section, any value the filters name, with count 0 when nothing has it.
+- `needs_you` and `library` are the whole library's, whatever the filters (the sidebar's numbers). `filters` is the
+  filter set as the server read it.
+- Answers in under 150 ms for 2,000 recordings and more; the server caches it until a recording or project of the person
+  changes (a filter set's answer for at most a minute, as the dates and the 24 hours move with the clock).
+
+### Saved views (since 2.0.0-p)
+My views in the sidebar: a saved filter set with a name, the same on every device of the person. A view keeps only the
+filters, the search and how the list is shown, never a recording or any of its words.
+
+- **The view:** `{"id": "01JD…", "name": "WhatsApp this week", "filters": {"date": {"op": "is", "values":
+  ["last_7_days"]}, "source": {"op": "is", "values": ["whatsapp"]}}, "search": "invoice", "sort": "newest", "group":
+  "date", "density": "comfortable", "position": 0, "client_ref": "3f2b…", "created_at": "…", "updated_at": "…"}`.
+  `name` is trimmed to single spaces, 1 to 60 characters (two views may share a name). `filters` is a filter set as
+  in "Library filters" (`{}` for none), kept as the server cleaned it. `search` is up to 200 characters, `null` for none.
+  `sort` is `newest` (default), `oldest`, `longest`, `shortest`, `name` or `opened` (recently opened); `group` is
+  `date` (default), `source`, `project`, `language`, `status`, `device` or `none`; `density` is `comfortable` (default)
+  or `compact`. An app that offers fewer shows a sort it lacks as Newest and a group as Date, and keeps the value.
+  `position` counts from 0 with no gaps.
+- **Whose:** the person's in the device's workspace, as lists are: a teammate has views of their own, and another
+  person's view is answered like an unknown one (`404 view_not_found`). Every role may keep views, a viewer too: a view
+  changes nothing of the workspace.
+- **At most 30** a person in a workspace: the 31st is `422 views_limit` (`limit`: 30) and nothing is saved.
+- **Sync:** every change (make, rename, change, delete, reorder) gives the person a new `views_version`, carried by
+  `GET /api/library` and every answer below. An app keeps a copy of the views and works offline; when the sync's
+  `views_version` differs from the one stored, it reads `GET /api/views` and replaces its copy. A view made offline is
+  sent with its own `client_ref`: sending it again answers the view it made, so it is never made twice. A change made
+  offline is sent when the app is back; the last one to arrive wins.
+- `422 validation_failed` names the field (`name`, `filters.source.values`, `sort`…).
+
+### `GET /api/views` — `library:read` (since 2.0.0-p)
+`200 {"data": [<view>], "views_version": 4, "limit": 30}` in `position` order.
+
+### `POST /api/views` — `sessions:write` (since 2.0.0-p)
+`{"name": "WhatsApp this week", "filters": {…}, "search": "invoice", "sort": "newest", "group": "date", "density":
+"comfortable", "client_ref": "3f2b…"}` (all but `name` optional; `client_ref` up to 64 characters) →
+`201 {"data": <view>, "views_version": 5}` at the end of My views. The same `client_ref` again → `200` with that view,
+unchanged. `422 views_limit`, `422 validation_failed`.
+
+### `PATCH /api/views/{id}` — `sessions:write` (since 2.0.0-p)
+Any of `name`, `filters`, `search`, `sort`, `group`, `density` (a field left out stays; `"search": null` takes the search
+away) → `200 {"data": <view>, "views_version": 6}`. Sending what the view already has changes nothing and keeps the
+version. `404 view_not_found`.
+
+### `DELETE /api/views/{id}` — `sessions:write` (since 2.0.0-p)
+`200 {"id": "01JD…", "views_version": 7}`; the views after it move up one. `404 view_not_found`.
+
+### `PUT /api/views/order` — `sessions:write` (since 2.0.0-p)
+`{"ids": ["01JD…", "01JC…"]}` names every view of the person exactly once → `200 {"data": [<view>], "views_version": 8}`
+in the new order (the order it already has keeps the version). A view left out, named twice, or not the person's →
 `422 validation_failed` and nothing moves.
 
 ### `PATCH /api/sessions/{id}` — `sessions:write` (since v1.1)
@@ -1625,7 +1770,9 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
   (`null` = no limit). These are plan minutes: `0` when it would run on the person's own key (Free) or an on-device
   engine, which count for none (since 2.0.0-j). Only the person whose recording it is sees it: on a recording a
   teammate sent (the `shared` folder) it is `null`.
-- `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter).
+- `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter). Since 2.0.0-p
+  the sidebar's **Audio only** is this list, and the Status filter's **Not transcribed** holds these and the
+  recordings kept without a finished transcript (see "Library filters").
 - `POST /api/sessions/{id}/transcribe` — `sessions:write`, throttled (30/min/device): starts the transcript of an
   `audio_only` session with the usual routing → `202 {"session": { …status "processing"… }, "transcript": {"id",
   "kind", "provider", "status", "language"}}`. `409 not_audio_only` when the session is not `audio_only` (already
