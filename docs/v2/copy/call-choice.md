@@ -29,6 +29,7 @@ placeholders; names, apps and numbers inside Urdu lines are isolated (FSI…PDI)
 | start_banner | Recording this call | یہ کال ریکارڈ ہو رہی ہے |
 | card_meta | %1$s · just now | %1$s · ابھی |
 | card_swipe | Swipe away to keep audio only | صرف آڈیو رکھنے کے لیے ہٹا دیں |
+| card_close_desktop | Close to keep audio only | صرف آڈیو رکھنے کے لیے بند کریں |
 | card_first_hint | You can change this in Settings › After each call. | آپ اسے ترتیبات › ہر کال کے بعد میں بدل سکتے ہیں۔ |
 | card_always | Always do this? | ہمیشہ یہی کریں؟ |
 | card_always_yes | Yes | ہاں |
