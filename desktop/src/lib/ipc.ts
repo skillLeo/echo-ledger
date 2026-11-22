@@ -604,9 +604,9 @@ export type SettingsPane = PermissionKind | "automation" | "sound" | "software_u
 export interface MissingPermission {
   kind: PermissionKind;
   sentence: string;
-  /** A call's other side found by the recording itself (2.0.6): not recorded (the tap is held back: System Audio
-   * Recording), or not heard for 30 s while another app plays sound (neutral). */
-  otherSide?: "permission" | "silent";
+  /** A call's other side found not recorded by the recording itself (2.0.6): a tap held back (System Audio
+   * Recording). A long silence is the 30-second "not hearing the other side" warning (`capture:far_side`) instead. */
+  otherSide?: "permission";
 }
 
 export interface PermissionsStatus {

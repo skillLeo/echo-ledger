@@ -573,18 +573,6 @@ describe("Screens chip (v1.5)", () => {
       expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
     });
 
-    it("the other side not heard while another app plays (2.0.6): neutral words, no System Settings, can be dismissed", async () => {
-      const silent = [{ kind: "system_audio" as const, sentence: "Can't hear the other side. Check the call's speaker or output device.", otherSide: "silent" as const }];
-      await renderPill(makeRecordingState({ missing: silent }));
-      await emitEvent("pill:visibility", true);
-      const warning = screen.getByTestId("missing-permission");
-      expect(warning).toHaveTextContent("Can't hear the other side");
-      expect(warning).not.toHaveTextContent(/System Audio|permission/);
-      expect(within(warning).queryByRole("button", { name: "Open System Settings" })).toBeNull();
-      fireEvent.click(within(warning).getByRole("button", { name: "Dismiss warning" }));
-      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
-    });
-
     it("hears a prompt answered after the start, and says more when more goes during the recording", async () => {
       const noMic = [{ kind: "microphone" as const, sentence: "The microphone is off for EchoLedger: a recording will have the other side of the call, not your voice." }];
       await renderPill(makeRecordingState({ missing: [] }));

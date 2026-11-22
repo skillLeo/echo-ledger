@@ -217,9 +217,8 @@ export default function PillApp() {
   // Dismissed is for what was on the line: something new going missing during the recording is said again.
   const missingKinds = (live?.missing ?? []).map((m) => `${m.kind}:${m.sentence}`).join();
   useEffect(() => setMissingDismissed(false), [missingKinds]);
-  // The other side not being recorded (2.0.6) stays until it is heard: no dismiss. Not heard (neutral) can be dismissed.
-  const otherSide = shown ? otherSideNotRecorded(live?.missing) : null;
-  const notRecorded = otherSide?.otherSide === "permission" ? otherSide : null;
+  // The other side not being recorded (2.0.6) stays until it is heard: no dismiss.
+  const notRecorded = shown ? otherSideNotRecorded(live?.missing) : null;
   const missing = shown && (!missingDismissed || notRecorded) ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
   const tray = mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : limitNotice && shown ? "limit" : screensNotice && shown && live?.screens?.on ? "screens" : null;
@@ -437,7 +436,7 @@ export default function PillApp() {
         </div>
       )}
       {tray === "missing" && missing && (
-        <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={otherSide?.sentence ?? live?.missing?.[0]?.sentence}>
+        <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={notRecorded?.sentence ?? live?.missing?.[0]?.sentence}>
           <WarningIcon size={14} />
           <span className="mark-text">{missing}</span>
           {notRecorded ? (

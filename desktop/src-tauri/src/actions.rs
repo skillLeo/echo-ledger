@@ -1313,47 +1313,36 @@ fn check_system_side(app: &AppHandle) {
     }
     let state = app.state::<crate::AppState>();
     let Some(side) = state.capture.system_side() else { return };
-    let shown_silent = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).problem == Some(crate::audio::health::SystemProblem::Silent);
-    if crate::audio::health::needs_playing_check(&side) && !shown_silent {
-        // Only zeros for 30 s: said only while another app plays sound, which is read beside the ticker.
-        let app = app.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            let side = crate::audio::health::SystemSide { others_playing: Some(crate::audio::platform::others_playing()), ..side };
-            look_at_system_side(&app, &side);
-        });
-        return;
-    }
-    look_at_system_side(app, &side);
-}
-
-/// One look at the system side: a change is said beside the ticker (it reads the system and writes a file).
-fn look_at_system_side(app: &AppHandle, side: &crate::audio::health::SystemSide) {
-    let state = app.state::<crate::AppState>();
-    let verdict = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).look(side);
+    let verdict = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).look(&side);
     if verdict == crate::audio::health::SystemVerdict::Same {
         return;
     }
+    // What a change does reads the system and writes a file: beside the ticker, so it never waits for them.
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || system_side_changed(&app, verdict));
 }
 
 /// What a change of the system-side check does: says it in the log and the recording's notes, keeps what was found for
-/// Setup and the Mac check (the permission only: never a quiet call), and puts the warning on the pill and in the main
-/// window, or takes it away once the other side is heard.
+/// Setup and the Mac check, and puts the warning on the pill and in the main window, or takes it away once the other
+/// side is heard.
 fn system_side_changed(app: &AppHandle, verdict: crate::audio::health::SystemVerdict) {
     use crate::audio::health::SystemVerdict;
     let state = app.state::<crate::AppState>();
+    // A later look may have changed it meanwhile (the other side heard a moment after it went missing): an old verdict
+    // never shows the warning again, or clears it. The watch stays held while what was found is kept, so two such
+    // jobs keep it in the order of their looks.
+    let watch = state.system_watch.lock().unwrap_or_else(|p| p.into_inner());
+    if !watch.still(&verdict) {
+        return;
+    }
     match verdict {
         SystemVerdict::Same => return,
         SystemVerdict::Missing(problem) => {
             let reason = problem.reason();
-            let said = if problem.names_permission() { "the other side isn't being recorded" } else { "the other side isn't heard" };
-            eprintln!("[echoledger] capture: {said}: {reason}; the microphone records on");
-            state.capture.note(&format!("Other side {}: {reason}", if problem.names_permission() { "not recorded" } else { "not heard" }));
-            if problem.names_permission() {
-                // Setup, the Mac check and the next recording say System Audio Recording is missing.
-                state.system_audio_checked(Some(Err(reason)));
-            }
+            eprintln!("[echoledger] capture: the other side isn't being recorded: {reason}; the microphone records on");
+            state.capture.note(&format!("Other side not recorded: {reason}"));
+            // Setup, the Mac check and the next recording say System Audio Recording is missing.
+            state.system_audio_checked(Some(Err(reason)));
         }
         SystemVerdict::Recording => {
             if state.permission_memory_now().system_audio_failing.is_some() {
@@ -1362,6 +1351,7 @@ fn system_side_changed(app: &AppHandle, verdict: crate::audio::health::SystemVer
             state.system_audio_checked(Some(Ok(())));
         }
     }
+    drop(watch);
     let Some(info) = state.capture.info() else { return };
     let permissions = state.permissions_now();
     let warning = state.system_watch.lock().unwrap_or_else(|p| p.into_inner()).warning();
