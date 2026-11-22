@@ -53,6 +53,8 @@ import com.echoledger.mobile.ui.printHtml
 import com.echoledger.mobile.ui.rememberRecordingPlayer
 import com.echoledger.mobile.ui.shareFile
 import com.echoledger.mobile.ui.v2.components.EchoActionItem
+import com.echoledger.mobile.ui.v2.components.EchoButton
+import com.echoledger.mobile.ui.v2.components.EchoButtonKind
 import com.echoledger.mobile.ui.v2.components.EchoEmptyState
 import com.echoledger.mobile.ui.v2.components.EchoErrorState
 import com.echoledger.mobile.ui.v2.components.EchoIconButton
@@ -345,8 +347,12 @@ private fun V2RecordingPage(
     val t = page.transcript
     val segments = t?.segments.orEmpty()
     val shown = page.shown
-    val findHits = remember(findQuery, shown, segments) {
+    // The languages whose lines are skipped on this page (since 2.0.0-o), for as long as it is open.
+    var skipped by remember(item.id) { mutableStateOf(emptySet<String>()) }
+    // Find looks only in the lines on screen: a skipped language's lines are not matches.
+    val findHits = remember(findQuery, shown, segments, skipped) {
         com.echoledger.mobile.ui.TranscriptFind.matches(segments.mapIndexed { i, s -> shown?.getOrNull(i) ?: s.text }, findQuery)
+            .filter { i -> segments.getOrNull(i)?.language.let { it == null || it !in skipped } }
     }
     val found = if (finding) findHits.getOrNull(findAt.coerceIn(0, (findHits.size - 1).coerceAtLeast(0))) else null
     var lineActions by remember(item.id) { mutableStateOf<LineUi?>(null) }
@@ -364,8 +370,6 @@ private fun V2RecordingPage(
         com.echoledger.mobile.ui.UpgradeSheet(vm, settings.plan, settings.plan.lockFor(feature)) { upgrading = null }
     }
     val finalReady = t?.kind == "final" && t.status == "completed"
-    // The languages whose lines are skipped on this page (since 2.0.0-o), for as long as it is open.
-    var skipped by remember(item.id) { mutableStateOf(emptySet<String>()) }
     val tools = TranscriptTools(
         names = page.speakerNames,
         skipped = skipped,
@@ -435,7 +439,19 @@ private fun V2RecordingPage(
         onMore = { sheet = RecordingSheet.Menu },
         onRename = { sheet = RecordingSheet.Rename },
         tools = tools,
-        ask = { com.echoledger.mobile.ui.v2.ask.V2AskRecording(vm, item.id, onPlayFrom = { page.playFrom(it) }) },
+        // Ask about the person's own recordings with a finished transcript (a teammate's, opened from Shared with me, is
+        // not theirs to ask about); a plan without AI notes gets Summary's lock and See plans.
+        ask = if (library.any { it.id == item.id } && finalReady) {
+            {
+                if (settings.plan.aiNotes) {
+                    com.echoledger.mobile.ui.v2.ask.V2AskRecording(vm, item.id, onPlayFrom = { page.playFrom(it) })
+                } else {
+                    AskLocked(onPlans = { upgrading = "ai_notes" })
+                }
+            }
+        } else {
+            null
+        },
         summary = {
             SummaryPane(
                 vm,
@@ -668,9 +684,14 @@ fun V2RecordingContent(
         }
         // The find match in view: the lines come after the head, the actions, the screens, the tabs and the toolbar.
         val firstLine = 4 + (if (screens.isNotEmpty()) 1 else 0)
-        LaunchedEffect(tools.foundIndex, tab) {
+        // A line of a skipped language is not on screen: the match is scrolled to among the lines shown.
+        val lineSegments = (transcript as? TranscriptState.Lines)?.segments.orEmpty()
+        fun hidden(i: Int) = lineSegments.getOrNull(i)?.language.let { it != null && it in tools.skipped }
+        LaunchedEffect(tools.foundIndex, tab, tools.skipped) {
             val found = tools.foundIndex
-            if (found != null && tab == TAB_TRANSCRIPT) list.animateScrollToItem(firstLine + found)
+            if (found != null && tab == TAB_TRANSCRIPT && !hidden(found)) {
+                list.animateScrollToItem(firstLine + (0 until found).count { !hidden(it) })
+            }
         }
         LazyColumn(Modifier.weight(1f), state = list) {
             item {
@@ -845,13 +866,15 @@ fun V2RecordingContent(
                             tools.foundIndex,
                             tools.kept
                         )
-                        // A skipped language's lines are left out; a line without a language always shows.
-                        val kept = shownLines.filter { it.segment.language == null || it.segment.language !in tools.skipped }
+                        // A skipped language's lines are left out; a line without a language always shows. Their screens
+                        // stay: after the last line shown before them (or the first one shown, for the leading lines).
+                        val kept = shownLines.filter { !hidden(it.index) }
+                        val screensAfter = ScreenAssets.keptAfter(after, shownLines.map { it.index }, kept.map { it.index })
                         itemsIndexed(kept, key = { _, line -> "line-${line.index}" }) { _, line ->
                             val i = line.index
                             Column {
                                 TranscriptRow(line, tools.canPlay, tools.onPlay, onActions = { tools.onLineActions(line) })
-                                after[i].orEmpty().forEach { screen ->
+                                screensAfter[i].orEmpty().forEach { screen ->
                                     ScreenInline(screen, onOpen = { onOpenScreen(screens.indexOf(screen)) })
                                 }
                             }
@@ -896,6 +919,18 @@ private fun LanguageSkip(segments: List<SegmentDto>, skipped: Set<String>, onSki
                 )
             }
         }
+    }
+}
+
+/** Ask on a plan without AI notes: the same words and See plans as Summary's lock. */
+@Composable
+private fun AskLocked(onPlans: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s12),
+        verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+    ) {
+        Text(stringResource(R.string.v2_rec_ask_locked), style = EchoV2.type.body, color = EchoV2.colors.textSecondary)
+        EchoButton(stringResource(R.string.v2_rec_see_plans), onPlans, kind = EchoButtonKind.Secondary)
     }
 }
 

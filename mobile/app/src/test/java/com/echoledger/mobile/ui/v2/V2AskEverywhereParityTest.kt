@@ -4,6 +4,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.TranscriptSummary
 import com.echoledger.mobile.testsupport.FakeServer
@@ -138,8 +140,24 @@ class V2AskEverywhereParityTest : ScreenTest() {
         {"channel":2,"speaker":"Client","start_ms":6000,"end_ms":8000,"text":"Theek hai, done.","words":[]}
     ]"""
 
-    private fun recording(language: EchoLanguage = EchoLanguage.English, lines: String = segments) {
+    private fun recording(
+        language: EchoLanguage = EchoLanguage.English,
+        lines: String = segments,
+        mine: Boolean = true,
+        firstLine: String = "Next Tuesday, by sea."
+    ) {
         server.on("GET", "/api/transcripts/.+", FakeServer.json(200, ServerFixtures.transcript(segments = lines)))
+        // The person's own recording is in their Library; a teammate's (from Shared with me) is not.
+        if (mine) {
+            server.on(
+                "GET",
+                "/api/library",
+                FakeServer.json(200, ServerFixtures.libraryPage(listOf(ServerFixtures.libraryItem(ServerFixtures.SESSION_ID))))
+            )
+            runBlocking { app.graph.library.refresh() }
+        }
+        vm.updateSettings { it.copy(plan = it.plan.copy(aiNotes = notesOnPlan)) }
+        pumpUntil("the plan") { vm.settings.value.plan.aiNotes == notesOnPlan }
         server.on(
             "GET",
             "/api/sessions/${ServerFixtures.SESSION_ID}",
@@ -171,7 +189,60 @@ class V2AskEverywhereParityTest : ScreenTest() {
                 }
             }
         }
-        pumpUntil("the lines") { seen("Next Tuesday, by sea.") }
+        pumpUntil("the lines") { seen(firstLine) }
+    }
+
+    private var notesOnPlan = true
+
+    private val askTab = hasText("Ask") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+
+    @Test
+    fun aTeammatesRecordingHasNoAsk() {
+        recording(mine = false)
+        assertTrue(compose.onAllNodes(askTab).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aPlanWithoutAiNotesGetsSummarysLockAndSeePlans() {
+        notesOnPlan = false
+        recording()
+        compose.onAllNodes(askTab).onFirst().performClick()
+        pumpUntil("the lock") { seen("Ask is on a higher plan.") }
+        assertTrue(compose.onAllNodes(hasText("See plans") and hasClickAction()).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(server.requestsTo("POST", "/api/sessions/.+/ask").isEmpty())
+    }
+
+    @Test
+    fun findLooksOnlyInTheLinesShownAndScrollsToTheMatchAmongThem() {
+        // 30 Urdu lines, 40 English ones, the needle (Urdu), then 40 more Urdu lines.
+        fun line(i: Int, text: String, language: String) =
+            """{"channel":1,"speaker":"Me","start_ms":${i * 1000},"end_ms":${i * 1000 + 900},"text":"$text","words":[],"language":"$language"}"""
+        val lines = (0 until 30).map { line(it, "Urdu line $it", "ur") } + (30 until 70).map { line(it, "English line $it", "en") } +
+            line(70, "The needle line", "ur") + (71 until 111).map { line(it, "Later line $it", "ur") }
+        recording(lines = lines.joinToString(",", "[", "]"), firstLine = "Urdu line 0")
+        press("English")
+        pumpUntil("English skipped") { !seen("English line 30") }
+        press("Find in transcript")
+        // A match only in a skipped line is not a match.
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextInput("English line 35")
+        pumpUntil("none") { seen("No matches") }
+        compose.onAllNodes(hasSetTextAction()).onFirst().performTextReplacement("needle")
+        pumpUntil("one match") { seen("1 of 1") }
+        // Scrolled to the needle among the lines shown (the 31st), not to where it sits among all of them (the 71st).
+        pumpUntil("in view") {
+            runCatching { compose.onAllNodesWithText("The needle line", substring = true).onFirst().assertIsDisplayed() }.isSuccess
+        }
+    }
+
+    @Test
+    fun aSkippedLinesScreensStayAfterTheLineShownBeforeIt() {
+        fun screen(id: String) = com.echoledger.mobile.data.ScreenDto(id)
+        val after = mapOf(0 to listOf(screen("s0")), 1 to listOf(screen("s1")), 2 to listOf(screen("s2")), 4 to listOf(screen("s4")))
+        // Lines 0 and 1 skipped: their screens go to the first line shown; line 2's stays; line 4 (skipped) goes to line 3.
+        val kept = com.echoledger.mobile.ui.v2.library.ScreenAssets.keptAfter(after, listOf(0, 1, 2, 3, 4), listOf(2, 3))
+        assertEquals(listOf("s0", "s1", "s2"), kept[2]!!.map { it.id })
+        assertEquals(listOf("s4"), kept[3]!!.map { it.id })
+        assertEquals(4, kept.values.sumOf { it.size })
     }
 
     @Test

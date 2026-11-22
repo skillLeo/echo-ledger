@@ -125,12 +125,13 @@ fun V2SharedNotesScreen(
                     status = if (!SharedNotes.done(note.status.stage)) ({ EchoProgressRing(null) }) else null,
                     onClick = if (canOpen) ({ opened = note.item?.id }) else null
                 )
-                // TalkBack hears the new stage when it changes ("Transcribing…"), not the whole row again.
+                // TalkBack hears the stage when it changes ("Transcribing…"), never each percent nor the whole row again.
                 val view = LocalView.current
-                var said by remember { mutableStateOf(words) }
-                LaunchedEffect(words) {
-                    if (words != said) {
-                        said = words
+                val stage = note.status.stage
+                var said by remember { mutableStateOf(stage) }
+                LaunchedEffect(stage) {
+                    if (stage != said) {
+                        said = stage
                         @Suppress("DEPRECATION")
                         view.announceForAccessibility(words)
                     }

@@ -13,11 +13,12 @@
     <string name="v2_wiz_allow_mic">ٹیسٹ کے لیے پچھلے مرحلے پر مائیکروفون کی اجازت دیں۔</string>
     <string name="v2_wiz_me">میں</string>
     <string name="v2_wiz_peak">زیادہ سے زیادہ</string>
-    <string name="v2_wiz_heard">آپ کا مائیکروفون کام کر رہا ہے۔ اپنی آواز سننے کے لیے اسے چلا کر دیکھیں۔</string>
-    <string name="v2_wiz_not_heard">ہمیں آپ کا مائیکروفون سنائی نہیں دیا۔ اوپر مائیکروفون اور اس کی اجازت دیکھیں۔</string>
+    <string name="v2_wiz_heard">آپ کا مائیکروفون کام کر رہا ہے۔</string>
+    <string name="v2_wiz_not_heard">ہمیں آپ کا مائیکروفون سنائی نہیں دیا۔ مائیکروفون کی اجازت دیکھیں اور دوبارہ کوشش کریں۔</string>
     <string name="v2_wiz_failed">ٹیسٹ ریکارڈ نہیں کر سکا۔ مائیکروفون کی اجازت دیکھیں اور دوبارہ کوشش کریں۔</string>
     <string name="v2_wiz_done_title">آپ تیار ہیں</string>
     <string name="v2_wiz_done_body">ریکارڈنگ کے قوانین ہر ملک میں مختلف ہیں۔ جہاں قانون کہے، اپنی میٹنگ کے لوگوں کو بتائیں کہ آپ ریکارڈ کر رہے ہیں۔ ریکارڈنگ کی اطلاع ہمیشہ دکھائی دیتی ہے۔</string>
     <string name="v2_wiz_start_using">EchoLedger استعمال کرنا شروع کریں</string>
     <string name="v2_wiz_consent">میں سمجھتا ہوں اور جہاں ضروری ہو اجازت لوں گا</string>
+    <string name="v2_wiz_one_moment">ایک لمحہ…</string>
 </resources>

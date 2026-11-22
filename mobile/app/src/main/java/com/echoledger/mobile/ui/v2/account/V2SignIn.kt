@@ -275,7 +275,8 @@ fun V2SignInScreen(vm: MainViewModel) {
             }
 
             Step.OTP -> {
-                var otp by rememberSaveable { mutableStateOf("") }
+                // An authenticator code lasts seconds: never kept past this screen.
+                var otp by remember { mutableStateOf("") }
                 var password by remember { mutableStateOf("") }
                 var code by rememberSaveable { mutableStateOf("") }
                 val afterPassword = state.otpAfter == Step.PASSWORD
