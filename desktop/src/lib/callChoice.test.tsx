@@ -6,7 +6,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AFTER_EACH_CALL_OPTIONS, CALL_WORDS, afterEachCallOf, alwaysOffer, afterEachCallPatch, cardMeta, cardName, doneText, groupedAudio, progressStyle } from "./callChoice";
+import { AFTER_EACH_CALL_OPTIONS, CALL_WORDS, afterEachCallOf, alwaysOffer, groupHeadline, groupedMixed, visibleRows, afterEachCallPatch, cardMeta, cardName, doneText, groupedAudio, progressStyle } from "./callChoice";
 import { makeSettings, makePrivacyStatus } from "../test/fixtures";
 import { resetTauriMock, respond } from "../test/tauri";
 import { CallsPage } from "../views/main/CaptureSettings";
@@ -119,5 +119,20 @@ describe("Hide EchoLedger from screen sharing", () => {
     render(<div className="el-root"><SharePrivacyPageV2 settings={makeSettings()} patch={patch} onCheck={() => undefined} /></div>);
     expect(await screen.findByText(HIDES_SCREENSHOTS_TOO)).toBeInTheDocument();
     expect(patch).not.toHaveBeenCalled();
+  });
+});
+
+describe("the grouped card's rows", () => {
+  it("show every Delete and fold only kept rows, as the core sizes the window for (after_call::visible_rows)", () => {
+    const row = (id: string, kind: "delete" | "audio" | "transcribe") => ({ id, kind });
+    const five = [row("d1", "delete"), row("a1", "audio"), row("a2", "audio"), row("t1", "transcribe"), row("a3", "audio")];
+    expect(visibleRows(five)).toEqual({ shown: [five[0], five[3], five[4]], more: 2 });
+    const deletes = [0, 1, 2, 3].map((i) => row(`d${i}`, "delete"));
+    expect(visibleRows([...deletes, row("a", "audio")])).toEqual({ shown: deletes, more: 1 });
+    expect(visibleRows(five.slice(1, 3)).more).toBe(0);
+    expect(groupHeadline([row("a", "audio"), row("b", "audio")])).toBe("2 calls saved as audio");
+    expect(groupHeadline([row("a", "audio"), row("d", "delete")])).toBe("2 calls");
+    const deck = readFileSync(join(here, "..", "..", "..", "docs", "v2", "copy", "call-choice.md"), "utf8");
+    expect(groupedMixed(4)).toBe(/^\| grouped_mixed \| ([^|]+) \|/m.exec(deck)![1].trim().replace("%1$d", "4"));
   });
 });

@@ -206,6 +206,49 @@ describe("back-to-back calls", () => {
   beforeEach(setup);
   afterEach(() => vi.unstubAllGlobals());
 
+  it("Undo on the Audio row reopens its card; the Delete row stays on screen under it with its own Undo, never applied", async () => {
+    const group = makeCallGroup([makeCallDone({ id: "del", kind: "delete", callerName: "Muneeb" }), makeCallDone({ id: "aud", kind: "audio", callerName: "Omar" })]);
+    await renderWindow(makeAfterCallState({ group }));
+    fireEvent.click(button("Undo: Omar"));
+    await flushAsync();
+    expect(callsOf("call_undo")).toEqual([{ id: "aud" }]);
+    // The core reopens Omar's card with Muneeb's Delete held under it (its time paused).
+    await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("aud", { callerName: "Omar" }), held: [group.calls[0]] }));
+    expect(chip()).toHaveTextContent("Omar");
+    const held = screen.getByTestId("call-held");
+    expect(held).toHaveTextContent("DeletedMuneeb");
+    expect(button("Undo: Muneeb")).toBeInTheDocument();
+    expect(callsOf("call_group_close"), "nothing was applied").toEqual([]);
+    fireEvent.click(button("Undo: Muneeb"));
+    await flushAsync();
+    expect(callsOf("call_undo")).toEqual([{ id: "aud" }, { id: "del" }]);
+  });
+
+  it("5 calls where the oldest is a Delete: it stays visible with its Undo, the rest fold into +N more", async () => {
+    const calls = [makeCallDone({ id: "d1", kind: "delete", callerName: "Oldest" }), ...["a1", "a2", "a3", "a4"].map((id) => makeCallDone({ id, kind: "audio", callerName: id }))];
+    await renderWindow(makeAfterCallState({ group: makeCallGroup(calls) }));
+    const rows = screen.getAllByTestId("call-group-row").map((r) => r.textContent);
+    expect(rows).toEqual(["DeletedOldestUndo", "Saved as audioa3TranscribeUndo", "Saved as audioa4TranscribeUndo"]);
+    expect(screen.getByTestId("call-more")).toHaveTextContent("+2 more");
+    expect(screen.getByTestId("call-group")).toHaveTextContent("5 calls");
+    expect(screen.getByTestId("call-group")).not.toHaveTextContent("saved as audio5");
+  });
+
+  it("after Review the Delete rows stay on screen with their Undo (the core applied only the rest)", async () => {
+    await renderWindow(makeAfterCallState({ group: makeCallGroup([makeCallDone({ id: "d", kind: "delete", callerName: "Muneeb" }), makeCallDone({ id: "a", kind: "audio" })]) }));
+    fireEvent.click(button("Review"));
+    await flushAsync();
+    expect(callsOf("call_group_close")).toEqual([{ review: true }]);
+    await emitEvent("aftercall:state", makeAfterCallState({ group: makeCallGroup([makeCallDone({ id: "d", kind: "delete", callerName: "Muneeb" })]) }));
+    expect(screen.getAllByTestId("call-group-row").map((r) => r.textContent)).toEqual(["DeletedMuneebUndo"]);
+    expect(button("Undo: Muneeb")).toBeInTheDocument();
+  });
+
+  it("a mixed group opens with the deck's headline, never an empty line", async () => {
+    await renderWindow(makeAfterCallState({ group: makeCallGroup([makeCallDone({ id: "a", kind: "audio" }), makeCallDone({ id: "t", kind: "transcribe" })]) }));
+    expect(screen.getByTestId("call-group").querySelector(".call-group-headline")).toHaveTextContent(/^2 calls$/);
+  });
+
   it("a pill's Stop and delete while another call's card was up: both in one card, each with its Undo", async () => {
     await renderWindow(makeAfterCallState({ group: makeCallGroup([makeCallDone({ id: "a", kind: "audio", callerName: "Omar" }), makeCallDone({ id: "b", kind: "delete", callerName: "Muneeb" })]) }));
     const rows = screen.getAllByTestId("call-group-row");

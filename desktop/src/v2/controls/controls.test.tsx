@@ -191,7 +191,7 @@ describe("the after-call card (the call choice)", () => {
 });
 
 describe("the after-call stack", () => {
-  const STATE: AfterCallState = { ask: ITEM, hint: false, done: null, group: null };
+  const STATE: AfterCallState = { ask: ITEM, hint: false, held: [], done: null, group: null };
   const done = (kind: "transcribe" | "audio" | "delete", offerAlways: "always_audio" | null = null) => ({
     kind, id: "p1", title: null, callerName: "Omar Farooq", sourceApp: "whatsapp", mode: "call" as const, durationMs: 44_000, until: "2026-11-17T10:05:00Z", offerAlways,
   });
@@ -251,7 +251,7 @@ describe("the after-call stack", () => {
     respond("call_undo", null);
     respond("call_done_transcribe", null);
     const calls = [{ ...done("audio"), id: "a", callerName: "Omar Khan" }, { ...done("delete"), id: "b", callerName: "A very long name that would not fit beside its buttons at all" }];
-    render(<AfterCallStack state={{ ask: null, hint: false, done: null, group: { count: 2, until: "2026-11-17T10:05:00Z", calls } }} onGone={() => undefined} />);
+    render(<AfterCallStack state={{ ask: null, hint: false, held: [], done: null, group: { count: 2, until: "2026-11-17T10:05:00Z", calls } }} onGone={() => undefined} />);
     const rows = screen.getAllByTestId("call-group-row");
     expect(rows.map((r) => r.textContent)).toEqual(["Saved as audioOmar KhanTranscribeUndo", "DeletedA very long name that would not fit beside its buttons at allUndo"]);
     expect(screen.getByTestId("call-group")).not.toHaveTextContent("calls saved as audio");
@@ -265,11 +265,29 @@ describe("the after-call stack", () => {
     expect(rows[1].querySelector(".el-aftercall__done-text")!.children).toHaveLength(2);
   });
 
+  it("the reopened card keeps the rest of the group under it, every Delete with its Undo; 5 calls show the oldest Delete", async () => {
+    respond("call_undo", null);
+    const del = { ...done("delete"), id: "del", callerName: "Muneeb" };
+    render(<AfterCallStack state={{ ask: ITEM, hint: false, held: [del], done: null, group: null }} onGone={() => undefined} />);
+    expect(screen.getByTestId("call-held")).toHaveTextContent("DeletedMuneeb");
+    fireEvent.click(screen.getByRole("button", { name: "Undo: Muneeb" }));
+    await act(flushAsync);
+    expect(callsOf("call_undo")).toEqual([{ id: "del" }]);
+  });
+
+  it("every Delete row shows; only kept rows fold into +N more; a mixed group says how many calls", () => {
+    const calls = [{ ...done("delete"), id: "d1", callerName: "Oldest" }, ...["a1", "a2", "a3", "a4"].map((id) => ({ ...done("audio"), id, callerName: id }))];
+    render(<AfterCallStack state={{ ask: null, hint: false, held: [], done: null, group: { count: 5, until: "2026-11-17T10:05:00Z", calls } }} onGone={() => undefined} />);
+    expect(screen.getAllByTestId("call-group-row").map((r) => r.querySelector(".el-aftercall__done-name")!.textContent)).toEqual(["Oldest", "a3", "a4"]);
+    expect(screen.getByTestId("call-more")).toHaveTextContent("+2 more");
+    expect(screen.getByTestId("call-group").querySelector(".el-aftercall__headline")).toHaveTextContent(/^5 calls$/);
+  });
+
   it("back to back: one grouped card, never a stack; Review opens the Library", async () => {
     respond("call_group_close", null);
     const onGone = vi.fn();
     const all = ["g1", "g2", "g3"].map((id) => ({ ...done("audio"), id }));
-    render(<AfterCallStack state={{ ask: null, hint: false, done: done("audio"), group: { count: 3, until: "2026-11-17T10:05:00Z", calls: all } }} onGone={onGone} />);
+    render(<AfterCallStack state={{ ask: null, hint: false, held: [], done: done("audio"), group: { count: 3, until: "2026-11-17T10:05:00Z", calls: all } }} onGone={onGone} />);
     expect(screen.getByTestId("call-group")).toHaveTextContent("3 calls saved as audio");
     expect(screen.getAllByTestId("call-group-row")).toHaveLength(3);
     expect(screen.queryByTestId("call-done")).toBeNull();
@@ -301,7 +319,7 @@ describe("the windows with the flags", () => {
 
   it("ui_v2.after_call draws the new card in the after-call window", async () => {
     respond("ui_flags", { ui_flags: { "ui_v2.after_call": true } });
-    respond("after_call_state", { ask: ITEM, hint: false, done: null, group: null });
+    respond("after_call_state", { ask: ITEM, hint: false, held: [], done: null, group: null });
     respond("set_hit_regions", null);
     respond("window_ready", null);
     render(<ReviewApp />);
@@ -341,18 +359,18 @@ describe("flags reach the overlay windows on their next show", () => {
 
   it("the after-call window: switching back to classic between two shows draws the classic card next time", async () => {
     respond("ui_flags", { ui_flags: { "ui_v2.after_call": true } });
-    respond("after_call_state", { ask: null, hint: false, done: null, group: null });
+    respond("after_call_state", { ask: null, hint: false, held: [], done: null, group: null });
     respond("set_hit_regions", null);
     respond("window_ready", null);
     render(<ReviewApp />);
     await act(flushAsync);
-    await act(() => emitEvent("aftercall:state", { ask: ITEM, hint: false, done: null, group: null }));
+    await act(() => emitEvent("aftercall:state", { ask: ITEM, hint: false, held: [], done: null, group: null }));
     await act(flushAsync);
     expect(await screen.findByTestId("after-call-card")).toBeInTheDocument();
     respond("ui_flags", { ui_flags: {}, ui_classic: true });
-    await act(() => emitEvent("aftercall:state", { ask: null, hint: false, done: null, group: null }));
+    await act(() => emitEvent("aftercall:state", { ask: null, hint: false, held: [], done: null, group: null }));
     await act(flushAsync);
-    await act(() => emitEvent("aftercall:state", { ask: { ...ITEM, id: "p9" }, hint: false, done: null, group: null }));
+    await act(() => emitEvent("aftercall:state", { ask: { ...ITEM, id: "p9" }, hint: false, held: [], done: null, group: null }));
     await act(flushAsync);
     expect(screen.queryByTestId("after-call-card")).toBeNull();
     expect(document.querySelector(".review-root .call-card")!.textContent).toMatch(/Omar Farooq/);

@@ -45,6 +45,7 @@ describe("recording pill", () => {
       toggle_captions: recordingStatus({ captionsLive: true }),
       set_pill_hidden: recordingStatus({ pillHidden: true }),
       pill_moved: undefined,
+      pill_expanded: undefined,
     });
   });
 
@@ -150,6 +151,7 @@ describe("recording pill", () => {
     const opener = screen.getByTestId("pill-choice");
     expect(opener).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(opener);
+    await flushAsync();
     expect(opener).toHaveAttribute("aria-expanded", "true");
     const menu = screen.getByRole("menu", { name: "After each call" });
     expect(menuItems(menu)).toEqual(["Transcribe this call", "Save audio only", "Stop and delete"]);
@@ -165,6 +167,7 @@ describe("recording pill", () => {
   it("ticks nothing on the menu before a choice is made", async () => {
     await renderPill(makeRecordingState({ callChoice: null }));
     fireEvent.click(screen.getByTestId("pill-choice"));
+    await flushAsync();
     for (const name of ["Transcribe this call", "Save audio only"]) expect(screen.getByRole("menuitemradio", { name })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("menu").querySelector("[aria-checked=true]")).toBeNull();
   });
@@ -174,12 +177,14 @@ describe("recording pill", () => {
     await renderPill();
     respond("recording_state", makeRecordingState({ callChoice: "transcribe" }));
     fireEvent.click(screen.getByTestId("pill-choice"));
+    await flushAsync();
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Transcribe this call" }));
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     await waitFor(() => expect(callsOf("call_choice")).toEqual([{ choice: "transcribe" }]));
     await flushAsync();
     expect(pill()).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("pill-choice"));
+    await flushAsync();
     expect(screen.getByRole("menuitemradio", { name: "Transcribe this call" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("menuitemradio", { name: "Save audio only" })).toHaveAttribute("aria-checked", "false");
     respond("recording_state", makeRecordingState({ callChoice: "audio" }));
@@ -191,11 +196,13 @@ describe("recording pill", () => {
   it("Escape closes the menu without choosing; a voice note's menu has only Stop and delete", async () => {
     await renderPill();
     fireEvent.click(screen.getByTestId("pill-choice"));
+    await flushAsync();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(callsOf("call_choice")).toHaveLength(0);
     await emitEvent("recording:state", makeRecordingState({ mode: "mic_note", sourceApp: "voice_note" }));
     fireEvent.click(screen.getByTestId("pill-choice"));
+    await flushAsync();
     expect(menuItems(document.body)).toEqual(["Stop and delete"]);
   });
 
@@ -211,11 +218,24 @@ describe("recording pill", () => {
     expect(pill()).not.toBeInTheDocument();
   });
 
+  it("grows the window first and only then draws the menu, so it is never clipped for a frame", async () => {
+    let grown: () => void = () => undefined;
+    respondWith("pill_expanded", () => new Promise<void>((r) => { grown = r; }));
+    await renderPill();
+    fireEvent.click(screen.getByTestId("pill-choice"));
+    await flushAsync();
+    expect(callsOf("pill_expanded")).toEqual([{ expanded: true }]);
+    expect(screen.queryByRole("menu"), "not drawn before the window has room").not.toBeInTheDocument();
+    await act(async () => grown());
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+  });
+
   it("the window keeps its old size while the menu is closed and grows only while the menu or the banner shows", async () => {
     respond("pill_expanded", undefined);
     await renderPill();
     expect(callsOf("pill_expanded"), "closed: nothing to grow").toEqual([]);
     fireEvent.click(screen.getByTestId("pill-choice"));
+    await flushAsync();
     await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true }]));
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(callsOf("pill_expanded")).toEqual([{ expanded: true }, { expanded: false }]));

@@ -41,30 +41,57 @@ pub const PILL_SIZE: (f64, f64) = (352.0, 84.0);
 pub const PILL_OPEN_SIZE: (f64, f64) = (352.0, 148.0);
 /// How much of the pill window the pill itself takes (the after-call card goes right under it).
 pub const PILL_VISIBLE_LOGICAL: f64 = 48.0;
-/// The after-call window for a confirmation, the grouped card or the unknown-app chip; only while the card shows does
-/// it grow to [`REVIEW_CARD_SIZE`].
+/// The after-call window for a confirmation, a short grouped card or the unknown-app chip; it grows only for what it
+/// shows ([`review_base`]).
 pub const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
-/// The after-call window while the card shows (with its first-time line at most).
+/// The after-call window while the card shows (with its first-time line at most), before any rows held under it.
 pub const REVIEW_CARD_SIZE: (f64, f64) = (360.0, 240.0);
+/// One call's row (what was done, its name, Transcribe and Undo) in the grouped card or under the card.
+pub const ROW_LOGICAL: f64 = 44.0;
+/// The "+N more" line.
+pub const MORE_LOGICAL: f64 = 24.0;
+/// The grouped card without its rows: its first line and the room around it.
+pub const GROUP_FRAME_LOGICAL: f64 = 80.0;
+/// The tallest the after-call window gets; past it the card scrolls (every Delete row is still there).
+pub const REVIEW_MAX_HEIGHT: f64 = 480.0;
 
 /// The pill's menu or the start banner is open (the pill page says so, `pill_expanded`).
 static PILL_OPEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-/// The after-call window shows the card.
-static REVIEW_CARD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// The after-call window's height now (logical px at 100 % text, as f64 bits): it grows before it draws something
+/// taller and keeps that size until it has nothing left to show.
+static REVIEW_HEIGHT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn review_height() -> f64 {
+    let bits = REVIEW_HEIGHT.load(std::sync::atomic::Ordering::SeqCst);
+    if bits == 0 { REVIEW_SIZE.1 } else { f64::from_bits(bits) }
+}
+
+fn set_review_height(height: f64) {
+    REVIEW_HEIGHT.store(height.to_bits(), std::sync::atomic::Ordering::SeqCst);
+}
 
 /// The pill window's size at 100 % text (pure): its old size, or room for the menu while it is open.
 pub fn pill_base(open: bool) -> (f64, f64) {
     if open { PILL_OPEN_SIZE } else { PILL_SIZE }
 }
 
-/// The rows the grouped card lists at most (the newest; the rest are a Review away).
-pub const GROUP_ROWS: usize = 3;
+/// The height a list of rows takes (pure): the rows it shows (every Delete, `after_call::visible_rows`) and "+N more".
+fn rows_height(calls: &[crate::after_call::CallDone]) -> f64 {
+    let (shown, more) = crate::after_call::visible_rows(calls);
+    shown.len() as f64 * ROW_LOGICAL + if more > 0 { MORE_LOGICAL } else { 0.0 }
+}
 
-/// The after-call window's size at 100 % text (pure): room for the card, or for a grouped card with all its rows, only
-/// while it shows; its old size otherwise.
+/// The after-call window's size at 100 % text (pure): room for what it shows (the card and the rows held under it, or
+/// the grouped card and its rows), never less than its old size and at most [`REVIEW_MAX_HEIGHT`].
 pub fn review_base(state: &crate::after_call::AfterCallState) -> (f64, f64) {
-    let tall_group = state.group.as_ref().is_some_and(|g| g.calls.len() >= GROUP_ROWS);
-    if state.ask.is_some() || tall_group { REVIEW_CARD_SIZE } else { REVIEW_SIZE }
+    let height = if state.ask.is_some() {
+        REVIEW_CARD_SIZE.1 + rows_height(&state.held)
+    } else if let Some(group) = &state.group {
+        GROUP_FRAME_LOGICAL + rows_height(&group.calls)
+    } else {
+        REVIEW_SIZE.1
+    };
+    (REVIEW_SIZE.0, height.clamp(REVIEW_SIZE.1, REVIEW_MAX_HEIGHT))
 }
 
 /// The base size of `label` now.
@@ -72,16 +99,22 @@ fn base_now(label: &str) -> Option<(f64, f64)> {
     use std::sync::atomic::Ordering::SeqCst;
     match label {
         PILL => Some(pill_base(PILL_OPEN.load(SeqCst))),
-        REVIEW => Some(if REVIEW_CARD.load(SeqCst) { REVIEW_CARD_SIZE } else { REVIEW_SIZE }),
+        REVIEW => Some((REVIEW_SIZE.0, review_height())),
         _ => None,
     }
 }
 
-/// The pill page opened or closed its menu or the start banner: the window grows for it, and gives the screen back
-/// when it closes (kept where it is at the top, the pill does not move).
+/// The pill page opens or closes its menu or the start banner: the window grows for it (before the page draws it, so
+/// nothing is clipped for a frame; call from an async command), and gives the screen back when it closes (kept where it
+/// is at the top, the pill does not move).
 pub fn set_pill_expanded(app: &AppHandle, open: bool) {
     PILL_OPEN.store(open, std::sync::atomic::Ordering::SeqCst);
-    fit_to_text_size_later(app, PILL);
+    fit_to_text_size(app, PILL);
+}
+
+/// A recording starts with the start banner: the pill window is built at its open size, never clipped.
+pub fn preset_pill_open(open: bool) {
+    PILL_OPEN.store(open, std::sync::atomic::Ordering::SeqCst);
 }
 /// The pill and the after-call card grow with the system's text size (D-141), up to twice their size.
 pub const TEXT_SCALE_MAX: f64 = 2.0;
@@ -646,8 +679,11 @@ fn make_click_through(app: &AppHandle, label: &str) {
 
 /// The recording pill on or off.
 pub fn set_pill_visible(app: &AppHandle, visible: bool) {
-    // A new recording's pill starts closed, at its old size.
-    PILL_OPEN.store(false, std::sync::atomic::Ordering::SeqCst);
+    // A recording's pill ends closed; the next starts at its old size unless it opens with the start banner
+    // (`preset_pill_open`, set just before).
+    if !visible {
+        PILL_OPEN.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
     if visible {
         lifecycle::show(app, PILL, "pill");
         fit_to_text_size_later(app, PILL);
@@ -680,11 +716,33 @@ pub fn show_after_call(app: &AppHandle, state: &crate::after_call::AfterCallStat
             tokio::time::sleep(AFTER_CALL_GRACE).await;
             if still_empty(asked) {
                 lifecycle::hide(&app, REVIEW, "after_call");
+                // Nothing left to show: the next time starts at the old size again.
+                set_review_height(REVIEW_SIZE.1);
+            }
+        });
+        return;
+    }
+    // It keeps its larger size while it shows something (a confirmation, then the card again after Undo) and grows
+    // before it draws anything taller, so nothing is clipped for a frame.
+    let wanted = review_base(state).1;
+    let grow = wanted > review_height() + 0.5;
+    if grow {
+        set_review_height(wanted);
+    }
+    lifecycle::show(app, REVIEW, "after_call");
+    if grow {
+        let (app, state) = (app.clone(), state.clone());
+        tauri::async_runtime::spawn(async move {
+            fit_to_text_size(&app, REVIEW);
+            if let Some(window) = app.get_webview_window(REVIEW) {
+                place_beside_pill(&app, &window);
+            }
+            // Only the newest state is drawn: one shown meanwhile is newer.
+            if still_empty(asked) {
+                lifecycle::emit(&app, REVIEW, "aftercall:state", &state);
             }
         });
     } else {
-        REVIEW_CARD.store(review_base(state) == REVIEW_CARD_SIZE, std::sync::atomic::Ordering::SeqCst);
-        lifecycle::show(app, REVIEW, "after_call");
         place_review_later(app);
         lifecycle::emit(app, REVIEW, "aftercall:state", state);
     }
@@ -738,23 +796,40 @@ mod tests {
         };
         let group = CallGroup { count: 2, until: String::new(), calls: vec![done.clone(), CallDone { id: "b".into(), ..done.clone() }] };
         let three = CallGroup { count: 3, until: String::new(), calls: vec![done.clone(); 3] };
-        assert_eq!(review_base(&AfterCallState { group: Some(three), ..Default::default() }), (360.0, 240.0), "three rows need the room");
+        assert_eq!(review_base(&AfterCallState { group: Some(three), ..Default::default() }), (360.0, 80.0 + 3.0 * 44.0), "three rows need the room");
+        // Every Delete row shows, so the window makes room for each, and scrolls only past its tallest.
+        let deletes = |n: usize| CallGroup { count: n, until: String::new(), calls: vec![CallDone { kind: CallChoice::Delete, ..done.clone() }; n] };
+        assert_eq!(review_base(&AfterCallState { group: Some(deletes(5)), ..Default::default() }).1, 80.0 + 5.0 * 44.0);
+        assert_eq!(review_base(&AfterCallState { group: Some(deletes(12)), ..Default::default() }).1, REVIEW_MAX_HEIGHT);
+        let mut five = vec![CallDone { kind: CallChoice::Delete, ..done.clone() }];
+        five.extend(vec![done.clone(); 4]);
+        assert_eq!(review_base(&AfterCallState { group: Some(CallGroup { count: 5, until: String::new(), calls: five }), ..Default::default() }).1,
+            80.0 + 3.0 * 44.0 + 24.0, "the oldest Delete, the two newest others, and +2 more");
         assert_eq!(review_base(&AfterCallState::default()), (360.0, 168.0));
-        assert_eq!(review_base(&AfterCallState { done: Some(done), ..Default::default() }), (360.0, 168.0));
+        assert_eq!(review_base(&AfterCallState { done: Some(done.clone()), ..Default::default() }), (360.0, 168.0));
         assert_eq!(review_base(&AfterCallState { group: Some(group), ..Default::default() }), (360.0, 168.0));
         let card = crate::pending::PendingItem {
             id: "a".into(), source_app: "whatsapp".into(), auto: true, mode: crate::audio::RecordingMode::Call, title: None, client_id: None,
             client_name: None, started_at: String::new(), ended_at: String::new(), duration_ms: 44_000, first_line: None,
             deadline_at: None, language: None, caller_name: None, screens: 0,
         };
-        assert_eq!(review_base(&AfterCallState { ask: Some(card), hint: true, ..Default::default() }), (360.0, 240.0), "room for the card and its first-time line");
+        assert_eq!(review_base(&AfterCallState { ask: Some(card.clone()), hint: true, ..Default::default() }), (360.0, 240.0), "room for the card and its first-time line");
+        let held = vec![CallDone { kind: CallChoice::Delete, ..done.clone() }, done.clone()];
+        assert_eq!(review_base(&AfterCallState { ask: Some(card), held, ..Default::default() }).1, 240.0 + 2.0 * 44.0, "and for the rows held under it");
         let code = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/overlay/mod.rs")).unwrap();
         let fit = &code[code.find("pub fn fit_to_text_size<").unwrap()..];
         assert!(fit[..fit.find("\n}\n").unwrap()].contains("base_now(label)"), "every resize follows what is shown now");
         let show = &code[code.find("pub fn show_after_call(").unwrap()..];
-        assert!(show[..show.find("\n}\n").unwrap()].contains("review_base(state)"), "the card window grows only for the card");
+        let show = &show[..show.find("\n}\n").unwrap()];
+        assert!(show.contains("review_base(state)"), "the card window grows only for what it shows");
+        // Grown first, then drawn: in the growing branch the resize comes before the state is sent.
+        let growing = &show[show.find("if grow {\n        let (app, state)").unwrap()..];
+        assert!(growing.find("fit_to_text_size(&app, REVIEW)").unwrap() < growing.find("lifecycle::emit(&app, REVIEW").unwrap());
+        assert!(show.contains("set_review_height(REVIEW_SIZE.1)"), "it gives the screen back once it has nothing to show");
         let pill = &code[code.find("pub fn set_pill_visible(").unwrap()..];
-        assert!(pill[..pill.find("\n}\n").unwrap()].contains("PILL_OPEN.store(false"), "a new pill starts closed");
+        assert!(pill[..pill.find("\n}\n").unwrap()].contains("PILL_OPEN.store(false"), "a pill ends closed");
+        let expand = &code[code.find("pub fn set_pill_expanded(").unwrap()..];
+        assert!(expand[..expand.find("\n}\n").unwrap()].contains("fit_to_text_size(app, PILL)"), "the pill grows before its menu is drawn");
     }
 
     #[test]

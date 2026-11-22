@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deleteWaitingQuestion,
+  deletedNotice,
   DISCARD_QUESTION,
   NO_AUDIO_HINT,
   bulkNotice,
@@ -72,8 +73,11 @@ describe("bulk copy", () => {
     expect(discardAllQuestion(1)).toBe(DISCARD_QUESTION);
     expect(bulkNotice("Transcribing", 3)).toBe("Transcribing 3 recordings");
     expect(bulkNotice("Deleted", 2)).toBe("Deleted 2 recordings");
-    expect(deleteWaitingQuestion(1)).toEqual({ title: "Delete this recording?", body: "It can't be undone.", confirm: "Delete", tone: "danger" });
-    expect(deleteWaitingQuestion(3)).toEqual({ title: "Delete all 3 recordings?", body: "It can't be undone.", confirm: "Delete all", tone: "danger" });
+    expect(deleteWaitingQuestion(1)).toEqual({ title: "Delete this recording?", body: "You can undo it for a few seconds.", confirm: "Delete", tone: "danger" });
+    expect(deleteWaitingQuestion(3)).toEqual({ title: "Delete all 3 recordings?", body: "You can undo it for a few seconds.", confirm: "Delete all", tone: "danger" });
+    expect(deletedNotice(1)).toBe("Deleted · Undo");
+    expect(deletedNotice(3)).toBe("Deleted 3 recordings · Undo");
+    expect(bulkNotice("Saved as audio", 2)).toBe("Saved 2 recordings as audio");
     expect(bulkNotice("Discarded", 1)).toBe("Discarded 1 recording");
   });
 });

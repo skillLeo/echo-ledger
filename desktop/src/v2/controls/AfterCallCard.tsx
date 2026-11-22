@@ -6,11 +6,14 @@
 // project.
 import { useMemo } from "react";
 import type { AfterEachCall, CallDone, CallGroup, PendingItem } from "../../lib/ipc";
-import { CALL_WORDS, GROUP_ROWS, alwaysOffer, cardMeta, cardName, doneText, groupHeadline, progressStyle, useEscape, useSwipeAway } from "../../lib/callChoice";
+import { CALL_WORDS, alwaysOffer, cardMeta, cardName, doneText, groupHeadline, moreRows, progressStyle, useEscape, useSwipeAway, visibleRows } from "../../lib/callChoice";
 import { SourceAvatar } from "../library/SourceAvatar";
 import { Button, Icons } from "../components";
 
 export type AfterCallActions = {
+  /** A held row's Undo and Transcribe (the rest of a grouped card under the card). */
+  onRowUndo?: (id: string) => void;
+  onRowTranscribe?: (id: string) => void;
   onTranscribe: () => void;
   /** The ×, Esc or a sideways drag: Save audio only. */
   onSaveAudio: () => void;
@@ -24,10 +27,12 @@ function AppLogo({ app }: { app: string }) {
   return <span className="el-aftercall__logo" aria-hidden="true"><SourceAvatar item={{ source_app: app, source_app_label: undefined, source_device: undefined }} size="md" /></span>;
 }
 
-export function AfterCallCard({ item, hint = false, screens = 0, busy = false, error = null, actions, now = Date.now() }: {
+export function AfterCallCard({ item, hint = false, held = [], screens = 0, busy = false, error = null, actions, now = Date.now() }: {
   item: PendingItem;
   /** The first card ever: where to change it. */
   hint?: boolean;
+  /** The rest of a grouped card, kept under the card with their own Undo until it is answered. */
+  held?: CallDone[];
   /** Screen moments kept during the call (desktop). */
   screens?: number;
   busy?: boolean;
@@ -64,7 +69,25 @@ export function AfterCallCard({ item, hint = false, screens = 0, busy = false, e
       <span className="el-aftercall__line" aria-hidden="true"><span key={item.deadlineAt ?? ""} style={line} /></span>
       <p className="el-caption el-secondary el-aftercall__close-line" id={`el-aftercall-close-${item.id}`} dir="auto">{CALL_WORDS.card_close_desktop}</p>
       {hint && <p className="el-caption el-secondary" data-testid="call-hint" dir="auto">{CALL_WORDS.card_first_hint}</p>}
+      {held.length > 0 && (
+        <div className="el-aftercall__held" data-testid="call-held">
+          <CallRows calls={held} busy={busy} onUndo={(id) => actions.onRowUndo?.(id)} onTranscribe={(id) => actions.onRowTranscribe?.(id)} />
+        </div>
+      )}
     </section>
+  );
+}
+
+/** A grouped list's rows: every Delete with its Undo, always, and the newest others; the rest as "+N more". */
+function CallRows({ calls, busy, onUndo, onTranscribe }: { calls: CallDone[]; busy: boolean; onUndo: (id: string) => void; onTranscribe: (id: string) => void }) {
+  const { shown, more } = visibleRows(calls);
+  return (
+    <>
+      {shown.map((c) => (
+        <DoneLine key={c.id} done={c} busy={busy} testId="call-group-row" named onUndo={() => onUndo(c.id)} onTranscribe={() => onTranscribe(c.id)} />
+      ))}
+      {more > 0 && <p className="el-caption el-secondary" data-testid="call-more" dir="auto">{moreRows(more)}</p>}
+    </>
   );
 }
 
@@ -121,15 +144,13 @@ export function CallGroupCard({ group, busy = false, error = null, onReview, onC
   const calls = group.calls ?? [];
   const headline = groupHeadline(calls);
   return (
-    <section className="el-aftercall el-aftercall--done" lang="en" data-hit role="status" aria-label={headline ?? calls.map((c) => `${doneText(c)} ${cardName(c)}`).join(", ")} data-testid="call-group">
+    <section className="el-aftercall el-aftercall--done" lang="en" data-hit role="status" aria-label={headline} data-testid="call-group">
       <div className="el-aftercall__done">
         <span className="el-aftercall__done-text el-body-strong el-aftercall__headline" dir="auto">{headline}</span>
         <Button variant="quiet" size="sm" disabled={busy} onClick={onReview}>{CALL_WORDS.grouped_review}</Button>
         <Button variant="quiet" size="sm" icon={Icons.CloseIcon} aria-label="Close" title="Close" disabled={busy} onClick={onClose} />
       </div>
-      {calls.slice(-GROUP_ROWS).map((c) => (
-        <DoneLine key={c.id} done={c} busy={busy} testId="call-group-row" named onUndo={() => onUndo(c.id)} onTranscribe={() => onTranscribe(c.id)} />
-      ))}
+      <CallRows calls={calls} busy={busy} onUndo={onUndo} onTranscribe={onTranscribe} />
       {error && <p className="el-field__error" role="alert">{error}</p>}
     </section>
   );

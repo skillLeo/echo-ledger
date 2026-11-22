@@ -1525,6 +1525,8 @@ export interface CallGroup {
 export interface AfterCallState {
   ask: PendingItem | null;
   hint: boolean;
+  /** The rest of a grouped card under a reopened card (Undo on one of its rows), each with its own Undo. */
+  held: CallDone[];
   done: CallDone | null;
   group: CallGroup | null;
 }
@@ -1983,6 +1985,10 @@ export const api = {
   recordingState: () => invoke<RecordingState>("recording_state"),
   pendingList: () => invoke<PendingItem[]>("pending_list"),
   pendingKeep: (id: string) => invoke<void>("pending_keep", { id }),
+  /** The waiting list's Delete / Delete all: gone from the list now, the files only after "Deleted · Undo" (5 s). */
+  pendingDelete: (ids: string[]) => invoke<number>("pending_delete", { ids }),
+  /** Undo on the waiting list's "Deleted · Undo": the recordings are back in the list. */
+  pendingDeleteUndo: (ids: string[]) => invoke<number>("pending_delete_undo", { ids }),
   /** "Save audio": kept and uploaded as audio only, not transcribed (contract 1.8.0-e); it lands in "Not transcribed". */
   pendingKeepAudio: (id: string) => invoke<void>("pending_keep_audio", { id }),
   pendingDiscard: (id: string) => invoke<void>("pending_discard", { id }),

@@ -11,6 +11,10 @@
 //! - Back-to-back calls: one grouped card ("2 calls saved as audio · Review"), never a stack. Whatever was on screen
 //!   when another call needs the window (a card, a confirmation, the grouped card) joins it there, each call with its
 //!   Undo, and every choice in it is applied only when the grouped card goes.
+//! - A pending choice is never applied while its Undo can't be reached: a Delete row always shows (only Transcribe and
+//!   Save audio only rows fold into "+N more"); Undo on one row reopens that call's card with the rest of the group under
+//!   it, their time paused until the card is answered; Review applies the rest and keeps the Deletes on screen; only the
+//!   grouped card's × is a deliberate "apply everything now".
 //! - Quiet hours (Settings › Notifications): no card; the call is saved as audio only and waits in the Library.
 //!
 //! [`outcome`] and [`Surfaces`] are plain data (unit-tested below); `actions` adds the files, timers and events.
@@ -139,6 +143,9 @@ pub struct AfterCallState {
     pub ask: Option<PendingItem>,
     /// The card's first time ever: "You can change this in Settings › After each call."
     pub hint: bool,
+    /// The rest of a grouped card under a reopened card (Undo on one of its rows), each with its own Undo; their time
+    /// is paused until the card is answered.
+    pub held: Vec<CallDone>,
     pub done: Option<CallDone>,
     pub group: Option<CallGroup>,
 }
@@ -222,8 +229,9 @@ pub fn start_banner(after: AfterEachCall, ask_when: AskWhen, auto: bool, mode: R
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Before {
     Nothing,
-    /// A card was counting: its call joins the group, saved as audio unless the person says otherwise there.
-    Card(String),
+    /// A card was counting (with the rows held under it): its call joins the group, saved as audio unless the person
+    /// says otherwise there.
+    Card(String, Vec<CallDone>),
     /// A confirmation within its 5 s.
     Done(CallDone),
     /// The grouped card, still up.
@@ -236,7 +244,7 @@ pub enum Before {
 pub fn grouped(before: Before, card_as_audio: impl Fn(&str) -> Option<CallDone>, newest: CallDone) -> Vec<CallDone> {
     let mut calls = match before {
         Before::Nothing => Vec::new(),
-        Before::Card(id) => card_as_audio(&id).into_iter().collect(),
+        Before::Card(id, held) => held.into_iter().chain(card_as_audio(&id)).collect(),
         Before::Done(done) => vec![done],
         Before::Group(calls) => calls,
     };
@@ -245,9 +253,34 @@ pub fn grouped(before: Before, card_as_audio: impl Fn(&str) -> Option<CallDone>,
     calls
 }
 
+/// The rows the grouped card lists before "+N more".
+pub const GROUP_ROWS: usize = 3;
+
+/// The rows a list of grouped calls shows (pure): every Delete, always, and the newest Transcribe and Save audio only rows
+/// up to [`GROUP_ROWS`] rows in all; the other rows fold into "+N more" (their choices keep the audio, so nothing is lost
+/// while they are folded). Returns the shown rows in order and how many are folded.
+pub fn visible_rows(calls: &[CallDone]) -> (Vec<&CallDone>, usize) {
+    let deletes = calls.iter().filter(|c| c.kind == CallChoice::Delete).count();
+    let others = calls.len() - deletes;
+    let room = GROUP_ROWS.saturating_sub(deletes).min(others);
+    let skip = others - room;
+    let mut seen = 0;
+    let shown = calls
+        .iter()
+        .filter(|c| {
+            if c.kind == CallChoice::Delete {
+                return true;
+            }
+            seen += 1;
+            seen > skip
+        })
+        .collect();
+    (shown, skip)
+}
+
 #[derive(Clone, Debug)]
 enum Shown {
-    Card { id: String, hint: bool },
+    Card { id: String, hint: bool, held: Vec<CallDone> },
     Done { done: CallDone, until: Instant },
     Group { calls: Vec<CallDone>, until: Instant },
 }
@@ -276,6 +309,14 @@ impl Surfaces {
         matches!(&self.shown, Some(Shown::Card { hint: true, .. }))
     }
 
+    /// The rows held under the card (the rest of a grouped card whose row was undone).
+    pub fn held(&self) -> &[CallDone] {
+        match &self.shown {
+            Some(Shown::Card { held, .. }) => held,
+            _ => &[],
+        }
+    }
+
     /// The confirmation while it is on screen.
     pub fn done(&self, now: Instant) -> Option<&CallDone> {
         match &self.shown {
@@ -300,7 +341,7 @@ impl Surfaces {
     /// Takes what is on screen now: a confirmation or the grouped card only while it lasts.
     fn take_live(&mut self, now: Instant) -> Before {
         match self.shown.take() {
-            Some(Shown::Card { id, .. }) => Before::Card(id),
+            Some(Shown::Card { id, held, .. }) => Before::Card(id, held),
             Some(Shown::Done { done, until }) if until > now => Before::Done(done),
             Some(Shown::Group { calls, until }) if until > now => Before::Group(calls),
             _ => Before::Nothing,
@@ -312,7 +353,7 @@ impl Surfaces {
     pub fn arrive(&mut self, id: &str, hint: bool, now: Instant) -> Before {
         let before = self.take_live(now);
         if before == Before::Nothing {
-            self.shown = Some(Shown::Card { id: id.to_string(), hint });
+            self.shown = Some(Shown::Card { id: id.to_string(), hint, held: Vec::new() });
         }
         before
     }
@@ -337,24 +378,40 @@ impl Surfaces {
         until
     }
 
-    /// A call's entry in the grouped card changes (Transcribe on its row); false when it is not in it.
-    pub fn update_in_group(&mut self, done: CallDone) -> bool {
-        if let Some(Shown::Group { calls, .. }) = &mut self.shown
-            && let Some(at) = calls.iter().position(|c| c.id == done.id)
-        {
-            calls[at] = done;
+    /// The row of `id` in the grouped card or under the card, while it shows (its `until`: when it is applied).
+    pub fn listed(&self, id: &str, now: Instant) -> Option<&CallDone> {
+        let rows: &[CallDone] = match &self.shown {
+            Some(Shown::Group { calls, until }) if *until > now => calls,
+            Some(Shown::Card { held, .. }) => held,
+            _ => &[],
+        };
+        rows.iter().find(|c| c.id == id)
+    }
+
+    /// A call's row (in the grouped card or under the card) changes (Transcribe on it); false when it is not listed.
+    pub fn update_listed(&mut self, done: CallDone) -> bool {
+        let rows = match &mut self.shown {
+            Some(Shown::Group { calls, .. }) => calls,
+            Some(Shown::Card { held, .. }) => held,
+            _ => return false,
+        };
+        if let Some(at) = rows.iter().position(|c| c.id == done.id) {
+            rows[at] = done;
             return true;
         }
         false
     }
 
-    /// The card of `id` goes (answered, timed out or opened); false when it shows another call or none.
-    pub fn clear_card(&mut self, id: &str) -> bool {
-        if self.card() == Some(id) {
-            self.shown = None;
-            return true;
+    /// The card of `id` goes (answered, timed out or opened): the rows held under it, which go back to a grouped card;
+    /// none when the card shows another call or none.
+    pub fn clear_card(&mut self, id: &str) -> Option<Vec<CallDone>> {
+        if self.card() != Some(id) {
+            return None;
         }
-        false
+        match self.shown.take() {
+            Some(Shown::Card { held, .. }) => Some(held),
+            _ => None,
+        }
     }
 
     /// The confirmation of `id` goes; false when it shows another call or none.
@@ -375,17 +432,31 @@ impl Surfaces {
         }
     }
 
-    /// The grouped card goes (× or Review).
-    pub fn clear_group(&mut self) {
-        if matches!(self.shown, Some(Shown::Group { .. })) {
-            self.shown = None;
+    /// The grouped card goes (its ×, or Review with nothing left to keep on screen): its rows, for the caller to apply.
+    pub fn take_group(&mut self, now: Instant) -> Vec<CallDone> {
+        match self.shown.take() {
+            Some(Shown::Group { calls, until }) if until > now => calls,
+            other => {
+                self.shown = other;
+                Vec::new()
+            }
         }
     }
 
-    /// Undo on the confirmation of `id` (or on its row in the grouped card): its card is back in the window, which a
-    /// call waiting for an answer needs first; the others in the group are still applied when their time is over.
-    pub fn ask_again(&mut self, id: &str) {
-        self.shown = Some(Shown::Card { id: id.to_string(), hint: false });
+    /// Undo on the confirmation of `id`, or on its row in the grouped card or under the card: its card is back, and
+    /// whatever else was on screen stays under it (another card's call saved as audio by `card_as_audio`). Returns the
+    /// rows now held under the card, whose time the caller pauses until the card is answered.
+    pub fn ask_again(&mut self, id: &str, card_as_audio: impl Fn(&str) -> Option<CallDone>, now: Instant) -> Vec<CallDone> {
+        let mut held = match self.take_live(now) {
+            Before::Nothing => Vec::new(),
+            Before::Card(other, held) if other == id => held,
+            Before::Card(other, held) => held.into_iter().chain(card_as_audio(&other)).collect(),
+            Before::Done(done) => vec![done],
+            Before::Group(calls) => calls,
+        };
+        held.retain(|c| c.id != id);
+        self.shown = Some(Shown::Card { id: id.to_string(), hint: false, held: held.clone() });
+        held
     }
 
     /// `id` finished uploading as server session `session`; entries older than [`UNDO_UPLOADED_FOR`] are dropped.
@@ -492,7 +563,7 @@ mod tests {
         assert_eq!(s.card(), Some("a"));
         assert!(s.hint(), "the first card says where to change it");
         let before = s.arrive("b", false, t0);
-        assert_eq!(before, Before::Card("a".into()), "a's card was counting: both go to the group");
+        assert_eq!(before, Before::Card("a".into(), Vec::new()), "a's card was counting: both go to the group");
         s.group_with(grouped(before, audio, done("b", CallChoice::Audio)), t0);
         assert_eq!((s.card(), s.group(t0)), (None, Some(2)));
         let later = t0 + Duration::from_secs(3);
@@ -518,8 +589,8 @@ mod tests {
         s.group_with(calls, t0 + Duration::from_secs(2));
         assert!(s.card().is_none() && s.done(t0).is_none(), "never two at once");
         // Transcribe on b's row updates it in place.
-        assert!(s.update_in_group(done("b", CallChoice::Transcribe)));
-        assert!(!s.update_in_group(done("z", CallChoice::Transcribe)), "not in the group");
+        assert!(s.update_listed(done("b", CallChoice::Transcribe)));
+        assert!(!s.update_listed(done("z", CallChoice::Transcribe)), "not in the group");
         assert_eq!(s.group_calls(t0).unwrap().0[1].kind, CallChoice::Transcribe);
         // After the 5 s of a confirmation, the window is free again.
         let mut free = Surfaces::default();
@@ -533,7 +604,7 @@ mod tests {
         let t0 = Instant::now();
         s.arrive("a", false, t0);
         let before = s.show_done(done("b", CallChoice::Delete), t0);
-        assert_eq!(before, Before::Card("a".into()), "the card is up: the two are grouped, not hidden");
+        assert_eq!(before, Before::Card("a".into(), Vec::new()), "the card is up: the two are grouped, not hidden");
         let calls = grouped(before, |id| Some(done(id, CallChoice::Audio)), done("b", CallChoice::Delete));
         assert_eq!(calls.iter().map(|c| (c.id.as_str(), c.kind)).collect::<Vec<_>>(), [("a", CallChoice::Audio), ("b", CallChoice::Delete)]);
         s.group_with(calls, t0);
@@ -541,7 +612,7 @@ mod tests {
         // A card answered replaces itself with its confirmation; Transcribe on a confirmation replaces the same call's.
         let mut one = Surfaces::default();
         one.arrive("c", false, t0);
-        assert!(one.clear_card("c"));
+        assert_eq!(one.clear_card("c"), Some(Vec::new()));
         assert_eq!(one.show_done(done("c", CallChoice::Audio), t0), Before::Nothing);
         assert_eq!(one.show_done(done("c", CallChoice::Transcribe), t0), Before::Nothing, "the same call: in place");
         assert_eq!(one.done(t0).map(|d| d.kind), Some(CallChoice::Transcribe));
@@ -557,9 +628,75 @@ mod tests {
         assert!(s.done(t0).unwrap().offer_always.is_some(), "another call's answer leaves it");
         s.drop_offer("a");
         assert!(s.done(t0).unwrap().offer_always.is_none());
-        s.ask_again("a");
+        assert!(s.ask_again("a", |_| None, t0).is_empty(), "its own confirmation: nothing to keep under the card");
         assert_eq!((s.card(), s.hint()), (Some("a"), false));
         assert!(s.done(t0).is_none());
+    }
+
+    #[test]
+    fn undo_on_one_row_keeps_the_delete_row_on_screen_under_the_card() {
+        let mut s = Surfaces::default();
+        let t0 = Instant::now();
+        s.group_with(vec![done("del", CallChoice::Delete), done("aud", CallChoice::Audio)], t0);
+        // Undo on the Audio row: its card comes back, and the Delete row stays under it with its own Undo.
+        let held = s.ask_again("aud", |_| None, t0);
+        assert_eq!(held.iter().map(|c| (c.id.as_str(), c.kind)).collect::<Vec<_>>(), [("del", CallChoice::Delete)], "the caller pauses it");
+        assert_eq!(s.card(), Some("aud"));
+        assert_eq!(s.held().iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["del"], "on screen, under the card");
+        assert!(s.listed("del", t0 + Duration::from_secs(60)).is_some(), "listed as long as the card is up, whatever the time");
+        // Another call arriving takes the card and its rows into the group: nothing drops out of sight.
+        let before = s.arrive("new", false, t0);
+        assert_eq!(before, Before::Card("aud".into(), vec![done("del", CallChoice::Delete)]));
+        let calls = grouped(before, |id| Some(done(id, CallChoice::Audio)), done("new", CallChoice::Audio));
+        assert_eq!(calls.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["del", "aud", "new"]);
+        // The card answered: its rows come back with its answer.
+        let mut t = Surfaces::default();
+        t.group_with(vec![done("del", CallChoice::Delete), done("aud", CallChoice::Audio)], t0);
+        t.ask_again("aud", |_| None, t0);
+        assert_eq!(t.clear_card("aud").unwrap().iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["del"]);
+        // Undo on a row under the card: that one is the card now, the card's call a row (saved as audio).
+        let mut u = Surfaces::default();
+        u.group_with(vec![done("del", CallChoice::Delete), done("aud", CallChoice::Audio)], t0);
+        u.ask_again("aud", |_| None, t0);
+        let held = u.ask_again("del", |id| Some(done(id, CallChoice::Audio)), t0);
+        assert_eq!((u.card(), held.iter().map(|c| (c.id.as_str(), c.kind)).collect::<Vec<_>>()), (Some("del"), vec![("aud", CallChoice::Audio)]));
+    }
+
+    #[test]
+    fn every_delete_row_shows_and_only_kept_rows_fold_into_more() {
+        let kinds = |calls: &[&CallDone]| calls.iter().map(|c| c.id.clone()).collect::<Vec<_>>();
+        // 5 calls, the oldest a Delete: it stays, with the two newest others; two fold into "+2 more".
+        let five = [done("d1", CallChoice::Delete), done("a1", CallChoice::Audio), done("a2", CallChoice::Audio), done("t1", CallChoice::Transcribe), done("a3", CallChoice::Audio)];
+        let (shown, more) = visible_rows(&five);
+        assert_eq!((kinds(&shown), more), (vec!["d1".to_string(), "t1".into(), "a3".into()], 2));
+        // Four Deletes: all four show, past the usual three, and nothing else.
+        let deletes: Vec<CallDone> = (0..4).map(|i| done(&format!("d{i}"), CallChoice::Delete)).chain([done("a", CallChoice::Audio)]).collect();
+        let (shown, more) = visible_rows(&deletes);
+        assert_eq!((shown.len(), more), (4, 1));
+        assert!(shown.iter().all(|c| c.kind == CallChoice::Delete));
+        let (shown, more) = visible_rows(&five[1..3]);
+        assert_eq!((shown.len(), more), (2, 0), "a short group shows everything");
+    }
+
+    #[test]
+    fn review_and_close_take_the_group_for_the_caller_to_apply() {
+        let mut s = Surfaces::default();
+        let t0 = Instant::now();
+        s.group_with(vec![done("del", CallChoice::Delete), done("aud", CallChoice::Audio)], t0);
+        let rows = s.take_group(t0);
+        assert_eq!(rows.len(), 2);
+        assert!(s.group(t0).is_none());
+        s.arrive("x", false, t0);
+        assert!(s.take_group(t0).is_empty(), "no group: a card is left alone");
+        assert_eq!(s.card(), Some("x"));
+        let code = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/actions.rs")).unwrap();
+        let review = &code[code.find("pub fn group_review(").unwrap()..];
+        let review = &review[..review.find("\n}\n").unwrap()];
+        assert!(review.contains("partition(|c| c.kind == CallChoice::Delete)") && review.contains("show_group(app, deletes)"),
+            "Review applies what is kept and keeps every Delete on screen with its Undo");
+        let undo = &code[code.find("pub fn call_undo(").unwrap()..];
+        let undo = &undo[..undo.find("\n}\n").unwrap()];
+        assert!(undo.contains("let paused = at +") && undo.contains("set_apply_time(&state, held, paused)"), "the rows under the card wait past it");
     }
 
     #[test]

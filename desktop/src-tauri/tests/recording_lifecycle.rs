@@ -1095,3 +1095,47 @@ fn eight_seconds_with_no_choice_save_the_audio_only_after_its_confirmation() {
     assert_eq!(files.keep_due(confirm).unwrap(), ["b"]);
     assert!(UploadQueue::load(&files.uploads).items.iter().any(|i| i.client_ref == "ref-b" && i.transcribe));
 }
+
+#[test]
+fn the_waiting_lists_delete_waits_for_its_undo_and_undo_puts_it_back_in_the_list() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    for id in ["a", "b"] {
+        files.add(decision(root.path(), id, None, now)).unwrap();
+    }
+    let at = now + chrono::Duration::seconds(7);
+    files.discard_later("a", at).unwrap();
+    files.discard_later("b", at).unwrap();
+    assert!(files.load().ui_items().is_empty(), "both leave the list at once");
+    assert!(files.discard_due(now + chrono::Duration::seconds(6)).0.is_empty(), "nothing goes while Undo shows");
+    let back = files.restore_waiting("a").unwrap();
+    assert!(back.waits(), "a waits in the list again");
+    assert_eq!(files.load().ui_items().iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["a"]);
+    let (gone, _) = files.discard_due(at);
+    assert_eq!(gone.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["b"], "only b, once its time is over");
+    assert_eq!(files.restore_waiting("b").unwrap_err().to_string(), pending::NOT_WAITING, "too late for b");
+    assert!(root.path().join("recordings/a/recording.flac").exists());
+}
+
+#[test]
+fn a_grouped_delete_paused_under_a_reopened_card_is_not_applied_at_the_groups_time() {
+    use desktop_lib::after_call::CallChoice;
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    let group_time = now + chrono::Duration::seconds(10);
+    files.add(decision(root.path(), "del", None, now)).unwrap();
+    files.add(decision(root.path(), "aud", None, now)).unwrap();
+    files.discard_later("del", group_time).unwrap();
+    files.choose("aud", CallChoice::Audio, group_time).unwrap();
+    // Undo on the Audio row: its card is back for 8 s, and the Delete under it waits past the card and its group.
+    let card = now + chrono::Duration::seconds(pending::CHIP_SECONDS);
+    files.ask_again("aud", card).unwrap();
+    let paused = card + chrono::Duration::seconds(9);
+    files.discard_later("del", paused).unwrap();
+    assert!(files.discard_due(group_time).0.is_empty(), "not at the group's old time: its row is still on screen");
+    assert!(root.path().join("recordings/del/recording.flac").exists());
+    // Its Undo still finds it, until its paused time.
+    assert!(files.restore_waiting("del").is_ok());
+}

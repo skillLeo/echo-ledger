@@ -334,12 +334,17 @@
 .call-done { gap: var(--space-1); padding-block: var(--space-2); }
 .call-done-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 /* What was done on one line, the name on its own line under it (never cut to a few letters by the buttons). */
-.call-done-text { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+/* The text column takes the free space and starts at the card's start, in either direction. */
+.call-done-text { display: flex; flex: 1 1 auto; flex-direction: column; align-items: flex-start; min-width: 0; }
 .call-done-text > * { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .call-done-text b { font-weight: 600; }
 /* The grouped card's first line wraps rather than clip, in either direction. */
 .call-group-headline { display: block; white-space: normal; overflow-wrap: anywhere; font-weight: 600; }
 .call-error { color: var(--danger); font-size: var(--text-xs); }
+/* The rest of a grouped card under a reopened card: each row with its own Undo, apart from the card's own choices. */
+.call-held { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-2); border-top: 1px solid var(--border); }
+/* Taller than the window allows (many Delete rows): the card scrolls, every row still there. */
+.review-root { overflow-y: auto; }
 
 .ctl-btn {
   display: inline-flex;

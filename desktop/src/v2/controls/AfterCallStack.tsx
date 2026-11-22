@@ -33,8 +33,10 @@ export function AfterCallStack({ state, screens = 0, onGone }: {
   return (
     <div className="el-root el-embedded el-aftercall-stack">
       {item ? (
-        <AfterCallCard key={item.id} item={item} hint={state.hint} screens={screens || item.screens || 0} busy={busy} error={error}
+        <AfterCallCard key={item.id} item={item} hint={state.hint} held={state.held ?? []} screens={screens || item.screens || 0} busy={busy} error={error}
           actions={{
+            onRowUndo: (id) => void act(() => api.callUndo(id)),
+            onRowTranscribe: (id) => void act(() => api.callDoneTranscribe(id)),
             onTranscribe: () => answer("transcribe"),
             onSaveAudio: () => answer("audio"),
             onDelete: () => answer("delete"),

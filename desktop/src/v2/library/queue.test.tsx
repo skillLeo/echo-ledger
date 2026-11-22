@@ -15,7 +15,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 const NOW = new Date(2026, 9, 24, 12, 0);
 const CLIENTS = { data: [{ id: "c1", name: "Acme Holdings", language: null }, { id: "c2", name: "Northwind", language: null }] };
 const DISCARD = "Discard this recording? It can't be undone.";
-const DELETE = "Delete this recording? It can't be undone.";
+const DELETE = "Delete this recording? You can undo it for a few seconds.";
 
 async function show(pending: PendingItem[] = [], uploads: UploadItem[] = []) {
   respond("library_list", [makeItem("a", { title: "Zoom with Acme" })]);
@@ -26,6 +26,8 @@ async function show(pending: PendingItem[] = [], uploads: UploadItem[] = []) {
   respond("list_clients", CLIENTS);
   respond("pending_keep", undefined);
   respond("pending_discard", undefined);
+  respond("pending_delete", 1);
+  respond("pending_keep_audio", undefined);
   respond("upload_retry", undefined);
   respond("upload_discard", undefined);
   render(<LibraryV2 />);
@@ -83,7 +85,9 @@ describe("waiting recordings at the top of the v2 Library", () => {
     fireEvent.click(within(rowOf("Drop me")).getByRole("button", { name: "Delete" }));
     await act(flushAsync);
     expect(confirm).toHaveBeenCalledWith(DELETE);
-    expect(callsOf("pending_discard")).toEqual([{ id: "p2" }]);
+    expect(callsOf("pending_delete")).toEqual([{ ids: ["p2"] }]);
+    expect(callsOf("pending_discard"), "never the immediate delete").toEqual([]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Deleted · Undo");
     expect(screen.queryByTestId("library-queue")).toBeNull();
   });
 
@@ -93,12 +97,24 @@ describe("waiting recordings at the top of the v2 Library", () => {
     fireEvent.click(review());
     fireEvent.click(screen.getByRole("button", { name: "Delete all" }));
     await act(flushAsync);
-    expect(confirm).toHaveBeenCalledWith("Delete all 2 recordings? It can't be undone.");
-    expect(callsOf("pending_discard")).toEqual([]);
+    expect(confirm).toHaveBeenCalledWith("Delete all 2 recordings? You can undo it for a few seconds.");
+    expect(callsOf("pending_delete")).toEqual([]);
     fireEvent.click(screen.getByRole("button", { name: "Transcribe all" }));
     await act(flushAsync);
     expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]);
     expect(screen.queryByTestId("library-queue")).toBeNull();
+  });
+
+  it("Save audio only, for one and for all, keeps the audio without a transcript", async () => {
+    await show([makePendingItem("p1", { title: "One" }), makePendingItem("p2", { title: "Two" }), makePendingItem("p3", { title: "Three" })]);
+    fireEvent.click(review());
+    fireEvent.click(within(rowOf("One")).getByRole("button", { name: "Save audio only" }));
+    await act(flushAsync);
+    expect(callsOf("pending_keep_audio")).toEqual([{ id: "p1" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Save all as audio only" }));
+    await act(flushAsync);
+    expect(callsOf("pending_keep_audio")).toEqual([{ id: "p1" }, { id: "p2" }, { id: "p3" }]);
+    expect(callsOf("pending_keep")).toEqual([]);
   });
 
   it("Rename… saves the new title with pending_rename", async () => {

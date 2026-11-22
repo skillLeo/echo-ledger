@@ -8,6 +8,7 @@ import {
   DISCARD_QUESTION,
   bulkNotice,
   deleteWaitingQuestion,
+  deletedNotice,
   discardAllQuestion,
   failedUploads,
   heldLine,
@@ -95,8 +96,8 @@ export function useLibraryQueue(notify: Notify) {
     setBusy(id);
     try {
       await fn();
-      // Calls being transcribed go up and show in the Library; what was deleted is gone.
-      if (ok) notify(ok, false, ok.startsWith("Transcribing") ? { kind: "library", view: null } : NO_TARGET);
+      // Calls being transcribed or saved as audio go up and show in the Library.
+      if (ok) notify(ok, false, /^(Transcribing|Saved)/.test(ok) ? { kind: "library", view: null } : NO_TARGET);
       return true;
     } catch (e) {
       notify(errorMessage(e), true);
@@ -117,13 +118,37 @@ export function useLibraryQueue(notify: Notify) {
     if (await perform(item.id, () => api.pendingKeep(item.id), "Transcribing…")) drop(item.id);
   };
 
-  const discard = async (item: PendingItem) => {
-    if (!(await confirmAction(DELETE_WAITING_QUESTION))) return;
-    if (await perform(item.id, () => api.pendingDiscard(item.id), "Deleted")) drop(item.id);
+  /** "Save audio only": kept and uploaded as audio, not transcribed; it can be transcribed later from the Library. */
+  const keepAudio = async (item: PendingItem) => {
+    if (await perform(item.id, () => api.pendingKeepAudio(item.id), "Saved as audio")) drop(item.id);
   };
 
-  /** Transcribe all / Delete all: one command per recording, in order; a failure is reported and the rest still run. */
-  const decideAll = async (verb: "Transcribing" | "Deleted", command: (id: string) => Promise<unknown>) => {
+  /** Delete and Delete all: gone from the list now, deleted only once "Deleted · Undo" has had its time; Undo puts them
+   * back in the list. */
+  const deleteLater = async (ids: string[]) => {
+    setBulkBusy(true);
+    try {
+      const count = await api.pendingDelete(ids);
+      setPending((list) => list.filter((i) => !ids.includes(i.id)));
+      notify(deletedNotice(count), false, { kind: "action", run: () => {
+        api.pendingDeleteUndo(ids).then(() => reloadPending(), (e) => notify(errorMessage(e), true));
+      } });
+    } catch (e) {
+      notify(errorMessage(e), true);
+      reloadPending();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const discard = async (item: PendingItem) => {
+    if (!(await confirmAction(DELETE_WAITING_QUESTION))) return;
+    await deleteLater([item.id]);
+  };
+
+  /** Transcribe all / Save audio only for all: one command per recording, in order; a failure is reported and the rest
+   * still run. */
+  const decideAll = async (verb: "Transcribing" | "Saved as audio", command: (id: string) => Promise<unknown>) => {
     const items = pending;
     setBulkBusy(true);
     let done = 0;
@@ -137,14 +162,16 @@ export function useLibraryQueue(notify: Notify) {
     } finally {
       setBulkBusy(false);
     }
-    if (done > 0) notify(bulkNotice(verb, done), false, verb === "Transcribing" ? { kind: "library", view: null } : NO_TARGET);
+    if (done > 0) notify(bulkNotice(verb, done), false, { kind: "library", view: null });
   };
 
   const keepAll = () => decideAll("Transcribing", (id) => api.pendingKeep(id));
+  const keepAudioAll = () => decideAll("Saved as audio", (id) => api.pendingKeepAudio(id));
 
   const discardAll = async () => {
-    if (!(await confirmAction(deleteWaitingQuestion(pending.length)))) return;
-    return decideAll("Deleted", (id) => api.pendingDiscard(id));
+    const ids = pending.map((i) => i.id);
+    if (!(await confirmAction(deleteWaitingQuestion(ids.length)))) return;
+    await deleteLater(ids);
   };
 
   /** A new title for a waiting recording; an unchanged one sends nothing, an empty one clears it. */
@@ -236,13 +263,13 @@ export function useLibraryQueue(notify: Notify) {
   const held = heldUploads(uploads);
   return {
     pending, uploads, failed, verifying, importing, held, clients, busy, bulkBusy, learn, pendingLoads, reloadPending,
-    keep, discard, keepAll, discardAll, rename, loadClients, assign, setLanguage, answerLearn, retry, discardUpload, discardHeld, cancelImport,
+    keep, keepAudio, discard, keepAll, keepAudioAll, discardAll, rename, loadClients, assign, setLanguage, answerLearn, retry, discardUpload, discardHeld, cancelImport,
   };
 }
 
 export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
   const q = useLibraryQueue(notify);
-  const { pending, clients, busy, bulkBusy, learn, pendingLoads, reloadPending, failed, verifying, importing, held } = q;
+  const { pending, clients, busy, bulkBusy, learn, pendingLoads, reloadPending, failed, verifying, importing, held, keepAudio, keepAudioAll } = q;
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
   const [assigning, setAssigning] = useState<string | null>(null);
@@ -342,6 +369,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             <div id="queue-pending-list" className="queue-list">
               <div className="queue-actions queue-bulk">
                 <button type="button" className="btn primary compact" disabled={bulkBusy} onClick={() => void keepAll()}>Transcribe all</button>
+                <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void keepAudioAll()}>Save all as audio only</button>
                 <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void discardAll()}>Delete all</button>
               </div>
               {pending.map((item) => {
@@ -419,9 +447,10 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                       <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Choose project</button>
                       <button type="button" className="btn ghost compact" disabled={isBusy} onClick={() => setRename({ id: item.id, text: item.title ?? "" })}>Rename</button>
                     </div>
-                    {/* As on the phone's card: Delete on the left, Transcribe (the one primary action) on the right. */}
+                    {/* As on the after-call card: Delete on the left, Save audio only, Transcribe (the one primary action) on the right. */}
                     <div className="queue-actions decide">
                       <button type="button" className="btn" disabled={isBusy} onClick={() => void discard(item)}>Delete</button>
+                      <button type="button" className="btn" disabled={isBusy} onClick={() => void keepAudio(item)}>Save audio only</button>
                       <button type="button" className="btn primary" disabled={isBusy} onClick={() => void keep(item)}>Transcribe</button>
                     </div>
                   </div>

@@ -37,6 +37,7 @@ const SURFACES = [
     ["group", "controls-group", REVIEW, async (page) => page.locator("[data-testid=call-group]").first().waitFor()],
     ["banner", "controls-banner", PILL, async (page) => page.locator("[data-testid=start-banner]").first().waitFor()],
     ["always", "controls-always", REVIEW, async (page) => page.locator("[data-testid=call-always]").first().waitFor()],
+    ["held", "controls-held", REVIEW, async (page) => page.locator("[data-testid=call-held]").first().waitFor()],
   ] : []),
 ];
 

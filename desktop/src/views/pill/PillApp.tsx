@@ -230,6 +230,11 @@ export default function PillApp() {
   // the screen back when they close. Said only when it changes (the first state is the closed one).
   const expanded = shown && (menu || menuV2 || banner);
   const sentExpanded = useRef(false);
+  /** Grows the window first and then lets the menu be drawn, so it is never clipped for a frame. */
+  const growFirst = useCallback(async () => {
+    sentExpanded.current = true;
+    await api.pillExpanded(true).catch(() => undefined);
+  }, []);
   useEffect(() => {
     if (sentExpanded.current === expanded) return;
     sentExpanded.current = expanded;
@@ -365,6 +370,7 @@ export default function PillApp() {
         <Suspense fallback={null}>
           <RecordingPillV2
             onMenu={setMenuV2}
+            beforeOpen={growFirst}
             model={{
               elapsed, name: caller || label, paused, captions: live.captions, language: languageChip(live.language), error,
               screens: live.screens ? { on: live.screens.on, count: live.screens.count } : null,
@@ -384,7 +390,8 @@ export default function PillApp() {
       <div className={`rec-pill${paused ? " paused" : ""}`} data-hit data-testid="recording-pill" role="toolbar"
         aria-label="Recording controls" onMouseDown={startDrag} onMouseMove={afterDrag}>
         <button type="button" className="rec-choice" data-testid="pill-choice" aria-haspopup="menu" aria-expanded={menu} aria-controls="rec-menu"
-          aria-label={`${paused ? "Paused" : "Recording"} ${elapsed}. ${menu ? "Hide" : "Show"} what happens to this recording`} onClick={() => setMenu(!menu)}>
+          aria-label={`${paused ? "Paused" : "Recording"} ${elapsed}. ${menu ? "Hide" : "Show"} what happens to this recording`}
+          onClick={() => { if (menu) setMenu(false); else void growFirst().then(() => setMenu(true)); }}>
           <span className="rec-status">
             <span className="rec-dot" aria-hidden="true" />
             <span className="rec-state">{paused ? "Paused" : "REC"}</span>

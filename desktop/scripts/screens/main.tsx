@@ -435,6 +435,8 @@ const commands: Record<string, (args: Args) => unknown> = {
     if (screen === "controls-discarded") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "delete", until }) });
     if (screen === "controls-always") return makeAfterCallState({ done: makeCallDone({ ...call, id: call.id, kind: "transcribe", until, offerAlways: "always_transcribe" }) });
     // Back to back: Omar's call was saved as audio, then Muneeb's was stopped and deleted from the pill: one card, both Undos.
+    // Undo on Omar's row: his card is back, Muneeb's Delete held under it with its own Undo.
+    if (screen === "controls-held") return makeAfterCallState({ ask: makeChipItem("g1", { ...call, id: "g1", callerName: "Omar Khan", deadlineAt: new Date(Date.now() + 5_000).toISOString() }), held: [makeCallDone({ ...call, id: call.id, kind: "delete", until })] });
     if (screen === "controls-group") return makeAfterCallState({ group: makeCallGroup([makeCallDone({ ...call, id: "g1", callerName: "Omar Khan", kind: "audio", until }), makeCallDone({ ...call, id: call.id, kind: "delete", until })], Date.now() + 3_592_000) });
     return makeAfterCallState({ hint: screen === "controls-card", ask: makeChipItem(call.id, { ...call, deadlineAt: new Date(Date.now() + 5_000).toISOString() }) });
   },
@@ -507,7 +509,7 @@ async function render() {
   root.render(
     <div className="screens-canvas">
       <div className="screens-window" style={{ width: 352, height: 148 }}><PillApp /></div>
-      <div className="screens-window" style={{ width: 360, height: 240 }}><ReviewApp /></div>
+      <div className="screens-window" style={{ width: 360, height: 340 }}><ReviewApp /></div>
       <div className="screens-window" style={{ width: 560, height: 150 }}><OverlayApp /></div>
     </div>,
   );

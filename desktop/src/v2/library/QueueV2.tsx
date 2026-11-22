@@ -114,6 +114,7 @@ export function QueueV2({ say, reviewRequest, onShown }: {
             <div id="queue-pending-list" className="el-library-top">
               <div className="el-page__actions">
                 <Button size="sm" variant="primary" disabled={bulkBusy} onClick={() => void q.keepAll()}>Transcribe all</Button>
+                <Button size="sm" disabled={bulkBusy} onClick={() => void q.keepAudioAll()}>Save all as audio only</Button>
                 <Button size="sm" disabled={bulkBusy} onClick={() => void q.discardAll()}>Delete all</Button>
               </div>
               {learn && (
@@ -137,6 +138,7 @@ export function QueueV2({ say, reviewRequest, onShown }: {
                       control={<span className="el-page__actions" role="group" aria-label={title} data-testid={`pending-${item.id}`}>
                         <Menu label={`More for ${title}`} items={() => more(item)} button={{ size: "sm", variant: "quiet", icon: Icons.MoreIcon, disabled: isBusy }} />
                         <Button size="sm" disabled={isBusy} onClick={() => void q.discard(item)}>Delete</Button>
+                        <Button size="sm" disabled={isBusy} onClick={() => void q.keepAudio(item)}>Save audio only</Button>
                         <Button size="sm" disabled={isBusy} onClick={() => void q.keep(item)}>Transcribe</Button>
                       </span>} />
                   );

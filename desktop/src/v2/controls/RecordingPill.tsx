@@ -66,12 +66,14 @@ export function useScreenCaptured(): { count: number; seq: number } | null {
   return captured;
 }
 
-export function RecordingPill({ model, actions, defaultOpen = false, onMenu }: {
+export function RecordingPill({ model, actions, defaultOpen = false, onMenu, beforeOpen }: {
   model: PillModel;
   actions: PillActions;
   defaultOpen?: boolean;
   /** The menu opened or closed (the window grows only while it shows). */
   onMenu?: (open: boolean) => void;
+  /** Grows the window before the menu is drawn, so it is never clipped for a frame. */
+  beforeOpen?: () => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const reportMenu = useRef(onMenu);
@@ -108,7 +110,10 @@ export function RecordingPill({ model, actions, defaultOpen = false, onMenu }: {
           {captured ? `Screen kept. ${captured.count} ${captured.count === 1 ? "screen" : "screens"} in this recording.` : ""}
         </span>
         <button type="button" className="el-pill__summary" aria-expanded={open} aria-controls="el-pill-controls" aria-haspopup="menu"
-          aria-label={`${status}, ${model.name}. ${open ? "Hide" : "Show"} the controls`} onClick={() => setOpen(!open)}>
+          aria-label={`${status}, ${model.name}. ${open ? "Hide" : "Show"} the controls`} onClick={() => {
+            if (open || !beforeOpen) setOpen(!open);
+            else void beforeOpen().finally(() => setOpen(true));
+          }}>
           <Status kind={model.paused ? "idle" : "recording"}><span className="el-num">{model.elapsed}</span></Status>
           <span className="el-pill__sep" aria-hidden="true">·</span>
           <span className={`el-pill__name${model.error ? " el-pill__name--error" : ""}`} dir="auto">{model.error ?? model.name}</span>

@@ -756,6 +756,10 @@ button.el-step__head { cursor: pointer; }
 [dir="rtl"] .el-aftercall__line > span { transform-origin: right center; }
 @keyframes el-aftercall-line { from { transform: scaleX(var(--from, 1)); } to { transform: scaleX(0); } }
 .el-aftercall__close-line { margin: 0; }
+/* The rest of a grouped card under a reopened card: each row with its own Undo, apart from the card's own choices. */
+.el-aftercall__held { display: flex; flex-direction: column; gap: var(--el-space-4); padding-block-start: var(--el-space-8); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+/* Taller than the window allows (many Delete rows): the window's root scrolls (controls.css .review-root), every row
+   still there. */
 /* The desktop's words are English (lang="en"): English metrics, also in a window laid out right to left. */
 .el-aftercall:lang(en), .el-pill-menu:lang(en), .el-pill-banner:lang(en) { font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
 .el-aftercall:lang(en) .el-caption { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); }
@@ -763,7 +767,8 @@ button.el-step__head { cursor: pointer; }
 .el-aftercall--done { gap: var(--el-space-4); padding-block: var(--el-space-8); }
 .el-aftercall__done { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
 /* What was done on one line, the name on its own line under it (never cut to a few letters by the buttons). */
-.el-aftercall__done-text { display: flex; flex: 1; flex-direction: column; min-inline-size: 0; }
+/* The text column takes the free space and starts at the card's start, in either direction. */
+.el-aftercall__done-text { display: flex; flex: 1; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
 .el-aftercall__done-text > * { min-inline-size: 0; max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The grouped card's first line wraps rather than clip, in either direction. */
 .el-aftercall__headline { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

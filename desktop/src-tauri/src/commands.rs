@@ -3385,6 +3385,18 @@ pub fn call_card_answer(app: AppHandle, id: String, choice: crate::after_call::C
     crate::actions::card_answer(&app, &id, choice)
 }
 
+/// The waiting list's Delete / Delete all: gone from the list now, the files only once "Deleted · Undo" has had its time.
+#[tauri::command]
+pub fn pending_delete(app: AppHandle, ids: Vec<String>) -> AppResult<usize> {
+    crate::actions::pending_delete(&app, &ids)
+}
+
+/// Undo on the waiting list's "Deleted · Undo": the recordings are back in the list.
+#[tauri::command]
+pub fn pending_delete_undo(app: AppHandle, ids: Vec<String>) -> AppResult<usize> {
+    crate::actions::pending_delete_undo(&app, &ids)
+}
+
 /// Undo on any confirmation: the call is back on its card, nothing was uploaded or deleted.
 #[tauri::command]
 pub fn call_undo(app: AppHandle, id: String) -> AppResult<()> {
@@ -3409,9 +3421,10 @@ pub fn call_group_close(app: AppHandle, review: bool) {
     if review { crate::actions::group_review(&app) } else { crate::actions::group_close(&app) }
 }
 
-/// The pill page opened or closed the call choice's menu or the start banner: its window grows for it and shrinks back.
+/// The pill page opens or closes the call choice's menu or the start banner: its window grows for it (this returns once
+/// it has, so the page draws the menu into the room it needs) and shrinks back after.
 #[tauri::command]
-pub fn pill_expanded(app: AppHandle, expanded: bool) {
+pub async fn pill_expanded(app: AppHandle, expanded: bool) {
     crate::overlay::set_pill_expanded(&app, expanded);
 }
 

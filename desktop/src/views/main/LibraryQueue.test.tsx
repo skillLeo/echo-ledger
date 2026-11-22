@@ -17,7 +17,7 @@ const local = (hour: number, minute = 0) => new Date(2026, 9, 24, hour, minute).
 const CLIENTS = { data: [{ id: "c1", name: "Acme Holdings", keyterm_count: 4 }, { id: "c2", name: "Northwind", keyterm_count: 0 }] };
 const DISCARD = "Discard this recording? It can't be undone.";
 /** The waiting list's Delete asks this (the call choice's words); a failed upload's Discard keeps DISCARD. */
-const DELETE = "Delete this recording? It can't be undone.";
+const DELETE = "Delete this recording? You can undo it for a few seconds.";
 
 const scrollIntoView = vi.fn();
 
@@ -31,6 +31,9 @@ function mockBackend(pending: PendingItem[] = [], uploads: UploadItem[] = []) {
   respond("list_clients", CLIENTS);
   respond("pending_keep", undefined);
   respond("pending_discard", undefined);
+  respond("pending_delete", 1);
+  respond("pending_delete_undo", 1);
+  respond("pending_keep_audio", undefined);
   respond("upload_retry", undefined);
   respond("upload_discard", undefined);
 }
@@ -131,18 +134,32 @@ describe("Waiting recordings", () => {
     expect(callsOf("pending_list")).toHaveLength(2);
   });
 
-  it("asks before discarding and discards only when confirmed", async () => {
+  it("asks before deleting, deletes only when confirmed, and then says Deleted · Undo, which brings it back", async () => {
     const confirm = answerConfirm().mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { notify } = await renderLibrary([makePendingItem("p1")]);
     fireEvent.click(within(row("p1")).getByRole("button", { name: "Delete" }));
     expect(confirm).toHaveBeenCalledWith(DELETE);
     await flushAsync();
-    expect(callsOf("pending_discard")).toHaveLength(0);
+    expect(callsOf("pending_delete")).toHaveLength(0);
     expect(row("p1")).toBeInTheDocument();
     fireEvent.click(within(row("p1")).getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p1" }]));
+    await waitFor(() => expect(callsOf("pending_delete")).toEqual([{ ids: ["p1"] }]));
     await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
-    expect(notify).toHaveBeenCalledWith("Deleted", false, undefined);
+    expect(callsOf("pending_discard"), "never the immediate delete").toHaveLength(0);
+    const [text, error, target] = notify.mock.calls.at(-1)!;
+    expect([text, error]).toEqual(["Deleted · Undo", false]);
+    respond("pending_list", [makePendingItem("p1")]);
+    target.run();
+    await waitFor(() => expect(callsOf("pending_delete_undo")).toEqual([{ ids: ["p1"] }]));
+    await waitFor(() => expect(waitingLine()).toBeInTheDocument());
+    expect(callsOf("pending_keep")).toHaveLength(0);
+  });
+
+  it("Save audio only keeps one as audio, not transcribed", async () => {
+    const { notify } = await renderLibrary([makePendingItem("p1")]);
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Save audio only" }));
+    await waitFor(() => expect(callsOf("pending_keep_audio")).toEqual([{ id: "p1" }]));
+    expect(notify).toHaveBeenCalledWith("Saved as audio", false, { kind: "library", view: null });
     expect(callsOf("pending_keep")).toHaveLength(0);
   });
 
@@ -241,17 +258,29 @@ describe("Waiting recordings: slim line", () => {
     expect(notify).toHaveBeenCalledWith("This recording is no longer waiting.", true);
   });
 
-  it("asks once before Delete all and deletes every recording", async () => {
+  it("asks once before Delete all, which can be undone like every Delete: Deleted 2 recordings · Undo", async () => {
     const confirm = answerConfirm().mockReturnValue(true);
     const { notify } = await renderLibrary(items());
+    respond("pending_delete", 2);
+    respond("pending_delete_undo", 2);
     fireEvent.click(screen.getByRole("button", { name: "Delete all" }));
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(confirm).toHaveBeenCalledWith("Delete all 2 recordings? It can't be undone.");
-    await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p1" }, { id: "p2" }]));
+    expect(confirm).toHaveBeenCalledWith("Delete all 2 recordings? You can undo it for a few seconds.");
+    await waitFor(() => expect(callsOf("pending_delete")).toEqual([{ ids: ["p1", "p2"] }]));
     await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
-    expect(confirm).toHaveBeenCalledTimes(1);
-    expect(notify).toHaveBeenCalledWith("Deleted 2 recordings", false, anyTarget);
+    expect(callsOf("pending_discard"), "never the immediate delete").toHaveLength(0);
+    const [text, , target] = notify.mock.calls.at(-1)!;
+    expect(text).toBe("Deleted 2 recordings · Undo");
+    target.run();
+    await waitFor(() => expect(callsOf("pending_delete_undo")).toEqual([{ ids: ["p1", "p2"] }]));
     expect(callsOf("pending_keep")).toHaveLength(0);
+  });
+
+  it("Save all as audio only keeps every one as audio, not transcribed", async () => {
+    const { notify } = await renderLibrary(items());
+    fireEvent.click(screen.getByRole("button", { name: "Save all as audio only" }));
+    await waitFor(() => expect(callsOf("pending_keep_audio")).toEqual([{ id: "p1" }, { id: "p2" }]));
+    expect(notify).toHaveBeenCalledWith("Saved 2 recordings as audio", false, { kind: "library", view: null });
   });
 
   it("deletes nothing when Delete all is cancelled", async () => {
@@ -260,7 +289,7 @@ describe("Waiting recordings: slim line", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete all" }));
     expect(confirm).toHaveBeenCalledTimes(1);
     await flushAsync();
-    expect(callsOf("pending_discard")).toHaveLength(0);
+    expect(callsOf("pending_delete")).toHaveLength(0);
     expect(row("p1")).toBeInTheDocument();
     expect(row("p2")).toBeInTheDocument();
     expect(notify).not.toHaveBeenCalled();

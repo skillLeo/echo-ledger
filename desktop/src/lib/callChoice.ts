@@ -86,13 +86,33 @@ export function alwaysOffer(value: AfterEachCall): string {
   return `${CALL_WORDS.card_always} ${AFTER_EACH_CALL_OPTIONS.find((o) => o.value === value)?.label ?? ""}`.trim();
 }
 
-/** The rows the grouped card lists (the newest); the rest are a Review away. Matches the core's GROUP_ROWS. */
+/** The rows a list of grouped calls shows before "+N more" (the core's after_call::GROUP_ROWS). */
 export const GROUP_ROWS = 3;
 
-/** The grouped card's first line: the deck's "3 calls saved as audio" when every call in it is saved as audio. */
-export function groupHeadline(calls: Pick<CallDone, "kind">[]): string | null {
-  return calls.length > 0 && calls.every((c) => c.kind === "audio") ? groupedAudio(calls.length) : null;
+/** "4 calls" (grouped_mixed): the grouped card's first line when its calls had different choices. */
+export const groupedMixed = (count: number): string => `${count} calls`;
+
+/** The grouped card's first line: "3 calls saved as audio" when every call in it is saved as audio, else "3 calls". */
+export function groupHeadline(calls: Pick<CallDone, "kind">[]): string {
+  return calls.length > 0 && calls.every((c) => c.kind === "audio") ? groupedAudio(calls.length) : groupedMixed(calls.length);
 }
+
+/**
+ * The rows a list of grouped calls shows (the core's after_call::visible_rows): every Delete, always, so its Undo is
+ * always there, and the newest Transcribe and Save audio only rows up to GROUP_ROWS rows in all; the others fold into
+ * "+N more" (their audio is kept either way).
+ */
+export function visibleRows<T extends Pick<CallDone, "kind">>(calls: T[]): { shown: T[]; more: number } {
+  const deletes = calls.filter((c) => c.kind === "delete").length;
+  const others = calls.length - deletes;
+  const room = Math.min(Math.max(GROUP_ROWS - deletes, 0), others);
+  const more = others - room;
+  let seen = 0;
+  return { shown: calls.filter((c) => c.kind === "delete" || ++seen > more), more };
+}
+
+/** "+2 more": the folded rows. */
+export const moreRows = (count: number): string => `+${count} more`;
 
 /** "When to ask" under Ask me. */
 export const ASK_WHEN_OPTIONS: { value: Settings["askWhen"]; label: string }[] = [

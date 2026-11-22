@@ -638,6 +638,19 @@ impl DecisionFiles {
         self.update(id, |d| apply_choice(d, choice, at))
     }
 
+    /// Undo on the waiting list's Delete: the recording waits in the list again, as before. An error when its files
+    /// already went.
+    pub fn restore_waiting(&self, id: &str) -> AppResult<PendingDecision> {
+        if !self.load().find(id).is_some_and(PendingDecision::discarding) {
+            return Err(AppError::msg(NOT_WAITING));
+        }
+        self.update(id, |d| {
+            d.discard_at = None;
+            d.chosen = None;
+            d.keep_at = None;
+        })
+    }
+
     /// Undo on a confirmation: no choice now, the card asks again until `keep_at` (then saves the audio only). An error
     /// when the choice was already applied.
     pub fn ask_again(&self, id: &str, keep_at: DateTime<Utc>) -> AppResult<PendingDecision> {

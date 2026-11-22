@@ -94,7 +94,7 @@ describe("screen-reader names (C7)", () => {
       }
       if (label === "pill") {
         fireEvent.click(screen.getByTestId("pill-choice"));
-        expect(screen.getByRole("menu")).toBeInTheDocument();
+        expect(await screen.findByRole("menu")).toBeInTheDocument();
       }
       if (state) await emitEvent("aftercall:state", state);
       await act(async () => undefined);

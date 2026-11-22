@@ -801,6 +801,8 @@ pub fn run() {
             commands::call_group_close,
             commands::call_choice,
             commands::pill_expanded,
+            commands::pending_delete,
+            commands::pending_delete_undo,
             commands::skipped_list,
             commands::recovered_sessions,
             commands::skipped_restore,

@@ -3,7 +3,7 @@ import { announceReady, api, errorMessage, listenTo, type AfterCallState, type A
 import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
 import { alwaysIgnoreLabel, askSeconds, askSubject } from "../../lib/controls";
-import { CALL_WORDS, GROUP_ROWS, alwaysOffer, cardMeta, cardName, doneText, groupHeadline, progressStyle, useEscape, useSwipeAway } from "../../lib/callChoice";
+import { CALL_WORDS, alwaysOffer, cardMeta, cardName, doneText, groupHeadline, moreRows, progressStyle, useEscape, useSwipeAway, visibleRows } from "../../lib/callChoice";
 import { hasSourceLogo, SourceLogo } from "../../components/SourceLogos";
 import { CloseIcon, MicIcon, SourceAppIcon } from "../../components/Icons";
 import "../controls.css";
@@ -16,7 +16,7 @@ const AfterCallStackV2 = lazy(() => import("../../v2/controls/AfterCallStack").t
 /** The card's full time (pending::CHIP_SECONDS, the call choice: 8 s). */
 export { CARD_SECONDS as CHIP_SECONDS } from "../../lib/callChoice";
 
-const EMPTY: AfterCallState = { ask: null, hint: false, done: null, group: null };
+const EMPTY: AfterCallState = { ask: null, hint: false, held: [], done: null, group: null };
 
 /**
  * The `review` window (360 x 240, next to the recording pill): the call choice after a call (docs/v2/copy/call-choice.md)
@@ -105,8 +105,9 @@ function CallChoiceStack({ state, onGone }: { state: AfterCallState; onGone: (pa
   const item = state.ask;
   const done = state.done;
   if (item) {
-    return <CallCard key={item.id} item={item} hint={state.hint} busy={busy} error={error} onAnswer={(choice) => void act(() => api.callCardAnswer(item.id, choice))}
-      onOpen={() => void act(() => api.pendingOpen(item.id, true), "ask")} />;
+    return <CallCard key={item.id} item={item} hint={state.hint} held={state.held ?? []} busy={busy} error={error} onAnswer={(choice) => void act(() => api.callCardAnswer(item.id, choice))}
+      onOpen={() => void act(() => api.pendingOpen(item.id, true), "ask")}
+      onRowUndo={(id) => void act(() => api.callUndo(id))} onRowTranscribe={(id) => void act(() => api.callDoneTranscribe(id))} />;
   }
   if (state.group) {
     return <CallGroupLine group={state.group} busy={busy} error={error} onReview={() => void act(() => api.callGroupClose(true), "group")}
@@ -130,9 +131,13 @@ function AppLogo({ app }: { app: string }) {
 }
 
 /** The card: Delete (quiet), Transcribe (the one filled button), the 8 s line and "Close to keep audio only". */
-function CallCard({ item, hint, busy, error, onAnswer, onOpen }: {
+function CallCard({ item, hint, held, busy, error, onAnswer, onOpen, onRowUndo, onRowTranscribe }: {
   item: PendingItem;
   hint: boolean;
+  /** The rest of a grouped card, kept under the card with their own Undo until it is answered. */
+  held: CallDone[];
+  onRowUndo: (id: string) => void;
+  onRowTranscribe: (id: string) => void;
   busy: boolean;
   error: string | null;
   onAnswer: (choice: CallChoice) => void;
@@ -165,7 +170,21 @@ function CallCard({ item, hint, busy, error, onAnswer, onOpen }: {
       <span className="call-card-line" aria-hidden="true"><span key={item.deadlineAt ?? ""} style={line} /></span>
       <p className="call-card-note" id={`call-close-${item.id}`} dir="auto">{CALL_WORDS.card_close_desktop}</p>
       {hint && <p className="call-card-note" data-testid="call-hint" dir="auto">{CALL_WORDS.card_first_hint}</p>}
+      {held.length > 0 && <div className="call-held" data-testid="call-held"><CallRows calls={held} busy={busy} onUndo={onRowUndo} onTranscribe={onRowTranscribe} /></div>}
     </section>
+  );
+}
+
+/** A grouped list's rows: every Delete with its Undo, always, and the newest others; the rest as "+N more". */
+function CallRows({ calls, busy, onUndo, onTranscribe }: { calls: CallDone[]; busy: boolean; onUndo: (id: string) => void; onTranscribe: (id: string) => void }) {
+  const { shown, more } = visibleRows(calls);
+  return (
+    <>
+      {shown.map((c) => (
+        <DoneRow key={c.id} done={c} busy={busy} testId="call-group-row" named onUndo={() => onUndo(c.id)} onTranscribe={() => onTranscribe(c.id)} />
+      ))}
+      {more > 0 && <p className="call-card-note" data-testid="call-more" dir="auto">{moreRows(more)}</p>}
+    </>
   );
 }
 
@@ -220,15 +239,13 @@ function CallGroupLine({ group, busy, error, onReview, onClose, onUndo, onTransc
   const calls = group.calls ?? [];
   const headline = groupHeadline(calls);
   return (
-    <section className="call-card call-done" lang="en" data-hit role="status" aria-label={headline ?? calls.map((c) => `${doneText(c)} ${cardName(c)}`).join(", ")} data-testid="call-group">
+    <section className="call-card call-done" lang="en" data-hit role="status" aria-label={headline} data-testid="call-group">
       <div className="call-done-row">
         <b className="call-done-text call-group-headline" dir="auto">{headline}</b>
         <button type="button" className="call-text-btn" disabled={busy} onClick={onReview}>{CALL_WORDS.grouped_review}</button>
         <button type="button" className="rec-btn" aria-label="Close" title="Close" disabled={busy} onClick={onClose}><CloseIcon size={15} /></button>
       </div>
-      {calls.slice(-GROUP_ROWS).map((c) => (
-        <DoneRow key={c.id} done={c} busy={busy} testId="call-group-row" named onUndo={() => onUndo(c.id)} onTranscribe={() => onTranscribe(c.id)} />
-      ))}
+      <CallRows calls={calls} busy={busy} onUndo={onUndo} onTranscribe={onTranscribe} />
       {error && <p className="call-error" role="alert">{error}</p>}
     </section>
   );
