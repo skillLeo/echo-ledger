@@ -672,6 +672,17 @@ const SCREENS = [
     // At rest: every scroller back at its top (the click can scroll the page).
     await page.evaluate(() => document.querySelectorAll("*").forEach((el) => { if (el.scrollTop) el.scrollTop = 0; }));
   }, { width, height: 800 }]),
+  // The v2 sidebar: the Library's places with their counts as quiet text (no pill), Activity's "needs you" count on its
+  // accent pill; and the same sidebar as the icon rail.
+  ["v2-sidebar", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    await page.getByRole("list", { name: "Library places" }).waitFor();
+    await page.locator(".el-nav-item--place .el-nav-item__count").first().waitFor();
+  }],
+  ["v2-sidebar-rail", `library&uiflags=${V2_FLAGS}`, async (page) => {
+    await page.getByRole("list", { name: "Library places" }).waitFor();
+    await page.getByRole("button", { name: "Collapse sidebar" }).click();
+    await page.locator(".el-sidebar[data-rail=on]").waitFor();
+  }],
 ];
 
 /**
