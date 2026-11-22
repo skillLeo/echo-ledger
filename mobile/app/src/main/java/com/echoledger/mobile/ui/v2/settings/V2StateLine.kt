@@ -15,7 +15,7 @@ import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 private const val ENDS_SOON = 7L
 
 /** What the line under the profile card says and opens; null while nothing needs the person (classic's StateRow). */
-data class StateLineWords(val icon: ImageVector, val text: String, val open: StateLineOpens)
+data class StateLineWords(val icon: ImageVector, val text: String, val open: StateLineOpens, val warning: Boolean = false)
 
 sealed interface StateLineOpens {
     data object Plan : StateLineOpens
@@ -33,13 +33,15 @@ fun stateLine(settings: AppSettings, deletesAt: String?, canPay: Boolean = manua
         deletesAt != null -> StateLineWords(
             EchoIcons.Error,
             stringResource(R.string.v2_st_deletes, PlanFormat.shortDate(deletesAt) ?: deletesAt.take(10)),
-            StateLineOpens.Plan
+            StateLineOpens.Plan,
+            warning = true
         )
 
         canPay && r?.stage == "needs_receipt" -> StateLineWords(
             EchoIcons.Error,
             stringResource(R.string.v2_st_receipt, name),
-            StateLineOpens.Request(FlowStep.Receipt)
+            StateLineOpens.Request(FlowStep.Receipt),
+            warning = true
         )
 
         canPay && r?.stage == "awaiting_payment" -> StateLineWords(
@@ -57,7 +59,8 @@ fun stateLine(settings: AppSettings, deletesAt: String?, canPay: Boolean = manua
         !plan.isFree && ends != null && ends in 0..ENDS_SOON -> StateLineWords(
             EchoIcons.Bell,
             stringResource(R.string.v2_st_ends, plan.displayName, PlanFormat.shortDate(plan.expiresAt).orEmpty()),
-            StateLineOpens.Plan
+            StateLineOpens.Plan,
+            warning = true
         )
 
         settings.serverUrl != null && plan.needsOwnKey && plan.transcriptionKey?.set != true -> StateLineWords(
@@ -72,9 +75,17 @@ fun stateLine(settings: AppSettings, deletesAt: String?, canPay: Boolean = manua
 
 /** One line under the card while something needs the person: a tap opens what it is about. */
 @Composable
-fun StateLine(settings: AppSettings, deletesAt: String?, onOpenPlan: () -> Unit, onOpenKey: () -> Unit, onRequest: (FlowStep) -> Unit) {
-    val line = stateLine(settings, deletesAt) ?: return
-    EchoSettingRow(line.text, icon = line.icon, onClick = {
+fun StateLine(
+    settings: AppSettings,
+    deletesAt: String?,
+    onOpenPlan: () -> Unit,
+    onOpenKey: () -> Unit,
+    onRequest: (FlowStep) -> Unit,
+    /** The Google Play build sells nothing here: no request lines (classic's manualPayments). */
+    canPay: Boolean = manualPayments
+) {
+    val line = stateLine(settings, deletesAt, canPay) ?: return
+    EchoSettingRow(line.text, icon = line.icon, warning = line.warning, onClick = {
         when (val o = line.open) {
             StateLineOpens.Plan -> onOpenPlan()
             StateLineOpens.Key -> onOpenKey()

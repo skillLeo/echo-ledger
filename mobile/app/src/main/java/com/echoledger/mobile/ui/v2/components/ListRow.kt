@@ -149,7 +149,9 @@ fun EchoSettingRow(
     trailing: (@Composable () -> Unit)? = null,
     /** The title and subtitle are people's own words (an Ask source), not the app's. */
     content: Boolean = false,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    /** The icon in the warning colour: something needs the person (the line under the profile card). */
+    warning: Boolean = false
 ) {
     val c = EchoV2.colors
     val type = EchoV2.type
@@ -166,7 +168,7 @@ fun EchoSettingRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
         ) {
-            icon?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary) }
+            icon?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.lg), tint = if (warning) c.warning else c.textSecondary) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
                 if (content) {
                     Text(title, style = type.content(title, type.body), color = c.textPrimary, textAlign = startAlign())

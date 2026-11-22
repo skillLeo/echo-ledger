@@ -33,15 +33,19 @@ class OverlayLookTest : ScreenTest() {
         val clock = "02:14"
         val urdu = V2Testing.resources(EchoLanguage.Urdu).getString(R.string.v2_live_pill_recording, clock)
         val english = V2Testing.resources(EchoLanguage.English).getString(R.string.v2_live_pill_recording, clock)
+        val scales = mutableListOf<Float>()
         show {
             OverlayLook(stored) {
                 fontScale = LocalDensity.current.fontScale
+                scales += fontScale
                 V2RecordingPill(PillState(elapsedMs = 134_000), 0, null, {})
             }
         }
         pumpUntil("Urdu") { compose.onAllNodesWithContentDescription(urdu, substring = true).fetchSemanticsNodes().isNotEmpty() }
         val phone = app.resources.configuration.fontScale
         assertEquals(phone * 1.3f, fontScale, 0.01f)
+        // From its first frame: it starts from the stored settings, never the phone's size first.
+        assertEquals(phone * 1.3f, scales.first(), 0.01f)
         stored.value = AppSettings(appLanguage = "en", textSize = "system")
         pumpUntil("English") { compose.onAllNodesWithContentDescription(english, substring = true).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(phone, fontScale, 0.01f)

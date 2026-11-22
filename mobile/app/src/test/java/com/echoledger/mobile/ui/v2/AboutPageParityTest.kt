@@ -52,6 +52,7 @@ class AboutPageParityTest : ScreenTest() {
     private var deletesAt by mutableStateOf<String?>(null)
     private val calls = mutableListOf<String>()
     private var setupOpened = 0
+    private var canPay by mutableStateOf(true)
     private val release = AndroidReleaseDto("2.1.0", 210, "https://echoledger.test/android.apk", "0".repeat(64), 31_457_280)
 
     private val actions = AboutActions(
@@ -96,10 +97,14 @@ class AboutPageParityTest : ScreenTest() {
                         )
                     }
                 } else {
-                    StateLine(line, deletesAt, onOpenPlan = { calls += "plan" }, onOpenKey = { calls += "key" }, onRequest = {
-                        calls +=
-                            "request $it"
-                    })
+                    StateLine(
+                        line,
+                        deletesAt,
+                        onOpenPlan = { calls += "plan" },
+                        onOpenKey = { calls += "key" },
+                        onRequest = { calls += "request $it" },
+                        canPay = canPay
+                    )
                 }
             }
         }
@@ -241,5 +246,57 @@ class AboutPageParityTest : ScreenTest() {
         language = EchoLanguage.Urdu
         showBoth()
         pumpUntil("Urdu") { listOf("اپ ڈیٹس دیکھیں", "سیٹنگز ایکسپورٹ کریں", "یہ فون", "سیٹ اپ گائیڈ").all(::shown) }
+    }
+
+    private fun keyless() = PlanState(
+        name = "Free",
+        key = "free",
+        features = mapOf("platform_transcription" to FeatureDto(false, "Transcription on EchoLedger")),
+        transcriptionKey = TranscriptionKeyDto(set = false)
+    )
+
+    private fun withStage(stage: String) = AppSettings(
+        serverUrl = "https://echoledger.test",
+        plan = keyless().copy(upgrade = UpgradeRequestDto(id = "r1", plan = "pro", payment = PaymentDto(stage = stage)))
+    )
+
+    @Test
+    fun theGooglePlayBuildShowsNoRequestLines() {
+        page = 2
+        canPay = false
+        line = withStage("needs_receipt")
+        showBoth()
+        // Nothing is sold in that build: the line says the next thing instead (free transcription to set up).
+        pumpUntil("the key line") { shown("Set up free transcription (2 minutes)") }
+        for (stage in listOf("needs_receipt", "awaiting_payment", "in_review")) {
+            line = withStage(stage)
+            compose.waitForIdle()
+            assertTrue(stage, !shown("Pro requested") && !shown("receipt") && !shown("Checking your payment"))
+        }
+        // Where plans are sold the same request has its line.
+        canPay = true
+        pumpUntil("the request line") { shown("Checking your payment for Pro") }
+    }
+
+    @Test
+    fun theDeletionTheReceiptAndTheEndAreWarningsAsInClassic() {
+        val server = "https://echoledger.test"
+        val cases = listOf(
+            Triple("deletion", AppSettings(serverUrl = server), inDays(5)),
+            Triple("receipt", withStage("needs_receipt"), null),
+            Triple("ends", AppSettings(serverUrl = server, plan = PlanState(name = "Pro", key = "pro", expiresAt = inDays(3))), null),
+            Triple("waiting", withStage("awaiting_payment"), null),
+            Triple("key", AppSettings(serverUrl = server, plan = keyless()), null)
+        )
+        val warnings = mutableMapOf<String, Boolean>()
+        show {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                cases.forEach { (name, settings, deletes) ->
+                    com.echoledger.mobile.ui.v2.settings.stateLine(settings, deletes, canPay = true)?.let { warnings[name] = it.warning }
+                }
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(mapOf("deletion" to true, "receipt" to true, "ends" to true, "waiting" to false, "key" to false), warnings)
     }
 }
