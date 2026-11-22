@@ -41,8 +41,14 @@ class PostCallPromptTest : AppTest() {
         android.provider.Settings.Global.putFloat(app.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
     }
 
+    private val usualRefresh = DecisionPopup.refreshWidget
+
     @After
-    fun closeCard() = DecisionPopup.hide()
+    fun closeCard() {
+        DecisionPopup.hide()
+        DecisionPopup.refreshWidget = usualRefresh
+        DecisionPopup.stepTimeoutMs = 30_000L
+    }
 
     private fun call(id: String = "call-1", state: String = "pending_decision") =
         app.storeRecording(id = id, state = state, sourceApp = "whatsapp", durationMs = 44_000)
@@ -323,6 +329,34 @@ class PostCallPromptTest : AppTest() {
         pumpUntil("call-3 on its way out") { app.peekRecording("call-3")?.state == Decisions.DISCARDING }
         assertEquals(Decisions.PROCESS, app.peekRecording("call-3")?.undoIn)
         assertTrue(discardWork("call-3").single().initialDelayMillis >= 3_000)
+    }
+
+    @Test
+    fun `a step cut short while the widget refreshes has already posted the Undo, before the delete is due`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        // A widget refresh that never ends: the step's time runs out there.
+        val refreshing = java.util.concurrent.CountDownLatch(1)
+        DecisionPopup.refreshWidget = {
+            refreshing.countDown()
+            kotlinx.coroutines.awaitCancellation()
+        }
+        DecisionPopup.stepTimeoutMs = 300
+        asked("call-1")
+        DecisionPopup.delete(app)
+        // call-2 ends while call-1's Deleted line shows: its "Deleted · Undo" goes in a notification.
+        assertFalse(DecisionPopup.deleted(app, call("call-2"), "dark", 3_000))
+        assertTrue("the step reached the widget", refreshing.await(10, TimeUnit.SECONDS))
+
+        pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        val due = java.time.Instant.parse(app.peekRecording("call-2")!!.discardAt).toEpochMilli()
+        val undo = notifications().firstOrNull { n -> n.actions.orEmpty().any { it.title.toString() == "Undo" } }
+        assertTrue("the Undo was posted with the delete, not after the widget", undo != null)
+        assertTrue("and before the delete is due", System.currentTimeMillis() < due)
+        assertNull(app.peekRecording("call-2")?.undoIn)
+
+        // The cut-short step held up nothing: the next one (Undo on call-1) still runs.
+        DecisionPopup.undo(app)
+        pumpUntil("call-1 back") { app.peekRecording("call-1")?.state == "pending_decision" }
     }
 
     @Test

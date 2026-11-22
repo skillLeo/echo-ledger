@@ -110,7 +110,14 @@ object Decisions {
      * sent after [uploadAfterMs] so the card's Undo ([undoKeep]) still finds it here; 0 sends it now. A call on its way
      * out stays so (only its own Undo brings it back). Null when the call is gone or is no longer the person's to decide.
      */
-    suspend fun keepFor(context: Context, recordingId: String, transcribe: Boolean, uploadAfterMs: Long): LocalRecording? {
+    suspend fun keepFor(
+        context: Context,
+        recordingId: String,
+        transcribe: Boolean,
+        uploadAfterMs: Long,
+        /** False: the caller refreshes the widget itself, after its own steps that must not be cut short. */
+        widget: Boolean = true
+    ): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         Notifications.cancelDecision(context, recordingId)
         DecisionTimeoutWorker.cancel(context, recordingId)
@@ -124,7 +131,7 @@ object Decisions {
         } else {
             UploadWorker.enqueue(context, recordingId)
         }
-        WidgetStateStore.refresh(context)
+        if (widget) WidgetStateStore.refresh(context)
         return kept
     }
 
@@ -132,14 +139,14 @@ object Decisions {
      * Undo on "Transcribing…" or "Saved as audio" (since 2.0.5): the call waits for the question again, its upload called
      * off and nothing decided. Null when it was sent meanwhile or is gone.
      */
-    suspend fun undoKeep(context: Context, recordingId: String): LocalRecording? {
+    suspend fun undoKeep(context: Context, recordingId: String, widget: Boolean = true): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         UploadWorker.cancel(context, recordingId)
         val back = graph.recordings.update(recordingId) {
             if (it.state == KEPT) it.copy(state = WAITING, transcribe = null) else it
         }?.takeIf { it.state == WAITING } ?: return null
         DecisionTimeoutWorker.schedule(context, recordingId)
-        WidgetStateStore.refresh(context)
+        if (widget) WidgetStateStore.refresh(context)
         return back
     }
 
@@ -160,7 +167,9 @@ object Decisions {
          * The Undo is on one of this process's screens (the after-call card, an in-app toast), not in a notification:
          * if the process is gone when the time is up, the call comes back to choose again instead ([finishDiscard]).
          */
-        undoHere: Boolean = false
+        undoHere: Boolean = false,
+        /** False: the caller refreshes the widget itself, after its own steps that must not be cut short. */
+        widget: Boolean = true
     ): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         Notifications.cancelDecision(context, recordingId)
@@ -181,7 +190,7 @@ object Decisions {
             }
         }?.takeIf { it.state == DISCARDING } ?: return null
         DiscardLaterWorker.schedule(context, recordingId, afterMs)
-        WidgetStateStore.refresh(context)
+        if (widget) WidgetStateStore.refresh(context)
         return discarding
     }
 
@@ -190,7 +199,7 @@ object Decisions {
      * ("queued"; the caller shows "Saved" again, whose time the upload waits for). Null when its time was over and it
      * is gone.
      */
-    suspend fun undoDiscard(context: Context, recordingId: String): LocalRecording? {
+    suspend fun undoDiscard(context: Context, recordingId: String, widget: Boolean = true): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         DiscardLaterWorker.cancel(context, recordingId)
         // A server copy an upload reached meanwhile: its delete is stopped if it has not run, else the next upload
@@ -211,7 +220,7 @@ object Decisions {
         }?.takeIf { it.state == WAITING || it.state == KEPT } ?: return null
         // Waiting again: its "kept after 10 s" runs again too, whoever shows the question, so it never waits without one.
         if (back.state == WAITING) DecisionTimeoutWorker.schedule(context, recordingId)
-        WidgetStateStore.refresh(context)
+        if (widget) WidgetStateStore.refresh(context)
         return back
     }
 

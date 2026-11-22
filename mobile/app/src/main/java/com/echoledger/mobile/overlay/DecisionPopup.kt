@@ -33,10 +33,13 @@ import com.echoledger.mobile.ui.v2.live.callCardTitle
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The after-call card (the call-choice plan, 2.0.5; docs/PLAN_CALL_CHOICE.md 3), at the bottom of the screen over
@@ -62,7 +65,7 @@ object DecisionPopup {
     /** Kept for the delayed delete: a Delete's "Deleted · Undo" line. */
     const val DISCARDED_MS = DONE_MS
 
-    /** The longest one store step may take before the queue moves on. */
+    /** How long a step's widget refresh and follow-up may take before the queue moves on (its change always ends). */
     private const val STEP_TIMEOUT_MS = 30_000L
 
     /** The backstop waits this much longer than the card, so the card always decides first. */
@@ -178,15 +181,22 @@ object DecisionPopup {
         val shown = !busy && open(app, rec, themeMode, CallCardScreen.Done(Pick.DELETE))
         if (shown) {
             go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE), lineMs)
-            io {
-                val gone = Decisions.discardLater(app, rec.id, afterMs = lineMs + Decisions.DISCARD_GRACE_MS, undoHere = true)
+            step(app, {
+                Decisions.discardLater(app, rec.id, afterMs = lineMs + Decisions.DISCARD_GRACE_MS, undoHere = true, widget = false)
+            }) { gone ->
                 if (gone == null) handler.post { if (showingFor == rec.id && showingMode == Mode.DELETED) hide() }
             }
         } else {
-            io { Decisions.discardLater(app, rec.id)?.let { com.echoledger.mobile.notify.Notifications.discardedWithUndo(app, it) } }
+            // The Undo notification goes out in the same uncancellable step as the delete it can take back, before
+            // anything that can wait (the widget), so the delete is never due without its Undo.
+            step(app, { deleteWithNotification(app, rec.id) })
         }
         return shown
     }
+
+    /** A delete whose Undo is a notification: the call on its way out and its "Deleted · Undo" posted, in one step. */
+    private suspend fun deleteWithNotification(app: Context, id: String): LocalRecording? =
+        Decisions.discardLater(app, id, widget = false)?.also { com.echoledger.mobile.notify.Notifications.discardedWithUndo(app, it) }
 
     /** Draws [mode] for [rec] at once (tests and screenshots): the question or one of its lines. */
     internal fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode): Boolean {
@@ -337,9 +347,9 @@ object DecisionPopup {
         hide()
         // In the order they ended: the first is asked, any later one joins it on the grouped line (back-to-back calls).
         next.forEach { (rec, themeMode) ->
-            io {
-                // Still waiting (decided meanwhile in a notification or the app: nothing to ask).
-                if (Decisions.stillWaiting(app, rec.id)) {
+            // Still waiting (decided meanwhile in a notification or the app: nothing to ask).
+            step(app, { Decisions.stillWaiting(app, rec.id) }, widget = false) { still ->
+                if (still == true) {
                     handler.post {
                         ask(app, rec, themeMode)
                         com.echoledger.mobile.calls.DecisionTimeoutWorker.schedule(app, rec.id, backstopMs(rec.id))
@@ -376,14 +386,14 @@ object DecisionPopup {
         val rec = current ?: return
         picked = if (showingMode == Mode.ASK) Pick.TRANSCRIBE else null
         go(app, Mode.TRANSCRIBING, CallCardScreen.Done(Pick.TRANSCRIBE))
-        io { Decisions.keepFor(app, rec.id, transcribe = true, uploadAfterMs = doneMs) }
+        step(app, { Decisions.keepFor(app, rec.id, transcribe = true, uploadAfterMs = doneMs, widget = false) })
     }
 
     internal fun audio(app: Context, chosen: Boolean) {
         val rec = current ?: return
         picked = if (chosen) Pick.AUDIO else null
         go(app, Mode.AUDIO, CallCardScreen.Done(Pick.AUDIO))
-        io { Decisions.keepFor(app, rec.id, transcribe = false, uploadAfterMs = doneMs) }
+        step(app, { Decisions.keepFor(app, rec.id, transcribe = false, uploadAfterMs = doneMs, widget = false) })
     }
 
     internal fun delete(app: Context) {
@@ -392,11 +402,9 @@ object DecisionPopup {
         go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE))
         // The file waits for the line and a little longer; this process applies it only while its Undo is reachable.
         val afterMs = doneMs + Decisions.DISCARD_GRACE_MS
-        io {
+        step(app, { Decisions.discardLater(app, rec.id, afterMs = afterMs, undoHere = true, widget = false) }) { gone ->
             // Decided meanwhile (a notification, the app): nothing was deleted, so the line does not say so.
-            if (Decisions.discardLater(app, rec.id, afterMs = afterMs, undoHere = true) == null) {
-                handler.post { if (showingFor == rec.id && showingMode == Mode.DELETED) hide() }
-            }
+            if (gone == null) handler.post { if (showingFor == rec.id && showingMode == Mode.DELETED) hide() }
         }
     }
 
@@ -407,8 +415,9 @@ object DecisionPopup {
         picked = null
         val question = CallCardScreen.Ask(callCardTitle(app.resources, rec), rec.durationMs, rec.sourceApp)
         go(app, Mode.ASK, question)
-        io {
-            val back = if (was == Mode.DELETED) Decisions.undoDiscard(app, rec.id) else Decisions.undoKeep(app, rec.id)
+        step(app, {
+            if (was == Mode.DELETED) Decisions.undoDiscard(app, rec.id, widget = false) else Decisions.undoKeep(app, rec.id, widget = false)
+        }) { back ->
             // Too late (sent already, or gone): the question has nothing left to ask.
             if (back == null) handler.post { if (showingFor == rec.id && showingMode == Mode.ASK) hide() }
         }
@@ -430,17 +439,39 @@ object DecisionPopup {
         )
     }
 
-    private fun keepQuietly(app: Context, id: String) = io { Decisions.keepFor(app, id, transcribe = false, uploadAfterMs = 0) }
+    private fun keepQuietly(app: Context, id: String) =
+        step(app, { Decisions.keepFor(app, id, transcribe = false, uploadAfterMs = 0, widget = false) })
 
     private fun settings(app: Context): AppSettings = (app as? EchoLedgerApp)?.graph?.liveSettings?.value ?: AppSettings()
 
     private fun update(app: Context, change: (AppSettings) -> AppSettings) {
         val graph = (app as? EchoLedgerApp)?.graph ?: return
-        io { graph.settings.update(change) }
+        step(app, { graph.settings.update(change) }, widget = false)
     }
 
-    /** One step on the queue; a step that never ends (a store gone with its process) never holds up the next ones. */
-    private fun io(block: suspend () -> Unit) {
-        steps.launch { order.withLock { runCatching { kotlinx.coroutines.withTimeoutOrNull(STEP_TIMEOUT_MS) { block() } } } }
+    /**
+     * One step on the queue, in the order the card asked for them. Its [change] (the store, the workers, the Undo
+     * notification) always runs to its end, uncancellable; only what comes after it (the widget, then [after], the
+     * card's own follow-up) is given up after [stepTimeoutMs], so a slow widget never holds up the next step.
+     */
+    private fun <T> step(app: Context, change: suspend () -> T, widget: Boolean = true, after: suspend (T?) -> Unit = {}) {
+        steps.launch {
+            order.withLock {
+                val result = runCatching { withContext(NonCancellable) { change() } }.getOrNull()
+                runCatching {
+                    withTimeoutOrNull(stepTimeoutMs) {
+                        if (widget) refreshWidget(app)
+                        after(result)
+                    }
+                }
+            }
+        }
     }
+
+    /** The home-screen widget's refresh after a card step (tests stand in a slow one). */
+    @androidx.annotation.VisibleForTesting
+    internal var refreshWidget: suspend (Context) -> Unit = { com.echoledger.mobile.widget.WidgetStateStore.refresh(it) }
+
+    @androidx.annotation.VisibleForTesting
+    internal var stepTimeoutMs = STEP_TIMEOUT_MS
 }
