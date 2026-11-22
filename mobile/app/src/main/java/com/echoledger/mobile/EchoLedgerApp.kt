@@ -42,7 +42,14 @@ class EchoLedgerApp : Application() {
         val autoRecord = AutoRecordKeeper.onAppStart(this)
         // The settings read once as the app starts, off the main thread, so a window that opens next (the pill, the
         // after-call card) has them at its first frame (graph.liveSettings).
-        val warm = Runnable { graph.scope.launch(Dispatchers.IO) { runCatching { graph.settings.current() } } }
+        val warm = Runnable {
+            graph.scope.launch(Dispatchers.IO) {
+                runCatching {
+                    // The channels were named in the phone's language a moment ago: in the app's, when it has its own.
+                    if (graph.settings.current().appLanguage != "system") Notifications.createChannels(this@EchoLedgerApp)
+                }
+            }
+        }
         val main = android.os.Handler(android.os.Looper.getMainLooper())
         main.postDelayed(warm, SETTINGS_WARM_MS)
         cancelStartCheck = {
@@ -63,12 +70,30 @@ class AppGraph(val context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val secretCipher: SecretCipher by lazy { TinkSecretCipher(context) }
     val recordingCipher: RecordingCipher by lazy { TinkRecordingCipher(context) }
+
+    /** The app language and text size last saved in this process, so a change of either refreshes what Android draws. */
+    @Volatile private var shownLook: Pair<String, String>? = null
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val lookRefresh = Dispatchers.Default.limitedParallelism(1)
+
     val settings: SettingsStore by lazy {
         // Every saved change of During screen sharing reaches the floating windows and ShareGuard's memory at once.
-        SettingsStore(context, secretCipher) { saved ->
+        SettingsStore(context, secretCipher, latestSettings) { saved ->
             ShareGuard.setMode(ShareGuard.Mode.of(saved.screenShareMode))
             // The capture journal keeps the choices that decide whether a call should be recorded, as they change.
             com.echoledger.mobile.recording.CallJournal.choices(context, com.echoledger.mobile.recording.CallJournal.choicesOf(saved))
+            // The app language or text size changed (or this process saves for the first time): what Android draws for
+            // the app (the widget, the notification channels' names) follows, as the v2 screens do.
+            val look = saved.appLanguage to saved.textSize
+            if (shownLook != look) {
+                // One after another, each with the latest language: a slow one never names them after an older choice.
+                scope.launch(lookRefresh) {
+                    runCatching { com.echoledger.mobile.notify.Notifications.createChannels(context) }
+                    runCatching { com.echoledger.mobile.widget.WidgetStateStore.refresh(context) }
+                }
+            }
+            shownLook = look
         }
     }
 
@@ -77,7 +102,21 @@ class AppGraph(val context: Context) {
      * reads them once as it starts ([EchoLedgerApp.onCreate]). What draws outside the activity starts from its value
      * at once, never waiting on the store; null only until the store has been read the first time.
      */
-    val liveSettings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?> get() = settings.latest
+    val liveSettings: kotlinx.coroutines.flow.StateFlow<com.echoledger.mobile.data.AppSettings?> get() = latestSettings
+
+    private val settingsAsked = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Before the settings have been read once, reads them now, off the main thread, once (a window drawing again and
+     * again asks only one read; a read that fails can be asked again).
+     */
+    fun readSettingsOnce() {
+        if (latestSettings.value != null || !settingsAsked.compareAndSet(false, true)) return
+        scope.launch(Dispatchers.IO) { if (runCatching { settings.current() }.isFailure) settingsAsked.set(false) }
+    }
+
+    /** Kept here, not in the store: reading [liveSettings] never makes the store (it opens the settings file). */
+    private val latestSettings = kotlinx.coroutines.flow.MutableStateFlow<com.echoledger.mobile.data.AppSettings?>(null)
 
     val recordings: RecordingStore by lazy { RecordingStore(context, recordingCipher) }
     val library: LibraryRepository by lazy { LibraryRepository(context, secretCipher) { api() } }

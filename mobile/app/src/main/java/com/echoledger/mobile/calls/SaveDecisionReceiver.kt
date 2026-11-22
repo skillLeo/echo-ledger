@@ -46,7 +46,7 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         // The chip for the same call goes too, so its ten seconds never keep a call on its way out.
         withContext(Dispatchers.Main) { if (DecisionPopup.showingFor == id) DecisionPopup.hide() }
         val discarding = Decisions.discardLater(context, id) ?: return
-        Notifications.discardedWithUndo(context, discarding, DecisionPopup.title(discarding))
+        Notifications.discardedWithUndo(context, discarding)
     }
 
     /**

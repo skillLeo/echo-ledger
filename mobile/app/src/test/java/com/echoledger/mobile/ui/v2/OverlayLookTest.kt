@@ -53,8 +53,10 @@ class OverlayLookTest : ScreenTest() {
         assertEquals(phone, fontScale, 0.01f)
     }
 
+    private fun pillShown() = compose.onAllNodesWithContentDescription("02:14", substring = true).fetchSemanticsNodes().isNotEmpty()
+
     @Test
-    fun theFirstFrameNeverWaitsForTheStoreAndTheSettingsFollowWhenRead() {
+    fun atAColdStartThePillWaitsForTheSettingsInsteadOfShowingThePhonesLook() {
         // A cold store, slow to answer (a process a call has just started), made hot as the app makes it.
         val read = java.util.concurrent.atomic.AtomicBoolean(false)
         val cold = kotlinx.coroutines.flow.flow {
@@ -65,6 +67,7 @@ class OverlayLookTest : ScreenTest() {
         val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
         val hot = cold.stateIn(scope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
         val scales = mutableListOf<Float>()
+        compose.mainClock.autoAdvance = false
         val started = System.nanoTime()
         show {
             OverlayLook(hot) {
@@ -72,18 +75,50 @@ class OverlayLookTest : ScreenTest() {
                 V2RecordingPill(PillState(elapsedMs = 134_000), 0, null, {})
             }
         }
-        compose.waitForIdle()
-        val firstFrameMs = (System.nanoTime() - started) / 1_000_000
-        // Drawn before the store answered, at the phone's own size: nothing waited for it.
+        repeat(3) { compose.mainClock.advanceTimeByFrame() }
+        val firstFramesMs = (System.nanoTime() - started) / 1_000_000
+        // The first frames came at once, while the store was still being read: nothing waited for it...
         assertTrue("drawn while the store was still being read", !read.get())
-        assertTrue("first frame after $firstFrameMs ms", firstFrameMs < SLOW_STORE_MS)
-        val phone = app.resources.configuration.fontScale
-        assertEquals(phone, scales.first(), 0.01f)
-        // Then the person's language and size, once the store has answered.
+        assertTrue("first frames after $firstFramesMs ms", firstFramesMs < SLOW_STORE_MS)
+        // ...and drew nothing rather than the phone's look.
+        assertTrue(scales.isEmpty())
+        assertTrue(!pillShown())
+        // Then the person's language and size, from its first frame.
+        pumpUntil("read") { read.get() }
         val urdu = V2Testing.resources(EchoLanguage.Urdu).getString(R.string.v2_live_pill_recording, "02:14")
-        pumpUntil("Urdu") { compose.onAllNodesWithContentDescription(urdu, substring = true).fetchSemanticsNodes().isNotEmpty() }
-        assertEquals(phone * 1.3f, scales.last(), 0.01f)
+        pumpUntil("Urdu") {
+            compose.mainClock.advanceTimeByFrame()
+            compose.onAllNodesWithContentDescription(urdu, substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        val phone = app.resources.configuration.fontScale
+        assertTrue("never the phone's size: $scales", scales.all { kotlin.math.abs(it - phone * 1.3f) < 0.01f })
         scope.cancel()
+    }
+
+    @Test
+    fun aStoreThatNeverAnswersStillShowsThePillInThePhonesLook() {
+        val never = MutableStateFlow<AppSettings?>(null)
+        val scales = mutableListOf<Float>()
+        compose.mainClock.autoAdvance = false
+        show {
+            OverlayLook(never) {
+                scales += LocalDensity.current.fontScale
+                V2RecordingPill(PillState(elapsedMs = 134_000), 0, null, {})
+            }
+        }
+        compose.mainClock.advanceTimeBy(com.echoledger.mobile.ui.v2.shell.OVERLAY_WAIT_MS - 100)
+        assertTrue(!pillShown())
+        compose.mainClock.advanceTimeBy(200)
+        compose.mainClock.advanceTimeByFrame()
+        assertTrue(pillShown())
+        assertEquals(app.resources.configuration.fontScale, scales.last(), 0.01f)
+    }
+
+    @Test
+    fun aWindowAskedForBeforeTheFirstReadAsksTheStoreForIt() {
+        val live = com.echoledger.mobile.ui.v2.shell.overlaySettings(app)
+        assertTrue(live === app.graph.liveSettings)
+        pumpUntil("read") { app.graph.liveSettings.value != null }
     }
 
     @Test
@@ -125,6 +160,6 @@ class OverlayLookTest : ScreenTest() {
     }
 
     private companion object {
-        const val SLOW_STORE_MS = 3_000L
+        const val SLOW_STORE_MS = 1_000L
     }
 }

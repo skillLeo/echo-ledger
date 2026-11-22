@@ -132,7 +132,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             com.echoledger.mobile.core.NotifyCategory.UPLOADS.channelId
         )
             .setSmallIcon(com.echoledger.mobile.R.drawable.ic_stat_rec)
-            .setContentTitle("Uploading a recording")
+            .setContentTitle(com.echoledger.mobile.notify.NoticeWords.say(applicationContext, "Uploading a recording"))
             .setSilent(true)
             .setOngoing(true)
             .build()

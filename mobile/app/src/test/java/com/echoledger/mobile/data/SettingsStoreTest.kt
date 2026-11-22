@@ -297,4 +297,39 @@ class SettingsStoreTest : AppTest() {
         store.update { it.copy(secureScreen = true) }
         assertEquals("a choice made afterwards is kept", true, store.current().secureScreen)
     }
+
+    // ---- the hot copy for windows outside the app (latest) ----------------------------------------------------------
+
+    @Test
+    fun `signing out reaches the hot copy at once`() = runBlocking {
+        store.update { it.copy(serverUrl = "https://ledger.example.com", deviceId = "01JDEVICE", deviceName = "Galaxy S25") }
+        assertEquals("01JDEVICE", store.latest.value?.deviceId)
+        store.clearPairing()
+        assertNull(store.latest.value?.deviceId)
+        assertNull(store.latest.value?.deviceName)
+        assertEquals("the server address stays", "https://ledger.example.com", store.latest.value?.serverUrl)
+    }
+
+    @Test
+    fun `a read that comes late never puts an older value over a save`() = runBlocking {
+        // Before any save, a read fills the hot copy.
+        store.current()
+        assertEquals("system", store.latest.value?.textSize)
+        store.update { it.copy(textSize = "larger") }
+        assertEquals("larger", store.latest.value?.textSize)
+        // A value the store's flow emits after the save (here planted behind the store's back, as an old read would
+        // arrive) is not published: saves are the authority.
+        plantRaw("settings_json", """{"textSize":"smaller","settingsVersion":2}""")
+        assertEquals("smaller", store.current().textSize)
+        assertEquals("larger", store.latest.value?.textSize)
+        // The next save is published again.
+        store.update { it.copy(textSize = "largest") }
+        assertEquals("largest", store.latest.value?.textSize)
+    }
+
+    @Test
+    fun `concurrent saves leave the hot copy on the last one the store applied`() = runBlocking {
+        (1..40).map { n -> async(kotlinx.coroutines.Dispatchers.IO) { store.update { it.copy(lockAfterMs = n.toLong()) } } }.awaitAll()
+        assertEquals(store.current().lockAfterMs, store.latest.value?.lockAfterMs)
+    }
 }
