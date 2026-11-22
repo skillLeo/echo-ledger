@@ -132,7 +132,16 @@ private fun PillBar(state: PillState, nowMs: Long, title: String?, onEvent: (Pil
                 modifier = Modifier.padding(vertical = EchoTokens.Space.s12)
             )
             title?.takeIf { it.isNotBlank() }?.let {
-                Text("· $it", style = EchoV2.type.label, color = c.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // The dot on its own, so it sits between the clock and the name in either direction; the name keeps its own
+                // script's face (Latin letters in Urdu stay in the app's Latin font).
+                Text("·", style = EchoV2.type.label.copy(fontFamily = EchoV2.type.latin), color = c.textSecondary)
+                Text(
+                    it,
+                    style = EchoV2.type.content(it, EchoV2.type.label),
+                    color = c.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             if (state.warning != null) Icon(EchoIcons.Error, null, Modifier.size(EchoTokens.Icon.md), tint = c.warning)
         }
@@ -178,7 +187,8 @@ private fun PillMenu(state: PillState, onEvent: (PillEvent) -> Unit, onHideWindo
             }
             MenuRow(
                 stringResource(if (state.captions) R.string.v2_live_pill_captions_off else R.string.v2_live_pill_captions),
-                icon = EchoIcons.Transcribe,
+                // The captions' own mark: Transcribe this call has the transcript's.
+                icon = EchoIcons.Captions,
                 onClick = { onEvent(PillEvent.ToggleCaptions) }
             )
             MenuRow(

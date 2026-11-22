@@ -53,7 +53,9 @@ object PostCallPrompt {
         val shown = isCall(rec) && Settings.canDrawOverlays(context) && DecisionPopup.ask(context, rec, themeMode)
         // One question at a time: the notification only when the card cannot be drawn.
         if (!shown) Notifications.showSaveDecision(context, rec, clientName = null)
-        DecisionTimeoutWorker.schedule(context, rec.id)
+        // The card's own time (and the line it waits behind) first; 10 s for the notification.
+        val backstopMs = if (shown) DecisionPopup.backstopMs(rec.id) else DecisionTimeoutWorker.WINDOW_SECONDS * 1000
+        DecisionTimeoutWorker.schedule(context, rec.id, backstopMs)
     }
 
     /** A call back from "Deleted · Undo" in a notification: asked again if it waited, sent if it was kept. */

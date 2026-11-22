@@ -330,6 +330,8 @@ class RecordingServiceTest : AppTest() {
         Thread.sleep(3_200)
         service.onStartCommand(Intent(app, RecordingService::class.java).setAction(RecordingService.ACTION_DISCARD_NOW), 0, 5)
         assertTrue("the delete counts down", RecordingService.pillState.value.discarding)
+        // Overlays only from here: a live pill's pulse would never let the looper go idle; the card's line needs them.
+        org.robolectric.shadows.ShadowSettings.setCanDrawOverlays(true)
         helper.listener!!.onCallEnded()
         pumpUntil("the call to be finished") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
         pumpUntil("stored only to be deleted") { app.graph.recordings.all().singleOrNull()?.state == Decisions.DISCARDING }
@@ -338,6 +340,9 @@ class RecordingServiceTest : AppTest() {
         assertEquals(CallJournal.Result.DISCARDED.wire, CallJournal.book(app).calls.single().result)
         assertNull("nothing asks about it", rec.transcribe)
         assertEquals("its Undo is on this process's card", Decisions.PROCESS, rec.undoIn)
+        pumpUntil("Deleted · Undo on the card") {
+            com.echoledger.mobile.overlay.DecisionPopup.showingMode == com.echoledger.mobile.overlay.DecisionPopup.Mode.DELETED
+        }
         val work = androidx.work.WorkManager.getInstance(app)
         assertTrue(
             "nothing is sent",

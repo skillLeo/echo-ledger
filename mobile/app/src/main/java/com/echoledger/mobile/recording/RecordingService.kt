@@ -1278,11 +1278,12 @@ class RecordingService : LifecycleService() {
                     settings,
                     session.fromCall,
                     session.gate?.answered == true,
-                    session.bannerShown
+                    session.bannerTried
                 )
             ) {
-                session.bannerShown = true
-                com.echoledger.mobile.overlay.StartBanner.show(this@RecordingService, settings.themeMode) {
+                session.bannerTried = true
+                // Only a banner that was really shown counts as asked; otherwise the card asks after the call.
+                session.bannerShown = com.echoledger.mobile.overlay.StartBanner.show(this@RecordingService, settings.themeMode) {
                     CaptureLog.add(this@RecordingService, "call choice", "Don't record (the banner)")
                     onPillEvent(PillEvent.DiscardNow(System.currentTimeMillis()))
                 }
@@ -1522,19 +1523,16 @@ class RecordingService : LifecycleService() {
                 stored.serverSessionId?.let { DiscardWorker.enqueue(this, stored.id, it) }
                 graph.recordings.delete(stored.id)
             } else if (deleteAtMs != null && stored != null) {
-                // Its Undo is on a screen of this process: the "Deleted · Undo" line for the time that was left.
+                // "Deleted · Undo" for the time that was left, on the card; when the card can't show it, in a
+                // notification (DecisionPopup.deleted). Time already over: deleted now.
                 val leftMs = (deleteAtMs - System.currentTimeMillis()).coerceAtLeast(0)
-                val gone = kotlinx.coroutines.runBlocking {
-                    com.echoledger.mobile.calls.Decisions.discardLater(
-                        this@RecordingService,
-                        stored.id,
-                        afterMs = leftMs + com.echoledger.mobile.calls.Decisions.DISCARD_GRACE_MS,
-                        undoHere = true
-                    )
-                }
                 val look = settings.themeMode
-                if (gone != null && leftMs > 0) {
-                    main.post { com.echoledger.mobile.overlay.DecisionPopup.deleted(this, gone, look, leftMs) }
+                if (leftMs > 0) {
+                    main.post { com.echoledger.mobile.overlay.DecisionPopup.deleted(this, stored, look, leftMs) }
+                } else {
+                    kotlinx.coroutines.runBlocking {
+                        com.echoledger.mobile.calls.Decisions.discardLater(this@RecordingService, stored.id, afterMs = 0)
+                    }
                 }
             } else if (skip != null && stored != null) {
                 // Nothing asks and nothing uploads; a server session the captions opened goes now (Restore uploads anew).
@@ -1652,7 +1650,8 @@ class RecordingService : LifecycleService() {
         /** Chosen on the pill during the call (since 2.0.5): no question after it. */
         @Volatile var pick: com.echoledger.mobile.calls.CallChoice.Pick? = null
 
-        /** "Recording this call" has been shown for this call (At the start of the call). */
+        /** "Recording this call" was tried once for this call, and was shown (At the start of the call). */
+        var bannerTried = false
         var bannerShown = false
 
         /** The call app's package (null for a SIM call or a recording by hand), to match its call notifications. */

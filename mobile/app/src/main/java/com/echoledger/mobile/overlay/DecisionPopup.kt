@@ -62,6 +62,12 @@ object DecisionPopup {
     /** Kept for the delayed delete: a Delete's "Deleted · Undo" line. */
     const val DISCARDED_MS = DONE_MS
 
+    /** The longest one store step may take before the queue moves on. */
+    private const val STEP_TIMEOUT_MS = 30_000L
+
+    /** The backstop waits this much longer than the card, so the card always decides first. */
+    const val BACKSTOP_GRACE_MS = 2_000L
+
     private val handler = Handler(Looper.getMainLooper())
     private var view: ComposeView? = null
     private var owner: OverlayOwner? = null
@@ -71,8 +77,11 @@ object DecisionPopup {
     private var current: LocalRecording? = null
     private val grouped = mutableListOf<String>()
 
-    /** A call that ended while a Deleted line was showing: asked about when that line is over. */
-    private var waiting: Pair<LocalRecording, String>? = null
+    /** Calls that ended while a Deleted line was showing, in order: asked about when that line is over. */
+    private val waiting = java.util.concurrent.CopyOnWriteArrayList<Pair<LocalRecording, String>>()
+
+    /** When the line or question on screen ends ([SystemClock.uptimeMillis]). */
+    private var endsAt = 0L
 
     /** A choice made on the card, counted toward "Always do this?" only once its line closes without Undo. */
     private var picked: Pick? = null
@@ -86,11 +95,28 @@ object DecisionPopup {
     private val order = Mutex()
 
     /** The id of the call the card is about; null when no card is showing (or for the grouped line). */
+    @Volatile
     var showingFor: String? = null
         private set
 
+    @Volatile
     var showingMode: Mode? = null
         private set
+
+    /**
+     * The card still answers for [id]: asking about it, or holding it behind a Deleted line. Its 10 s backstop
+     * ([com.echoledger.mobile.calls.DecisionTimeoutWorker]) then waits instead of keeping it. Any thread.
+     */
+    fun answersFor(id: String): Boolean = (showingFor == id && showingMode == Mode.ASK) || waiting.any { it.first.id == id }
+
+    /**
+     * How long [id]'s backstop waits: the question's time and a little more, after the line it is held behind (main
+     * thread, right after [ask]).
+     */
+    fun backstopMs(id: String): Long {
+        val behind = if (waiting.any { it.first.id == id }) (endsAt - android.os.SystemClock.uptimeMillis()).coerceAtLeast(0) else 0L
+        return behind + askMs + BACKSTOP_GRACE_MS
+    }
 
     val isShowing: Boolean get() = view != null
 
@@ -105,9 +131,9 @@ object DecisionPopup {
     fun ask(context: Context, rec: LocalRecording, themeMode: String): Boolean {
         val app = context.applicationContext
         if (isShowing && showingMode == Mode.DELETED) {
-            // Another call's Delete can still be undone: this call waits for its line to end (its own 10 s backstop is
-            // started again then, so it is never kept before it was asked).
-            waiting = rec to themeMode
+            // Another call's Delete can still be undone: this call waits for its line to end (its backstop waits too,
+            // [answersFor], so it is never kept before it was asked).
+            waiting += rec to themeMode
             return true
         }
         if (isShowing && (showingMode == Mode.ASK || showingMode == Mode.GROUPED)) {
@@ -145,9 +171,21 @@ object DecisionPopup {
      */
     fun deleted(context: Context, rec: LocalRecording, themeMode: String, lineMs: Long): Boolean {
         val app = context.applicationContext
-        if (!open(app, rec, themeMode, CallCardScreen.Done(Pick.DELETE))) return false
-        go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE), lineMs)
-        return true
+        // Never over another call's question or Deleted line: then the Undo goes in a notification, which outlives the
+        // process, and the delete follows that notification's time.
+        val busy = isShowing && showingMode in setOf(Mode.ASK, Mode.GROUPED, Mode.DELETED)
+        if (!busy) commitPick(app)
+        val shown = !busy && open(app, rec, themeMode, CallCardScreen.Done(Pick.DELETE))
+        if (shown) {
+            go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE), lineMs)
+            io {
+                val gone = Decisions.discardLater(app, rec.id, afterMs = lineMs + Decisions.DISCARD_GRACE_MS, undoHere = true)
+                if (gone == null) handler.post { if (showingFor == rec.id && showingMode == Mode.DELETED) hide() }
+            }
+        } else {
+            io { Decisions.discardLater(app, rec.id)?.let { com.echoledger.mobile.notify.Notifications.discardedWithUndo(app, it) } }
+        }
+        return shown
     }
 
     /** Draws [mode] for [rec] at once (tests and screenshots): the question or one of its lines. */
@@ -288,19 +326,24 @@ object DecisionPopup {
             }
         }
         timeout = task
-        handler.postDelayed(task, lineMs ?: if (mode == Mode.ASK || mode == Mode.GROUPED) askMs else doneMs)
+        val ms = lineMs ?: if (mode == Mode.ASK || mode == Mode.GROUPED) askMs else doneMs
+        endsAt = android.os.SystemClock.uptimeMillis() + ms
+        handler.postDelayed(task, ms)
     }
 
     /** The card's time is over: it goes, then a call held back by a Deleted line is asked about. */
     private fun close(app: Context) {
-        val next = waiting
+        val next = waiting.toList()
         hide()
-        next?.let { (rec, themeMode) ->
+        // In the order they ended: the first is asked, any later one joins it on the grouped line (back-to-back calls).
+        next.forEach { (rec, themeMode) ->
             io {
-                // Still waiting (its 10 s backstop may have kept it meanwhile): asked now, with its 10 s from now.
+                // Still waiting (decided meanwhile in a notification or the app: nothing to ask).
                 if (Decisions.stillWaiting(app, rec.id)) {
-                    com.echoledger.mobile.calls.DecisionTimeoutWorker.schedule(app, rec.id)
-                    handler.post { ask(app, rec, themeMode) }
+                    handler.post {
+                        ask(app, rec, themeMode)
+                        com.echoledger.mobile.calls.DecisionTimeoutWorker.schedule(app, rec.id, backstopMs(rec.id))
+                    }
                 }
             }
         }
@@ -325,7 +368,7 @@ object DecisionPopup {
         current = null
         screen = null
         grouped.clear()
-        waiting = null
+        waiting.clear()
         picked = null
     }
 
@@ -396,7 +439,8 @@ object DecisionPopup {
         io { graph.settings.update(change) }
     }
 
+    /** One step on the queue; a step that never ends (a store gone with its process) never holds up the next ones. */
     private fun io(block: suspend () -> Unit) {
-        steps.launch { order.withLock { runCatching { block() } } }
+        steps.launch { order.withLock { runCatching { kotlinx.coroutines.withTimeoutOrNull(STEP_TIMEOUT_MS) { block() } } } }
     }
 }

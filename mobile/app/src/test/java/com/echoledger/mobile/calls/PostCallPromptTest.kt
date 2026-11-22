@@ -233,6 +233,17 @@ class PostCallPromptTest : AppTest() {
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
         assertTrue("it waits for the person, not for a timer", timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
         assertTrue("nothing is sent", noUpload("call-1"))
+        // Never kept by itself later either: not by the hourly 24 h keep (it started long ago), not by a late backstop.
+        assertTrue(UndecidedKeepWorker.due(listOf(back), 24, java.time.Instant.now()).isEmpty())
+        runBlocking { androidx.work.testing.TestListenableWorkerBuilder<UndecidedKeepWorker>(app).build().doWork() }
+        runBlocking {
+            androidx.work.testing.TestListenableWorkerBuilder<DecisionTimeoutWorker>(app)
+                .setInputData(androidx.work.workDataOf(DecisionTimeoutWorker.KEY_ID to "call-1"))
+                .build()
+                .doWork()
+        }
+        assertEquals("still waiting for the person", "pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue("still nothing sent", noUpload("call-1"))
 
         // A notification's Delete keeps its Undo in the shade, which outlives the process: it is applied.
         call("call-2")
@@ -245,6 +256,73 @@ class PostCallPromptTest : AppTest() {
         app.graph.recordings.update("call-3") { it.copy(undoIn = "a process that has gone") }
         runBlocking { Decisions.finishDiscard(app, "call-3") }
         assertEquals("pending_decision", app.peekRecording("call-3")?.state)
+    }
+
+    @Test
+    fun `a held call's backstop waits for its question, and is never kept before it was asked`() {
+        asked("call-1")
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        PostCallPrompt.show(app, call("call-2"), "dark")
+        assertTrue(DecisionPopup.answersFor("call-2"))
+
+        // Its backstop waits for the line it is held behind, then the whole question.
+        val first = timeoutWork("call-2").single { it.state == WorkInfo.State.ENQUEUED }
+        assertTrue("${first.initialDelayMillis} ms", first.initialDelayMillis >= DecisionPopup.ASK_MS + DecisionPopup.BACKSTOP_GRACE_MS)
+        // Even run early (the clock moved, a long Undo), it keeps nothing while the card still answers for the call.
+        androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!.setInitialDelayMet(first.id)
+        pumpUntil("the backstop ran and came again") {
+            timeoutWork("call-2").any { it.state == WorkInfo.State.ENQUEUED && it.id != first.id }
+        }
+        assertEquals("not kept before it was asked", "pending_decision", app.peekRecording("call-2")?.state)
+
+        after(DecisionPopup.DONE_MS + 1)
+        pumpUntil("call-2 asked") { DecisionPopup.showingFor == "call-2" && DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
+        val asked = timeoutWork("call-2").single { it.state == WorkInfo.State.ENQUEUED }
+        assertTrue(asked.initialDelayMillis >= DecisionPopup.ASK_MS)
+    }
+
+    @Test
+    fun `several calls held behind a Deleted line are asked in order, the later ones on the grouped line`() {
+        asked("call-1")
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        PostCallPrompt.show(app, call("call-2"), "dark")
+        PostCallPrompt.show(app, call("call-3"), "dark")
+        assertTrue(DecisionPopup.answersFor("call-2") && DecisionPopup.answersFor("call-3"))
+        assertEquals("call-1", DecisionPopup.showingFor)
+
+        after(DecisionPopup.DONE_MS + 1)
+        pumpUntil("both asked, on one line") { DecisionPopup.showingMode == DecisionPopup.Mode.GROUPED }
+        assertEquals(CallCardScreen.Grouped(2), DecisionPopup.shown)
+        listOf("call-2", "call-3").forEach { id ->
+            pumpUntil("$id kept as audio") { app.peekRecording(id)?.let { it.state == "queued" && it.transcribe == false } == true }
+        }
+    }
+
+    @Test
+    fun `a Delete that ends a call never replaces another call's line, and its Undo goes in a notification then`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        asked("call-1")
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+
+        assertFalse(DecisionPopup.deleted(app, call("call-2"), "dark", 3_000))
+        assertEquals("call-1's line stays", "call-1", DecisionPopup.showingFor)
+        assertEquals(DecisionPopup.Mode.DELETED, DecisionPopup.showingMode)
+        pumpUntil("call-2 on its way out") { app.peekRecording("call-2")?.state == Decisions.DISCARDING }
+        assertNull("its Undo is in the shade, which outlives the process", app.peekRecording("call-2")?.undoIn)
+        pumpUntil("Deleted · Undo in a notification") {
+            notifications().any { n -> n.actions.orEmpty().any { it.title.toString() == "Undo" } }
+        }
+
+        // With the card free, the line is on the card and its Undo is this process's.
+        DecisionPopup.hide()
+        assertTrue(DecisionPopup.deleted(app, call("call-3"), "dark", 3_000))
+        assertEquals(DecisionPopup.Mode.DELETED, DecisionPopup.showingMode)
+        pumpUntil("call-3 on its way out") { app.peekRecording("call-3")?.state == Decisions.DISCARDING }
+        assertEquals(Decisions.PROCESS, app.peekRecording("call-3")?.undoIn)
+        assertTrue(discardWork("call-3").single().initialDelayMillis >= 3_000)
     }
 
     @Test
