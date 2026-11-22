@@ -40,8 +40,9 @@ placeholders; names, apps and numbers inside Urdu lines are isolated (FSI…PDI)
 | grouped_review | Review | دیکھیں |
 | quiet_saved | Saved as audio during quiet hours | خاموش اوقات میں آڈیو محفوظ ہوئی |
 | block_screens | Block screenshots of EchoLedger | EchoLedger کے اسکرین شاٹس روکیں |
-| block_screens_help | Off: you can take screenshots at any time, also while recording. EchoLedger's windows still hide when you share your screen. | بند: آپ کسی بھی وقت اسکرین شاٹ لے سکتے ہیں، ریکارڈنگ کے دوران بھی۔ اسکرین شیئر کرتے وقت EchoLedger کی ونڈوز پھر بھی چھپ جاتی ہیں۔ |
-| block_screens_help_old_android | On this Android version, EchoLedger's windows hide from screen sharing only while this is on. | اس اینڈرائیڈ ورژن پر EchoLedger کی ونڈوز اسکرین شیئر سے صرف تب چھپتی ہیں جب یہ آن ہو۔ |
+| block_screens_help | Off: you can take screenshots of the app at any time. On: EchoLedger's own screens can't be captured. | بند: آپ ایپ کے اسکرین شاٹس کسی بھی وقت لے سکتے ہیں۔ آن: EchoLedger کی اپنی اسکرینز کیپچر نہیں ہو سکتیں۔ |
+| hide_live_words | Hide EchoLedger's live words from screenshots and screen shares | EchoLedger کے لائیو الفاظ اسکرین شاٹس اور اسکرین شیئر سے چھپائیں |
+| hide_live_words_help | On: captions, Live Assist and Live Translate show as a black box in screenshots, screen recordings and screen shares. The recording pill and the after-call card always show. Off: everything shows. | آن: کیپشنز، لائیو اسسٹ اور لائیو ترجمہ اسکرین شاٹس، اسکرین ریکارڈنگ اور اسکرین شیئر میں کالا ڈبہ دکھتے ہیں۔ ریکارڈنگ پِل اور کال کے بعد کا کارڈ ہمیشہ دکھتے ہیں۔ بند: سب کچھ دکھتا ہے۔ |
 
 Confirmations (one line at a time, 5 s, never two at once, never on top of the card):
 - after Transcribe: `done_transcribing` + `undo`;
