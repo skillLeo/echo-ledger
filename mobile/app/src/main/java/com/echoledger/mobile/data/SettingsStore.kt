@@ -220,14 +220,18 @@ data class CaptionStyle(
  * Non-secret settings in DataStore; the device token is stored separately, encrypted with the Keystore keyset.
  * [onSaved] hears every settings change [update] saved (the app graph passes it to screen-share privacy).
  */
-class SettingsStore(private val context: Context, private val cipher: SecretCipher, private val onSaved: (AppSettings) -> Unit = {}) {
+class SettingsStore(
+    private val context: Context,
+    private val cipher: SecretCipher,
+    /** Where [latest] is kept: the app's own, so reading it never makes this store (nor opens the file). */
+    private val latestValue: kotlinx.coroutines.flow.MutableStateFlow<AppSettings?> = kotlinx.coroutines.flow.MutableStateFlow(null),
+    private val onSaved: (AppSettings) -> Unit = {}
+) {
     private object Keys {
         val SETTINGS = stringPreferencesKey("settings_json")
         val TOKEN = stringPreferencesKey("device_token_enc")
         val SETUP_SEEN = booleanPreferencesKey("setup_seen")
     }
-
-    private val latestValue = kotlinx.coroutines.flow.MutableStateFlow<AppSettings?>(null)
 
     /**
      * The settings as last read or saved, at once and without touching the store (null before the first read): what
@@ -235,19 +239,41 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
      */
     val latest: kotlinx.coroutines.flow.StateFlow<AppSettings?> get() = latestValue
 
-    val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }.onEach { latestValue.value = it }
+    /**
+     * Writes through this store are the authority for [latest]: each is numbered inside the store's own (serialized)
+     * transaction and published only if no later one was, so a slow write never puts an older value over a newer one.
+     * A read publishes only until the first write has: a reader that lags can't undo a save.
+     */
+    private val order = Any()
+    private var written = 0L
+    private var published = 0L
+
+    private fun nextWrite(): Long = synchronized(order) { ++written }
+
+    private fun publish(write: Long, value: AppSettings) = synchronized(order) {
+        if (write > published) {
+            published = write
+            latestValue.value = value
+        }
+    }
+
+    private fun publishRead(value: AppSettings) = synchronized(order) { if (published == 0L) latestValue.value = value }
+
+    val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }.onEach { publishRead(it) }
 
     suspend fun current(): AppSettings = settings.first()
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
         var saved: AppSettings? = null
+        var write = 0L
         context.dataStore.edit { prefs ->
             val next = transform(prefs.toSettings())
             prefs[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), next)
             saved = next
+            write = nextWrite()
         }
         saved?.let {
-            latestValue.value = it
+            publish(write, it)
             onSaved(it)
         }
     }
@@ -272,10 +298,17 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
         com.echoledger.mobile.account.SecretClip.clearNow(context)
         // And any account page's remembered step (the two-step key and codes kept across a rotation).
         com.echoledger.mobile.account.SignOuts.happened()
+        var cleared: AppSettings? = null
+        var write = 0L
         context.dataStore.edit {
             it.remove(Keys.TOKEN)
-            it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), it.toSettings().copy(deviceId = null, deviceName = null))
+            val next = it.toSettings().copy(deviceId = null, deviceName = null)
+            it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), next)
+            cleared = next
+            write = nextWrite()
         }
+        // Windows outside the app see the phone signed out at once (it is a write like any other).
+        cleared?.let { publish(write, it) }
     }
 
     private fun Preferences.toSettings(): AppSettings {

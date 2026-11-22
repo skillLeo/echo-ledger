@@ -31,6 +31,7 @@ import com.echoledger.mobile.R
 import com.echoledger.mobile.core.SettingsIndex
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.ui.MainViewModel
+import com.echoledger.mobile.ui.phoneFacts
 import com.echoledger.mobile.ui.v2.components.EchoDialog
 import com.echoledger.mobile.ui.v2.components.EchoEmptyState
 import com.echoledger.mobile.ui.v2.components.EchoIcons
@@ -308,7 +309,11 @@ fun V2SettingsScreen(
                 )
 
                 // Help v2 (guides, what's new, contact support); its phone check is the classic help page.
-                "help" -> if (help != null) HelpPage(help, openClassicPage, back) else openClassicPage(r.id, back)
+                // Help v2 (guides, what's new, contact support) and its phone check; without Help's source, the phone check.
+                "help" -> {
+                    val toSetup = { route = SettingsRoute.Page(SettingsTree.SETUP) }
+                    if (help != null) HelpPage(vm, help, toSetup, back) else PhoneCheck(vm, toSetup, back)
+                }
 
                 else -> openClassicPage(r.id, back)
             }
@@ -504,11 +509,30 @@ fun UsageMeter(used: Long, monthly: Long?, onClick: () -> Unit) {
 }
 
 @Composable
-private fun HelpPage(help: HelpSource, openClassicPage: @Composable (String, () -> Unit) -> Unit, onBack: () -> Unit) {
+private fun HelpPage(vm: MainViewModel, help: HelpSource, onSetup: () -> Unit, onBack: () -> Unit) {
     var phoneCheck by remember { mutableStateOf(false) }
     if (phoneCheck) {
-        openClassicPage("help") { phoneCheck = false }
+        androidx.activity.compose.BackHandler { phoneCheck = false }
+        PhoneCheck(vm, onSetup) { phoneCheck = false }
     } else {
         V2HelpScreen(help, onPhoneCheck = { phoneCheck = true }, onBack = onBack)
     }
+}
+
+/** The phone check with the view model's calls; the audio probe is the engineering builds' own sheet. */
+@Composable
+private fun PhoneCheck(vm: MainViewModel, onSetup: () -> Unit, onBack: () -> Unit) {
+    val settings by vm.settings.collectAsState()
+    val helper by vm.helper.collectAsState()
+    PhoneCheckPage(
+        PhoneCheckActions(
+            facts = { context -> context.phoneFacts(helper.connected, settings) },
+            diagnostics = { vm.captureDiagnostics() },
+            send = { facts, rows -> vm.sendDeviceReport(facts, rows) },
+            signedIn = settings.paired
+        ),
+        onSetup = onSetup,
+        onBack = onBack,
+        audioProbe = { dismiss -> com.echoledger.mobile.ui.AudioProbeSheet(vm, helperReady = helper.connected, onDismiss = dismiss) }
+    )
 }
