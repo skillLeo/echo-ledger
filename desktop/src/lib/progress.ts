@@ -1,7 +1,8 @@
 // Clear progress (Phase 1C, C): a recording goes through three steps, each with real progress: Upload (% of bytes, from
-// the upload queue), Transcribing (parts done and time left, `progress` / `final_progress`) and Improving (the views'
-// lines done, `views.progress`). The Library row, the recording page and Activity say it the same way. Pure; tested.
-import type { LibraryItem, TranscriptProgress, TranscriptView, UploadItem } from "./ipc";
+// the upload queue), Transcribing (parts done and time left, `progress` / `final_progress`) and Improve (the views'
+// lines done, `views.progress`: an Urdu call opens in Roman Urdu, written after the Urdu transcript; the line says
+// "Converting to Roman Urdu… 60%"). The Library row, the recording page and Activity say it the same way. Pure; tested.
+import type { ExportView, LibraryItem, TranscriptProgress, TranscriptView, UploadItem, ViewsSummary } from "./ipc";
 
 export type Step = "upload" | "transcribe" | "improve";
 export type StepState = "done" | "active" | "waiting" | "failed";
@@ -41,10 +42,36 @@ export function improvingView(
   return first ?? null;
 }
 
-/** "Improving Roman Urdu… 60%", or without a percent when the server does not say. */
-export function improvingText(view: TranscriptView | null, percent: number | null): string {
-  const name = view ? VIEW_NAMES[view] : "the views";
-  return percent === null ? `Improving ${name}…` : `Improving ${name}… ${percent}%`;
+/** "Converting to Roman Urdu… 60%", or without a percent while the server has no lines done yet. */
+export function convertingText(view: TranscriptView | null, percent: number | null): string {
+  const what = view ? `Converting to ${VIEW_NAMES[view]}…` : "Converting…";
+  return percent === null ? what : `${what} ${percent}%`;
+}
+
+/** "Couldn't convert to Roman Urdu": the view stopped, or went quiet and the server gave up on it. */
+export function convertFailedText(view: TranscriptView | null): string {
+  return view ? `Couldn't convert to ${VIEW_NAMES[view]}` : "Couldn't convert";
+}
+
+/** The view a transcript opens in when it is not its original words (Roman Urdu for an Urdu call), else null. */
+export function defaultViewOf(views: Pick<ViewsSummary, "default"> | null | undefined): TranscriptView | null {
+  const view = views?.default;
+  return view && view !== "original" ? view : null;
+}
+
+/**
+ * What a Library row says about its default view: converting (with the percent once there is one) from the moment the
+ * transcript is done, or that it failed. Null when the row opens in its original words or the view is ready.
+ */
+export function rowViewsLine(views: ViewsSummary | null | undefined): { state: "making" | "failed"; view: TranscriptView; text: string; percent: number | null } | null {
+  const view = defaultViewOf(views);
+  if (!views || !view) return null;
+  if (views.status === "making") {
+    const percent = viewPercent(views.progress, view);
+    return { state: "making", view, text: convertingText(view, percent), percent };
+  }
+  if (views.status === "failed") return { state: "failed", view, text: convertFailedText(view), percent: null };
+  return null;
 }
 
 /** "Uploading… 42%" from the upload queue's item; "Waiting to upload" while queued. */
@@ -76,4 +103,20 @@ export function stepStates(step: Step | null, improving: boolean, failed: boolea
   if (failed) return { upload: "done", transcribe: "failed", improve: "waiting" };
   const at = improving ? 2 : step ? ORDER.indexOf(step) : ORDER.length;
   return Object.fromEntries(ORDER.map((s, i) => [s, i < at ? "done" : i === at ? "active" : "waiting"])) as Record<Step, StepState>;
+}
+
+/**
+ * The view a list shows its recordings in (U19): the default view most of `items` open in (Roman Urdu for Urdu calls),
+ * or undefined when they open in their original words. A zip in that view keeps the original words of a recording whose
+ * view is not made yet, as the server does.
+ */
+export function shownExportView(items: readonly Pick<LibraryItem, "transcript">[]): ExportView | undefined {
+  const counts = new Map<ExportView, number>();
+  for (const item of items) {
+    const view = defaultViewOf(item.transcript?.views);
+    if (view) counts.set(view, (counts.get(view) ?? 0) + 1);
+  }
+  let best: ExportView | undefined;
+  for (const [view, n] of counts) if (best === undefined || n > (counts.get(best) ?? 0)) best = view;
+  return best;
 }

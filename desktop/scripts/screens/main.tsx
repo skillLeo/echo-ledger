@@ -16,7 +16,7 @@ import "../../src/views/controls.css";
 import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
 import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
-import type { SmartFolder } from "../../src/lib/ipc";
+import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
@@ -47,6 +47,13 @@ function silentWav(): string {
 const audioUrl = silentWav();
 
 const empty = screen === "library-empty";
+const UPLOADS: UploadItem[] = [
+  { id: "u-imp", sourceApp: "imported", title: "Supplier interview.m4a", startedAt: new Date(Date.now() - 600_000).toISOString(), durationMs: 1_260_000, state: "uploading", lastError: null, attempts: 0, imported: true, progress: 45, heldFor: null },
+  { id: "u-fail", sourceApp: "zoom", title: "Weekly sync", startedAt: new Date(Date.now() - 7_200_000).toISOString(), durationMs: 2_400_000, state: "failed", lastError: "The server could not verify this upload.", attempts: 3, imported: false, progress: null, heldFor: null },
+  { id: "u-held1", sourceApp: "whatsapp", title: null, startedAt: new Date(Date.now() - 86_400_000).toISOString(), durationMs: 300_000, state: "queued", lastError: null, attempts: 0, imported: false, progress: null, heldFor: "sara@example.test" },
+  { id: "u-held2", sourceApp: "phone_call", title: null, startedAt: new Date(Date.now() - 90_000_000).toISOString(), durationMs: 120_000, state: "queued", lastError: null, attempts: 0, imported: false, progress: null, heldFor: "sara@example.test" },
+  { id: "u-check", sourceApp: "google_meet", title: "Budget review", startedAt: new Date(Date.now() - 1_800_000).toISOString(), durationMs: 900_000, state: "verifying", lastError: null, attempts: 1, imported: false, progress: null, heldFor: null },
+];
 const bluetooth = screen.endsWith("-bluetooth");
 const mac = screen.includes("-mac");
 const windows10 = screen.endsWith("-windows10");
@@ -282,6 +289,15 @@ const commands: Record<string, (args: Args) => unknown> = {
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
   whatsapp_open: () => false,
   save_audio_downloads: () => "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
+  // Text and voice (F6): no share here, so the fallback: the voice in Downloads and on the clipboard, pasted with the
+  // system's keys ("-mac": ⌘V). "whatsapp-opened": a share whose end is not known (Windows 10, or no answer in time).
+  whatsapp_share_voice: (args: Args) => screen.includes("whatsapp-opened") && args.share !== false ? { kind: "opened" } : ({
+    kind: "fallback",
+    path: mac ? "/Users/ayesha/Downloads/Kick-off Contoso website 2026-11-06.ogg" : "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
+    fileOnClipboard: true,
+    textCut: false,
+    pasteKeys: mac ? "⌘V" : "Ctrl+V",
+  }),
   update_status: () =>
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
@@ -318,7 +334,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   skipped_list: () => (empty ? [] : SKIPPED),
   // "library-recovered": the first recording was recovered after a restart, and its transcript renamed it.
   recovered_sessions: () => (screen === "library-recovered" ? [ITEMS[0].id] : []),
-  upload_list: () => [],
+  // `&uploads=1`: a file being imported, one upload that failed, two waiting for another account and one being checked.
+  upload_list: () => (params.get("uploads") === "1" ? UPLOADS : []),
   activity_list: () => ({ data: ACTIVITY, unread_count: ACTIVITY.filter((a) => !a.read).length }),
   // `&found=1`: recordings whose title holds what was typed come back, as from the server (D-087: they arrive later).
   search_library: ({ query }) => {

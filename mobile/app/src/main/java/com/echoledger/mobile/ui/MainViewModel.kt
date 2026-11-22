@@ -36,6 +36,8 @@ import com.echoledger.mobile.update.UpdatePrefs
 import com.echoledger.mobile.update.UpdateStatus
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.io.File
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,7 +50,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** The stored settings, or the fact that they have not been read yet (a cold start reads DataStore after the first frame). */
 sealed interface SettingsState {
@@ -606,6 +610,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { graph.api()?.transcriptViews(transcriptId) }.getOrNull()
     }
 
+    private val viewsRechecking = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * A row still `making` long after its transcript finished: its views are read (when the Library opens, then about
+     * 5 and 15 minutes on: [com.echoledger.mobile.ui.v2.library.LibraryModel.VIEWS_RECHECKS]), and the row takes what
+     * they say (failed after 20 minutes with nothing done, or ready), since that change does not reach a sync. One read
+     * at a time per row.
+     */
+    fun recheckViews(item: LibraryItem) {
+        val id = item.transcript?.finalTranscriptId ?: return
+        if (!viewsRechecking.add(item.id)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val now = runCatching { graph.api()?.transcriptViews(id) }.getOrNull() ?: return@launch
+                val was = item.transcript?.views ?: return@launch
+                if (now.status != was.status) graph.library.setViewsLocally(item.id, was.copy(status = now.status, progress = now.progress))
+            } finally {
+                viewsRechecking.remove(item.id)
+            }
+        }
+    }
+
     /** Show as (since v1.2): asks the server to write the views; null with a message when it cannot. */
     suspend fun makeTranscriptViews(transcriptId: String): TranscriptViewsDto? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.makeTranscriptViews(transcriptId) }
@@ -646,26 +672,50 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The recording's audio (since v1.6, Send to WhatsApp) in the app's private `exports/` cache, from its temporary
-     * signed address; null with a message when it could not be fetched.
+     * The recording's voice (since v1.6, Send to WhatsApp) in the app's private `exports/` cache, or in [dir] (Send to
+     * WhatsApp's share folder), from its temporary signed address, named after [title] with the extension its type
+     * gives (.m4a, .ogg, .mp3, .wav). Null with a message when it could not be fetched, and no half-written file left.
+     * Cancelling (the share closed) stops the download at once.
      */
-    suspend fun downloadAudio(sessionId: String, title: String): File? = withContext(Dispatchers.IO) {
+    suspend fun downloadAudio(sessionId: String, title: String, dir: File? = null): File? = withContext(Dispatchers.IO) {
+        var file: File? = null
         try {
             val api = graph.api() ?: return@withContext null
             val url = sessionDetail(sessionId)?.playbackUrl ?: run {
-                _message.value = "This recording has no audio on the server."
+                _message.value = "This recording has no voice on the server."
                 return@withContext null
             }
-            val dir = File(getApplication<Application>().cacheDir, "exports").apply { mkdirs() }
-            val name = title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().ifBlank { "Recording" }.take(60) + ".ogg"
-            val file = File(dir, name)
-            api.http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { resp ->
-                if (!resp.isSuccessful) throw java.io.IOException("The audio could not be downloaded (${resp.code}).")
-                file.outputStream().use { out -> resp.body.byteStream().copyTo(out) }
+            val folder = (dir ?: File(getApplication<Application>().cacheDir, "exports")).apply { mkdirs() }
+            val base = title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().ifBlank { "Recording" }.take(60)
+            val known = url.toHttpUrlOrNull()?.pathSegments?.lastOrNull()?.substringAfterLast('.', "")
+            val call = api.http.newCall(okhttp3.Request.Builder().url(url).build())
+            suspendCancellableCoroutine { cont ->
+                cont.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: java.io.IOException) = cont.resumeWithException(e)
+
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        try {
+                            response.use { resp ->
+                                if (!resp.isSuccessful) throw java.io.IOException("The voice could not be downloaded (${resp.code}).")
+                                val ext = com.echoledger.mobile.share.WhatsAppShare.voiceExtension(resp.header("Content-Type"), known)
+                                val out = File(folder, "$base.$ext").also { file = it }
+                                if (!cont.isActive) return
+                                out.outputStream().use { o -> resp.body.byteStream().copyTo(o) }
+                            }
+                            cont.resume(Unit)
+                        } catch (e: Exception) {
+                            if (!cont.isActive) file?.delete()
+                            cont.resumeWithException(e)
+                        }
+                    }
+                })
             }
             file
         } catch (e: Exception) {
-            _message.value = "The audio could not be downloaded. Check the connection and try again."
+            file?.delete()
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            _message.value = "The voice could not be downloaded. Check the connection and try again."
             null
         }
     }
@@ -702,14 +752,99 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         clearClient: Boolean = false,
         labels: List<String>? = null,
         keep: Boolean? = null,
-        title: String? = null
+        title: String? = null,
+        important: Boolean? = null
     ): Boolean {
         val ok = withContext(Dispatchers.IO) {
-            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title) ?: error("Not signed in") }
+            runCatching {
+                graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title, important)
+                    ?: error("Not signed in")
+            }
                 .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.isSuccess
         }
         if (ok) refresh()
         return ok
+    }
+
+    // ---- Lists (D14, contract 2.0.0-m) --------------------------------------------------------------------------------
+
+    private val _lists = MutableStateFlow<List<com.echoledger.mobile.data.ListDto>>(emptyList())
+
+    /** The person's lists in the chip row's order (empty until read, or offline). */
+    val lists: StateFlow<List<com.echoledger.mobile.data.ListDto>> = _lists.asStateFlow()
+
+    /** Reads the lists again (on opening the Library and after each sync). */
+    suspend fun loadLists() {
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.lists() }.getOrNull() }?.let { _lists.value = it }
+    }
+
+    /** What went wrong with a list's name, in the server's codes: the screen words them. */
+    enum class ListProblem { Reserved, Exists, Other }
+
+    private fun listProblem(e: Throwable): ListProblem = when ((e as? com.echoledger.mobile.net.ApiException)?.code) {
+        "name_reserved" -> ListProblem.Reserved
+        "list_exists" -> ListProblem.Exists
+        else -> ListProblem.Other.also { _message.value = com.echoledger.mobile.core.Problems.text(e, "The list could not be saved.") }
+    }
+
+    /** `POST /api/lists`: the new list, or what was wrong with its name. */
+    suspend fun createList(name: String, color: String?): Result<com.echoledger.mobile.data.ListDto> = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.createList(name, color) ?: error("Not signed in") }
+    }.onSuccess { made -> _lists.value = (_lists.value.filterNot { it.key == made.key } + made).sortedBy { it.position } }
+
+    fun problemOf(e: Throwable): ListProblem = listProblem(e)
+
+    /** `PATCH /api/lists/{key}`: a new name or colour; the library follows (every recording's label changed). */
+    suspend fun updateList(key: String, name: String? = null, color: String? = null): Result<com.echoledger.mobile.data.ListDto> =
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.updateList(key, name, color) ?: error("Not signed in") } }
+            .onSuccess { changed ->
+                _lists.value = _lists.value.map { if (it.key == key) changed else it }
+                if (name != null) refreshQuietly()
+            }
+            // Another device may have changed or removed it: read the lists again.
+            .onFailure { loadLists() }
+
+    /** `DELETE /api/lists/{key}`: the list goes, its recordings stay. */
+    suspend fun deleteList(key: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.deleteList(key) ?: error("Not signed in") }
+            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The list could not be deleted.") }.isSuccess
+    }.also { ok ->
+        if (ok) {
+            _lists.value = _lists.value.filterNot { it.key == key }
+            refreshQuietly()
+        } else {
+            loadLists()
+        }
+    }
+
+    /** `PUT /api/lists/order`: [key] one place earlier ([delta] −1) or later (+1). */
+    suspend fun moveList(key: String, delta: Int): Boolean {
+        val keys = com.echoledger.mobile.core.LibraryLists.moved(_lists.value, key, delta) ?: return false
+        val ordered = withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.orderLists(keys) ?: error("Not signed in") }
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The lists could not be moved.") }.getOrNull()
+        } ?: return false.also { loadLists() }
+        _lists.value = ordered
+        return true
+    }
+
+    /**
+     * Puts [ids] in [list] or takes them out (bulk label / unlabel, no toast of its own); the ids that changed, or null
+     * when it failed (with a message). Only those come back on Undo.
+     */
+    suspend fun label(ids: List<String>, list: com.echoledger.mobile.data.ListDto, add: Boolean): List<String>? {
+        if (ids.isEmpty()) return emptyList()
+        val ok = withContext(Dispatchers.IO) {
+            runCatching {
+                graph.api()?.bulk(ids.take(Organise.MAX_BULK), if (add) "label" else "unlabel", null, list.name)
+                    ?: error("Not signed in")
+            }
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The change could not be saved.") }.isSuccess
+        }
+        if (!ok) return null
+        withContext(Dispatchers.IO) { runCatching { graph.library.refresh() } }
+        loadLists()
+        return ids.take(Organise.MAX_BULK)
     }
 
     /** One action for the selected recordings; how many changed, or null (with a message) when it failed. */
@@ -738,6 +873,60 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * empty and the screen says "N deleted" without Undo.
      */
     data class Deleted(val went: List<String>, val changed: Int)
+
+    /** What a Transcribe (one recording, or the selection) came to (2.0.0-j); the screen says it in its own words. */
+    sealed interface TranscribeOutcome {
+        /** Started: [started] ids, [skipped] ones with why, [minutes] of the plan they use. */
+        data class Started(val started: List<String>, val skipped: List<com.echoledger.mobile.data.TranscribeSkipped>, val minutes: Long) :
+            TranscribeOutcome
+
+        /** The month's minutes can't cover it; nothing started. */
+        data class Budget(val needed: Long?, val left: Long?) : TranscribeOutcome
+
+        /** Free without an own key: nothing started. */
+        data object NeedsKey : TranscribeOutcome
+
+        /** Already transcribed, or still uploading. */
+        data object NotAudioOnly : TranscribeOutcome
+
+        /** Any other refusal, in the server's or the app's words (null: the screen's own "could not be transcribed"). */
+        data class Failed(val words: String?) : TranscribeOutcome
+    }
+
+    private fun transcribeRefused(e: Throwable): TranscribeOutcome = when ((e as? com.echoledger.mobile.net.ApiException)?.code) {
+        "budget_exceeded" -> TranscribeOutcome.Budget(e.minutesNeeded, e.minutesLeft)
+        "needs_transcription_key" -> TranscribeOutcome.NeedsKey
+        "not_audio_only" -> TranscribeOutcome.NotAudioOnly
+        else -> TranscribeOutcome.Failed(com.echoledger.mobile.core.Problems.text(e, "").ifBlank { null })
+    }
+
+    /** `POST /api/sessions/transcribe-estimate`: the minutes transcribing [ids] would use, null when it can't be asked. */
+    suspend fun transcribeEstimate(ids: List<String>): com.echoledger.mobile.data.TranscribeEstimateAnswer? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.transcribeEstimate(ids) }.getOrNull()
+    }
+
+    /** "Transcribe selected": starts every audio-only one among [ids] (all or nothing for the minutes), then syncs. */
+    suspend fun transcribeMany(ids: List<String>): TranscribeOutcome = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.transcribeSessions(ids) ?: error("Not signed in") }.fold(
+            onSuccess = {
+                refreshQuietly()
+                TranscribeOutcome.Started(it.started, it.skipped, it.minutes)
+            },
+            onFailure = ::transcribeRefused
+        )
+    }
+
+    /** Transcribe on an audio-only recording: its first transcript starts; the Library takes the answer at once. */
+    suspend fun transcribeOne(id: String): TranscribeOutcome = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.transcribeSession(id) ?: error("Not signed in") }.fold(
+            onSuccess = { answer ->
+                graph.library.upsertLocally(answer.session)
+                refreshQuietly()
+                TranscribeOutcome.Started(listOf(id), emptyList(), answer.session.transcribeEstimate?.minutes ?: 0)
+            },
+            onFailure = ::transcribeRefused
+        )
+    }
 
     /**
      * Library v2's Delete (one or many), on classic's path (`POST /api/sessions/bulk` with "delete", at most
@@ -1008,9 +1197,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Ask for the v2 screen (P-089): the answer, or the failure itself (offline or not, the server's status and code,
      * and words for people), never null plus a message elsewhere. The classic screen keeps [ask].
      */
-    suspend fun askOutcome(clientId: String, question: String, language: String): AskOutcome = withContext(Dispatchers.IO) {
+    suspend fun askOutcome(clientId: String, question: String, language: String): AskOutcome =
+        askOutcome(AskScope.Project(clientId), question, language)
+
+    /** Ask a project, one recording or all of the person's recordings (since 2.0.0-o); the same outcomes. */
+    suspend fun askOutcome(scope: AskScope, question: String, language: String): AskOutcome = withContext(Dispatchers.IO) {
         try {
-            AskOutcome.Answer((graph.api() ?: error(com.echoledger.mobile.core.Problems.SIGN_IN)).ask(clientId, question, language))
+            val api = graph.api() ?: error(com.echoledger.mobile.core.Problems.SIGN_IN)
+            AskOutcome.Answer(
+                when (scope) {
+                    is AskScope.Project -> api.ask(scope.id, question, language)
+                    is AskScope.Recording -> api.askRecording(scope.id, question, language)
+                    AskScope.Everywhere -> api.askEverywhere(question, language)
+                }
+            )
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1193,11 +1393,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun importFiles(
         files: List<com.echoledger.mobile.share.FileImport.Picked>,
         clientId: String?,
-        language: String?
+        language: String?,
+        /** False: the screen says the outcome in its own words (the v2 import sheet). */
+        say: Boolean = true
     ): com.echoledger.mobile.share.FileImport.Summary = withContext(Dispatchers.IO) {
         com.echoledger.mobile.share.FileImport.import(getApplication(), graph, files, clientId, language).also {
             reloadLocal()
-            _message.value = it.message()
+            if (say) _message.value = it.message()
         }
     }
 
@@ -1215,7 +1417,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         UploadWorker.cancel(getApplication(), id)
         Decisions.apply(getApplication(), id, keep = false)
         reloadLocal()
-        _message.value = RECORDING_DELETED
+        _message.value = "Recording deleted"
     }
 
     /** Removes a row that only reported something (an import the Library already had). */
@@ -1356,6 +1558,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun updateSettings(transform: (AppSettings) -> AppSettings) = viewModelScope.launch { graph.settings.update(transform) }
 
     // ---- Onboarding and settings files (B19) ------------------------------------------------------------------------
+
+    /**
+     * The server's interface flags, read now and kept as the config read keeps them (the first-run wizard, after sign-in,
+     * decides its design from them); null when signed out or the server does not answer.
+     */
+    suspend fun interfaceFlags(): com.echoledger.mobile.ui.v2.shell.UiFlags? {
+        val config = withContext(Dispatchers.IO) { runCatching { graph.api()?.config() }.getOrNull() } ?: return null
+        graph.settings.update { it.copy(uiFlags = config.uiFlags, uiClassic = config.uiClassic, uiDesign = config.uiDesign) }
+        return com.echoledger.mobile.ui.v2.shell.UiFlags(config.uiFlags, config.uiClassic, server = config.uiDesign)
+    }
 
     /** Ends the first-run wizard for good; the consent box of its last step is recorded when ticked. */
     fun finishOnboarding(consent: Boolean = false) = updateSettings {
@@ -1822,13 +2034,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         /** The production server from the build (BuildConfig.DEFAULT_SERVER); tests set it to "" so nothing reaches it. */
         @Volatile var defaultServer: String = BuildConfig.DEFAULT_SERVER
 
-        const val RECORDING_DELETED = "Recording deleted"
-
         /** `409 ai_unavailable`: the server has no AI provider set up (call notes, the brief and Ask). */
         const val AI_NOT_SET_UP = "The AI assistant is not set up on the server yet."
 
         /** The same sentence as the classic Ask's. */
         const val ASK_FAILED = "The AI assistant could not answer right now. Try again in a minute."
+
+        /** `409 no_transcript` (since 2.0.0-o). */
+        const val NOTHING_TO_ASK = "There is nothing transcribed to ask about yet. Ask again once a transcript is ready."
 
         /**
          * A failed Ask in words for people: by its code, else [com.echoledger.mobile.core.Problems] (a bare status such
@@ -1836,13 +2049,29 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
          */
         internal fun askFailure(e: Throwable): AskOutcome.Failed {
             val refused = e as? ApiException
-            val words = if (refused?.code == "ai_unavailable") AI_NOT_SET_UP else com.echoledger.mobile.core.Problems.text(e, ASK_FAILED)
+            val words = when (refused?.code) {
+                "ai_unavailable" -> AI_NOT_SET_UP
+
+                // Since 2.0.0-o: a recording (or every recording) with no finished transcript.
+                "no_transcript" -> NOTHING_TO_ASK
+
+                else -> com.echoledger.mobile.core.Problems.text(e, ASK_FAILED)
+            }
             val offline = refused == null && words == com.echoledger.mobile.core.Problems.OFFLINE
             return AskOutcome.Failed(offline = offline, status = refused?.status, code = refused?.code, words = words)
         }
 
         const val NOT_A_PAIRING_QR = "That isn't an EchoLedger sign-in code. In the console open Account → Devices → Sign in a device."
     }
+}
+
+/** What Ask is about: a project, one recording, or all of the person's own recordings (since 2.0.0-o). */
+sealed interface AskScope {
+    data class Project(val id: String) : AskScope
+
+    data class Recording(val id: String) : AskScope
+
+    data object Everywhere : AskScope
 }
 
 /** What Ask got back (P-089). */

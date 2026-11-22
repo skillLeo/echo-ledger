@@ -106,6 +106,8 @@ final class SessionController extends Controller
             'language' => ['nullable', 'string', 'max:16'],
             'artifacts' => ['sometimes', 'array', 'min:1', 'max:3'],
             'skip_duplicate' => ['sometimes', 'boolean'],
+            // Since v1.8 (contract 1.8.0-e): false = keep it as audio only; absent = transcribe, as before.
+            'transcribe' => ['sometimes', 'boolean'],
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),
             ...CallerMatcher::rules(),
@@ -194,6 +196,7 @@ final class SessionController extends Controller
             'client_id' => ['nullable', 'string', 'size:26'],
             'language' => ['nullable', 'string', 'max:16'],
             'artifacts' => ['required', 'array', 'min:1', 'max:3'],
+            'transcribe' => ['sometimes', 'boolean'],
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),
             ...CallerMatcher::rules(),
@@ -356,6 +359,9 @@ final class SessionController extends Controller
         $data = $request->validate(['language' => ['present', 'nullable', 'string', 'max:16']]);
         try {
             $run = app(Retranscriber::class)->startAs($session, $data['language']);
+        } catch (ApiError $e) {
+            // Since 2.0.0-j an audio-only recording answers as "Transcribe" does (budget_exceeded, needs_transcription_key).
+            throw $e;
         } catch (RuntimeException $e) {
             throw new ApiError(409, 'cannot_retranscribe', $e->getMessage());
         }
@@ -463,11 +469,11 @@ final class SessionController extends Controller
 
     /**
      * Checks every segment in one pass: channel 1|2, 0 ≤ start_ms ≤ end_ms ≤ $maxEnd, text 1-20 000 characters,
-     * speaker ≤ 40, optional words (text ≤ 1000, times ≥ 0, confidence 0-1). The first problem is a 422 on
-     * `segments.<i>.<field>`.
+     * speaker ≤ 40, optional words (text ≤ 1000, times ≥ 0, confidence 0-1), optional language ≤ 16 (since 2.0.0-o).
+     * The first problem is a 422 on `segments.<i>.<field>`.
      *
      * @param  list<mixed>  $segments
-     * @return list<array{channel: int, speaker: string|null, start_ms: int, end_ms: int, text: string, words: list<array<string, mixed>>}>
+     * @return list<array{channel: int, speaker: string|null, start_ms: int, end_ms: int, text: string, words: list<array<string, mixed>>, language: string|null}>
      */
     private static function validatedSegments(array $segments, int $maxEnd): array
     {
@@ -514,9 +520,15 @@ final class SessionController extends Controller
                 $fail("{$at}.text", 'The :attribute field must not be greater than 20000 characters.');
             }
 
+            // Since 2.0.0-o: the line's language when the device's engine knows it (kept when it is one of ours).
+            $language = $segment['language'] ?? null;
+            if ($language !== null && (! is_string($language) || mb_strlen($language) > 16)) {
+                $fail("{$at}.language", 'The :attribute field must be a string of at most 16 characters.');
+            }
+
             $rows[] = [
                 'channel' => $channel, 'speaker' => $speaker, 'start_ms' => $start, 'end_ms' => $end, 'text' => $text,
-                'words' => self::validatedWords($segment['words'] ?? null, "{$at}.words", $fail),
+                'words' => self::validatedWords($segment['words'] ?? null, "{$at}.words", $fail), 'language' => $language,
             ];
         }
 

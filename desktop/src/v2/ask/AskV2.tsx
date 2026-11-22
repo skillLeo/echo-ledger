@@ -2,7 +2,8 @@
 // your own words, get the answer with the recordings and files it comes from (a recording opens at its moment). The
 // server answers per project today (`client_ask`, POST /api/clients/{id}/ask), so the scope is a project. "All
 // recordings" isn't offered or mentioned at all until the server can ask across them.
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { notifyWhenAway } from "../../lib/notify";
 import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type ClientAnswer } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
 import { Banner, Button, Card, EmptyState, Icons, List, ListRow, ListSection, Loading, Segmented, Select, Skeleton, TextArea } from "../components";
@@ -53,6 +54,17 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
   const [state, setState] = useState<AskState>({ kind: "idle" });
   const [copied, setCopied] = useState(false);
   const chosen = projects.find((p) => p.id === projectId) ?? projects[0] ?? null;
+  // Whether the server has AI set up, read from the chosen project's workspace: said before anything is asked.
+  const [aiReady, setAiReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    setAiReady(null);
+    if (!chosen) return;
+    let live = true;
+    api.clientWorkspace(chosen.id).then((r) => live && setAiReady(r?.data?.ai?.configured !== false), () => live && setAiReady(null));
+    return () => {
+      live = false;
+    };
+  }, [chosen?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Another project: the answer on screen was about the last one.
   const choose = (id: string) => {
     if (id !== chosen?.id) setState({ kind: "idle" });
@@ -71,12 +83,15 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
   }
 
   const ask = async () => {
-    if (!chosen || !question.trim()) return;
+    if (!chosen || !question.trim() || aiReady === false) return;
     setState({ kind: "asking" });
     setCopied(false);
     try {
-      const r = await api.askClient(chosen.id, question.trim(), language);
+      const q = question.trim();
+      const r = await api.askClient(chosen.id, q, language);
       setState(r?.data ? { kind: "answer", answer: r.data } : { kind: "failed", words: TRY_AGAIN });
+      // Asked, then looked elsewhere: the answer says it is ready (classic's).
+      if (r?.data) void notifyWhenAway("Answer ready", q);
     } catch (e) {
       setState({ kind: "failed", words: askFailureWords(e) });
     }
@@ -98,9 +113,14 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
             <span className="el-field__label">Answer in</span>
             <Segmented label="Answer in" options={LANGUAGES} value={language} onChange={setLanguage} />
           </div>
-          <Button variant="primary" disabled={!question.trim()} loading={state.kind === "asking"} loadingLabel="Asking" onClick={() => void ask()}>Ask</Button>
+          <Button variant="primary" disabled={!question.trim() || aiReady === false} loading={state.kind === "asking"} loadingLabel="Asking" onClick={() => void ask()}>Ask</Button>
         </div>
       </Card>
+      {aiReady === false && (
+        <Banner tone="warning" icon={Icons.WarningIcon} testId="ask-no-ai">
+          Ask needs AI set up on the server. Ask the person who runs the console to set it up.
+        </Banner>
+      )}
 
       {state.kind === "idle" && (
         <EmptyState icon={Icons.AskIcon} title="Ask your recordings" body="Pick a project, then ask in your own words. Answers say which recording they come from." />

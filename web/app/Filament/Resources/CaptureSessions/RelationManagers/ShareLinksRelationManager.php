@@ -14,11 +14,13 @@ use App\Services\ShareLinks;
 use Filament\Actions\Action;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /** The recording's share links (v1.1; audiences and downloads since v1.5): when they expire, how often they were opened, and Revoke. */
 class ShareLinksRelationManager extends RelationManager
@@ -45,11 +47,15 @@ class ShareLinksRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         $tz = app(SettingsRepository::class)->displayTimezone();
-        // Since v2.0 (the new frame, W-201): the table fits the page at 1024 px. The dates by the one date rule (the
-        // time on a second line), Made by and Downloads in Columns only, and the row's actions in one ⋮ menu. Its words
-        // are in the console's language (only the new frame has another). Classic is as it was.
+        // W-201: the table fits the page at 1024 px in both designs. The dates have their time on a second line, Made by
+        // and Downloads are wide-only columns, and the row's actions are in one ⋮ menu. The new frame dates by its one
+        // date rule, in the console's language (only the new frame has another); classic keeps "Nov 17, 2026".
         $v2 = ConsoleV2::shell();
-        $date = fn (TextColumn $column): TextColumn => V2Tables::date($column, $tz);
+        // A column that made the table too wide: under Columns in the new frame; in classic only on a wide window (from
+        // 1280 px), since classic has no Columns menu (Filament draws its labels with x-html, which classic pages never contain).
+        $wide = fn (Column $column): Column => $v2 ? V2Tables::inColumns($column) : $column->visibleFrom('xl');
+        $date = fn (TextColumn $column): TextColumn => $v2 ? V2Tables::date($column, $tz) : $column->date('M j, Y', $tz)
+            ->description(fn (mixed $state): ?string => $state ? Carbon::parse($state)->setTimezone($tz)->format('g:i A') : null);
         $actions = [
             Action::make('log')->label(__('Access log'))->icon(Heroicon::OutlinedListBullet)->color('gray')
                 ->modalHeading(__('Access log'))->modalSubmitAction(false)->modalCancelActionLabel(__('Close'))
@@ -69,20 +75,20 @@ class ShareLinksRelationManager extends RelationManager
             ->emptyStateHeading(__('No share links'))
             ->emptyStateDescription(__('Use “Share” at the top of the page to make a view-only link.'))
             ->columns([
-                TextColumn::make('created_at')->label(__('Made'))->dateTime('M j, Y · g:i A', $tz)->when($v2, $date),
+                TextColumn::make('created_at')->label(__('Made'))->dateTime('M j, Y · g:i A', $tz)->tap($date),
                 TextColumn::make('state')->label(__('Status'))->badge()
                     ->state(fn (ShareLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isOpen() ? 'Active' : 'Expired'))
                     ->formatStateUsing(fn (string $state): string => __($state))
                     ->color(fn (string $state): string => $state === 'Active' ? 'success' : 'gray'),
-                TextColumn::make('expires_at')->label(__('Expires'))->dateTime('M j, Y · g:i A', $tz)->placeholder(__('Never'))->when($v2, $date),
+                TextColumn::make('expires_at')->label(__('Expires'))->dateTime('M j, Y · g:i A', $tz)->placeholder(__('Never'))->tap($date),
                 // Since v1.5: who may open it (anyone, a password, named people) and whether files can be downloaded.
                 TextColumn::make('audience')->label(__('Who can open it'))->wrap()->state(fn (ShareLink $link): string => SharingActions::audienceLabel($link))
                     ->formatStateUsing(fn (string $state): string => __($state)),
-                IconColumn::make('allow_download')->label(__('Downloads'))->boolean()->when($v2, V2Tables::inColumns(...)),
+                IconColumn::make('allow_download')->label(__('Downloads'))->boolean()->tap($wide),
                 TextColumn::make('view_count')->label(__('Views'))->numeric(),
                 TextColumn::make('last_viewed_at')->label(__('Last opened'))->since()->placeholder(__('Never')),
-                TextColumn::make('created_by')->label(__('Made by'))->placeholder('—')->when($v2, V2Tables::inColumns(...)),
+                TextColumn::make('created_by')->label(__('Made by'))->placeholder('—')->tap($wide),
             ])
-            ->recordActions($v2 ? V2Tables::actions($actions) : $actions);
+            ->recordActions(V2Tables::actions($actions));
     }
 }

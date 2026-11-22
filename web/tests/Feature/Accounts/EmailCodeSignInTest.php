@@ -246,7 +246,8 @@ describe('POST /api/auth/code/verify', function () {
         $this->person->forceFill(['deletes_at' => now()->addDays(7)])->save();
         $this->travel(61)->seconds();
         $this->postJson('/api/auth/code', ['email' => 'farah@example.test'])->assertStatus(202);
-        $this->postJson('/api/auth/code/verify', verifyBody('farah@example.test', emailedCode('farah@example.test')))->assertForbidden()->assertJsonPath('code', 'not_allowed');
+        // Since 2.0.0-l `deletion_scheduled` (was `not_allowed`): the same call with "keep": true keeps the account.
+        $this->postJson('/api/auth/code/verify', verifyBody('farah@example.test', emailedCode('farah@example.test')))->assertForbidden()->assertJsonPath('code', 'deletion_scheduled');
     });
 
     it('gives a new address a one-time sign-up token, not an account', function () {

@@ -15,8 +15,10 @@ use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\LibraryView;
 use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\Shell;
+use App\Filament\Support\V2DismissedBanners;
 use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -25,6 +27,7 @@ use App\Services\ConsoleUploads;
 use App\Services\LibraryOrganiser;
 use App\Services\RetentionPolicy;
 use App\Services\Sharing\Teammates;
+use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
@@ -40,14 +43,20 @@ use Filament\Support\Facades\FilamentView;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\View\TablesRenderHook;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\Pagination\CursorPaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Livewire;
+use RuntimeException;
 
 class ListCaptureSessions extends ListRecords
 {
@@ -334,6 +343,23 @@ class ListCaptureSessions extends ListRecords
         return isset($tabs['waiting']) && is_numeric($tabs['waiting']->getBadge()) ? (int) $tabs['waiting']->getBadge() : 0;
     }
 
+    /** Whether the person closed the quiet line and nothing has risen since (V2DismissedBanners); also for a read-only console. */
+    public function v2WaitingDismissed(int $waiting): bool
+    {
+        $user = auth()->user();
+
+        return V2DismissedBanners::hidden($user instanceof User ? $user : null, (int) CurrentWorkspace::id(), 'library', ['waiting' => $waiting]);
+    }
+
+    /** The quiet line's ×: hidden until more calls wait than now (the server's count, never the page's). */
+    public function dismissV2Waiting(): void
+    {
+        $user = auth()->user();
+        if ($user instanceof User) {
+            V2DismissedBanners::dismiss($user, (int) CurrentWorkspace::id(), 'library', ['waiting' => $this->v2Waiting()]);
+        }
+    }
+
     /** The empty state's "Show all recordings": no smart view and no folder. */
     public function showAllRecordings(): void
     {
@@ -387,6 +413,88 @@ class ListCaptureSessions extends ListRecords
         return [...parent::getListeners(), ...(ConsoleV2::library() ? ['el-library-undo-delete' => 'undoDelete'] : [])];
     }
 
+    /** The new Library's rows come in chunks of this many (WEB-LIB-033): the first ones, then Load more. */
+    public const V2_CHUNK = 50;
+
+    /** The new Library grows to this many rows at most; past it, the person narrows the list ("Refine your search"). */
+    public const V2_MAX = 500;
+
+    /** How many rows the new Library shows now; Load more adds a chunk, and a new search, filter or order starts over. */
+    #[Locked]
+    public int $v2Shown = self::V2_CHUNK;
+
+    /**
+     * The rows on screen that are still moving (uploading, being transcribed, a view being made) when the list was last
+     * drawn, and how they stood then: the quiet poll draws the list again only once one of them changed.
+     *
+     * @var list<string>
+     */
+    #[Locked]
+    public array $v2Moving = [];
+
+    #[Locked]
+    public string $v2MovingPrint = '';
+
+    /** Load more (also when its button scrolls into view): the next chunk of the list, the counts unchanged. */
+    public function v2LoadMore(): void
+    {
+        if (ConsoleV2::library()) {
+            $this->v2Shown = min(self::V2_MAX, $this->v2Shown + self::V2_CHUNK);
+        }
+    }
+
+    /**
+     * The new Library's poll while a row on screen is moving: a few columns of those rows only, and no redraw of the
+     * list (up to 500 rows) unless one of them changed.
+     */
+    public function v2Poll(): void
+    {
+        if (! ConsoleV2::library() || ($this->v2Moving !== [] && $this->v2Print($this->v2Moving) === $this->v2MovingPrint)) {
+            $this->skipRender();
+        }
+    }
+
+    /** @param  list<string>  $ids */
+    private function v2Print(array $ids): string
+    {
+        $rows = CaptureSession::query()->whereIn('id', $ids)->orderBy('id')
+            ->with(['finalTranscript' => fn ($final) => $final->select(['id', 'capture_session_id', 'kind', 'status', 'updated_at'])])
+            ->get(['id', 'status', 'updated_at']);
+
+        // Since U19 also the five minutes it is in: a view that went quiet (or never started) stops "Converting…" by
+        // itself, without anything stored changing.
+        return md5((string) json_encode([intdiv(now()->getTimestamp(), 300), ...$rows->map(fn (CaptureSession $r): array => [(string) $r->id, $r->status->value, (string) $r->updated_at,
+            $r->finalTranscript?->status?->value, (string) $r->finalTranscript?->updated_at])->all()]));
+    }
+
+    /**
+     * Since U9b (WEB-LIB-033, 2,000+ recordings): the new Library is one growing list instead of pages of 5 to 50. Its
+     * first v2Shown rows, with the true total, so "Showing 1 to 50 of 2,000" and the counts stay right; Load more grows
+     * it. Classic keeps its pages.
+     *
+     * @param  Builder<Model>  $query
+     * @return Paginator<int, Model>|CursorPaginator<int, Model>
+     */
+    protected function paginateTableQuery(Builder $query): Paginator|CursorPaginator
+    {
+        if (! ConsoleV2::library()) {
+            return parent::paginateTableQuery($query);
+        }
+        $total = (clone $query)->toBase()->getCountForPagination();
+        $items = (clone $query)->limit(max(1, min(self::V2_MAX, $this->v2Shown)))->get();
+        $this->v2Moving = $items->filter(fn (Model $r): bool => $r instanceof CaptureSession && CaptureSessionsTable::isMoving($r))->map(fn (Model $r): string => (string) $r->getKey())->values()->all();
+        $this->v2MovingPrint = $this->v2Moving === [] ? '' : $this->v2Print($this->v2Moving);
+
+        return new LengthAwarePaginator($items, $total, max(1, $total), 1, ['pageName' => $this->getTablePaginationPageName()]);
+    }
+
+    /** A new search, filter, order or grouping shows the first chunk again (Filament resets the page then). */
+    public function resetPage(?string $pageName = null): void
+    {
+        $this->v2Shown = self::V2_CHUNK;
+        parent::resetPage($pageName);
+    }
+
     /** v2.0: another page of the list, or another page size, starts with nothing selected, so Delete takes what is on screen. */
     public function updatedPaginators(): void
     {
@@ -415,10 +523,13 @@ class ListCaptureSessions extends ListRecords
         }
         $back = 0;
         $policy = app(RetentionPolicy::class);
-        foreach (CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', array_slice(array_map('strval', $ids), 0, 200))->get() as $session) {
-            if ($session->restorable() && Gate::allows('restore', $session)) {
-                $policy->restore($session);
-                $back++;
+        // Every one of the batch, however many select all picked, a few hundred at a time.
+        foreach (array_chunk(array_map('strval', $ids), 200) as $chunk) {
+            foreach (CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->whereIn('id', $chunk)->get() as $session) {
+                if ($session->restorable() && Gate::allows('restore', $session)) {
+                    $policy->restore($session);
+                    $back++;
+                }
             }
         }
         $notice = Notification::make()->title($back === 1 ? __('1 recording is back') : __(':count recordings are back', ['count' => $back]));
@@ -543,6 +654,8 @@ class ListCaptureSessions extends ListRecords
             // Since v2.0 (ui_v2.library): the quick filters right after the search field.
             FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_SEARCH_AFTER, fn (): string => Livewire::current() instanceof self && ConsoleV2::library() ? view('filament.v2.library-toolbar')->render() : '');
             FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view(ConsoleV2::library() ? 'filament.v2.bulk-bar' : 'filament.library.bulk-bar'), scopes: self::class);
+            // Since U9b: the new Library's Load more, under the list.
+            FilamentView::registerRenderHook(TablesRenderHook::CONTENT_AFTER, fn (): string => ConsoleV2::library() ? view('filament.v2.library-more')->render() : '', scopes: self::class);
         }
     }
 
@@ -560,6 +673,30 @@ class ListCaptureSessions extends ListRecords
             return;
         }
         app(LibraryOrganiser::class)->update($session, ['pinned' => ! $session->pinned]);
+        $this->flushCachedTableRecords();
+    }
+
+    /**
+     * Since U19: Try again beside a row's "Couldn't convert to Roman Urdu": the view it opens in is made again (the
+     * person's own recording; never from a read-only console).
+     */
+    public function retryViews(string $id): void
+    {
+        if (ConsoleAccess::readOnly()) {
+            return;
+        }
+        $session = CaptureSession::query()->where('workspace_id', (int) CurrentWorkspace::id())->ofPerson()->with('finalTranscript')->find($id);
+        $final = $session instanceof CaptureSession ? $session->finalTranscript : null;
+        if ($final === null) {
+            return;
+        }
+        try {
+            app(TranscriptViews::class)->request($final);
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
+
+            return;
+        }
         $this->flushCachedTableRecords();
     }
 
@@ -609,7 +746,7 @@ class ListCaptureSessions extends ListRecords
         return [
             // Opens the file picker of the drop zone below (several files at once, on phones too).
             Action::make('upload')
-                ->label('Upload')
+                ->label(__('Upload'))
                 ->icon(Heroicon::OutlinedArrowUpTray)
                 ->alpineClickHandler("\$dispatch('el-upload-pick')"),
         ];
@@ -638,7 +775,8 @@ class ListCaptureSessions extends ListRecords
 
     public function getTitle(): string|Htmlable
     {
-        return ConsoleV2::library() ? __('Library') : parent::getTitle();
+        // Since W-213 the classic Library's title in the console's language too (English reads exactly as before).
+        return ConsoleV2::library() ? __('Library') : __((string) parent::getTitle());
     }
 
     /** A list page is the top of its section: no "Sessions > List" trail (C3). */

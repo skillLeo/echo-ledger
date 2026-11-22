@@ -30,6 +30,7 @@ import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.MissedFix
 import com.echoledger.mobile.core.Readiness
 import com.echoledger.mobile.recording.RecordingService
+import com.echoledger.mobile.translate.TranslateMode
 import com.echoledger.mobile.ui.ActivityBadge
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.v2.activity.ActivityActions
@@ -88,11 +89,25 @@ sealed interface V2Route {
     data class ClassicPage(val id: String) : V2Route
     data class Live(val entry: LiveEntry) : V2Route
 
-    /** A recording; Back goes to [from] (the tabs, or the project page it was opened from); [atMs] plays from there. */
-    data class Recording(val id: String, val from: V2Route = Tabs, val atMs: Long? = null) : V2Route
+    /**
+     * A recording; Back goes to [from] (the tabs, or the project page it was opened from); [atMs] plays from there.
+     * [item] is one that is not in this phone's Library (a teammate's, from Shared with me).
+     */
+    data class Recording(
+        val id: String,
+        val from: V2Route = Tabs,
+        val atMs: Long? = null,
+        val item: com.echoledger.mobile.data.LibraryItem? = null
+    ) : V2Route
     data object Projects : V2Route
     data class Project(val id: String) : V2Route
     data object ClassicProjects : V2Route
+
+    /** A smart folder of Projects (Inbox, an app, Imported, Shared with me); Back goes to [from]. */
+    data class Folder(val key: String, val from: V2Route = Tabs) : V2Route
+
+    /** Request files; Back goes to [from]. */
+    data class Requests(val from: V2Route = Tabs) : V2Route
 }
 
 /**
@@ -140,7 +155,9 @@ fun EchoV2Shell(
     /** Help v2's guides, notes and support messages (the phone core's); without it Help stays the classic page. */
     help: HelpSource? = null,
     onRecordNow: () -> Boolean = { false },
-    onReadyCheck: (turnOn: Boolean) -> Unit = {}
+    onReadyCheck: (turnOn: Boolean) -> Unit = {},
+    /** Goes up by one each time Activity should open (the after-call card's title: rename it or pick a project there). */
+    openActivity: Int = 0
 ) {
     val settings by vm.settings.collectAsState()
     val shown = AppLook.language(settings.appLanguage, language)
@@ -150,7 +167,7 @@ fun EchoV2Shell(
             CompositionLocalProvider(LocalEchoToasts provides toasts) {
                 MessagesToToasts(vm, toasts)
                 Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
-                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock)
+                    ShellBody(vm, flags, classic, onSwitchToClassic, help, onRecordNow, onReadyCheck, clock, openActivity)
                     EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
                 }
             }
@@ -207,12 +224,14 @@ private fun ShellBody(
     help: HelpSource?,
     onRecordNow: () -> Boolean,
     onReadyCheck: (Boolean) -> Unit,
-    clock: () -> Long
+    clock: () -> Long,
+    openActivity: Int = 0
 ) {
     val text = v2Text
     val context = LocalContext.current
     var tab by rememberSaveable { mutableStateOf(V2Tab.Library) }
     var route by remember { mutableStateOf<V2Route>(V2Route.Tabs) }
+    LaunchedEffect(openActivity) { if (openActivity > 0) route = V2Route.Activity }
     var libraryViews by remember { mutableStateOf(emptySet<SavedView>()) }
     var reselected by remember { mutableIntStateOf(0) }
     var recordSheet by remember { mutableStateOf(false) }
@@ -229,11 +248,25 @@ private fun ShellBody(
     val readiness = remember(setup) { Readiness.evaluate(setup.ready) }
     // The bell's server part: unread problems as the last Activity answer had them.
     LaunchedEffect(Unit) { vm.activity()?.let { serverUnread = ActivityBadge.server(it.data, vm.missed.value) } }
+    // A project, Shared with me or request link opened in the app lands on the new pages while Projects is v2.
+    val projectsTarget by vm.projectsTarget.collectAsState()
+    LaunchedEffect(projectsTarget) {
+        val t = projectsTarget ?: return@LaunchedEffect
+        if (!flags.isOn(UiFlags.ASK)) return@LaunchedEffect
+        route = when (t) {
+            is com.echoledger.mobile.ui.ProjectsTarget.Project -> V2Route.Project(t.id)
+            is com.echoledger.mobile.ui.ProjectsTarget.Folder -> V2Route.Folder(t.key)
+            com.echoledger.mobile.ui.ProjectsTarget.Requests -> V2Route.Requests()
+        }
+        vm.openInProjects(null)
+    }
     BackHandler(enabled = route != V2Route.Tabs) {
         route = when (val r = route) {
             V2Route.ClassicSettings -> V2Route.Settings
             is V2Route.Recording -> r.from
             is V2Route.Project -> V2Route.Projects
+            is V2Route.Folder -> r.from
+            is V2Route.Requests -> r.from
             V2Route.ClassicProjects -> if (flags.isOn(UiFlags.ASK)) V2Route.Tabs else V2Route.Projects
             else -> V2Route.Tabs
         }
@@ -349,17 +382,47 @@ private fun ShellBody(
 
                     is V2Route.ClassicPage -> classic.settingsPage(r.id) { route = V2Route.Tabs }
 
-                    is V2Route.Live -> classic.liveEntry(r.entry) { route = V2Route.Tabs }
+                    // Game and Watch translate on the new components; the other entries open their screens.
+                    is V2Route.Live -> when (r.entry) {
+                        LiveEntry.LiveTranslate, LiveEntry.WatchTranslate -> {
+                            val game = r.entry == LiveEntry.LiveTranslate
+                            com.echoledger.mobile.ui.v2.live.V2LiveTranslatePage(
+                                vm,
+                                if (game) TranslateMode.GAME else TranslateMode.WATCH,
+                                onBack = { route = V2Route.Tabs },
+                                onSetup = { route = V2Route.Setup },
+                                onSettings = { route = V2Route.SettingsPage(if (game) "games" else "videos") }
+                            )
+                        }
+
+                        else -> classic.liveEntry(r.entry) { route = V2Route.Tabs }
+                    }
 
                     V2Route.Projects -> V2WorkspacesScreen(
                         vm,
                         onOpen = { route = V2Route.Project(it) },
-                        onSharedAndImported = { route = V2Route.ClassicProjects },
+                        onFolder = { route = V2Route.Folder(it.key, from = V2Route.Projects) },
+                        onRequests = { route = V2Route.Requests(from = V2Route.Projects) },
                         onBack = { route = V2Route.Tabs }
                     )
 
-                    // Shared with me, imported and requests stay on today's Projects page.
                     V2Route.ClassicProjects -> classic.ask()
+
+                    is V2Route.Folder -> {
+                        val folder = com.echoledger.mobile.ui.SmartFolder.of(r.key)
+                        if (folder == null) {
+                            LaunchedEffect(r.key) { route = r.from }
+                        } else {
+                            com.echoledger.mobile.ui.v2.workspace.V2FolderPage(
+                                vm,
+                                folder,
+                                onBack = { route = r.from },
+                                onOpenRecording = { item -> route = V2Route.Recording(item.id, from = r, item = item) }
+                            )
+                        }
+                    }
+
+                    is V2Route.Requests -> com.echoledger.mobile.ui.v2.workspace.V2RequestsPage(vm, onBack = { route = r.from })
 
                     is V2Route.Project -> V2WorkspaceScreen(
                         vm,
@@ -376,7 +439,7 @@ private fun ShellBody(
                     V2Route.Trash -> V2TrashScreen(vm, configKeepHours = settings.trashKeepHours, onBack = { route = V2Route.Tabs })
 
                     is V2Route.Recording -> {
-                        val item = library.firstOrNull { it.id == r.id }
+                        val item = library.firstOrNull { it.id == r.id } ?: r.item
                         if (item == null) {
                             LaunchedEffect(r.id) { route = V2Route.Tabs }
                         } else {
@@ -416,7 +479,16 @@ private fun ShellBody(
                             }
                             val badge = activityBadge(serverUnread, missed, pending)
                             val failedIds = remember(pending) { pending.filter { it.state == "failed" }.map { it.id } }
-                            val extras = remember(home, readiness.chip, badge, settings.setupCardHidden, failedIds, reselected) {
+                            val extras = remember(
+                                home,
+                                readiness,
+                                badge,
+                                settings.setupCardHidden,
+                                failedIds,
+                                reselected,
+                                settings.serverNotices,
+                                settings.closedAnnouncements
+                            ) {
                                 LibraryExtras(
                                     actions = { ActivityBell(badge) { route = V2Route.Activity } },
                                     status = { CallsChip(readiness.chip, { onReadyCheck(false) }) },
@@ -427,7 +499,8 @@ private fun ShellBody(
                                             LibraryTop.banner(
                                                 readiness.chip,
                                                 home.needsAction,
-                                                setupShowsCapture(home.checklist, settings.setupCardHidden)
+                                                setupShowsCapture(home.checklist, settings.setupCardHidden),
+                                                readiness.problems.firstOrNull { it.blocking }?.key
                                             ),
                                             LibraryTopActions(
                                                 onSetup = { route = V2Route.Setup },
@@ -438,7 +511,13 @@ private fun ShellBody(
                                                 onFix = { onReadyCheck(false) },
                                                 onReview = { route = V2Route.Activity },
                                                 // Classic's Retry: each upload that failed, sent again.
-                                                onRetryUploads = { failedIds.forEach(vm::retryUpload) }
+                                                onRetryUploads = { failedIds.forEach(vm::retryUpload) },
+                                                onUpdate = { openUpdate(context, vm, settings.serverNotices.appUpdate?.url) },
+                                                onCloseAnnouncement = { vm.closeAnnouncement(it) }
+                                            ),
+                                            server = com.echoledger.mobile.core.ServerBanners.of(
+                                                settings.serverNotices,
+                                                settings.closedAnnouncements
                                             )
                                         )
                                     },
@@ -476,7 +555,8 @@ private fun ShellBody(
                             V2WorkspacesScreen(
                                 vm,
                                 onOpen = { route = V2Route.Project(it) },
-                                onSharedAndImported = { route = V2Route.ClassicProjects },
+                                onFolder = { route = V2Route.Folder(it.key) },
+                                onRequests = { route = V2Route.Requests() },
                                 onBack = null
                             )
                         } else {
@@ -553,5 +633,22 @@ private fun SetupPage(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
         classic.setup { if (flags.isOn(UiFlags.SETUP_HEALTH)) classicSetup = false else onBack() }
     } else {
         V2SetupHealthScreen(vm, highlight, onClassicSetup = { classicSetup = true }, onBack = onBack)
+    }
+}
+
+/**
+ * A server banner's Update, as classic does it: the website build updates itself from the server; the store build opens
+ * the page the server names.
+ */
+internal fun openUpdate(context: android.content.Context, vm: com.echoledger.mobile.ui.MainViewModel, url: String?) {
+    if (com.echoledger.mobile.BuildConfig.CAPTURE_HELPER || url.isNullOrBlank()) {
+        vm.checkForUpdates()
+    } else {
+        runCatching {
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
     }
 }

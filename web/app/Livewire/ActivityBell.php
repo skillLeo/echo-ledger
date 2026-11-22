@@ -7,6 +7,7 @@ namespace App\Livewire;
 use App\Filament\Support\Notice;
 use App\Models\User;
 use App\Services\ActionBadge;
+use App\Services\ActivityFeed;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Livewire\DatabaseNotifications;
 use Filament\Notifications\Notification;
@@ -25,6 +26,13 @@ class ActivityBell extends DatabaseNotifications
         $notice = parent::getNotification($notification);
         if (! $notice instanceof Notice) {
             return $notice;
+        }
+
+        // Since W-218 in the reader's language when the notification keeps its lines (older ones as they were stored);
+        // escaped, as the bell renders HTML and the words hold names and titles people typed.
+        if (is_array($notification->data['viewData']['lines'] ?? null)) {
+            $words = ActivityFeed::localized($notification);
+            $notice->title(e($words['title']))->body(e($words['body']));
         }
 
         // The whole card opens it, so its own Open button goes.

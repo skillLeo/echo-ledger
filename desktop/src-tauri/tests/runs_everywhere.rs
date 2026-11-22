@@ -395,7 +395,8 @@ fn what_is_refused_goes_through_the_helper_that_reaches_a_closed_window() {
         assert!(source.contains("refusal::say"), "{name} tells the person through the helper");
         assert!(!source.contains("app:error"), "{name} sends nothing straight to a page that may be gone");
     }
-    assert!(actions.contains("refusal::say(app, \"No sound was captured"), "a recording that saved nothing is said too");
+    // D-168: the notice is picked by silent_recording_message (no sound / the system gave only silence).
+    assert!(actions.contains("refusal::say(app, silent_recording_message(withheld)"), "a recording that saved nothing is said too");
 }
 
 #[test]

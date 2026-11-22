@@ -13,6 +13,7 @@ use App\Models\ConnectedApp;
 use App\Models\Device;
 use App\Services\Accounts\AccountExports;
 use App\Services\Accounts\AccountSessions;
+use App\Services\Accounts\EmailChange;
 use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
 use App\Services\PairingService;
@@ -21,6 +22,7 @@ use App\Support\Brand;
 use App\Support\Formats;
 use App\Support\RecordingConsent;
 use chillerlan\QRCode\QRCode;
+use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -29,6 +31,7 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -41,6 +44,15 @@ trait ManagesAccountPages
     {
         $name = $this->getNameFormComponent();
         $email = $this->getEmailFormComponent();
+        // Since the security review of 2.0.0-l: not an address reserved for another account's restore window, and not
+        // while this account's own window (or its lock after a restore) is open.
+        if ($email instanceof TextInput) {
+            $email->rule(fn (): Closure => function (string $attribute, mixed $value, Closure $fail): void {
+                if (is_string($value) && Str::lower(trim($value)) !== Str::lower($this->account()->email) && EmailChange::isReserved($value, $this->account()->id)) {
+                    $fail(__('That address is not available. Use another one.'));
+                }
+            });
+        }
         foreach (['profile.name' => [$name, 'Name'], 'profile.email' => [$email, 'Email']] as $id => [$field, $label]) {
             if ($field instanceof TextInput) {
                 $field->label($label)->markAsRequired(false)->autofocus(false)

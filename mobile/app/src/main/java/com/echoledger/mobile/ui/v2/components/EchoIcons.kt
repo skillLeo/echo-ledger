@@ -8,28 +8,37 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.automirrored.outlined.PhoneCallback
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AllInclusive
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.AutoDelete
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ClosedCaption
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.FolderShared
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Forward10
 import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.HealthAndSafety
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Image
@@ -39,18 +48,25 @@ import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardVoice
 import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Laptop
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.MicOff
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhoneMissed
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.Replay10
 import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.material.icons.outlined.Search
@@ -62,8 +78,10 @@ import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Spellcheck
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.StopScreenShare
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Storefront
+import androidx.compose.material.icons.outlined.Support
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tv
@@ -139,6 +157,8 @@ object EchoIcons {
     val Bell: ImageVector get() = Icons.Outlined.Notifications
     val Stop: ImageVector get() = Icons.Outlined.Stop
     val Mic: ImageVector get() = Icons.Outlined.Mic
+    val MicOff: ImageVector get() = Icons.Outlined.MicOff
+    val Important: ImageVector get() = Icons.Outlined.Flag
     val Dictation: ImageVector get() = Icons.Outlined.KeyboardVoice
     val Translate: ImageVector get() = Icons.Outlined.Translate
     val Assist: ImageVector get() = Icons.Outlined.AutoAwesome
@@ -163,4 +183,56 @@ object EchoIcons {
     val Key: ImageVector get() = Icons.Outlined.Key
     val Games: ImageVector get() = Icons.Outlined.SportsEsports
     val Videos: ImageVector get() = Icons.Outlined.Tv
+
+    // Settings (docs/v2/DESIGN_SYSTEM.md "Settings icons", tokens/icons/settings.json): one glyph per meaning, so a group
+    // never repeats its pages' glyphs (Recording vs Microphone & audio vs Voice notes).
+    val SettingsRecording: ImageVector get() = Icons.Outlined.RadioButtonChecked
+    val SettingsTranscription: ImageVector get() = Icons.Outlined.Description
+    val SettingsAccount: ImageVector get() = Icons.Outlined.Person
+    val SettingsSetup: ImageVector get() = Icons.Outlined.CheckCircle
+    val SettingsAbout: ImageVector get() = Icons.Outlined.Support
+    val SettingsVoice: ImageVector get() = Icons.Outlined.GraphicEq
+    val SettingsLanguage: ImageVector get() = Icons.Outlined.Translate
+    val SettingsProfile: ImageVector get() = Icons.Outlined.ManageAccounts
+    val SettingsPlan: ImageVector get() = Icons.Outlined.CreditCard
+    val SettingsPolicy: ImageVector get() = Icons.Outlined.Policy
+
+    /** A person's avatar when there is no name to take initials from (never a "?"). */
+    val Person: ImageVector get() = Icons.Outlined.Person
+
+    /** Allow auto clean-up: the recording may go by the retention rules again. */
+    val AutoClean: ImageVector get() = Icons.Outlined.AutoDelete
+
+    /** Auto-record calls (the Record sheet); mirrors in right to left. */
+    val AutoRecordCalls: ImageVector get() = Icons.AutoMirrored.Outlined.PhoneCallback
+
+    /** A recording made on a computer (the source mark's device badge). */
+    val DeviceComputer: ImageVector get() = Icons.Outlined.Laptop
+
+    /** A recording made on the web (the source mark's device badge). */
+    val DeviceWeb: ImageVector get() = Icons.Outlined.Language
+
+    /** The Inbox smart folder: recordings in no project. */
+    val Inbox: ImageVector get() = Icons.Outlined.Inbox
+
+    /** The Imported smart folder. */
+    val Imported: ImageVector get() = Icons.Outlined.FileDownload
+
+    /** Shared with me: what teammates sent. */
+    val SharedWithMe: ImageVector get() = Icons.Outlined.FolderShared
+
+    /** A request link (Request files). */
+    val Link: ImageVector get() = Icons.Outlined.Link
+
+    /** A group meeting app (Teams). */
+    val Groups: ImageVector get() = Icons.Outlined.Groups
+
+    /** Shrink the recording pill to a dot. */
+    val Shrink: ImageVector get() = Icons.Outlined.RemoveCircleOutline
+
+    /** Hide EchoLedger's floating windows (before a screen share). */
+    val HideWindows: ImageVector get() = Icons.Outlined.StopScreenShare
+
+    /** Copy one detail (a payment detail, a reference). */
+    val Copy: ImageVector get() = Icons.Outlined.ContentCopy
 }

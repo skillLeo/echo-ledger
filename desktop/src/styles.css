@@ -353,11 +353,12 @@ label.field { display: grid; gap: 6px; margin-bottom: var(--space-3); color: var
 
 /* Segmented control: 2-4 choices (the phone's SegmentedControl). */
 .segmented { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-full); background: var(--surface-2); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
-.segmented > button { height: 30px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
+.segmented > button { min-height: 30px; padding: 0 var(--space-3); border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); font-size: var(--text-sm); font-weight: 500; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
 .segmented > button:hover { color: var(--text); }
 .segmented > button[aria-pressed="true"], .segmented > button[aria-selected="true"], .segmented > button[aria-checked="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border); }
 .segmented > button:disabled { opacity: 0.5; cursor: default; }
-.segmented > button[lang="ur"] { font-family: "Noto Nastaliq Urdu", var(--font-sans); font-size: 14px; line-height: 1; }
+/* D4 §3.5: Nastaliq needs its own line (14/28); line-height 1 cut its tall letters, and the control grows to fit. */
+.segmented > button[lang="ur"] { font-family: "Noto Nastaliq Urdu", var(--font-sans); font-size: 14px; line-height: var(--el-text-urdu-caption-line, 28px); }
 
 /* ---------- Library: search pill, filter chips, rows and the list + detail split ---------- */
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
@@ -413,6 +414,17 @@ select.chip option { color: var(--text); background: var(--surface); }
    ellipsis there; a Latin one on the right. It still lines up with the row's start (the window's direction, not the title's). */
 :is(.item-title, .tree-name, .lib-title, .queue-title, .activity-title, .recent-title, .data-title, .import-title)[dir="auto"], .activity-title > [dir="auto"] { text-align: left; unicode-bidi: plaintext; }
 [dir="rtl"] :is(.item-title, .tree-name, .lib-title, .queue-title, .activity-title, .recent-title, .data-title, .import-title)[dir="auto"], [dir="rtl"] .activity-title > [dir="auto"] { text-align: right; }
+/* D-163 (D4 §4–7): the desktop's words are English in every window, so in a right-to-left (Urdu) window each piece of
+   text takes its own direction from its first letter: an English line keeps its order ("Northwind · 42:10",
+   "Transcribing…", "2 calls waiting", a full stop at its end) and an Urdu title stays right to left. It stays on the
+   window's start side (match-parent; plain "start" would follow the text). Classic only: v2 (.el-root) has its own
+   rules. The alignment has no specificity, so an element's own alignment still wins; buttons keep theirs (centred). */
+:where([dir="rtl"] .app) :is(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div, button):not(.el-root, .el-root *) { unicode-bidi: plaintext; }
+:where([dir="rtl"] .app) :where(p, span, b, strong, em, small, label, h1, h2, h3, h4, li, dt, dd, a, div):not(.el-root, .el-root *) { text-align: match-parent; }
+/* Times read as in English in every window ("8:12 AM", "0:00 / 2:15"). */
+.item-time, .player-time, .seg-time, .app :is(.item-time, .player-time, .seg-time) { direction: ltr; unicode-bidi: isolate; }
+/* Chevrons that point along the reading direction turn round; disclosures (down/up) and the external-link icon don't. */
+[dir="rtl"] :is(.set-trail:not(.disclosure):not(.set-ext), .crumb-step svg, .back-link svg, .screen-step svg) { transform: scaleX(-1); }
 /* A title that is cut gets its ellipsis at its own end. */
 .activity-title[dir="auto"] { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item-time { flex: none; font-size: var(--text-xs); color: var(--text-muted); }
@@ -627,7 +639,7 @@ button.segment.active { background: var(--accent-soft); }
 .app.narrow .content.page-library { scroll-padding-block-end: calc(var(--player-dock-h, 0px) + var(--space-2)); }
 /* Here the page (.content, 24 px padding) is what scrolls, and sticky bars stop at its padding: without these the
    transcript showed through above the find bar and below the player. */
-.app.narrow .detail .find-bar { top: calc(-1 * var(--space-5)); }
+.app.narrow .detail .find-bar { top: calc(var(--item-bar-h, 0px) - var(--space-5)); }
 .app.narrow .detail .player-dock { bottom: calc(-1 * var(--space-5)); }
 /* A narrow and short page (200 % text in the smallest window, D-137): the player, two rows tall there, would stick over
    the end of the list and the recording's head; it stays where it is, under the transcript's toolbar. */
@@ -636,9 +648,17 @@ button.segment.active { background: var(--accent-soft); }
 }
 /* A narrow page with a recording open: the recording takes the list's place, full width, with Back to the list (the
    two would otherwise share 45 % of the height each and the player would sit on the recording's head). */
-.detail-back { display: none; }
+.detail-back, .item-bar { display: none; }
 .app.narrow .library.has-open > .list, .app.narrow .library-main.has-open > .library-toolbar { display: none; }
-.app.narrow .library.has-open .detail-back { display: inline-flex; margin: 0 0 var(--space-2); margin-inline-start: calc(-1 * var(--space-2)); }
+.app.narrow .library.has-open .detail-back { display: inline-flex; flex: none; margin-block: 0; margin-inline-start: calc(-1 * var(--space-2)); margin-inline-end: 0; }
+/* D5 §3.3 (D-165): Back stays in a bar under the top bar while the recording scrolls; once the header's title has gone
+   under it, the bar shows the title too. Solid, a hairline once something scrolls under it, no shadow. */
+.app.narrow .library.has-open .item-bar { display: flex; align-items: center; gap: var(--space-2); position: sticky; top: calc(-1 * var(--space-5)); z-index: 6;
+  margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-5)) var(--space-2); padding: var(--space-2) var(--space-5); background: var(--surface);
+  border-radius: var(--radius-md) var(--radius-md) 0 0; border-bottom: 1px solid transparent; }
+.app.narrow .library.has-open .item-bar.titled { border-bottom-color: var(--border); }
+.item-bar-title { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; visibility: hidden; }
+.item-bar.titled .item-bar-title { visibility: visible; }
 [dir="rtl"] .detail-back-icon { display: inline-flex; transform: scaleX(-1); }
 /* With nothing open there, the list is the page (no empty "Select a recording" box under it): it grows with its rows, the
    page scrolls, and the group headers stick to the page's top edge (inside its padding, as the find bar does). The table's
@@ -646,7 +666,7 @@ button.segment.active { background: var(--accent-soft); }
 .app.narrow .library:not(.has-open):not(.as-table) > .detail { display: none; }
 .app.narrow .library:not(.as-table) > .list { max-height: none; overflow: visible; }
 .app.narrow .library:not(.as-table) .group-head { top: calc(-1 * var(--space-5)); }
-.app.narrow .content.page-library { scroll-padding-block-start: var(--group-head-h, 0px); }
+.app.narrow .content.page-library { scroll-padding-block-start: calc(var(--group-head-h, 0px) + var(--item-bar-h, 0px)); }
 /* The top bar fits a half-screen window: tighter gaps instead of the avatar running out of the window. */
 .app.narrow .topbar { gap: var(--space-1); padding: 0 var(--space-3); }
 .app.narrow .topbar-search-text { display: none; }
@@ -964,6 +984,10 @@ audio.player { display: none; }
 .improving-track { height: 3px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
 .improving-track > div { height: 100%; background: var(--accent); border-radius: inherit; transform-origin: left; transition: transform var(--motion-base) var(--ease-out); }
 .improving-track > div.indeterminate { transform: scaleX(0.3); }
+.converting-line { display: inline-flex; align-items: center; gap: var(--space-1); }
+.converting-line .spinner { width: 12px; height: 12px; }
+.convert-failed { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; }
+.convert-failed > .small, .item-sub .convert-note { display: inline-flex; align-items: center; gap: var(--space-1); }
 .activity-row.progress-row { display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-3); }
 
 /* An automatic title (Phase 1C): a quiet note beside it. */
@@ -1295,9 +1319,19 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .key-steps li { counter-increment: key-step; position: relative; display: grid; gap: var(--space-1); justify-items: start; padding-left: 34px; min-height: 24px; }
 .key-steps li::before { content: counter(key-step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent-text); display: grid; place-items: center; font-size: var(--text-xs); font-weight: 700; }
 .key-paste { width: 100%; gap: var(--space-2); }
-.key-paste .input { flex: 1; min-width: 0; font-family: var(--font-mono, ui-monospace, monospace); }
+.key-paste .input { flex: 1; min-width: 0; font-family: var(--font-mono); }
 .needs-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .account-delete { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--danger-soft); }
+/* Your account from the app (2.0.0-l, AccountFlows.tsx): the same flows in both designs. Logical sides only, for Urdu. */
+.account-form { display: grid; gap: var(--space-3); }
+.account-field { gap: var(--space-1); }
+.account-qr { display: block; margin-inline: auto; inline-size: 192px; block-size: 192px; image-rendering: pixelated; border-radius: var(--radius-field); }
+.account-key code, .account-codes code { font-family: var(--font-mono); letter-spacing: 0.04em; user-select: all; }
+.account-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); padding-inline-start: var(--space-5); margin: var(--space-2) 0; }
+.account-said { margin-block-start: var(--space-2); }
+.account-avatar, .account-initials { inline-size: 32px; block-size: 32px; border-radius: 50%; object-fit: cover; }
+.account-initials { display: inline-flex; align-items: center; justify-content: center; background: var(--surface-3); font-weight: 600; font-size: var(--text-sm); }
+.account-passkey .set-end { display: inline-flex; gap: var(--space-1); }
 /* The recording-consent notice (since v1.5): the setup's last step and Settings → Privacy & consent. */
 .consent-notice { display: grid; gap: var(--space-1); }
 .consent-notice p { margin: 0; }

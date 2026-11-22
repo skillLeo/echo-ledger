@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.Serializable
 
 private val Context.dataStore by preferencesDataStore(name = "echoledger_settings")
@@ -124,6 +125,8 @@ data class AppSettings(
     val textSize: String = "system",
     /** The new design's language (since 2.0): `system` (the phone's), `en` or `ur`. */
     val appLanguage: String = "system",
+    /** Library rows swipe (right Pin, left Delete with Undo) in the new design; off, a row only taps and long-presses. */
+    val librarySwipes: Boolean = true,
     /** The setup card at the top of the new design's Library was hidden (since 2.0); Setup & health still has it all. */
     val setupCardHidden: Boolean = false,
     /** The last five Library searches (since v1.3), newest first; this phone only. */
@@ -224,7 +227,15 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
         val SETUP_SEEN = booleanPreferencesKey("setup_seen")
     }
 
-    val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }
+    private val latestValue = kotlinx.coroutines.flow.MutableStateFlow<AppSettings?>(null)
+
+    /**
+     * The settings as last read or saved, at once and without touching the store (null before the first read): what
+     * draws outside the activity (the recording pill, the after-call card, the Live Assist card) starts from it.
+     */
+    val latest: kotlinx.coroutines.flow.StateFlow<AppSettings?> get() = latestValue
+
+    val settings: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }.onEach { latestValue.value = it }
 
     suspend fun current(): AppSettings = settings.first()
 
@@ -235,10 +246,15 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
             prefs[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), next)
             saved = next
         }
-        saved?.let(onSaved)
+        saved?.let {
+            latestValue.value = it
+            onSaved(it)
+        }
     }
 
     suspend fun saveToken(token: String) {
+        // A new sign-in may be another account or another server: no picture of the last one is kept.
+        com.echoledger.mobile.account.AvatarCache.clearAll(context)
         val enc = cipher.encrypt(token.toByteArray(), TOKEN_CONTEXT)
         context.dataStore.edit { it[Keys.TOKEN] = Base64.encodeToString(enc, Base64.NO_WRAP) }
     }
@@ -251,6 +267,11 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
     suspend fun clearPairing() {
         // A device report sent for this account is never attached to another account's support message.
         com.echoledger.mobile.help.DeviceReports(context).clear()
+        // Nor the account's pictures, nor a two-step key or recovery codes still on the clipboard.
+        com.echoledger.mobile.account.AvatarCache.clearAll(context)
+        com.echoledger.mobile.account.SecretClip.clearNow(context)
+        // And any account page's remembered step (the two-step key and codes kept across a rotation).
+        com.echoledger.mobile.account.SignOuts.happened()
         context.dataStore.edit {
             it.remove(Keys.TOKEN)
             it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), it.toSettings().copy(deviceId = null, deviceName = null))

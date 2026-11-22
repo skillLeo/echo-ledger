@@ -38,6 +38,9 @@ html[lang='ur'] .fi-body {
 /*
  * Right to left: a line written in English (a name, an email, a page not yet in Urdu, model output) keeps its own
  * order, and a number with its unit stays one run ("1 min", "$0.00"). The shortcut chips read left to right.
+ * plaintext takes each line's direction from its first strong letter. So a translated sentence must never start with
+ * a bare value: every value put into an Urdu sentence (a name, a file, a month, the search text) is isolated
+ * (U+2068…U+2069 or <bdi>), so its first strong letter is Urdu and the line stays right to left (D4 4, D11).
  */
 html[dir='rtl'] .fi-body :is(p, h1, h2, h3, h4, li, dt, dd, td, th, label, .fi-wi-stats-overview-stat-value,
     .fi-wi-stats-overview-stat-description, .fi-wi-stats-overview-stat-label, .fi-section-header-description, .fi-ta-text-item-label) {
@@ -921,6 +924,37 @@ button.v2-row:hover {
     height: var(--el-icon-sm);
 }
 
+/* Since U19: the small spinner of "Converting to Roman Urdu… 60%". */
+.v2-spinner {
+    flex: none;
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    border: var(--el-space-2) solid currentColor;
+    border-inline-end-color: transparent;
+    border-radius: var(--el-radius-full);
+    animation: v2-spin 0.8s linear infinite;
+}
+
+.v2-row-retry {
+    flex: none;
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+    color: var(--el-role-accent-text);
+    text-decoration: underline;
+}
+
+@keyframes v2-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .v2-spinner {
+        animation-duration: 2.4s;
+    }
+}
+
 .v2-status.is-warning {
     color: var(--el-role-warning-default);
 }
@@ -1793,4 +1827,183 @@ html[dir='rtl'] .v2-row-title {
 
 .fi-ta-filter-indicators-badges-ctn .fi-badge .fi-badge-delete-btn {
     color: var(--el-role-accent-text);
+}
+
+/* A recording's source mark (filament/v2/components/source-logo.blade.php) with the device it came from in a small
+   badge on the end side, as on the phone and the desktop app. The mark draws itself; only its frame is ours. */
+.v2-source {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    inline-size: var(--el-space-32);
+    block-size: var(--el-space-32);
+}
+
+.v2-source--sm {
+    inline-size: var(--el-space-24);
+    block-size: var(--el-space-24);
+}
+
+.v2-source-mark {
+    inline-size: 100%;
+    block-size: 100%;
+}
+
+.v2-source-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-source-device {
+    position: absolute;
+    inset-block-end: calc(-1 * var(--el-space-2));
+    inset-inline-end: calc(-1 * var(--el-space-2));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-space-16);
+    block-size: var(--el-space-16);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-source-device svg {
+    inline-size: var(--el-space-12);
+    block-size: var(--el-space-12);
+}
+
+/* A recording row's marks (U9): the unread dot before the title, and its labels' colour dots (DESIGN_SYSTEM "Label
+   colours"). A label whose stored colour is one of the eight takes .v2-label-dot--<name>; any other colour comes in
+   as --label-own on .v2-label-dot--other and draws the dot alone, with a hairline ring, never as text or fill. */
+.v2-unread-dot,
+.v2-label-dot {
+    display: inline-block;
+    flex: none;
+    inline-size: var(--el-component-status-dot-size);
+    block-size: var(--el-component-status-dot-size);
+    border-radius: var(--el-radius-full);
+}
+
+.v2-unread-dot {
+    background-color: var(--el-role-accent-default);
+}
+
+.v2-label-dot--grey { background-color: var(--el-role-label-grey-dot); }
+.v2-label-dot--red { background-color: var(--el-role-label-red-dot); }
+.v2-label-dot--orange { background-color: var(--el-role-label-orange-dot); }
+.v2-label-dot--amber { background-color: var(--el-role-label-amber-dot); }
+.v2-label-dot--green { background-color: var(--el-role-label-green-dot); }
+.v2-label-dot--teal { background-color: var(--el-role-label-teal-dot); }
+.v2-label-dot--blue { background-color: var(--el-role-label-blue-dot); }
+.v2-label-dot--pink { background-color: var(--el-role-label-pink-dot); }
+
+.v2-label-dot--other {
+    border: var(--el-border-hairline) solid var(--el-role-border-strong);
+    background-color: var(--label-own, var(--el-role-bg-subtle));
+}
+
+/* Selection on the Library list (U9): a selected row is tinted, never marked with a coloured start bar (anti-template
+   rule 4), and Filament's red "Clear" link goes: the selection bar's × already clears it, and red is for deleting. */
+.v2-library .fi-ta-record.fi-selected::before {
+    content: none;
+}
+
+.v2-library .fi-ta-record.fi-selected {
+    background-color: var(--el-role-accent-soft);
+}
+
+.v2-library .fi-ta-selection-indicator-actions-ctn .fi-link.fi-color-danger {
+    display: none;
+}
+
+/* "Show 50 more" at the end of the Library list: centred, with room around it. */
+.v2-lib-more {
+    display: flex;
+    justify-content: center;
+    padding-block: var(--el-space-16);
+}
+
+/* A row being swiped at phone width (U9b): what lets go will do shows under it. Delete on the end side in the danger
+   colour, Pin on the start side in the accent's tint. The swipe script sets data-swipe ("delete" | "pin") and
+   data-swipe-label (the word, in the console's language) on the record while the finger moves, and clears them after. */
+.v2-library .fi-ta-record[data-swipe] {
+    position: relative;
+    overflow: hidden;
+}
+
+.v2-library .fi-ta-record[data-swipe]::after {
+    content: attr(data-swipe-label);
+    position: absolute;
+    inset-block: 0;
+    display: flex;
+    align-items: center;
+    padding-inline: var(--el-space-16);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-library .fi-ta-record[data-swipe='delete'] {
+    background-color: var(--el-role-danger-default);
+    color: var(--el-role-text-on-accent);
+}
+
+.v2-library .fi-ta-record[data-swipe='delete']::after {
+    inset-inline-end: 0;
+}
+
+.v2-library .fi-ta-record[data-swipe='pin'] {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-library .fi-ta-record[data-swipe='pin']::after {
+    inset-inline-start: 0;
+}
+
+.v2-library .fi-ta-record[data-swipe] .v2-lib-row {
+    position: relative;
+    z-index: 1;
+    background-color: var(--el-role-bg-canvas);
+}
+
+/* A split button (Copy): the main part acts, the chevron part opens the other choices; one shape, a hairline between. */
+.v2-split {
+    display: inline-flex;
+    align-items: stretch;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-split > button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-height: var(--el-layout-control-touch-min);
+    padding-inline: var(--el-space-16) var(--el-space-12);
+    border: 0;
+    background: transparent;
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-split > button + button {
+    padding-inline: var(--el-space-12);
+    border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-split > button:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: calc(-1 * var(--el-focus-width));
+}
+
+.v2-split > button:hover {
+    background-color: var(--el-role-bg-canvas);
 }

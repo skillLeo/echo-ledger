@@ -95,14 +95,14 @@ export function RequestLinksSheet({ projects, projectId = null, focusId = null, 
         <div className="row organise-field">
           <label htmlFor={ids.where} className="small muted">Files go to</label>
           <select id={ids.where} className="select" value={where} onChange={(e) => setWhere(e.target.value)}>
-            <option value="">Inbox</option>
-            {visibleRows(projectTree(projects), "all").map(({ project }) => <option key={project.id} value={project.id}>{projectLabel(projects, project.id)}</option>)}
+            <option dir="auto" value="">Inbox</option>
+            {visibleRows(projectTree(projects), "all").map(({ project }) => <option dir="auto" key={project.id} value={project.id}>{projectLabel(projects, project.id)}</option>)}
           </select>
         </div>
         <div className="row organise-field">
           <label htmlFor={ids.expiry} className="small muted">Stops working</label>
           <select id={ids.expiry} className="select" value={expiry} onChange={(e) => setExpiry(e.target.value as ExpiryChoice)}>
-            {EXPIRY_CHOICES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            {EXPIRY_CHOICES.map(([value, label]) => <option dir="auto" key={value} value={value}>{label}</option>)}
           </select>
           {expiry === "date" && (
             <>

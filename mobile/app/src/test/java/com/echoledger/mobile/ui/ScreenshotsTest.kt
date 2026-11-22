@@ -52,6 +52,7 @@ import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.simulateBiometrics
 import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.ui.design.DesignGallery
+import com.echoledger.mobile.util.AppClock
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -628,7 +629,17 @@ class ScreenshotsTest : ScreenTest() {
      */
     @Test
     fun activityMissed() {
-        val now = System.currentTimeMillis()
+        // The same day and times on every day it runs (F2): the picture is compared with a saved one.
+        AppClock.fix(java.time.Instant.parse("2026-11-17T06:42:00Z"), java.time.ZoneId.of("UTC"))
+        try {
+            activityMissedAtFixedTime()
+        } finally {
+            AppClock.reset()
+        }
+    }
+
+    private fun activityMissedAtFixedTime() {
+        val now = AppClock.millis()
         val missed = listOf(
             com.echoledger.mobile.calls.MissedItem(
                 "r1",
@@ -649,7 +660,7 @@ class ScreenshotsTest : ScreenTest() {
                 now
             )
         )
-        val today = java.time.LocalDate.now().toString()
+        val today = AppClock.today().toString()
         val items = listOf(
             ActivityItemDto(
                 "a1",

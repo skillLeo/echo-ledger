@@ -167,6 +167,8 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.zxing.core)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.common)
     implementation(libs.androidx.biometric)

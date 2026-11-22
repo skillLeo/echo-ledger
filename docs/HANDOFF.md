@@ -1095,3 +1095,18 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
 - **Waiting for re-review:** b-phone-parity-recording 5ea084d9. b-phone-parity e7b12b6c needs a status check first.
 - **Parity:** desktop 62% (372/603), phone 36% (103/285), web audit just started. Source: docs/v2/audit/parity.csv.
 - **Caption latency, real provider:** p50 0.56 s / p90 1.11 s English; p50 0.77 s / p90 1.20 s Urdu+English.
+
+## 2026-11-22 06:00 PKT — production web deploy v1.1 2bc45fc3
+- **Live:** v1.1 2bc45fc3 (from f3b0f7a2): 204 web files, 0 deleted, `public/build` rebuilt; 5 migrations in one batch
+  (2026_12_22 assist_relay_checks, 2026_12_23 transcribe later, 2026_12_24 title_by_person, 2026_12_25 label_lists,
+  2026_12_26 avatar/email-restore columns). Contracts 2.0.0-j…o (Audio only, person titles, account, lists, Roman Urdu
+  default, Ask everywhere).
+- **Safety:** backup `~/echoledger-backups/pre-v1.1-2bc45fc3-20261122-005909` (db, web.tgz, env, SHA256SUMS, plus
+  `db-at-down.sql.gz` taken in maintenance); Mac copy `~/echoledger-backups/pre-v1.1-2bc45fc3/db.sql.gz`. Rehearsal on
+  that dump: REHEARSAL PASSED (5 up, down, up; counts 3 273 245 0 0). Downtime 65 s.
+- **After:** counts unchanged; no pending migrations; `/app/login` 200, `/api/config` 401, `/.env` 403, assetlinks 200;
+  `/up` answers 403 from Hostinger's edge (not the app); no new errors. `assist:relay-check` is scheduled.
+- **One-time:** `echoledger:roman-titles` rewrote 111 automatic Urdu-script titles in Roman Urdu (title writer; person
+  titles untouched; a dry run now finds 0).
+- **Open:** `ECHOLEDGER_ANDROID_FINGERPRINTS` is empty on production, so phone App Links and phone passkeys stay off
+  until the release key's SHA-256 is set in `.env`. hPanel cron for `schedule:run` still to be confirmed by Hassam.

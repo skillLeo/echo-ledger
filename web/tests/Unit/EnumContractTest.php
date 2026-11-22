@@ -49,7 +49,8 @@ function docTokens(string $rowStartsWith): array
  * Values the contract already names but the server doesn't have yet (like ApiDocumentationTest's NOT_SERVED_YET).
  * Remove a value here in the change that adds it to the enum; the guard below fails while both hold it.
  */
-const NOT_BUILT_YET = ['session `status`' => ['audio_only']];
+// Since 2.0.0-j `audio_only` is built (contract 1.8.0-e): nothing documented waits.
+const NOT_BUILT_YET = ['session `status`' => []];
 
 function caseValues(string $enum): array
 {

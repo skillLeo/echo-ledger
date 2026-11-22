@@ -51,10 +51,14 @@ import kotlinx.coroutines.launch
 
 /** A setting a search result jumped to: drawn on the accent's soft fill (static; nothing moves). */
 @Composable
-fun Modifier.highlightedIf(on: Boolean): Modifier = if (on) background(EchoV2.colors.accentSoft) else this
+fun Modifier.highlightedIf(on: Boolean): Modifier =
+    if (on) background(EchoV2.colors.accentSoft).semantics { this[Highlighted] = true } else this
+
+/** Marks the setting a search result lit (tests find it by this; TalkBack reads nothing new). */
+val Highlighted = androidx.compose.ui.semantics.SemanticsPropertyKey<Boolean>("Highlighted")
 
 /**
- * Appearance: the theme (System, Light, Dark), Wallpaper colours, the phone's font, Text size and App language (both
+ * Appearance: the theme (System, Light, Dark), Wallpaper colours, the phone's font, Library swipes, Text size and App language (both
  * applied across the v2 screens, their sheets, dialogs and menus included), and Switch back to classic while v2 is on.
  */
 @Composable
@@ -84,7 +88,8 @@ fun AppearancePage(
                     modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)
                 )
             }
-            // Wallpaper colours, as classic (Android 12 and later): the wallpaper's accent; Record keeps its colour.
+            // Wallpaper colours (Android 12 and later), a classic setting kept here for parity: it changes the classic
+            // screens only, and the redesigned ones keep EchoLedger's own colours (its hint says so).
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 EchoSwitch(
                     checked = settings.dynamicColour,
@@ -100,6 +105,13 @@ fun AppearancePage(
                 label = stringResource(R.string.v2_set_phone_font),
                 supporting = stringResource(R.string.v2_set_phone_font_help),
                 modifier = Modifier.highlightedIf(highlight == "appearance.font")
+            )
+            EchoSwitch(
+                checked = settings.librarySwipes,
+                onCheckedChange = { on -> update { it.copy(librarySwipes = on) } },
+                label = stringResource(R.string.v2_set_swipes),
+                supporting = stringResource(R.string.v2_set_swipes_help),
+                modifier = Modifier.highlightedIf(highlight == "appearance.swipes")
             )
             Column(Modifier.highlightedIf(highlight == "appearance.textsize")) {
                 EchoSectionHeader(stringResource(R.string.v2_set_item_appearance_textsize))

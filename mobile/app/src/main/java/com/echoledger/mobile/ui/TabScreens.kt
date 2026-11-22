@@ -73,6 +73,7 @@ import com.echoledger.mobile.ui.design.TextButton
 import com.echoledger.mobile.ui.design.dateGroup
 import com.echoledger.mobile.ui.design.rowTime
 import com.echoledger.mobile.ui.design.tabular
+import com.echoledger.mobile.util.AppClock
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -93,7 +94,7 @@ fun ActivityScreen(
     waiting: List<LocalRecording> = emptyList(),
     onOpenWaiting: () -> Unit = {},
     scrollToTop: Int = 0,
-    today: LocalDate = LocalDate.now(),
+    today: LocalDate = AppClock.today(),
     skipped: List<LocalRecording> = emptyList(),
     onRestore: (String) -> Unit = {},
     missed: List<MissedItem> = emptyList(),

@@ -124,14 +124,17 @@ function claimedPng(int $width, int $height): string
 }
 
 it('never enlarges a picture to compare it, and leaves strips, huge and mis-sized pictures uncompared, quickly', function () {
+    // The pictures are made first: only the refusals are timed (W-211). Each is refused from its header alone, before GD
+    // decodes it: microseconds, so 0.5 s still catches one that decodes, however busy the computer is. The one
+    // picture that is compared is not timed: decoding 1920 × 1080 takes what the computer has to give (0.4 s idle).
+    [$tall, $wide, $huge, $screen] = [plainPng(1, 100000), plainPng(100000, 1), claimedPng(30000, 30000), appScreen(orders())];
     $started = microtime(true);
-    expect(ScreenSimilarity::signature(plainPng(1, 100000)))->toBeNull()
-        ->and(ScreenSimilarity::signature(plainPng(100000, 1)))->toBeNull()
-        // Refused from the header alone, before GD decodes it.
-        ->and(ScreenSimilarity::signature(claimedPng(30000, 30000)))->toBeNull()
-        ->and(ScreenSimilarity::signature(appScreen(orders()), 1280, 720))->toBeNull()
-        ->and(ScreenSimilarity::signature(appScreen(orders()), 1920, 1080))->not->toBeNull()
-        ->and(microtime(true) - $started)->toBeLessThan(2.0);
+    expect(ScreenSimilarity::signature($tall))->toBeNull()
+        ->and(ScreenSimilarity::signature($wide))->toBeNull()
+        ->and(ScreenSimilarity::signature($huge))->toBeNull()
+        ->and(ScreenSimilarity::signature($screen, 1280, 720))->toBeNull()
+        ->and(microtime(true) - $started)->toBeLessThan(0.5);
+    expect(ScreenSimilarity::signature($screen, 1920, 1080))->not->toBeNull();
     // A small picture keeps its size; a 4 to 1 one is still compared, at most 640 × 2560.
     [$w, $h, $grey] = ScreenSimilarity::signature(plainPng(320, 200));
     [$tallW, $tallH] = ScreenSimilarity::signature(plainPng(1000, 4000));

@@ -3,13 +3,14 @@
 // original, a line edited in place, and the call notes of a recording filed under a project. Same commands as classic.
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
-  api, errorMessage, type AnswerLanguage, type CallNotes, type TranscriptDetail, type TranscriptRevision,
+  api, errorMessage, type AnswerLanguage, type CallNotes, type TranscriptDetail, type TranscriptRevision, type TranscriptView,
 } from "../../lib/ipc";
+import { convertFailedText, convertingText } from "../../lib/progress";
 import { formatWhen, timestamp } from "../../lib/format";
 import { confirmAction } from "../../lib/confirm";
 import { usePoll } from "../../lib/usePoll";
 import { notesWorking } from "../../views/main/CallNotes";
-import { Badge, Button, Checkbox, Dialog, EmptyState, Icons, Loading, SearchField, Segmented, Skeleton, TextField } from "../components";
+import { Badge, Button, Checkbox, Dialog, EmptyState, Icon, Icons, Loading, Progress, SearchField, Segmented, Skeleton, TextField } from "../components";
 
 /** Find in this transcript: the field, "N of M", previous and next; Enter, Shift+Enter and Esc as classic. */
 export function FindBar({ query, onQuery, count, current, onStep, onClose }: {
@@ -280,5 +281,35 @@ export function CallNotesV2({ sessionId, onSeek, say }: { sessionId: string; onS
         ))
       )}
     </div>
+  );
+}
+
+/**
+ * Over the transcript while its default view is written: a small spinner and "Converting to Roman Urdu… 60%" (no
+ * percent until the first lines are done). When it could not be written, "Couldn't convert to Roman Urdu" and Try again.
+ */
+export function ConvertingLine({ view, percent = null, failed = false, retrying = false, onRetry }: {
+  view: TranscriptView | null;
+  percent?: number | null;
+  failed?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
+}) {
+  if (failed) {
+    return (
+      <span className="el-converting el-converting--failed" role="status" data-testid="convert-failed">
+        <Icon icon={Icons.ErrorIcon} size="sm" />
+        <span className="el-caption">{convertFailedText(view)}</span>
+        {onRetry && <Button size="sm" variant="quiet" loading={retrying} loadingLabel="Starting…" onClick={onRetry}>Try again</Button>}
+      </span>
+    );
+  }
+  return (
+    <span className="el-converting" role="status" data-testid="converting-line">
+      <span className="el-spinner" aria-hidden="true" />
+      <span className="el-caption el-secondary">{convertingText(view, percent)}</span>
+      {/* How far, once lines are written (classic's slim bar). */}
+      {percent !== null && <Progress value={percent} label={convertingText(view, null)} valueText={`${percent}%`} />}
+    </span>
   );
 }

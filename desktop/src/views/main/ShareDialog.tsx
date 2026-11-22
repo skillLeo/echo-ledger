@@ -193,7 +193,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
       <div className="row organise-field">
         <label htmlFor={expiryId} className="small muted">Stops working</label>
         <select id={expiryId} className="select" value={expiry} onChange={(e) => setExpiry(e.target.value as ExpiryChoice)}>
-          {EXPIRY_CHOICES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {EXPIRY_CHOICES.map(([value, label]) => <option dir="auto" key={value} value={value}>{label}</option>)}
         </select>
         {expiry === "date" && (
           <>

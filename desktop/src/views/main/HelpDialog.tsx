@@ -22,13 +22,13 @@ export function windowKeys(platform: string): readonly (readonly [string, string
     [PLAYER_KEYS.toggle, "Play or pause the open recording"],
     [`${PLAYER_KEYS.back5} / ${PLAYER_KEYS.forward5}`, "Back or forward 5 seconds"],
     [`${PLAYER_KEYS.back10} / ${PLAYER_KEYS.forward10}`, "Back or forward 10 seconds"],
-    [`${mod}F`, "Find in the open transcript"],
+    [`${mod}F`, "Find in the open transcript (in the new design, search when no recording is open)"],
     ["[", "Collapse or expand the sidebar"],
     ["?", "This list"],
   ];
 }
 
-const GLOBAL: readonly (readonly [ShortcutAction, string])[] = [
+export const GLOBAL_SHORTCUTS: readonly (readonly [ShortcutAction, string])[] = [
   ["record_now", "Record now"],
   ["toggle_captions", "Show / hide live captions"],
   ["toggle_saving", "Start / stop saving a recording"],
@@ -57,7 +57,7 @@ export function HelpDialog({ platform, onClose, onSettings }: { platform: string
         </dl>
         <h3 className="help-head">Anywhere on this computer</h3>
         <dl className="key-list">
-          {GLOBAL.map(([action, what]) => (
+          {GLOBAL_SHORTCUTS.map(([action, what]) => (
             <div key={action}><dt><span className="kbd">{settings?.shortcuts[action] ? prettyShortcut(settings.shortcuts[action], platform) : "Not set"}</span></dt><dd>{what}</dd></div>
           ))}
         </dl>

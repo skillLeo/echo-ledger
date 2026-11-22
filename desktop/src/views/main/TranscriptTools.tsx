@@ -26,7 +26,7 @@ export function PlayerControls({ rate, onRate, skipSilence, onSkipSilence, follo
     <div className="row small player-controls">
       <label htmlFor={speedId} className="muted">Speed</label>
       <select id={speedId} className="select compact" value={rate} onChange={(e) => onRate(Number(e.target.value))}>
-        {SPEEDS.map((s) => <option key={s} value={s}>{s}×</option>)}
+        {SPEEDS.map((s) => <option dir="auto" key={s} value={s}>{s}×</option>)}
       </select>
       <label className="check"><input type="checkbox" checked={skipSilence} onChange={(e) => onSkipSilence(e.target.checked)} />Skip silence</label>
       <label className="check"><input type="checkbox" checked={follow} onChange={(e) => onFollow(e.target.checked)} />Follow</label>
@@ -86,7 +86,8 @@ export function PlayerDock({ playing, nowMs, durationMs, onToggle, onSkip, child
   useStickyHeight(dock, "--player-dock-h");
   return (
     <div ref={dock} className="player-dock" role="region" aria-label="Player">
-      <div className="player-row">
+      {/* Media controls, the time and the waveform never mirror (D4 §7). */}
+      <div className="player-row" dir="ltr">
         <button type="button" className="skip-btn" aria-label="Back 10 seconds" title={`Back 10 s (${PLAYER_KEYS.back10})`} onClick={() => onSkip(-10)}><SkipIcon back size={22} /></button>
         <button type="button" className="play-btn" aria-label={playing ? "Pause" : "Play"} title={`${playing ? "Pause" : "Play"} (${PLAYER_KEYS.toggle})`} onClick={onToggle}>
           {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
@@ -304,11 +305,12 @@ export function ExportMenu({ onExport, viewLabel = null, onPack }: {
     <>
       <label htmlFor={id} className="sr-only">Export</label>
       <select id={id} className="select compact" value="" title={PDF_HINT} onChange={(e) => { choose(e.target.value); e.target.value = ""; }}>
-        <option value="">{viewLabel ? `Export as ${viewLabel}…` : "Export…"}</option>
-        {EXPORTS.map(([format, label]) => <option key={format} value={format}>{label}</option>)}
+        {/* Each option takes its own direction: in a right-to-left window "Export…" would read "…Export" (D4 §6). */}
+        <option dir="auto" value="">{viewLabel ? `Export as ${viewLabel}…` : "Export…"}</option>
+        {EXPORTS.map(([format, label]) => <option dir="auto" key={format} value={format}>{label}</option>)}
         {onPack && (
           <optgroup label="With the screens">
-            {PACKS.map(([value, , , label]) => <option key={value} value={value}>{label}</option>)}
+            {PACKS.map(([value, , , label]) => <option dir="auto" key={value} value={value}>{label}</option>)}
           </optgroup>
         )}
       </select>
@@ -375,7 +377,7 @@ export function SharePanel({ sessionId, hasAudio, notify, onClose }: {
       <div className="row small">
         <label htmlFor={expiresId} className="muted">Expires after</label>
         <select id={expiresId} className="select compact" value={expiresIn} onChange={(e) => setExpiresIn(Number(e.target.value))}>
-          {LIFETIMES.map(([s, label]) => <option key={s} value={s}>{label}</option>)}
+          {LIFETIMES.map(([s, label]) => <option dir="auto" key={s} value={s}>{label}</option>)}
         </select>
         <label htmlFor={passwordId} className="muted">Password</label>
         <input id={passwordId} className="input" type="password" value={password} minLength={6} maxLength={100} placeholder="Optional, 6+ characters" onChange={(e) => setPassword(e.target.value)} />

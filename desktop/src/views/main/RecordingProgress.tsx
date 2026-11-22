@@ -1,16 +1,19 @@
 // Clear progress on the recording page (Phase 1C, C2–C4): the three steps with what each is doing, "Notify me when
-// ready", and the slim "Improving Roman Urdu… 60%" bar over a transcript that is already readable.
+// ready", and the slim "Converting to Roman Urdu… 60%" bar over a transcript that is already readable (or, when the
+// view could not be written, "Couldn't convert to Roman Urdu" with Try again).
 import { useState } from "react";
 import { api, errorMessage, type LibraryItem, type TranscriptView } from "../../lib/ipc";
-import { improvingText, stepOf, stepStates, type Step } from "../../lib/progress";
+import { convertFailedText, convertingText, stepOf, stepStates, type Step } from "../../lib/progress";
 import { itemState } from "../../lib/library";
 import { fillWidth } from "../../lib/motion";
 import type { Notify } from "../../lib/notice";
+import { AlertIcon } from "../../components/Icons";
 
 // The running step says its name; what it is doing (parts, time left, percent) is said once, under the steps.
 const STEP_WORDS: Record<Step, { waiting: string; active: string; done: string }> = {
   upload: { waiting: "Upload", active: "Uploading", done: "Uploaded" },
   transcribe: { waiting: "Transcribe", active: "Transcribing", done: "Transcribed" },
+  // The step keeps its name on every platform (Upload · Transcribe · Improve); only the line under it says "Converting to …".
   improve: { waiting: "Improve", active: "Improving", done: "Improved" },
 };
 
@@ -52,15 +55,25 @@ export function RecordingSteps({ item, improving, notify }: {
   );
 }
 
-/** The slim bar over a readable transcript while its views are written (C3). */
-export function ImprovingBar({ view, percent }: { view: TranscriptView | null; percent: number | null }) {
-  const label = improvingText(view, percent);
+/** The slim bar over a readable transcript while its views are written (C3): a small spinner, the words, the percent. */
+export function ConvertingBar({ view, percent }: { view: TranscriptView | null; percent: number | null }) {
+  const label = convertingText(view, percent);
   return (
     <div className="improving-bar" data-testid="improving-bar">
-      <span className="small muted">{label}</span>
+      <span className="small muted converting-line" role="status"><span className="spinner" aria-hidden="true" />{label}</span>
       <div className="improving-track" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent ?? undefined}>
         <div className={percent === null ? "indeterminate" : ""} style={percent === null ? undefined : fillWidth(percent / 100)} />
       </div>
+    </div>
+  );
+}
+
+/** The view could not be written (it stopped, or went quiet for too long): say so, and offer to start it again. */
+export function ConvertFailed({ view, onRetry, retrying }: { view: TranscriptView | null; onRetry?: () => void; retrying?: boolean }) {
+  return (
+    <div className="convert-failed" data-testid="convert-failed" role="status">
+      <span className="small muted"><AlertIcon size={14} />{convertFailedText(view)}</span>
+      {onRetry && <button type="button" className="btn ghost compact" disabled={retrying} onClick={onRetry}>{retrying ? "Starting…" : "Try again"}</button>}
     </div>
   );
 }

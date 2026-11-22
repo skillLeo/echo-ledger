@@ -76,7 +76,7 @@ class SaveDecisionReceiver : BroadcastReceiver() {
 
 /** Keep → queue for upload; Discard → securely delete the local encrypted file. Shared by notification + in-app list. */
 object Decisions {
-    suspend fun apply(context: Context, recordingId: String, keep: Boolean) {
+    suspend fun apply(context: Context, recordingId: String, keep: Boolean, transcribe: Boolean? = null) {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         Notifications.cancelDecision(context, recordingId)
         DecisionTimeoutWorker.cancel(context, recordingId)
@@ -85,7 +85,7 @@ object Decisions {
         // A call on its way out is kept only through its Undo, never by a late "keep after 10 s".
         if (keep && graph.recordings.get(recordingId)?.state == DISCARDING) return
         if (keep) {
-            graph.recordings.update(recordingId) { it.copy(state = "queued") }
+            graph.recordings.update(recordingId) { it.copy(state = "queued", transcribe = transcribe ?: it.transcribe) }
             UploadWorker.enqueue(context, recordingId)
         } else {
             // Nothing is uploaded; a server session that captions opened is deleted, so no transcript is ever made.

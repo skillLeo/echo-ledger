@@ -136,7 +136,7 @@ private fun pageValue(id: String, s: AppSettings): String? = when (id) {
 
     "captions" -> if (s.captionsEnabled) "On" else "Off"
 
-    "voice" -> if (s.dictationMode == "hold") "Hold to talk" else "Tap to start"
+    "voice" -> if (s.dictationMode == "push_to_talk") "Hold to talk" else "Tap to start"
 
     "language" -> s.transcriptionLanguage?.let { code ->
         com.echoledger.mobile.core.Languages.OPTIONS.firstOrNull { it.code == code }?.menu

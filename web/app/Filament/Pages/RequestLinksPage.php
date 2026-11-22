@@ -23,6 +23,7 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\Column;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
@@ -102,10 +103,13 @@ class RequestLinksPage extends Page implements HasTable
     public function table(Table $table): Table
     {
         $tz = app(SettingsRepository::class)->displayTimezone();
-        // Since v2.0 (the new frame, W-201): the table fits the page at 1024 px. The title wraps, Open until by the one
-        // date rule (the time on a second line), Made in Columns only, and Revoke in the row's ⋮ menu. Its words are in
-        // the console's language (only the new frame has another). Classic is as it was.
+        // W-201: the table fits the page at 1024 px in both designs. The title wraps, Open until has its time on a second
+        // line, Made is a wide-only column, and Revoke is in the row's ⋮ menu. The new frame dates by its one date rule,
+        // in the console's language (only the new frame has another); classic keeps "Nov 17, 2026".
         $v2 = ConsoleV2::shell();
+        // A column that made the table too wide: under Columns in the new frame; in classic only on a wide window (from
+        // 1280 px), since classic has no Columns menu (Filament draws its labels with x-html, which classic pages never contain).
+        $wide = fn (Column $column): Column => $v2 ? V2Tables::inColumns($column) : $column->visibleFrom('xl');
         $actions = [
             Action::make('revoke')->label(__('Revoke'))->icon(Heroicon::OutlinedNoSymbol)->color('danger')
                 ->visible(fn (RequestLink $link): bool => $link->isActive())
@@ -117,21 +121,22 @@ class RequestLinksPage extends Page implements HasTable
             ->query(fn (): Builder => RequestLink::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->with('client'))
             ->defaultSort('created_at', 'desc')
             ->columns([
-                TextColumn::make('title')->label(__('Title'))->limit(60)->searchable()
-                    ->when($v2, fn (TextColumn $column): TextColumn => $column->wrap()),
+                TextColumn::make('title')->label(__('Title'))->limit(60)->searchable()->wrap(),
                 TextColumn::make('client.name')->label(__('Goes to'))->placeholder(__('Inbox')),
                 TextColumn::make('received')->label(__('Received'))
                     ->state(fn (RequestLink $link): string => __(':received of :max', ['received' => $link->received, 'max' => $link->max_files]))
                     ->description(fn (RequestLink $link): string => __('up to :mb MB each', ['mb' => $link->max_mb])),
                 TextColumn::make('state')->label(__('Status'))->badge()
                     ->state(fn (RequestLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isActive() ? 'Open' : 'Expired'))
-                    ->formatStateUsing(fn (string $state): string => __($state))
+                    // "Open" is the action (کھولیں) elsewhere: a link's state has its own word (کھلا), English "Open" as before.
+                    ->formatStateUsing(fn (string $state): string => $state === 'Open' ? (trans()->has('Open (state)') ? __('Open (state)') : 'Open') : __($state))
                     ->color(fn (string $state): string => $state === 'Open' ? 'success' : 'gray'),
                 TextColumn::make('expires_at')->label(__('Open until'))->dateTime('M j, Y · g:i A', $tz)->placeholder(__('Until revoked'))
-                    ->when($v2, fn (TextColumn $column): TextColumn => V2Tables::date($column, $tz)),
-                TextColumn::make('created_at')->label(__('Made'))->since()->when($v2, V2Tables::inColumns(...)),
+                    ->when($v2, fn (TextColumn $column): TextColumn => V2Tables::date($column, $tz), fn (TextColumn $column): TextColumn => $column->date('M j, Y', $tz)
+                        ->description(fn (RequestLink $link): ?string => $link->expires_at?->setTimezone($tz)->format('g:i A'))),
+                TextColumn::make('created_at')->label(__('Made'))->since()->tap($wide),
             ])
-            ->recordActions($v2 ? V2Tables::actions($actions) : $actions)
+            ->recordActions(V2Tables::actions($actions))
             ->emptyStateIcon(Heroicon::OutlinedInboxArrowDown)
             ->emptyStateHeading(__('No request links yet'))
             ->emptyStateDescription(__('Make one to collect voice notes, recordings or documents from anyone, without an account.'));

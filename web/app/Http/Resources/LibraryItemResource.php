@@ -8,10 +8,14 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Api\SessionController;
 use App\Models\CaptureSession;
+use App\Models\Device;
 use App\Models\Transcript;
+use App\Models\User;
 use App\Services\LibraryOrganiser;
 use App\Services\RetentionPolicy;
+use App\Services\TranscribeLater;
 use App\Services\Views\TranscriptViews;
+use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -70,7 +74,10 @@ final class LibraryItemResource extends JsonResource
             'filed_by' => $session->client !== null ? $session->filed_by : null,
             'title' => $session->displayTitle(),
             // Since v1.5 (Phase 1C): the title was written by the server from what was said; a person's title is false.
-            'title_auto' => (bool) $session->title_auto,
+            // Since 2.0.0-k: where the title shown comes from (own | person | auto | app); `title_auto` keeps its v1.5
+            // meaning, written from what was said, so older apps badge only those.
+            'title_auto' => ($source = $session->titleSource()) === 'auto',
+            'title_source' => $source,
             // Since v1.2: who the recording was with (name, number, where the device saw it), or null.
             'caller' => SessionController::caller($session),
             'started_at' => $session->started_at->toAtomString(),
@@ -85,7 +92,10 @@ final class LibraryItemResource extends JsonResource
                 'final_transcript_id' => $final?->id,
                 'live_available' => $live !== null,
                 'live_transcript_id' => $live?->id,
-                'preview' => ($final?->text ? $final->preview() : $live?->preview()) ?: null,
+                // Since 2.0.0-n (U19): in the view the recording opens in once it is made (Roman Urdu for Urdu calls), and
+                // `preview_view` says which ("roman", "urdu", "english" or "original"), so rows need not read the views.
+                'preview' => ($rowPreview = TranscriptViews::rowPreview($final))['text'] ?? (($final?->text ? $final->preview() : $live?->preview()) ?: null),
+                'preview_view' => $rowPreview['view'] ?? 'original',
                 // Since v1.1.2: which language and engine produced the final transcript, and a wrong-script warning.
                 'final_language' => $final?->language,
                 'final_provider' => $final?->provider,
@@ -118,8 +128,25 @@ final class LibraryItemResource extends JsonResource
             'important' => (bool) $session->important,
             'label_colors' => (object) self::labelColors($session),
             'expires_at' => app(RetentionPolicy::class)->expiresAt($session)?->toAtomString(),
+            // Since v1.8 (contract 1.8.0-e): what transcribing an audio-only recording would use; null otherwise.
+            // Only for the person whose recording it is: the minutes left are theirs, never a sender's (a recording a
+            // teammate sent shows none).
+            'transcribe_estimate' => self::asksOwner($request, $session) ? app(TranscribeLater::class)->estimate($session) : null,
             'updated_at' => $session->updated_at->toAtomString(),
         ];
+    }
+
+    /** Whether the person asking (a device's, or the signed-in console user) made [$session], in its workspace. */
+    private static function asksOwner(Request $request, CaptureSession $session): bool
+    {
+        $asker = $request->user();
+        [$id, $workspace] = match (true) {
+            $asker instanceof Device => [(int) $asker->user_id, (int) $asker->workspace_id],
+            $asker instanceof User => [(int) $asker->id, (int) CurrentWorkspace::id()],
+            default => [null, null],
+        };
+
+        return $id !== null && $id === (int) $session->user_id && $workspace === (int) $session->workspace_id;
     }
 
     /**

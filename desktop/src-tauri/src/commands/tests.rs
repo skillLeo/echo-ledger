@@ -538,3 +538,20 @@ fn the_share_notice_is_said_once_and_closing_it_remembers() {
     s.save(&path).unwrap();
     assert!(!Settings::load(&path).share_notice, "never again");
 }
+
+#[test]
+fn a_list_name_is_cleaned_as_the_server_cleans_it() {
+    assert_eq!(list_name("  Clients   and  Co ").unwrap(), "Clients and Co");
+    assert_eq!(list_name("کلائنٹس").unwrap(), "کلائنٹس");
+    assert!(list_name("   ").is_err());
+    assert_eq!(list_name(&"ب".repeat(40)).unwrap().chars().count(), 40, "40 letters of any script");
+    assert!(list_name(&"x".repeat(41)).is_err());
+}
+
+#[test]
+fn a_list_colour_is_hash_and_six_hex_digits() {
+    assert_eq!(list_colour("#E15F56").unwrap(), "#e15f56");
+    for bad in ["red", "#12345", "#1234567", "#GGGGGG", "e15f56"] {
+        assert!(list_colour(bad).is_err(), "{bad}");
+    }
+}

@@ -128,6 +128,86 @@ class PostCallPromptTest : AppTest() {
         assertEquals(WorkInfo.State.ENQUEUED, discardWork("call-1").single().state)
     }
 
+    private fun v2Card(rec: com.echoledger.mobile.data.LocalRecording) {
+        PostCallPrompt.show(
+            app,
+            rec,
+            PostCallPrompt.ASK,
+            "dark",
+            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
+        )
+        assertTrue("the v2 card", DecisionPopup.showingV2)
+    }
+
+    @Test
+    fun `the v2 card's Save audio keeps the call as audio only and Transcribe keeps it to be transcribed`() {
+        overlayAllowed(true)
+        v2Card(call(state = "pending_decision"))
+        compose.onNodeWithText("Save audio").performClick()
+        pumpUntil("kept") { app.peekRecording("call-1")?.state == "queued" }
+        assertEquals("audio only (2.0.0-j)", false, app.peekRecording("call-1")?.transcribe)
+        assertFalse(DecisionPopup.isShowing)
+
+        v2Card(call(id = "call-2", state = "pending_decision"))
+        compose.onNodeWithText("Transcribe").performClick()
+        pumpUntil("kept") { app.peekRecording("call-2")?.state == "queued" }
+        assertEquals(true, app.peekRecording("call-2")?.transcribe)
+    }
+
+    @Test
+    fun `with the v2 card Saved stays six seconds and the upload starts only once they are over`() {
+        overlayAllowed(true)
+        PostCallPrompt.show(
+            app,
+            call(),
+            PostCallPrompt.KEEP,
+            "dark",
+            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
+        )
+        assertTrue(DecisionPopup.showingV2)
+        val waiting = uploadWork("call-1").single()
+        assertEquals(WorkInfo.State.ENQUEUED, waiting.state)
+        assertEquals("the upload waits out the card", DecisionPopup.SAVED_MS, waiting.initialDelayMillis)
+        assertEquals(0, waiting.runAttemptCount)
+        ShadowLooper.idleMainLooper(DecisionPopup.SAVED_MS - 1, TimeUnit.MILLISECONDS)
+        assertTrue("Saved is still up at 5.999 s", DecisionPopup.isShowing)
+        assertEquals(0, uploadWork("call-1").single().runAttemptCount)
+        ShadowLooper.idleMainLooper(2, TimeUnit.MILLISECONDS)
+        assertFalse("gone after 6 s", DecisionPopup.isShowing)
+        // Six seconds on, the upload's delay is over and it runs.
+        val driver = androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!
+        // (The test phone has no network: its constraint is met by hand, as it would be on a phone that has one.)
+        driver.setAllConstraintsMet(waiting.id)
+        assertEquals("still waiting for its delay", 0, uploadWork("call-1").single().runAttemptCount)
+        driver.setInitialDelayMet(waiting.id)
+        pumpUntil("the upload to start") {
+            uploadWork("call-1").single().let { it.runAttemptCount > 0 || it.state != WorkInfo.State.ENQUEUED }
+        }
+    }
+
+    @Test
+    fun `the v2 card says Saved with Undo for six seconds when calls are kept automatically, and Undo is the delayed discard`() {
+        overlayAllowed(true)
+        val rec = call()
+        PostCallPrompt.show(
+            app,
+            rec,
+            PostCallPrompt.KEEP,
+            "dark",
+            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
+        )
+        assertTrue(DecisionPopup.showingV2)
+        assertEquals(DecisionPopup.Mode.SAVED, DecisionPopup.showingMode)
+        compose.onNodeWithText("Saved").assertExists()
+        // The upload waits out the card's six seconds (the same timer as classic's chip, tested above).
+        assertTrue(DecisionPopup.isShowing)
+        assertEquals(DecisionPopup.SAVED_MS, 6_000L)
+        compose.onNodeWithText("Undo").performClick()
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertEquals("Deleted · Undo", DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
+        assertTrue("nothing deleted by the tap", app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
     @Test
     fun `without the flag the after-call chip is the classic one`() {
         overlayAllowed(true)

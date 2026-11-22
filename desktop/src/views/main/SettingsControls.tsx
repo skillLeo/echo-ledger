@@ -76,7 +76,7 @@ export function SelectRow<T extends string>({ id, title = titleOf(id), value, op
     <div className={`set-row ${disabled ? "disabled" : ""}`.trim()} {...rowAttrs(id)}>
       <label htmlFor={selectId} className="set-title">{title}</label>
       <select id={selectId} className="input set-select" style={width ? { width } : undefined} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value as T)}>
-        {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+        {options.map(([v, text]) => <option dir="auto" key={v} value={v}>{text}</option>)}
       </select>
     </div>
   );
@@ -155,7 +155,7 @@ export function LinkRow({ id, title = titleOf(id), value, onOpen, external = fal
       <span className="set-title">{title}</span>
       <span className="set-end">
         {value !== undefined && value !== null && value !== "" && <span className="set-value">{value}</span>}
-        {external && <LucideExternalLinkIcon size={18} className="set-trail" />}
+        {external && <LucideExternalLinkIcon size={18} className="set-trail set-ext" />}
         {chevron && !external && <LucideChevronRightIcon size={16} className="set-trail" />}
       </span>
     </button>

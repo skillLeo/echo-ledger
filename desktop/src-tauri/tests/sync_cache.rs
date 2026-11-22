@@ -680,3 +680,19 @@ async fn maintenance_or_a_refused_version_leaves_the_library_and_its_sync_positi
         assert_eq!(cache.since.as_deref(), Some("2026-10-24T08:00:00+00:00"));
     }
 }
+
+#[tokio::test]
+async fn opening_a_recording_tells_the_server_and_the_saved_copy_is_read_at_once() {
+    let server = MockServer::start(Router::new().fixed("POST", "/api/sessions/a/opened", Reply::empty(204)));
+    client(&server).session_opened("a").await.unwrap();
+    assert_eq!(server.requests_to("POST", "/api/sessions/a/opened").len(), 1);
+
+    let mut cache = LibraryCache::default();
+    let mut unread = item("a", "2026-10-24T08:00:00+00:00", "2026-10-24T08:00:00+00:00", "a");
+    unread.rest.insert("opened".into(), Value::Bool(false));
+    cache.items.push(unread);
+    assert!(cache.mark_opened("a"), "unread → read");
+    assert_eq!(cache.items[0].rest.get("opened"), Some(&Value::Bool(true)));
+    assert!(!cache.mark_opened("a"), "already read: nothing to save");
+    assert!(!cache.mark_opened("gone"), "not in the Library: nothing to save");
+}

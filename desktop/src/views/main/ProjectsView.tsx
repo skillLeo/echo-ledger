@@ -50,8 +50,28 @@ export function deletedText(name: string, answer: { moved_sessions?: number; mov
   return parts.join(" · ");
 }
 
-export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled, aiNotesInPlan = true, request = null, aside = null, renderPage = null }: {
+/** This page's name dialog, or the one the new design renders (one component type, so typing never remounts it). */
+function NameDialogSwitch({ render, ...props }: Parameters<typeof NameDialog>[0] & { render: ((props: Parameters<typeof NameDialog>[0]) => ReactNode) | null }) {
+  return render ? <>{render(props)}</> : <NameDialog {...props} />;
+}
+
+/** What the new design's list of projects is given. */
+export type ProjectsListContext = {
+  projects: ClientFolder[] | null;
+  error: string | null;
+  onReload: () => void;
+  items: readonly LibraryItem[];
+  expanded: ReadonlySet<string>;
+  onToggle: (id: string) => void;
+  onOpenProject: (id: string) => void;
+  onNew: () => void;
+  onRequest: (() => void) | null;
+};
+
+export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled, aiNotesInPlan = true, request = null, aside = null, renderPage = null, onRequestLink, renderList = null, renderNameDialog = null }: {
   notify: Notify;
+  /** The new design's Request files sheet (into a project, or the Inbox); without it this page's own sheet opens. */
+  onRequestLink?: (projectId: string | null) => void;
   /** Every project; null while they load. */
   projects: ClientFolder[] | null;
   /** Why they could not be loaded. */
@@ -78,6 +98,10 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   aside?: ReactNode;
   /** A project's page in the new look (ui_v2.ask) in place of today's; the dialogs stay this page's. */
   renderPage?: ((ctx: ProjectPageContext) => ReactNode) | null;
+  /** The new design's list of projects; this page's dialogs stay with it. */
+  renderList?: ((ctx: ProjectsListContext) => ReactNode) | null;
+  /** The new design's name dialog (New project, New folder inside, Rename) in place of this page's. */
+  renderNameDialog?: ((props: Parameters<typeof NameDialog>[0]) => ReactNode) | null;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -188,11 +212,11 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   const dialogs = dialog && (
     <>
       {dialog.kind === "new" && (
-        <NameDialog title={dialog.parentId ? `New folder in ${projectLabel(list, dialog.parentId)}` : "New project"} submitLabel={dialog.parentId ? "Add folder" : "Add project"}
+        <NameDialogSwitch render={renderNameDialog} title={dialog.parentId ? `New folder in ${projectLabel(list, dialog.parentId)}` : "New project"} submitLabel={dialog.parentId ? "Add folder" : "Add project"}
           hint={dialog.parentId ? "A folder keeps some of the project's recordings and files apart. It has its own notes and Ask." : "A project keeps its calls, files, a brief and notes together, and Ask answers from all of them."}
           onSubmit={(name) => create(name, dialog.parentId)} onClose={close} />
       )}
-      {dialog.kind === "rename" && <NameDialog title={`Rename ${dialog.project.name}`} initial={dialog.project.name} submitLabel="Rename" onSubmit={(name) => rename(dialog.project, name)} onClose={close} />}
+      {dialog.kind === "rename" && <NameDialogSwitch render={renderNameDialog} title={`Rename ${dialog.project.name}`} initial={dialog.project.name} submitLabel="Rename" onSubmit={(name) => rename(dialog.project, name)} onClose={close} />}
       {dialog.kind === "move" && <MoveProjectDialog project={dialog.project} projects={list} onMove={(parentId) => move(dialog.project, parentId)} onClose={close} />}
       {dialog.kind === "delete" && (
         <DeleteProjectDialog project={dialog.project} recordings={Math.max(dialog.project.session_count ?? 0, items.filter((i) => !i.deleted && i.client?.id === dialog.project.id).length)}
@@ -211,7 +235,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       nested && { label: "Move…", onPick: () => setDialog({ kind: "move", project }) },
       nested && { label: "Share link…", onPick: () => setDialog({ kind: "share", project, start: "link" }) },
       nested && { label: "Send to a teammate…", onPick: () => setDialog({ kind: "share", project, start: "send" }) },
-      requests && { label: "Request files into it…", onPick: () => setDialog({ kind: "requests", projectId: project.id, focusId: null }) },
+      requests && { label: "Request files into it…", onPick: () => (onRequestLink ? onRequestLink(project.id) : setDialog({ kind: "requests", projectId: project.id, focusId: null })) },
       nested && { label: "Delete project…", danger: true, onPick: () => setDialog({ kind: "delete", project }) },
     ];
     const share = nested && (
@@ -253,13 +277,25 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
     );
   }
 
+  if (renderList) {
+    return (
+      <>
+        {renderList({
+          projects, error, onReload: () => void onReload(), items, expanded, onToggle, onOpenProject: (id) => onOpenProject(id),
+          onNew: () => setDialog({ kind: "new", parentId: null }),
+          onRequest: requests ? () => (onRequestLink ? onRequestLink(null) : setDialog({ kind: "requests", projectId: null, focusId: null })) : null,
+        })}
+        {dialogs}
+      </>
+    );
+  }
   return (
     <div className="projects-home">
       <PageHeader crumbs={[{ label: "Projects" }]} title="Projects"
         subtitle="Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in the Inbox."
         actions={<>
           {requests && (
-            <button type="button" className="btn" onClick={() => setDialog({ kind: "requests", projectId: null, focusId: null })} title="A link anyone can use to send you voice notes and files">
+            <button type="button" className="btn" onClick={() => (onRequestLink ? onRequestLink(null) : setDialog({ kind: "requests", projectId: null, focusId: null }))} title="A link anyone can use to send you voice notes and files">
               <RequestFilesIcon size={16} />Request files
             </button>
           )}

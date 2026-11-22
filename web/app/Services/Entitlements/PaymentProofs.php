@@ -279,7 +279,7 @@ final class PaymentProofs
         $user = $request->user;
         $this->audit->record('upgrade_receipt_requested', $staff->id, $request, "New receipt asked for {$request->reference_code} of ".$user->email);
         Mail::to($user->email)->queue(new UpgradeReceiptRequestedMail($plan, (string) $request->reference_code, $note, UpgradeRequests::accountUrl()));
-        app(ActivityFeed::class)->post($user, 'upgrade_receipt_requested', "We need another receipt for {$plan}", $note, null, 'heroicon-o-document-magnifying-glass');
+        app(ActivityFeed::class)->post($user, 'upgrade_receipt_requested', ActivityFeed::line('We need another receipt for :plan', ['plan' => $plan]), $note, null, 'heroicon-o-document-magnifying-glass');
 
         return $request;
     }
@@ -490,7 +490,7 @@ final class PaymentProofs
     }
 
     /** Turns the picture as its EXIF orientation (1–8) says. */
-    private static function upright(GdImage $image, int $orientation): GdImage
+    public static function upright(GdImage $image, int $orientation): GdImage
     {
         $rotate = fn (GdImage $i, int $degrees): GdImage => imagerotate($i, $degrees, 0) ?: $i;
         switch ($orientation) {
@@ -523,7 +523,7 @@ final class PaymentProofs
     }
 
     /** The orientation tag (0x0112) of a JPEG's EXIF block, read without the exif extension; 1 when there is none. */
-    private static function jpegOrientation(string $path): int
+    public static function jpegOrientation(string $path): int
     {
         $data = (string) file_get_contents($path, false, null, 0, 256 * 1024);
         $offset = 2;

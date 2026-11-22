@@ -385,7 +385,14 @@ data class CreateSessionRequest(
     /** Imports (since 1.4): skip a file the Library already has (`409 duplicate_recording`). Left out when false. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    @SerialName("skip_duplicate") val skipDuplicate: Boolean = false
+    @SerialName("skip_duplicate") val skipDuplicate: Boolean = false,
+    /**
+     * Audio only (2.0.0-j): false keeps it as audio, with no transcript started (Save audio after a call); left out
+     * when null, so the server transcribes as before.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val transcribe: Boolean? = null
 )
 
 @Serializable
@@ -436,7 +443,14 @@ data class FinishSessionRequest(
     /** Who the call was with, when the phone saw it (since v1.2). */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val caller: CallerDto? = null
+    val caller: CallerDto? = null,
+    /**
+     * Audio only (2.0.0-j): false keeps it as audio, with no transcript started (Save audio after a call); left out
+     * when null, so the server transcribes as before.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val transcribe: Boolean? = null
 )
 
 /** Caller names (since v1.2): who a recording was with and where the phone saw the name. */
@@ -498,7 +512,15 @@ data class LibraryItem(
     /** How it got its project (since v1.5): "user", "contact", "rule", or null (the Inbox). */
     @SerialName("filed_by") val filedBy: String? = null,
     /** Screen moments kept during the meeting (since v1.5); null from an older server. */
-    @SerialName("screen_count") val screenCount: Int? = null
+    @SerialName("screen_count") val screenCount: Int? = null,
+    /** The person flagged it (contract 2.0.0-i). */
+    val important: Boolean = false,
+    /** The colours of its labels that have one, `{label: "#rrggbb"}` (contract 2.0.0-i). */
+    @SerialName("label_colors") val labelColors: Map<String, String> = emptyMap(),
+    /** When retention moves it to Trash (contract 2.0.0-i); null when kept forever or still recording. */
+    @SerialName("expires_at") val expiresAt: String? = null,
+    /** An audio-only recording (2.0.0-j): the plan minutes its transcript would use and the month's minutes left. */
+    @SerialName("transcribe_estimate") val transcribeEstimate: TranscribeEstimateDto? = null
 )
 
 @Serializable
@@ -522,7 +544,9 @@ data class TranscriptSummary(
     /** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
     @SerialName("final_progress") val finalProgress: ProgressDto? = null,
     /** The views of the finished transcript (since v1.5): being made and how far, for "Improving Roman Urdu… 60%". */
-    val views: RowViewsDto? = null
+    val views: RowViewsDto? = null,
+    /** Which words [preview] is in (contract 2.0.0-n): "roman", "urdu", "english" or "original" (the default view once ready). */
+    @SerialName("preview_view") val previewView: String? = null
 )
 
 /** A Library row's views (since v1.5, Phase 1C): `{"status": "making", "default": "roman", "progress": {"roman": {…}}}`. */
@@ -713,7 +737,9 @@ data class AuthOptionsDto(
     @SerialName("sign_up") val signUp: Boolean = false,
     @SerialName("sign_up_url") val signUpUrl: String? = null,
     @SerialName("reset_url") val resetUrl: String? = null,
-    @SerialName("browser_sign_in") val browserSignIn: Boolean = true
+    @SerialName("browser_sign_in") val browserSignIn: Boolean = true,
+    /** Since 2.0.0-l: what a new password needs, so the phone can say so before sending; the server still decides. */
+    @SerialName("password_rules") val passwordRules: PasswordRulesDto? = null
 )
 
 @Serializable
@@ -741,6 +767,13 @@ data class SegmentDto(
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val words: List<WordDto> = emptyList(),
+    /**
+     * The language this line was heard in (since 2.0.0-o: `ur`, `en`, `ar`…), null when the engine did not say; the
+     * page can skip a language's lines (null lines always show). Sent with live captions only when known.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val language: String? = null,
     /** The engine was not sure of this line (since v1.2); kept as heard. Never sent by the phone. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -884,8 +917,14 @@ data class SessionDetailDto(
     /** Bookmarks on the recording, in time order (since v1.1). */
     val markers: List<SessionMarkerDto> = emptyList(),
     /** Renamed speakers: label in the segments → name (since v1.1). */
-    @SerialName("speaker_names") val speakerNames: Map<String, String> = emptyMap()
+    @SerialName("speaker_names") val speakerNames: Map<String, String> = emptyMap(),
+    /** The recording's files (the primary one first): their size for Details. */
+    val recordings: List<RecordingFileDto> = emptyList()
 )
+
+/** One of a recording's files in `GET /api/sessions/{id}`. */
+@Serializable
+data class RecordingFileDto(val id: String, val role: String = "primary", @SerialName("size_bytes") val sizeBytes: Long = 0)
 
 @Serializable
 data class SessionMarkerDto(val id: String, @SerialName("at_ms") val atMs: Long, val tag: String? = null, val note: String? = null)
@@ -943,8 +982,14 @@ data class SharedItemDto(
     val client: ClientDto? = null
 )
 
+/** A person shown beside an item; since 2.0.0-l with their picture ([avatarUrl] null: initials). */
 @Serializable
-data class SenderDto(val name: String? = null, val email: String? = null)
+data class SenderDto(
+    val name: String? = null,
+    val email: String? = null,
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("avatar_version") val avatarVersion: Long? = null
+)
 
 /** What you sent of a recording or a project (`GET /api/sent`, since v1.5). */
 @Serializable
@@ -995,6 +1040,45 @@ data class ClientResponse(val data: ClientDto)
 
 @Serializable
 data class BulkAnswer(val changed: Int = 0)
+
+/** A Library item's `transcribe_estimate` (2.0.0-j); [minutesLeft] null: no limit. */
+@Serializable
+data class TranscribeEstimateDto(val minutes: Long = 0, @SerialName("minutes_left") val minutesLeft: Long? = null)
+
+/** The transcript `POST /api/sessions/{id}/transcribe` started. */
+@Serializable
+data class StartedTranscriptDto(
+    val id: String,
+    val kind: String? = null,
+    val provider: String? = null,
+    val status: String? = null,
+    val language: String? = null
+)
+
+@Serializable
+data class SessionTranscribeAnswer(val session: LibraryItem, val transcript: StartedTranscriptDto)
+
+@Serializable
+data class TranscribeEstimateItem(val id: String, val minutes: Long = 0)
+
+/** `POST /api/sessions/transcribe-estimate`: only the person's audio-only recordings among the ids are in [items]. */
+@Serializable
+data class TranscribeEstimateAnswer(
+    val minutes: Long = 0,
+    @SerialName("minutes_left") val minutesLeft: Long? = null,
+    val items: List<TranscribeEstimateItem> = emptyList()
+)
+
+@Serializable
+data class TranscribeSkipped(val id: String, val code: String? = null)
+
+/** `POST /api/sessions/transcribe`: the ones started, the ones skipped (and why), the minutes they use. */
+@Serializable
+data class TranscribeManyAnswer(
+    val started: List<String> = emptyList(),
+    val skipped: List<TranscribeSkipped> = emptyList(),
+    val minutes: Long = 0
+)
 
 /** `GET /api/activity` (since v1.1, B18): the activity centre. */
 @Serializable
@@ -1136,7 +1220,17 @@ data class AccountDto(
     val google: Boolean = false,
     @SerialName("created_at") val createdAt: String? = null,
     val workspace: AccountWorkspaceDto? = null,
-    @SerialName("deletes_at") val deletesAt: String? = null
+    @SerialName("deletes_at") val deletesAt: String? = null,
+    /** Since 2.0.0-l: the person's picture, null for initials; [avatarVersion] changes only when the picture does. */
+    @SerialName("avatar_url") val avatarUrl: String? = null,
+    @SerialName("avatar_version") val avatarVersion: Long? = null,
+    /** False for an account made with Google that never set a password (it proves itself with an email code). */
+    @SerialName("has_password") val hasPassword: Boolean = true,
+    /** A new address waiting for its code or link; null once confirmed, cancelled, blocked or expired. */
+    @SerialName("pending_email") val pendingEmail: String? = null,
+    @SerialName("pending_email_expires_at") val pendingEmailExpiresAt: String? = null,
+    /** False when this server is not set up for phone passkeys: they are managed on the website. */
+    @SerialName("passkeys_available") val passkeysAvailable: Boolean = false
 )
 
 @Serializable
@@ -1230,3 +1324,22 @@ data class ConfigWorkspaceDto(val id: Long? = null, val name: String? = null, va
 /** `GET /api/library/views` (since v1.5 its `folders`): how many recordings each smart folder lists on the server. */
 @Serializable
 data class LibraryViewsDto(val folders: Map<String, Int>? = null)
+
+/**
+ * One of the person's lists (contract 2.0.0-m): a label with its name, colour and place in the Library's chip row.
+ * [key] is the name in lower case and names it in `/api/lists/{key}`; [color] is `#rrggbb` or null (made by labelling).
+ */
+@Serializable
+data class ListDto(val key: String, val name: String, val color: String? = null, val position: Int = 0, val count: Int = 0)
+
+/** `GET /api/lists` and `PUT /api/lists/order`: the lists in their order. */
+@Serializable
+data class ListsResponse(val data: List<ListDto> = emptyList())
+
+/** `POST /api/lists` and `PATCH /api/lists/{key}`: the list as it is now. */
+@Serializable
+data class ListResponse(val data: ListDto)
+
+/** `DELETE /api/lists/{key}`: the list gone and how many recordings lost its label. */
+@Serializable
+data class ListDeletedAnswer(val key: String, val changed: Int = 0)

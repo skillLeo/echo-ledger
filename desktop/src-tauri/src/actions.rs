@@ -366,6 +366,31 @@ pub async fn toggle_recording(app: &AppHandle) -> AppResult<()> {
 /// Smaller than any real recording: the container headers alone are a few hundred bytes.
 const MIN_AUDIO_BYTES: u64 = 1024;
 
+/// A recording with nothing in it: nothing reached the app's input.
+pub(crate) const NO_SOUND: &str = "No sound was captured, so nothing was saved. Check your microphone and the audio device, then try again.";
+/// A recording of exact zeros on both sides (D-168): the input runs but the system hands over silence, as macOS does
+/// for an app it doesn't let use the microphone and the computer's sound (a build not signed as the one allowed).
+pub(crate) const WITHHELD: &str = "Your computer gave EchoLedger only silence, so nothing was saved. Allow EchoLedger in System Settings › Privacy & Security › Microphone and System Audio Recording, then try again.";
+
+/// What the "nothing was saved" notice says (pure).
+pub(crate) fn silent_recording_message(withheld: bool) -> &'static str {
+    if withheld { WITHHELD } else { NO_SOUND }
+}
+
+/// Whether both sides ran for over a second and every sample was exactly zero (D-168). A microphone that is merely
+/// quiet or muted still has its noise floor a few steps above zero; a moment too short to tell, or a side that wrote
+/// nothing, is not counted.
+pub(crate) fn input_withheld(mic_wav: &std::path::Path, system_wav: &std::path::Path) -> bool {
+    let silent_for_a_second = |path: &std::path::Path| -> bool {
+        let Ok(mut reader) = hound::WavReader::open(path) else { return false };
+        if reader.duration() < 16_000 {
+            return false;
+        }
+        reader.samples::<i16>().all(|s| matches!(s, Ok(0)))
+    };
+    silent_for_a_second(mic_wav) && silent_for_a_second(system_wav)
+}
+
 /// A recording started: fresh session link, pill shown (unless the user hides it later), state ticker running.
 fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     let state = app.state::<crate::AppState>();
@@ -532,12 +557,14 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     // recording the server would reject (the server enforces the same floor).
     let silent = std::fs::metadata(&finished.output.primary).map(|m| m.len() < MIN_AUDIO_BYTES).unwrap_or(true);
     if silent {
+        // Read before the folder goes: exact zeros mean the system withheld the input (D-168), not a quiet microphone.
+        let withheld = input_withheld(&finished.output.mic_wav, &finished.output.system_wav);
         crate::recovery::delete_recording_folder(&finished.output.dir);
         crate::screens::forget(app, &client_ref);
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
-        crate::refusal::say(app, "No sound was captured, so nothing was saved. Check your microphone and the audio device, then try again.", crate::refusal::Asked::Other);
+        crate::refusal::say(app, silent_recording_message(withheld), crate::refusal::Asked::Other);
         return Ok(());
     }
 
@@ -1999,5 +2026,50 @@ mod start_up_tests {
         let gate = outside.find("if !ready_or_queue(&OUTSIDE, args) || app.try_state::<crate::AppState>().is_none() {").expect("gated");
         assert!(gate < outside.find("handle_links(app, args)").unwrap() && gate < outside.find(".state::<crate::AppState>()").unwrap());
         assert!(lib.contains("tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))"));
+    }
+}
+
+#[cfg(test)]
+mod silence_tests {
+    use super::{NO_SOUND, WITHHELD, input_withheld, silent_recording_message};
+    use std::path::Path;
+
+    fn wav(path: &Path, samples: &[i16]) {
+        let spec = hound::WavSpec { channels: 1, sample_rate: 16_000, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
+        let mut w = hound::WavWriter::create(path, spec).unwrap();
+        for &s in samples {
+            w.write_sample(s).unwrap();
+        }
+        w.finalize().unwrap();
+    }
+
+    // D-168: an unsigned build got only zeros from macOS for 3 s of a voice note, and said "check your microphone".
+    #[test]
+    fn exact_zeros_on_both_sides_for_over_a_second_mean_macos_withheld_the_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mic, sys) = (dir.path().join("mic.wav"), dir.path().join("system.wav"));
+        wav(&mic, &vec![0; 48_000]);
+        wav(&sys, &vec![0; 48_000]);
+        assert!(input_withheld(&mic, &sys));
+        assert_eq!(silent_recording_message(true), WITHHELD);
+        assert!(WITHHELD.contains("System Settings") && WITHHELD.contains("Microphone"));
+    }
+
+    #[test]
+    fn a_real_quiet_microphone_or_a_moment_too_short_is_not_withheld() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mic, sys) = (dir.path().join("mic.wav"), dir.path().join("system.wav"));
+        // A muted microphone still has its noise floor: a few steps above zero.
+        let noise: Vec<i16> = (0..48_000).map(|i| [0, 2, -1, 3, -2][i % 5]).collect();
+        wav(&mic, &noise);
+        wav(&sys, &vec![0; 48_000]);
+        assert!(!input_withheld(&mic, &sys));
+        // Started and stopped at once: too short to tell.
+        wav(&mic, &vec![0; 4_000]);
+        wav(&sys, &vec![0; 4_000]);
+        assert!(!input_withheld(&mic, &sys));
+        // No files: not withheld either (the plain message).
+        assert!(!input_withheld(&dir.path().join("none.wav"), &sys));
+        assert_eq!(silent_recording_message(false), NO_SOUND);
     }
 }

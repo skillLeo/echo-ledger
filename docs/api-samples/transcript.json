@@ -65,7 +65,8 @@
                     "end_ms": 3565,
                     "confidence": 0.97
                 }
-            ]
+            ],
+            "language": "en"
         },
         {
             "channel": 2,
@@ -134,7 +135,8 @@
                     "end_ms": 8645,
                     "confidence": 0.97
                 }
-            ]
+            ],
+            "language": null
         },
         {
             "channel": 1,
@@ -203,7 +205,8 @@
                     "end_ms": 13905,
                     "confidence": 0.97
                 }
-            ]
+            ],
+            "language": null
         },
         {
             "channel": 2,
@@ -260,7 +263,8 @@
                     "end_ms": 18305,
                     "confidence": 0.97
                 }
-            ]
+            ],
+            "language": null
         }
     ],
     "error": null,

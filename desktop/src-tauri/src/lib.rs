@@ -24,6 +24,7 @@ pub mod lock;
 pub mod mac_check;
 mod main_thread;
 pub mod material;
+pub mod my_account;
 pub mod net;
 pub mod notifications;
 pub mod overlay;
@@ -39,7 +40,9 @@ pub mod receipts;
 pub mod recovery;
 pub mod refusal;
 pub mod screens;
+pub mod secret_copy;
 pub mod settings;
+pub mod share_sheet;
 pub mod sharing;
 pub mod shortcuts;
 pub mod skipped;
@@ -585,6 +588,11 @@ pub fn run() {
             commands::sign_in_browser_cancel,
             commands::unpair,
             commands::account_get,
+            commands::account_call,
+            commands::account_avatar_choose,
+            commands::account_avatar_image,
+            commands::account_recovery_codes_save,
+            commands::account_recovery_codes_copy,
             commands::account_sign_out_everywhere,
             commands::account_delete,
             commands::account_export_start,
@@ -642,6 +650,7 @@ pub fn run() {
             commands::save_audio,
             commands::save_audio_downloads,
             commands::whatsapp_open,
+            commands::whatsapp_share_voice,
             commands::copy_last_minutes,
             commands::library_list,
             commands::library_refresh,
@@ -702,6 +711,12 @@ pub fn run() {
             commands::sessions_transcribe,
             commands::sessions_transcribe_estimate,
             commands::client_create,
+            commands::session_opened,
+            commands::lists_get,
+            commands::list_create,
+            commands::list_update,
+            commands::list_delete,
+            commands::lists_order,
             commands::client_update,
             commands::client_delete,
             commands::library_views,
@@ -807,6 +822,10 @@ pub fn run() {
         #[cfg(target_os = "macos")]
         if let RunEvent::Reopen { .. } = &event {
             actions::show_main_from_outside(handle, &[]);
+        }
+        // Quitting: recovery codes copied a moment ago leave the clipboard with the app.
+        if let RunEvent::Exit = &event {
+            secret_copy::clear_now_on_main_thread(handle);
         }
         if let RunEvent::ExitRequested { code, api, .. } = &event {
             // The last window closed (no code): EchoLedger keeps running. A Quit (app.exit) or the updater's restart exits.

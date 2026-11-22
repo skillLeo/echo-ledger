@@ -2,16 +2,18 @@
 // reloaded on library:updated), as WhatsApp-style rows with the saved views All, Today, Untranscribed and Trash. One
 // feedback system: the Toast, one at a time, with Undo after a delete. Selection mode (Select, a Cmd/Ctrl- or Shift-click,
 // Cmd/Ctrl+A or X) picks several; the row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+// Lists (D14, lists.tsx): the chip row under the search shows All, Unread, Important or one of the person's lists.
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type SearchResult } from "../../lib/ipc";
+import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
+import { folderKnownHere, folderLabel, inFolderHere } from "../../lib/folders";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Banner, Breadcrumbs, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
@@ -22,22 +24,36 @@ import {
 } from "./filters";
 import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { recordingName, searchItems, type SortKey } from "../../lib/library";
+import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
+import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type Density, type Preferences } from "../../lib/shell";
 import { RecordingPage } from "./RecordingPage";
+import { useRowViews } from "../../lib/rowViews";
 import { SourceAvatar } from "./SourceAvatar";
 import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
+import { QueueV2 } from "./QueueV2";
+import { addToListMenu, inPlace, listKey, ListsRow, placeGone, placeName, unreadCount, useLists, type Place } from "./lists";
 import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
-  copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
+  copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, shownExportView, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
   TranscribeDialog, WhatsAppDialog,
 } from "./organise";
 
 /** What the recording page adds to the one menu: its language item, its view-aware Export ▸, Save audio. */
-export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void };
+/** The recording page's own parts of the menu; `ai` copies for AI in the view on screen (a row copies in its default view). */
+export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void; ai?: () => void };
 
 type Organise =
   | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null }
   | { kind: "rename" | "whatsapp"; item: LibraryItem };
+
+/** How often the list syncs while something uploads or is transcribed (classic's)… */
+export const RESYNC_MS = 5000;
+/** …for this long; something still under way after it (a transcript stuck waiting) is asked about once a minute. */
+export const RESYNC_FAST_FOR_MS = 10 * 60_000;
+export const RESYNC_SLOW_MS = 60_000;
+/** A transcript is being made for it. */
+const isUnderWay = (i: LibraryItem) => ["pending", "submitted", "processing"].includes(i.transcript?.final_status ?? "");
 
 /** The core's limits (src-tauri commands.rs MAX_BULK, MAX_TRANSCRIBE): more picked than this and the bar says so. */
 const MAX_BULK = 200;
@@ -50,20 +66,36 @@ const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 
 type Message = { id: number; text: string; action?: { label: string; run: () => void } };
 
+/** The views the When and Marked chips own: asked for from outside, they open as the chip with that value ticked. */
+const CHIP_VIEWS: Partial<Record<ListView, { key: FilterKey; value: string }>> = {
+  today: { key: "when", value: "today" }, this_week: { key: "when", value: "this_week" },
+  pinned: { key: "marked", value: "pinned" }, bookmarked: { key: "marked", value: "bookmarked" },
+};
+
 export type LibraryV2Props = {
   onImport?: () => void;
   onRecord?: () => void;
   /** Open this recording (a notice, the palette, a link); `seq` makes the same one open again. */
   openRequest?: { id: string; seq: number; ms?: number } | null;
+  /** Open the waiting recordings at the top of the list (Activity's Review); `seq` makes it open again. */
+  reviewRequest?: { seq: number } | null;
   /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
   viewRequest?: { view: SavedView; seq: number } | null;
+  /** A smart folder of the sidebar (classic's: the Inbox, an app, Voice notes, Imported); null for every recording. */
+  folder?: SmartFolder | null;
+  /** The folder's way back to every recording (its chip's ×, Clear all). */
+  onFolder?: (folder: SmartFolder | null) => void;
   /** Library as the start screen (plan 2): the get-started card and the needs-action banner on top. */
   top?: Omit<LibraryTopProps, "items" | "onAction"> & { onActivity: () => void };
   /** Opens a project (the recording page's project name). */
   onOpenProject?: (id: string) => void;
+  /** The recording that was open when the main window was last closed: opened again once it is known. */
+  initialOpen?: string | null;
+  /** The open recording changed (null: back to the list), to be kept for the next main window. */
+  onOpenChange?: (id: string | null) => void;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, onOpenProject }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,17 +104,52 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
   const [openId, setOpenIdNow] = useState<string | null>(null);
   // Recently opened (Sort by) remembers each recording opened here.
   const [opened, setOpened] = useState<Record<string, number>>(() => loadOpened());
+  // Opened here since the Library loaded: read at once (Unread and its count), before the server's word comes back.
+  const [readHere, setReadHere] = useState<ReadonlySet<string>>(new Set());
   const setOpenId = useCallback((id: string | null) => {
-    if (id) setOpened(rememberOpened(id));
+    if (id) {
+      setOpened(rememberOpened(id));
+      setReadHere((r) => (r.has(id) ? r : new Set(r).add(id)));
+      // Read on every device (POST /api/sessions/{id}/opened). Offline it stays read here; the dot is only a hint.
+      void api.markOpened(id).catch(() => undefined);
+    }
     setOpenIdNow(id);
   }, []);
   const [filters, setFilters] = useState<Filters>({});
+  // Lists (D14): the chip chosen in the row, and the new-list dialog (from "+", or Add to list › New list… with its ids).
+  const { lists, setLists, reload: reloadLists } = useLists();
+  const [place, setPlace] = useState<Place>("all");
+  const [creatingList, setCreatingList] = useState<{ ids: string[] } | null>(null);
+  // The chosen list was deleted or renamed (here, on another device, or found missing): back to All.
+  useEffect(() => {
+    if (placeGone(place, lists)) setPlace("all");
+  }, [place, lists]);
+  // Density, shared with Settings › Appearance (classic's View menu has it too): both follow each other at once.
+  const [density, setDensityNow] = useState<Density>(() => loadPreferences().density);
+  useEffect(() => {
+    const follow = (e: Event) => {
+      const prefs = (e as CustomEvent<Preferences>).detail;
+      setDensityNow(prefs?.density ?? loadPreferences().density);
+    };
+    window.addEventListener(PREFERENCES_EVENT, follow);
+    return () => window.removeEventListener(PREFERENCES_EVENT, follow);
+  }, []);
+  const setDensity = (next: Density) => {
+    const prefs = { ...loadPreferences(), density: next };
+    savePreferences(prefs);
+    setDensityNow(next);
+    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: prefs }));
+  };
   /** The words of each value when it was ticked, for a chip whose value this view doesn't offer. */
   const knownValues = useRef<Record<string, string>>({});
   // Sort and group, remembered per view on this computer (classic's View menu).
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
+  // What the queue shows with its own Review: the banner above it leaves those out (one Review for each thing).
+  const [queueShows, setQueueShows] = useState<{ waiting: boolean; failed: boolean }>({ waiting: false, failed: false });
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
+  // The server didn't answer a sync: the list shown is what this computer saved (classic's banner, with Retry).
+  const [syncError, setSyncError] = useState<string | null>(null);
   // Show as List or Table, and the table's columns, kept on this computer (classic's).
   const [layout, setLayoutNow] = useState<Layout>(loadLayout);
   const [columns, setColumnsNow] = useState<Column[]>(loadColumns);
@@ -139,13 +206,34 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
     }
   }, []);
 
+  // The rows' "Converting to Roman Urdu… 60%" (U19): asked about while written; once one is ready or failed the
+  // Library syncs, for the title the server may have written in Roman Urdu meanwhile.
+  const quietSync = useCallback(() => {
+    api.refreshLibrary().then(setItems).catch(() => undefined);
+  }, []);
+  const rowViews = useRowViews(items, quietSync);
   useEffect(() => {
-    void load().then(() => api.refreshLibrary().then(setItems).catch(() => undefined));
+    void load().then(() => api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e))));
     const un = listen("library:updated", () => void load());
     return () => {
       void un.then((f) => f());
     };
   }, [load]);
+  // While something uploads or is transcribed the list syncs every 5 s (classic's), until nothing is under way.
+  const busyItems = (items ?? []).some((i) => !i.deleted && (i.status === "uploading" || isUnderWay(i)));
+  useEffect(() => {
+    if (!busyItems) return;
+    const started = Date.now();
+    let timer = 0;
+    const next = () => {
+      timer = window.setTimeout(() => {
+        api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e)));
+        next();
+      }, Date.now() - started < RESYNC_FAST_FOR_MS ? RESYNC_MS : RESYNC_SLOW_MS);
+    };
+    next();
+    return () => window.clearTimeout(timer);
+  }, [busyItems]);
   useEffect(() => {
     if (view === "trash") void loadBin();
     else setChoiceNow(loadChoice(view));
@@ -160,8 +248,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
     try {
       setItems(await api.refreshLibrary());
       setError(null);
+      setSyncError(null);
     } catch (e) {
-      say(errorMessage(e));
+      setSyncError(errorMessage(e));
     } finally {
       setSyncing(false);
     }
@@ -173,16 +262,81 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
    */
   const listOf = (all: readonly LibraryItem[] | null) => {
     if (!all || view === "trash") return { groups: [], rows: [] as LibraryItem[], matching: 0 };
-    const inThis = applyFilters(all.filter((i) => inView(i, view as ListView)), filters);
+    const inThis = applyFilters(all.filter((i) => inView(i, view as ListView) && inPlace(i, place, readHere) && inFolder(i)), filters);
     const groups = sections(searchItems(inThis, query), choice.group, choice.sort, opened, view !== "pinned");
     return { groups, rows: groups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.items), matching: groups.reduce((n, g) => n + g.items.length, 0) };
   };
+  // A view the chips own (the sidebar's Pinned, the palette's Today) opens as that chip, the rest as the view.
   useEffect(() => {
-    if (viewRequest) {
-      setOpenId(null);
-      setView(viewRequest.view);
-    }
+    if (!viewRequest) return;
+    setOpenId(null);
+    const chip = CHIP_VIEWS[viewRequest.view as ListView];
+    if (chip) {
+      setView("all");
+      setFilters({ [chip.key]: [chip.value] });
+    } else setView(viewRequest.view);
   }, [viewRequest]);
+  // A smart folder: what this computer can tell (the Inbox, an app's calls), else the server's list (Imported).
+  const [folderIds, setFolderIds] = useState<ReadonlySet<string> | null>(null);
+  // The server's list of the folder didn't come: said above the list, with Try again (what this computer can tell
+  // shows meanwhile).
+  const [folderError, setFolderError] = useState<string | null>(null);
+  const [folderTry, setFolderTry] = useState(0);
+  const [folderTrying, setFolderTrying] = useState(false);
+  useEffect(() => {
+    setFolderIds(null);
+    setFolderError(null);
+    if (!folder) return;
+    setOpenId(null);
+    setView("all");
+  }, [folder]);
+  useEffect(() => {
+    if (!folder) return;
+    let live = true;
+    setFolderTrying(true);
+    api.libraryFolder(folder).then((list) => {
+      if (!live) return;
+      setFolderIds(new Set(list.filter((i) => !i.deleted).map((i) => i.id)));
+      setFolderError(null);
+    }).catch((e) => live && setFolderError(errorMessage(e))).finally(() => live && setFolderTrying(false));
+    return () => {
+      live = false;
+    };
+  }, [folder, folderTry]);
+  const inFolder = (i: LibraryItem) => {
+    if (!folder) return true;
+    if (folderIds) return folderIds.has(i.id);
+    return inFolderHere(i, folder) ?? false;
+  };
+  // The recording open when the main window closed opens again (classic's), once; what is opened after is kept.
+  const restored = useRef(false);
+  const restoredId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialOpen || restored.current) return;
+    restored.current = true;
+    restoredId.current = initialOpen;
+    setOpenIdNow((now) => now ?? initialOpen);
+  }, [initialOpen]);
+  // The kept recording was deleted (or is gone) since: once the list has loaded it isn't open, and isn't kept either.
+  useEffect(() => {
+    const id = restoredId.current;
+    if (!id || !items) return;
+    restoredId.current = null;
+    if (!items.some((i) => i.id === id && !i.deleted)) setOpenIdNow((now) => (now === id ? null : now));
+  }, [items, initialOpen]);
+  const reported = useRef<string | null | undefined>(undefined);
+  const onOpenChangeRef = useRef(onOpenChange);
+  onOpenChangeRef.current = onOpenChange;
+  useEffect(() => {
+    // Not on the first draw: the kept recording isn't forgotten before it is read back.
+    if (reported.current === undefined) {
+      reported.current = openId;
+      return;
+    }
+    if (reported.current === openId) return;
+    reported.current = openId;
+    onOpenChangeRef.current?.(openId);
+  }, [openId]);
   useEffect(() => {
     if (openRequest) {
       setView("all");
@@ -309,6 +463,24 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
       say(errorMessage(e));
     }
   };
+  /**
+   * Add to list: the chosen recordings go in the list or come out of it, with Undo. Undo changes only the recordings
+   * this changed: one already in the list stays in it, one already out of it stays out.
+   */
+  const putInList = async (ids: readonly string[], list: ListItem, on: boolean) => {
+    const inList = (id: string) => (items?.find((i) => i.id === id)?.labels ?? []).some((l) => listKey(l) === list.key);
+    const changed = ids.filter((id) => inList(id) !== on);
+    try {
+      await api.bulkSessions([...ids], on ? "label" : "unlabel", null, list.name);
+      say(on ? `Added to ${list.name}` : `Removed from ${list.name}`, changed.length ? {
+        label: "Undo",
+        run: () => void api.bulkSessions(changed, on ? "unlabel" : "label", null, list.name).then(() => Promise.all([load(), reloadLists()])).catch((e) => say(errorMessage(e))),
+      } : undefined);
+      await Promise.all([load(), reloadLists()]);
+    } catch (e) {
+      say(errorMessage(e));
+    }
+  };
   const bulk = async (ids: readonly string[], action: BulkAction, done: string) => {
     try {
       const changed = await api.bulkSessions([...ids], action);
@@ -332,11 +504,18 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
     const none = (test: (i: LibraryItem) => boolean) => !chosen.some(test);
     const list: (MenuItem & { key: string })[] = [];
     const add = (key: string, item: MenuItem) => { if (!without.has(key)) list.push({ key, ...item }); };
-    if (one) add("open", { label: "Open", onPick: () => setOpenId(one.id) });
+    if (one) add("open", { label: "Open", icon: Icons.TranscriptIcon, onPick: () => setOpenId(one.id) });
+    // The same selection mode X and Select start, with this recording ticked.
+    if (one && !selecting) add("select", { label: "Select", icon: Icons.SelectIcon, shortcut: "X", onPick: () => startSelecting(one.id) });
     if (one) add("rename", { label: "Rename…", icon: Icons.RenameIcon, group: "Organise", onPick: () => setOrganise({ kind: "rename", item: one }) });
     add("move", { label: "Move to project…", icon: Icons.MoveIcon, group: "Organise",
       onPick: () => setOrganise({ kind: "move", ids: [...ids], title: one?.title, current: one ? one.client?.id ?? null : undefined }) });
-    add("label", { label: "Label…", icon: Icons.LabelIcon, group: "Organise", onPick: () => setOrganise({ kind: "label", ids: [...ids] }) });
+    // Lists (D14): tick the lists the recordings go in, or make a new one for them. Add to list takes Label…'s place;
+    // a server without lists keeps Label….
+    if (!lists) add("label", { label: "Label…", icon: Icons.LabelIcon, group: "Organise", onPick: () => setOrganise({ kind: "label", ids: [...ids] }) });
+    if (lists) {
+      add("lists", addToListMenu({ lists, chosen, onToggle: (list, on) => void putInList(ids, list, on), onNew: () => setCreatingList({ ids: [...ids] }) }));
+    }
     if (!all((i) => !!i.pinned)) add("pin", { label: "Pin", icon: Icons.PinIcon, group: "Organise", onPick: () => void bulk(ids, "pin", "Pinned") });
     if (!none((i) => !!i.pinned)) add("unpin", { label: "Unpin", icon: Icons.PinIcon, group: "Organise", onPick: () => void bulk(ids, "unpin", "Unpinned") });
     if (!all((i) => !!i.keep)) add("keep", { label: "Keep forever", icon: Icons.KeepIcon, group: "Organise", onPick: () => void bulk(ids, "keep", "Kept forever") });
@@ -347,9 +526,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
         : { label: "Transcribe…", icon: Icons.TranscriptIcon, group: "Organise", onPick: () => setOrganise({ kind: "transcribe", ids: [...ids] }) });
     }
     for (const item of own.organise ?? []) add(item.label, { group: "Organise", ...item });
-    add("export", own.export ?? exportMenu((format) => void exportRecordings(ids, format, say)));
+    add("export", own.export ?? exportMenu((format) => void exportRecordings(ids, format, say, shownExportView(chosen))));
     for (const item of own.export_more ?? []) add(item.label, { group: "Export", ...item });
-    add("ai", { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Export", onPick: () => void copyForAiToClipboard(chosen, say) });
+    add("ai", { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Export", onPick: own.ai ?? (() => void copyForAiToClipboard(chosen, say)) });
     if (one) add("whatsapp", { label: "Send to WhatsApp…", icon: Icons.SendIcon, group: "Export", onPick: own.whatsapp ?? (() => setOrganise({ kind: "whatsapp", item: one })) });
     add("delete", { label: ids.length === 1 ? "Delete" : `Delete ${ids.length}`, icon: Icons.TrashIcon, group: "Danger", danger: true, shortcut: "Del", onPick: () => deleteOrAsk(ids) });
     return list.map(({ key: _key, ...item }) => item);
@@ -380,7 +559,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
   const counts = items ? viewCounts(items) : null;
   const { groups, rows: shown, matching } = useMemo(() => listOf(items),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, view, filters, query, choice, opened, collapsed]);
+    [items, view, filters, query, choice, opened, collapsed, folder, folderIds, place, readHere]);
   // What the filters offer: the recordings of this view before the filters, so a tick never hides its own choice.
   // Worked out once per change, for the chips' menus and their words alike.
   const options = useMemo(() => {
@@ -409,11 +588,42 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
       return next;
     });
   };
+  const startSelecting = (id: string) => {
+    setSelecting(true);
+    anchor.current = id;
+    setPicked(new Set([id]));
+  };
   const pickAll = () => {
     setSelecting(true);
     setPicked(new Set(shownIds));
   };
+  /**
+   * Dragging rows onto a project or the Inbox in the sidebar (classic's, lib/dragMove.ts): the row pressed, or every
+   * picked row when it is one of them; the same move as Move to project….
+   */
+  const rowDrag = (item: LibraryItem, e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (view === "trash") return;
+    beginRecordingDrag(e, () => {
+      const ids = selecting && picked.has(item.id) ? pickedIds : [item.id];
+      const titles = (items ?? []).filter((i) => ids.includes(i.id)).map((i) => i.title);
+      return { ids, label: dragLabel(titles) };
+    }, (ids, projectId) => void dropMove(ids, projectId));
+  };
+  const dropMove = async (ids: string[], projectId: string | null) => {
+    if (ids.length > MAX_BULK) return say(`Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`);
+    try {
+      const changed = await api.bulkSessions(ids, "move", projectId);
+      const name = projectId ? (await api.clients().catch(() => null))?.data.find((c) => c.id === projectId)?.name ?? "the project" : "the Inbox";
+      say(ids.length === 1 ? `Moved to ${name}` : `${recordingsWord(changed)} moved to ${name}`);
+      endSelection();
+      await load();
+    } catch (e) {
+      say(errorMessage(e));
+    }
+  };
   const rowClick = (item: LibraryItem, e: ReactMouseEvent<HTMLButtonElement>) => {
+    // The press that ended a drag never opens or ticks the row.
+    if (dragJustEnded()) return;
     if (e.shiftKey && anchor.current && shownIds.includes(anchor.current)) {
       // A range from the last ticked row to this one, added to what is picked.
       const [a, b] = [shownIds.indexOf(anchor.current), shownIds.indexOf(item.id)].sort((x, y) => x - y);
@@ -523,7 +733,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
   };
   const recordingPage = open && (
     <RecordingPage key={open.id} item={open} startAt={openAt?.id === open.id ? openAt : null} onBack={closeOpen} onMessage={(t) => say(t)} onOpenProject={onOpenProject}
-      menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
+      onItemChanged={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)}
+      menu={(own) => menuFor([open.id], new Set(["open", "select"]), own)} onViews={(v) => rowViews.note(open, v)} />
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
   // the scrim closes it. The list opens it as its own page.
@@ -544,7 +755,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
   );
 
   const viewMenu: MenuItem[] = [
-    ...LIST_VIEWS.map((v) => ({ label: VIEW_NAMES[v], checked: view === v, radio: true, count: counts?.[v], onPick: () => setView(v) })),
+    // Today, This week, Pinned and Bookmarked are the When and Marked chips' now: Views ▾ has the rest, one at a time.
+    ...LIST_VIEWS.filter((v) => !CHIP_VIEWS[v]).map((v) => ({ label: VIEW_NAMES[v], checked: view === v, radio: true, count: counts?.[v], onPick: () => setView(v) })),
   ];
   const filterMenu = (key: FilterKey): MenuItem[] => options[key].map((o) => ({
     label: o.label, checked: (filters[key] ?? []).includes(o.value), count: o.count, keepOpen: true,
@@ -558,13 +770,30 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
       onPick: () => setChoice({ ...choice, sort: k }) })),
     ...(Object.keys(GROUP_NAMES) as GroupKey[]).map((k) => ({ label: GROUP_NAMES[k], group: "Group by", checked: choice.group === k, radio: true,
       onPick: () => setChoice({ ...choice, group: k }) })),
+    ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
+  // The place the list shows, after "Library" in the breadcrumbs.
+  // One chip-owned value on its own (Marked: Pinned from the sidebar) reads as that place.
+  const chipPlace = filterCount(filters) === 1 ? (Object.keys(CHIP_VIEWS) as ListView[]).find((v) => filters[CHIP_VIEWS[v]!.key]?.[0] === CHIP_VIEWS[v]!.value) : undefined;
+  const crumb = view === "trash" ? null : folder ? folderLabel(folder) : view !== "all" ? VIEW_NAMES[view as ListView]
+    : place !== "all" ? placeName(place, lists ?? []) : chipPlace ? VIEW_NAMES[chipPlace] : null;
+  const showEverything = () => {
+    onFolder?.(null);
+    setView("all");
+    setPlace("all");
+    setFilters({});
+  };
   const clearAll = () => {
+    onFolder?.(null);
     setFilters({});
     setQuery("");
     setView("all");
+    setPlace("all");
   };
+  // A list chip with nothing in it (and nothing else narrowing the list) says how to fill it.
+  const inList = place.startsWith("list:") && view === "all" && !query && !filtersOn;
   const subtitle = view === "trash" || !counts ? null
+    : folder ? `${recordingsWord(matching)} in ${folderLabel(folder)}`
     : view === "all" && !filtersOn && !query ? `${recordingsWord(counts.all)} from your phone, this computer and the web.`
       : `${recordingsWord(matching)} shown`;
 
@@ -588,20 +817,22 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
                 onClick={() => setOrganise({ kind: "label", ids: pickedIds })} />
               {pickedIds.length > 0 && !tooMany && (
                 <Menu label="Share or export" button={{ variant: "quiet", icon: Icons.ShareIcon, title: "Share or export" }}
-                  items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say)).items!.map((i) => ({ ...i, group: "Export transcripts" })),
+                  items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
                     { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
               )}
               <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
                 onClick={() => deleteOrAsk(pickedIds)} />
               {pickedIds.length > 0 && !tooMany && (
                 <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon }}
-                  items={menuFor(pickedIds, new Set(["open", "move", "label", "ai", "delete"]))} />
+                  items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "ai", "delete"]))} />
               )}
             </div>
           </header>
         ) : (
           <header className="el-page__head">
             <div className="el-page__titles">
+              {/* Library › the place shown (a smart folder, a view, a list); Library shows every recording again. */}
+              {crumb && <Breadcrumbs crumbs={[{ label: "Library", onOpen: showEverything }, { label: crumb }]} />}
               <h1 className="el-title-l">{view === "trash" ? "Trash" : "Library"}</h1>
               {subtitle && <p className="el-secondary" aria-live="polite">{subtitle}</p>}
             </div>
@@ -620,10 +851,31 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
           </header>
         )}
         {top && view !== "trash" && !selecting && (
-          <LibraryTop {...top} items={items}
+          <LibraryTop {...top} items={items} covered={queueShows}
             onAction={(a) => (a === "missed" ? top.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"))} />
         )}
+        {view !== "trash" && syncError && items && (
+          <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
+            action={<Button size="sm" loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Retry</Button>}>
+            Couldn't sync with the server. Showing what is saved on this computer.
+          </Banner>
+        )}
+        {view !== "trash" && folder && folderError && (
+          <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-folder-error"
+            action={<Button size="sm" loading={folderTrying} loadingLabel="Trying…" onClick={() => setFolderTry((n) => n + 1)}>Try again</Button>}>
+            {`${folderLabel(folder)} didn't load from the server: ${folderError}${folderKnownHere(folder) ? " Showing what this computer knows meanwhile." : ""}`}
+          </Banner>
+        )}
+        {view !== "trash" && !selecting && <QueueV2 say={say} reviewRequest={reviewRequest} onShown={setQueueShows} />}
         <div className="el-page__tools">
+          {view !== "trash" && (
+            <ListsRow lists={lists ?? []} setLists={setLists} reload={reloadLists} place={place} onPlace={setPlace} unread={items ? unreadCount(items, readHere) : 0}
+              say={(t) => say(t)} onLibraryChanged={() => void api.refreshLibrary().then(setItems).catch(() => undefined)} creating={creatingList}
+              onCreating={(request, made) => {
+                if (made && creatingList?.ids.length) void putInList(creatingList.ids, made, true);
+                setCreatingList(request);
+              }} />
+          )}
           {view !== "trash" && (
             <div className="el-search-row">
               <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="/" />
@@ -634,7 +886,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
                 button={{ variant: "quiet", icon: Icons.SortIcon, title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
             </div>
           )}
-          <FilterBar label="Filter recordings" end={(filtersOn > 0 || (view !== "all" && view !== "trash")) && (
+          <FilterBar label="Filter recordings" end={(filtersOn > 0 || !!folder || (view !== "all" && view !== "trash")) && (
             <Button variant="quiet" size="sm" onClick={clearAll}>Clear all</Button>
           )}>
             {view !== "trash" && found.length > 0 && (
@@ -668,6 +920,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
               <Chip label="All recordings" onToggle={() => setView("all")} />
             ) : (
               <>
+                {folder && <Chip label={folderLabel(folder)} selected onRemove={() => onFolder?.(null)} removeLabel={`Show every recording, not only ${folderLabel(folder)}`} />}
                 <Menu label="Views" items={viewMenu} chip={{ text: view === "all" ? "Views" : VIEW_NAMES[view as ListView], on: view !== "all" }} />
                 {FILTER_KEYS.map((key) => {
                   const menuItems = filterMenu(key);
@@ -722,6 +975,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
           <EmptyState icon={Icons.LibraryIcon} title="No recordings yet"
             body="Calls and meetings you record on this computer or your phone, and files you import, appear here."
             action={onImport ? <Button onClick={onImport}>Import</Button> : undefined} />
+        ) : matching === 0 && inList ? (
+          <EmptyState icon={Icons.LabelIcon} title={`Nothing in ${placeName(place, lists ?? [])} yet`} body="Add recordings from their ⋮ menu: Add to list."
+            action={<Button onClick={() => setPlace("all")}>Show all</Button>} />
+        ) : matching === 0 && (place === "unread" || place === "important") && view === "all" && !query && !filtersOn ? (
+          <EmptyState icon={Icons.LibraryIcon} title={place === "unread" ? "You've opened every recording" : "Nothing marked important yet"}
+            body={place === "unread" ? "New recordings show here until you open them." : "Recordings you mark important show here."}
+            action={<Button onClick={() => setPlace("all")}>Show all</Button>} />
         ) : matching === 0 ? (
           <EmptyState icon={Icons.SearchIcon}
             title={query || filtersOn ? "No recordings match" : view === "today" ? "Nothing recorded today" : view === "untranscribed" ? "Everything is transcribed" : `Nothing in ${VIEW_NAMES[view as ListView]}`}
@@ -729,8 +989,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
               : view === "today" ? "Today's calls and meetings appear here as they are recorded." : view === "untranscribed" ? "Recordings without a transcript appear here." : "Recordings appear here when they fit this view."}
             action={<Button onClick={clearAll}>{query && !filtersOn ? "Clear search" : filtersOn ? "Clear filters" : "Show all"}</Button>} />
         ) : layout === "table" ? (
-          <LibraryTable groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
-            onRow={rowClick} onRowMenu={rowMenu} recovered={recovered}
+          <LibraryTable viewsOf={rowViews.summaryFor} groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
+            onRow={rowClick} onRowMenu={rowMenu} onRowPointerDown={rowDrag} recovered={recovered}
             rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
         ) : (
           <List label="Recordings">
@@ -745,9 +1005,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
                   } : undefined} />
               ) : null,
               ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
-                const r = rowModel(item);
+                const r = rowModel(item, undefined, rowViews.summaryFor(item));
                 return (
-                  <ListRow key={item.id} leading={<SourceAvatar item={item} />} strong title={r.title} meta={r.meta}
+                  <ListRow key={item.id} leading={<SourceAvatar item={item} />} strong title={r.title}
+                    meta={r.converting === "making" ? <span className="el-converting" data-testid="row-converting"><span className="el-spinner" aria-hidden="true" />{r.meta}</span> : r.meta}
                     badge={r.badge || recovered.has(item.id) ? <>
                       {r.badge && <Badge tone={r.badge.tone}>{r.badge.text}</Badge>}
                       {recovered.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
@@ -758,7 +1019,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, top, o
                       {(item.labels ?? []).slice(0, 3).map((l) => [<span key={l} className="el-row__label" dir="auto">{l}</span>, " "])}
                     </> : undefined}
                     endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
-                    rowId={item.id} onClick={(e) => rowClick(item, e)} onContextMenu={(e) => rowMenu(item, e)}
+                    rowId={item.id} onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
                     checked={selecting ? picked.has(item.id) : undefined}
                     actions={selecting ? undefined : <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
                 );

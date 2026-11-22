@@ -15,7 +15,7 @@ export function Banner({ icon, children, action, onClose, closeLabel = "Close", 
   return (
     <div className={`el-banner el-banner--${tone}`} role={tone === "info" ? "status" : "alert"} data-testid={testId}>
       {icon && <span className="el-banner__icon"><Icon icon={icon} /></span>}
-      <span className="el-banner__text">{children}</span>
+      <span className="el-banner__text" dir="auto">{children}</span>
       {action}
       {onClose && <Button size="sm" variant="quiet" icon={CloseIcon} aria-label={closeLabel} onClick={onClose} />}
     </div>

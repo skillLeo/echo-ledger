@@ -67,6 +67,18 @@ reconciler and the 30-day retention cleanup.
 - **Check after:** `GET /api/library?limit=1` with a device token carries `important`, `label_colors` and `expires_at`;
   older apps ignore them.
 
+## Live Assist monitoring (plan B4)
+- **Migration `2026_12_22_000001`:** the new table `assist_relay_checks` (one row every 5 minutes while a relay address
+  is set, and one for each "Check the relay now": host, time, scheduled or manual, ok, milliseconds, version, the
+  check's own sentence; 7 days kept), and two indexes on `assist_sessions` (`status, ended_at` and `started_at`) for the
+  page's counts. Nothing existing changes. Rollback (`migrate:rollback --step=1`) drops the table, the uptime history
+  with it, and the two indexes.
+- **Scheduler:** `assist:relay-check` every 5 minutes (in the same `schedule:run` cron as the rest). Each run asks
+  `https://<relay host>/healthz` once (3 s at most, no retry, public addresses only), so the server must be able to
+  reach the relay over HTTPS, as Live Assist itself already needs.
+- **Check after:** Admin → Usage → Live Assist shows "Relay" with a state, and within 5 minutes a first check; "Check the
+  relay now" adds one at once. No content is shown or stored: states, times and numbers only.
+
 ## Cron (the only background process)
 ```
 * * * * * cd /home/USER/echoledger/web && php artisan schedule:run >> /dev/null 2>&1
@@ -78,6 +90,8 @@ The scheduler (`routes/console.php`) runs:
   (`config/queue.php` `assist-reports`) uses the same driver as `QUEUE_CONNECTION` with `retry_after` 480, longer than
   a report can take, so one is never made twice.
 - `stt:reconcile` every 5 minutes (recovers missed webhooks, retries provider-side deletes)
+- since B4, `assist:relay-check` every 5 minutes (`withoutOverlapping(5)`): one health check of the Live Assist relay
+  (3 s, no retry, public addresses only), kept 7 days for Admin → Usage → Live Assist; nothing when no relay is set
 - `recordings:retention` hourly (recordings past their retention go to the 48-hour undo bin; the bin erases what has
   waited 48 hours) and `model:prune` daily (webhook events, old tombstones and other expired rows)
 - `sanctum:prune-expired --hours=24` daily

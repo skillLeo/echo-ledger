@@ -28,11 +28,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.isSpecified
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.largeText
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
@@ -147,6 +149,18 @@ fun EchoBottomBar(
 ) {
     val c = EchoV2.colors
     val half = (destinations.size + 1) / 2
+    // The labels grow with the text size up to 1.3×, as Material's navigation bar does: five tabs and the Record
+    // button share the phone's width, so at 200 % "Library" would be cut to "Libr…". The icons carry the meaning;
+    // screen readers get the full label at any size.
+    val fontScale = LocalDensity.current.fontScale
+    val labelStyle = EchoV2.type.captionStrong.let { s ->
+        if (fontScale <= LABEL_SCALE_MAX) {
+            s
+        } else {
+            val k = LABEL_SCALE_MAX / fontScale
+            s.copy(fontSize = s.fontSize * k, lineHeight = if (s.lineHeight.isSpecified) s.lineHeight * k else s.lineHeight)
+        }
+    }
     Column(modifier.fillMaxWidth().background(c.bgSurface)) {
         EchoDivider()
         Row(
@@ -179,7 +193,7 @@ fun EchoBottomBar(
                     }
                     Text(
                         d.label,
-                        style = EchoV2.type.captionStrong,
+                        style = labelStyle,
                         color = if (selected) c.textPrimary else c.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -203,28 +217,46 @@ fun EchoTopBar(
     actions: @Composable () -> Unit = {}
 ) {
     val c = EchoV2.colors
-    Row(
-        modifier
-            .fillMaxWidth()
-            .background(c.bgCanvas)
-            .defaultMinSize(minHeight = EchoTokens.Space.s64)
-            .padding(start = if (onBack != null) EchoTokens.Space.s4 else EchoTokens.Layout.pagePaddingMobile, end = EchoTokens.Space.s4),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (onBack != null) EchoIconButton(EchoIcons.Back, EchoV2.strings.back, onBack)
-        // A title can be someone's words (a project's or a recording's name): it takes their face and direction.
+    val back: @Composable () -> Unit = { if (onBack != null) EchoIconButton(EchoIcons.Back, EchoV2.strings.back, onBack) }
+    // A title can be someone's words (a project's or a recording's name): it takes their face and direction.
+    val titleText: @Composable (Modifier, Int) -> Unit = { m, lines ->
         Text(
             title,
             style = EchoV2.type.content(title, if (large) EchoV2.type.titleL else EchoV2.type.titleM),
             color = c.textPrimary,
             textAlign = startAlign(),
-            maxLines = 1,
+            maxLines = lines,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f)
+            modifier = m
                 .padding(start = if (onBack != null) EchoTokens.Space.s4 else EchoTokens.Space.s0)
                 .semantics { heading() }
         )
-        actions()
+    }
+    val padded = modifier
+        .fillMaxWidth()
+        .background(c.bgCanvas)
+        .padding(start = if (onBack != null) EchoTokens.Space.s4 else EchoTokens.Layout.pagePaddingMobile, end = EchoTokens.Space.s4)
+    // A page without a title (a recording, whose name is in its header) keeps one row at any text size.
+    if (!largeText() || title.isBlank()) {
+        Row(padded.defaultMinSize(minHeight = EchoTokens.Space.s64), verticalAlignment = Alignment.CenterVertically) {
+            back()
+            titleText(Modifier.weight(1f), 1)
+            actions()
+        }
+    } else {
+        // At 150 % text and more the title never shares its line with the actions ("Activ…" beside "Mark all as
+        // read"): it takes the whole width, up to two lines, and the actions go on a line of their own under it.
+        Column(padded.padding(bottom = EchoTokens.Space.s4)) {
+            Row(Modifier.defaultMinSize(minHeight = EchoTokens.Space.s64), verticalAlignment = Alignment.CenterVertically) {
+                back()
+                titleText(Modifier.weight(1f), 2)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                actions()
+            }
+        }
     }
 }
+
+/** The most the bottom bar's labels grow with the text size. */
+private const val LABEL_SCALE_MAX = 1.3f

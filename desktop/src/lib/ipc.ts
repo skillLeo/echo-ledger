@@ -122,6 +122,8 @@ export interface AuthOptions {
   browserSignIn: boolean;
   /** Email codes are offered (since v1.6). */
   code: boolean;
+  /** What a new password needs (since 2.0.0-l); null from an older server. */
+  passwordRules?: { min: number; letters: boolean; numbers: boolean } | null;
 }
 
 /** "Email → Continue" (since v1.6): `older` is a server without the route (the v1.5 sign-in then). */
@@ -350,6 +352,15 @@ export interface Account {
   super_admin?: boolean;
   /** Every workspace of the person (v1.6 shell; empty when the server does not list them). */
   workspaces?: { id: unknown; name: string; role?: string | null; current?: boolean | null }[];
+  /** The person's picture (since 2.0.0-l): a signed link and the version it is kept by; null shows the initials. */
+  avatar_url?: string | null;
+  avatar_version?: number | null;
+  /** The account has a password (one made with Google may not); null from a server before 2.0.0-l. */
+  has_password?: boolean | null;
+  /** An email change waiting for its code, and until when. */
+  pending_email?: string | null;
+  pending_email_expires_at?: string | null;
+  passkeys_available?: boolean | null;
 }
 
 /** Signed updates from the server (since v1.5). */
@@ -764,6 +775,18 @@ export interface NotRecordedMic {
   at: string;
 }
 
+/** One of the person's lists (contract 2.0.0-m): a label with its colour and place in the Library's row. */
+export interface ListItem {
+  /** The name in lower case. */
+  key: string;
+  name: string;
+  /** "#rrggbb", or null (the neutral colour). */
+  color: string | null;
+  position: number;
+  /** The person's recordings in it, not in Trash. */
+  count: number;
+}
+
 export interface LibraryItem {
   id: string;
   deleted: boolean;
@@ -788,6 +811,12 @@ export interface LibraryItem {
   /** Pinned to the top and recording labels (since v1.1, B15). */
   pinned?: boolean;
   labels?: string[];
+  /** The person's colour of each label that has one, label as spelt here => "#rrggbb" (since 2.0.0-i). */
+  label_colors?: Record<string, string>;
+  /** The person flagged it (since 2.0.0-i). */
+  important?: boolean;
+  /** The person has opened it (since v1.3): false is unread. */
+  opened?: boolean;
   /** Never deleted by retention (B17). */
   keep?: boolean;
   /** The recording's language (null = automatic) and its chip, "UR+EN" (since v1.1.2). */
@@ -816,6 +845,11 @@ export interface LibraryItem {
     alternate_language?: string | null;
     /** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
     final_progress?: TranscriptProgress | null;
+    /**
+     * The views of the final transcript (since 2.0.0-n on a row): "making" from the moment the transcript is done until
+     * the default view is written (`progress` `{}` until the first lines are), "failed" when it stopped or went quiet.
+     */
+    views?: ViewsSummary | null;
   };
   /** How it got into its project (since v1.5): by hand, the caller is a contact, a filing rule; null = the Inbox. */
   filed_by?: "user" | "contact" | "rule" | null;
@@ -1078,6 +1112,13 @@ export interface TranscriptProgress {
 
 /** Lines done of lines per view while the views are being made (`views.progress`, Phase 1C); `{}` otherwise. */
 export type ViewsProgress = Partial<Record<TranscriptView, { done: number; total: number }>>;
+
+/** A transcript's views as a Library row and the transcript detail carry them: their state, the view the apps open in, how far. */
+export interface ViewsSummary {
+  status: TranscriptViewsStatus;
+  default?: "original" | TranscriptView;
+  progress?: ViewsProgress;
+}
 
 export interface TranscriptDetail {
   id: string;
@@ -1497,6 +1538,15 @@ export type CheckOutcome = "pass" | "fail" | "error";
 /** Why a Share Check ran. */
 export type CheckWhy = "asked" | "onboarding" | "first" | "app_update" | "system_update" | "weekly" | "before_call" | "retry";
 export type MeetingApp = "zoom" | "teams" | "meet" | "slack" | "whatsapp";
+
+/** How Send to WhatsApp → Text and voice ended (F6): the share took it (`toWhatsApp`: WhatsApp was the target), the
+ *  share is open and its end not known (`opened`: nothing is claimed), the person closed the share, or wa.me opened with
+ *  the text and the voice saved at `path` (on the clipboard, to paste with `pasteKeys`, when `fileOnClipboard`). */
+export type WhatsAppVoiceOutcome =
+  | { kind: "shared"; toWhatsApp: boolean }
+  | { kind: "opened" }
+  | { kind: "cancelled" }
+  | { kind: "fallback"; path: string; fileOnClipboard: boolean; textCut: boolean; pasteKeys: string };
 /** What the guided test says of a meeting app on this Mac. */
 export type MeetingAppState = "hidden" | "visible" | "not_checked" | "share_tab";
 
@@ -1660,7 +1710,7 @@ export type AppEvent = keyof EventPayloads;
 
 /** The server's public pages the app opens in the browser (since v1.5). */
 /** The server's pages the apps open in the browser (v1.6: the console's admin panel, workspace and profile pages). */
-export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "app/workspace" | "app/profile";
+export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "app/workspace" | "app/profile" | "app/settings/security/passkeys";
 /** The words the core uses while the server holds this computer's work (error.rs: MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT). */
 export const MAINTENANCE_TEXT = "The server is in maintenance for a while. Your recordings wait on this computer and upload when it is back.";
 export const UPDATE_REQUIRED_TEXT = "This version of EchoLedger is no longer accepted by the server. Update it: your recordings wait on this computer and upload after the update.";
@@ -1741,6 +1791,16 @@ export const api = {
   signOutEverywhere: () => invoke<AppStatus>("account_sign_out_everywhere"),
   /** When the account will be deleted (in 7 days). */
   deleteAccount: (password: string | null, otp: string | null) => invoke<string | null>("account_delete", { password, otp }),
+  /** One account change of 2.0.0-l, answered whole (lib/account.ts `call`). */
+  accountCall: (action: string, body: Record<string, unknown> | null, id: string | null) => invoke<unknown>("account_call", { action, id, body }),
+  /** Change picture…: the picker, then the upload; null when the person cancels the picker. */
+  chooseAvatar: () => invoke<unknown>("account_avatar_choose"),
+  /** A person's picture as a data: URL, kept on this computer by its version; null shows the initials. */
+  avatarImage: (url: string | null, version: number) => invoke<string | null>("account_avatar_image", { url, version }),
+  /** Save the recovery codes as a text file; null when the person cancels. */
+  saveRecoveryCodes: (codes: string[], email: string) => invoke<string | null>("account_recovery_codes_save", { codes, email }),
+  /** Copy codes: on the clipboard, left out of clipboard history and managers, and taken off it after a minute. */
+  copyRecoveryCodes: (codes: string[]) => invoke<void>("account_recovery_codes_copy", { codes }),
   startExport: () => invoke<AccountExport>("account_export_start"),
   exportStatus: (id: string) => invoke<AccountExport>("account_export_status", { id }),
   openExport: (url: string) => invoke<void>("account_export_open", { url }),
@@ -1820,6 +1880,18 @@ export const api = {
   /** Its recordings go to the Inbox and its subfolders up a level. */
   deleteClient: (id: string) => invoke<{ moved_sessions?: number; moved_projects?: number }>("client_delete", { id }),
   libraryViews: (tz: string | null = null) => invoke<LibraryViews>("library_views", { tz }),
+  /** The person opened this recording (since v1.3): no longer unread, on every device. */
+  markOpened: (id: string) => invoke<void>("session_opened", { id }),
+  /** The person's lists in their order (since 2.0.0-m); null on a server without lists. */
+  lists: () => invoke<ListItem[] | null>("lists_get"),
+  /** "+": a new, empty list; without a colour the server picks the one fewest lists have. */
+  createList: (name: string, color: string | null = null) => invoke<ListItem>("list_create", { name, color }),
+  /** Rename (every recording in it with it) and/or recolour. */
+  updateList: (key: string, change: { name?: string; color?: string }) => invoke<ListItem>("list_update", { key, name: change.name ?? null, color: change.color ?? null }),
+  /** The label comes off its recordings (they stay); how many changed. */
+  deleteList: (key: string) => invoke<number>("list_delete", { key }),
+  /** Every list's key once, in the new order. */
+  orderLists: (keys: string[]) => invoke<ListItem[]>("lists_order", { keys }),
   libraryFolder: (folder: SmartFolder) => invoke<LibraryItem[]>("library_folder", { folder }),
   /** null: the server has no filing rules yet. */
   clientRules: (id: string) => invoke<{ data: FilingRule[] } | null>("client_rules", { id }),
@@ -1995,6 +2067,9 @@ export const api = {
   saveAudioToDownloads: (id: string) => invoke<string>("save_audio_downloads", { id }),
   /** Send to WhatsApp (v1.6): opens wa.me with the text; true when it was too long and was cut (the core builds the address). */
   whatsappOpen: (text: string) => invoke<boolean>("whatsapp_open", { text }),
+  /** Send to WhatsApp → Text and voice (F6): the audio handed with the text to the system's share (WhatsApp's); without
+   *  it, or with `share` false, the audio in Downloads, wa.me with the text and the file on the clipboard. */
+  whatsappShareVoice: (id: string, text: string, share = true) => invoke<WhatsAppVoiceOutcome>("whatsapp_share_voice", { id, text, share }),
   /** Show as (since v1.2): the Roman Urdu and English views and their state; `makeTranscriptViews` starts them. */
   transcriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views", { id }),
   makeTranscriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views_make", { id }),

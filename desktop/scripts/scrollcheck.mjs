@@ -63,8 +63,21 @@ for (const [engineName, engine] of [["webkit", webkit], ["chromium", chromium]])
         errors.push(`step failed: ${String(e.message).split("\n")[0]}`);
       }
       const before = await page.evaluate(scrollers);
-      // The wheel and the trackpad over the middle of the content.
-      await page.mouse.move(Math.round(w * 0.6), Math.round(h * 0.6));
+      // The wheel and the trackpad over the middle of what scrolls: the largest area in sight that has more than it
+      // shows (a page whose list scrolls beside a still pane, as classic Settings, was aimed at the pane before). With
+      // nothing to scroll, the middle of the content as before.
+      const aim = await page.evaluate(() => {
+        let best = null;
+        for (const el of document.querySelectorAll("*")) {
+          const s = getComputedStyle(el);
+          if (!/(auto|scroll)/.test(s.overflowY) || el.scrollHeight <= el.clientHeight + 1) continue;
+          const r = el.getBoundingClientRect();
+          const width = Math.min(r.right, innerWidth) - Math.max(r.left, 0), height = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);
+          if (width > 20 && height > 20 && (!best || width * height > best.area)) best = { area: width * height, x: Math.max(r.left, 0) + width / 2, y: Math.max(r.top, 0) + height / 2 };
+        }
+        return best;
+      });
+      await page.mouse.move(Math.round(aim?.x ?? w * 0.6), Math.round(aim?.y ?? h * 0.6));
       await page.mouse.wheel(0, 600);
       await page.waitForTimeout(400);
       const after = await page.evaluate(scrollers);

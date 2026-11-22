@@ -244,7 +244,9 @@ class ControlPill(
                         kotlinx.coroutines.delay(V2_TICK_MS)
                     }
                 }
-                com.echoledger.mobile.ui.v2.live.V2RecordingPill(s, now, title = null, onEvent = onEvent, modifier = drags)
+                com.echoledger.mobile.ui.v2.shell.OverlayLook(com.echoledger.mobile.ui.v2.shell.overlaySettings(context)) {
+                    com.echoledger.mobile.ui.v2.live.V2RecordingPill(s, now, title = null, onEvent = onEvent, modifier = drags)
+                }
                 return
             }
             when (s.mode) {

@@ -50,6 +50,19 @@ class LibraryQueryTest {
     }
 
     @Test
+    fun `a date, a mark and a state each narrow the others, and choices of one kind widen`() {
+        // Pinned (Views) and Failed (Status): only what is both, never either.
+        val pinnedAndFailed = LibraryFilters(views = setOf(SmartView.PINNED, SmartView.FAILED))
+        val both = item("e", started = "2026-10-25T09:00:00Z", pinned = true, final = "failed")
+        assertEquals(listOf("e"), LibraryQuery.apply(items + both, pinnedAndFailed, "", LibrarySort.NEWEST, now).map { it.id })
+        val pinnedThisWeek = LibraryFilters(views = setOf(SmartView.PINNED, SmartView.THIS_WEEK))
+        assertEquals(listOf("c"), LibraryQuery.apply(items, pinnedThisWeek, "", LibrarySort.NEWEST, now).map { it.id })
+        // Two states, or two dates, add up.
+        val todayOrThisWeek = LibraryFilters(views = setOf(SmartView.TODAY, SmartView.THIS_WEEK))
+        assertEquals(listOf("a", "c", "d"), LibraryQuery.apply(items, todayOrThisWeek, "", LibrarySort.NEWEST, now).map { it.id }.sorted())
+    }
+
+    @Test
     fun `no client and a client folder can be ticked together`() {
         val f = LibraryFilters(folders = setOf("", "acme"))
         assertEquals(4, LibraryQuery.apply(items, f, "", LibrarySort.NEWEST, now).size)

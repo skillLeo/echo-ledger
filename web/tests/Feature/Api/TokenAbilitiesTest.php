@@ -69,8 +69,18 @@ function abilityRoutes(): array
         'add replacement' => ['POST', '/api/vocabulary/replacements', 'sessions:write'],
         'organise session' => ['PATCH', "/api/sessions/{$id}", 'sessions:write'],
         'bulk action' => ['POST', '/api/sessions/bulk', 'sessions:write'],
+        // Since 2.0.0-j: audio only and "Transcribe later".
+        'transcribe one' => ['POST', "/api/sessions/{$id}/transcribe", 'sessions:write'],
+        'transcribe many' => ['POST', '/api/sessions/transcribe', 'sessions:write'],
+        'transcribe estimate' => ['POST', '/api/sessions/transcribe-estimate', 'library:read'],
         // Since 2.0.0-i: a label's colour.
         'label colour' => ['PUT', '/api/labels/color', 'sessions:write'],
+        // Since 2.0.0-m: lists.
+        'lists' => ['GET', '/api/lists', 'config:read'],
+        'make list' => ['POST', '/api/lists', 'sessions:write'],
+        'order lists' => ['PUT', '/api/lists/order', 'sessions:write'],
+        'change list' => ['PATCH', "/api/lists/{$id}", 'sessions:write'],
+        'delete list' => ['DELETE', "/api/lists/{$id}", 'sessions:write'],
         'bulk export' => ['POST', '/api/sessions/export', 'library:read'],
         'smart views' => ['GET', '/api/library/views', 'library:read'],
         'create client' => ['POST', '/api/clients', 'sessions:write'],
@@ -89,6 +99,8 @@ function abilityRoutes(): array
         'add client file' => ['POST', "/api/clients/{$id}/files", 'sessions:write'],
         'remove client file' => ['DELETE', "/api/clients/{$id}/files/{$id}", 'sessions:write'],
         'ask about a client' => ['POST', "/api/clients/{$id}/ask", 'sessions:write'],
+        'ask about a recording' => ['POST', "/api/sessions/{$id}/ask", 'sessions:write'],
+        'ask across my recordings' => ['POST', '/api/ask', 'sessions:write'],
         'call notes' => ['GET', "/api/sessions/{$id}/notes", 'library:read'],
         'make call notes' => ['POST', "/api/sessions/{$id}/notes", 'sessions:write'],
         'decide suggested fix' => ['POST', "/api/transcripts/{$id}/suggestions/{$id}", 'sessions:write'],
@@ -132,6 +144,28 @@ function abilityRoutes(): array
         'delete your account' => ['DELETE', '/api/account', 'sessions:write'],
         'export your data' => ['POST', '/api/account/export', 'library:read'],
         'your export' => ['GET', "/api/account/export/{$id}", 'library:read'],
+        // Since 2.0.0-l: account and security from the apps.
+        'get account/security' => ['GET', '/api/account/security', 'config:read'],
+        'post account/proof-code' => ['POST', '/api/account/proof-code', 'sessions:write'],
+        'patch account' => ['PATCH', '/api/account', 'sessions:write'],
+        'post account/avatar' => ['POST', '/api/account/avatar', 'sessions:write'],
+        'delete account/avatar' => ['DELETE', '/api/account/avatar', 'sessions:write'],
+        'post account/email' => ['POST', '/api/account/email', 'sessions:write'],
+        'post account/email/confirm' => ['POST', '/api/account/email/confirm', 'sessions:write'],
+        'delete account/email' => ['DELETE', '/api/account/email', 'sessions:write'],
+        'put account/password' => ['PUT', '/api/account/password', 'sessions:write'],
+        'patch account/devices/{id}' => ['PATCH', "/api/account/devices/{$id}", 'sessions:write'],
+        'delete account/devices/{id}' => ['DELETE', "/api/account/devices/{$id}", 'sessions:write'],
+        'delete account/browsers/{id}' => ['DELETE', "/api/account/browsers/{$id}", 'sessions:write'],
+        'delete account/google' => ['DELETE', '/api/account/google', 'sessions:write'],
+        'post account/passkeys/options' => ['POST', '/api/account/passkeys/options', 'sessions:write'],
+        'post account/passkeys' => ['POST', '/api/account/passkeys', 'sessions:write'],
+        'patch account/passkeys/{id}' => ['PATCH', "/api/account/passkeys/{$id}", 'sessions:write'],
+        'delete account/passkeys/{id}' => ['DELETE', "/api/account/passkeys/{$id}", 'sessions:write'],
+        'post account/two-factor' => ['POST', '/api/account/two-factor', 'sessions:write'],
+        'post account/two-factor/confirm' => ['POST', '/api/account/two-factor/confirm', 'sessions:write'],
+        'post account/two-factor/recovery-codes' => ['POST', '/api/account/two-factor/recovery-codes', 'sessions:write'],
+        'delete account/two-factor' => ['DELETE', '/api/account/two-factor', 'sessions:write'],
         // Since v1.9 (L1): Live Assist, behind the live_assist flag (the ability is checked first).
         'assist: list preps' => ['GET', '/api/assist/preps', 'library:read'],
         'assist: a prep' => ['GET', "/api/assist/preps/{$id}", 'library:read'],
@@ -181,7 +215,7 @@ describe('route coverage', function () {
         expect($declared)->toBe($tested);
     });
 
-    it('leaves only registration, account sign-in and its options, signed audio, provider webhooks and the relay\'s signed API reachable without a token', function () {
+    it('leaves only registration, account sign-in and its options, signed audio and pictures, provider webhooks and the relay\'s signed API reachable without a token', function () {
         $open = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/') && ! in_array('auth:sanctum', $route->gatherMiddleware(), true))
             ->map(fn ($route) => $route->methods()[0].' /'.$route->uri())
@@ -189,6 +223,8 @@ describe('route coverage', function () {
 
         expect($open)->toBe([
             'GET /api/auth/options',
+            // Since 2.0.0-l: a profile picture's signed, versioned URL.
+            'GET /api/avatars/{user}/{version}',
             'GET /api/internal/assist/providers',
             'GET /api/recordings/{recording}/audio',
             'POST /api/auth/code',

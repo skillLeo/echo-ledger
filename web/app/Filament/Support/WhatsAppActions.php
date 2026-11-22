@@ -32,16 +32,16 @@ final class WhatsAppActions
         $resolve = fn (?CaptureSession $record): CaptureSession => $session !== null ? $session() : $record ?? throw new \LogicException('No recording.');
 
         return Action::make($name)
-            ->label('Send to WhatsApp…')
+            ->label(__('Send to WhatsApp…'))
             ->icon(Heroicon::OutlinedChatBubbleLeftRight)
             ->color('gray')
-            ->modalHeading('Send to WhatsApp')
-            ->modalDescription('Opens WhatsApp, or WhatsApp Web, with the message ready to send to the person you choose.')
+            ->modalHeading(__('Send to WhatsApp'))
+            ->modalDescription(__('Opens WhatsApp, or WhatsApp Web, with the message ready to send to the person you choose.'))
             ->modalWidth('md')
             ->visible(fn (?CaptureSession $record): bool => ! $resolve($record)->hasNoAudio())
             ->modalContent(fn (?CaptureSession $record): View => view('filament.library.whatsapp-panel', [...self::panel($resolve($record), $view !== null ? $view() : null), 'copy_ai' => $copyForAi]))
             ->modalSubmitAction(false)
-            ->modalCancelActionLabel('Close');
+            ->modalCancelActionLabel(__('Close'));
     }
 
     /**
@@ -62,7 +62,7 @@ final class WhatsAppActions
             'url' => $message['url'] ?? null,
             'cut' => $message['cut'] ?? false,
             'audio' => $primary?->isReady() === true ? route('admin.recordings.stream', ['recording' => $primary->id, 'download' => 1]) : null,
-            'audio_name' => $session->displayTitle(),
+            'audio_name' => $session->outsideTitle(),
             'view' => $view,
         ];
     }

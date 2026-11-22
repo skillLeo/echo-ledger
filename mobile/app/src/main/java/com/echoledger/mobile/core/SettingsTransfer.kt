@@ -24,6 +24,8 @@ object SettingsTransfer {
     const val MAX_BYTES = 256 * 1024
 
     val PORTABLE: Set<String> = setOf(
+        // Library swipes on or off (Appearance) go to another phone with the rest of the preferences.
+        "librarySwipes",
         "autoRecordArmed",
         "widgetHideTitles",
         "screenShareMode",

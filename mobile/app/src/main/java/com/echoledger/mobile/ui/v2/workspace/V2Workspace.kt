@@ -103,7 +103,7 @@ private val MENU = listOf(
  * - Memory & instructions: the AI notes switch and the month's AI use, the brief (Edit, Save brief, Write again),
  *   memory (open the call, pin, remove, add), the pasted instructions;
  * - Call notes (while AI notes are on) and Screens;
- * and Share, Copy for AI and the project menu, whose dialogs stay today's (ProjectMenuDialogs).
+ * and Share (the v2 Share link sheet), Copy for AI and the project menu, whose dialogs stay today's (ProjectMenuDialogs).
  */
 @Composable
 fun V2WorkspaceScreen(
@@ -247,7 +247,13 @@ fun V2WorkspaceScreen(
             }
         }
     }
-    sheet?.let { key -> ProjectMenuDialogs(vm, project, all, key, onClose = { sheet = null }, onOpenProject = onOpenProject) }
+    sheet?.let { key ->
+        if (key == "share") {
+            com.echoledger.mobile.ui.v2.library.V2ShareLinkSheet(vm, sessionId = null, clientId = project.id, onDismiss = { sheet = null })
+        } else {
+            ProjectMenuDialogs(vm, project, all, key, onClose = { sheet = null }, onOpenProject = onOpenProject)
+        }
+    }
 }
 
 private const val WORKING_POLL_MS = 5_000L
@@ -321,7 +327,7 @@ private fun RecordingsTab(
                 meta = row.meta,
                 titleEnd = row.time,
                 metaEnd = { Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary) },
-                leading = { EchoAvatar(icon = row.icon, contentDescription = row.source) },
+                leading = { com.echoledger.mobile.ui.v2.library.RowSourceLogo(row) },
                 tall = true,
                 onClick = { onOpenRecording(item) }
             )
@@ -967,10 +973,11 @@ private fun ScreensTab(vm: MainViewModel, project: ClientDto, nested: Boolean, o
 
 /** A project row on the Projects list: its avatar, name, recordings and folders. */
 @Composable
-fun ProjectRow(project: ClientDto, recordings: Int, folders: Int, onOpen: () -> Unit) {
+fun ProjectRow(project: ClientDto, recordings: Int, folders: Int, onOpen: () -> Unit, lastCall: String? = null) {
+    val last = lastCall?.let { stringResource(R.string.v2_ws_last_call, it) }
     EchoListRow(
         title = project.name,
-        meta = listOfNotNull(recordingsCount(recordings), folders.takeIf { it > 0 }?.let { foldersCount(it) }).joinToString(", "),
+        meta = listOfNotNull(recordingsCount(recordings), folders.takeIf { it > 0 }?.let { foldersCount(it) }, last).joinToString(", "),
         leading = { EchoAvatar(icon = EchoIcons.Folder) },
         onClick = onOpen
     )

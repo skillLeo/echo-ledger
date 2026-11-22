@@ -6,6 +6,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\ConsoleDates;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\Shell;
@@ -49,6 +50,11 @@ class Activity extends Page
 
     protected string $view = 'filament.pages.activity';
 
+    public function getTitle(): string
+    {
+        return __('Activity');
+    }
+
     /** Since v1.6 (P6): only what needs the person, "9+" above nine, as the bell and the apps count it. */
     public static function getNavigationBadge(): ?string
     {
@@ -60,7 +66,7 @@ class Activity extends Page
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('markAllRead')->label('Mark all as read')->color('gray')->icon(Heroicon::OutlinedCheck)
+            Action::make('markAllRead')->label(__('Mark all as read'))->color('gray')->icon(Heroicon::OutlinedCheck)
                 ->visible(fn (): bool => $this->user()?->unreadNotifications()->exists() === true)
                 ->action(fn () => $this->user()?->unreadNotifications()->update(['read_at' => now()])),
         ];
@@ -85,7 +91,7 @@ class Activity extends Page
             return;
         }
         if (ActivityFeed::payload($notification)['session_id'] !== null) {
-            Notification::make()->title('This recording is no longer in this workspace\'s library.')->warning()->send();
+            Notification::make()->title(__('This recording is no longer in this workspace\'s library.'))->warning()->send();
         }
     }
 
@@ -97,11 +103,13 @@ class Activity extends Page
         $groups = ['needs' => [], 'today' => [], 'earlier' => []];
         $notifications = $this->user()?->notifications()->latest()->limit(self::LIMIT)->get() ?? collect();
         foreach ($notifications as $notification) {
-            $item = ActivityFeed::payload($notification);
+            // In the reader's language (W-218); notifications made before keep their stored words.
+            $item = [...ActivityFeed::payload($notification), ...ActivityFeed::localized($notification)];
             $at = $notification->created_at?->copy()->setTimezone($zone);
+            // In the console's language (W-213: "17 نومبر 2026 · 11:42 صبح"; English reads exactly as before).
             $item += [
-                'time' => $at === null ? '' : ($at->gte($today) ? $at->format(Shell::timeFormat()) : $at->format('M j')),
-                'full_time' => $at?->format('M j, Y · '.Shell::timeFormat()) ?? '',
+                'time' => $at === null ? '' : ($at->gte($today) ? ConsoleDates::time($at, Shell::timeFormat()) : ConsoleDates::day($at)),
+                'full_time' => $at !== null ? ConsoleDates::dateTime($at, Shell::timeFormat()) : '',
                 'tone' => self::tone($item['kind']),
                 'icon' => self::icon($item['kind'], $notification->data['icon'] ?? null),
             ];

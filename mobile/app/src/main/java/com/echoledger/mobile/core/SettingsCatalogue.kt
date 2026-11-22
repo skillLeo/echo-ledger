@@ -120,7 +120,8 @@ object SettingsReset {
                 dynamicColour = d.dynamicColour,
                 phoneFont = d.phoneFont,
                 textSize = d.textSize,
-                appLanguage = d.appLanguage
+                appLanguage = d.appLanguage,
+                librarySwipes = d.librarySwipes
             )
 
             "notifications" -> s.copy(
@@ -143,11 +144,9 @@ object SettingsReset {
 
             "calls" -> s.copy(decisionTimeout = d.decisionTimeout, decisionTimeoutChosen = d.decisionTimeoutChosen)
 
+            // Microphone & audio's own choices only: SIM calls and the Phone app's recordings live on Calls & meetings.
             "mic" -> s.copy(
                 recordingKbps = d.recordingKbps,
-                phoneCalls = d.phoneCalls,
-                phoneAppImport = d.phoneAppImport,
-                deletePhoneAppCopy = d.deletePhoneAppCopy,
                 micSource = d.micSource,
                 inputDevice = d.inputDevice,
                 farSideWarning = d.farSideWarning

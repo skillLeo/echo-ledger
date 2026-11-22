@@ -9,7 +9,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * The new recording page's Copy menu (docs/PLAN_V2_PARITY.md section 4): Copy text (without timestamps), with timestamps,
- * and Copy for AI with a header; the player writes the text exactly as classic's buttons do (filament.v2.copy, held to
+ * and Copy for AI with the apps' header (V2CopyForAi::header); the player writes the text exactly as classic's buttons do (filament.v2.copy, held to
  * classic by tests/js/v2-copy.test.mjs). Classic keeps its player buttons only.
  */
 
@@ -31,8 +31,27 @@ it('offers Copy ▾ beside Share with the three copies, and the header for AI', 
     expect($html)->toContain('window.elV2Copy = ')
         ->toContain('Copy with timestamps')->toContain('Copy for AI')->not->toContain('Copy without timestamps')
         ->toContain("window.elV2Copy('text'")->toContain("window.elV2Copy('ai'")
-        ->toContain('Recording: Payment terms')->toContain('People: Ahmed');
+        // The apps' header (desktop aiHeader, V2CopyForAi): "# Title", the date line, the people who speak, the language.
+        ->toContain('# Payment terms\\n')->toContain('People: Me')->not->toContain('Recording: Payment terms');
     expect(strpos($html, '>Share<'))->toBeLessThan(strpos($html, "window.elV2Copy('text'"));
+});
+
+it('keeps the header for AI free of isolate marks in Urdu, where the page has them', function () {
+    foreach (InterfaceFlags::UI_V2 as $flag) {
+        app(InterfaceFlags::class)->set($flag, true, 0, [], [], 'everyone');
+    }
+    $this->owner->forceFill(['console_preferences' => ['shell' => ['app_language' => 'ur']]])->save();
+    app('auth')->forgetGuards();
+    $this->actingAs($this->owner->fresh(), 'web');
+
+    $html = (string) $this->get('/app/sessions/'.$this->recording->id)->assertOk()->getContent();
+
+    $start = strpos($html, "window.elV2Copy('ai', ");
+    expect($start)->not->toBeFalse();
+    $header = substr($html, $start, (int) strpos($html, ')', $start) - $start);
+    // The header is the apps' (V2CopyForAi): title, date line, the people who speak, language.
+    expect($header)->toContain('Payment terms')->toContain('People: Me')
+        ->not->toContain('\u2068')->not->toContain('\u2069')->not->toContain("\u{2068}")->not->toContain("\u{2069}");
 });
 
 it('leaves the classic recording page as it was', function () {

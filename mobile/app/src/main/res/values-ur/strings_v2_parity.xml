@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words for the classic features they gained (parity.csv). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_set_swipes">سوائپ ایکشنز</string>
+    <string name="v2_set_swipes_help">لائبریری کی قطار کو دائیں سوائپ کریں تو پن، بائیں سوائپ کریں تو حذف۔</string>
+    <string name="v2_lib_uploading_pct">اپ لوڈ ہو رہی ہے %1$d%%</string>
+    <string name="v2_lib_upload_duplicate">پہلے سے آپ کی لائبریری میں ہے · ہٹانے کے لیے ٹیپ کریں</string>
+    <string name="v2_lib_upload_dismiss">ہٹائیں</string>
+    <string name="v2_lib_upload_more">%1$s کے لیے مزید</string>
+    <string name="v2_lib_upload_retry">دوبارہ اپ لوڈ کریں</string>
+    <string name="v2_lib_upload_delete">ریکارڈنگ حذف کریں…</string>
+    <string name="v2_lib_upload_delete_title">یہ ریکارڈنگ حذف کریں؟</string>
+    <string name="v2_lib_upload_delete_body">یہ کبھی اپ لوڈ نہیں ہوئی، اس لیے اس کی واحد کاپی اسی فون پر ہے۔ اسے واپس نہیں لایا جا سکتا۔</string>
+    <string name="v2_share_anyone">لنک والا کوئی بھی</string>
+    <string name="v2_share_anyone_password">لنک اور پاس ورڈ والا کوئی بھی</string>
+    <string name="v2_share_people">صرف وہ لوگ جنہیں میں چنوں</string>
+    <string name="v2_share_password">پاس ورڈ (6 یا زیادہ حروف)</string>
+    <string name="v2_share_emails">ان کی ای میلز</string>
+    <string name="v2_share_emails_help">وہ اسے کنسول میں انہی میں سے کسی ای میل سے سائن اِن ہو کر کھولیں گے۔</string>
+    <string name="v2_share_downloads">ڈاؤن لوڈ کی اجازت (آڈیو اور ٹرانسکرپٹ)</string>
+    <string name="v2_share_works_for">لنک کتنی دیر چلے</string>
+    <string name="v2_share_never">ہمیشہ</string>
+    <string name="v2_share_1_day">1 دن</string>
+    <string name="v2_share_7_days">7 دن</string>
+    <string name="v2_share_month">1 مہینہ</string>
+    <string name="v2_share_make">لنک بنائیں</string>
+    <string name="v2_share_making">لنک بن رہا ہے…</string>
+    <string name="v2_share_shown_once">ابھی کاپی کر لیں: یہ صرف ایک بار دکھایا جاتا ہے۔</string>
+    <string name="v2_share_copy">کاپی</string>
+    <string name="v2_share_share">شیئر…</string>
+    <string name="v2_share_copied">لنک کاپی ہو گیا</string>
+    <string name="v2_share_links">لنکس</string>
+    <string name="v2_share_revoke">منسوخ کریں</string>
+    <string name="v2_share_revoke_title">یہ لنک منسوخ کریں؟</string>
+    <string name="v2_share_revoke_question">یہ ہر اس شخص کے لیے کام کرنا بند کر دے گا جس کے پاس یہ ہے۔</string>
+    <string name="v2_share_aud_password">پاس ورڈ</string>
+    <string name="v2_share_aud_people">صرف %1$s</string>
+    <string name="v2_share_aud_chosen">صرف چنے ہوئے لوگ</string>
+    <string name="v2_share_revoked">منسوخ</string>
+    <string name="v2_share_downloads_on">ڈاؤن لوڈ آن</string>
+    <string name="v2_share_no_downloads">ڈاؤن لوڈ بند</string>
+    <string name="v2_share_until">%1$s تک</string>
+    <string name="v2_share_sent_to">جنہیں بھیجا</string>
+    <string name="v2_share_stop">شیئر کرنا بند کریں</string>
+    <string name="v2_share_stop_question">%1$s کے ساتھ شیئر کرنا بند کریں؟ یہ ان کی فہرست سے ہٹ جائے گا اور وہ اسے مزید نہیں کھول سکیں گے۔ جو کاپی وہ محفوظ کر چکے ہیں وہ ان کی رہے گی۔</string>
+    <string name="v2_share_them">ان</string>
+    <string name="v2_share_sent_on">%1$s کو بھیجا</string>
+    <string name="v2_share_saved_copy">انہوں نے کاپی محفوظ کر لی</string>
+    <plurals name="v2_share_views">
+        <item quantity="one">%1$d بار دیکھا گیا</item>
+        <item quantity="other">%1$d بار دیکھا گیا</item>
+    </plurals>
+    <string name="v2_lib_copy_ai_none">کچھ کاپی نہیں ہوا: ان میں سے کسی کی ٹرانسکرپٹ ابھی نہیں بنی۔</string>
+    <plurals name="v2_lib_copy_ai_some">
+        <item quantity="one">%2$d میں سے %1$d AI کے لیے کاپی ہوئیں: باقی کی ٹرانسکرپٹ ابھی نہیں بنی۔</item>
+        <item quantity="other">%2$d میں سے %1$d AI کے لیے کاپی ہوئیں: باقی کی ٹرانسکرپٹ ابھی نہیں بنی۔</item>
+    </plurals>
+    <string name="v2_lib_copying">کاپی ہو رہا ہے…</string>
+</resources>

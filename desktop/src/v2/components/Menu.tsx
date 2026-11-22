@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type Ref } from "react";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type Ref } from "react";
 import { Button, Icon, type ButtonProps, type IconType } from "./Button";
 import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
 
@@ -22,6 +22,8 @@ export type MenuItem = {
   keepOpen?: boolean;
   /** A number on the end side (how many recordings a filter value has). */
   count?: number;
+  /** A hairline above this item, setting it and those after it apart without a header (Delete list…, New list…). */
+  separator?: boolean;
 };
 
 const ITEM_ROLES = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
@@ -49,8 +51,11 @@ type ListProps = {
 const EDGE = 8;
 const rtl = (el: Element | null) => !!el && getComputedStyle(el).direction === "rtl";
 
-/** The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level. */
-function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false }: ListProps) {
+/**
+ * The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level.
+ * Exported for openers of their own (SplitButton); a page uses Menu or ContextMenu.
+ */
+export function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false }: ListProps) {
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
   const own = useRef<HTMLUListElement | null>(null);
@@ -102,7 +107,7 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
   };
   useEffect(() => {
     if (sub !== null) return;
-    own.current?.querySelectorAll<HTMLElement>(`:scope > li > :is(${ITEM_ROLES})`)[active]?.focus();
+    own.current?.querySelectorAll<HTMLElement>(`:scope > li > :is(${ITEM_ROLES}), :scope > li > [role="group"] > li > :is(${ITEM_ROLES})`)[active]?.focus();
   }, [active, sub]);
 
   const openSub = (i: number) => {
@@ -132,38 +137,68 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
     else if (e.key === "Tab") onLeave();
   };
 
+  // When some items carry a tick, the others keep its column empty so every label starts in the same place.
+  const ticks = items.some((it) => it.checked !== undefined);
+  const row = (item: MenuItem, i: number) => {
+    const subOpen = sub === i;
+    return (
+      <Fragment key={`${item.group ?? ""}:${item.label}`}>
+      {item.separator && i > 0 && <li role="separator" className="el-menu__separator" />}
+      <li role="none" className="el-menu__item">
+        <div role={item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={item.checked} tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
+          aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
+          aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
+          className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
+          data-active={i === active || undefined}
+          onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
+          onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
+          {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
+            : ticks && <span className="el-menu__check" aria-hidden="true" />}
+          {item.icon ? <Icon icon={item.icon} /> : item.checked === undefined && <span className="el-menu__icon-space" aria-hidden="true" />}
+          <span className="el-menu__label">{item.label}</span>
+          {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
+          {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
+          {item.items && <Icon icon={ChevronEndIcon} directional />}
+        </div>
+        {subOpen && item.items && (
+          <MenuList label={item.label} items={item.items} className={`el-menu el-menu--sub${fit.room ? " el-menu--inline" : ""}`} initial={0}
+            inline={!!fit.room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
+        )}
+      </li>
+      </Fragment>
+    );
+  };
+
   return (
     <ul className={`${className}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
       onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={fit.up || undefined}>
-      {items.map((item, i) => {
-        const header = item.group && item.group !== items[i - 1]?.group ? item.group : null;
-        const subOpen = sub === i;
-        return [
-          header && <li key={`g-${header}`} role="presentation" className="el-menu__group el-caption">{header}</li>,
-          <li key={item.label} role="none" className="el-menu__item">
-            <div role={item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={item.checked} tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
-              aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
-              aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
-              className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
-              data-active={i === active || undefined}
-              onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
-              onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
-              {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
-                : item.icon ? <Icon icon={item.icon} /> : <span className="el-menu__icon-space" aria-hidden="true" />}
-              <span className="el-menu__label">{item.label}</span>
-              {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
-              {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
-              {item.items && <Icon icon={ChevronEndIcon} directional />}
-            </div>
-            {subOpen && item.items && (
-              <MenuList label={item.label} items={item.items} className={`el-menu el-menu--sub${fit.room ? " el-menu--inline" : ""}`} initial={0}
-                inline={!!fit.room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
-            )}
-          </li>,
-        ];
+      {runs(items).map(({ group, from, to }) => {
+        const rows = items.slice(from, to).map((item, k) => row(item, from + k));
+        if (!group) return rows;
+        // A titled group is announced as one: its own role="group" named by its header, so a screen reader hears
+        // "Sort, group" and each section's ticks are a radio set of their own (Sort, Group by, Density).
+        return (
+          <li key={`g-${group}:${from}`} role="none" className="el-menu__section">
+            <ul role="group" aria-label={group}>
+              <li role="presentation" aria-hidden="true" className="el-menu__group el-caption">{group}</li>
+              {rows}
+            </ul>
+          </li>
+        );
       })}
     </ul>
   );
+}
+
+/** Consecutive items with the same `group` (none: ungrouped), as index ranges [from, to). */
+function runs(items: readonly MenuItem[]): { group?: string; from: number; to: number }[] {
+  const out: { group?: string; from: number; to: number }[] = [];
+  items.forEach((item, i) => {
+    const last = out[out.length - 1];
+    if (last && last.group === item.group) last.to = i + 1;
+    else out.push({ group: item.group, from: i, to: i + 1 });
+  });
+  return out;
 }
 
 /** "⌘A" → "Meta+A", "Del" → "Delete", for aria-keyshortcuts. */

@@ -45,6 +45,11 @@ export {
   LucideArrowUpDownIcon as SortIcon,
   LucideRotateCcwIcon as BackIcon,
   LucideRotateCwIcon as ForwardIcon,
+  LucideRadioIcon as RadioIcon,
+  LucideLifeBuoyIcon as LifeBuoyIcon,
+  LucideUserRoundPenIcon as UserRoundPenIcon,
+  LucideFingerprintIcon as FingerprintIcon,
+  LucideCommandIcon as CommandIcon,
 } from "../../components/Icons";
 export {
   SourceAppIcon,
@@ -64,6 +69,10 @@ export {
   DownloadIcon,
   GlobeIcon as WebIcon,
   ColumnsIcon,
+  SidebarIcon,
   LinkIcon,
+  PlusIcon,
+  UsersIcon,
+  RequestFilesIcon,
 } from "../../components/Icons";
 export { PlayIcon, PauseIcon, StopIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";

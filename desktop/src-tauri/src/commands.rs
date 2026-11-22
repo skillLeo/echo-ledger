@@ -201,6 +201,9 @@ async fn adopt_registration(app: &AppHandle, api: &ApiClient, registered: crate:
     }
     state.token_store.save(&registered.token).map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = Some(registered.token);
+    // Another account may be signing in: the last one's WhatsApp share copies and kept pictures go.
+    forget_whatsapp_shares(app);
+    forget_avatars(app);
     state.update_settings(|s| {
         s.server_url = Some(api.base_url().to_string());
         s.pins = final_pins.clone();
@@ -443,6 +446,10 @@ pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callb
 #[tauri::command]
 pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     let state = app.state::<AppState>();
+    // First, so the share copies, kept pictures and copied recovery codes go even when a later step (the keychain) fails.
+    forget_whatsapp_shares(&app);
+    forget_avatars(&app);
+    crate::secret_copy::clear_now(&app).await;
     state.token_store.forget().map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = None;
     state.api_cache.clear();
@@ -516,11 +523,128 @@ pub fn account_export_open(app: AppHandle, url: String) -> AppResult<()> {
     app.opener().open_url(url.trim(), None::<&str>).map_err(|e| AppError::msg(e.to_string()))
 }
 
+// ---- Your account from the app (contract 2.0.0-l) ------------------------------------------------------------------
+
+/// One account action (`my_account::ACTIONS`) with its body (a proof, a name, a code…), answered whole so the window
+/// can say each refusal in its own words. Only a signed-out computer is an error.
+#[tauri::command]
+pub async fn account_call(app: AppHandle, action: String, id: Option<String>, body: Option<serde_json::Value>) -> AppResult<crate::my_account::AccountReply> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let (method, path) = crate::my_account::route(&action, id.as_deref())?;
+    let body = body.unwrap_or(serde_json::Value::Null);
+    if !body.is_null() && !body.is_object() {
+        return Err(AppError::msg("That is not something this app can change."));
+    }
+    let reply = state.api()?.account_request(method, &path, &body).await?;
+    // The name, the picture or the email changed: the shell's avatar and name follow.
+    if reply.ok && matches!(action.as_str(), "name" | "avatar_remove" | "email_confirm") {
+        let _ = app.emit("account:changed", ());
+    }
+    Ok(reply)
+}
+
+/// Change picture…: the person picks a photo here; it is made ready (a JPEG, PNG or WebP of at most 5 MB, with no
+/// place or camera details; HEIC turned into a JPEG on a Mac) and sent. `None` when they cancel the picker.
+#[tauri::command]
+pub async fn account_avatar_choose(app: AppHandle) -> AppResult<Option<crate::my_account::AccountReply>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let Some(path) = crate::files::pick_avatar(&app).await else { return Ok(None) };
+    // A file over 50 MB is not read at all (and no more than that is read of a file that grows meanwhile).
+    let too_large = || AppError::msg(crate::my_account::FILE_TOO_LARGE);
+    if tokio::fs::metadata(&path).await?.len() > crate::my_account::MAX_AVATAR_INPUT as u64 {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    {
+        use tokio::io::AsyncReadExt as _;
+        tokio::fs::File::open(&path).await?.take(crate::my_account::MAX_AVATAR_INPUT as u64 + 1).read_to_end(&mut bytes).await?;
+    }
+    if bytes.len() > crate::my_account::MAX_AVATAR_INPUT {
+        return Err(too_large());
+    }
+    let picture = tokio::task::spawn_blocking(move || crate::my_account::prepare_avatar(bytes, crate::my_account::heif_to_jpeg))
+        .await
+        .map_err(|e| AppError::msg(e.to_string()))?
+        .map_err(AppError::msg)?;
+    let reply = state.api()?.upload_avatar(&picture).await?;
+    if reply.ok {
+        let _ = app.emit("account:changed", ());
+    }
+    Ok(Some(reply))
+}
+
+/// A person's picture as a `data:` URL for the window (its pictures come from the app only), kept on this computer by
+/// server, person and version (`my_account::avatar_cache_path`) until sign-out, so it shows again without a download.
+/// `None` when there is none to show (the window draws the initials).
+#[tauri::command]
+pub async fn account_avatar_image(app: AppHandle, url: Option<String>, version: u64) -> AppResult<Option<String>> {
+    use base64::Engine as _;
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let Some(url) = url else { return Ok(None) };
+    let server = state.settings().server_url.ok_or(AppError::NotPaired)?;
+    // Kept by server, person and version: another account's or server's picture is never this one.
+    let Some(cached) = crate::my_account::avatar_cache_path(&state.data_dir, &server, &url, version) else { return Ok(None) };
+    let to_url = |bytes: &[u8]| {
+        let mime = crate::receipts::sniff(bytes).map(|k| k.mime()).unwrap_or("image/webp");
+        format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
+    };
+    if let Ok(bytes) = tokio::fs::read(&cached).await {
+        return Ok(Some(to_url(&bytes)));
+    }
+    if !crate::account::on_server(&url, &server) {
+        return Ok(None);
+    }
+    let Ok(Some(bytes)) = state.api()?.avatar_bytes(&url).await else { return Ok(None) };
+    if crate::receipts::sniff(&bytes).is_none() {
+        return Ok(None);
+    }
+    if let Some(dir) = cached.parent() {
+        let _ = tokio::fs::create_dir_all(dir).await;
+        let _ = tokio::fs::write(&cached, &bytes).await;
+    }
+    Ok(Some(to_url(&bytes)))
+}
+
+/// Save the recovery codes as a text file where the person chooses; `None` when they cancel.
+#[tauri::command]
+pub async fn account_recovery_codes_save(app: AppHandle, codes: Vec<String>, email: String) -> AppResult<Option<String>> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    recovery_codes_ok(&codes, "There are no recovery codes to save.")?;
+    let Some(path) = crate::files::ask_save_path(&app, "EchoLedger recovery codes.txt", "Text").await else { return Ok(None) };
+    tokio::fs::write(&path, crate::my_account::recovery_codes_text(&codes, &email)).await?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Copy codes: the recovery codes on the clipboard, marked so clipboard history and clipboard managers keep no copy,
+/// and emptied after a minute if nothing was copied since (`secret_copy`).
+#[tauri::command]
+pub async fn account_recovery_codes_copy(app: AppHandle, codes: Vec<String>) -> AppResult<()> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    recovery_codes_ok(&codes, "There are no recovery codes to copy.")?;
+    let text = codes.iter().map(|c| c.trim()).collect::<Vec<_>>().join("\n");
+    crate::secret_copy::copy_concealed(&app, text).await.map_err(|e| {
+        eprintln!("[account] clipboard: {e}");
+        AppError::msg("Could not copy. Save them as a file instead.")
+    })
+}
+
+/// Recovery codes as the server makes them: 1 to 32 of them, none longer than 64.
+fn recovery_codes_ok(codes: &[String], refusal: &str) -> AppResult<()> {
+    if codes.is_empty() || codes.len() > 32 || codes.iter().any(|c| c.len() > 64 || c.trim().is_empty()) {
+        return Err(AppError::msg(refusal));
+    }
+    Ok(())
+}
+
 /// The server's public pages the app links to (docs/API.md "Public pages and app downloads"), opened in the browser.
 /// The server's pages the apps open in the browser (v1.6): the staff's admin panel (`admin`, the avatar menu, only for
 /// the super admin) and the customer app's workspace and profile pages (`app/…`, the workspace switcher and Account →
-/// Password & sign-in methods; the console moved them from `/admin` to `/app`, and old links redirect).
-const SERVER_PAGES: [&str; 7] = ["terms", "privacy", "account/delete", "downloads", "admin", "app/workspace", "app/profile"];
+/// Password & sign-in methods; the console moved them from `/admin` to `/app`, and old links redirect), and since
+/// 2.0.0-l the passkeys page (the desktop adds passkeys on the website).
+const SERVER_PAGES: [&str; 8] = ["terms", "privacy", "account/delete", "downloads", "admin", "app/workspace", "app/profile", "app/settings/security/passkeys"];
 
 /// `server_url` is the server the sign-in screen talks to (Terms and Privacy before signing in, v1.6); without it the
 /// signed-in server.
@@ -1496,17 +1620,48 @@ pub async fn save_audio(app: AppHandle, id: String) -> AppResult<Option<String>>
 /// a dialog, so the person can attach it in WhatsApp; returns its path.
 #[tauri::command]
 pub async fn save_audio_downloads(app: AppHandle, id: String) -> AppResult<String> {
+    audio_to_downloads(&app, &id).await
+}
+
+async fn audio_to_downloads(app: &AppHandle, id: &str) -> AppResult<String> {
+    let state = app.state::<AppState>();
+    let audio = audio_source(app, id).await?;
+    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+    let path = export_target(&dir, &audio.name);
+    state.api()?.download_audio(&audio.url, &path).await?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// The recording's audio as the server has it now.
+struct AudioSource {
+    url: String,
+    name: String,
+    /// The audio's version and size (`share_sheet::audio_version`).
+    version: String,
+    size: Option<u64>,
+}
+
+/// The recording's audio link, file name and version; an error when the audio is not on the server.
+async fn audio_source(app: &AppHandle, id: &str) -> AppResult<AudioSource> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    let api = state.api()?;
-    let detail = api.session(&id).await?;
+    let detail = state.api()?.session(id).await?;
     let Some(url) = detail.get("playback_url").and_then(serde_json::Value::as_str).filter(|u| !u.is_empty()).map(str::to_string) else {
         return Err(AppError::msg("The audio of this recording is not on the server, so there is nothing to save yet."));
     };
-    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
-    let path = export_target(&dir, &crate::files::audio_file_name(&detail));
-    api.download_audio(&url, &path).await?;
-    Ok(path.to_string_lossy().into_owned())
+    let (version, size) = crate::share_sheet::audio_version(&detail);
+    Ok(AudioSource { url, name: crate::files::audio_file_name(&detail), version, size })
+}
+
+/// The pictures kept on this computer (2.0.0-l) are this account's: removed on sign-out and when an account signs in.
+fn forget_avatars(app: &AppHandle) {
+    crate::my_account::clear_avatars(&app.state::<AppState>().data_dir);
+}
+
+/// Send to WhatsApp's share copies (F6) are this account's: removed on sign-out and when an account signs in.
+fn forget_whatsapp_shares(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    crate::share_sheet::clear_all(&crate::share_sheet::share_root(app.path().app_cache_dir().ok(), &state.data_dir));
 }
 
 /// Send to WhatsApp (v1.6, P5.5): opens `wa.me` with the text (WhatsApp, else WhatsApp Web). True when the text was
@@ -1520,6 +1675,46 @@ pub fn whatsapp_open(app: AppHandle, text: String) -> AppResult<bool> {
     let (url, cut) = crate::whatsapp::whatsapp_url(&text);
     app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))?;
     Ok(cut)
+}
+
+/// Send to WhatsApp → Text and voice (F6): the audio kept in the app's cache (one copy per recording and audio version,
+/// used again on a retry; the others removed once this share has settled, and all of them on sign-out), then the text and the file handed to the system's share (WhatsApp's share on the Mac, the Share window on
+/// Windows). When that cannot be used, or `share` is false (the window's "Open WhatsApp with the text instead"): the
+/// voice in Downloads (one copy per recording), wa.me with the text as before, and the file on the clipboard to paste
+/// into the chat (`share_sheet`).
+#[tauri::command]
+pub async fn whatsapp_share_voice(app: AppHandle, id: String, text: String, share: Option<bool>) -> AppResult<crate::share_sheet::ShareOutcome> {
+    use crate::share_sheet::{self, ShareOutcome};
+    if text.trim().is_empty() {
+        return Err(AppError::msg("There is nothing to send yet."));
+    }
+    let audio = audio_source(&app, &id).await?;
+    let state = app.state::<AppState>();
+    let root = share_sheet::share_root(app.path().app_cache_dir().ok(), &state.data_dir);
+    let key = share_sheet::cache_key(&id, &audio.version);
+    let cached = root.join(&key).join(&audio.name);
+    if !share_sheet::is_cached(&cached, audio.size) {
+        // The folder is this audio version's own; whatever is in it is a copy that did not finish.
+        let _ = std::fs::remove_dir_all(root.join(&key));
+        std::fs::create_dir_all(root.join(&key))?;
+        state.api()?.download_audio(&audio.url, &cached).await?;
+    }
+    let outcome = async {
+        if share.unwrap_or(true)
+            && let Some(outcome) = share_sheet::settled(&share_sheet::share(&app, text.trim(), &cached.to_string_lossy()).await)
+        {
+            return Ok(outcome);
+        }
+        let downloads = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+        let path = share_sheet::downloads_copy(&downloads, &audio.name, &cached)?.to_string_lossy().into_owned();
+        let file_on_clipboard = share_sheet::file_to_clipboard(&app, &path).await;
+        let text_cut = whatsapp_open(app.clone(), text)?;
+        AppResult::Ok(ShareOutcome::Fallback { path, file_on_clipboard, text_cut, paste_keys: share_sheet::paste_keys(std::env::consts::OS).into() })
+    }
+    .await;
+    // Settled: the copies of earlier shares go (one still open until now could have been reading its copy).
+    share_sheet::clear_other_shares(&root, &key);
+    outcome
 }
 
 // ---- Settings export / import (B19) -----------------------------------------------------------------------------
@@ -1652,8 +1847,15 @@ pub fn lock_now(app: AppHandle) -> LockStatus {
     if state.settings().app_lock {
         state.lock.set_locked(true);
         emit_lock(&app);
+        clear_copied_codes(&app);
     }
     lock_status_of(&state)
+}
+
+/// Recovery codes copied before a lock leave the clipboard with it (secret_copy.rs).
+fn clear_copied_codes(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move { crate::secret_copy::clear_now(&app).await });
 }
 
 /// The UI saw the person use the app; resets the lock-after timer.
@@ -1724,6 +1926,7 @@ pub fn spawn_idle_lock(app: AppHandle) {
             if !state.lock.is_locked() && crate::lock::idle_expired(settings.app_lock, settings.lock_after_minutes, state.lock.last_activity(), std::time::Instant::now()) {
                 state.lock.set_locked(true);
                 emit_lock(&app);
+                crate::secret_copy::clear_now(&app).await;
             }
         }
     });
@@ -1953,6 +2156,119 @@ pub fn when_available(answer: AppResult<serde_json::Value>) -> AppResult<Option<
 /// An IANA time zone name as the webview reports it (`Asia/Karachi`, `UTC`, `Etc/GMT+5`).
 pub fn is_time_zone(zone: &str) -> bool {
     (1..=64).contains(&zone.len()) && zone.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '+'))
+}
+
+// ---- Lists (contract 2.0.0-m) -------------------------------------------------------------------------------------
+
+/// The longest list name (a list is a label).
+pub const MAX_LIST_NAME: usize = 40;
+
+/// A list name as the server stores it: trimmed, single spaces, 1 to 40 characters.
+pub fn list_name(name: &str) -> AppResult<String> {
+    let clean = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if clean.is_empty() {
+        return Err(AppError::msg("Type a name for the list."));
+    }
+    if clean.chars().count() > MAX_LIST_NAME {
+        return Err(AppError::msg(format!("A list name is at most {MAX_LIST_NAME} characters.")));
+    }
+    Ok(clean)
+}
+
+/// "#rrggbb", or an error.
+pub fn list_colour(color: &str) -> AppResult<String> {
+    let ok = color.len() == 7 && color.starts_with('#') && color[1..].chars().all(|c| c.is_ascii_hexdigit());
+    if ok { Ok(color.to_ascii_lowercase()) } else { Err(AppError::msg("Choose one of the list colours.")) }
+}
+
+/// The person's lists in their order; `None` on a server without lists yet (the Library shows its fixed chips only).
+#[tauri::command]
+pub async fn lists_get(app: AppHandle) -> AppResult<Option<Vec<crate::net::models::ListDto>>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.lists().await {
+        Ok(answer) => Ok(Some(answer.data)),
+        Err(e) if e.is_missing_route() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// "+" in the Library's list row: a new, empty list at the end; without a colour the server picks the least used.
+#[tauri::command]
+pub async fn list_create(app: AppHandle, name: String, color: Option<String>) -> AppResult<crate::net::models::ListDto> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let name = list_name(&name)?;
+    let color = color.as_deref().map(list_colour).transpose()?;
+    match state.api()?.create_list(&name, color.as_deref()).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Lists")),
+        other => Ok(other?.data),
+    }
+}
+
+/// Rename… and Change colour… on a list chip. A rename or a recolour changes every recording in the list: the Library
+/// syncs once afterwards (the page asks for it), not here as well.
+#[tauri::command]
+pub async fn list_update(app: AppHandle, key: String, name: Option<String>, color: Option<String>) -> AppResult<crate::net::models::ListDto> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let mut patch = serde_json::Map::new();
+    if let Some(name) = name.as_deref() {
+        patch.insert("name".into(), list_name(name)?.into());
+    }
+    if let Some(color) = color.as_deref() {
+        patch.insert("color".into(), list_colour(color)?.into());
+    }
+    if patch.is_empty() {
+        return Err(AppError::msg("There is nothing to change."));
+    }
+    let answer = match state.api()?.update_list(&key, &serde_json::Value::Object(patch)).await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("Lists")),
+        other => other?,
+    };
+    Ok(answer.data)
+}
+
+/// Delete list…: the label comes off its recordings (they stay); returns how many changed. The page syncs the Library
+/// once afterwards.
+#[tauri::command]
+pub async fn list_delete(app: AppHandle, key: String) -> AppResult<u64> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let answer = match state.api()?.delete_list(&key).await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("Lists")),
+        other => other?,
+    };
+    Ok(answer.changed)
+}
+
+/// The person opened a recording here (`POST /api/sessions/{id}/opened`, since v1.3): it is no longer unread, on
+/// every device. The saved Library says so at once, as the server doesn't send the recording again for it. A server
+/// before v1.3 has no unread recordings: nothing to do.
+#[tauri::command]
+pub async fn session_opened(app: AppHandle, id: String) -> AppResult<()> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.session_opened(&id).await {
+        Err(e) if e.is_missing_route() => return Ok(()),
+        other => other?,
+    }
+    let mut cache = state.library.lock().await;
+    if cache.mark_opened(&id) {
+        cache.save(&paths::library(&state.data_dir))?;
+    }
+    Ok(())
+}
+
+/// Move left / Move right on a list chip: every list's key once, in the new order.
+#[tauri::command]
+pub async fn lists_order(app: AppHandle, keys: Vec<String>) -> AppResult<Vec<crate::net::models::ListDto>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.order_lists(&keys).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Lists")),
+        other => Ok(other?.data),
+    }
 }
 
 /// Deletes a project. Nothing in it is lost: its recordings go to the Inbox and its subfolders up a level (its files,

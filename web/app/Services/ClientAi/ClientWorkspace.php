@@ -17,6 +17,8 @@ use App\Models\Client;
 use App\Models\ClientBrief;
 use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
+use App\Models\Scopes\OwnerScope;
+use App\Models\Scopes\WorkspaceScope;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
@@ -70,6 +72,9 @@ final class ClientWorkspace
 
     /** How many passages one question carries (about 8 000 tokens). */
     private const PASSAGES = 12;
+
+    /** Since 2.0.0-o: how many of a person's latest transcribed recordings Ask across all recordings reads. */
+    public const ASK_ALL_RECORDINGS = 100;
 
     public function __construct(
         private readonly ClientAi $ai,
@@ -131,12 +136,23 @@ final class ClientWorkspace
     /** @param array{input_tokens: int, output_tokens: int, model: string} $usage */
     private function bill(Client $client, string $purpose, array $usage, ?string $sessionId = null): void
     {
+        $this->charge($client->user_id, $client->workspace_id, $client->id, $purpose, $usage, $sessionId);
+    }
+
+    /**
+     * One Claude request in the usage ledger, counted against the workspace's AI budget (`client_*`): a project's, or
+     * since 2.0.0-o a person's Ask about a recording or across their recordings (no project, or the recording's).
+     *
+     * @param  array{input_tokens: int, output_tokens: int, model: string}  $usage
+     */
+    private function charge(int $userId, int $workspaceId, ?string $clientId, string $purpose, array $usage, ?string $sessionId = null): void
+    {
         [$in, $out] = ClaudeClientAi::PRICES[$usage['model']] ?? ClaudeClientAi::PRICES[ClaudeClientAi::MODEL];
         UsageLedgerEntry::query()->create([
-            'user_id' => $client->user_id,
-            'workspace_id' => $client->workspace_id,
+            'user_id' => $userId,
+            'workspace_id' => $workspaceId,
             'capture_session_id' => $sessionId,
-            'client_id' => $client->id,
+            'client_id' => $clientId,
             'report_id' => 'client-ai/'.Str::ulid(),
             'source' => UsageLedgerEntry::SOURCE_SERVER,
             'use_case' => 'client_'.$purpose,
@@ -459,7 +475,7 @@ final class ClientWorkspace
     public function noteText(CallNote $note): string
     {
         $session = $note->captureSession;
-        $title = ($session?->title ?: 'Call').' · '.($session?->started_at->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y') ?? '');
+        $title = ($session?->displayTitle() ?? 'Call').' · '.($session?->started_at->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y') ?? '');
         $lines = ["### {$title}"];
         foreach ($note->toApi()['sections'] as $section) {
             $lines[] = $section['heading'].':';
@@ -667,19 +683,87 @@ final class ClientWorkspace
         $brief = ClientBrief::query()->withoutGlobalScopes()->where('client_id', $client->id)->first();
         $memory = ClientMemoryItem::query()->withoutGlobalScopes()->ofProjectMaker($client)->orderByDesc('pinned')->orderBy('happened_on')
             ->limit(200)->get()->map(fn (ClientMemoryItem $m): string => '- '.ucfirst($m->kind).($m->happened_on ? ' ('.$m->happened_on->toDateString().')' : '').': '.$m->text)->all();
+        [$answer, $usage] = $this->answer($client->name, $brief?->toApi()['sections'] ?? ClientBrief::emptySections(), array_values($memory), $passages, $question, $language);
+        $this->bill($client, 'ask', $usage);
+
+        return $answer;
+    }
+
+    /**
+     * Since 2.0.0-o: answers a question about one recording from its transcript and its notes, with the same rules,
+     * plan and budget checks and citations as a project's Ask. The caller has checked the recording is the person's.
+     *
+     * @return array{answer: string, citations: list<array<string, mixed>>}
+     */
+    public function askRecording(CaptureSession $session, string $question, string $language): array
+    {
+        $this->assertCanWriteNotes($session->workspace_id);
+        $session->loadMissing('finalTranscript');
+        $passages = (new PassageSearch($this->settings))->topOfRecordings([$session], $question, self::PASSAGES);
+        if ($passages === []) {
+            throw new ApiError(409, 'no_transcript', 'This recording has no transcript to ask about yet.');
+        }
+        $note = CallNote::query()->withoutGlobalScopes()->where('capture_session_id', $session->id)->where('status', 'ready')->first();
+        $memory = $note instanceof CallNote ? [$this->noteText($note->setRelation('captureSession', $session))] : [];
+        [$answer, $usage] = $this->answer($session->displayTitle(), ClientBrief::emptySections(), $memory, $passages, $question, $language, ClientAi::ASK_RECORDING);
+        $this->charge($session->user_id, $session->workspace_id, $session->client_id, 'ask', $usage, $session->id);
+
+        return $answer;
+    }
+
+    /**
+     * Since 2.0.0-o: answers a question across a person's own recordings in one workspace (their latest
+     * [ASK_ALL_RECORDINGS] with a finished transcript; never a teammate's, never one in the Bin). Their ids come first;
+     * then the transcripts are read a batch at a time, only the columns the search uses, so a heavy account never holds
+     * all of them at once.
+     *
+     * @return array{answer: string, citations: list<array<string, mixed>>}
+     */
+    public function askAll(int $workspaceId, int $userId, string $question, string $language): array
+    {
+        $this->assertCanWriteNotes($workspaceId);
+        $mine = fn (): Builder => CaptureSession::query()->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class])
+            ->where('workspace_id', $workspaceId)->where('user_id', $userId);
+        $ids = $mine()->whereHas('finalTranscript', fn (Builder $q) => $q->where('status', TranscriptStatus::Completed->value))
+            ->latest('started_at')->orderByDesc('id')->limit(self::ASK_ALL_RECORDINGS)->pluck('id')->all();
+        $passages = (new PassageSearch($this->settings))->topOfManyRecordings(
+            array_values(array_map('strval', $ids)),
+            fn (array $batch): iterable => $mine()->whereKey($batch)->with(['finalTranscript' => fn ($q) => $q->select(PassageSearch::TRANSCRIPT_COLUMNS)])->get(),
+            $question,
+            self::PASSAGES,
+        );
+        if ($passages === []) {
+            throw new ApiError(409, 'no_transcript', 'None of your recordings has a transcript to ask about yet.');
+        }
+        [$answer, $usage] = $this->answer('your recordings', ClientBrief::emptySections(), [], $passages, $question, $language, ClientAi::ASK_RECORDINGS);
+        $this->charge($userId, $workspaceId, null, 'ask', $usage);
+
+        return $answer;
+    }
+
+    /**
+     * Claude's answer from the passages, with each citation as a call and its moment or a file and its page.
+     *
+     * @param  array<string, mixed>  $brief
+     * @param  list<string>  $memory
+     * @param  list<array<string, mixed>>  $passages
+     * @return array{0: array{answer: string, citations: list<array<string, mixed>>}, 1: array{input_tokens: int, output_tokens: int, model: string}}
+     */
+    private function answer(string $name, array $brief, array $memory, array $passages, string $question, string $language, string $scope = ClientAi::ASK_PROJECT): array
+    {
         try {
             $result = $this->ai->ask(
-                $client->name,
-                $brief?->toApi()['sections'] ?? ClientBrief::emptySections(),
-                array_values($memory),
+                $name,
+                $brief,
+                $memory,
                 array_map(fn (array $p): array => ['title' => $p['title'], 'blocks' => $p['blocks']], $passages),
                 $question,
                 $language,
+                $scope,
             );
         } catch (Throwable $e) {
             throw new ApiError(502, 'provider_error', 'The AI could not answer right now. Try again in a minute.');
         }
-        $this->bill($client, 'ask', $result);
         $citations = [];
         foreach ($result['citations'] as $citation) {
             $passage = $passages[$citation['passage']] ?? null;
@@ -693,7 +777,8 @@ final class ClientWorkspace
             $citations[json_encode([$entry['type'], $passage['id'], $where])] = $entry;
         }
 
-        return ['answer' => $result['answer'], 'citations' => array_values($citations)];
+        return [['answer' => $result['answer'], 'citations' => array_values($citations)],
+            ['input_tokens' => $result['input_tokens'], 'output_tokens' => $result['output_tokens'], 'model' => $result['model']]];
     }
 
     /** "Copy for AI": the brief, the memory and the last [$notes] call notes, ready to paste into a chat project. */

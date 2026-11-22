@@ -4,6 +4,8 @@ import type { GalleryParams } from "./guard";
 import { LibraryScreen } from "./screens/Library";
 import { RecordingScreen } from "./screens/Recording";
 import { SettingsScreen } from "./screens/Settings";
+import { KitScreen } from "./screens/Kit";
+import { ListsScreen } from "./screens/Lists";
 import "./gallery.css";
 import { AssistCard } from "../assist/AssistCard";
 import { FIXTURE_SESSION } from "../assist/fixture";
@@ -44,6 +46,8 @@ export function Gallery({ screen, lang, state = "ready" }: Pick<GalleryParams, "
             <PlanPageV2 e={planSample()} role={null} workspace={null} onKey={noop} />
           </div>
         )}
+        {screen === "kit" && <KitScreen lang={lang} />}
+        {screen === "lists" && <ListsScreen lang={lang} />}
         {screen === "assist" && (
           <div className="g-assist">
             <h1 className="el-visually-hidden">Live Assist</h1>

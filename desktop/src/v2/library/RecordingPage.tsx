@@ -1,11 +1,12 @@
 // The v2 recording page (ui_v2.library): title, the one player, the transcript with speakers, and the actions. The
 // data are today's: session_detail for the audio and speaker names, transcript_detail for the text. Its ⋮ is the
 // Library's one menu (organise.tsx) with this page's parts: Change language, the Export ▸ in the view on screen with
-// PDF and the meeting packs, and Save audio. Under the player: Send to WhatsApp · Copy ▾ · Export ▾; over the
+// PDF and the meeting packs, and Save audio. Under the player: Send to WhatsApp · Copy (the text at once, its chevron
+// for the other ways) · Export ▾; over the
 // transcript: Show as (Roman Urdu · اردو · English · Original), as classic.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  api, errorMessage, type ExportFormat, type LibraryItem, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
+  api, errorMessage, type ExportFormat, type LearnOffer, type LibraryItem, type TranscriptionLanguage, type TranscriptSuggestion, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
   type TranscriptViewsState,
 } from "../../lib/ipc";
 import { confirmAction } from "../../lib/confirm";
@@ -13,21 +14,57 @@ import { screenSaid, screensByLine } from "../../lib/screens";
 import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
-import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
-import { PLAYER_HINT, activeIndex, findMatches, KEY_SECONDS, markParts, playerKey, playerLength, skipTarget, speakerLabels, speakerName } from "../../lib/player";
-import { CallNotesV2, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
-import { normalizeLanguage, scriptWarning, transcribedIn } from "../../lib/languages";
+import { copiedTranscript, DEFAULT_UNSURE, fileSize, formatDuration, formatWhen, providerName, sourceAppLabel, timestamp, type UnsureMarkers } from "../../lib/format";
+import { PLAYER_HINT, activeIndex, activeWord, waveformBars, findMatches, KEY_SECONDS, markParts, newTerms, playerKey, playerLength, skipTarget, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
+import { CallNotesV2, ConvertingLine, FindBar, HistoryDialog, LineEditor, ReplaceDialog, SpeakersDialog } from "./TranscriptToolsV2";
+import { defaultViewOf, improvingView, transcribingLine, viewPercent } from "../../lib/progress";
+import { usePoll } from "../../lib/usePoll";
+import { canTryAgain, failureLine, languageLabel, needsKeyAction, normalizeLanguage, partsText, retryLine, scriptWarning, transcribedIn, usedBackupEngine } from "../../lib/languages";
+import { openSettingsSection } from "../../lib/entitlements";
+import { PLAYBACK_EXPIRED } from "../shared/SharedReader";
 import { bookmarksOf, type Bookmark } from "../../lib/library";
 import { ShareDialog } from "../../views/main/ShareDialog";
-import { PDF_HINT } from "../../views/main/TranscriptTools";
+import { PDF_HINT, WAVE_BARS } from "../../views/main/TranscriptTools";
+import { LockedChip, NEEDS_KEY_TEXT } from "../../views/main/Upgrade";
+import { BackupEngineLine, FiledByLineV2, LearnOfferV2, RecordingStepsV2, VocabularyOfferV2 } from "./recordingExtras";
 import { screenMarker } from "../../lib/screens";
-import { Badge, Button, Card, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, Tabs, Toggle, Transcript, type Segment } from "../components";
+import { Waveform, Badge, Banner, Button, Card, copyMenuItems, LabelChip, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, SplitButton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
 import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
 
 type Tab = "transcript" | "notes" | "details";
+
+/** A transcript still being made (queued, waiting for the engine, in parts). */
+const IN_FLIGHT = new Set(["pending", "submitted", "processing"]);
+const isTranscribing = (status?: string | null) => !!status && IN_FLIGHT.has(status);
+
+/** The primary recording's size from the session's detail, when the server says it. */
+export function primarySize(detail: Record<string, unknown>): number | null {
+  const recordings = Array.isArray(detail.recordings) ? (detail.recordings as Record<string, unknown>[]) : [];
+  const primary = recordings.find((r) => r.role === "primary") ?? recordings[0];
+  const size = primary?.size_bytes;
+  return typeof size === "number" && size > 0 ? size : null;
+}
+
+/** Tooltips of what the engine was not sure of (kept as heard), as classic's. */
+export const UNSURE_WORD = "Not sure of this word. Click to hear it.";
+export const UNSURE_LINE = "The engine was not sure of this line. Click to hear it.";
+/**
+ * The words with timings join back into the line's text, ignoring spaces, punctuation and capitals (engines send words
+ * without the line's commas and full stops): only then are they drawn one by one.
+ */
+export function wordsMatch(words: readonly { text: string }[], text: string): boolean {
+  // An apostrophe joins its word ("don't" is one word whether an engine sends "don't" or "dont"); other marks split.
+  const squash = (t: string) => t.toLowerCase().replace(/['’‘`ʼ]/g, "").replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
+  return squash(words.map((w) => w.text).join(" ")) === squash(text);
+}
+
+/** No speaker names yet: one empty object, so what is worked out from them keeps while the page reads. */
+const NO_NAMES: Record<string, string> = {};
+/** Double-check: what a second transcription heard on a line it disagreed on (never the engine's name, D-132). */
+export const SECOND_HEARD = "A second transcription heard:";
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; value: T };
 
 export type RecordingPageProps = {
@@ -41,6 +78,10 @@ export type RecordingPageProps = {
   onOpenProject?: (id: string) => void;
   /** The Library's one menu for this recording, with this page's parts in their places (Delete stays last). */
   menu: (own: RecordingMenuParts) => MenuItem[];
+  /** What the page read about the transcript's views, for the recording's row in the Library. */
+  onViews?: (views: TranscriptViewsState) => void;
+  /** The recording changed here (renamed by its title, a label taken off): the Library shows it at once. */
+  onItemChanged?: (item: Partial<LibraryItem> & { id: string }) => void;
 };
 
 const SPEEDS = ["0.5", "0.75", "1", "1.25", "1.5", "1.75", "2"];
@@ -54,10 +95,24 @@ type ShowAs = "original" | TranscriptView;
 const inField = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"]:not(.el-drawer), [role="alertdialog"], [role="menu"], [role="listbox"]'));
 
-export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject }: RecordingPageProps) {
+export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, onOpenProject, onViews, onItemChanged }: RecordingPageProps) {
   const [sharing, setSharing] = useState(false);
+  // Rename by clicking the title (classic's): Enter or leaving the field saves, Esc cancels.
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const renameDone = useRef(false);
+  // After Enter or Esc the keyboard is back on the title it came from.
+  const titleButton = useRef<HTMLButtonElement>(null);
+  const focusTitle = useRef(false);
+  useEffect(() => {
+    if (renaming !== null || !focusTitle.current) return;
+    focusTitle.current = false;
+    titleButton.current?.focus();
+  }, [renaming]);
   const [tab, setTab] = useState<Tab>("transcript");
-  const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string>; bookmarks: Bookmark[] }>>({ state: "loading" });
+  const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string>; bookmarks: Bookmark[]; sizeBytes: number | null }>>({ state: "loading" });
+  // An expired playback link is asked for again once (classic's); a second failure says so.
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const refreshedLink = useRef(false);
   const [transcript, setTranscript] = useState<Load<TranscriptDetail | null>>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -86,11 +141,24 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const [screenOpen, setScreenOpen] = useState<number | null>(null);
   const { screens, reload: reloadScreens } = useSessionScreens(item.id, item.screen_count);
   const state = itemState(item);
-  const transcriptId = item.transcript?.final_transcript_id ?? item.transcript?.live_transcript_id ?? null;
+  // Which version is shown after Re-transcribe as: the transcript (newest), or the previous one while it is kept.
+  const [version, setVersion] = useState<"final" | "alternate">("final");
+  useEffect(() => setVersion("final"), [item.id]);
+  const alternateId = item.transcript?.alternate_status === "completed" ? item.transcript?.alternate_transcript_id ?? null : null;
+  const transcriptId = (version === "alternate" && alternateId) || (item.transcript?.final_transcript_id ?? item.transcript?.live_transcript_id ?? null);
+  // After an edit: "Always write X as Y for Acme?" (one at a time), else the new words to add to the vocabulary.
+  const [learn, setLearn] = useState<LearnOffer[]>([]);
+  const [vocabTerms, setVocabTerms] = useState<string[]>([]);
+  useEffect(() => {
+    setLearn([]);
+    setVocabTerms([]);
+  }, [transcriptId]);
 
   useEffect(() => {
     let live = true;
     setDetail({ state: "loading" });
+    setPlaybackError(null);
+    refreshedLink.current = false;
     setTranscript(transcriptId ? { state: "loading" } : { state: "ready", value: null });
     api.session(item.id).then((d) => {
       if (!live) return;
@@ -101,6 +169,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
           url: typeof d.playback_url === "string" ? d.playback_url : null,
           names: names && typeof names === "object" && !Array.isArray(names) ? (names as Record<string, string>) : {},
           bookmarks: bookmarksOf(d),
+          sizeBytes: primarySize(d),
         },
       });
     }).catch((e) => live && setDetail({ state: "error", message: errorMessage(e) }));
@@ -135,13 +204,52 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     void chooseView(preferred, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tDetail?.id, viewsInfo?.status]);
+  // The default view (Roman Urdu for an Urdu call) is written after the transcript: "making" from the moment it is
+  // done, so the page asks at once and then every few seconds, and stops once the views are ready or failed.
+  const viewsStatus = views?.status ?? viewsInfo?.status ?? null;
+  const viewsMaking = viewsStatus === "making" && tDetail?.kind === "final";
+  // A failed read never stops it (usePoll keeps asking, and waits while the window is hidden), so the converting line
+  // can't spin for ever on one lost answer; the server says "failed" itself after 20 quiet minutes.
+  const readViews = async () => {
+    const id = tDetail?.id;
+    if (!id) return;
+    const v = await api.transcriptViews(id);
+    if (shownTranscript.current === id) setViews(v);
+  };
   useEffect(() => {
-    if (!transcriptId || views?.status !== "making") return;
-    const timer = window.setTimeout(() => {
-      api.transcriptViews(transcriptId).then(setViews).catch(() => undefined);
-    }, VIEWS_POLL_MS);
-    return () => window.clearTimeout(timer);
-  }, [transcriptId, views]);
+    if (tDetail?.id && viewsMaking && !views) void readViews().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tDetail?.id, viewsMaking]);
+  usePoll(!!tDetail?.id && viewsMaking, readViews, VIEWS_POLL_MS);
+  // Made while the page is open: the default view comes in (unless the person chose one), and the Library syncs, for
+  // the title the server may have written in Roman Urdu meanwhile. The row hears of every read.
+  const lastStatus = useRef<string | null>(null);
+  useEffect(() => {
+    if (views && tDetail && shownTranscript.current === tDetail.id) onViews?.(views);
+    const became = lastStatus.current === "making" && viewsStatus === "ready";
+    lastStatus.current = viewsStatus;
+    if (!became) return;
+    void api.refreshLibrary().catch(() => undefined);
+    const preferred = defaultViewOf(viewsInfo);
+    if (!viewPicked.current && !editing && preferred && views?.available.includes(preferred)) setShowAs(preferred);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views, viewsStatus]);
+  const barView = viewsMaking ? improvingView(views?.progress ?? viewsInfo?.progress, showAs, viewsInfo?.default) : null;
+  const failedView = viewsStatus === "failed" && tDetail?.kind === "final" ? (showAs !== "original" ? showAs : defaultViewOf(viewsInfo)) : null;
+  const [retrying, setRetrying] = useState(false);
+  const retryViews = async () => {
+    const id = tDetail?.id;
+    if (!id || retrying) return;
+    setRetrying(true);
+    try {
+      const state = await api.makeTranscriptViews(id);
+      if (shownTranscript.current === id) setViews(state);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    } finally {
+      if (mounted.current) setRetrying(false);
+    }
+  };
   const chooseView = async (view: ShowAs, picked = true) => {
     const press = ++viewPress.current;
     if (picked) viewPicked.current = true;
@@ -160,10 +268,12 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const viewText = (i: number): string | null => (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] ?? null : null);
   const exportView = showAs !== "original" && views?.status === "ready" ? showAs : null;
 
-  const names = detail.state === "ready" ? detail.value.names : {};
-  const segments: Segment[] = transcript.state === "ready" && transcript.value
+  const names = detail.state === "ready" ? detail.value.names : NO_NAMES;
+  const segments: Segment[] = useMemo(() => (transcript.state === "ready" && transcript.value
     ? transcript.value.segments.map((s, i) => ({ speaker: speakerName(names, s.speaker), start: s.start_ms / 1000, text: viewText(i) ?? s.text }))
-    : [];
+    : []),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [transcript, names, showAs, views]);
   const matches = useMemo(() => (findOpen ? findMatches(segments.map((s) => s.text), findQuery) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [findOpen, findQuery, transcript, showAs, views]);
@@ -188,32 +298,155 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     if (mounted.current) setEditLine((l) => (l === index ? null : l));
     const id = shownTranscript.current;
     if (!id) return;
+    const before = transcript.state === "ready" ? transcript.value?.segments[index]?.text ?? "" : "";
     try {
-      const { learn: _learn, ...edited } = await api.editTranscript(id, index, text);
+      const { learn: offers, ...edited } = await api.editTranscript(id, index, text);
       if (!stillShown(id)) return;
       setTranscript({ state: "ready", value: edited });
+      // For a project's recording the server names the words worth a rule; that offer takes the vocabulary's place.
+      const rules = Array.isArray(offers) ? offers : [];
+      setLearn(rules);
+      setVocabTerms(rules.length ? [] : newTerms(before, text));
       onMessage("Line saved");
     } catch (e) {
       onMessage(errorMessage(e));
     }
   };
+  // Suggested fixes (since v1.4): open ones are marked in their line; one at a time opens with Accept and Dismiss. They
+  // are decided only in the words as heard, never in a Show as view or while editing.
+  const [openFix, setOpenFix] = useState<number | null>(null);
+  const reviewButton = useRef<HTMLButtonElement>(null);
+  const focusFix = useRef(false);
+  const focusReview = useRef(false);
+  const openFixAndFocus = (id: number) => {
+    focusFix.current = true;
+    setOpenFix(id);
+  };
+  const closeFix = () => {
+    setOpenFix(null);
+    focusReview.current = true;
+  };
+  // After the box opens from Review (or the next one after a decision): scrolled into view, the keyboard on Accept. After
+  // Close, or the last decision: back on Review, or on the title when Review has gone with the last fix.
+  useEffect(() => {
+    if (focusFix.current && openFix !== null) {
+      focusFix.current = false;
+      const box = page.current?.querySelector<HTMLElement>(`[data-fix="${openFix}"]`);
+      box?.scrollIntoView?.({ block: "center" });
+      box?.querySelector<HTMLButtonElement>("button")?.focus();
+    } else if (focusReview.current) {
+      focusReview.current = false;
+      (reviewButton.current ?? titleButton.current)?.focus();
+    }
+  });
+  const [fixBusy, setFixBusy] = useState(false);
+  const openFixes = useMemo(() => (tDetail?.suggestions ?? []).filter((f) => f.status === "open"), [tDetail]);
+  const fixesShown = useMemo(() => (showAs === "original" && !editing ? openFixes : []), [showAs, editing, openFixes]);
+  const pendingFix = fixesShown.find((f) => f.id === openFix) ?? null;
+  const decideFix = async (fix: TranscriptSuggestion, accept: boolean) => {
+    const id = shownTranscript.current;
+    if (!id) return;
+    setFixBusy(true);
+    try {
+      const next = await api.decideSuggestion(id, fix.id, accept);
+      if (stillShown(id)) {
+        setTranscript({ state: "ready", value: next });
+        // The next open fix opens with the keyboard on its Accept; with none left, the keyboard goes back to Review.
+        const left = (next.suggestions ?? []).filter((f) => f.status === "open").sort((a, b) => a.index - b.index);
+        const after = left.find((f) => f.index >= fix.index) ?? left[0] ?? null;
+        if (after) openFixAndFocus(after.id);
+        else {
+          setOpenFix(null);
+          focusReview.current = true;
+        }
+      }
+      onMessage(accept ? `Changed to “${fix.to}”` : "Suggestion dismissed");
+    } catch (e) {
+      onMessage(errorMessage(e));
+    } finally {
+      if (mounted.current) setFixBusy(false);
+    }
+  };
+  /** A word the engine was not sure of plays from that word (its line's click would play from the line's start). */
+  const playWord = (ms: number) => {
+    seek(ms / 1000);
+    void audio.current?.play().catch(() => undefined);
+  };
+  const canPlay = detail.state === "ready" && !!detail.value.url;
+  /**
+   * A line as heard: its suggested fixes marked, else its unsure words underlined (a press plays from the word), and on
+   * the line being played the word heard now (`on`, -1 for none). Words are drawn only when they join back into the
+   * line's text (an edited line keeps its words as written).
+   */
+  const heardText = (i: number, on = -1): ReactNode | undefined => {
+    const raw = tDetail?.segments[i];
+    if (!raw) return undefined;
+    const fixes = fixesShown.filter((f) => f.index === i).map((f) => ({ f, span: suggestionSpan(raw.text, f.from) }))
+      .filter((x): x is { f: TranscriptSuggestion; span: [number, number] } => !!x.span).sort((a, b) => a.span[0] - b.span[0]);
+    if (fixes.length) {
+      const out: ReactNode[] = [];
+      let pos = 0;
+      for (const { f, span: [from, to] } of fixes) {
+        if (from < pos) continue;
+        out.push(raw.text.slice(pos, from));
+        out.push(
+          <button key={f.id} type="button" className="el-suggest" aria-expanded={openFix === f.id} title={`Suggested: ${f.to}${f.reason ? ` (${f.reason})` : ""}`}
+            aria-label={`Suggested fix: ${raw.text.slice(from, to)} to ${f.to}`} onClick={(e) => { e.stopPropagation(); setOpenFix(openFix === f.id ? null : f.id); }}>
+            {raw.text.slice(from, to)}
+          </button>,
+        );
+        pos = to;
+      }
+      out.push(raw.text.slice(pos));
+      return out;
+    }
+    if (!raw.words?.length || !wordsMatch(raw.words, raw.text)) return undefined;
+    // The line being played shows its words one by one: the word being heard now is marked (classic's).
+    if (on < 0 && !raw.words.some(uncertainWord)) return undefined;
+    const words = raw.words;
+    return words.map((w, wi) => {
+      const cls = ["el-word", uncertainWord(w) && "el-word--unsure", wi === on && "el-word--on"].filter(Boolean).join(" ");
+      return (
+        <span key={wi}>
+          {uncertainWord(w) ? (
+            // Out of the Tab order (a long transcript would be hundreds of stops): the line's time plays it from the keys.
+            <button type="button" tabIndex={-1} className={cls} title={UNSURE_WORD} aria-label={`${w.text}, not sure of this word${canPlay ? ", play it" : ""}`}
+              disabled={!canPlay} onClick={(e) => { e.stopPropagation(); playWord(w.start_ms); }}>{w.text}</button>
+          ) : <span className={cls} data-on={wi === on || undefined}>{w.text}</span>}
+          {wi < words.length - 1 ? " " : ""}
+        </span>
+      );
+    });
+  };
+  /** A Show as view's "[?word]" marks drawn like the words as heard: underlined, without the brackets. */
+  const viewMarks = (text: string): ReactNode | undefined => {
+    const parts = text.split(/(\[\?[^\]]+\])/);
+    if (parts.length === 1) return undefined;
+    return parts.map((part, k) => {
+      const marked = /^\[\?([^\]]+)\]$/.exec(part);
+      return marked ? <span key={k} className="el-word el-word--unsure" title={UNSURE_WORD}>{marked[1]}</span> : part;
+    });
+  };
   /** The words a line has in the transcript itself (never a Show as view's): what an edit starts from. */
   const rawText = (i: number) => (transcript.state === "ready" ? transcript.value?.segments[i]?.text ?? segments[i].text : segments[i].text);
-  const renderText = (i: number) => {
+  const lineText = (i: number, on = -1): ReactNode | undefined => {
     if (editing && editLine === i) return <LineEditor text={rawText(i)} onSave={(t) => void saveLine(i, t)} onCancel={() => setEditLine(null)} />;
     if (editing) return <button type="button" className="el-line-edit" aria-label={`Edit line ${i + 1}: ${rawText(i)}`} onClick={(e) => { e.stopPropagation(); setEditLine(i); }}>{rawText(i)}</button>;
     const inLine = matches.map((m, index) => ({ ...m, index })).filter((m) => m.seg === i);
-    if (!inLine.length) return undefined;
+    if (!inLine.length) return viewText(i) !== null ? viewMarks(segments[i].text) : heardText(i, on);
     return markParts(segments[i].text, inLine).map((p, k) => (p.match === null ? <span key={k}>{p.text}</span>
       : <mark key={k} className={p.match === findCurrent ? "el-find el-find--current" : "el-find"}>{p.text}</mark>));
   };
   // The line being played is marked once playing has started, not on a page just opened.
   const active = transcript.state === "ready" && transcript.value && (playing || position > 0) ? activeIndex(transcript.value.segments, position * 1000) : -1;
+  const activeWordAt = active >= 0 && tDetail ? activeWord(tDetail.segments[active]?.words, position * 1000) : -1;
   // The screens at their moments: after the line that started at or before each one (the phone's rule).
   const rawSegments = transcript.state === "ready" && transcript.value ? transcript.value.segments : null;
   // The player's length: the server's, else the audio file's own (on loadedmetadata), else the last line's end.
   const durationS = Math.max(1, Math.round(playerLength(item.duration_ms, rawSegments, mediaSeconds) / 1000));
   const screensAfter = useMemo(() => screensByLine(rawSegments ?? [], screens ?? []), [rawSegments, screens]);
+  // The waveform is drawn from the transcript (who speaks when), as classic's: decoding a long recording here would be slow.
+  const waveBars = useMemo(() => waveformBars(rawSegments ?? [], durationS * 1000, WAVE_BARS), [rawSegments, durationS]);
   const lines = useMemo(() => (rawSegments ?? []).map((s) => ({ ...s, speaker: speakerName(names, s.speaker) })), [rawSegments, names]);
   const openScreen = (screen: ScreenMoment) => setScreenOpen(Math.max(0, (screens ?? []).findIndex((s) => s.id === screen.id)));
   const deleteScreen = async (screen: ScreenMoment) => {
@@ -228,7 +461,115 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     }
   };
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
-  const meta = [source, formatWhen(item.started_at)].filter(Boolean).join(" · ");
+  // When, how long, then the project (its own button after this line).
+  const meta = [source, formatWhen(item.started_at), formatDuration(item.duration_ms)].filter(Boolean).join(" · ");
+  // A transcription waiting for its engine says when it tries again; a failed one says why.
+  const engineRetry = tDetail && isTranscribing(tDetail.status) ? retryLine(tDetail) : null;
+  const failureCode = tDetail?.status === "failed" ? tDetail.error_code ?? null : item.transcript?.final_error_code ?? null;
+  const liveLine = tDetail?.kind === "live"
+    ? `Live captions (final transcript pending${partsText(item.transcript?.final_progress) ? ` · ${partsText(item.transcript?.final_progress)}` : ""})` : null;
+  const saveTitle = async () => {
+    if (renaming === null || renameDone.current) return;
+    renameDone.current = true;
+    const next = renaming.trim();
+    focusTitle.current = true;
+    setRenaming(null);
+    if (next === (item.title?.trim() ?? "")) return;
+    try {
+      const saved = await api.organiseSession(item.id, { title: next || null });
+      onItemChanged?.({ id: item.id, title: saved?.data?.title ?? next, title_auto: saved?.data?.title_auto ?? false });
+      onMessage("Renamed");
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
+  const startRename = () => {
+    renameDone.current = false;
+    setRenaming(item.title?.trim() ?? "");
+  };
+  /** Try again after a failed transcription: the same language as before (classic's). */
+  const tryAgain = async () => {
+    const language = (item.language ?? null) as TranscriptionLanguage | null;
+    setBusy(true);
+    try {
+      await api.retranscribe(item.id, language);
+      onMessage(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  /** The preferred engine again, in the same language (the backup engine's Re-transcribe). */
+  const retranscribeSame = tryAgain;
+  const answerLearn = async (yes: boolean) => {
+    const offer = learn[0];
+    if (!offer) return;
+    setLearn((list) => list.slice(1));
+    if (!yes) return;
+    try {
+      await api.addReplacement(offer.from, offer.to, offer.client_id);
+      onMessage(`${offer.client_name}'s transcripts will write “${offer.to}” from now on`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
+  const addToVocabulary = async (term: string) => {
+    try {
+      await api.addToVocabulary(term, item.client?.id ?? null);
+      setVocabTerms((terms) => terms.filter((t) => t !== term));
+      onMessage(`Added “${term}” to the vocabulary`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
+  /** A label's × on the page: the recording keeps its other labels ("Label removed"). */
+  const removeLabel = async (label: string) => {
+    try {
+      const left = (item.labels ?? []).filter((l) => l !== label);
+      const saved = await api.organiseSession(item.id, { labels: left });
+      onItemChanged?.({ id: item.id, labels: saved?.data?.labels ?? left });
+      onMessage(`Label removed: ${label}`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
+  /** The fix box's buttons: Review and each decision put the keyboard there, or back on Review. */
+  const fixBox = (fix: TranscriptSuggestion) => (
+    <div className="el-suggest-pop" role="group" aria-label="Suggested fix" data-fix={fix.id}>
+      <span dir="auto">Change <b>{fix.from}</b> to <b>{fix.to}</b>?{fix.reason ? <span className="el-secondary"> ({fix.reason})</span> : null}</span>
+      <Button size="sm" variant="primary" loading={fixBusy} loadingLabel="Changing…" onClick={() => void decideFix(fix, true)}>Accept</Button>
+      <Button size="sm" disabled={fixBusy} onClick={() => void decideFix(fix, false)}>Dismiss</Button>
+      <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close" onClick={() => closeFix()} />
+    </div>
+  );
+
+  // Each line's words, note, screens, fix box and tooltip, worked out once and not on every tick of the player: only the
+  // line being played is drawn again as it plays (its word heard now).
+  const parts = useMemo(() => segments.map((_, i) => ({
+    text: lineText(i),
+    note: showAs !== "original" && views?.kept?.[showAs]?.includes(i) ? <span className="el-segment__note">· original words</span>
+      : viewText(i) === null && tDetail?.segments[i]?.check ? <span className="el-segment__check" dir="auto"><b>{SECOND_HEARD}</b> {tDetail.segments[i].check!.text}</span> : null,
+    title: viewText(i) === null && tDetail?.segments[i]?.uncertain ? UNSURE_LINE : undefined,
+    after: (() => {
+      const at = screensAfter.get(i);
+      const fix = pendingFix?.index === i ? fixBox(pendingFix) : null;
+      return at || fix ? <>{fix}{at && <LineScreens screens={at} onOpen={openScreen} />}</> : null;
+    })(),
+  })),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [segments, editing, editLine, matches, findCurrent, tDetail, fixesShown, openFix, fixBusy, screensAfter, canPlay, showAs, views]);
+  const renderText = (i: number) => (i === active && activeWordAt >= 0 ? lineText(i, activeWordAt) : parts[i]?.text);
+  const audioError = () => {
+    if (refreshedLink.current) return setPlaybackError(PLAYBACK_EXPIRED);
+    refreshedLink.current = true;
+    const failed = detail.state === "ready" ? detail.value.url : null;
+    api.session(item.id).then((d) => {
+      const next = typeof d.playback_url === "string" ? d.playback_url : null;
+      if (next && next !== failed) setDetail((s) => (s.state === "ready" ? { state: "ready", value: { ...s.value, url: next } } : s));
+      else setPlaybackError(PLAYBACK_EXPIRED);
+    }).catch(() => setPlaybackError(PLAYBACK_EXPIRED));
+  };
   const engine = transcribedIn(item.transcript);
   const warning = scriptWarning(item.transcript?.script_warning);
   const bookmarks = detail.state === "ready" ? detail.value.bookmarks : [];
@@ -241,7 +582,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       const after = (i: number) => (screensAfter.get(i) ?? []).map(screenMarker);
       const body = copiedTranscript(lines, viewText, withTimestamps, unsure, forAi, after);
       const people = [...new Set(lines.map((l) => l.speaker))];
-      await navigator.clipboard.writeText(forAi ? `${aiHeader(item, people)}\n\n${body}` : body);
+      // The header's language is the view's when the lines are in one ("Roman Urdu"), as the server writes it.
+      await navigator.clipboard.writeText(forAi ? `${aiHeader(item, people, exportView)}\n\n${body}` : body);
       onMessage(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied");
     } catch {
       onMessage("Could not access the clipboard");
@@ -272,6 +614,8 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
   const [whatsApp, setWhatsApp] = useState(false);
   // The menus are made once per recording, view and transcript: never on the player's position.
   const exportsRef = useRef({ exportAs, packAs });
+  const copyRef = useRef(copy);
+  copyRef.current = copy;
   exportsRef.current = { exportAs, packAs };
   const exportItems: MenuItem[] = useMemo(() => recordingExportItems({
     exportAs: (f) => void exportsRef.current.exportAs(f),
@@ -283,6 +627,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     export: canExport ? { label: "Export", icon: Icons.DownloadIcon, group: "Export", items: exportItems } : undefined,
     export_more: [{ label: "Save audio", icon: Icons.StorageIcon, onPick: () => void act(async () => { if (await api.saveAudio(item.id)) onMessage("Audio saved"); }) }],
     whatsapp: () => setWhatsApp(true),
+    ai: () => void copyRef.current(false, true),
   }).filter((i) => canExport || i.label !== "Export"),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [menu, canChangeLanguage, canExport, exportItems, item.id]);
@@ -299,16 +644,22 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
     setPosition(to);
     if (audio.current) audio.current.currentTime = to;
   };
+  // One callback for every line's time (lines are drawn again only when their own parts change).
+  const playFromRef = useRef<(i: number) => void>(() => undefined);
+  const playLine = useCallback((i: number) => playFromRef.current(i), []);
   const playFrom = (i: number) => {
     seek(segments[i]?.start ?? 0);
     void audio.current?.play().catch(() => undefined);
   };
+  playFromRef.current = playFrom;
   // Space plays or pauses, the arrows jump 5 s and Shift with an arrow 10 s, as classic; never while typing.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keys.current = (e: KeyboardEvent) => {
+    // Nothing to find (no transcript): Cmd/Ctrl+F is left to app search.
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f" && !e.altKey && !inField(e.target)) {
+      if (!segments.length) return;
       e.preventDefault();
-      if (segments.length) setFindOpen(true);
+      setFindOpen(true);
       return;
     }
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || inField(e.target)) return;
@@ -376,7 +727,21 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack} aria-keyshortcuts="Escape">Library</Button>
       <header className="el-page__head el-page__head--top">
         <div className="el-page__titles">
-          <h1 className="el-title-l" dir="auto">{item.title?.trim() || "Recording"}</h1>
+          <span className="el-visually-hidden" id="el-recording-rename-hint">Press the title to rename the recording</span>
+          {renaming !== null ? (
+            <input className="el-title-l el-recording__title-field" aria-label="Recording title" dir="auto" value={renaming} autoFocus maxLength={200}
+              onChange={(e) => setRenaming(e.target.value)} onBlur={() => void saveTitle()} onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); void saveTitle(); }
+                if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); renameDone.current = true; focusTitle.current = true; setRenaming(null); }
+              }} />
+          ) : (
+            <h1 className="el-title-l" dir="auto">
+              <button type="button" ref={titleButton} className="el-recording__title" title="Click to rename" aria-describedby="el-recording-rename-hint" onClick={startRename}>
+                {item.title?.trim() || "Recording"}
+              </button>
+            </h1>
+          )}
           <p className="el-page__meta el-secondary">
             <SourceAvatar item={item} size="sm" />
             <span dir="auto">{meta}</span>
@@ -389,7 +754,26 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
                 : state === "no_audio" ? <Badge>Nothing was heard</Badge>
                   : item.transcript?.final_status ? <Badge tone="accent">Transcribing…</Badge> : <Badge tone="warning">Untranscribed</Badge>}
           </p>
+          {(item.labels?.length ?? 0) > 0 && (
+            <ul className="el-recording__labels" aria-label="Labels">
+              {item.labels!.map((l) => <li key={l}><LabelChip name={l} colour={item.label_colors?.[l] ?? null} onRemove={() => void removeLabel(l)} /></li>)}
+            </ul>
+          )}
+          <RecordingStepsV2 item={item} improving={barView !== null && tDetail?.kind === "final"} say={onMessage} />
           {engine && <p className="el-caption el-secondary">Transcribed in {engine}</p>}
+          {tDetail?.kind === "final" && tDetail.status === "completed" && version === "final" && usedBackupEngine(tDetail) && !isTranscribing(item.transcript?.final_status) && (
+            <BackupEngineLine busy={busy} onRetranscribe={() => void retranscribeSame()} />
+          )}
+          <FiledByLineV2 item={item} />
+          {/* What the plan leaves out here, each with the plan that has it (classic's locked chips; none when all are in). */}
+          <p className="el-recording__locked el-caption" data-testid="locked-chips">
+            {item.transcript?.final_status && <LockedChip feature="premium_engines" label="Premium engines" />}
+            {tDetail?.kind === "final" && <LockedChip feature="views" label="Roman Urdu · English · اردو" />}
+            {tDetail?.kind === "final" && <LockedChip feature="double_check" label="Double-check" />}
+            {!screens?.length && <LockedChip feature="screen_moments" label="Screens" />}
+            <LockedChip feature="connector" label="Ask an AI assistant" />
+          </p>
+          {engineRetry && <p className="el-caption el-secondary" role="status" dir="auto">{engineRetry}</p>}
           {warning && <p className="el-caption el-row__error" role="status">{warning}</p>}
         </div>
         <div className="el-page__actions">
@@ -406,8 +790,11 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             {detail.state === "ready" && detail.value.url && (
               <audio ref={audio} src={detail.value.url} preload="metadata" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
                 onLoadedMetadata={(e) => setMediaSeconds(e.currentTarget.duration)}
-                onEnded={() => setPlaying(false)} onTimeUpdate={(e) => timeUpdate(e.currentTarget)} />
+                onEnded={() => setPlaying(false)} onTimeUpdate={(e) => timeUpdate(e.currentTarget)} onError={audioError} />
             )}
+            {playbackError && <Banner tone="warning" icon={Icons.WarningIcon}>{playbackError}</Banner>}
+            <Waveform bars={waveBars} marks={bookmarks.map((b) => ({ id: b.id, atMs: b.at_ms, title: `${timestamp(b.at_ms)}${b.tag ? ` ${b.tag}` : ""}${b.note ? ` · ${b.note}` : ""}` }))}
+              durationMs={durationS * 1000} nowMs={position * 1000} onSeek={(ms) => seek(ms / 1000)} />
             <Player playing={playing} position={Math.round(position)} duration={durationS} onToggle={toggle} onSeek={seek}
               onSkip={(s) => seek(position + s)}
               end={<Select label="Playback speed" hideLabel value={speed} onChange={setSpeed} className="el-page__speed"
@@ -435,11 +822,9 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
       {canExport && (
         <div className="el-recording__actions" role="toolbar" aria-label="Share, copy and export">
           <Button icon={Icons.SendIcon} disabled={busy} onClick={sendToWhatsApp}>Send to WhatsApp…</Button>
-          <Menu label="Copy" button={{ icon: Icons.CopyIcon, iconEnd: Icons.ChevronDownIcon, text: "Copy" }} items={[
-            { label: "Copy text", icon: Icons.CopyIcon, onPick: () => void copy(false) },
-            { label: "Copy with timestamps", icon: Icons.ClockIcon, onPick: () => void copy(true) },
-            { label: "Copy for AI", icon: Icons.SparkleIcon, onPick: () => void copy(false, true) },
-          ]} />
+          {/* Copy: the main part copies the text without timestamps at once; the chevron has the other ways. */}
+          <SplitButton label="Copy" icon={Icons.CopyIcon} mainLabel="Copy text" onClick={() => void copy(false)} menuLabel="More copy options"
+            items={copyMenuItems({ withTimestamps: () => void copy(true), forAi: () => void copy(false, true) })} />
           <Menu label={exportView ? `Export as ${VIEW_LABELS[exportView]}` : "Export"} items={exportItems}
             button={{ icon: Icons.DownloadIcon, iconEnd: Icons.ChevronDownIcon, text: exportView ? `Export as ${VIEW_LABELS[exportView]}` : "Export", title: PDF_HINT }} />
         </div>
@@ -457,12 +842,23 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
           ) : segments.length > 0 ? (
             <>
+              {alternateId && (
+                <div className="el-recording__viewbar">
+                  <Segmented label="Version" value={version} onChange={(v) => { setEditing(false); setVersion(v); }}
+                    options={[{ value: "final" as const, label: "Current" },
+                      { value: "alternate" as const, label: `Previous${item.transcript?.alternate_language ? ` (${languageLabel(item.transcript.alternate_language)})` : ""}` }]} />
+                </div>
+              )}
+              {liveLine && <p className="el-caption el-secondary" role="status" data-testid="live-line">{liveLine}</p>}
               {(viewsInfo?.available.length ?? 0) > 0 && tDetail?.kind === "final" && (
                 <div className="el-recording__viewbar">
                   {editing ? <span className="el-caption el-secondary">Show as is off while you edit: you edit the words as heard.</span> : <Segmented label="Show as" value={showAs} onChange={(v) => void chooseView(v)}
                     options={[...VIEW_ORDER.filter((v) => viewsInfo!.available.includes(v)).map((v) => ({ value: v as ShowAs, label: VIEW_LABELS[v] })),
                       { value: "original" as ShowAs, label: "Original" }]} />}
-                  {showAs !== "original" && (
+                  {barView && <ConvertingLine view={barView} percent={viewPercent(views?.progress ?? viewsInfo?.progress, barView)} />}
+                  {!barView && failedView && <ConvertingLine view={failedView} failed retrying={retrying} onRetry={() => void retryViews()} />}
+                  {/* The converting line says it while the view is written or could not be (U19): no second caption then. */}
+                  {showAs !== "original" && !barView && !failedView && (
                     <span className="el-caption el-secondary" role="status">
                       {views?.status === "ready" ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`
                         : views?.status === "failed" ? `The view could not be made: ${views.error ?? "try again later."}`
@@ -483,22 +879,35 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
               )}
               {findOpen && <FindBar query={findQuery} onQuery={setFindQuery} count={matches.length} current={Math.max(0, findCurrent)}
                 onStep={(d) => matches.length && setFindAt((findCurrent + d + matches.length) % matches.length)} onClose={() => { setFindOpen(false); setFindQuery(""); }} />}
-              <Transcript label="Transcript" segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={detail.state === "ready" && detail.value.url ? playFrom : undefined}
+              {learn[0] && <LearnOfferV2 key={`${learn[0].from}-${learn[0].to}`} offer={learn[0]} onAnswer={(yes) => void answerLearn(yes)} />}
+              {!learn.length && <VocabularyOfferV2 terms={vocabTerms} projectName={item.client?.name ?? null} onAdd={(t) => void addToVocabulary(t)} onDismiss={() => setVocabTerms([])} />}
+              {fixesShown.length > 0 && (
+                <p className="el-suggestions el-caption" role="status" dir="auto">
+                  <span>{fixesShown.length === 1 ? "1 suggested fix" : `${fixesShown.length} suggested fixes`}: words that may have been misheard are underlined.</span>
+                  <Button ref={reviewButton} size="sm" variant="quiet" icon={Icons.SparkleIcon} onClick={() => openFixAndFocus(fixesShown[0].id)}>Review</Button>
+                </p>
+              )}
+              <Transcript label="Transcript" grouped segments={segments} renderText={renderText} activeIndex={active >= 0 ? active : undefined} onPlayLine={canPlay ? playLine : undefined}
                 lang={showAs === "urdu" ? "ur" : showAs === "original" ? normalizeLanguage(tDetail?.language) ?? undefined : undefined}
-                note={(i) => (showAs !== "original" && views?.kept?.[showAs]?.includes(i) ? <span className="el-segment__note">· original words</span> : null)}
-                after={(i) => { const at = screensAfter.get(i); return at ? <LineScreens screens={at} onOpen={openScreen} /> : null; }} />
+                note={(i) => parts[i]?.note} lineTitle={(i) => parts[i]?.title} after={(i) => parts[i]?.after} />
             </>
           ) : transcript.state === "ready" && transcript.value?.status === "completed" && transcript.value.segments.length === 0 ? (
             <EmptyState icon={Icons.TranscriptIcon} title="The transcript is empty" body="No speech was detected in this recording." />
           ) : state === "processing" && item.transcript?.final_status ? (
-            <EmptyState icon={Icons.TranscriptIcon} title="Transcribing" body="The transcript appears here when it is ready. You can keep working meanwhile." />
+            <EmptyState icon={Icons.TranscriptIcon} title="Transcribing"
+              body={`${transcribingLine(item.transcript?.final_progress ?? tDetail?.progress)} The transcript appears here when it is ready. You can keep working meanwhile.`} />
           ) : state === "no_audio" ? (
             <EmptyState icon={Icons.MicIcon} title="Nothing was heard" body="The recording has no sound to transcribe. Check the microphone and system audio before the next call." />
           ) : (
             <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : "Not transcribed yet"}
-              body={`Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
-              action={<Button variant="primary" loading={busy} loadingLabel="Starting…"
-                onClick={() => setTranscribeOpen(true)}>Transcribe</Button>} />
+              body={state === "failed" ? (failureCode === "needs_transcription_key" ? NEEDS_KEY_TEXT
+                : needsKeyAction(failureCode) ? failureLine(failureCode) : `${failureLine(failureCode)} Transcribe it again to read, search and share what was said.`)
+                : `Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
+              action={state === "failed" && needsKeyAction(failureCode)
+                ? <Button variant="primary" icon={Icons.SettingsIcon} onClick={() => openSettingsSection("transcription-key")}>{failureCode === "own_key_rejected" ? "Check my Groq key" : "Add my Groq key"}</Button>
+                : state === "failed" && canTryAgain(failureCode)
+                ? <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => void tryAgain()}>Try again</Button>
+                : <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => setTranscribeOpen(true)}>Transcribe</Button>} />
           )
         ) : (
           <dl className="el-details">
@@ -509,6 +918,7 @@ export function RecordingPage({ item, startAt = null, onBack, onMessage, menu, o
             {item.device?.name && <><dt>Device</dt><dd>{item.device.name}</dd></>}
             {item.client?.name && <><dt>Project</dt><dd>{item.client.name}</dd></>}
             {item.language_chip && <><dt>Language</dt><dd>{item.language_chip}</dd></>}
+            {detail.state === "ready" && detail.value.sizeBytes ? <><dt>File size</dt><dd className="el-num">{fileSize(detail.value.sizeBytes)}</dd></> : null}
             {item.transcript?.final_provider_label || item.transcript?.final_provider
               ? <><dt>Transcription engine</dt><dd>{item.transcript.final_provider_label || providerName(item.transcript.final_provider)}</dd></> : null}
             <dt>Kept</dt><dd>{item.keep ? "Forever" : "Until auto clean-up (Settings › Storage)"}</dd>

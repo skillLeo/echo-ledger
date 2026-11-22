@@ -626,6 +626,32 @@ class RecordingServiceTest : AppTest() {
     }
 
     @Test
+    @org.robolectric.annotation.Config(sdk = [34])
+    fun `the new design chosen on this phone draws the new pill with no server flag (parity PH-OTH-032)`() {
+        com.echoledger.mobile.ui.v2.shell.DesignChoice.set(app, com.echoledger.mobile.ui.v2.shell.Design.V2)
+        try {
+            app.graph.helper.attach(OneTrackHelper(seconds = 4), source = "adb")
+            app.getSystemService(android.media.AudioManager::class.java).mode = android.media.AudioManager.MODE_IN_COMMUNICATION
+            val toggle = Intent(app, RecordingService::class.java).setAction(RecordingService.ACTION_TOGGLE)
+            val controller = buildService(RecordingService::class.java, toggle).create()
+            controller.startCommand(0, 1)
+            pumpUntil("the recording to start") { RecordingService.isRecording }
+            assertTrue("the pill window draws the new pill", RecordingService.pillV2)
+            controller.get().onStartCommand(toggle, 0, 2)
+            pumpUntil("the recording to be saved") { !RecordingService.isRecording }
+            // Back on classic, the next recording has classic's pill.
+            com.echoledger.mobile.ui.v2.shell.DesignChoice.set(app, com.echoledger.mobile.ui.v2.shell.Design.Classic)
+            controller.get().onStartCommand(toggle, 0, 3)
+            pumpUntil("the next recording to start") { RecordingService.isRecording }
+            assertFalse(RecordingService.pillV2)
+            controller.get().onStartCommand(toggle, 0, 4)
+            pumpUntil("the next recording to be saved") { !RecordingService.isRecording }
+        } finally {
+            com.echoledger.mobile.ui.v2.shell.DesignChoice.set(app, null)
+        }
+    }
+
+    @Test
     fun `recording without the microphone permission ends quietly`() {
         shadowOf(app).denyPermissions(android.Manifest.permission.RECORD_AUDIO)
         val service = start(RecordingService.ACTION_TOGGLE)

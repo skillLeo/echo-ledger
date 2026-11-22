@@ -16,10 +16,12 @@ enum SessionStatus: string implements HasColor, HasIcon, HasLabel
     case Processing = 'processing';
     case Completed = 'completed';
     case Failed = 'failed';
+    /** Since v1.8 (contract 1.8.0-e): uploaded, kept as audio, not transcribed until the person asks. */
+    case AudioOnly = 'audio_only';
 
     public function getLabel(): string
     {
-        return ucfirst($this->value);
+        return $this === self::AudioOnly ? 'Audio only' : ucfirst($this->value);
     }
 
     public function getIcon(): Heroicon
@@ -30,6 +32,7 @@ enum SessionStatus: string implements HasColor, HasIcon, HasLabel
             self::Processing => Heroicon::OutlinedArrowPath,
             self::Completed => Heroicon::OutlinedCheckCircle,
             self::Failed => Heroicon::OutlinedExclamationTriangle,
+            self::AudioOnly => Heroicon::OutlinedSpeakerWave,
         };
     }
 
@@ -40,6 +43,7 @@ enum SessionStatus: string implements HasColor, HasIcon, HasLabel
             self::Uploading, self::Processing => 'warning',
             self::Completed => 'success',
             self::Failed => 'danger',
+            self::AudioOnly => 'gray',
         };
     }
 }

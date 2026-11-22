@@ -114,7 +114,7 @@ final class CaptureSessionInfolist
                     ->formatStateUsing(fn (?string $state): string => SttProviderKey::tryFrom((string) $state)?->getLabel() ?? (string) $state)
                     ->visible(fn (): bool => ConsoleAccess::operator()),
                 TextEntry::make('finalTranscript.language')->label('Language')->placeholder('Automatic')
-                    ->formatStateUsing(fn (?string $state): string => LanguageChoice::OFFERED[(string) $state] ?? (string) $state),
+                    ->formatStateUsing(fn (?string $state): string => LanguageChoice::offered()[(string) $state] ?? (string) $state),
                 TextEntry::make('finalTranscript.error')->label('Error')->color('danger')->placeholder('—')
                     ->visible(fn (CaptureSession $r): bool => ConsoleAccess::operator() && filled($r->finalTranscript?->error) && ! $r->hasNoAudio())->columnSpan(2),
             ]),

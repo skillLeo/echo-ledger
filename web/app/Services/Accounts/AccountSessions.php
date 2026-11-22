@@ -51,10 +51,13 @@ final class AccountSessions
         return $device instanceof Device && (bool) $device->delete();
     }
 
-    /** Returns how many devices were signed out. */
-    public function signOutEverywhere(User $user): int
+    /**
+     * Returns how many devices were signed out. [$keepDeviceId] (since 2.0.0-l, a password changed from an app with
+     * "sign out others"): that one device stays signed in; everything else goes as always.
+     */
+    public function signOutEverywhere(User $user, ?string $keepDeviceId = null): int
     {
-        $devices = $this->devices($user)->filter(fn (Device $d): bool => $d->signed_out_at === null);
+        $devices = $this->devices($user)->filter(fn (Device $d): bool => $d->signed_out_at === null && $d->id !== $keepDeviceId);
         foreach ($devices as $device) {
             $device->signOut('self');
         }

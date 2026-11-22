@@ -3,7 +3,13 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-i (2026-11-21, accepted by the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-o (2026-11-22, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-o (proposed 2026-11-22, accepted when merged; B12, see "Ask about a recording and across recordings (since 2.0.0-o)"): Ask beyond one project. `POST /api/sessions/{id}/ask` asks about one recording of the person's (its transcript and its notes) and `POST /api/ask` across all of their own recordings in the workspace, with the request, answer, citations, throttle, plan feature and AI budget of `POST /api/clients/{id}/ask`. New code `409 no_transcript` (nothing transcribed to ask about). Every Segment carries `language` (the line's language when the engine knew it: `ur`, `en`, `ar`…; `null` otherwise and on every line before 2.0.0-o), so the apps can skip a language's lines; `POST /api/sessions/{id}/transcripts` takes it too. Only additions: older apps ignore them.
+2.0.0-n (proposed 2026-11-21, accepted when merged; U19 "Roman Urdu by default"): `views.status` (a transcript's `views`, `GET /api/transcripts/{id}/views` and a library item's `transcript.views`) is `making` from the moment a finished transcript's default view is on its way, also before its job has started (`progress` is `{}` until the job counts the lines), so apps show "Converting to Roman Urdu…" at once; a `making` that moved no line for 20 minutes, and a view that never started within 20 minutes of the transcript (until 24 hours after it, `none` then), is `failed` (`error` "Converting took too long. Try again."), never busy for ever, and `POST` starts it again. A library item's `transcript.views` counts only views made (or failed) after the transcript's last edit. A library item's `transcript.preview` is in the default view once it is `ready`, and the new `transcript.preview_view` (`"roman"` | `"urdu"` | `"english"` | `"original"`) says which, so rows need not fetch the views. A recording that opens in Roman Urdu gets its automatic title in Roman Urdu, and an automatic title in Urdu letters is written again in Roman Urdu when the view is made. No other field changes.
+2.0.0-m (proposed 2026-11-21, accepted when merged): lists (B11, see "Lists (since 2.0.0-m)"). A person's lists are their labels with a name, a colour and a place in the apps' row, kept by the server so every device shows the same ones: `GET /api/lists`, `POST /api/lists` (an empty list), `PATCH` and `DELETE /api/lists/{key}` (rename or delete changes every recording of the person in one transaction) and `PUT /api/lists/order`. Labelling a recording makes its list when it is new (never for a label spelt All, Unread or Important, which stays a plain label). `GET /api/library/views` gives the labels in list order. A label's colour is its list's (`PUT /api/labels/color` and `label_colors` answer as before). New codes `name_reserved`, `list_exists`, `list_not_found`. Only additions: older apps ignore them.
+2.0.0-l (proposed 2026-11-21, accepted by the lead and EL-UX 2026-11-21, served when merged, after 2.0.0-m): the person's account and security from the apps — name, profile picture (`avatar_url` and `avatar_version` beside every person shown), email change, password, sign-in methods, browsers and devices of every workspace, two-step setup, phone passkeys, Keep my account through sign-in (`403 deletion_scheduled`, then `"keep": true`), `error_codes` beside `errors`. Additions only, except that an app sign-in during a deletion's grace now answers `deletion_scheduled` instead of `not_allowed`. See "Account and security from the apps (since 2.0.0-l)".
+2.0.0-k (proposed 2026-11-21, accepted when merged): a call's title comes from the person called (see "Title from the person"): a person's own title (any rename wins), then "Call with <name>" or the number, then the automatic title. `title` is that title; the new `title_source` (`own` | `person` | `auto` | `app`) says which, and `title_auto` stays `true` only for `auto`. Outside the account (share links, exports, WhatsApp, the audit log) the title never names the person called.
+2.0.0-j (accepted 2026-11-21): "Audio only and Transcribe later" (1.8.0-e) is served: the three endpoints, `audio_only`, `transcribe_estimate` and projects' `transcribe_calls`. Clarified where the server had to decide: minutes are plan minutes (0 on the person's own key or an on-device engine); the estimate lists only the person's audio-only recordings among the ids (what bulk would start); bulk on Free without an own key is `403 needs_transcription_key` and nothing starts; the open create takes `transcribe` too.
 2.0.0-i (accepted 2026-11-21): the parity plan's row indicators (docs/PLAN_V2_PARITY.md section 3). Library items carry
 `important`, `label_colors` and `expires_at`; `PATCH /api/sessions/{id}` takes `important` and answers with `opened`;
 `POST /api/sessions/bulk` takes `important` and `unimportant`; `GET /api/library` takes `important=1|0`; `GET
@@ -116,6 +122,7 @@ Every addition below is marked **(since v1.1)**.
 | 409 | `cannot_retranscribe` | `sessions/{id}/retranscribe`: the recording's audio is not on the server (not uploaded yet, or erased; since v1.2) | Retry once the upload has finished |
 | 409 | `ai_unavailable` | Since v1.4: client notes, brief or Ask without an Anthropic key in API Credentials | Show the message; retry after the key is added |
 | 409 | `no_client` | Since v1.4: `POST sessions/{id}/notes` for a recording not filed under a project | File it under a project first |
+| 409 | `no_transcript` | Since 2.0.0-o: `POST sessions/{id}/ask` for a recording with no finished transcript, or `POST /api/ask` when none of the person's recordings has one | Say there is nothing to ask about yet; ask again once a transcript is ready |
 | 410 | `restore_expired` | `sessions/{id}/restore` after the 48-hour undo bin ended | Permanent: the recording is gone |
 | 413 | `too_large` | Body or declared size above the limit | Permanent |
 | 422 | `validation_failed` | Field errors in `errors` | Permanent for that request |
@@ -124,6 +131,9 @@ Every addition below is marked **(since v1.1)**.
 | 422 | `verification_failed` | `complete`: the assembled file failed the size/SHA-256 check; the parts were discarded | Upload the whole file again from chunk 0 |
 | 422 | `invalid_cursor` | `library` cursor is malformed | Restart paging without a cursor |
 | 422 | `too_many_labels` | More than 20 labels on one recording | Permanent: remove some labels first |
+| 422 | `name_reserved` | Since 2.0.0-m: a list can't be called All, Unread or Important (in English or Urdu: سب, نہ پڑھی گئی, اہم) | Ask for another name |
+| 409 | `list_exists` | Since 2.0.0-m: the person already has a list of that name (capitals and spaces ignored); `name` is that list's | Say "You already have a list called …" |
+| 404 | `list_not_found` | Since 2.0.0-m: no list of the person's has this key | Refresh the lists |
 | 429 | `rate_limited` | Throttled; `Retry-After` is always set | Wait `Retry-After` seconds |
 | 502 | `provider_error` | `stt/token`: the provider refused or could not be reached | Retry later |
 | 503 | `provider_not_configured` | `stt/token`: provider key or region missing. Since 1.8.1-b the `message` is "Live captions are not set up on the server yet. Ask your admin." (or "Dictation …" for dictation); it never names an engine | Show the message; retry later |
@@ -146,8 +156,15 @@ Every addition below is marked **(since v1.1)**.
 **Segment** (shared transcript shape; channel 1 = "Me" mic/left, channel 2 = "Client" system/right; mono = channel 1 "Speaker"):
 ```json
 {"channel": 1, "speaker": "Me", "start_ms": 250, "end_ms": 2600, "text": "Smoke from the north.",
- "words": [{"text": "Smoke", "start_ms": 250, "end_ms": 650, "confidence": 0.97}]}
+ "words": [{"text": "Smoke", "start_ms": 250, "end_ms": 650, "confidence": 0.97}], "language": "en"}
 ```
+`language` (since 2.0.0-o): the language this line was heard in, as one of the language codes the server offers (`ur`,
+`en`, `ar`, …; Hindi reads as `ur`), when the engine said so; `null` when it did not. Whisper on Groq and Gemini give
+the language of each piece of the recording they heard (or the language it was forced into), Soniox the language most
+of the line's words were heard in; the other engines give none yet. Lines written before 2.0.0-o are `null` (nothing is
+guessed afterwards). An edit keeps the line's language. Apps that skip a language's lines skip only lines with that
+code and always show `null` lines. A view's lines (`GET /api/transcripts/{id}/views`) are aligned with the segments, so
+a line's language is its segment's.
 
 **Transcript `error_code` messages** (since v1.1; plain words since contract 1.8.1-a). The `error` field of a failed
 transcript (in `GET /api/transcripts/{id}`, a session's `transcripts` and the session detail) is exactly the sentence for
@@ -1008,8 +1025,9 @@ session's final provider mode is `device`, e.g. `parakeet_local`).
 ```json
 {"kind": "live", "provider": "assemblyai", "language": "en", "segments": [ …Segment… ]}
 ```
-Validation: `0 ≤ start_ms ≤ end_ms ≤ duration_ms + 500`, `channel ∈ {1, 2}`, at most 20 000 segments. `201` →
-Transcript. Live caption times are on the recording timeline: paused time is not counted.
+Validation: `0 ≤ start_ms ≤ end_ms ≤ duration_ms + 500`, `channel ∈ {1, 2}`, at most 20 000 segments. Since 2.0.0-o a
+segment may carry `language` (a string of at most 16 characters): kept when it is a language the server offers, else
+`null`. `201` → Transcript. Live caption times are on the recording timeline: paused time is not counted.
 
 ### Bookmarks and pauses (since v1.1)
 Both `POST /api/sessions` (with artifacts) and `POST /api/sessions/{id}/finish` accept two optional lists. Times are
@@ -1049,7 +1067,7 @@ when `status=recording` is given).
     "client": {"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH"},
     "title": "Zoom call", "started_at": "…", "ended_at": "…", "duration_ms": 2530000, "status": "completed",
     "transcript": {"final_status": "completed", "final_transcript_id": "01JB…", "live_available": true,
-                   "live_transcript_id": "01JB…", "preview": "first 160 characters…"},
+                   "live_transcript_id": "01JB…", "preview": "first 160 characters…", "preview_view": "roman"},
     "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"], "opened": false,
     "important": false, "label_colors": {"Invoice": "#16a34a"}, "expires_at": "2026-12-14T09:00:00+00:00",
     "updated_at": "…"},
@@ -1082,6 +1100,7 @@ not decided Keep or Discard), `bookmarked`, `failed` (session `failed` or an upl
 ### `GET /api/library/views?tz=` — `library:read` (since v1.1)
 `200 {"views": {"today": 2, "this_week": 9, "waiting": 0, "bookmarked": 4, "failed": 1, "pinned": 3}, "labels": [{"label": "Invoice", "count": 5, "color": "#16a34a"}]}`.
 Counts match what `GET /api/library?view=…` lists. Each label's `color` (since 2.0.0-i) is `null` until one is chosen.
+Since 2.0.0-m the labels come in the order of the person's lists (`GET /api/lists`); a label without a list comes after them, by name.
 
 ### Important, label colours and days left (since 2.0.0-i)
 What a Library row shows beside the title and the time (docs/PLAN_V2_PARITY.md section 3):
@@ -1115,6 +1134,62 @@ returned in lower case as a project's colour is. A label none of the person's re
 label gets a new `updated_at`, so the other devices pick the colour up on their next sync. `422 validation_failed` for
 an empty label, a missing `color`, or a colour that is not `#rrggbb`. A viewer's device gets `403 not_allowed`, as for
 every other change.
+
+### Lists (since 2.0.0-m)
+The apps' row of lists (All · Unread · Important · the person's lists · +). A list is one of the person's labels with its
+name as typed, its colour and its place in the row; there is no other model. Like labels and their colours, lists belong
+to the person who made the recordings in the device's workspace: a teammate has lists of their own, and another person's
+list is answered like an unknown one. All, Unread and Important are the apps' own chips, never lists.
+
+- **The list:** `{"key": "clients", "name": "Clients", "color": "#e15f56", "position": 0, "count": 3}`. `key` is the
+  name in lower case (single spaces); it names the list in the paths below (URL-encoded) and in every label it matches,
+  capitals ignored only, as label colours are ("Résumé" and "resume" are two lists). `name` is cleaned as a label is
+  (trimmed, single spaces, at most 40 characters). `color` is one of the eight label colours (`#8e8a80` grey, `#e15f56`
+  red, `#dc6718` orange, `#b3820f` amber, `#2d9a63` green, `#26978f` teal, `#458cde` blue, `#d7609c` pink), or `null`
+  for a list made by labelling, or a colour set before 2.0.0-m (any `#rrggbb` through `PUT /api/labels/color`). `position` counts from
+  0 with no gaps. `count` is how many of the person's recordings, not in Trash, carry the label.
+- **Labelling makes the list:** a label given through `PATCH /api/sessions/{id}` `labels` or `POST /api/sessions/bulk`
+  `label` that is new to the person is a new list at the end of the row, without a colour. Taking the label off every
+  recording keeps the list, empty.
+- **A label spelt as a fixed chip** (All, Unread or Important, in English or Urdu, capitals ignored; written before
+  2.0.0-m or given through `labels`) stays on its recordings and in `labels` but is never a list: neither labelling,
+  `GET /api/lists` nor the upgrade makes one, and `/api/lists/{key}` answers `404 list_not_found` for it. Its colour is
+  kept as before 2.0.0-m (`PUT /api/labels/color`, `label_colors`).
+- **Names:** a list can't be called All, Unread or Important, in English or in the Urdu the apps show (سب, نہ پڑھی گئی,
+  اہم), capitals and spaces ignored → `422 name_reserved`. A name another list of the person's has, capitals and spaces
+  ignored → `409 list_exists` with `name`, that list's name ("You already have a list called Clients."). The same
+  answer, with nothing changed, when another device takes the name in the same moment, or when the database holds the
+  new name as a label one of the recordings already has (MySQL compares labels ignoring accents too: renaming a list
+  to "Resume" when a recording in it also carries "Résumé"). An empty name or
+  one over 40 characters → `422 validation_failed`. A colour outside the eight → `422 validation_failed`.
+- Every change gives each recording it touches a new `updated_at`, so the other devices sync its labels and
+  `label_colors`. The audit log records `list_created`, `list_renamed` and `list_deleted` (staff see the event's name, not
+  the list's).
+
+### `GET /api/lists` — `config:read` (since 2.0.0-m)
+`200 {"data": [<list>]}` in `position` order. A label of the person's recordings (in Trash too) that has no list yet gets
+one at the end first, unless it is spelt as a fixed chip.
+
+### `POST /api/lists` — `sessions:write` (since 2.0.0-m)
+`{"name": "Clients", "color": "#e15f56"}` (`color` optional) → `201 {"data": <list>}`, empty (`count` 0), at the end of
+the row. Without `color` the list takes the one of the eight fewest of the person's lists have, the earliest in the order
+above on a tie. `name_reserved`, `list_exists` and `validation_failed` as above.
+
+### `PATCH /api/lists/{key}` — `sessions:write` (since 2.0.0-m)
+`{"name": "Customers", "color": "#d7609c"}`, either or both → `200 {"data": <list>}`. A new name is the label's new
+spelling on every recording of the person that carries it, those in Trash too, all in one transaction: either every
+recording changes or none does. A change of capitals alone is allowed; a recording that carries the label twice in other capitals keeps one.
+`404 list_not_found`; the name checks as above (`409 list_exists` also for a clash found while saving).
+
+### `DELETE /api/lists/{key}` — `sessions:write` (since 2.0.0-m)
+The label comes off every recording of the person that carries it (in Trash too), in one transaction, and the list goes;
+the recordings stay. The lists after it move up one. `200 {"key": "clients", "changed": 3}` (`changed`: the recordings
+that lost the label). `404 list_not_found`.
+
+### `PUT /api/lists/order` — `sessions:write` (since 2.0.0-m)
+`{"keys": ["family", "clients", "home"]}` → `200 {"data": [<list>]}` in the new order. `keys` names every list of the
+person exactly once (as keys or names, capitals ignored); a list left out, named twice, or not the person's →
+`422 validation_failed` and nothing moves.
 
 ### `PATCH /api/sessions/{id}` — `sessions:write` (since v1.1)
 Body, every field optional: `title` (≤ 200; empty clears it), `client_id` (a client of the owner, `null` = no
@@ -1531,19 +1606,25 @@ ready (`kind` `alternate`); then the new one becomes the `final` transcript and 
 `alternate`. Two versions are kept, the newest and the one before it; a new request replaces a run that is still
 going. A failed or unfinished transcript is simply run again in the new language (`kind` `final`).
 `409 cannot_retranscribe` when the recording's audio is not on the server (not uploaded yet, or erased).
+(Since 2.0.0-j:) on an `audio_only` recording it starts the first transcript exactly as `POST /sessions/{id}/transcribe`
+does (budget, key, the same errors) and is throttled like it (30/min/device); the new language is kept only when the
+transcript starts.
 
-### Audio only and "Transcribe later" (since v1.8, contract 1.8.0-e)
+### Audio only and "Transcribe later" (since v1.8, contract 1.8.0-e; served since 2.0.0-j)
 v1.8 P1: when Ready, a call is always recorded as audio, but transcribed only with the person's permission (the
 after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Save audio).
 - `POST /api/sessions` (one-shot create) and `POST /api/sessions/{id}/finish` take `"transcribe": true | false`.
   Absent = `true`, so older apps keep today's behaviour. With `false` the recording and its screens upload as usual,
   no transcript is started, and when the upload completes the session's status is `audio_only`. A repeated create or
-  finish (idempotency) never changes the stored choice.
+  finish (idempotency) never changes the stored choice. (Since 2.0.0-j:) the open create (`POST /api/sessions` without
+  `artifacts`) takes it too; a `transcribe` sent with the finish replaces it.
 - Audio-only recordings count for storage, never for minutes; minutes are counted only when a transcript runs.
 - Every Library item carries `transcribe_estimate`: `null` unless the status is `audio_only`, then
   `{"minutes": 5, "minutes_left": 120}` — the minutes a transcript would use (the recording's length rounded up, times
   the billed channels of the engine the routing would pick) and the minutes left this month for this workspace
-  (`null` = no limit).
+  (`null` = no limit). These are plan minutes: `0` when it would run on the person's own key (Free) or an on-device
+  engine, which count for none (since 2.0.0-j). Only the person whose recording it is sees it: on a recording a
+  teammate sent (the `shared` folder) it is `null`.
 - `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter).
 - `POST /api/sessions/{id}/transcribe` — `sessions:write`, throttled (30/min/device): starts the transcript of an
   `audio_only` session with the usual routing → `202 {"session": { …status "processing"… }, "transcript": {"id",
@@ -1553,9 +1634,19 @@ after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Sav
 - `POST /api/sessions/transcribe` — `sessions:write`: bulk "Transcribe selected", `{"ids": ["…"]}` (1–50) →
   `202 {"started": ["…"], "skipped": [{"id": "…", "code": "not_audio_only"}], "minutes": 42}`. All or nothing for the
   budget: when the total exceeds what's left, `403 budget_exceeded` with `minutes_needed` and `minutes_left`, and
-  nothing starts. Ids of another workspace are skipped as `not_found`.
+  nothing starts. Ids of another workspace are skipped as `not_found`. (Since 2.0.0-j:) so are a teammate's, as only
+  the person's own recordings are theirs to transcribe; an id sent twice counts once; on Free without an own key the
+  answer is `403 needs_transcription_key` and nothing starts. Throttled like the one-recording call (30/min/device).
+  A recording whose transcript cannot be handed to the engine stays `audio_only` and is skipped as `not_started`;
+  the others still start (try it again later).
+- (Since 2.0.0-j, for every start:) the minutes left count the transcripts already started and not finished at their
+  estimate (the month's usage counts a transcript only when it completes), and starts of one workspace run one at a
+  time: a start that waits more than a few seconds for another is `429 rate_limited` with `Retry-After`. A server
+  that cannot keep starts apart answers `503 server_busy` (`Retry-After: 60`) and starts nothing. A start that fails
+  inside the server (`5xx`) leaves the recording `audio_only` with no transcript running, to be started again.
 - `POST /api/sessions/transcribe-estimate` — `library:read`: `{"ids": ["…"]}` (1–50) → `200 {"minutes": 42,
-  "minutes_left": 120, "items": [{"id": "…", "minutes": 5}]}` (no side effects).
+  "minutes_left": 120, "items": [{"id": "…", "minutes": 5}]}` (no side effects). `items` lists the person's
+  audio-only recordings among the ids, the ones bulk would start (since 2.0.0-j), and `minutes` is their sum.
 - Projects: `transcribe_calls` = `"ask"` (default) | `"always"` on the project (`GET /api/clients`, `PATCH
   /api/clients/{id}`): "Always transcribe calls in this project". An app that files a call into such a project sends
   `"transcribe": true` without asking.
@@ -1574,6 +1665,15 @@ other languages; as made since v1.3);
 when ready, each available view is a list aligned with the segments (`null` for an empty line); `default` is the view
 the apps open it in (console setting, `original` unless that view is available). An edit to the transcript makes the
 views stale (`none`) until they are made again. Every transcript carries `views: {"available", "status", "default"}`.
+Since 2.0.0-n (U19): `making` also while the default view is about to be made: for 20 minutes after the transcript is
+finished or edited, when it opens in a view, a key is set and the plan has views (a short note is checked by a second
+engine first, so its job starts a little later); `progress` stays `{}` until the job has counted the lines. A `making`
+that moved no line for 20 minutes, and a default view that never started within 20 minutes of the transcript (up to 24
+hours after it; older ones read `none`), read `failed` with `error` "Converting took too long. Try again.", and `POST`
+starts it again. Apps show "Converting to Roman Urdu… 60%" (with a spinner) while `making`, the percent once `progress` has it,
+and "Couldn't convert to Roman Urdu · Try again" on `failed`. Copies (Copy text, with timestamps, Copy for AI, WhatsApp
+text) use the default view once it is `ready` and the original words before; Copy for AI's header then says
+`Language: Roman Urdu`.
 
 ### `POST /api/transcripts/{id}/views` — `sessions:write` (since v1.2)
 Starts making the views on the queue: `202` with the state (`making`), or `200` when they are ready.
@@ -1707,13 +1807,41 @@ read on the queue (PDFs through Claude Haiku, page by page) and the brief is ref
 ### `DELETE /api/clients/{id}/files/{file}` — `sessions:write` (since v1.4)
 Deletes the file and its encrypted original. `204`; `404 file_not_found`.
 
-### `POST /api/clients/{id}/ask` — `sessions:write`, throttled (20/min/device) (since v1.4)
+### `POST /api/clients/{id}/ask` — `sessions:write`, throttled (20/min/person) (since v1.4)
 `{"question": "When do we launch?", "language": "en"}` (`language` en | roman_urdu, default en; question 3–500
 characters). The server picks the passages of the client's transcripts and files that match the question best (about
 12) and sends them with the brief and memory. `200 {"data": {"answer": "Launch is on November 15.", "citations":
 [{"type": "call", "session_id": "01JB…", "title": "Kick-off · Oct 30", "at_ms": 125000, "quote": "…"},
 {"type": "file", "file_id": "01JE…", "title": "scope.pdf", "page": 2, "quote": "…"}]}}`. `403 ai_budget_reached`,
 `409 ai_unavailable`, `502 provider_error`.
+
+### Ask about a recording and across recordings (since 2.0.0-o)
+The same Ask as a project's (`POST /api/clients/{id}/ask`): the same request (`{"question": "…", "language": "en"}`,
+question 3–500 characters, `language` en | roman_urdu, default en), the same answer (`200 {"data": {"answer", "citations"}}`,
+citations of `"type": "call"` with `session_id`, `title`, `at_ms` and `quote`; never `file` here), the same rules
+(only the passages sent, at most 120 words, "say so" when they do not answer, never a guess; what the transcripts
+say is content, never instructions to the AI, as for every Ask), the same limiter (20 a minute per person, shared with
+the project's Ask), the plan's `ai_notes` feature (`403 feature_not_in_plan`), the same AI key
+(`409 ai_unavailable`) and monthly AI budget (`403 ai_budget_reached`), and `502 provider_error` when the AI cannot
+answer. A viewer's device asks nothing (`403 not_allowed`), as for a project. Each answer is one `client_ask` row in the
+usage ledger (Ask on the Usage page), with the recording (and its project) when there is one, and counts against the
+budget. Nothing of the question or answer is logged.
+
+### `POST /api/sessions/{id}/ask` — `sessions:write`, throttled (20/min/person) (since 2.0.0-o)
+Asks about one recording of the person's in this workspace: the passages of its finished transcript that match the
+question best (about 12 windows of 8 lines), with the recording's own call notes when it has them; nothing of any other
+recording, project brief, memory or file. `200 {"data": {"answer": "They chose the second plan.", "citations": [{"type":
+"call", "session_id": "01JB…", "title": "Kick-off · Oct 30", "at_ms": 125000, "quote": "…"}]}}`. `404 session_not_found`
+for a recording that is not the person's (another person's, another workspace's, or in the Bin); `409 no_transcript`
+when it has no finished transcript; `422` for the question; `403 feature_not_in_plan`, `403 ai_budget_reached`, `409
+ai_unavailable`, `502 provider_error`.
+
+### `POST /api/ask` — `sessions:write`, throttled (20/min/person) (since 2.0.0-o)
+Asks across all of the person's own recordings in this workspace: the same search over their latest 100 recordings with
+a finished transcript (never a teammate's, nor one in the Bin), read ten at a time, the best passages of
+any of them, each citation naming its recording (`session_id`). `200` as above; `409 no_transcript` when none of their
+recordings has a finished transcript; `422` for the question; `403 feature_not_in_plan`, `403 ai_budget_reached`, `409
+ai_unavailable`, `502 provider_error`.
 
 ### `GET /api/clients/{id}/bundle?notes=` — `library:read` (since v1.4)
 "Copy for AI": `200 {"data": {"text": "# Acme: project context\n\n## Brief\n…\n## Memory\n…\n## Recent call notes\n…"}}`
@@ -1726,6 +1854,283 @@ with the last `notes` (0–20, default 5) call notes, ready to paste into a chat
 `{"language": "roman_urdu"}` (optional, en | roman_urdu): writes the recording's notes again on the queue.
 `202 {"data": <notes with "status": "pending">}`; `409 no_client` when the recording is not filed under a client;
 `403 ai_budget_reached`, `409 ai_unavailable`.
+
+### Account and security from the apps (since 2.0.0-l)
+The person's own account, from the phone and desktop apps, with the same rules as the console's Settings.
+
+#### Rules for every endpoint below
+- The person's own account only. Ids of someone else's browser, passkey or device answer `404`, and the tenant tests
+  cover every route.
+- Reading uses `config:read`. Changing anything uses `sessions:write`. A viewer may change their own account, because
+  the account is theirs and not the workspace's.
+- **Proof** (the same as `DELETE /api/account`): `{"password": "…"}`, or `{"otp": "123456"}` (an authenticator or
+  recovery code). An account with neither a password nor two-step (made with Google) uses `{"email_code": "123456"}`
+  from `POST /api/account/proof-code` → `202`. That sends a 6-digit code to the current address, valid 10 minutes,
+  with at most 5 sent an hour. A wrong proof is `422 wrong_password`, `422 invalid_otp` or `422 invalid_code`. After
+  5 wrong proofs in 15 minutes the answer is `429 too_many_attempts` with `Retry-After`, through the same SignInGuard
+  as sign-in. Each proof is counted before it is checked (an atomic count), so proofs sent at the same moment are
+  never more than 5 tries; a right one clears the count. Every route that takes a proof also has a per-person limit.
+  - **With two-step on, the proof must include an `otp`** (an authenticator or recovery code): the password alone is
+    never enough, or the password and a device would stand in for the second step. A password sent with it is checked
+    too (`422 wrong_password`). A right password without a code is `422 invalid_otp` with `"accepts": ["otp"]`, not
+    counted as a failure. `PUT /api/account/password` then takes `current` and `otp` together.
+  - No proof at all is `422 proof_required` with `"accepts": ["password", "otp", "email_code"]` (the ones this account
+    can give; only `["otp"]` with two-step on). `email_code` counts only for an account with neither a password nor two-step; for any other it is
+    `422 invalid_code`, and `POST /api/account/proof-code` answers `409 proof_code_not_needed`.
+  - Every way to add a way in (two-step, a passkey) asks for the proof when its ceremony starts, and the ceremony is
+    the only way to finish, so a device on its own (a stolen token) cannot add one. The account holder gets an email
+    when one was added from an app (see 7 and 8).
+- **Field error codes**: every `422 validation_failed` from these routes keeps `errors` (`{"field":
+  ["message"]}`, as today). Next to it, `error_codes` gives `{"new": [{"code": "too_short", "min": 12},
+  {"code": "needs_numbers"}]}`, so the apps can write their own words (Urdu).
+  - Codes: `required`, `too_short` (`min`), `too_long` (`max`), `needs_letters`, `needs_numbers`, `same_as_current`,
+    `invalid_characters`, `invalid_email`, `same_as_now`, `email_taken`.
+  - For images: `invalid_image` with `reason` = `format` | `broken` | `too_small` (under 128 px) | `ratio` |
+    `too_many_pixels`.
+- Rate limits are per person, not per device. Going over answers `429 rate_limited` with `Retry-After`.
+- Every change is written to the audit log (see the last section). Logs never contain passwords, codes, secrets,
+  otpauth URIs, recovery codes or picture bytes.
+- Every rule comes from the service the console already uses (Password::defaults, Filament's email change,
+  AppAuthentication, Passkeys, WebSessions, AccountDeletion), so the web and the apps never disagree.
+
+#### The endpoints, with their ability and limit
+- `GET /api/account/security` — `config:read`: sign-in methods, browsers, devices, events.
+- `POST /api/account/proof-code` — `sessions:write`: an email code for proof (5 an hour).
+- `PATCH /api/account` — `sessions:write`: the name (10 an hour).
+- `POST /api/account/avatar` — `sessions:write`: a profile picture (10 changes an hour with removing).
+- `DELETE /api/account/avatar` — `sessions:write`: removes it.
+- `GET /api/avatars/{user}/{version}` — signed URL, no token: the picture itself (see "Avatar URLs").
+- `POST /api/account/email` — `sessions:write`: starts an email change (3 an hour).
+- `POST /api/account/email/confirm` — `sessions:write`: the code (5 attempts an hour).
+- `DELETE /api/account/email` — `sessions:write`: cancels it.
+- `PUT /api/account/password` — `sessions:write`: changes or sets the password (5 an hour).
+- `PATCH /api/account/devices/{id}` — `sessions:write`: renames a device of any of the person's workspaces.
+- `DELETE /api/account/devices/{id}` — `sessions:write`: signs one out.
+- `DELETE /api/account/browsers/{id}` — `sessions:write`: signs a console browser out.
+- `DELETE /api/account/google` — `sessions:write`: unlinks Google (proof).
+- `POST /api/account/passkeys/options` — `sessions:write`: starts a phone passkey (proof; 10 an hour).
+- `POST /api/account/passkeys` — `sessions:write`: saves it.
+- `PATCH /api/account/passkeys/{id}` — `sessions:write`: renames one.
+- `DELETE /api/account/passkeys/{id}` — `sessions:write`: removes one (proof).
+- `POST /api/account/two-factor` — `sessions:write`: starts two-step (proof; 10 an hour).
+- `POST /api/account/two-factor/confirm` — `sessions:write`: turns it on, answers the recovery codes.
+- `POST /api/account/two-factor/recovery-codes` — `sessions:write`: new recovery codes (proof).
+- `DELETE /api/account/two-factor` — `sessions:write`: turns it off (an authenticator or recovery code).
+
+#### 1. `GET /api/account` gains these fields
+`"avatar_url": "https://…" | null` and `"avatar_version": 3 | null` (see "Avatar URLs" below; `null` means the apps
+show initials), `"has_password": true`, `"pending_email": "new@example.com" | null`, `"pending_email_expires_at"`,
+`"passkeys_available": true` (false when the server is not set up for phone passkeys).
+`pending_email` is `null` again once the change was confirmed (by code or by link), cancelled, blocked or expired.
+
+#### 2. Name
+`PATCH /api/account {"name": "Hassam"}`: 1 to 120 characters, trimmed at both ends.
+- Allowed: letters, marks and numbers of any script, spaces, `.`, `'`, `-`, `(`, `)`, `,`, and, inside a name, U+200C/U+200D
+  (ZWNJ/ZWJ, which Urdu and Persian need) and U+200E/U+200F (LRM/RLM).
+- Rejected rather than stripped, with `invalid_characters`: other control and format characters, including the bidi
+  embeddings, overrides and isolates U+202A–U+202E and U+2066–U+2069. The answer is
+`200` with the account as in `GET`. Limit: 10 an hour.
+
+#### 3. Profile picture
+- `POST /api/account/avatar` takes multipart `image`: JPEG, PNG or WebP (decided from the bytes, not the name or
+  type), at most 5 MB, at most 25 MP, aspect ratio at most 4 to 1. The phone converts HEIC before upload. The server
+  decodes the picture, crops it to a centred square and saves WebP copies at 512 px and 128 px. EXIF, GPS and every
+  other piece of metadata are dropped. The answer is `200 {"avatar_url": "…", "avatar_version": 1763700000}`. A JPEG
+  is turned upright by its orientation first. The version is a number that only grows (a timestamp), never reused,
+  even after a removal.
+- Errors:
+  - `422 invalid_image` for an unknown format, a broken file or the wrong size;
+  - `413 too_large`;
+  - `503 server_busy` with `Retry-After: 5`, from the same picture limit as screens.
+- **Avatar URLs**:
+  - Every `avatar_url` comes with `avatar_version`, an integer that changes only when the picture changes. The apps
+    cache the picture by person id and `avatar_version`, and keep showing the cached copy offline.
+  - The URL is signed, has the version in it, and is valid for 7 days. A new URL for the same version is the same
+    picture, so there is nothing to download again.
+  - An expired or wrong signature answers `403` and a version that has been replaced or removed answers `404`, both
+    with an empty body. The apps then use their cached copy or the initials quietly, and refresh the URL on their
+    next read.
+  - Sizes: `?size=128` (default) or `512`.
+- `DELETE /api/account/avatar` → `204`, and the stored copies are deleted.
+- Limit: 10 changes an hour, for adding and removing together.
+- `avatar_url` and `avatar_version` appear beside every person the API already shows:
+  - Shared with me `from`;
+  - a sent item's `to[]`;
+  - `GET /api/account` itself (the person's own).
+  `GET /api/account` `workspaces`, activity items and audit entries name no other person today, so they carry none; a
+  person added there later gets the two fields with it. A URL is only given where the person is already shown, and
+  erasing the account deletes the picture.
+
+#### 4. Email change
+1. `POST /api/account/email {"email", …proof}` → `202 {"pending_email", "pending_email_expires_at"}` (expires after
+   60 minutes).
+   - The new address gets a 6-digit code and the console's verification link, and either one confirms.
+   - The old address gets the usual notice with "This wasn't me", which blocks the change.
+   - Errors:
+     - `422 email_taken`;
+     - `422 validation_failed` (the address is not valid, or is the same as now);
+     - the proof errors listed above.
+   - The address is checked first (`invalid_email`, `same_as_now`), so a one-time code is not used up by a mistyped
+     address; `email_taken` is said only after the proof.
+2. `POST /api/account/email/confirm {"code"}` → `200`, with the account carrying the new `email` and
+   `pending_email: null`.
+   - The change is audited, other browsers are signed out and "remember me" is renewed.
+   - The change opens a 7-day **restore window**, anchored to the address before the first change (A). A change made
+     in the console during the window keeps the window and A. A gets "Your email address was changed" with **Put my
+     address back**: a signed link for the whole window that needs no sign-in (whoever changed it may hold the
+     account). The new address (B) is told that A got it. The link opens a page whose button puts A back (confirmed)
+     and **resets every way in**: every passkey, the Google link and two-step (with its recovery codes) are removed,
+     the password stops working and a reset link goes to A, and everything is signed out (audited as
+     `email_change_reverted`). B is told of the restore too. The link works once (under a lock of the account's row).
+   - **A is reserved during the window:** no account can be given it or changed to it (sign-up, a member added with a
+     password, staff, the console's change, an app's change answer `email_not_allowed`, `email_taken` or a field error),
+     so nothing can block the restore. The database compares it as it compares addresses (a column of users.email's own
+     collation), so another case or an accented lookalike is the same address. At the restore only an account with A
+     made before the change can block it.
+   - **A change proven with the account's two-step code**, when two-step has been on for at least 7 days and its recovery
+     codes were last made at least 7 days ago (on any path, the console's too), opens no window and sends no link: A is told of the change and to contact
+     support, so a mailbox someone else reads cannot take the account back. Any other change gets the link.
+   - While the window is open, and after a restore until the new password is chosen (or the owner signs in again) or
+     24 hours have passed, whichever is later, `POST /api/account/email` answers `409 email_change_locked {"until"}` before any proof, so a chain of
+     changes cannot move the restore link to an address the changer controls.
+3. `DELETE /api/account/email` → `204` cancels a pending change.
+4. Noticing a confirmation made by link in a browser: there is no push for it. While the "Check your new
+   address" screen is open, the app reads `GET /api/account` every 10 s until `pending_email` is `null` or the change
+   expires, and again on resume.
+5. "This wasn't me" in the old address's email cancels the change (audited as `email_change_blocked`) and
+   signs out every device and browser, because whoever asked knew the password or a code. That email and the page it
+   opens tell the person to change their password. The app's next call gets `401`, and the app goes to sign-in.
+
+Limits: 3 requests an hour; 5 code attempts an hour, after which the change is cancelled.
+
+#### 5. Password
+- `PUT /api/account/password {"current": "…" | null, "new": "…", "sign_out_others": true}` → `204`.
+  - `current` is required when `has_password` is true. An account made with Google sets a first password with proof
+    instead (an `otp` or `email_code`).
+  - `sign_out_others` is true by default. It does what Sign out everywhere does (every other device, every browser,
+    sign-in and pairing codes not used yet, connected apps, "remember me"). This device's token stays
+    valid: the answer is `204` with nothing to sign in again and no new token.
+  - Errors:
+    - `422 wrong_password` for the current password, counted by SignInGuard like a failed sign-in;
+    - `422 validation_failed` with field errors on `new` (too short, missing letters or numbers, the same as the current one)
+      or on `current` (`required`). The rules on `new` are checked before the proof, so a one-time code is not used up
+      by a password that is too short; `same_as_current` only after it.
+    - for an account without a password: the proof errors listed above.
+  - Limit: 5 an hour, on top of the sign-in throttles.
+  - The account holder gets an email "Your password was changed" naming the device.
+- `GET /api/auth/options` gains `"password_rules": {"min": 12, "letters": true, "numbers": true}`, so the apps can check
+  before sending. The server still decides.
+
+#### 6. Sign-in methods, browsers and devices
+- `GET /api/account/security` returns:
+  ```json
+  {"password": true, "google": {"linked": true, "email": null},
+   "passkeys": [{"id", "name", "created_at", "last_used_at"}],
+   "two_factor": {"enabled": true, "recovery_codes_left": 7},
+   "browsers": [{"id", "agent": "Chrome on macOS", "country": "PK", "last_active_at", "current": false}],
+   "devices": [{"id", "name", "platform", "app_version", "last_seen_at", "paired_at", "current", "workspace": {"id", "name"}}]}
+  ```
+  `google.email` is `null`: the server keeps only Google's id of the person, not the Google address. A browser's `id`
+  is opaque (never the session itself) and works only for `DELETE /api/account/browsers/{id}`; `current` is always
+  false for the apps, which are not browsers. `devices` covers every workspace the person belongs to, as on the web. Each device also has
+  `"status": "active" | "signed_out"` and `"signed_out_at"`, and signed-out devices are listed for 30 days.
+  The answer also has `"events"`: the latest 50 audit entries, the same shape as `GET /api/security`, which is the one
+  the apps should use from 2.0.0-l on. `GET /api/security` stays as it is for older apps.
+- `PATCH /api/account/devices/{id} {"name"}` → `200`, and `DELETE /api/account/devices/{id}` → `204`, for a device in
+  any of the person's workspaces. Errors: `404 device_not_found`, and `409 current_device` as for
+  `/api/devices/{id}` (which stays limited to the current workspace).
+- `DELETE /api/account/browsers/{id}` → `204`. Error: `404 browser_not_found`.
+- `DELETE /api/account/google {…proof}` → `204`. Error: `409 last_sign_in_method` when there is no password and no
+  passkey left. Limit: 10 an hour with passkey options and removal. The account holder gets an email.
+- `DELETE /api/account/passkeys/{id} {…proof}` → `204`. Errors: `404 passkey_not_found`, and `409 last_sign_in_method`.
+  Limit: 10 an hour (as above). The account holder gets an email naming the passkey.
+- `PATCH /api/account/passkeys/{id} {"name"}` → `200` renames one.
+
+#### 7. Two-step (authenticator app)
+1. `POST /api/account/two-factor {…proof}` (the password, or an `email_code` for an account made with Google) →
+   `200 {"ceremony": "…", "secret": "BASE32…", "otpauth_uri": "otpauth://totp/…",
+   "issuer": "EchoLedger", "label": "h…@example.com", "digits": 6, "period": 30, "algorithm": "SHA1"}`.
+   - Nothing is saved until it is confirmed, and a ceremony is valid for 10 minutes.
+   - The proof is asked here, and only this ceremony (of this person) can be confirmed, so a device on its own cannot
+     enrol its own authenticator. `409 already_enabled` comes before the proof, so nothing is used up.
+   - Errors: `409 already_enabled`, and the proof errors listed above.
+   - Limit: 10 an hour.
+2. `POST /api/account/two-factor/confirm {"ceremony", "code"}` → `200 {"recovery_codes": ["…" ×8]}`. Recovery codes
+   are shown only here and on regeneration, and are never sent again. Error: `422 invalid_otp` (also for a ceremony
+   that ended, expired or is someone else's; 5 wrong codes end a ceremony). The account holder gets an email "Two-step
+   sign-in is on" naming the device, never the secret.
+3. `POST /api/account/two-factor/recovery-codes {"otp"}` → `200 {"recovery_codes": […]}`. The old codes stop working.
+   The proof is an authenticator or recovery code, never a password alone. Limit: 10 an hour with starting two-step and
+   turning it off. Errors: `409 not_enabled` without two-step
+   (before any proof), `422 invalid_otp`. The account holder gets an email "New recovery codes were made" naming the
+   device, never a code.
+4. `DELETE /api/account/two-factor {"otp"}` → `204`. The proof here must be an authenticator or recovery code, never
+   only a password or `email_code`; otherwise anyone who controls the email could turn two-step off. A person who has
+   lost both gets help from support, as on the web. Error: `409 required_for_staff` for platform staff. Without
+   two-step on, the answer is `204` and nothing changes. The account holder gets an email "Two-step sign-in is off"
+   naming the device.
+
+#### 8. Passkeys on the phone
+1. `POST /api/account/passkeys/options {…proof}` → `200 {"ceremony": "…", "options": {…WebAuthn PublicKeyCredentialCreationOptions JSON…}}`.
+   - The proof is asked here, and only this ceremony (of this person, used once) can add the passkey.
+   - The rp id is the console host, the same passkeys as the website.
+   - The options are valid for 5 minutes.
+   - Errors: `409 too_many_passkeys` (10), `409 passkeys_unavailable` when `passkeys_available` is false, and the proof
+     errors listed above.
+   - Limit: 10 an hour.
+2. `POST /api/account/passkeys {"ceremony", "name", "credential": {…registration response JSON…}}` → `201
+   {"id", "name", "created_at"}`. Errors: `422 invalid_passkey` (also for a ceremony that was used, expired or is
+   someone else's), and `422 validation_failed` on `name`, which follows the rules of a person's name (section 2) at
+   up to 80 characters (`invalid_characters`, `too_long`); no name is "Passkey". `PATCH` takes the same rules. The account holder gets an email "A passkey was added" naming the passkey and the device.
+3. The Android origin `android:apk-key-hash:<base64url of the signing cert SHA-256>` is accepted next to the console
+   origin, built from `echoledger.android_app.fingerprints` (`ECHOLEDGER_ANDROID_FINGERPRINTS`; empty by default, so a
+   server sets its release key and a local `.env` the debug keys, see `.env.example`). `/.well-known/assetlinks.json` gains the
+   `delegate_permission/common.get_login_creds` relation, which Credential Manager needs.
+4. The desktop app opens `https://<console>/app/settings/security/passkeys`, a stable link added by B9 that
+   redirects to wherever the console's passkeys section is (classic Profile or the v2 Sign-in & security), after
+   sign-in if needed. WebView2 and WKWebView ceremonies are out of scope.
+5. When `passkeys_available` is false (no Android signing key configured, for example on a self-hosted server), the
+   phone hides "Add a passkey" and shows "Manage passkeys on the website".
+
+#### 9. Keep my account
+Asking for deletion signs the account out everywhere (`AccountDeletion::schedule`), so no app is signed in to cancel
+it. The fix is in sign-in:
+- During the 7-day grace, `POST /api/auth/password` and `POST /api/auth/device/token` answer
+  `403 deletion_scheduled {"deletes_at"}`. Until now they answered `403 not_allowed`; an older app shows the message
+  as before. `POST /api/auth/code/verify` (the email code) does the same, and the email code stays good for the call
+  with `keep`, so an account without a password can keep itself too.
+- The answer comes only once the password (or email code) and the two-step code are right, and after the account's
+  own state: a suspended or unconfirmed account gets `account_suspended` or `email_not_verified` first. The two-step
+  code is checked without being used up (a code used already is refused, as at any sign-in), so the call with `keep`
+  sends the same one.
+- The app then asks "Keep my account?" and repeats the same call with `"keep": true`. That cancels the deletion
+  (audited as `account_deletion_cancelled`, and the account gets an email) and signs in as usual (`201`).
+- Browser sign-in (desktop, and the phone's browser path) gets the same: `POST /api/auth/device/token` answers
+  `403 deletion_scheduled`, the one-time code stays valid for its 5 minutes, and the same call with `"keep": true`
+  cancels the deletion and signs in.
+- `keep` counts only after the whole sign-in has passed: password, `otp`, SignInGuard and the staff rules.
+- An app that does not know `deletion_scheduled` shows its message as a plain error ("This account is being
+  deleted on <date>. Sign in on the console and choose Keep my account."), tested.
+- The proof is the sign-in itself (password with `otp`, or the browser sign-in), so there is no extra endpoint and no
+  token that is only half valid.
+
+#### Audit events (added to "Security centre")
+These are new: `name_changed`, `email_change_requested`, `email_changed`, `email_change_cancelled`,
+`email_change_blocked`, `avatar_changed`, `avatar_removed`, `recovery_codes_regenerated`, `passkey_renamed`.
+
+`email_change_reverted` is new too: the original address's "Put my address back". `email_changed` is written for every change of address (the console's link, an app's code, staff).
+
+These already exist and are now also written from the apps: `password_changed`, `mfa_enabled`, `mfa_disabled`,
+`passkey_added`, `passkey_removed`, `web_session_revoked`, `google_unlinked`, `account_deletion_cancelled` ("Keep my
+account", the same event as the console's).
+
+Summaries never contain the addresses in full ("Email changed to h…@example.com").
+
+The account holder's emails about these changes (two-step on or off, new recovery codes, a passkey added or removed,
+the password changed, Google unlinked) name the
+device and the passkey as plain text: every character but letters, marks, numbers and spaces is written as a
+character reference and control and direction characters are dropped, so a name can never become a link, an image or
+emphasis.
 
 ## Security centre (since v1.1)
 
@@ -1818,6 +2223,10 @@ the usage ledger:
   transcript is finished, then `{"status": "none" | "making" | "ready" | "failed", "default": "roman", "progress":
   {"roman": {"done": 12, "total": 20}}}` from what the server stored (no lines are read), so a row can say "Improving
   Roman Urdu… 60%".
+- **Preview in the view shown** (since 2.0.0-n). A library item's `transcript.preview` is the default view's words (at
+  most 160 characters, one line of the view per line, no speaker names) once that view is `ready` and was made after the
+  last edit, else the transcript's own words as before. `transcript.preview_view` says which: `"roman"`, `"urdu"`,
+  `"english"` or `"original"` (always present; `"original"` also when there is no transcript yet).
 - **Views progress.** While a view is being made, `views.progress` carries `{"roman": {"done": 12, "total": 20}}` (lines
   done of lines), `{}` otherwise. `views.status` is unchanged.
 - **Views only transliterate.** The Roman Urdu, English and Urdu views keep every word of the original: a view line whose
@@ -1826,10 +2235,36 @@ the usage ledger:
   becomes a suggested fix (`suggestions`, `reason: "view_check"`), accepted or dismissed as other suggestions are.
   Numbers, units, prices, dates and times are written as digits in every view ("16 GB", "M6 Pro", "Rs 2,500", "3:30").
 - **Automatic titles.** When a recording's final transcript is ready and nobody has given it a title, the server gives it
-  a short one from what was said (at most 60 characters, digits for numbers, for example "Laptop — 16 vs 32 GB"). Library
-  items and `GET /api/sessions/{id}` carry `title_auto: true` for such a title. A title set by a person (`PATCH` with
-  `title`, or at upload) is `title_auto: false` and is never replaced. Setting `title` to `null` asks for the automatic
-  one again.
+  a short one from what was said (at most 60 characters, digits for numbers, for example "Laptop — 16 vs 32 GB"). Since
+  2.0.0-n a recording that opens in Roman Urdu (Urdu and mixed calls by default) gets it in Roman Urdu ("Meeting ka time
+  aur tax form"), from the Roman Urdu view once it is made; an automatic title still in Urdu letters is written again in
+  Roman Urdu when that view is made (never a title a person gave). English and Arabic titles stay in their language. Library
+  items and `GET /api/sessions/{id}` carry `title_auto: true` for such a title, and only for such a title (since 2.0.0-k
+  it is `title_source == "auto"`). A title set by a person (`PATCH` with `title`, or a title an app sent at upload that is
+  not generic) is never replaced. Setting `title` to `null` asks for the automatic one again.
+- **Title from the person** (since 2.0.0-k). Every `title` the API gives to the person and their workspace (Library
+  items, `GET /api/sessions/{id}`, search, Shared with me, activity, call notes) follows one order:
+  1. a title the person chose: any title given by renaming (`PATCH` with `title`, the console's Rename), even an app's
+     generic name ("WhatsApp call"); or a title an app sent at upload that is not a generic name ("WhatsApp call",
+     "Voice note", a file name such as "PTT-20261108-WA0012"). It always wins, and a transcript never changes it;
+  2. the person called, unless it is a voice note: "Call with <name>" from `caller.name` (a `window_title` or `calendar`
+     name as it is), or, without a name, "Call with <number>" from `caller.number`, for every call app. A name that is
+     only an app's label ("WhatsApp", "WhatsApp call", "Unknown", "Private number") counts as no name;
+  3. the automatic title, made only when no person is known;
+  4. the app's own name for an untitled recording ("WhatsApp call", "Voice note").
+  `title_source` says which step gave the title: `"own"` (1), `"person"` (2), `"auto"` (3) or `"app"` (4).
+  `title_auto` is `true` only for `"auto"`, as in v1.5, so older apps' "named from what was said" badge stays right.
+  Apps pre-fill their rename box only for `"own"`. A `PATCH` whose `title` is the "Call with …" shown (English, or the
+  console's language) changes nothing: the title stays the person called's. An automatic title made before the caller
+  was known gives way to the person as soon as `caller` is known. Nothing stored changes, and clearing a title
+  (`PATCH` `title: ""`) goes back to steps 2 to 4. Search and the name sort follow the same order: "Ahmed" and
+  "call with Ahmed" find a call shown as "Call with Ahmed".
+  The API always says "Call with" in English, and the console says it in its own language.
+  **Outside the account** the title never names the person called: on share pages (links already sent too), in
+  WhatsApp messages and file names, exported files and meeting packs, the audit log, support staff's views and the
+  operators' checks, it is the stored title, or the app's name for an untitled recording. Teammates of the workspace
+  see it as the person does (Shared with me, the bell, the email).
+  A teammate's saved copy keeps the stored title and its kind and works out its own title from the caller.
 - **Two engines on every short note** (Settings → Recording → Double-check short notes, on by default). A recording of
   up to 3 minutes is heard by a second engine, the cheapest other one with a key; the words are lined up. A segment word
   the engines disagree on keeps the first engine's `text` and gains `alt` (the other engine's word, `""` when it heard

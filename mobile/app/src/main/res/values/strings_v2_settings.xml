@@ -105,6 +105,7 @@
     <string name="v2_set_activity_help">Transcripts ready, failed uploads, new devices</string>
     <string name="v2_set_quiet_help">From %1$s to %2$s, notifications arrive silently</string>
     <string name="v2_set_sign_out">Sign out</string>
+    <string name="v2_set_audio_kept">Audio kept: %1$s · cleaned up automatically after %2$s</string>
     <string name="v2_set_sign_out_title">Sign out of this phone?</string>
     <string name="v2_set_sign_out_body">Recordings that haven\'t uploaded yet stay on this phone until you sign in again.</string>
     <string name="v2_set_theme">Theme</string>

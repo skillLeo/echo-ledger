@@ -11,11 +11,28 @@ export function Avatar({ initials, size = "md" }: { initials: string; size?: "sm
   return <span className={`el-avatar${size === "sm" ? " el-avatar--sm" : ""}`} aria-hidden="true">{initials}</span>;
 }
 
-/** The app's primary navigation; below the compact breakpoint it keeps its icons only. */
-export function Sidebar({ label, brand, children, footer }: { label: string; brand?: ReactNode; children: ReactNode; footer?: ReactNode }) {
+/** The app's primary navigation; below the rail breakpoint (780 px window) it keeps its icons only. */
+export function Sidebar({ label, brand, brandEnd, children, footer, rail, width }: {
+  label: string;
+  /** Icons only (true) or full (false) whatever the window's width; left out, the window's width decides. */
+  rail?: boolean;
+  /** Its width in CSS pixels while not a rail (the person's, 200 to 320); left out, the design's. */
+  width?: number;
+  brand?: ReactNode;
+  /** A control at the brand's end (Search): it stays at the top of the rail when the name hides. */
+  brandEnd?: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
   return (
-    <nav className="el-sidebar" aria-label={label}>
-      {brand && <div className="el-sidebar__brand">{brand}</div>}
+    <nav className="el-sidebar" aria-label={label} data-rail={rail === undefined ? undefined : rail ? "on" : "off"}
+      style={width !== undefined && !rail ? { ["--el-sidebar-width" as string]: `${width}px` } : undefined}>
+      {(brand || brandEnd) && (
+        <div className="el-sidebar__brand">
+          {brand && <span className="el-sidebar__brand-name">{brand}</span>}
+          {brandEnd && <span className="el-sidebar__brand-end">{brandEnd}</span>}
+        </div>
+      )}
       {children}
       {footer}
     </nav>

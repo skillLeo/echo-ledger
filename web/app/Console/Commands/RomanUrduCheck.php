@@ -86,7 +86,7 @@ final class RomanUrduCheck extends Command
             $verdicts[] = $verdict;
             $session = $transcript->captureSession;
             $rows[] = [
-                mb_strimwidth($session->displayTitle(), 0, 40, '…'),
+                mb_strimwidth($session->outsideTitle(), 0, 40, '…'),
                 $session->started_at->copy()->setTimezone($zone)->format('M j, g:i A'),
                 $check['original'],
                 $check['roman'],

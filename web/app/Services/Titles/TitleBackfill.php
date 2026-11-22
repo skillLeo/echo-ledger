@@ -39,6 +39,8 @@ final class TitleBackfill
         $skipped = ['no_transcript' => 0, 'no_words' => 0, 'caller_shown' => 0, 'changed_meanwhile' => 0];
         $query = CaptureSession::query()->withoutGlobalScopes()->whereNull('deleted_at')
             ->where(fn ($q) => $q->whereNull('title')->orWhere('title', '')->orWhere('title_auto', false))
+            // Since 2.0.0-k a title a person gave by renaming is theirs, generic or not.
+            ->where('title_by_person', false)
             ->when($userId !== null, fn ($q) => $q->where('user_id', $userId));
 
         foreach ($query->lazyById(self::CHUNK, 'id') as $session) {
@@ -107,7 +109,9 @@ final class TitleBackfill
         if ($final === null) {
             return 'no_transcript';
         }
-        $title = AutoTitles::firstWords(AutoTitles::plainText($final));
+        // Since U19: a recording that opens in Roman Urdu takes its first words from that view when it is made.
+        $roman = AutoTitles::opensInRoman($final) ? AutoTitles::romanText($final) : '';
+        $title = AutoTitles::firstWords($roman !== '' ? $roman : AutoTitles::plainText($final));
 
         return $title === '' ? 'no_words' : ['after' => $title, 'action' => 'titled'];
     }

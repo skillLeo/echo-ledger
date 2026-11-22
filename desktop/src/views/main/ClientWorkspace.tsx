@@ -548,7 +548,7 @@ function Memory({ ws, clientId, notify, onChange, onOpenRecording }: {
         })}
         <form className="memory-add" onSubmit={(e) => { e.preventDefault(); void add(); }}>
           <select className="input" aria-label="Kind" value={kind} onChange={(e) => setKind(e.target.value as MemoryKind)}>
-            {MEMORY_GROUPS.map(([value, heading]) => <option key={value} value={value}>{heading}</option>)}
+            {MEMORY_GROUPS.map(([value, heading]) => <option dir="auto" key={value} value={value}>{heading}</option>)}
           </select>
           <input className="input" aria-label="Add to memory" placeholder="Add a decision, question, change or scope line" maxLength={500} value={text} onChange={(e) => setText(e.target.value)} />
           <button type="submit" className="btn" disabled={!text.trim() || busy === "add"}><PlusIcon size={16} />Add</button>
@@ -611,7 +611,7 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
           {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><CloseIcon size={16} /></button>}
         </label>
         <select className="chip" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort recordings">
-          {PROJECT_SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          {PROJECT_SORTS.map(([key, label]) => <option dir="auto" key={key} value={key}>{label}</option>)}
         </select>
         {hasFolders && <label className="check"><input type="checkbox" checked={nested} onChange={(e) => setNested(e.target.checked)} />Include its folders</label>}
       </div>

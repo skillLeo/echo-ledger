@@ -1,13 +1,13 @@
 @extends('share.layout')
 
-@section('title', $session->displayTitle())
+@section('title', $session->outsideTitle())
 
 @section('content')
     @if ($backUrl ?? null)
         <p class="crumbs"><a href="{{ $backUrl }}">← All recordings</a></p>
     @endif
     <div class="card" @if ($languageCode ?? null) lang="{{ $languageCode }}" @endif>
-        <h1 dir="auto">{{ $session->displayTitle() }}</h1>
+        <h1 dir="auto">{{ $session->outsideTitle() }}</h1>
         <p class="facts">
             {{ $session->started_at->copy()->setTimezone(app(\App\Services\SettingsRepository::class)->displayTimezone())->format('j M Y, H:i T') }}
             @if ($session->duration_ms) · {{ \App\Services\TranscriptExporter::clock($session->duration_ms) }} @endif

@@ -13,6 +13,7 @@ use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\ConsoleDates;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
@@ -35,6 +36,7 @@ use App\Services\Entitlements\Entitlements;
 use App\Services\Projects\FilingRules;
 use App\Services\Projects\ProjectTree;
 use App\Services\SettingsRepository;
+use App\Services\Titles\TitleSql;
 use App\Services\TranscriptExporter;
 use App\Services\Workspaces\PlanLimits;
 use App\Support\UrduText;
@@ -66,6 +68,7 @@ class ViewClient extends ViewRecord
 
     protected static string $resource = ClientResource::class;
 
+    /** English, as the keys of their words in the console's language (the views pass them through __()). */
     public const TABS = ['overview' => 'Overview', 'recordings' => 'Recordings', 'screens' => 'Screens', 'files' => 'Files', 'ask' => 'Ask', 'rules' => 'Rules'];
 
     /** The Screens tab (v1.5) shows the screens of this many recordings, newest first. */
@@ -137,8 +140,9 @@ class ViewClient extends ViewRecord
         $zone = app(SettingsRepository::class)->displayTimezone();
 
         return match (true) {
-            $count === 0 => 'No recordings yet',
-            default => ($count === 1 ? '1 recording' : "{$count} recordings").' · Last call '.Carbon::parse((string) $last, 'UTC')->setTimezone($zone)->format('M j'),
+            $count === 0 => __('No recordings yet'),
+            default => ($count === 1 ? __(':n recording', ['n' => 1]) : __(':n recordings', ['n' => $count])).' · '
+                .__('Last call :date', ['date' => ConsoleDates::day(Carbon::parse((string) $last, 'UTC')->setTimezone($zone))]),
         };
     }
 
@@ -147,14 +151,14 @@ class ViewClient extends ViewRecord
         return [
             SharingActions::share(fn (): Client => $this->client(), fn (): array => []),
             ActionGroup::make([
-                Action::make('newSubfolder')->label('New subfolder')->icon(Heroicon::OutlinedFolderPlus)
+                Action::make('newSubfolder')->label(__('New subfolder'))->icon(Heroicon::OutlinedFolderPlus)
                     ->url(fn (): string => ClientResource::getUrl('create', ['parent' => $this->client()->id]))
                     ->visible(fn (): bool => $this->depth() < Client::MAX_DEPTH),
                 SharingActions::send(fn (): Client => $this->client()),
                 SharingActions::sentTo(fn (): Client => $this->client()),
                 SharingActions::renameProject(),
                 SharingActions::moveProject(),
-                EditAction::make()->label('Settings')->icon(Heroicon::OutlinedCog6Tooth),
+                EditAction::make()->label(__('Settings'))->icon(Heroicon::OutlinedCog6Tooth),
                 SharingActions::deleteProject(fn () => $this->redirect(ClientResource::getUrl('index'))),
             ])->icon(Heroicon::OutlinedEllipsisVertical)->color('gray'),
         ];
@@ -183,13 +187,13 @@ class ViewClient extends ViewRecord
     /** The upgrade sheet for AI notes (since v1.6): what they do, the plans side by side, Request upgrade. */
     public function upgradeAiNotesAction(): Action
     {
-        return PlanLock::sheet('upgradeAiNotes', 'ai_notes', 'AI notes');
+        return PlanLock::sheet('upgradeAiNotes', 'ai_notes', __('AI notes'));
     }
 
     /** The upgrade sheet for screen moments (since v1.6.2), from the Screens tab when the plan leaves them out. */
     public function upgradeScreensAction(): Action
     {
-        return PlanLock::sheet('upgradeScreens', 'screen_moments', 'Screen moments');
+        return PlanLock::sheet('upgradeScreens', 'screen_moments', __('Screen moments'));
     }
 
     /**
@@ -214,16 +218,16 @@ class ViewClient extends ViewRecord
         }
         $client = $this->client();
         $client->update(['ai_notes' => ! $client->ai_notes]);
-        Notification::make()->title($client->ai_notes ? 'AI notes are on for '.$client->name : 'AI notes are off for '.$client->name)->success()->send();
+        Notification::make()->title($client->ai_notes ? __('AI notes are on for :name', ['name' => $client->name]) : __('AI notes are off for :name', ['name' => $client->name]))->success()->send();
     }
 
     /** The edit form of the brief: the goal on one line, every other section one line per item. */
     public function editBriefAction(): Action
     {
         return Action::make('editBrief')
-            ->label('Edit')
-            ->modalHeading('Edit the brief')
-            ->modalDescription('Once you edit the brief it is not rewritten by itself; Make again replaces it.')
+            ->label(__('Edit'))
+            ->modalHeading(__('Edit the brief'))
+            ->modalDescription(__('Once you edit the brief it is not rewritten by itself; Make again replaces it.'))
             ->modalWidth('2xl')
             ->fillForm(function (): array {
                 $sections = ClientBrief::clean($this->brief()->sections);
@@ -235,11 +239,11 @@ class ViewClient extends ViewRecord
                 return $data;
             })
             ->schema([
-                TextInput::make('goal')->label('Goal')->maxLength(300),
-                ...array_map(fn (string $key): Textarea => Textarea::make($key)->label(ucfirst($key))->rows(3)
-                    ->helperText($key === 'scope' ? 'One line per item.' : null), array_slice(ClientBrief::SECTIONS, 1)),
+                TextInput::make('goal')->label(__('Goal'))->maxLength(300),
+                ...array_map(fn (string $key): Textarea => Textarea::make($key)->label(__(ucfirst($key)))->rows(3)
+                    ->helperText($key === 'scope' ? __('One line per item.') : null), array_slice(ClientBrief::SECTIONS, 1)),
             ])
-            ->modalSubmitActionLabel('Save')
+            ->modalSubmitActionLabel(__('Save'))
             ->action(function (array $data): void {
                 $sections = ['goal' => (string) ($data['goal'] ?? '')];
                 foreach (array_slice(ClientBrief::SECTIONS, 1) as $key) {
@@ -248,7 +252,7 @@ class ViewClient extends ViewRecord
                 $client = $this->client();
                 $brief = ClientBrief::query()->firstOrNew(['client_id' => $client->id]);
                 $brief->fill(['workspace_id' => $client->workspace_id, 'sections' => ClientBrief::clean($sections), 'edited' => true, 'status' => 'ready', 'error' => null])->save();
-                Notification::make()->title('Brief saved')->success()->send();
+                Notification::make()->title(__('Brief saved'))->success()->send();
             });
     }
 
@@ -279,7 +283,7 @@ class ViewClient extends ViewRecord
         $this->validate([
             'memoryKind' => ['required', 'in:'.implode(',', ClientMemoryItem::KINDS)],
             'memoryText' => ['required', 'string', 'max:500'],
-        ], [], ['memoryText' => 'line', 'memoryKind' => 'kind']);
+        ], [], self::fieldNames(['memoryText' => 'line', 'memoryKind' => 'kind']));
         $client = $this->client();
         if (! app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes')) {
             Notification::make()->title(Entitlements::lockedMessage('ai_notes'))->url(EditProfile::settingsUrl('plan'))->warning()->send();
@@ -320,14 +324,14 @@ class ViewClient extends ViewRecord
     /** A document dropped or chosen: stored encrypted, its text read on the queue. */
     public function updatedUpload(): void
     {
-        $this->validate(['upload' => ['required', 'file', 'max:'.(ClientWorkspace::MAX_FILE_BYTES / 1024)]], [], ['upload' => 'file']);
+        $this->validate(['upload' => ['required', 'file', 'max:'.(ClientWorkspace::MAX_FILE_BYTES / 1024)]], [], self::fieldNames(['upload' => 'file']));
         $upload = $this->upload;
         if (! $upload instanceof TemporaryUploadedFile) {
             return;
         }
         try {
             $file = app(ClientWorkspace::class)->addFile($this->client(), $upload, (int) auth()->id());
-            Notification::make()->title('Added '.$file->name)->body('Its text is being read for the brief and Ask.')->success()->send();
+            Notification::make()->title(__('Added :name', ['name' => $file->name]))->body(__('Its text is being read for the brief and Ask.'))->success()->send();
         } catch (ApiError $e) {
             $this->addError('upload', $e->getMessage());
         } finally {
@@ -341,11 +345,11 @@ class ViewClient extends ViewRecord
         $this->validate([
             'instructions' => ['required', 'string', 'max:100000'],
             'instructionsName' => ['nullable', 'string', 'max:200'],
-        ], [], ['instructions' => 'instructions', 'instructionsName' => 'name']);
+        ], [], self::fieldNames(['instructions' => 'instructions', 'instructionsName' => 'name']));
         app(ClientWorkspace::class)->addInstructions($this->client(), $this->instructions, $this->instructionsName ?: null, (int) auth()->id());
         $this->instructions = '';
         $this->instructionsName = '';
-        Notification::make()->title('Instructions added')->success()->send();
+        Notification::make()->title(__('Instructions added'))->success()->send();
     }
 
     public function removeFileAction(): Action
@@ -353,14 +357,14 @@ class ViewClient extends ViewRecord
         return Action::make('removeFile')
             ->requiresConfirmation()
             ->color('danger')
-            ->modalHeading('Remove this file?')
-            ->modalDescription('The file and the text read from it are deleted. The brief keeps what it has until it is made again.')
-            ->modalSubmitActionLabel('Remove')
+            ->modalHeading(__('Remove this file?'))
+            ->modalDescription(__('The file and the text read from it are deleted. The brief keeps what it has until it is made again.'))
+            ->modalSubmitActionLabel(__('Remove'))
             ->action(function (array $arguments): void {
                 $file = ClientFile::query()->where('client_id', $this->client()->id)->find($arguments['file'] ?? null);
                 if ($file instanceof ClientFile) {
                     app(ClientWorkspace::class)->deleteFile($file);
-                    Notification::make()->title('Removed '.$file->name)->success()->send();
+                    Notification::make()->title(__('Removed :name', ['name' => $file->name]))->success()->send();
                 }
             });
     }
@@ -375,7 +379,7 @@ class ViewClient extends ViewRecord
         $this->validate([
             'question' => ['required', 'string', 'min:3', 'max:500'],
             'askLanguage' => ['required', 'in:en,roman_urdu'],
-        ], [], ['question' => 'question']);
+        ], [], self::fieldNames(['question' => 'question']));
         $this->askError = null;
         try {
             $this->answer = app(ClientWorkspace::class)->ask($this->client(), trim($this->question), $this->askLanguage);
@@ -392,7 +396,7 @@ class ViewClient extends ViewRecord
         $this->validate([
             'ruleKind' => ['required', 'in:'.implode(',', FilingRule::KINDS)],
             'ruleValue' => ['required', 'string', 'max:120'],
-        ], [], ['ruleValue' => 'value', 'ruleKind' => 'kind']);
+        ], [], self::fieldNames(['ruleValue' => 'value', 'ruleKind' => 'kind']));
         try {
             ['created' => $created] = app(FilingRules::class)->add($this->client(), $this->ruleKind, $this->ruleValue);
         } catch (ApiError $e) {
@@ -401,7 +405,19 @@ class ViewClient extends ViewRecord
             return;
         }
         $this->ruleValue = '';
-        Notification::make()->title($created ? 'Rule added' : 'This project already has that rule')->success()->send();
+        Notification::make()->title($created ? __('Rule added') : __('This project already has that rule'))->success()->send();
+    }
+
+    /**
+     * The fields' names in an error ("The line field is required."), in the console's language from
+     * lang/<locale>/validation.php's attributes, or as written.
+     *
+     * @param  array<string, string>  $names
+     * @return array<string, string>
+     */
+    private static function fieldNames(array $names): array
+    {
+        return array_map(fn (string $name): string => trans()->has('validation.attributes.'.$name) ? (string) __('validation.attributes.'.$name) : $name, $names);
     }
 
     public function removeRule(int $id): void
@@ -519,7 +535,7 @@ class ViewClient extends ViewRecord
 
         return match ($this->sort) {
             'oldest' => $query->oldest('started_at'),
-            'title' => $query->orderByRaw('LOWER(COALESCE(title, caller_name, source_app))'),
+            'title' => TitleSql::orderByShown($query),
             'longest' => $query->orderByDesc('duration_ms'),
             default => $query->latest('started_at'),
         };
@@ -545,7 +561,7 @@ class ViewClient extends ViewRecord
 
             return [
                 'title' => $session->displayTitle(),
-                'when' => $session->started_at->copy()->setTimezone($zone)->format('M j, Y · g:i A'),
+                'when' => ConsoleDates::dateTime($session->started_at->copy()->setTimezone($zone), 'g:i A'),
                 'url' => $url,
                 'screens' => array_values(($screens[$session->id] ?? collect())->values()->map(fn (Screen $s, int $i): array => [
                     'id' => $s->id,
@@ -573,7 +589,7 @@ class ViewClient extends ViewRecord
         $client = $this->client();
         $nodes = Client::query()->where('workspace_id', $client->workspace_id)->where('user_id', $client->user_id)->get(['id', 'parent_id', 'name'])
             ->mapWithKeys(fn (Client $c): array => [$c->id => ['parent_id' => $c->parent_id, 'name' => $c->name]])->all();
-        $crumbs = [ClientResource::getUrl('index') => 'Projects'];
+        $crumbs = [ClientResource::getUrl('index') => __('Projects')];
         foreach (ProjectTree::pathOf($client->id, $nodes) as $ancestor) {
             $crumbs[ClientResource::getUrl('view', ['record' => $ancestor['id']])] = $ancestor['name'];
         }

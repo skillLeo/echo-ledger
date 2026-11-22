@@ -8,6 +8,13 @@ export const nav = (name) => async (page) => {
   await page.waitForTimeout(1200);
 };
 
+/** Whether a gallery page was opened in Urdu (its steps then use the Urdu words). */
+const urdu = (page) => new URL(page.url()).searchParams.get("lang") === "ur";
+/** The sample lists (D14) by their English name, in the page's language. */
+const LIST_UR = { Clients: "کلائنٹس", Home: "گھر", Family: "خاندان" };
+const listChip = (page, name) => page.getByRole("group", { name: urdu(page) ? "فہرستیں" : "Lists" })
+  .getByRole("button", { name: urdu(page) ? LIST_UR[name] : name, exact: true });
+
 /** [name, kind, path (theme added), languages, steps] */
 export const CASES = [
   ["g-library", "gallery", "?v2gallery&screen=library", ["en", "ur"]],
@@ -16,6 +23,27 @@ export const CASES = [
   ["g-settings", "gallery", "?v2gallery&screen=settings", ["en", "ur"]],
   ["g-library-error", "gallery", "?v2gallery&screen=library&state=error", ["en", "ur"]],
   ["g-assist", "gallery", "?v2gallery&screen=assist", ["en"]],
+  ["g-kit", "gallery", "?v2gallery&screen=kit", ["en", "ur"]],
+  ["g-kit-menus", "gallery", "?v2gallery&screen=kit", ["en", "ur"], async (page) => { await page.locator(".el-sortgroup").first().click(); await page.waitForTimeout(300); }],
+  ["g-kit-scrolled", "gallery", "?v2gallery&screen=kit", ["en", "ur"], async (page) => { await page.locator(".g-kit-scroller").evaluate((el) => { el.scrollTop = el.scrollHeight; }); await page.waitForTimeout(300); }],
+  ["g-lists", "gallery", "?v2gallery&screen=lists", ["en", "ur"]],
+  ["g-lists-clients", "gallery", "?v2gallery&screen=lists", ["en", "ur"], async (page) => { await listChip(page, "Clients").click(); await page.waitForTimeout(300); }],
+  ["g-lists-dialog", "gallery", "?v2gallery&screen=lists", ["en", "ur"], async (page) => {
+    const ur = urdu(page);
+    await page.getByRole("group", { name: ur ? "فہرستیں" : "Lists" }).getByRole("button", { name: ur ? "نئی فہرست" : "New list", exact: true }).click();
+    await page.getByRole("textbox", { name: ur ? "فہرست کا نام" : "List name" }).fill(ur ? "سپلائرز" : "Suppliers");
+    await page.getByRole("radio", { name: ur ? "نیلا" : "Blue" }).click();
+    await page.getByRole("textbox").focus();
+    await page.waitForTimeout(300);
+  }],
+  ["g-lists-addto", "gallery", "?v2gallery&screen=lists", ["en", "ur"], async (page) => { await page.locator('[data-row-id="r6"]').click({ button: "right", position: { x: 260, y: 28 } }); await page.waitForTimeout(300); }],
+  ["g-lists-chipmenu", "gallery", "?v2gallery&screen=lists", ["en", "ur"], async (page) => {
+    // Right-clicked low on the chip, so the menu opens under it and the chip stays in sight.
+    const chip = listChip(page, "Home");
+    const box = await chip.boundingBox();
+    await chip.click({ button: "right", position: { x: box.width / 3, y: box.height - 2 } });
+    await page.waitForTimeout(300);
+  }],
   ["a-library", "app", app("library"), ["en"]],
   ["a-recording", "app", app("library"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
   ["a-recording-screens", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); }],
@@ -148,3 +176,21 @@ export const GATE3 = [
   ["set-about", "a-set-about", "Settings › About"],
   ["set-technical", "a-set-technical", "Settings › About › Technical details"],
 ];
+
+/**
+ * Design-review pictures (shoot.mjs --review=<id>): [file stem, case above, window widths]. Each is taken light and
+ * dark, in English and Urdu, at every width given (the width then goes in the name: desktop-lists-800-dark-ur.png),
+ * or at 1280 alone when none is given (desktop-lists-dialog-light-en.png), into the review's folder.
+ */
+export const REVIEWS = {
+  D14: {
+    dir: "docs/v2/design-review/D14",
+    shots: [
+      ["desktop-lists", "g-lists", [1280, 800]],
+      ["desktop-lists-clients", "g-lists-clients", [1280, 800]],
+      ["desktop-lists-dialog", "g-lists-dialog"],
+      ["desktop-lists-addto", "g-lists-addto"],
+      ["desktop-lists-chipmenu", "g-lists-chipmenu"],
+    ],
+  },
+};

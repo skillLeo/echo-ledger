@@ -48,43 +48,46 @@ final class SharingActions
      *
      * @param  Closure(): (CaptureSession|Client)  $target
      * @param  Closure(): list<string>  $readyViews  the Show as views ready for a recording (none for a project)
+     * @param  Closure(): (string|null)|null  $shownView  since U19: the view being read, the link's view to start with
      */
-    public static function share(Closure $target, Closure $readyViews, ?Closure $hasAudio = null): Action
+    public static function share(Closure $target, Closure $readyViews, ?Closure $hasAudio = null, ?Closure $shownView = null): Action
     {
         return Action::make('share')
-            ->label('Share')->labeledFrom('sm')
+            ->label(__('Share'))->labeledFrom('sm')
             ->icon(Heroicon::OutlinedLink)
             ->color('gray')
             ->button()
-            ->modalHeading(fn (): string => $target() instanceof Client ? 'Share this project' : 'Share this recording')
+            ->modalHeading(fn (): string => $target() instanceof Client ? __('Share this project') : __('Share this recording'))
             ->modalDescription(fn (): string => $target() instanceof Client
-                ? 'A view-only page listing the project\'s recordings (its subfolders\' too), each one readable and playable.'
-                : 'A view-only page with the transcript and a player.')
+                ? __('A view-only page listing the project\'s recordings (its subfolders\' too), each one readable and playable.')
+                : __('A view-only page with the transcript and a player.'))
             ->schema([
-                Select::make('audience')->label('Who can open it')->required()->default('public')->selectablePlaceholder(false)->live()
-                    ->options(['public' => 'Anyone with the link', 'password' => 'Anyone with the link and a password', 'people' => 'Only people I name (they sign in)']),
-                TextInput::make('password')->label('Password')->password()->revealable()->minLength(6)->maxLength(100)
+                Select::make('audience')->label(__('Who can open it'))->required()->default('public')->selectablePlaceholder(false)->live()
+                    ->options(['public' => __('Anyone with the link'), 'password' => __('Anyone with the link and a password'), 'people' => __('Only people I name (they sign in)')]),
+                TextInput::make('password')->label(__('Password'))->password()->revealable()->minLength(6)->maxLength(100)
                     ->required(fn (Get $get): bool => $get('audience') === 'password')
                     ->visible(fn (Get $get): bool => $get('audience') === 'password'),
-                TagsInput::make('people')->label('Their emails')->placeholder('name@example.com')
-                    ->helperText('They open the link signed in to '.Brand::name().' with one of these emails. Up to '.ShareLinks::MAX_PEOPLE.'.')
+                TagsInput::make('people')->label(__('Their emails'))->placeholder('name@example.com')
+                    ->helperText(__('They open the link signed in to :app with one of these emails. Up to :max.', ['app' => Brand::name(), 'max' => ShareLinks::MAX_PEOPLE]))
                     ->nestedRecursiveRules(['email', 'max:190'])->rules(['array', 'max:'.ShareLinks::MAX_PEOPLE])
                     ->required(fn (Get $get): bool => $get('audience') === 'people')
                     ->visible(fn (Get $get): bool => $get('audience') === 'people'),
-                Select::make('expires')->label('Expires')->required()->default('604800')->selectablePlaceholder(false)->live()
-                    ->options(self::EXPIRIES),
-                DateTimePicker::make('expires_at')->label('Expires on')->seconds(false)->minDate(now())
+                Select::make('expires')->label(__('Expires'))->required()->default('604800')->selectablePlaceholder(false)->live()
+                    ->options(array_map(fn (string $label): string => __($label), self::EXPIRIES)),
+                DateTimePicker::make('expires_at')->label(__('Expires on'))->seconds(false)->minDate(now())
                     ->timezone(app(SettingsRepository::class)->displayTimezone())
                     ->required(fn (Get $get): bool => $get('expires') === 'date')
                     ->visible(fn (Get $get): bool => $get('expires') === 'date'),
-                Toggle::make('allow_download')->label('Allow downloading the audio and transcript')
-                    ->helperText('Off: they can read and listen only.')
+                Toggle::make('allow_download')->label(__('Allow downloading the audio and transcript'))
+                    ->helperText(__('Off: they can read and listen only.'))
                     ->visible(fn (): bool => $hasAudio === null || $hasAudio()),
-                Select::make('view')->label('Show the transcript as')->placeholder('Original words')
+                Select::make('view')->label(__('Show the transcript as'))->placeholder(__('Original words'))
                     ->options(fn (): array => array_intersect_key(TranscriptViews::VIEWS, array_flip($readyViews())))
+                    // Since U19: the view being read (Roman Urdu once it is made), so the link shows what the person sees.
+                    ->default(fn (): ?string => $shownView !== null && in_array($view = $shownView(), $readyViews(), true) ? $view : null)
                     ->visible(fn (): bool => $readyViews() !== []),
             ])
-            ->modalSubmitActionLabel('Make the link')
+            ->modalSubmitActionLabel(__('Make the link'))
             ->action(function (array $data) use ($target): void {
                 $expiresAt = match ((string) ($data['expires'] ?? '')) {
                     'never' => null,
@@ -106,7 +109,7 @@ final class SharingActions
 
                     return;
                 }
-                Notification::make()->title('Share link ready. Copy it now: it is shown only once.')->body($url)->persistent()->success()->send();
+                Notification::make()->title(__('Share link ready. Copy it now: it is shown only once.'))->body($url)->persistent()->success()->send();
             });
     }
 
@@ -118,15 +121,15 @@ final class SharingActions
     public static function send(Closure $target): Action
     {
         return Action::make('send')
-            ->label('Send to a teammate')
+            ->label(__('Send to a teammate'))
             ->icon(Heroicon::OutlinedPaperAirplane)
-            ->modalDescription('They find it in Shared with me, can read and play it, and can save their own copy. People without an account here will not receive it.')
+            ->modalDescription(__('They find it in Shared with me, can read and play it, and can save their own copy. People without an account here will not receive it.'))
             ->schema([
-                TagsInput::make('to')->label('Their emails')->placeholder('name@example.com')->required()
+                TagsInput::make('to')->label(__('Their emails'))->placeholder('name@example.com')->required()
                     ->nestedRecursiveRules(['email', 'max:190'])->rules(['array', 'max:'.Teammates::MAX_RECIPIENTS]),
-                Textarea::make('note')->label('Note (optional)')->rows(2)->maxLength(500),
+                Textarea::make('note')->label(__('Note (optional)'))->rows(2)->maxLength(500),
             ])
-            ->modalSubmitActionLabel('Send')
+            ->modalSubmitActionLabel(__('Send'))
             ->action(function (array $data) use ($target): void {
                 $user = auth()->user();
                 if (! $user instanceof User) {
@@ -139,7 +142,7 @@ final class SharingActions
 
                     return;
                 }
-                Notification::make()->title($sent === 1 ? 'Sent to 1 address' : "Sent to {$sent} addresses")->body('People without an account here will not receive it.')->success()->send();
+                Notification::make()->title(trans_choice('Sent to :count address|Sent to :count addresses', $sent, ['count' => $sent]))->body(__('People without an account here will not receive it.'))->success()->send();
             });
     }
 
@@ -151,11 +154,11 @@ final class SharingActions
     public static function sentTo(Closure $target): Action
     {
         return Action::make('sentTo')
-            ->label('Sent to')
+            ->label(__('Sent to'))
             ->icon(Heroicon::OutlinedUsers)
             ->color('gray')
             ->modalWidth('lg')
-            ->modalSubmitAction(false)->modalCancelActionLabel('Close')
+            ->modalSubmitAction(false)->modalCancelActionLabel(__('Close'))
             ->modalContent(fn (): View => view('filament.pages.sent-to', ['items' => self::sentOf($target())]));
     }
 
@@ -173,13 +176,13 @@ final class SharingActions
     public static function renameProject(): Action
     {
         return Action::make('renameProject')
-            ->label('Rename')
+            ->label(__('Rename'))
             ->icon(Heroicon::OutlinedPencilSquare)
             ->color('gray')
             ->modalWidth('lg')
             ->fillForm(fn (Client $record): array => ['name' => $record->name])
-            ->schema([TextInput::make('name')->label('Name')->required()->maxLength(120)->autofocus()])
-            ->modalSubmitActionLabel('Save')
+            ->schema([TextInput::make('name')->label(__('Name'))->required()->maxLength(120)->autofocus()])
+            ->modalSubmitActionLabel(__('Save'))
             ->action(function (Client $record, array $data, Action $action): void {
                 $name = trim((string) $data['name']);
                 $tree = app(ProjectTree::class);
@@ -199,7 +202,7 @@ final class SharingActions
                     return;
                 }
                 // Toasts render their title as HTML: a name is text.
-                Notification::make()->title('Renamed to “'.e($name).'”')->success()->send();
+                Notification::make()->title(__('Renamed to “:name”', ['name' => e($name)]))->success()->send();
             });
     }
 
@@ -207,16 +210,16 @@ final class SharingActions
     public static function moveProject(): Action
     {
         return Action::make('moveProject')
-            ->label('Move')
+            ->label(__('Move'))
             ->icon(Heroicon::OutlinedArrowsRightLeft)
             ->color('gray')
             ->modalWidth('lg')
             ->fillForm(fn (Client $record): array => ['parent_id' => $record->parent_id])
             ->schema([
-                Select::make('parent_id')->label('Move into')->placeholder('Top level (no folder)')->searchable()
+                Select::make('parent_id')->label(__('Move into'))->placeholder(__('Top level (no folder)'))->searchable()
                     ->options(fn (Client $record): array => self::folderOptions($record)),
             ])
-            ->modalSubmitActionLabel('Move')
+            ->modalSubmitActionLabel(__('Move'))
             ->action(function (Client $record, array $data, Action $action): void {
                 $tree = app(ProjectTree::class);
                 try {
@@ -237,7 +240,7 @@ final class SharingActions
                     return;
                 }
                 $parent = $record->parent_id !== null ? $record->parent()->first() : null;
-                Notification::make()->title($parent === null ? 'Moved to the top level' : 'Moved into “'.e($parent->name).'”')
+                Notification::make()->title($parent === null ? __('Moved to the top level') : __('Moved into “:name”', ['name' => e($parent->name)]))
                     ->url($parent === null ? ClientResource::getUrl('index') : ClientResource::getUrl('view', ['record' => $parent]))->success()->send();
             });
     }
@@ -246,13 +249,13 @@ final class SharingActions
     public static function deleteProject(?Closure $after = null): Action
     {
         return Action::make('deleteProject')
-            ->label('Delete')
+            ->label(__('Delete'))
             ->icon(Heroicon::OutlinedTrash)
             ->color('danger')
             ->requiresConfirmation()
-            ->modalHeading(fn (Client $record): string => 'Delete “'.$record->name.'”?')
-            ->modalDescription('Its recordings are not deleted: they go to the Inbox. Its subfolders move up a level. Its files, brief, notes, memory, rules and share links are deleted.')
-            ->modalSubmitActionLabel('Delete project')
+            ->modalHeading(fn (Client $record): string => __('Delete “:name”?', ['name' => $record->name]))
+            ->modalDescription(__('Its recordings are not deleted: they go to the Inbox. Its subfolders move up a level. Its files, brief, notes, memory, rules and share links are deleted.'))
+            ->modalSubmitActionLabel(__('Delete project'))
             ->visible(fn (Client $record): bool => ($user = auth()->user()) instanceof User && app(ProjectTree::class)->canDelete($user, $record))
             ->action(function (Client $record) use ($after): void {
                 $user = auth()->user();
@@ -263,8 +266,8 @@ final class SharingActions
 
                     return;
                 }
-                Notification::make()->title('Project deleted')
-                    ->body(($moved['moved_sessions'] === 1 ? '1 recording' : $moved['moved_sessions'].' recordings').' moved to the Inbox.')->success()->send();
+                Notification::make()->title(__('Project deleted'))
+                    ->body(trans_choice(':count recording moved to the Inbox.|:count recordings moved to the Inbox.', $moved['moved_sessions'], ['count' => $moved['moved_sessions']]))->success()->send();
                 if ($after !== null) {
                     $after();
                 }
@@ -307,9 +310,9 @@ final class SharingActions
     public static function audienceLabel(ShareLink $link): string
     {
         return match ($link->audience) {
-            'password' => 'Password',
+            'password' => __('Password'),
             'people' => implode(', ', $link->people ?? []),
-            default => 'Anyone with the link',
+            default => __('Anyone with the link'),
         };
     }
 }

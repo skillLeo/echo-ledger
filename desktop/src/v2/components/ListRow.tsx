@@ -63,6 +63,10 @@ export type ListRowProps = {
   checked?: boolean;
   /** Buttons on the end side next to the row's own button (a recording's ⋮), shown on hover and focus. */
   actions?: ReactNode;
+  /** "always": the actions stay on screen, quiet (a list whose rows have no other way to their actions, as Shared). */
+  actionsShown?: "hover" | "always";
+  /** 2: the meta line wraps onto a second line before it is cut, so a time at its end isn't lost in a narrow window. */
+  metaLines?: 1 | 2;
   selected?: boolean;
   compact?: boolean;
   /** At most one badge per row. */
@@ -89,11 +93,11 @@ export type ListRowProps = {
  */
 export function ListRow({
   title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId, label, mark, anchor, disabled, expanded,
-  onContextMenu, checked, actions, strong,
+  onContextMenu, checked, actions, strong, actionsShown = "hover", metaLines = 1,
 }: ListRowProps) {
   const id = useId();
   const interactive = Boolean(onClick) && !control;
-  const cls = ["el-row", interactive && "el-row--interactive", disabled && "el-row--disabled", (selected || checked) && "el-row--selected", compact && "el-row--compact", actions && "el-row--actions"]
+  const cls = ["el-row", interactive && "el-row--interactive", disabled && "el-row--disabled", (selected || checked) && "el-row--selected", compact && "el-row--compact", actions && "el-row--actions", actions && actionsShown === "always" && "el-row--actions-always", metaLines === 2 && "el-row--meta-2"]
     .filter(Boolean).join(" ");
   const describedBy = [mark && `${id}-mark`, meta && `${id}-meta`, (endTop || endBottom) && `${id}-end`, value && `${id}-value`, badge && `${id}-badge`]
     .filter(Boolean).join(" ") || undefined;

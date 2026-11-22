@@ -115,6 +115,12 @@ Back up the bucket as well: `APP_KEY` and `ECHOLEDGER_RECORDINGS_KEY` never go t
 bucket itself, and useless without those two keys. A copy holds erased files for as long as it is kept: 30 days at most,
 as with the rule above.
 
+
+**Phone App Links and passkeys (since 2.0.0-l):** set `ECHOLEDGER_ANDROID_FINGERPRINTS` to the SHA-256 of the phone app's
+release signing key (comma separated if more than one). It is empty by default, and until it is set Android App Links
+and phone passkeys stay off (`/.well-known/assetlinks.json` lists no key, `passkeys_available` is false). The debug
+builds' keys belong only in a local `.env` (see `.env.example`).
+
 ## PHP-FPM workers and pictures
 
 A screen or a payment receipt is decoded on the request that sends it: up to about 200 MB of memory for the largest
