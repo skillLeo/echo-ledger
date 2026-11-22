@@ -6,7 +6,7 @@ development Mac. Results go into [SCREEN_SHARE_MATRIX.md](SCREEN_SHARE_MATRIX.md
 
 Phone rules for every batch: `pm install -r` only; never uninstall, never clear data; check `mCallState=0` first.
 
-## Next slot — the call choice (PLAN_CALL_CHOICE), Mac 2.0.7 and phone 2.0.7, about 45 minutes
+## Next slot — the call choice (PLAN_CALL_CHOICE), Mac 2.0.8 and phone 2.0.8, about 45 minutes
 
 Builds:
 - **Mac:** 2.0.7, signed with the pinned identity, waiting in the lead's scratchpad. The lead installs it after "mac free".
