@@ -2294,17 +2294,25 @@ html[dir='rtl'] .v2-row-title {
     font-weight: var(--el-text-body-strong-weight);
 }
 
-.v2-sb-group-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-inline: var(--el-space-12) var(--el-space-4);
+/* MY VIEWS and LABELS: a quiet heading that folds its group, with + at its end. */
+.v2-sb-group {
+    position: relative;
 }
 
 .v2-sb-group-title {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12) var(--el-space-40);
     color: var(--el-role-text-secondary);
     font-size: var(--el-text-caption-size);
     font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-sb-group > .v2-sb-add {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: var(--el-space-4);
 }
 
 .v2-sb-view {
@@ -2424,7 +2432,25 @@ html[dir='rtl'] .v2-row-title {
 
 /* The new Library starts high: no header, the one toolbar row just under the top bar (2.0.0-p: the list within 120). */
 .fi-resource-sessions:has(.v2-lib-shell) .fi-page-header-main-ctn {
-    padding-block-start: var(--el-space-12);
+    padding-block-start: var(--el-space-8);
+}
+
+/* The one toolbar row sits close to the list, and the first group's heading close to the toolbar. */
+.v2-lib-shell .v2-library .fi-ta-header-toolbar {
+    padding-block-end: var(--el-space-4);
+}
+
+.v2-lib-shell .v2-library .fi-ta-content > .fi-ta-group-header:first-child {
+    padding-block-start: var(--el-space-4);
+}
+
+/* The search is as tall as the row's chips (32), so the row is one line of equal controls. */
+.v2-lib-shell .v2-library .fi-ta-search-field .fi-input-wrp {
+    min-height: var(--el-component-chip-height);
+}
+
+.v2-lib-shell .v2-library .fi-ta-search-field .fi-input {
+    padding-block: var(--el-space-4);
 }
 
 .fi-resource-sessions:has(.v2-lib-shell) .fi-page-content > .fi-sc {
@@ -2491,4 +2517,110 @@ button.v2-row-tile:focus-visible,
     color: var(--el-role-text-secondary);
     font-size: var(--el-text-caption-size);
     font-weight: var(--el-text-body-strong-weight);
+}
+
+/* The new Library's sidebar is denser (docs/PLAN_LIBRARY_FILTERS.md section 4: items 32 tall) so more of it shows. */
+.v2-sb:has(.v2-sb-lib) .v2-sb-item {
+    min-height: var(--el-component-chip-height);
+}
+
+.v2-sb-lib .v2-sb-sub,
+.v2-sb-folding .v2-sb-sub {
+    margin-block: var(--el-space-2);
+}
+
+.v2-sb-lib {
+    gap: var(--el-space-4);
+}
+
+/* PROJECTS folds with the arrow at the end of its row; the row itself still opens the Projects page. */
+.v2-sb-folding {
+    position: relative;
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: var(--el-space-4);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-component-chip-height);
+    block-size: var(--el-component-chip-height);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle:hover {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-fold:not([open]) > .v2-sb-fold-toggle .v2-icon {
+    transform: rotate(-90deg);
+}
+
+[dir='rtl'] .v2-sb-fold:not([open]) > .v2-sb-fold-toggle .v2-icon {
+    transform: rotate(90deg);
+}
+
+.v2-sb.v2-rail .v2-sb-fold-toggle,
+.v2-sb.v2-rail .v2-sb-group,
+.v2-sb.v2-rail .v2-sb-scroll span {
+    display: none;
+}
+
+/* The scrolling middle says when there is more: "More" at its foot (and an arrow back at its top), on the sidebar's own
+   background, above what scrolls under it. */
+.v2-sb-inner,
+.v2-sb-nav {
+    background-color: inherit;
+}
+
+.v2-sb-nav {
+    position: relative;
+}
+
+.v2-sb-scroll {
+    position: sticky;
+    z-index: var(--el-layer-sticky);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--el-space-4);
+    inline-size: 100%;
+    min-block-size: var(--el-space-24);
+    border: 0;
+    background-color: inherit;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+    cursor: pointer;
+}
+
+.v2-sb-scroll:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-sb-scroll .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-scroll.is-down {
+    inset-block-end: 0;
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-sb-scroll.is-up {
+    inset-block-start: 0;
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-sb-scroll.is-up .v2-icon {
+    transform: rotate(180deg);
 }

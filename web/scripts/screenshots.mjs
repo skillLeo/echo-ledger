@@ -68,7 +68,11 @@ const pages = {
     'library-empty': { path: '/app/sessions?search=zzzz-nothing-matches' },
     // The Library's filters and views (contract 2.0.0-p): the window as it opens, the whole page, the filter panel open
     // (a drawer under 1280 px), filters applied as pills, and nothing matching.
-    'lf-window': { path: '/app/sessions', full: false },
+    // listTop: the guard of docs/PLAN_LIBRARY_FILTERS.md section 4 (below).
+    // reach: every one of these can be scrolled to in the sidebar's middle and is then seen, not covered (below).
+    'lf-window': { path: '/app/sessions', full: false, listTop: true, reach: ['[data-place]', '[data-new-view]', '[data-label]', '[data-new-label]', '[data-projects-fold] > summary', '[data-sidebar-scroll] [data-project]', '[data-module=projects]', '[data-module=live]', '[data-module=ask]'] },
+    // The sidebar's middle scrolled to its end at 1440 × 900: LABELS, PROJECTS, Live and Ask, and the way back up.
+    'lf-sidebar-end': { path: '/app/sessions', full: false, run: "document.querySelector('[data-sidebar-scroll]').scrollTop = 100000" },
     'lf-full': { path: '/app/sessions' },
     'lf-panel': { path: '/app/sessions', run: "window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } }))", full: false },
     'lf-pills': { path: '/app/sessions?f[source][op]=is&f[source][values][0]=whatsapp&f[date][op]=is_not&f[date][values][0]=today', full: false },
@@ -304,6 +308,70 @@ for (const theme of themes) {
                     await page.keyboard.type(spec.type.text, { delay: 60 });
                     await page.waitForTimeout(1200);
                     await page.waitForLoadState('networkidle');
+                }
+                // The Library's list starts within 120 px of the window's top on a computer (docs/PLAN_LIBRARY_FILTERS.md
+                // section 4). What counts is the list's first item: the first group's heading, or the first row when the
+                // list is not grouped; measured with no filter on (no pills row), from 1024 px wide.
+                if (spec.listTop && width >= 1024) {
+                    const top = await page.evaluate(() => {
+                        const first = document.querySelector('.v2-library .fi-ta-content > *');
+                        const row = document.querySelector('.v2-library .v2-lib-row');
+                        return { first: first ? Math.round(first.getBoundingClientRect().top) : null, row: row ? Math.round(row.getBoundingClientRect().top) : null };
+                    });
+                    console.log(`${name} ${width} ${theme}: the list starts at ${top.first} px (first row at ${top.row} px)`);
+                    if (top.first === null || top.first > 120) {
+                        console.error(`${name} ${width} ${theme}: the list starts at ${top.first} px, more than 120 px from the top`);
+                        process.exitCode = 1;
+                    }
+                }
+                // The sidebar's middle scrolls when it outgrows the window ("More" says so): each place, view, label and
+                // project, Live and Ask can be scrolled to and is then the thing under the pointer at its middle (what a
+                // fold holds, with the fold opened). From 1024 px wide, where the sidebar is open beside the page.
+                if (spec.reach && width >= 1024) {
+                    const missed = await page.evaluate(async (selectors) => {
+                        const nav = document.querySelector('[data-sidebar-scroll]');
+                        const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+                        const out = [];
+                        if (nav === null) return ['the sidebar has no scrolling middle'];
+                        if (nav.scrollHeight > nav.clientHeight + 1 && getComputedStyle(nav.querySelector('[data-scroll-down]')).display === 'none') out.push('no "More" while the middle overflows');
+                        for (const selector of selectors) {
+                            const found = [...document.querySelectorAll(selector)].filter((el) => el.closest('[data-sidebar-scroll]'));
+                            if (found.length === 0) out.push(`${selector}: not in the sidebar`);
+                            for (const el of found) {
+                                const folds = [];
+                                for (let d = el.parentElement?.closest('details'); d; d = d.parentElement?.closest('details')) {
+                                    if (!d.open && !(el.tagName === 'SUMMARY' && el.parentElement === d)) {
+                                        d.open = true;
+                                        folds.push(d);
+                                    }
+                                }
+                                await frame();
+                                // Scrolled within the sidebar only (scrollIntoView would move the page too).
+                                const before = el.getBoundingClientRect();
+                                const box = nav.getBoundingClientRect();
+                                nav.scrollTop += before.top - box.top - (box.height - before.height) / 2;
+                                await frame();
+                                const r = el.getBoundingClientRect();
+                                const n = nav.getBoundingClientRect();
+                                // At the middle of its name (a row's other end may hold its own button, such as PROJECTS' fold).
+                                const name = (el.querySelector('.v2-sb-label') ?? el).getBoundingClientRect();
+                                const hit = document.elementFromPoint(name.left + name.width / 2, name.top + name.height / 2);
+                                if (r.height === 0 || r.top < n.top - 1 || r.bottom > n.bottom + 1 || hit === null || !(el === hit || el.contains(hit))) {
+                                    out.push(`${selector} "${(el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}"`);
+                                }
+                                for (const d of folds) d.open = false;
+                            }
+                        }
+                        nav.scrollTop = 0;
+                        await frame();
+                        return out;
+                    }, spec.reach);
+                    if (missed.length > 0) {
+                        console.error(`${name} ${width} ${theme}: out of reach in the sidebar: ${missed.join('; ')}`);
+                        process.exitCode = 1;
+                    } else {
+                        console.log(`${name} ${width} ${theme}: every sidebar place, view, label and project, Live and Ask can be reached`);
+                    }
                 }
                 // Alpine fades the sidebar labels in; give it time so every picture shows the settled page.
                 await page.waitForTimeout(spec.settle ?? 900);

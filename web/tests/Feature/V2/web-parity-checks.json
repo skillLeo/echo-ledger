@@ -81,12 +81,14 @@
   ]
  },
  "WEB-NAV-014": {
-  "type": "html",
+  "type": "panel",
   "page": "library",
-  "contains": [
-   "data-section=\"source\"",
-   "data-section=\"project\"",
-   "value=\"none\""
+  "keys": [
+   "input|whatsapp",
+   "input|zoom",
+   "input|phone call",
+   "input|voice note",
+   "input|no project"
   ]
  },
  "WEB-NAV-015": {
@@ -231,27 +233,25 @@
   ]
  },
  "WEB-LIB-002": {
-  "type": "html",
+  "type": "panel",
   "page": "library",
-  "contains": [
-   "data-place=\"needs_you\"",
-   "value=\"today\"",
-   "value=\"last_7_days\"",
-   "data-section=\"bookmarks\"",
-   "value=\"pinned\""
+  "keys": [
+   "input|today",
+   "input|last days",
+   "input|any bookmark",
+   "input|pinned",
+   "input|failed"
   ]
  },
  "WEB-LIB-003": {
-  "type": "html",
+  "type": "panel",
   "page": "library",
-  "contains": [
-   "data-section=\"source\"",
-   "value=\"whatsapp\"",
-   "value=\"zoom\"",
-   "value=\"phone_call\"",
-   "value=\"voice_note\"",
-   "value=\"none\"",
-   "data-quick-source"
+  "keys": [
+   "input|whatsapp",
+   "input|zoom",
+   "input|phone call",
+   "input|voice note",
+   "input|no project"
   ]
  },
  "WEB-LIB-007": {
@@ -300,17 +300,19 @@
   ]
  },
  "WEB-LIB-013": {
-  "type": "html",
+  "type": "panel",
   "page": "library",
-  "contains": [
-   "data-filters-button",
-   "data-section=\"status\"",
-   "data-section=\"bookmarks\"",
-   "value=\"any\"",
-   "data-section=\"labels\"",
-   "value=\"custom\"",
-   "data-from",
-   "data-to"
+  "keys": [
+   "button|close filters",
+   "input|is",
+   "input|is not",
+   "input|transcribed",
+   "input|not transcribed",
+   "input|processing",
+   "input|failed",
+   "input|any bookmark",
+   "input|custom dates",
+   "button|save as view"
   ]
  },
  "WEB-LIB-014": {
@@ -1065,12 +1067,11 @@
   "key": "button|switch back to classic"
  },
  "WEB-LIB-016": {
-  "type": "html",
+  "type": "panel",
   "page": "library",
-  "contains": [
-   "value=\"last_7_days\"",
-   "data-place=\"needs_you\"",
-   "data-section=\"bookmarks\""
+  "keys": [
+   "input|last days",
+   "input|any bookmark"
   ]
  },
  "WEB-LIB-004": {
@@ -1164,11 +1165,9 @@
   ]
  },
  "WEB-LIB-032": {
-  "type": "html",
+  "type": "control",
   "page": "library",
-  "contains": [
-   "data-place=\"needs_you\"",
-   "v2-sb-subcount is-strong"
-  ]
+  "scope": "sidebar",
+  "key": "a|needs you"
  }
 }

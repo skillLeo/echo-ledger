@@ -30,6 +30,7 @@ use App\Services\Library\LibraryFilters;
 use App\Services\Library\SavedViews;
 use App\Services\LibraryOrganiser;
 use App\Services\RetentionPolicy;
+use App\Services\SettingsRepository;
 use App\Services\Sharing\Teammates;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
@@ -55,6 +56,7 @@ use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Locked;
@@ -178,9 +180,30 @@ class ListCaptureSessions extends ListRecords
                 $filters['source'] = ['op' => 'is', 'values' => [$source]];
             } elseif ($folder === 'inbox') {
                 $filters['project'] = ['op' => 'is', 'values' => [LibraryFilters::NO_PROJECT]];
+            } elseif ($folder === 'shared') {
+                // Others' recordings were never in this list: Shared with me is the sidebar's own page.
+                $this->redirect(SharedWithMe::getUrl());
             }
             $this->folder = null;
         }
+        // An old view's link opens what holds its rows now: Waiting for decision and Failed uploads (Activity's Review, a
+        // notice) open Needs you, where both are; Today, This week, Bookmarked and Pinned become their filters (shown as
+        // pills, counted by the panel); Untranscribed is the place Not transcribed.
+        $tab = (string) $this->activeTab;
+        $week = Carbon::now(app(SettingsRepository::class)->displayTimezone())->startOfWeek(Carbon::MONDAY);
+        $filters += match ($tab) {
+            'today' => ['date' => ['op' => 'is', 'values' => ['today']]],
+            'this_week' => ['date' => ['op' => 'is', 'values' => ['custom'], 'from' => $week->toDateString(), 'to' => $week->copy()->addDays(6)->toDateString()]],
+            'bookmarked' => ['bookmarks' => ['op' => 'is', 'values' => ['any']]],
+            'pinned' => ['marked' => ['op' => 'is', 'values' => ['pinned']]],
+            default => [],
+        };
+        $this->activeTab = match ($tab) {
+            'waiting', 'failed' => 'needs_you',
+            'untranscribed' => 'not_transcribed',
+            'today', 'this_week', 'bookmarked', 'pinned' => 'all',
+            default => $this->activeTab,
+        };
         $this->lf = $filters;
         if ($this->savedView !== null) {
             $this->openSavedView($this->savedView);
@@ -617,7 +640,8 @@ class ListCaptureSessions extends ListRecords
             $this->activeTab = 'all';
         } elseif (array_key_exists($key, self::VIEW_LABELS) || (ConsoleV2::library() && ($key === 'untranscribed' || in_array($key, LibraryFacets::PLACES, true)))) {
             $this->folder = null;
-            $this->activeTab = $key;
+            // Since 2.0.0-p Waiting for decision and Failed uploads are Needs you.
+            $this->activeTab = ConsoleV2::library() && in_array($key, ['waiting', 'failed'], true) ? 'needs_you' : $key;
         } else {
             return;
         }

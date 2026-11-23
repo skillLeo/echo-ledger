@@ -7,12 +7,19 @@ use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Enums\WorkspaceRole;
+use App\Filament\Pages\SharedWithMe;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
+use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
+use App\Filament\Widgets\V2NeedsActionWidget;
 use App\Livewire\Shell\Sidebar;
+use App\Models\CaptureSession;
 use App\Models\LabelList;
 use App\Models\SavedView;
+use App\Models\Workspace;
 use App\Services\InterfaceFlags;
 use App\Services\Library\SavedViews;
+use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
 use Livewire\Livewire;
@@ -80,6 +87,22 @@ describe('one toolbar row', function () {
         Livewire::test(ListCaptureSessions::class)->set('tableSearch', 'payment')
             ->assertCanSeeTableRecords([$this->whatsapp])->assertCanNotSeeTableRecords([$this->zoom]);
     });
+
+    it('also finds a recording by its project path, the words in different places, and the panel counts the same', function () {
+        $folder = Fx::client($this->owner, 'Contracts');
+        $folder->forceFill(['parent_id' => $this->acme->id])->save();
+        $this->zoom->forceFill(['client_id' => $folder->id])->save();
+
+        // "acme" is Payment terms' project and the folder above Weekly sync's; "contracts weekly" is a name and a title.
+        $page = Livewire::test(ListCaptureSessions::class)->set('tableSearch', 'ACME');
+        $page->assertCanSeeTableRecords([$this->whatsapp, $this->zoom])->assertCanNotSeeTableRecords([$this->old, $this->failed]);
+        expect($page->instance()->libraryFacets()['total'])->toBe(2);
+        Livewire::test(ListCaptureSessions::class)->set('tableSearch', 'contracts weekly')
+            ->assertCanSeeTableRecords([$this->zoom])->assertCanNotSeeTableRecords([$this->whatsapp, $this->old]);
+        // The Project filter narrows the search further.
+        Livewire::test(ListCaptureSessions::class)->set('tableSearch', 'acme')->call('applyFilters', lfIs('project', [$folder->id]))
+            ->assertCanSeeTableRecords([$this->zoom])->assertCanNotSeeTableRecords([$this->whatsapp]);
+    });
 });
 
 describe('the filter panel', function () {
@@ -114,7 +137,7 @@ describe('the filter panel', function () {
 
     it('says when nothing matches, with Clear filters', function () {
         $page = Livewire::test(ListCaptureSessions::class)->call('applyFilters', lfIs('source', ['discord']));
-        expect($page->html())->toContain('No recordings match these filters');
+        expect($page->html())->toContain('No recordings match these filters')->toContain('Try other filters, or clear them.');
         $page->callTableAction('clearSearchAndFilters')->assertSet('lf', [])->assertCanSeeTableRecords([$this->whatsapp, $this->zoom]);
     });
 });
@@ -174,6 +197,106 @@ describe('the places', function () {
     });
 });
 
+describe('old links', function () {
+    beforeEach(function () {
+        $at = fn (int $days): array => ['started_at' => now()->subDays($days)];
+        $make = fn (string $title, SourceApp $app, array $state = []) => Fx::session($this->owner, $this->device, ['title' => $title, 'source_app' => $app, ...$state]);
+        $this->pinned = $make('Pinned brief', SourceApp::GoogleMeet, [...$at(10), 'pinned' => true]);
+        $this->marked = $make('Marked moment', SourceApp::MicrosoftTeams, $at(5));
+        $this->marked->markers()->create(['at_ms' => 1000, 'tag' => 'Decision']);
+        $this->voice = $make('Shopping note', SourceApp::VoiceNote, [...$at(20), 'status' => SessionStatus::AudioOnly]);
+        $this->imported = $make('Uploaded file', SourceApp::VoiceNote, [...$at(15), 'origin' => CaptureSession::ORIGIN_IMPORTED]);
+        $this->business = $make('Supplier order', SourceApp::WhatsAppBusiness, $at(2));
+        $this->broken = $make('Broken upload', SourceApp::PhoneCall, [...$at(6), 'status' => SessionStatus::Failed]);
+        foreach ([$this->pinned, $this->marked, $this->imported, $this->business] as $session) {
+            $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'language' => 'en', 'text' => 'Words']);
+        }
+    });
+
+    it('opens each old view and folder on the rows it held (Waiting and Failed uploads in Needs you)', function () {
+        $all = ['whatsapp', 'zoom', 'old', 'failed', 'waiting', 'pinned', 'marked', 'voice', 'imported', 'business', 'broken'];
+        $cases = [
+            'tab=today' => ['whatsapp'],
+            'tab=this_week' => ['whatsapp'],
+            // The waiting call and the failures (the transcript that failed, the recording that failed) are in Needs you.
+            'tab=waiting' => ['waiting', 'failed', 'broken'],
+            'tab=failed' => ['waiting', 'failed', 'broken'],
+            'tab=bookmarked' => ['marked'],
+            'tab=pinned' => ['pinned'],
+            // Untranscribed is the place Not transcribed (a transcript that failed is in Needs you).
+            'tab=untranscribed' => ['voice'],
+            'folder=inbox' => ['zoom', 'old', 'failed', 'pinned', 'marked', 'voice', 'imported', 'business', 'broken'],
+            'folder=whatsapp' => ['whatsapp', 'failed'],
+            'folder=whatsapp_business' => ['business'],
+            'folder=google_meet' => ['pinned'],
+            'folder=zoom' => ['zoom'],
+            'folder=teams' => ['marked'],
+            'folder=phone' => ['old', 'broken'],
+            'folder=voice_notes' => ['voice'],
+            'folder=imported' => ['imported'],
+        ];
+        foreach ($cases as $address => $listed) {
+            parse_str($address, $params);
+            $page = Livewire::withQueryParams($params)->test(ListCaptureSessions::class);
+            $page->assertCanSeeTableRecords(array_map(fn (string $k) => $this->{$k}, $listed))
+                ->assertCanNotSeeTableRecords(array_map(fn (string $k) => $this->{$k}, array_diff($all, $listed)));
+            // What the list shows is what the panel counts.
+            expect($page->instance()->libraryFacets()['total'])->toBe(count($listed), $address);
+        }
+        expect(Livewire::withQueryParams(['tab' => 'waiting'])->test(ListCaptureSessions::class)->get('activeTab'))->toBe('needs_you');
+        // Today, This week, Bookmarked and Pinned are their filters now, shown as pills.
+        expect(Livewire::withQueryParams(['tab' => 'today'])->test(ListCaptureSessions::class)->get('lf'))->toBe(lfIs('date', ['today']))
+            ->and(Livewire::withQueryParams(['tab' => 'this_week'])->test(ListCaptureSessions::class)->get('lf'))
+            ->toBe(['date' => ['op' => 'is', 'values' => ['custom'], 'from' => '2026-11-23', 'to' => '2026-11-29']])
+            ->and(Livewire::withQueryParams(['tab' => 'pinned'])->test(ListCaptureSessions::class)->html())->toContain('data-pill="marked"');
+        // Shared with me was never this list: its own page opens.
+        Livewire::withQueryParams(['folder' => 'shared'])->test(ListCaptureSessions::class)->assertRedirect(SharedWithMe::getUrl());
+    });
+
+    it('points Activity, the waiting line and Home at Needs you, where the waiting call is listed', function () {
+        $needsYou = '/app/sessions?tab=needs_you';
+        expect((string) $this->get('/app/activity')->assertOk()->getContent())->toContain('href="'.url($needsYou).'"')
+            ->and(Livewire::test(WaitingDecisionsWidget::class)->html())->toContain(url($needsYou))
+            ->and(collect(V2NeedsActionWidget::items())->firstWhere('key', 'waiting')['url'] ?? null)->toBe(url($needsYou));
+        Livewire::withQueryParams(['tab' => 'needs_you'])->test(ListCaptureSessions::class)->assertCanSeeTableRecords([$this->waiting]);
+    });
+});
+
+describe('another person\'s views', function () {
+    beforeEach(function () {
+        // A teammate in the same workspace: the closest another person's view gets.
+        $this->mate = Fx::user(['name' => 'Teammate']);
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->owner->current_workspace_id), $this->mate, WorkspaceRole::Member);
+        $this->theirs = app(SavedViews::class)->create((int) $this->owner->current_workspace_id, $this->mate->id,
+            ['name' => 'Their private view', 'filters' => lfIs('source', ['zoom'])])['view']['id'];
+        $this->unchanged = fn () => expect(SavedView::query()->withoutGlobalScopes()->find($this->theirs))->not->toBeNull()
+            ->and(SavedView::query()->withoutGlobalScopes()->find($this->theirs)->name)->toBe('Their private view')
+            ->and(SavedView::query()->withoutGlobalScopes()->find($this->theirs)->filters)->toBe(lfIs('source', ['zoom']));
+    });
+
+    it('opens nothing from the address', function () {
+        $page = Livewire::withQueryParams(['v' => $this->theirs])->test(ListCaptureSessions::class);
+        $page->assertSet('savedView', null)->assertSet('lf', [])->assertCanSeeTableRecords([$this->whatsapp, $this->zoom]);
+        expect($page->html())->not->toContain('Their private view');
+    });
+
+    it('saves nothing into it when the page is told it is open', function () {
+        Livewire::test(ListCaptureSessions::class)->call('applyFilters', lfIs('source', ['whatsapp']))
+            ->set('savedView', $this->theirs)->callAction('updateView')->assertNotified('View not found.');
+        ($this->unchanged)();
+    });
+
+    it('neither renames, deletes nor moves it from the sidebar', function () {
+        $sidebar = Livewire::test(Sidebar::class);
+        $sidebar->call('mountAction', 'renameView', ['id' => $this->theirs])->set('mountedActions.0.data.name', 'Taken')->call('callMountedAction')
+            ->assertNotified('View not found.');
+        $sidebar->call('mountAction', 'deleteView', ['id' => $this->theirs])->call('callMountedAction')->assertNotified('View not found.');
+        $sidebar->call('moveView', $this->theirs, -1)->call('orderViews', [$this->theirs]);
+        ($this->unchanged)();
+        expect(SavedView::query()->withoutGlobalScopes()->where('user_id', $this->owner->id)->count())->toBe(0);
+    });
+});
+
 describe('saved views', function () {
     it('saves the filters, the search and the order as a view, opens it from the address and saves changes to it', function () {
         $page = Livewire::test(ListCaptureSessions::class)->call('applyFilters', lfIs('source', ['whatsapp']))->call('setLibrarySort', 'oldest')
@@ -216,6 +339,30 @@ describe('the sidebar', function () {
             ->toContain('data-new-view')->toContain('data-new-label');
         // The first nine places answer ⌘1…⌘9: the six Library places, then My views.
         expect($html)->toContain('data-place="all" data-shortcut="1"')->toMatch('~data-view="[0-9A-Za-z]{26}" data-shortcut="7"~');
+    });
+
+    it('keeps LABELS, PROJECTS, Live and Ask in its middle, which scrolls with "More" when they outgrow the window', function () {
+        $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+        $nav = (string) preg_replace('~^.*?(<nav class="v2-sb-nav"[^>]*data-sidebar-scroll.*?</nav>).*$~s', '$1', $html);
+
+        expect($nav)->toStartWith('<nav class="v2-sb-nav"')
+            ->toContain('data-labels-fold')->toContain('data-label="clients"')->toContain('v2-label-dot--red')->toContain('data-new-label')
+            ->toContain('data-projects-fold')->toContain('data-module="projects"')
+            ->toMatch('~href="[^"]*'.preg_quote($this->acme->id, '~').'[^"]*"[^>]*data-project="'.preg_quote($this->acme->id, '~').'"~')
+            ->toContain('data-module="live"')->toContain('data-module="ask"')
+            // The way down and back up, named, shown only while there is more that way.
+            ->toContain('x-show="below"')->toContain('data-scroll-down')->toContain('aria-label="Show more of the menu"')
+            ->toContain('x-show="above"')->toContain('data-scroll-up')->toContain('aria-label="Show the top of the menu"');
+        expect((string) file_get_contents(resource_path('css/v2/console.css')))->toMatch('~\.v2-sb-nav \{[^}]*overflow-y: auto;~');
+        // In a browser, scripts/screenshots.mjs (lf-window, `reach`) scrolls to each one and checks it is seen, not covered.
+        expect((string) file_get_contents(base_path('scripts/screenshots.mjs')))->toContain("'[data-module=live]', '[data-module=ask]'");
+    });
+
+    it('is a dialog that keeps the focus while the filter panel is a drawer, and F answers only from the Library', function () {
+        $html = Livewire::test(ListCaptureSessions::class)->html();
+        expect($html)->toContain("x-bind:role=\"drawer ? 'dialog' : null\"")->toContain("x-bind:aria-modal=\"drawer ? 'true' : null\"")
+            ->toContain('x-trap.noscroll="drawer && filtersOpen"');
+        expect((string) file_get_contents(resource_path('js/library-keys-core.cjs')))->toContain("return s.focused ? { do: 'toggle-filters' } : null;");
     });
 
     it('renames, moves and deletes a view, and makes a label', function () {

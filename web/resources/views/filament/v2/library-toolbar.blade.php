@@ -1,6 +1,6 @@
 {{--
-    The Library's one toolbar row (docs/PLAN_LIBRARY_FILTERS.md section 1), after the search (titles and transcripts,
-    ⌘F / Ctrl+F): [Filters n] opens the filter panel (F), and Sort & display ▾ holds List / Table, the order, Group by
+    The Library's one toolbar row (docs/PLAN_LIBRARY_FILTERS.md section 1), after the search (titles, transcripts and
+    projects, ⌘F / Ctrl+F): [Filters n] opens the filter panel (F), and Sort & display ▾ holds List / Table, the order, Group by
     and Density. The applied filters show as pills on a second row only while some are on (library-pills).
 --}}
 @php
@@ -17,7 +17,9 @@
         @if ($count > 0)
             <span class="v2-chip-count" data-filters-count>{{ \Illuminate\Support\Number::format($count) }}</span>
         @endif
-        <span class="v2-sr">{{ trans_choice(':count filter on|:count filters on', $count, ['count' => $count]) }}</span>
+        @if ($count > 0)
+            <span class="v2-sr">{{ trans_choice(':count filter on|:count filters on', $count, ['count' => $count]) }}</span>
+        @endif
     </button>
 
     <x-filament::dropdown placement="bottom-end" max-height="32rem" wire:key="v2-library-display">

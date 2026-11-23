@@ -109,6 +109,8 @@ const WEB_PARITY_SCOPES = [
     'switcher' => '//*[contains(concat(" ", normalize-space(@class), " "), " el-workspace-switcher ")]',
     'player' => '//*[contains(concat(" ", normalize-space(@class), " "), " el-player ")]',
     'rectabs' => '//*[contains(concat(" ", normalize-space(@class), " "), " v2-rec-tabs ")]',
+    // Since 2.0.0-p: the Library's filter panel (read as drawn open: the "panel" check).
+    'panel' => '//*[@data-filter-panel]',
 ];
 
 /** What a control's text is compared on: lower case, digits out, spaces as one. */

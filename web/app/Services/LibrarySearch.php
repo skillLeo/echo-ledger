@@ -73,14 +73,26 @@ final class LibrarySearch
 
     /**
      * [$base] narrowed to the recordings the words find: every word in the title shown, a transcript or a screen
-     * moment (since 2.0.0-p also the Library's search box and its filter counts). Sets [$engine].
+     * moment. Sets [$engine].
      *
      * @param  Builder<CaptureSession>  $base
      * @return Builder<CaptureSession>
      */
     public function matching(Builder $base, string $query): Builder
     {
-        $terms = self::terms($query);
+        return $this->matchingTerms($base, self::terms($query));
+    }
+
+    /**
+     * [$base] narrowed to the recordings that hold every one of [$terms] in the title shown, in one transcript or in
+     * one screen moment (since 2.0.0-p the Library's search asks it one word at a time, LibraryFacets). Sets [$engine].
+     *
+     * @param  Builder<CaptureSession>  $base
+     * @param  list<string>  $terms
+     * @return Builder<CaptureSession>
+     */
+    public function matchingTerms(Builder $base, array $terms): Builder
+    {
         // Transcripts are searched in their folded form (Urdu spelling variants made one, App\Support\UrduText), with
         // folded terms; titles keep the original letters and the original terms.
         $folded = array_values(array_unique(array_map(UrduText::fold(...), $terms)));

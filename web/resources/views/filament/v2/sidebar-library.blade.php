@@ -8,6 +8,7 @@
 @php
     $nav = \App\Filament\Support\LibraryFilterBar::sidebar($this->here ?? null);
     $readOnly = \App\Services\Workspaces\ConsoleAccess::readOnly();
+    $sharedOpen = collect($nav['shared'])->contains('active', true);
 @endphp
 @if ($nav['places'] !== [])
     <div class="v2-sb-lib" data-sidebar-library>
@@ -27,7 +28,8 @@
             @if ($nav['shared'] !== [])
                 {{-- Shared opens to Shared with me, My links and Request links (open until folded). --}}
                 <li>
-                    <details class="v2-sb-fold" open>
+                    {{-- Folded until one of its pages is open, so the groups below stay in view. --}}
+                    <details class="v2-sb-fold" @if ($sharedOpen) open @endif>
                         <summary class="v2-sb-subitem" data-place="shared-group">
                             <x-el.v2.icon name="users" />
                             <span class="v2-sb-label">{{ __('Shared') }}</span>
@@ -50,26 +52,19 @@
             @endif
         </ul>
 
-        <div class="v2-sb-group" x-data="{ open: true }">
-            <div class="v2-sb-group-head">
-                <button type="button" class="v2-sb-group-title" x-on:click="open = ! open" x-bind:aria-expanded="open ? 'true' : 'false'" aria-controls="v2-sb-views">
-                    {{ __('My views') }}
-                </button>
-                <a href="{{ \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('index', ['compose' => 'view']) }}" class="v2-icon-btn v2-sb-add"
-                    x-on:click="if (document.querySelector('.v2-library')) { $event.preventDefault(); window.dispatchEvent(new CustomEvent('el-new-view')) }"
-                    aria-label="{{ __('New view') }}" title="{{ __('New view') }}" data-new-view>
-                    <x-el.v2.icon name="plus" />
-                </a>
-            </div>
-            <ul class="v2-sb-sub" id="v2-sb-views" x-show="open" aria-label="{{ __('My views') }}"
-                x-data="{ dragging: null, drop(target) { if (! this.dragging || this.dragging === target) return; const ids = Array.from($el.querySelectorAll('[data-view-id]')).map((e) => e.dataset.viewId);
-                    const from = ids.indexOf(this.dragging); ids.splice(from, 1); ids.splice(ids.indexOf(target) + (from <= ids.indexOf(target) ? 1 : 0), 0, this.dragging); $wire.orderViews(ids); this.dragging = null } }">
+        {{-- MY VIEWS and LABELS fold (native disclosures, open until folded); + sits beside each heading. --}}
+        <div class="v2-sb-group">
+            <details class="v2-sb-fold" open data-views-fold>
+                <summary class="v2-sb-group-title">{{ __('My views') }}</summary>
+                <ul class="v2-sb-sub" id="v2-sb-views" aria-label="{{ __('My views') }}"
+                    x-data="{ dragging: null, drop(target) { if (! this.dragging || this.dragging === target) return; const ids = Array.from($el.querySelectorAll('[data-view-id]')).map((e) => e.dataset.viewId);
+                        const from = ids.indexOf(this.dragging); ids.splice(from, 1); ids.splice(ids.indexOf(target) + (from <= ids.indexOf(target) ? 1 : 0), 0, this.dragging); $wire.orderViews(ids); this.dragging = null } }">
                 @forelse ($nav['views'] as $i => $view)
                     <li class="v2-sb-view" data-view-id="{{ $view['id'] }}" draggable="true" x-on:dragstart="dragging = @js($view['id'])" x-on:dragover.prevent x-on:drop.prevent="drop(@js($view['id']))">
                         <a href="{{ $view['url'] }}" @class(['v2-sb-subitem', 'is-on' => $view['active']]) @if ($view['active']) aria-current="page" @endif
                             data-view="{{ $view['id'] }}" data-shortcut="{{ $view['shortcut'] ?? '' }}">
                             <x-el.v2.icon name="tune" />
-                            <span class="v2-sb-label"><bdi>{{ $view['label'] }}</bdi></span>
+                            <span class="v2-sb-label" dir="auto"><bdi>{{ $view['label'] }}</bdi></span>
                             @if ($view['count'] > 0)
                                 <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($view['count']) }}</span>
                             @endif
@@ -95,26 +90,24 @@
                 @empty
                     <li class="v2-sb-empty">{{ __('Save filters as a view to keep them here.') }}</li>
                 @endforelse
-            </ul>
+                </ul>
+            </details>
+            <a href="{{ \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('index', ['compose' => 'view']) }}" class="v2-icon-btn v2-sb-add"
+                x-on:click="if (document.querySelector('.v2-library')) { $event.preventDefault(); window.dispatchEvent(new CustomEvent('el-new-view')) }"
+                aria-label="{{ __('New view') }}" title="{{ __('New view') }}" data-new-view>
+                <x-el.v2.icon name="plus" />
+            </a>
         </div>
 
-        <div class="v2-sb-group" x-data="{ open: true }">
-            <div class="v2-sb-group-head">
-                <button type="button" class="v2-sb-group-title" x-on:click="open = ! open" x-bind:aria-expanded="open ? 'true' : 'false'" aria-controls="v2-sb-labels">
-                    {{ __('Labels') }}
-                </button>
-                @unless ($readOnly)
-                    <button type="button" class="v2-icon-btn v2-sb-add" wire:click="mountAction('newLabel')" aria-label="{{ __('New label') }}" title="{{ __('New label') }}" data-new-label>
-                        <x-el.v2.icon name="plus" />
-                    </button>
-                @endunless
-            </div>
-            <ul class="v2-sb-sub" id="v2-sb-labels" x-show="open" aria-label="{{ __('Labels') }}">
+        <div class="v2-sb-group">
+            <details class="v2-sb-fold" open data-labels-fold>
+                <summary class="v2-sb-group-title">{{ __('Labels') }}</summary>
+                <ul class="v2-sb-sub" id="v2-sb-labels" aria-label="{{ __('Labels') }}">
                 @forelse ($nav['labels'] as $label)
                     <li>
                         <a href="{{ $label['url'] }}" @class(['v2-sb-subitem', 'is-on' => $label['active']]) @if ($label['active']) aria-current="page" @endif data-label="{{ $label['key'] }}">
                             <span class="v2-label-dot {{ $label['dot'] }}" aria-hidden="true" @if ($label['own'] !== null) style="--label-own: {{ $label['own'] }}" @endif></span>
-                            <span class="v2-sb-label"><bdi>{{ $label['label'] }}</bdi></span>
+                            <span class="v2-sb-label" dir="auto"><bdi>{{ $label['label'] }}</bdi></span>
                             @if ($label['count'] > 0)
                                 <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($label['count']) }}</span>
                             @endif
@@ -123,7 +116,13 @@
                 @empty
                     <li class="v2-sb-empty">{{ __('No labels yet.') }}</li>
                 @endforelse
-            </ul>
+                </ul>
+            </details>
+            @unless ($readOnly)
+                <button type="button" class="v2-icon-btn v2-sb-add" wire:click="mountAction('newLabel')" aria-label="{{ __('New label') }}" title="{{ __('New label') }}" data-new-label>
+                    <x-el.v2.icon name="plus" />
+                </button>
+            @endunless
         </div>
     </div>
 @endif

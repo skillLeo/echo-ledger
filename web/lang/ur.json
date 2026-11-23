@@ -1023,5 +1023,12 @@
     "Clear filters": "فلٹرز صاف کریں",
     "Show only :source recordings": "صرف :source کی ریکارڈنگز دکھائیں",
     "Show only the :label label": "صرف :label لیبل دکھائیں",
-    "Search titles and transcripts": "عنوانات اور ٹرانسکرپٹس میں تلاش کریں"
+    "Search titles and transcripts": "عنوانات اور ٹرانسکرپٹس میں تلاش کریں",
+    "Try other filters, or clear them.": "دوسرے فلٹرز آزمائیں، یا انہیں صاف کریں۔",
+    "Show the top of the menu": "مینو کا اوپر والا حصہ دکھائیں",
+    "Show more of the menu": "مینو کا مزید حصہ دکھائیں",
+    "Show or hide the projects": "پروجیکٹس دکھائیں یا چھپائیں",
+    "Open or close the filters (while the Library has focus)": "فلٹرز کھولیں یا بند کریں (جب لائبریری پر فوکس ہو)",
+    "Search titles, transcripts and projects in the Library": "لائبریری میں عنوانات، ٹرانسکرپٹس اور پروجیکٹس تلاش کریں",
+    "Open the sidebar's first nine places": "سائیڈ بار کی پہلی نو جگہیں کھولیں"
 }

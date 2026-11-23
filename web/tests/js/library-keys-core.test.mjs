@@ -84,11 +84,13 @@ test('right-click opens ⋮ of the selection on a selected row, else the row\'s 
 });
 
 // Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): F, ⌘F / Ctrl+F, Esc and ⌘1…⌘9.
-const shell = (more = {}) => ({ modal: false, panelOpen: false, places: 7, ...more });
+const shell = (more = {}) => ({ modal: false, panelOpen: false, places: 7, focused: true, ...more });
 const field = { tagName: 'INPUT' };
 
 test('F opens and closes the filter panel, but never while typing or with a modifier', () => {
     assert.deepEqual(core.shellKey(key('f'), shell()), { do: 'toggle-filters' });
+    // A single key answers only while the Library has the focus (WCAG 2.1.4).
+    assert.equal(core.shellKey(key('f'), shell({ focused: false })), null);
     assert.deepEqual(core.shellKey(key('F'), shell({ panelOpen: true })), { do: 'toggle-filters' });
     assert.equal(core.shellKey(key('f', { target: field }), shell()), null);
     assert.equal(core.shellKey(key('f', { altKey: true }), shell()), null);

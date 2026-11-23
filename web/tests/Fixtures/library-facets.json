@@ -5,7 +5,7 @@
     "Each recording is a library item as the apps hold it (its facets are what the server sends) plus the stored fields the server derives them from.",
     "The clock stands at `now`; dates are counted in `tz`. A recording that is `deleted` or still `recording` is never in the list or the counts; one still recording does count in Needs you.",
     "Each filter set's `expect.facets` gives, for each section, the count of each option with every other section's filter applied and not its own, in the panel's order.",
-    "Search: every word in the title, or every word in the transcript text, ignoring capitals.",
+    "Search: every word somewhere among the title, the transcript text and the project path (the project's name and the names of the folders above it), ignoring capitals; the words may be in different places.",
     "`bookmarks` lists the tag of each bookmark (null for one without a tag): a library item's `marker_count` is how many and its `tags` the tags."
   ],
   "now": "2026-11-23T10:00:00+00:00",
@@ -3984,7 +3984,7 @@
     },
     {
       "name": "search_invoice",
-      "note": "Search 'invoice' (titles and transcripts)",
+      "note": "Search 'invoice' (titles and transcripts; the project Invoices' recordings say it too)",
       "filters": {},
       "search": "invoice",
       "expect": {
@@ -4069,17 +4069,188 @@
     },
     {
       "name": "search_budget_acme",
-      "note": "Search 'acme budget': both words in the title, or both in the transcript",
+      "note": "Search 'acme budget': each word in the title, the transcript or the project path, not necessarily the same one ('Acme quarterly review' says budget in its transcript)",
       "filters": {},
       "search": "acme budget",
       "expect": {
-        "total": 1,
+        "total": 2,
         "ids": [
-          "01JFXR00000000000000000001"
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000005"
         ],
         "facets": {
           "date": {
             "today": 1,
+            "last_7_days": 2,
+            "this_month": 2
+          },
+          "source": {
+            "whatsapp": 1,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 1,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 1,
+            "desktop": 1,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 2,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0
+          },
+          "language": {
+            "en": 1,
+            "ur": 1,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 2,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 1,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 1,
+            "important": 1,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 2,
+            "decision": 1,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_project_folders",
+      "note": "Search 'acme': the recordings in Acme and in its folder Invoices (a folder above counts), and any title or transcript with the word",
+      "filters": {},
+      "search": "acme",
+      "expect": {
+        "total": 7,
+        "ids": [
+          "01JFXR00000000000000000003",
+          "01JFXR00000000000000000001",
+          "01JFXR00000000000000000039",
+          "01JFXR00000000000000000005",
+          "01JFXR00000000000000000012",
+          "01JFXR00000000000000000016",
+          "01JFXR00000000000000000031"
+        ],
+        "facets": {
+          "date": {
+            "today": 2,
+            "last_7_days": 4,
+            "this_month": 7
+          },
+          "source": {
+            "whatsapp": 3,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 1,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 1,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 1,
+            "other": 0
+          },
+          "device": {
+            "phone": 5,
+            "desktop": 1,
+            "web": 1
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 7,
+            "01JFXP00000000000000000002": 2,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0
+          },
+          "language": {
+            "en": 2,
+            "ur": 4,
+            "ar": 1,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 7,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 4,
+            "invoice": 3,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 2,
+            "important": 2,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 3,
+            "decision": 2,
+            "follow-up": 0,
+            "price": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "search_mixed_places",
+      "note": "Search 'acme paid': 'acme' from the folder above Invoices, 'paid' from the transcript ('Invoice for March')",
+      "filters": {},
+      "search": "acme paid",
+      "expect": {
+        "total": 1,
+        "ids": [
+          "01JFXR00000000000000000039"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
             "last_7_days": 1,
             "this_month": 1
           },
@@ -4109,7 +4280,7 @@
           "project": {
             "none": 0,
             "01JFXP00000000000000000001": 1,
-            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000002": 1,
             "01JFXP00000000000000000004": 0,
             "01JFXP00000000000000000003": 0
           },
@@ -4129,6 +4300,88 @@
           },
           "labels": {
             "clients": 1,
+            "invoice": 1,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 0
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_title_and_text",
+      "note": "Search 'shopping eggs': one word in the title, the other in the transcript",
+      "filters": {},
+      "search": "shopping eggs",
+      "expect": {
+        "total": 1,
+        "ids": [
+          "01JFXR00000000000000000013"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 0,
+            "this_month": 1
+          },
+          "source": {
+            "whatsapp": 0,
+            "whatsapp_business": 0,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 0,
+            "phone_call": 0,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 1,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 1,
+            "desktop": 0,
+            "web": 0
+          },
+          "project": {
+            "none": 1,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 0
+          },
+          "language": {
+            "en": 0,
+            "ur": 1,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 1,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 0,
             "invoice": 0,
             "follow up": 0,
             "someday": 0,
@@ -4137,12 +4390,96 @@
           },
           "marked": {
             "pinned": 0,
-            "important": 1,
+            "important": 0,
             "keep_forever": 0
           },
           "bookmarks": {
-            "any": 1,
-            "decision": 1,
+            "any": 0,
+            "decision": 0,
+            "follow-up": 0,
+            "price": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "search_family",
+      "note": "Search 'FAMILY': capitals ignored, the project Family's recordings",
+      "filters": {},
+      "search": "FAMILY",
+      "expect": {
+        "total": 3,
+        "ids": [
+          "01JFXR00000000000000000008",
+          "01JFXR00000000000000000010",
+          "01JFXR00000000000000000035"
+        ],
+        "facets": {
+          "date": {
+            "today": 0,
+            "last_7_days": 0,
+            "this_month": 2
+          },
+          "source": {
+            "whatsapp": 0,
+            "whatsapp_business": 1,
+            "google_meet": 0,
+            "zoom": 0,
+            "microsoft_teams": 1,
+            "phone_call": 1,
+            "telegram": 0,
+            "signal": 0,
+            "messenger": 0,
+            "instagram": 0,
+            "skype": 0,
+            "slack": 0,
+            "discord": 0,
+            "voice_note": 0,
+            "imported": 0,
+            "other": 0
+          },
+          "device": {
+            "phone": 2,
+            "desktop": 1,
+            "web": 0
+          },
+          "project": {
+            "none": 0,
+            "01JFXP00000000000000000001": 0,
+            "01JFXP00000000000000000002": 0,
+            "01JFXP00000000000000000004": 0,
+            "01JFXP00000000000000000003": 3
+          },
+          "language": {
+            "en": 1,
+            "ur": 2,
+            "ar": 0,
+            "fr": 0,
+            "de": 0,
+            "unknown": 0
+          },
+          "status": {
+            "transcribed": 3,
+            "not_transcribed": 0,
+            "processing": 0,
+            "failed": 0
+          },
+          "labels": {
+            "clients": 0,
+            "invoice": 0,
+            "follow up": 0,
+            "someday": 0,
+            "important": 0,
+            "older label": 0
+          },
+          "marked": {
+            "pinned": 0,
+            "important": 0,
+            "keep_forever": 1
+          },
+          "bookmarks": {
+            "any": 0,
+            "decision": 0,
             "follow-up": 0,
             "price": 0
           }

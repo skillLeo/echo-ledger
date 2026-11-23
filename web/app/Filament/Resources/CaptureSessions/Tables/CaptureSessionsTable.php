@@ -212,7 +212,7 @@ final class CaptureSessionsTable
     {
         return [
             Split::make([
-                // Since 2.0.0-p the search finds titles and transcripts (and screen moments), as GET /api/search does.
+                // Since 2.0.0-p every word somewhere among the title, the transcripts (and screen moments) and the project path.
                 ViewColumn::make('title')->label(__('Title'))->view('filament.v2.library-row')
                     ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitlesAndTranscripts($query, $search)),
             ]),
@@ -321,8 +321,9 @@ final class CaptureSessionsTable
         // Since 2.0.0-p the new Library's own filters (the panel's) count as filters too: "Clear filters".
         $filtered = $table->isFiltered() || (method_exists($livewire, 'activeFilterCount') && $livewire->activeFilterCount() > 0);
         if ($livewire->hasTableSearch() || $filtered) {
+            // Since 2.0.0-p, with only filters on, the words speak of filters only.
             return ['kind' => 'search', 'icon' => 'heroicon-o-magnifying-glass', 'heading' => $livewire->hasTableSearch() ? __('No recordings match your search') : __('No recordings match these filters'),
-                'description' => __('Try other words, or clear the search and filters.')];
+                'description' => $livewire->hasTableSearch() || ! ConsoleV2::library() ? __('Try other words, or clear the search and filters.') : __('Try other filters, or clear them.')];
         }
         $view = property_exists($livewire, 'activeTab') ? (string) ($livewire->activeTab ?: 'all') : 'all';
         $folder = property_exists($livewire, 'folder') && is_string($livewire->folder) ? $livewire->folder : null;
@@ -912,8 +913,9 @@ final class CaptureSessionsTable
     }
 
     /**
-     * The new Library's search (2.0.0-p): every word in the title shown, a transcript or a screen moment (LibrarySearch,
-     * read once with the person's library and kept with it).
+     * The new Library's search (2.0.0-p): every word somewhere among the title shown, the transcripts (and screen
+     * moments) and the project path, the words in any of them (LibraryFacets, read once with the person's library and
+     * kept with it; docs/API.md "Library filters": the apps search the same way).
      *
      * @param  Builder<CaptureSession>  $query
      * @return Builder<CaptureSession>

@@ -63,7 +63,7 @@ it('lists the projects under Projects with their counts, and My links and Reques
     $side = navSidebar(navPage($this, $this->owner, $this->pages['library']));
 
     // Qureshi Textiles holds two of the person's recordings (the third was deleted).
-    expect($side)->toMatch('~data-project="[^"]+"><span class="v2-sb-label"><bdi>Qureshi Textiles</bdi></span><span class="v2-sb-subcount">2</span>~')
+    expect($side)->toMatch('~data-project="[^"]+"><span class="v2-sb-label" dir="auto"><bdi>Qureshi Textiles</bdi></span><span class="v2-sb-subcount">2</span>~')
         ->toContain('data-place="links"')->toContain('data-place="requests"')
         ->toContain('href="https://echoledger.test/app/shares"')->toContain('href="https://echoledger.test/app/request-links"');
     // On My links, that place is the one you are on.

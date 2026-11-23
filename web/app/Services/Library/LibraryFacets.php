@@ -563,7 +563,9 @@ final class LibraryFacets
     }
 
     /**
-     * The rows the search finds (every row without one).
+     * The rows the search finds (every row without one): every word somewhere among the recording's title shown, its
+     * transcripts (and screen moments) and its project path, the project's name and the names of the folders above it;
+     * the words may be in different places (docs/API.md "Library filters").
      *
      * @return list<Row>
      */
@@ -574,12 +576,43 @@ final class LibraryFacets
             return $rows;
         }
         $key = 'library-facets:search:'.$workspaceId.':'.$userId.':'.sha1($version.'|'.$query);
-        $ids = $this->memo[$key] ??= self::kept($version, $key, self::ROWS_TTL, fn (): array => $this->search->matching(
-            CaptureSession::acrossPeople()->where('capture_sessions.workspace_id', $workspaceId)->where('capture_sessions.user_id', $userId), $query,
-        )->pluck('capture_sessions.id')->map(fn ($id): string => (string) $id)->all());
+        $ids = $this->memo[$key] ??= self::kept($version, $key, self::ROWS_TTL, fn (): array => $this->searchMatches($workspaceId, $userId, $query, $rows));
         $found = array_flip($ids);
 
         return array_values(array_filter($rows, fn (array $row): bool => isset($found[$row['id']])));
+    }
+
+    /**
+     * The ids of the rows that hold every word of [$query]: one query a word for the titles, transcripts and screen
+     * moments (LibrarySearch), and the project paths from the rows (a row's projects are its own and every one above).
+     *
+     * @param  list<Row>  $rows
+     * @return list<string>
+     */
+    private function searchMatches(int $workspaceId, int $userId, string $query, array $rows): array
+    {
+        $names = Client::acrossPeople()->where('workspace_id', $workspaceId)->where('user_id', $userId)->pluck('name', 'id')
+            ->map(fn (mixed $name): string => mb_strtolower((string) $name))->all();
+        $kept = null;
+        foreach (LibrarySearch::terms($query) as $term) {
+            $found = array_fill_keys($this->search->matchingTerms(CaptureSession::acrossPeople()->where('capture_sessions.workspace_id', $workspaceId)
+                ->where('capture_sessions.user_id', $userId), [$term])->pluck('capture_sessions.id')->map(fn ($id): string => (string) $id)->all(), true);
+            $needle = mb_strtolower($term);
+            $named = array_filter($names, fn (string $name): bool => str_contains($name, $needle));
+            if ($named !== []) {
+                foreach ($rows as $row) {
+                    if (array_intersect_key(array_flip($row['projects']), $named) !== []) {
+                        $found[$row['id']] = true;
+                    }
+                }
+            }
+            $kept = $kept === null ? $found : array_intersect_key($kept, $found);
+            if ($kept === []) {
+                break;
+            }
+        }
+
+        return array_map('strval', array_keys($kept ?? []));
     }
 
     /**

@@ -38,7 +38,7 @@ beforeEach(function () {
     $this->transcribing = Fx::session($this->owner, $this->device, ['title' => 'Being written out', 'started_at' => $at(2)]);
     $this->transcribing->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Processing]);
     $this->waiting = Fx::session($this->owner, $this->device, ['title' => 'Call to keep or discard', 'status' => SessionStatus::Recording, 'started_at' => $at(3)]);
-    $this->failed = Fx::session($this->owner, $this->device, ['title' => 'Transcript that failed', 'status' => SessionStatus::Failed, 'started_at' => $at(4)]);
+    $this->failed = Fx::session($this->owner, $this->device, ['title' => 'Transcript that failed', 'status' => SessionStatus::Failed, 'started_at' => $at(4), 'ended_at' => $at(4)->addMinutes(10)]);
     Fx::readyRecording($this->failed, 'audio of the failed call');
     $this->failed->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed, 'error_code' => 'engine_error']);
     Filament::setCurrentPanel('app');
@@ -133,9 +133,12 @@ it('shows Uploading, Transcribing, Waiting and Failed on their rows, and nothing
 });
 
 it('offers Retry and Delete on a failed recording\'s row in Failed uploads, and Retry transcribes it again', function () {
+    // Since 2.0.0-p Failed uploads is in Needs you (with the waiting call, which has neither button).
     $page = Livewire::test(ListCaptureSessions::class)->call('openPlace', 'failed');
+    expect($page->get('activeTab'))->toBe('needs_you');
     $page->assertCanSeeTableRecords([$this->failed])->assertCanNotSeeTableRecords([$this->call])
-        ->assertTableActionVisible('retryFailed', $this->failed)->assertTableActionVisible('deleteFailed', $this->failed);
+        ->assertTableActionVisible('retryFailed', $this->failed)->assertTableActionVisible('deleteFailed', $this->failed)
+        ->assertTableActionHidden('retryFailed', $this->waiting);
     // Retry queues a new run of the failed transcript, which waits for the engine again.
     Queue::fake();
     $failed = $this->failed->finalTranscript()->first();
@@ -201,8 +204,8 @@ it('ticks the current choice in Sort & display (Group by, Sort, Density) and the
         ->and(libraryMenuOption($html, 'sort-oldest'))->not->toContain('M16.704 4.153')
         ->and(libraryMenuOption($html, 'density-comfortable'))->toContain('aria-checked="true"');
     $source = $page->call('applyFilters', ['source' => ['op' => 'is', 'values' => ['whatsapp']]])->html();
-    expect($source)->toMatch('~<input type="checkbox" name="source" value="whatsapp" data-value\s+checked~')
-        ->not->toMatch('~<input type="checkbox" name="source" value="phone_call" data-value\s+checked~');
+    expect($source)->toMatch('~<input type="checkbox" id="lf-source-[0-9a-f]{10}" name="source" value="whatsapp" data-value\s+checked~')
+        ->not->toMatch('~<input type="checkbox" id="lf-source-[0-9a-f]{10}" name="source" value="phone_call" data-value\s+checked~');
 
     // The tick follows the choice.
     $html = $page->call('setLibraryGroup', 'app')->call('setLibrarySort', 'oldest')->html();
@@ -257,7 +260,7 @@ it('counts the calls waiting for a decision in the sidebar\'s Needs you, strong,
 it('gives every classic view its home: a sidebar place or a filter, with its count', function () {
     // Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 6): Today → Date › Today, This week → Date › Last 7 days,
     // Waiting for decision and Failed uploads → Needs you, Bookmarked → Bookmarks › Any bookmark, Pinned → Marked ›
-    // Pinned, Untranscribed → Not transcribed. An old address with the view still opens it.
+    // Pinned, Untranscribed → Not transcribed. An old address with the view opens that home, with its rows.
     $this->call->markers()->create(['at_ms' => 1000, 'tag' => 'Decision']);
     $page = Livewire::test(ListCaptureSessions::class);
     $counts = fn (string $section): array => collect(collect($page->instance()->filterPanel())->firstWhere('key', $section)['options'])->pluck('count', 'value')->all();
@@ -265,7 +268,8 @@ it('gives every classic view its home: a sidebar place or a filter, with its cou
         ->and($counts('marked')['pinned'])->toBe(1)->and($counts('bookmarks')['any'])->toBe(1);
     $page->call('applyFilters', ['bookmarks' => ['op' => 'is', 'values' => ['any']]])->assertCanSeeTableRecords([$this->call])->assertCanNotSeeTableRecords([$this->pinned]);
     $page->call('applyFilters', ['marked' => ['op' => 'is', 'values' => ['pinned']]])->assertCanSeeTableRecords([$this->pinned])->assertCanNotSeeTableRecords([$this->call]);
-    foreach (['this_week', 'bookmarked'] as $view) {
-        expect(Livewire::withQueryParams(['tab' => $view])->test(ListCaptureSessions::class)->get('activeTab'))->toBe($view);
-    }
+    Livewire::withQueryParams(['tab' => 'bookmarked'])->test(ListCaptureSessions::class)->assertSet('activeTab', 'all')
+        ->assertSet('lf', ['bookmarks' => ['op' => 'is', 'values' => ['any']]])->assertCanSeeTableRecords([$this->call])->assertCanNotSeeTableRecords([$this->pinned]);
+    Livewire::withQueryParams(['tab' => 'this_week'])->test(ListCaptureSessions::class)->assertSet('activeTab', 'all')
+        ->assertSet('lf.date', ['op' => 'is', 'values' => ['custom'], 'from' => '2026-11-16', 'to' => '2026-11-22'])->assertCanSeeTableRecords([$this->call, $this->pinned]);
 });

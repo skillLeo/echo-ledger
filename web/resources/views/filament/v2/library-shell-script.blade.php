@@ -1,8 +1,8 @@
 {{--
     The new Library's filter panel and keys (2.0.0-p, docs/PLAN_LIBRARY_FILTERS.md sections 1 and 5), only under
     ui_v2.library. elV2LibraryShell keeps the panel open or closed (remembered by this browser, closed by default) and
-    makes it a drawer over the list when the window is narrower than --el-breakpoint-panel (tokens.css); the keys: F opens or
-    closes the filters, ⌘F / Ctrl+F goes to the search, Esc closes the panel before it clears a selection, and ⌘1…⌘9
+    makes it a drawer over the list when the window is narrower than --el-breakpoint-panel (tokens.css), a modal dialog
+    then; the keys: F opens or closes the filters while the Library has the focus (WCAG 2.1.4), ⌘F / Ctrl+F goes to the search, Esc closes the panel before it clears a selection, and ⌘1…⌘9
     (Alt+1…9 too) opens the sidebar's first nine places. ElLibraryKeysCore.shellKey decides (tests/js).
 --}}
 <script>
@@ -63,8 +63,10 @@
                 .sort((a, b) => Number(a.dataset.shortcut) - Number(b.dataset.shortcut));
             const data = window.Alpine ? window.Alpine.$data(shellEl) : null;
             const field = (t) => t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]') !== null ? { typing: true } : t;
+            // The single key F answers only while the Library has the focus (WCAG 2.1.4): the list, its toolbar or the panel.
             const act = core.shellKey({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, target: field(e.target) }, {
                 modal: document.querySelector('.fi-modal-open[aria-modal="true"]') !== null, panelOpen: !! (data && data.filtersOpen), places: Math.min(9, places.length),
+                focused: e.target instanceof Element && shellEl.contains(e.target),
             });
             if (! act) return;
             e.preventDefault();

@@ -89,10 +89,19 @@
                 </div>
             @endif
 
-            <nav class="v2-sb-nav" aria-label="{{ __('Main') }}">
+            {{-- The middle scrolls when the Library's places, views, labels and projects outgrow the window (2.0.0-p): "More"
+                 at its foot (and a way back at its top) says so and scrolls it; the foot stays in place. --}}
+            <nav class="v2-sb-nav" aria-label="{{ __('Main') }}" data-sidebar-scroll
+                x-data="{ above: false, below: false, measure() { const n = this.$el; this.above = n.scrollTop > 1; this.below = n.scrollTop + n.clientHeight < n.scrollHeight - 1 },
+                    page(dir) { this.$el.scrollBy({ top: dir * this.$el.clientHeight * 0.8, behavior: 'smooth' }) } }"
+                x-init="$nextTick(() => measure()); new ResizeObserver(() => measure()).observe($el); new ResizeObserver(() => measure()).observe($el.querySelector('.v2-sb-list'))"
+                x-on:scroll.passive="measure()" x-on:toggle.capture="$nextTick(() => measure())">
+                <button type="button" class="v2-sb-scroll is-up" x-show="above" x-cloak x-on:click="page(-1)" aria-label="{{ __('Show the top of the menu') }}" data-scroll-up>
+                    <x-el.v2.icon name="chevron-down" />
+                </button>
                 <ul class="v2-sb-list">
                     @foreach ($nav as $item)
-                        <li>
+                        <li @class(['v2-sb-folding' => $item['key'] === 'projects' && $newLibrary])>
                             @if ($item['url'] !== null)
                                 <a href="{{ $item['url'] }}" @class(['v2-sb-item', 'is-on' => $item['active']]) @if ($item['active']) aria-current="page" @endif
                                     x-bind:title="$el.closest('.v2-rail') ? @js($item['label']) : null" data-module="{{ $item['key'] }}">
@@ -119,13 +128,33 @@
                                     @endforeach
                                 </ul>
                             @endif
-                            @if ($item['key'] === 'projects' && $item['url'] !== null && $projects !== [])
+                            @if ($item['key'] === 'projects' && $item['url'] !== null && $projects !== [] && $newLibrary)
+                                {{-- PROJECTS folds (2.0.0-p); each project opens its page, which lists its recordings. --}}
+                                <details class="v2-sb-fold v2-sb-fold-end" open data-projects-fold>
+                                    <summary class="v2-sb-fold-toggle" aria-label="{{ __('Show or hide the projects') }}" title="{{ __('Show or hide the projects') }}">
+                                        <x-el.v2.icon name="chevron-down" />
+                                    </summary>
+                                    <ul class="v2-sb-sub" aria-label="{{ __('Projects') }}">
+                                        @foreach ($projects as $project)
+                                            <li>
+                                                <a href="{{ $project['url'] }}" @class(['v2-sb-subitem', 'is-child' => $project['depth'] > 0, 'is-on' => $project['active']])
+                                                    @if ($project['active']) aria-current="page" @endif data-project="{{ $project['id'] }}">
+                                                    <span class="v2-sb-label" dir="auto"><bdi>{{ $project['name'] }}</bdi></span>
+                                                    @if ($project['count'] > 0)
+                                                        <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($project['count']) }}</span>
+                                                    @endif
+                                                </a>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </details>
+                            @elseif ($item['key'] === 'projects' && $item['url'] !== null && $projects !== [])
                                 <ul class="v2-sb-sub" aria-label="{{ __('Projects') }}">
                                     @foreach ($projects as $project)
                                         <li>
                                             <a href="{{ $project['url'] }}" @class(['v2-sb-subitem', 'is-child' => $project['depth'] > 0, 'is-on' => $project['active']])
                                                 @if ($project['active']) aria-current="page" @endif data-project="{{ $project['id'] }}">
-                                                <span class="v2-sb-label"><bdi>{{ $project['name'] }}</bdi></span>
+                                                <span class="v2-sb-label" dir="auto"><bdi>{{ $project['name'] }}</bdi></span>
                                                 @if ($project['count'] > 0)
                                                     <span class="v2-sb-subcount">{{ \Illuminate\Support\Number::format($project['count']) }}</span>
                                                 @endif
@@ -137,6 +166,9 @@
                         </li>
                     @endforeach
                 </ul>
+                <button type="button" class="v2-sb-scroll is-down" x-show="below" x-cloak x-on:click="page(1)" aria-label="{{ __('Show more of the menu') }}" data-scroll-down>
+                    <x-el.v2.icon name="chevron-down" /><span>{{ __('More') }}</span>
+                </button>
             </nav>
 
             <div class="v2-sb-foot">

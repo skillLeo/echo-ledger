@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Support\ConsoleDates;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\Shell;
@@ -121,7 +122,8 @@ class Activity extends Page
         return [
             'groups' => $groups,
             'waiting' => app(LibraryOrganiser::class)->waitingSummary((int) CurrentWorkspace::id()),
-            'reviewUrl' => CaptureSessionResource::getUrl('index', ['tab' => 'waiting']),
+            // Since 2.0.0-p the new Library keeps the waiting calls in Needs you.
+            'reviewUrl' => CaptureSessionResource::getUrl('index', ['tab' => ConsoleV2::library() ? 'needs_you' : 'waiting']),
         ];
     }
 

@@ -67,7 +67,8 @@
      * places, decided before keyAction. e as keyAction's (with code); s: {modal, panelOpen, places (how many places
      * answer a number)}. F opens or closes the filters, ⌘F / Ctrl+F goes to the search (also from another field), Esc
      * closes the panel before it clears a selection, and ⌘1…⌘9 (Alt+1…9 too, where the browser keeps ⌘ and Ctrl for its
-     * tabs) opens the sidebar's first nine places. Returns {do, at?} or null.
+     * tabs) opens the sidebar's first nine places. A single key with no modifier (F) answers only while the Library has
+     * the focus (s.focused), so speech input and stray keys elsewhere never trigger it (WCAG 2.1.4). Returns {do, at?} or null.
      */
     function shellKey(e, s) {
         if (e.defaultPrevented || s.modal) return null;
@@ -79,7 +80,7 @@
             return at < s.places ? { do: 'place', at } : null;
         }
         if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return key === 'Escape' && s.panelOpen ? { do: 'close-filters' } : null;
-        if (key === 'f') return { do: 'toggle-filters' };
+        if (key === 'f') return s.focused ? { do: 'toggle-filters' } : null;
         if (key === 'Escape' && s.panelOpen) return { do: 'close-filters' };
         return null;
     }
