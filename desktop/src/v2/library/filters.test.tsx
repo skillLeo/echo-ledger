@@ -104,7 +104,7 @@ describe("Find in the Library", () => {
     await show();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All\s*4$/);
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("aria-keyshortcuts", "Meta+F Control+F /");
-    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search titles and transcripts \(/));
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search titles, transcripts and projects \(/));
     expect(filtersButton()).toHaveAttribute("aria-expanded", "false");
     expect(filtersButton()).toHaveAttribute("aria-keyshortcuts", "F");
     expect(screen.getByRole("button", { name: "Sort & display" })).toHaveAttribute("aria-haspopup", "menu");
@@ -112,7 +112,9 @@ describe("Find in the Library", () => {
     // No Select button and no Sync button: a row's box starts a selection; the sidebar's "Synced" line syncs.
     expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Sync" })).toBeNull();
-    // Narrow, the search says less (its box is shorter).
+    // Narrower, the search says less (its box is shorter).
+    act(() => setWidth(1100));
+    expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search recordings \((⌘|Ctrl\+)F\)$/));
     act(() => setWidth(900));
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search \((⌘|Ctrl\+)F\)$/));
   });
@@ -324,6 +326,25 @@ describe("Find in the Library", () => {
     fireEvent.click(section("Marked").getByRole("button", { name: "Clear Marked" }));
     await followed();
     expect(rows()).toEqual(["tp", "t", "ti"]);
+  });
+
+  it("the search finds the title, the transcript, or the project with the folders above it", async () => {
+    respond("list_clients", { data: [{ id: "p0", name: "Holdings" }, { id: "c1", name: "Acme", parent_id: "p0" }] });
+    await show();
+    const search = screen.getByRole("searchbox", { name: "Search recordings" });
+    // Ali and Chand are in Acme, under Holdings.
+    fireEvent.change(search, { target: { value: "holdings" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["c", "a"]);
+    fireEvent.change(search, { target: { value: "acme" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["c", "a"]);
+    fireEvent.change(search, { target: { value: "two" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["b"]);
+    fireEvent.change(search, { target: { value: "dawood" } });
+    await act(flushAsync);
+    expect(rows()).toEqual(["d"]);
   });
 
   it("a row's source logo or label dot filters by it at once", async () => {

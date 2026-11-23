@@ -72,7 +72,9 @@ export const FILTER_DEBOUNCE_MS = 150;
 /** Under this window width the filter panel is a drawer over the list: tokens.css `--el-breakpoint-panel` (a test keeps them one). */
 export const DRAWER_BELOW = 1280;
 const PANEL_KEY = "echoledger-library-filters-open";
-/** Under this width (tokens.css --el-breakpoint-medium) the search box is too short for its whole placeholder. */
+/** The search box's placeholder says what it finds where it has room (tokens.css --el-breakpoint-wide), less below
+ * --el-breakpoint-medium. */
+const WIDE = 1440;
 const NARROW = 1024;
 
 /** Keys the Library answers anywhere but in a field, a dialog or a menu. */
@@ -1006,7 +1008,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
               {!trash && (
                 <>
                   <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
-                    placeholder={width < NARROW ? `Search (${MOD}F)` : `Search titles and transcripts (${MOD}F)`} className="el-lib-toolbar__search" />
+                    placeholder={width >= WIDE ? `Search titles, transcripts and projects (${MOD}F)` : width >= NARROW ? `Search recordings (${MOD}F)` : `Search (${MOD}F)`}
+                    className="el-lib-toolbar__search" />
                   <Button variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
                     title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
                     Filters{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}

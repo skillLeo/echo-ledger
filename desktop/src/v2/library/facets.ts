@@ -138,9 +138,10 @@ export type Facts = {
   values: Record<ValueSection, readonly string[]>;
   unread: boolean;
   needs: boolean;
-  /** Its title and transcript in small letters, for the search. */
+  /** Its title and transcript, and its project's name with every folder above it, in small letters, for the search. */
   title: string;
   text: string;
+  project: string;
 };
 
 /** The words of each value met, for the options and the pills ("whatsapp" → "WhatsApp", a project's id → its name). */
@@ -230,6 +231,7 @@ export function prepare(items: readonly LibraryItem[], context: Context = {}): {
       needs: needsYou(item, now),
       title: (item.title ?? "").toLowerCase(),
       text: (item.transcript?.preview ?? "").toLowerCase(),
+      project: item.client ? chain(item.client.id).map((id) => names.project.get(id) ?? "").join(" ").toLowerCase() : "",
     });
   }
   return { facts, names };
@@ -260,9 +262,13 @@ export function searchWords(q: string): string[] {
   if (s.length < 2 || !/[\p{L}\p{N}]/u.test(s)) return [];
   return s.toLowerCase().split(/\s+/).filter(Boolean);
 }
-/** The search keeps a recording when every word is in its title, or every word is in its transcript. */
+/**
+ * The search keeps a recording when every word is in its title, or every word is in its transcript, or every word is in
+ * its project's name and the names of the folders above it ("acme" finds Acme Holdings › Contracts too).
+ */
 export const matchesSearch = (f: Facts, words: readonly string[]) =>
-  words.length === 0 || words.every((w) => f.title.includes(w)) || words.every((w) => f.text.includes(w));
+  words.length === 0 || words.every((w) => f.title.includes(w)) || words.every((w) => f.text.includes(w))
+  || (!!f.project && words.every((w) => f.project.includes(w)));
 
 /** The days a Date choice keeps, inclusive, as YYYY-MM-DD; null for an open end. Nothing after today is in Today or Last 7 days. */
 export function dateRange(preset: DatePreset, now: number, tz?: string, custom: { from?: string; to?: string } = {}): { from: string | null; to: string | null } {

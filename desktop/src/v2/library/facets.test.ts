@@ -166,17 +166,30 @@ describe("the search", () => {
   const { facts } = prepare([
     makeItem("a", { title: "Budget call with Acme", transcript: { ...none, preview: "We agreed the invoice." } }),
     makeItem("b", { title: "Standup", transcript: { ...none, preview: "Budget for Acme next week." } }),
-  ], { now: NOW.getTime() });
+    makeItem("c", { title: "Clause review", transcript: { ...none, preview: "Page four." }, client: { id: "p2", name: "Contracts" } }),
+    makeItem("d", { title: "Kick-off", transcript: none, client: { id: "p3", name: "Northwind" } }),
+  ], { now: NOW.getTime(), projects: [{ id: "p1", name: "Qureshi Holdings" }, { id: "p2", name: "Contracts", parent_id: "p1" }, { id: "p3", name: "Northwind" }] });
   const found = (q: string) => facts.filter((f) => matchesSearch(f, searchWords(q))).map((f) => f.item.id);
   it("every word in the title, or every word in the transcript, whatever the case", () => {
     expect(found("budget acme")).toEqual(["a", "b"]);
     expect(found("ACME invoice")).toEqual([]);
     expect(found("invoice")).toEqual(["a"]);
   });
+  it("or every word in the project's name and the folders above it", () => {
+    expect(found("northwind")).toEqual(["d"]);
+    // A folder's name finds the recordings in its subfolders.
+    expect(found("qureshi")).toEqual(["c"]);
+    expect(found("holdings contracts")).toEqual(["c"]);
+    expect(found("CONTRACTS")).toEqual(["c"]);
+    // Each place on its own: a word in the project and another in the title is no match.
+    expect(found("contracts clause")).toEqual([]);
+    // No project: nothing to match.
+    expect(found("no project")).toEqual([]);
+  });
   it("one character, or only punctuation, is no search", () => {
     expect(searchWords("a")).toEqual([]);
     expect(searchWords("--")).toEqual([]);
-    expect(found("x")).toEqual(["a", "b"]);
+    expect(found("x")).toEqual(["a", "b", "c", "d"]);
   });
 });
 
