@@ -3,8 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-r (2026-11-24, proposed by EL-Web)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
-2.0.0-r (proposed 2026-11-24 by EL-Web, accepted when merged; v2.1 Polish, see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)"): five interface flags (`v21_aftercall_notify`, `v21_aftercall_card`, `v21_panel_flyout`, `v21_zoom`, `v21_preview_pane`, each `off` for all but the admin's lists at first); one Activity item per recording and kind with `repeat_count`, `group` and `resolved`, and `GET /api/activity/groups`; the upload retry schedule in `GET /api/config` (`upload_retry`) and `POST /api/activity/retry-all`; `GET /api/badge`, the one Activity number; the glossary's states as `facets.state` and the facets' `states`; and the profile inside the apps (`language`, `avatar_color` on `GET` and `PATCH /api/account`). Additions only: nothing is renamed or removed.
+**Contract revision: 2.0.0-r (2026-11-24, accepted 2026-11-24 by EL-Lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-r (accepted 2026-11-24 by EL-Lead; v2.1 Polish, see "v2.1: flags, Activity, upload retries, the badge, states and the profile (since 2.0.0-r)"): five interface flags (`v21_aftercall_notify`, `v21_aftercall_card`, `v21_panel_flyout`, `v21_zoom`, `v21_preview_pane`, each `off` for all but the admin's lists at first); one Activity item per recording and kind with `repeat_count`, `group` and `resolved`, and `GET /api/activity/groups`; the upload retry schedule in `GET /api/config` (`upload_retry`) and `POST /api/activity/retry-all`; `GET /api/badge`, the one Activity number; the glossary's states as `facets.state` and the facets' `states`; and the profile inside the apps (`language`, `avatar_color` on `GET` and `PATCH /api/account`). Additions only: nothing is renamed or removed.
 2.0.0-q (accepted 2026-11-24 by EL-Lead; the Library's kinds, see "The Library's kinds (since 2.0.0-q)"): every recording has exactly one kind, `call`, `meeting`, `voice_note` or `other`, worked out from its Source, so the Library's tabs always add up to All. Imported files and any Source that is not a call, a meeting or a voice note are `other`, and the tabs gain **Other**, shown only when its count is above 0. A library item's `facets` carries `kind`; `GET /api/library/facets` answers `kinds`, the count of each kind for the filters and the search, which add up to `total`. The console's address takes `kind=other`. The shared test file gives every recording its kind and every filter set its kinds. Only additions, nothing stored: older apps ignore `kind` and `kinds` and keep their four tabs.
 2.0.0-p (proposed 2026-11-23, accepted when merged; the Library's filters and views, see "Library filters (since 2.0.0-p)" and "Saved views (since 2.0.0-p)"): one definition of every Library filter (Date, Source, Device, Project, Language, Status, Labels, Marked, Bookmarks, each with "is" and "is not", and the search) and of "Needs you", the same on the server, the desktop and the phone, with a shared test file of recordings and their counts (`web/tests/Fixtures/library-facets.json`). `GET /api/library` takes `filters` and `q` (the search: every word somewhere among the title, the transcript and the project path), and `view=needs_you` / `view=unread`; its answer carries `views_version`. Every library item carries `facets` (its Source, Status and Language) and `processing_since` (when its current upload or transcript attempt began, for Needs you's "stuck"). New `GET /api/library/facets` (the filter panel's counts, Needs you and the sidebar's counts) and saved views: `GET`/`POST /api/views`, `PATCH`/`DELETE /api/views/{id}`, `PUT /api/views/order`, at most 30 a person. New codes `views_limit`, `view_not_found`. Only additions: older apps ignore them.
 2.0.0-o (proposed 2026-11-22, accepted when merged; B12, see "Ask about a recording and across recordings (since 2.0.0-o)"): Ask beyond one project. `POST /api/sessions/{id}/ask` asks about one recording of the person's (its transcript and its notes) and `POST /api/ask` across all of their own recordings in the workspace, with the request, answer, citations, throttle, plan feature and AI budget of `POST /api/clients/{id}/ask`. New code `409 no_transcript` (nothing transcribed to ask about). Every Segment carries `language` (the line's language when the engine knew it: `ur`, `en`, `ar`…; `null` otherwise and on every line before 2.0.0-o), so the apps can skip a language's lines; `POST /api/sessions/{id}/transcripts` takes it too. Only additions: older apps ignore them.
@@ -2382,7 +2382,7 @@ and an app that does not know a new field ignores it.
 
 | Flag | What it turns on |
 |---|---|
-| `v21_aftercall_notify` | phone: the after-call notification with Transcribe · Save audio only |
+| `v21_aftercall_notify` | phone: the after-call notification with Transcribe and Delete; swiping it away keeps the audio only |
 | `v21_aftercall_card` | desktop: the small after-call card |
 | `v21_panel_flyout` | every app: under 1200 px the panel opens over the page instead of disappearing |
 | `v21_zoom` | desktop and web: zoom in Settings › Appearance |
@@ -2431,7 +2431,8 @@ lists, so they answer `false` for everyone until the admin adds someone to a lis
 ### 4. The badge (BE-04)
 `GET /api/badge` — `library:read`: `200 {"count": 4, "label": "4", "tone": "accent"}`. It is the one number on the
 Activity icon in every app and in the web console.
-- `count`: unread Activity items that need action, plus calls waiting for Keep or Discard. Items that need action are
+- `count`: unread Activity items that need action, plus calls waiting for the person's choice after a call (Transcribe,
+  Save audio only or Delete). Items that need action are
   a failed transcript or upload, the monthly limit reached, a missed recording, and an answer to an upgrade request. A
   merged item counts once, and a resolved one never counts.
 - `label`: `null` at 0, the number up to 99, then `"99+"`.
@@ -2449,7 +2450,7 @@ Each recording has one state, from its one Status (`facets.status`, "Library fil
 | `transcribing` | Transcribing… | a small spinner and the text |
 | `waiting_to_upload` | Waiting to upload | grey text |
 | `failed` | Failed · Retry | red text and a retry icon (the only red on rows) |
-| `waiting` | Waiting | a call waiting for Keep or Discard (in Needs you only) |
+| `waiting` | Waiting | a call waiting for the person's choice after a call (Transcribe, Save audio only or Delete), in Needs you only |
 
 - Every library item's `facets` gains `state`. `transcribed` comes from Status `transcribed`, `audio_only` from
   `not_transcribed`, and `failed` from `failed`. Status `processing` gives `waiting` while the session is `recording`,
