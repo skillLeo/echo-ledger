@@ -7,6 +7,7 @@ use App\Filament\Pages\Activity;
 use App\Filament\Support\SettingsContext;
 use App\Livewire\Shell\Sidebar;
 use App\Models\User;
+use App\Services\InterfaceFlags;
 use Livewire\Livewire;
 
 /*
@@ -14,7 +15,7 @@ use Livewire\Livewire;
  * docs/PLAN_NAV_3_LEVELS.md in the rail and the panels: ● Record and the places in the rail, Projects with its projects
  * and their counts, My links and Request links, Activity with its badge, the panel that folds and its style, + in the
  * top bar, the section above the title, and the phone-width bar Library · Projects · Record · Live · Ask; Settings ›
- * Appearance and its menu in Urdu.
+ * Appearance and its menu in Urdu. The earlier v2 sidebar (the new shell without the three levels) keeps its resize edge.
  */
 
 require_once __DIR__.'/Support/parity_world.php';
@@ -107,6 +108,21 @@ it('folds the place\'s panel with ⊟ or ⌘\\ and remembers it for each place; 
     $css = (string) file_get_contents(resource_path('css/v2/console.css'));
     expect($css)->toContain('--sidebar-width: calc(var(--el-space-24) * 3 + var(--el-space-20) * 13);')->toContain('--collapsed-sidebar-width: calc(var(--el-space-24) * 3);')
         ->toContain('.v2-frame:not(.fi-sidebar-open) .v2-panels');
+});
+
+it('resizes the sidebar from its edge, by dragging or with the arrow keys, and remembers the width (the new shell without the three levels)', function () {
+    // The new shell alone (ui_v2.shell without ui_v2.library) still ships the earlier v2 sidebar, with its resize edge.
+    app(InterfaceFlags::class)->set('ui_v2.library', false, 0, [], [], 'off');
+    $html = navPage($this, $this->owner, $this->pages['library']);
+    expect($html)->not->toContain('class="v2-frame-inner"')
+        ->toContain('class="v2-sb-resize" role="separator"')->toContain('aria-label="Resize the sidebar"')
+        ->toContain('x-on:pointerdown="startResize($event)"')->toContain('x-on:keydown="resizeKey($event)"')
+        ->toContain('x-data="elV2Sidebar(')->toContain('window.elV2Sidebar');
+
+    $this->actingAs($this->owner->fresh(), 'web');
+    Livewire::test(Sidebar::class)->call('rememberShell', 'width', 300);
+    expect($this->owner->fresh()->console_preferences['shell']['width'])->toBe(300);
+    expect(navPage($this, $this->owner, $this->pages['library']))->toContain('aria-valuenow="300"')->toContain('300px');
 });
 
 it('offers Sidebar style (Light, Dark, Soft grey) for the rail and its panels, starts on Soft grey and draws the choice', function () {

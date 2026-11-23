@@ -143,7 +143,8 @@ it('keeps the same words in English in the new frame and in classic', function (
             $html = leftoverPage($this, $v2, 'en', $page, $library);
             // With the three levels (the new frame and the new Library) the bell is the rail's Activity
             // (docs/PLAN_NAV_3_LEVELS.md section 2: never the same thing at two levels), so the top bar has none.
-            $frame = $v2 && $library ? ['="Notifications, 1 needs you"'] : [];
+            // Help & shortcuts lists the frame's own keys there in place of the sidebar's [ line.
+            $frame = $v2 && $library ? ['="Notifications, 1 needs you"', 'Fold the sidebar to icons, and back'] : [];
             foreach ([...leftoverPhrases($page, $phrases, $v2 && $library), ...array_diff(LEFTOVER_FRAME, $frame)] as $english) {
                 expect(leftoverHas($html, $english))->toBeTrue(($v2 ? 'v2' : 'classic')." {$page}: \"{$english}\" is missing");
             }

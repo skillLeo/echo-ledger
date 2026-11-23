@@ -6,6 +6,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Filament\Pages\Activity;
 use App\Filament\Pages\LiveAssist\AssistSessions;
 use App\Filament\Pages\RequestLinksPage;
 use App\Filament\Pages\SharedWithMe;
@@ -85,6 +86,19 @@ function navRailOf(string $html): string
     return (string) preg_replace('~^.*?(<nav class="v2-rail".*?</nav>).*$~s', '$1', $html);
 }
 
+/** Which links of one place's panel are marked as the open one, as [href => bool]. */
+function navPanelActive(string $html, string $place): array
+{
+    $section = (string) preg_replace('~^.*?(<section class="v2-panel" data-panel="'.$place.'".*?</section>).*$~s', '$1', $html);
+    preg_match_all('~<a href="([^"]+)"([^>]*)>~s', $section, $m, PREG_SET_ORDER);
+    $links = [];
+    foreach ($m as [$all, $href, $attributes]) {
+        $links[html_entity_decode($href)] = str_contains($attributes, 'aria-current="page"');
+    }
+
+    return $links;
+}
+
 /** The links of one place's panel, as [href => text]. */
 function navPanelLinks(string $html, string $place): array
 {
@@ -162,7 +176,8 @@ describe('the panels', function () {
         $projects = navPanelLinks(($this->page)('/app/clients'), 'projects');
         expect(array_values($projects))->toContain('All projects', 'Pinned', 'Recent', 'New project', 'Acme 1', 'Quiet project');
         expect(array_values(navPanelLinks(($this->page)('/app/live'), 'live')))->toContain('Call recording In the apps', 'Live Translate', 'Dictation', 'Captions');
-        expect(array_values(navPanelLinks(($this->page)('/app/ask'), 'ask')))->toContain('New question', 'Acme', 'Quiet project');
+        // (The panel's title and + New question both open the Ask page.)
+        expect(array_values(navPanelLinks(($this->page)('/app/ask'), 'ask')))->toBe(['New question']);
         // (The panel's title opens the place's own page, the same as its first item.)
         // Needs you: the failed transcript and the call waiting for its decision (as the rail's badge).
         expect(array_values(navPanelLinks(($this->page)('/app/activity'), 'activity')))->toBe(['All', 'Needs you 2', 'Done']);
@@ -249,6 +264,31 @@ describe('Live Assist\'s tabs', function () {
         expect($sessions)->toContain('data-page-tab="upcoming"')->toContain('data-page-tab="reports"')
             ->toMatch('~class="v2-tab is-on"\s+aria-current="page"\s+data-page-tab="practice"~');
         expect($tabs('/app/live-assist/preps'))->toMatch('~class="v2-tab is-on"\s+aria-current="page"\s+data-page-tab="upcoming"~');
+        // No Show filter: calls and Practice together, so neither tab (nor the panel's item) is the open one.
+        $all = ($this->page)('/app/live-assist/sessions');
+        expect((string) preg_replace('~^.*?(<nav class="v2-tabs v2-page-tabs".*?</nav>).*$~s', '$1', $all))->not->toContain('is-on')
+            ->and(implode(' ', array_keys(array_filter(navPanelActive($all, 'live')))))->not->toContain('kind');
+        expect($tabs(NavFrame::assistSessionsUrl('call')))->toMatch('~class="v2-tab is-on"\s+aria-current="page"\s+data-page-tab="reports"~');
+        // A list where a word belongs is nothing chosen, never an error.
+        foreach (['/app/live-assist/sessions?filters[kind][value][]=call', '/app/live-assist/sessions?filters[kind]=call', '/app/live-assist/sessions?filters=call'] as $odd) {
+            $page = ($this->page)($odd);
+            expect(str_contains((string) preg_replace('~^.*?(<nav class="v2-tabs v2-page-tabs".*?</nav>).*$~s', '$1', $page), 'is-on'))->toBeFalse($odd)
+                ->and(navPanelActive($page, 'live'))->not->toContain(true);
+        }
+    })->skip(fn (): bool => ! class_exists(AssistSessions::class));
+
+    it('keeps Live Assist\'s Show filter, Activity\'s and Projects\' views in the address with the three levels only', function () {
+        app(InterfaceFlags::class)->set(InterfaceFlags::LIVE_ASSIST, true, 0, [], [], 'everyone');
+        $this->actingAs($this->owner->fresh(), 'web');
+        Livewire::withQueryParams(['filters' => ['kind' => ['value' => 'practice']]])->test(AssistSessions::class)->assertSet('tableFilters.kind.value', 'practice');
+        Livewire::withQueryParams(['show' => 'done'])->test(Activity::class)->assertSet('show', 'done');
+        Livewire::withQueryParams(['show' => 'pinned'])->test(ListClients::class)->assertSet('show', 'pinned');
+        // Without them (the new shell alone) the pages' addresses stay as they were: nothing is read from them.
+        app(InterfaceFlags::class)->set('ui_v2.library', false, 0, [], [], 'off');
+        Livewire::withQueryParams(['filters' => ['kind' => ['value' => 'practice']]])->test(AssistSessions::class)->assertNotSet('tableFilters.kind.value', 'practice');
+        Livewire::withQueryParams(['show' => 'done'])->test(Activity::class)->assertSet('show', '');
+        Livewire::withQueryParams(['show' => 'pinned'])->test(ListClients::class)->assertSet('show', '')->assertCanSeeTableRecords([$this->acme, $this->quiet]);
+        Livewire::withQueryParams([]);
     })->skip(fn (): bool => ! class_exists(AssistSessions::class));
 });
 
@@ -362,6 +402,42 @@ describe('after the desktop\'s review', function () {
         expect($html)->toContain("x-on:keydown.escape.window=\"if (flyout !== null) closeFlyout('escape')\"")->toContain("x-on:click.outside=\"closeFlyout('outside')\"")
             ->toContain('core.railFlyout({ narrow: this.folded(), hasPanel: this.hasPanel(key), flyout: this.flyout, key, current: this.place })')
             ->toContain("session.set('el-nav-flyout', key)");
+    });
+
+    it('takes none of the frame\'s keys while a dialog is in front: Filament\'s, Help & shortcuts, an image viewer, the filters as a drawer', function () {
+        $html = ($this->page)('/app/sessions');
+        expect($html)->toContain('const dialogOpen = () => Array.from(document.querySelectorAll(\'.fi-modal-open[aria-modal="true"], .el-help, [role="dialog"][aria-modal="true"]\'))')
+            ->toContain('.some((el) => el.getClientRects().length > 0);')->toContain('mac, modal: dialogOpen(), rail: rail.length');
+        // The viewers and the help dialog are what that selector finds.
+        foreach (['filament/v2/recording-moments.blade.php', 'filament/clients/tab-screens.blade.php', 'filament/infolists/transcript-player.blade.php'] as $view) {
+            expect(str_contains((string) file_get_contents(resource_path('views/'.$view)), 'role="dialog" aria-modal="true"'))->toBeTrue($view);
+        }
+        expect((string) file_get_contents(resource_path('views/filament/shell/help.blade.php')))->toContain('<div class="el-help" role="dialog" aria-modal="true"');
+    });
+
+    it('lists the frame\'s keys in Help & shortcuts and Settings › Shortcuts, and [ hides or shows the place\'s panel', function () {
+        $help = (string) preg_replace('~^.*?(<div x-data="\{ open: false \}" x-on:el-help\.window.*?</template>).*$~s', '$1', ($this->page)('/app/sessions'));
+        expect($help)->toContain('Ctrl 1…6')->toContain('Library, Projects, Live, Ask, Activity, Settings')
+            ->toContain('Alt 1…9')->toContain('The panel&#039;s first nine (the Library&#039;s views, then My views)')
+            ->toContain('Ctrl \\  [')->toContain('Hide or show the panel')->toContain('Ctrl [  Ctrl ]')->toContain('Back and forward')
+            ->not->toContain('Fold the sidebar to icons, and back');
+        $shortcuts = ($this->page)('/app/settings/shortcuts');
+        expect($shortcuts)->toContain('Hide or show the panel')->not->toContain('Fold the sidebar to icons, and back');
+        // The [ key goes to the frame's panel (remembered for the place), not the sidebar store.
+        expect(($this->page)('/app/sessions'))->toContain('if (data && typeof data.togglePanel === \'function\') {');
+        // Without the three levels Help keeps the sidebar's [ line.
+        app(InterfaceFlags::class)->set('ui_v2.library', false, 0, [], [], 'off');
+        expect(($this->page)('/app/sessions'))->toContain('Fold the sidebar to icons, and back')->not->toContain('Library, Projects, Live, Ask, Activity, Settings');
+    });
+
+    it('keeps Ask\'s panel to + New question while the web has no question history (the project is the page\'s own picker)', function () {
+        $html = ($this->page)('/app/ask');
+        // The panel's title and + New question, both the Ask page: nothing else.
+        expect(navPanelLinks($html, 'ask'))->toBe(['https://echoledger.test/app/ask' => 'New question']);
+        $panel = (string) preg_replace('~^.*?(<section class="v2-panel" data-panel="ask".*?</section>).*$~s', '$1', $html);
+        expect($panel)->not->toContain('Acme')->not->toContain('Quiet project')->not->toContain('data-ask-project');
+        // The page still asks about a project, from its own picker.
+        expect($html)->toContain('for="ask-project"');
     });
 
     it('says how many recordings the list holds in the Library\'s header, never only in the table\'s foot', function () {

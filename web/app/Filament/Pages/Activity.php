@@ -23,7 +23,6 @@ use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Carbon;
-use Livewire\Attributes\Url;
 
 /**
  * Activity (plan B18), as the phone shows it: what needs the person first (calls waiting for Keep or Discard, failed
@@ -54,10 +53,16 @@ class Activity extends Page
 
     /**
      * Since docs/PLAN_NAV_3_LEVELS.md (Activity's panel): All (''), Needs you (what needs action and is not done yet,
-     * and the waiting calls) or Done (what was read). Kept in the address, so the panel's links and Back open it.
+     * and the waiting calls) or Done (what was read). Kept in the address with the three levels only (queryString), so
+     * the panel's links and Back open it.
      */
-    #[Url(except: '')]
     public string $show = '';
+
+    /** @return array<string, array{except: string}> */
+    protected function queryString(): array
+    {
+        return ConsoleV2::frame() ? ['show' => ['except' => '']] : [];
+    }
 
     public function getTitle(): string
     {

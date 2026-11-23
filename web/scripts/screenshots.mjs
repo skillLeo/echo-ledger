@@ -82,7 +82,11 @@ const pages = {
     'nav-settings': { path: '/app/settings/profile', full: false },
     // Setup & health, the rail's own place (no panel): Devices and Get the apps as its tabs.
     'nav-setup': { path: '/app/settings/devices', full: false },
+    // Under the flyout width (1024): each place folded to the rail, and its panel open over the page from its icon.
     'nav-flyout': { path: '/app/sessions', full: false, click: '[data-rail="library"]' },
+    'nav-projects-flyout': { path: '/app/clients', full: false, click: '[data-rail="projects"]' },
+    'nav-settings-flyout': { path: '/app/settings', full: false, click: '[data-rail="settings"]' },
+    'nav-settings-home': { path: '/app/settings', full: false },
     'nav-filters': { path: '/app/sessions', full: false, run: "window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } }))" },
     'nav-folded': { path: '/app/sessions', full: false, run: "document.querySelector('[data-panel-toggle]')?.click()" },
     'nav-tab': { path: '/app/sessions?kind=calls', full: false },
@@ -255,22 +259,35 @@ async function navChecks(page, width) {
     const memory = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('el-nav')));
     if (memory.includes('el-nav-last:library') || memory.includes('el-nav:000000000000.00000000:last:library')) wrong.push(`someone else's memory stayed: ${memory.join(', ')}`);
     if (!memory.some((k) => /^el-nav:[0-9a-f]{12}\.[0-9a-f]{8}:last:library$/.test(k))) wrong.push(`no memory of this place for this person: ${memory.join(', ')}`);
-    // Alt+1…9 in a field types there: nothing opens.
-    await page.locator('.v2-library .fi-ta-search-field input').first().focus();
+    // Alt+1…9 and ⌘1…⌘6 in a field type there: nothing opens. (What they typed is cleared as typing would clear it, so
+    // the Library's search settles before the next step.)
+    const search = page.locator('.v2-library .fi-ta-search-field input').first();
+    await search.focus();
     await page.keyboard.press('Alt+Digit1');
+    await page.keyboard.press(mod + '+Digit2');
     await page.waitForTimeout(600);
-    if (at() !== '/app/sessions') wrong.push(`Alt+1 in the search went to ${at()}`);
-    await page.evaluate(() => { document.activeElement?.blur(); const i = document.querySelector('.v2-library .fi-ta-search-field input'); if (i) i.value = ''; });
-    // A row's source mark filters; the recording does not open.
+    if (!at().startsWith('/app/sessions')) wrong.push(`Alt+1 or ${mod}+2 in the search went to ${at()}`);
+    await search.fill('');
+    await settle();
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.waitForFunction(() => location.search === '', null, { timeout: 5000 }).catch(() => {});
+    // Each step waits (up to 5 s, on a busy machine) for the address it should reach, then says where it is.
+    const reach = (ok) => page.waitForFunction(ok, null, { timeout: 5000 }).catch(() => {});
+    const filtered = () => decodeURIComponent(location.search).includes('f[source]');
+    // A row's source mark filters; the recording does not open (Livewire has started on the page first).
+    await page.waitForFunction(() => window.Livewire !== undefined && document.querySelector('.v2-lib-row [data-quick-source]') !== null, null, { timeout: 10000 }).catch(() => {});
     await page.locator('.v2-lib-row [data-quick-source]').first().click();
+    await reach(filtered);
     await settle();
     if (!at().startsWith('/app/sessions?') || !at().includes('f[source]')) wrong.push(`source mark went to ${at()}`);
     // Back and forward from the keyboard.
     await page.evaluate(() => document.activeElement?.blur());
     await page.keyboard.press(mod + '+BracketLeft');
+    await reach(() => location.pathname === '/app/sessions' && location.search === '');
     await settle();
     if (at() !== '/app/sessions') wrong.push(`⌘[ left ${at()}`);
     await page.keyboard.press(mod + '+BracketRight');
+    await reach(filtered);
     await settle();
     if (!at().includes('f[source]')) wrong.push(`⌘] left ${at()}`);
     // The Library's rail icon from inside the Library starts it over (All recordings, no filter), at every width.
@@ -295,7 +312,8 @@ async function navChecks(page, width) {
             if (!(await flyout()) || opened.expanded !== 'true') wrong.push(`Projects' flyout (${close}): open ${await flyout()}, aria-expanded ${opened.expanded}`);
             if (close === 'Escape') await page.keyboard.press('Escape');
             if (close === 'toggle') await page.click('.v2-panel[data-panel="projects"] [data-panel-toggle]');
-            if (close === 'outside') await page.mouse.click(width - 40, 860);
+            // An empty spot of the page far from the rail (the left in Urdu, where the rail is on the right).
+            if (close === 'outside') await page.mouse.click((await page.evaluate(() => document.documentElement.dir)) === 'rtl' ? 40 : width - 40, 860);
             await page.waitForTimeout(300);
             const closed = await state('projects');
             if (await flyout()) wrong.push(`the flyout stayed open after ${close}`);

@@ -51,9 +51,10 @@
 
     /**
      * Whether focus goes back to what opened the flyout when it closes: after Esc and ⊟ (or ⌘\) always; after a click
-     * outside it only when that click left focus nowhere (on the page's body, or in the flyout now hidden), never taking
-     * it from a field or button the click went to; after choosing something in it, never (the page changes).
-     * how: 'escape' | 'toggle' | 'outside' | 'chosen'; lost: whether focus is nowhere or still in the flyout.
+     * outside it only when that click left focus nowhere a person works with (the body, the page's main, or the flyout
+     * now hidden), never taking it from a field or button the click went to; after choosing something in it, never (the
+     * page changes). how: 'escape' | 'toggle' | 'outside' | 'chosen'; lost: whether focus is on nothing a person works
+     * with, or still in the flyout.
      */
     function flyoutFocusBack(how, lost) {
         if (how === 'escape' || how === 'toggle') return true;
@@ -100,8 +101,9 @@
      * The frame's keys (section 6), on every page. e: {key, code, ctrlKey, metaKey, altKey, shiftKey, defaultPrevented,
      * target}; s: {mac, modal, rail (how many places the rail has, at most 6), items (how many of the panel's first
      * nine answer a number)}. ⌘1…⌘6 (Ctrl off a Mac) open the rail's places, Alt+1…9 the panel's first nine (saved views
-     * keep these, so the two never clash), ⌘\ hides or shows the panel. Not over a dialog; the numbers with Alt not in a
-     * field (Alt types letters there on a Mac). Returns {do: 'rail' | 'item' | 'panel', at?} or null.
+     * keep these, so the two never clash), ⌘\ hides or shows the panel. Not over a dialog. No number while a field or
+     * an editor has the focus (⌘1 would leave the page and lose what was typed; Alt types letters there on a Mac); ⌘\
+     * works from a field too. Returns {do: 'rail' | 'item' | 'panel', at?} or null.
      */
     function frameKey(e, s) {
         if (e.defaultPrevented || s.modal || e.shiftKey) return null;
@@ -109,7 +111,7 @@
         const digit = /^Digit([1-9])$/.exec(e.code || '') || /^Numpad([1-9])$/.exec(e.code || '');
         if (mod && ! e.altKey) {
             if (e.code === 'Backslash' || e.key === '\\') return { do: 'panel' };
-            if (digit) {
+            if (digit && ! isField(e.target)) {
                 const at = Number(digit[1]) - 1;
                 return at < Math.min(6, s.rail) ? { do: 'rail', at } : null;
             }

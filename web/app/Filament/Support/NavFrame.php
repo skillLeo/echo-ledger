@@ -282,10 +282,13 @@ final class NavFrame
             ['key' => 'calls', 'label' => __('Call recording'), 'icon' => 'phone', 'url' => $live.'#record', 'note' => __('In the apps'), 'active' => $onLive],
         ]]];
         if (AssistSessions::canAccess()) {
-            $kind = $routes && request()->routeIs('filament.app.pages.live-assist.sessions') ? (string) (request()->query('filters')['kind']['value'] ?? '') : null;
+            // The Show filter from the address, only as a word (?filters[kind][value][]=x is a list: nothing chosen).
+            $filters = $routes && request()->routeIs('filament.app.pages.live-assist.sessions') ? request()->query('filters') : null;
+            $value = is_array($filters) && is_array($filters['kind'] ?? null) ? ($filters['kind']['value'] ?? null) : null;
+            $kind = is_string($value) ? $value : null;
             $groups[] = ['title' => __('Live Assist'), 'items' => [
                 ['key' => 'upcoming', 'label' => __('Upcoming'), 'icon' => 'clock', 'url' => AssistPreps::getUrl(), 'active' => $routes && request()->routeIs('filament.app.pages.live-assist.preps')],
-                ['key' => 'reports', 'label' => __('Past reports'), 'icon' => 'transcript', 'url' => self::assistSessionsUrl('call'), 'active' => $kind === 'call' || $kind === ''],
+                ['key' => 'reports', 'label' => __('Past reports'), 'icon' => 'transcript', 'url' => self::assistSessionsUrl('call'), 'active' => $kind === 'call'],
                 ['key' => 'practice', 'label' => __('Practice'), 'icon' => 'mic', 'url' => self::assistSessionsUrl('practice'), 'active' => $kind === 'practice'],
             ]];
         }
@@ -306,7 +309,9 @@ final class NavFrame
      */
     public static function liveAssistTabs(mixed $page): array
     {
-        $kind = $page instanceof AssistSessions ? (string) (($page->tableFilters['kind']['value'] ?? null) ?: 'call') : null;
+        // With no Show filter the page lists calls and Practice together: neither tab is the open one then.
+        $value = $page instanceof AssistSessions && is_array($page->tableFilters['kind'] ?? null) ? ($page->tableFilters['kind']['value'] ?? null) : null;
+        $kind = is_string($value) ? $value : null;
 
         return [
             ['key' => 'upcoming', 'label' => __('Upcoming'), 'url' => AssistPreps::getUrl(), 'active' => $page instanceof AssistPreps],
@@ -322,20 +327,14 @@ final class NavFrame
     }
 
     /**
-     * Ask's panel: + New question, then the projects to ask about (Ask works on a project's recordings on the web).
+     * Ask's panel: + New question only. The web keeps no list of earlier questions (each answer is on the page that
+     * asked it), and which project to ask about is the page's own picker, so the panel doesn't list the projects again.
      *
-     * @return array{new: string|null, projects: list<array<string, mixed>>}
+     * @return array{new: string|null}
      */
     public static function askPanel(): array
     {
-        if (! Ask::canAccess()) {
-            return ['new' => null, 'projects' => []];
-        }
-        $routes = request()->route()?->getName() !== null;
-        $current = $routes && request()->routeIs('filament.app.pages.ask') ? (string) request()->query('project', '') : null;
-        $projects = array_map(fn (array $p): array => [...$p, 'url' => Ask::getUrl(['project' => $p['id']]), 'active' => $current === $p['id']], ConsoleV2Nav::projects(500));
-
-        return ['new' => Ask::getUrl(), 'projects' => $projects];
+        return ['new' => Ask::canAccess() ? Ask::getUrl() : null];
     }
 
     /**

@@ -105,6 +105,21 @@ test('⌘1…⌘6 open the rail\'s places (Ctrl off a Mac), and only those there
     assert.equal(core.frameKey(key('1', { metaKey: true, code: 'Digit1' }), frame({ mac: false })), null);
 });
 
+test('⌘1…⌘6 (Ctrl off a Mac) do nothing while a field or an editor has the focus: what was typed stays', () => {
+    const fields = [{ tagName: 'INPUT' }, { tagName: 'input' }, { tagName: 'TEXTAREA' }, { tagName: 'SELECT' }, { field: true }, { editable: true }, { tagName: 'DIV', isContentEditable: true }];
+    for (const field of fields) {
+        for (let n = 1; n <= 6; n++) {
+            assert.equal(core.frameKey(key(String(n), { metaKey: true, code: 'Digit' + n, target: field }), frame()), null, `${JSON.stringify(field)} ⌘${n}`);
+            assert.equal(core.frameKey(key(String(n), { ctrlKey: true, code: 'Digit' + n, target: field }), frame({ mac: false })), null, `${JSON.stringify(field)} Ctrl+${n}`);
+            assert.equal(core.frameKey(key(String(n), { ctrlKey: true, code: 'Numpad' + n, target: field }), frame({ mac: false })), null, `${JSON.stringify(field)} Ctrl+Numpad${n}`);
+        }
+        // ⌘\ still hides or shows the panel from there.
+        assert.deepEqual(core.frameKey(key('\\', { metaKey: true, code: 'Backslash', target: field }), frame()), { do: 'panel' }, `${JSON.stringify(field)} ⌘\\`);
+    }
+    // Out of a field the same keys open the places.
+    assert.deepEqual(core.frameKey(key('2', { ctrlKey: true, code: 'Digit2' }), frame({ mac: false })), { do: 'rail', at: 1 });
+});
+
 test('Alt+1…9 open the panel\'s first nine (saved views keep these), never in a field, where Alt types letters', () => {
     assert.deepEqual(core.frameKey(key('¡', { altKey: true, code: 'Digit1' }), frame()), { do: 'item', at: 0 });
     assert.deepEqual(core.frameKey(key('ª', { altKey: true, code: 'Digit9' }), frame()), { do: 'item', at: 8 });

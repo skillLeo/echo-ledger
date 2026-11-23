@@ -13,7 +13,6 @@ use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\RenderHook;
 use Filament\Schemas\Schema;
 use Filament\View\PanelsRenderHook;
-use Livewire\Attributes\Url;
 
 class ListClients extends ListRecords
 {
@@ -23,8 +22,17 @@ class ListClients extends ListRecords
      * Since docs/PLAN_NAV_3_LEVELS.md (Projects' panel): All projects (''), Pinned or Recent (those with a recording in
      * the last 30 days, the latest first), every level of the tree; in the address, so the panel's links and Back open it.
      */
-    #[Url(except: '')]
     public string $show = '';
+
+    /**
+     * In the address with the three levels only: without them the page's address stays as it was.
+     *
+     * @return array<string, array{except: string}>
+     */
+    protected function queryString(): array
+    {
+        return ConsoleV2::frame() ? ['show' => ['except' => '']] : [];
+    }
 
     /** With the three levels + New project is the panel's, only there. */
     protected function getHeaderActions(): array

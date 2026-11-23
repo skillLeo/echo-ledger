@@ -151,7 +151,10 @@
                 this.$nextTick(() => {
                     const active = document.activeElement;
                     const panel = this.$root.querySelector('[data-panel="' + key + '"]');
-                    const lost = active === null || active === document.body || (panel !== null && panel.contains(active));
+                    // Focus is lost when nothing a person works with has it: the body, the page's main (a skip link's
+                    // target, focused by a click on it), or the flyout now hidden.
+                    const works = active instanceof Element && active.matches('a[href], button, input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [tabindex]:not([tabindex="-1"])');
+                    const lost = ! works || (panel !== null && panel.contains(active));
                     if (! window.ElFrameCore.flyoutFocusBack(how, lost)) return;
                     const back = opener && opener.isConnected ? opener : this.$root.querySelector('[data-rail="' + key + '"]');
                     back?.focus();
@@ -162,6 +165,10 @@
 
         // The frame's keys, on every page (ElFrameCore.frameKey).
         const mac = /mac|iphone|ipad/i.test(navigator.userAgentData?.platform || navigator.platform || '');
+        // A dialog in front (Filament's, Help & shortcuts, an image viewer, the filters as a drawer): none of the keys.
+        // A dialog kept in the page while closed (x-show) has no box, so only one on screen counts.
+        const dialogOpen = () => Array.from(document.querySelectorAll('.fi-modal-open[aria-modal="true"], .el-help, [role="dialog"][aria-modal="true"]'))
+            .some((el) => el.getClientRects().length > 0);
         document.addEventListener('keydown', (e) => {
             const core = window.ElFrameCore;
             const frame = document.querySelector('.v2-frame-inner');
@@ -173,7 +180,7 @@
                 : (t.closest('[contenteditable]:not([contenteditable="false"])') !== null ? { editable: true } : (t.closest('input, textarea, select') !== null ? { field: true } : t));
             const act = core.frameKey({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey,
                 defaultPrevented: e.defaultPrevented, target: where(e.target) }, {
-                mac, modal: document.querySelector('.fi-modal-open[aria-modal="true"]') !== null, rail: rail.length, items: Math.min(9, items.length),
+                mac, modal: dialogOpen(), rail: rail.length, items: Math.min(9, items.length),
             });
             if (! act) return;
             e.preventDefault();
