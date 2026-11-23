@@ -36,6 +36,8 @@
     >
         <div class="v2-frame-inner" x-data="elV2Frame(@js($config))" x-bind:class="{ 'is-flyout': flyout !== null, 'is-narrow': narrow }"
             x-on:keydown.escape.window="if (flyout !== null) closeFlyout('escape')" x-on:click.outside="closeFlyout('outside')"
+            x-on:focusin.window="if (flyout !== null && ! $el.contains($event.target)) closeFlyout('outside')"
+            x-on:blur.window="if (flyout !== null && document.activeElement?.tagName === 'IFRAME') closeFlyout('outside')"
             x-on:el-nav-show-panel.window="showPanel($event)">
             <nav class="v2-rail" aria-label="{{ __('Places') }}">
                 <a href="{{ NavFrame::homeUrl() }}" @class(['v2-rail-logo', 'is-on' => $here === null && request()->routeIs('filament.app.pages.dashboard')])

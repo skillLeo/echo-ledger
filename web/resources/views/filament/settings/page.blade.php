@@ -73,7 +73,7 @@
                 @if ($searching)
                     @include('filament.settings.search-results', ['results' => $this->searchResults(), 'query' => $this->settingsQuery])
                 @elseif ($this->subpage === '')
-                    <h1 class="el-set-h1">Settings</h1>{!! $showGroups !!}
+                    <h1 class="el-set-h1">{{ __('Settings') }}</h1>{!! $showGroups !!}
                     @include('filament.settings.profile-card')
                     @include('filament.settings.state-row')
                     @include('filament.settings.this-month')

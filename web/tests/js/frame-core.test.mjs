@@ -59,6 +59,26 @@ test('a closed flyout gives focus back to what opened it after Esc and ⊟, afte
     assert.equal(core.flyoutFocusBack('chosen', true), false);
 });
 
+test('after a click outside, focus counts as lost only on nothing, the body, the main or the hidden flyout', () => {
+    const el = (tag, more = {}) => ({ tagName: tag.toUpperCase(), matches: (sel) => sel === tag, ...more });
+    const body = el('body');
+    const inside = el('a');
+    const panel = { contains: (node) => node === inside };
+    // Lost: focus may go back to the flyout's opener.
+    assert.equal(core.focusLost(null, body, panel), true);
+    assert.equal(core.focusLost(undefined, body, panel), true);
+    assert.equal(core.focusLost(body, body, panel), true);
+    assert.equal(core.focusLost(el('main'), body, panel), true);
+    assert.equal(core.focusLost(inside, body, panel), true);
+    // Kept where the click put it: audio and video controls, a frame, a script's tabindex -1, a field, a button.
+    for (const kept of [el('audio'), el('video'), el('iframe'), el('div', { tabIndex: -1 }), el('input'), el('button'), el('section')]) {
+        assert.equal(core.focusLost(kept, body, panel), false, kept.tagName);
+    }
+    // No panel (it is gone): only nothing, the body and the main are lost.
+    assert.equal(core.focusLost(el('div'), body, null), false);
+    assert.equal(core.focusLost(el('main'), body, null), true);
+});
+
 test('the places\' memory is one person\'s in one workspace: anyone else\'s goes, and the login page forgets it all', () => {
     const mine = 'aaaaaaaaaaaa.11111111';
     assert.equal(core.memoryKey(mine, 'last', 'library'), 'el-nav:aaaaaaaaaaaa.11111111:last:library');

@@ -312,19 +312,20 @@ final class UpgradeFlow
         $limit = $minutes['limit'] ?? null;
         if ($limit === 0 || $limit === 0.0) {
             $key = $context->flag('key');
-            $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => 'Your Groq key', 'percent' => null, 'tone' => 'neutral',
-                'line' => $key ? 'Key added' : 'Not added.', 'link' => $key ? null : ['label' => 'Add key', 'url' => EditProfile::settingsUrl('transcription-key')], 'after' => null,
+            $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => __('Your Groq key'), 'percent' => null, 'tone' => 'neutral',
+                'line' => $key ? __('Key added') : __('Not added.'), 'link' => $key ? null : ['label' => __('Add key'), 'url' => EditProfile::settingsUrl('transcription-key')], 'after' => null,
                 'label' => 'Transcription, with your own Groq key, '.($key ? 'key added' : 'not added')];
         } else {
             $used = (int) ($minutes['used'] ?? 0);
             $meter = self::meter($used, $limit === null ? null : (int) $limit);
-            $value = $limit === null ? number_format($used).' min' : number_format($used).' of '.number_format((int) $limit).' min';
+            // In the console's language: "230 of 600 min" · "600 میں سے 230 منٹ"; "Resets 1 Dec" · "1 دسمبر کو دوبارہ شروع ہوگا".
+            $value = $limit === null ? __(':n min', ['n' => number_format($used)]) : __(':used of :limit min', ['used' => number_format($used), 'limit' => number_format((int) $limit)]);
             $day = $resets->format('j M');
             $near = $meter['percent'] !== null && $meter['percent'] >= 80 && $meter['percent'] < 100;
             $line = match (true) {
                 $meter['percent'] !== null && $meter['percent'] >= 100 => "Transcription is paused until {$day}.",
                 $near => "You've used {$meter['percent']}% of your minutes.".($buyer ? '' : " They reset on {$day}."),
-                default => "Resets {$day}",
+                default => __('Resets :date', ['date' => ConsoleDates::format($resets, 'j M', 'j F')]),
             };
             $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
                 'line' => $line, 'link' => $near && $buyer ? ['label' => 'Upgrade', 'url' => $upgradeUrl] : null, 'after' => $near && $buyer ? " or wait until {$day}." : null,

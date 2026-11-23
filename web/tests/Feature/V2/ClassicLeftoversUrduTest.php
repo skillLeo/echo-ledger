@@ -111,6 +111,8 @@ const LEFTOVER_ENGLISH = [
     // W-213: Activity's headings and dates, a new project's form.
     'activity' => [true, ['Mark all as read', 'Needs action', 'Unread:', '="Nov 17, 2026 · 11:42 AM"']],
     'project-create' => [true, ['Create & create another', '="Color picker"', '="Collapse section"', '="Breadcrumb"', 'Urdu (with English words)', 'Portuguese']],
+    // Settings' home: its heading, the profile card's Upgrade, and This month (each meter, its amount and Plan & usage).
+    'settings' => [true, ['Settings', 'Upgrade', 'This month', 'Transcription', 'Resets 1 Dec', 'Storage', 'Devices', 'Plan & usage', ' min']],
 ];
 
 it('shows the classic pages\' last English in Urdu in the new frame, with Urdu month names and the digits 0-9', function () {
@@ -132,6 +134,12 @@ it('shows the classic pages\' last English in Urdu in the new frame, with Urdu m
     expect(leftoverBare(html_entity_decode($library)))->toContain('="اطلاعات، 1 آپ کی منتظر ہے"');
     $activity = leftoverBare(html_entity_decode(leftoverPage($this, true, 'ur', 'activity')));
     expect($activity)->toContain('="17 نومبر 2026 · ')->toContain('سب کو پڑھا ہوا کریں')->not->toContain('نشان زد');
+    // Settings' home: its words in Urdu, the minutes in Urdu units and every amount in its own order (<bdi>).
+    $settings = leftoverPage($this, true, 'ur', 'settings');
+    expect(leftoverWords($settings))->toContain('ترتیبات')->toContain('اپ گریڈ کریں')->toContain('اس مہینے')->toContain('ٹرانسکرپشن')
+        ->toContain('1 دسمبر کو دوبارہ شروع ہوگا')->toContain('اسٹوریج')->toContain('ڈیوائسز')->toContain('پلان اور استعمال')->toMatch('/\d+ منٹ/u')
+        ->not->toMatch('/[٠-٩۰-۹]/u');
+    expect(substr_count($settings, '<span class="el-set-value" style="max-width:60%"><bdi>'))->toBe(3);
     $create = leftoverWords(leftoverPage($this, true, 'ur', 'project-create'));
     expect($create)->toContain('پروجیکٹ بنائیں')->toContain('بنائیں اور ایک اور بنائیں')->toContain('منسوخ کریں')->toContain('اردو (انگریزی الفاظ کے ساتھ)')
         ->not->toContain('Create')->not->toContain('Cancel');

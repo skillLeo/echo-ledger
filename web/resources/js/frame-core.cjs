@@ -62,6 +62,18 @@
     }
 
     /**
+     * Whether focus was left nowhere after a click outside the flyout (so it may go back to the flyout's opener): on
+     * nothing (null), on the page's body, on its main (a click there focuses the skip link's target), or still in the
+     * flyout now hidden. Anything else the click focused keeps it: a field or a button, audio or video controls, a
+     * frame, an element a script made focusable (tabindex -1). active, body, panel: the elements (panel may be null).
+     */
+    function focusLost(active, body, panel) {
+        if (active === null || active === undefined || active === body) return true;
+        if (typeof active.matches === 'function' && active.matches('main')) return true;
+        return !! panel && typeof panel.contains === 'function' && panel.contains(active);
+    }
+
+    /**
      * This browser's memory of each place (where you left it, whether its panel was folded) belongs to one person in one
      * workspace: scope is an opaque name of both (person.workspace, from the server), so it never carries over to
      * someone else signing in here, and the login page forgets it all (signing out). what: 'last' | 'panel'.
@@ -124,5 +136,5 @@
         return null;
     }
 
-    return { isField, railTarget, sameConsole, railFlyout, flyoutFocusBack, memoryKey, staleMemory, allMemory, panelOpen, frameKey };
+    return { isField, railTarget, sameConsole, railFlyout, flyoutFocusBack, focusLost, memoryKey, staleMemory, allMemory, panelOpen, frameKey };
 });

@@ -400,6 +400,10 @@ describe('after the desktop\'s review', function () {
             expect($html)->toContain("x-effect=\"expanded(\$el, '{$place}')\"")->toContain('id="v2-panel-'.$place.'"');
         }
         expect($html)->toContain("x-on:keydown.escape.window=\"if (flyout !== null) closeFlyout('escape')\"")->toContain("x-on:click.outside=\"closeFlyout('outside')\"")
+            // Focus leaving the flyout (a click on audio or video controls, which sends no click, or into a frame) closes it too.
+            ->toContain("x-on:focusin.window=\"if (flyout !== null && ! \$el.contains(\$event.target)) closeFlyout('outside')\"")
+            ->toContain("x-on:blur.window=\"if (flyout !== null && document.activeElement?.tagName === 'IFRAME') closeFlyout('outside')\"")
+            ->toContain('const lost = window.ElFrameCore.focusLost(active, document.body, panel);')
             ->toContain('core.railFlyout({ narrow: this.folded(), hasPanel: this.hasPanel(key), flyout: this.flyout, key, current: this.place })')
             ->toContain("session.set('el-nav-flyout', key)");
     });

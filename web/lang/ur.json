@@ -1065,5 +1065,11 @@
     "Last activity :date": "آخری سرگرمی :date",
     "Show groups": "گروپس دکھائیں",
     "Close the panel": "پینل بند کریں",
-    "A project groups its recordings, files and notes, and teaches the engines its names and words. Start one with New project in the panel.": "پروجیکٹ اپنی ریکارڈنگز، فائلیں اور نوٹس ایک جگہ رکھتا ہے، اور انجنوں کو اپنے نام اور الفاظ سکھاتا ہے۔ پینل میں نیا پروجیکٹ سے شروع کریں۔"
+    "A project groups its recordings, files and notes, and teaches the engines its names and words. Start one with New project in the panel.": "پروجیکٹ اپنی ریکارڈنگز، فائلیں اور نوٹس ایک جگہ رکھتا ہے، اور انجنوں کو اپنے نام اور الفاظ سکھاتا ہے۔ پینل میں نیا پروجیکٹ سے شروع کریں۔",
+    "Resets :date": ":date کو دوبارہ شروع ہوگا",
+    ":used of :limit min": ":limit میں سے :used منٹ",
+    "Your Groq key": "آپ کی Groq کلید",
+    "Key added": "کلید شامل ہے",
+    "Not added.": "شامل نہیں کی گئی۔",
+    "Add key": "کلید شامل کریں"
 }

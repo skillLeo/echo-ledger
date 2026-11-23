@@ -259,18 +259,16 @@ async function navChecks(page, width) {
     const memory = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('el-nav')));
     if (memory.includes('el-nav-last:library') || memory.includes('el-nav:000000000000.00000000:last:library')) wrong.push(`someone else's memory stayed: ${memory.join(', ')}`);
     if (!memory.some((k) => /^el-nav:[0-9a-f]{12}\.[0-9a-f]{8}:last:library$/.test(k))) wrong.push(`no memory of this place for this person: ${memory.join(', ')}`);
-    // Alt+1…9 and ⌘1…⌘6 in a field type there: nothing opens. (What they typed is cleared as typing would clear it, so
-    // the Library's search settles before the next step.)
-    const search = page.locator('.v2-library .fi-ta-search-field input').first();
-    await search.focus();
+    // Alt+1…9 and ⌘1…⌘6 in a field type there: nothing opens, and the field keeps the focus and what was typed. (A field
+    // of its own, put on the page for the check: the Library's search would search for what the keys typed.)
+    await page.evaluate(() => { const f = Object.assign(document.createElement('input'), { id: 'el-nav-field', value: 'typed' }); Object.assign(f.style, { position: 'fixed', top: '8px', left: '50%', zIndex: '1' }); document.body.appendChild(f); f.focus(); });
     await page.keyboard.press('Alt+Digit1');
     await page.keyboard.press(mod + '+Digit2');
     await page.waitForTimeout(600);
-    if (!at().startsWith('/app/sessions')) wrong.push(`Alt+1 or ${mod}+2 in the search went to ${at()}`);
-    await search.fill('');
-    await settle();
-    await page.evaluate(() => document.activeElement?.blur());
-    await page.waitForFunction(() => location.search === '', null, { timeout: 5000 }).catch(() => {});
+    const field = await page.evaluate(() => ({ focus: document.activeElement?.id, value: document.getElementById('el-nav-field')?.value }));
+    if (at() !== '/app/sessions') wrong.push(`Alt+1 or ${mod}+2 in a field went to ${at()}`);
+    if (field.focus !== 'el-nav-field' || !String(field.value).startsWith('typed')) wrong.push(`Alt+1 or ${mod}+2 in a field took the focus or the words: ${JSON.stringify(field)}`);
+    await page.evaluate(() => document.getElementById('el-nav-field')?.remove());
     // Each step waits (up to 5 s, on a busy machine) for the address it should reach, then says where it is.
     const reach = (ok) => page.waitForFunction(ok, null, { timeout: 5000 }).catch(() => {});
     const filtered = () => decodeURIComponent(location.search).includes('f[source]');
@@ -318,6 +316,27 @@ async function navChecks(page, width) {
             const closed = await state('projects');
             if (await flyout()) wrong.push(`the flyout stayed open after ${close}`);
             if (closed.expanded !== 'false' || closed.focus !== 'projects') wrong.push(`after ${close}: aria-expanded ${closed.expanded}, focus on ${closed.focus}`);
+        }
+        // A click outside on something that takes focus itself keeps it there: audio controls, an element a script
+        // made focusable (tabindex -1). Both are put on an empty spot of the page for the check, then removed.
+        for (const probe of ['audio', 'focusable']) {
+            await page.click('[data-rail="projects"]');
+            await page.waitForTimeout(300);
+            const box = await page.evaluate((kind) => {
+                const el = kind === 'audio' ? Object.assign(document.createElement('audio'), { controls: true }) : Object.assign(document.createElement('div'), { tabIndex: -1, textContent: 'probe' });
+                el.id = 'el-nav-probe';
+                const rtl = document.documentElement.dir === 'rtl';
+                Object.assign(el.style, { position: 'fixed', bottom: '8px', [rtl ? 'left' : 'right']: '8px', width: '240px', height: '40px', zIndex: '1' });
+                document.body.appendChild(el);
+                const r = el.getBoundingClientRect();
+                return { x: r.left + 20, y: r.top + r.height / 2 };
+            }, probe);
+            await page.mouse.click(box.x, box.y);
+            await page.waitForTimeout(300);
+            const after = await page.evaluate(() => ({ focus: document.activeElement?.id || document.activeElement?.tagName, open: document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout') }));
+            if (after.open) wrong.push(`the flyout stayed open after a click on the ${probe} probe`);
+            if (after.focus !== 'el-nav-probe') wrong.push(`a click on the ${probe} probe left focus on ${after.focus}`);
+            await page.evaluate(() => document.getElementById('el-nav-probe')?.remove());
         }
         await forget();
         return wrong;
