@@ -73,7 +73,8 @@ pub fn mac_app_problem(answers_quits: bool, main: &crate::mac_check::WindowFacts
 
 /// What is wrong with the windows' capture flags as Windows reads them back (pure): each against the capture policy
 /// under the default setting. `reads`: the window and what `GetWindowDisplayAffinity` says. `supported`: this machine can
-/// keep the flag ([`crate::privacy::win::flags_supported`]); where it cannot (before build 19041, or session 0) the windows
+/// keep the flag ([`crate::privacy::win::flags_supported`]); where it cannot (before build 19041, session 0, or a desktop
+/// the window manager does not compose) the windows
 /// the policy hides are not checked, and the ones it shows still are. Anywhere else a flag that did not hold fails.
 pub fn windows_capture_problem(reads: &[(&str, Option<crate::privacy::share::Read>)], supported: bool) -> Option<String> {
     let defaults = crate::privacy::Choice::of(&crate::settings::Settings::default(), false, 0, (false, false));
@@ -364,10 +365,10 @@ pub fn drive(app: tauri::AppHandle) {
             labels.extend(overlay::WINDOWS);
             use crate::privacy::win::Affinity;
             let reads: Vec<(&str, Option<crate::privacy::share::Read>)> = labels.iter().map(|label| (*label, crate::privacy::read_flag(&app, label))).collect();
-            let (build, session) = (crate::privacy::win::System.build(), crate::privacy::win::session_id());
-            let supported = crate::privacy::win::flags_supported(build, session);
+            let (build, session, composed) = (crate::privacy::win::System.build(), crate::privacy::win::session_id(), crate::privacy::win::composition_enabled());
+            let supported = crate::privacy::win::flags_supported(build, session, composed);
             if !supported {
-                say(&format!("  this machine cannot keep a capture flag (build {build:?}, session {session:?}): the hidden windows are not checked here"));
+                say(&format!("  this machine cannot keep a capture flag (build {build:?}, session {session:?}, composed {composed:?}): the hidden windows are not checked here"));
             }
             if let Some(problem) = windows_capture_problem(&reads, supported) {
                 say(&format!("failed: {problem}"));

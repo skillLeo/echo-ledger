@@ -203,6 +203,77 @@ describe("the page promises no more than the last check saw", () => {
   });
 });
 
+describe("Check screen-share privacy v2", () => {
+  const check = () => render(<div className="el-root"><ShareCheckPageV2 /></div>);
+
+  it("what you see next to what others see, and the plain line, after a pass; one main button", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", system: "macOS 27.3" }));
+    respond("share_check_run", view());
+    respond("share_check_card", null);
+    check();
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    await act(flushAsync);
+    expect(screen.getByRole("status")).toHaveTextContent("Hidden in this check. Each meeting app captures differently on a Mac: test yours below. Checked on macOS 27.3, today.");
+    expect(screen.getByText("What you see")).toBeInTheDocument();
+    expect(screen.getByAltText("Your screen as a screen share captured it")).toHaveAttribute("src", PICTURE);
+    expect(callsOf("share_check_run")).toEqual([{ why: "asked" }]);
+    expect(document.querySelectorAll(".el-button--primary")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
+  });
+
+  it("a missing permission before any run and after one, with Open System Settings; a failed capture with Try again", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: false }));
+    respond("open_privacy_settings", null);
+    check();
+    await act(flushAsync);
+    fireEvent.click(within(screen.getByTestId("permission-first")).getByRole("button", { name: OPEN_SYSTEM_SETTINGS }));
+    expect(callsOf("open_privacy_settings")).toEqual([{ kind: "screen" }]);
+    cleanup();
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: true }));
+    respond("share_check_run", view({ result: "error", reason: "capture_failed", picture: null, testArea: null, controlArea: null }));
+    check();
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByText("What others see")).toBeNull();
+  });
+
+  it("keeps Check now off while an automatic run is on", async () => {
+    respond("privacy_status", makePrivacyStatus({ checkRunning: true }));
+    check();
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+  });
+
+  it("asks per meeting app on a Mac and keeps the answer; Cancel leaves no answer", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", apps: [
+      { app: "zoom", name: "Zoom", version: "7.1.9", state: "not_checked", line: "Zoom: not checked", needsTest: true },
+      { app: "meet", name: "Meet", version: "142.0", state: "share_tab", line: "Meet: share a tab", needsTest: true },
+    ] }));
+    respond("share_check_card", null);
+    respond("share_check_answer", makePrivacyStatus({ platform: "macos" }));
+    check();
+    await act(flushAsync);
+    expect(screen.getByText("Chrome 142.0")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Test Zoom" }));
+    await act(flushAsync);
+    const question = screen.getByText(/A test card is on your screen now/);
+    await waitFor(() => expect(question).toHaveFocus());
+    expect(screen.getByText(GUIDED_ALONE)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(callsOf("share_check_answer")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Test Zoom" }));
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "I can't see it" }));
+    await act(flushAsync);
+    expect(callsOf("share_check_answer")).toEqual([{ meetingApp: "zoom", visible: false }]);
+    expect(callsOf("share_check_card")).toEqual([{ open: true }, { open: false }, { open: true }]);
+  });
+});
+
+/** Parity: every control today's pages show, in each state, is on the v2 pages. */
 describe("parity with today's Screen-share privacy pages", () => {
   const settings = makeSettings();
   const patch = async () => true;

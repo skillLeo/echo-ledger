@@ -78,8 +78,9 @@ Live Translate) off the screen until it ends; the shown windows stay.
   - macOS: each window's `NSWindow.sharingType` and the window server's `kCGWindowSharingState`
     (`CGWindowListCopyWindowInfo`), the main window included, against the table; it fails with exit 7;
   - Windows: each window's `GetWindowDisplayAffinity` against the table; it fails with exit 10. A window the table hides
-    is left out of the check only where Windows cannot keep the flag (before build 19041, or session 0 with no
-    interactive desktop), and the run says so; anywhere else a flag that did not hold fails.
+    is left out of the check only where Windows cannot keep the flag (before build 19041, session 0 with no interactive
+    desktop, or a desktop DWM does not compose: `DwmIsCompositionEnabled`), and the run says so; anywhere else a flag
+    that did not hold fails.
 - **Outside the privacy service** only `privacy::apply_policy(app, label)` sets a flag (screen moments' shield of the
   main window); it derives the affinity from the table itself.
 
