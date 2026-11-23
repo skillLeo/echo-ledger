@@ -70,9 +70,10 @@ type Action = "pause" | "stop" | "cancel" | "choice" | "captions" | "hide" | "ma
 export default function PillApp() {
   const [rec, setRec] = useState<RecordingState | null>(null);
   // The interface flags are read again at each recording's start, before the pill shows, and never in the middle of one
-  // (v2/flags.ts): a flag turned on or off, or "Switch back to classic", reaches the next recording.
+  // (v2/flags.ts): a flag turned on or off, or "Switch back to classic", reaches the next recording. `ui:flags` is
+  // left alone, even the core's first answer, so the pill never changes its look during a recording.
   const runKey = `run-${useRisingCount(!!rec?.active)}`;
-  const [ui, , flagsFor] = useUiFlags(true, runKey, false);
+  const [ui, , flagsFor] = useUiFlags(true, runKey, false, { atOnce: false });
   const [visible, setVisible] = useState(false);
   const [anchor, setAnchor] = useState<TimerAnchor | null>(null);
   const [now, setNow] = useState(() => Date.now());
