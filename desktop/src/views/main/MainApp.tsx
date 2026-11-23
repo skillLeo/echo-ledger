@@ -131,6 +131,8 @@ export default function MainApp() {
   const [tab, setTab] = useState<Tab>("library");
   // Interface flags: read at start and on each page change, never while recording (v2/flags.ts).
   const [ui, setUi, flagsReadFor] = useUiFlags(!!status?.paired, tab, !!status?.recording);
+  const threeLevels = useRef(false);
+  threeLevels.current = ui.flags["ui_v2.library"];
   // The sidebar (v1.6, P4.1): 200–320 px wide or a 64 px icon rail, kept on this computer like the theme.
   const [chosenCollapsed, setCollapsed] = useState(loadCollapsed);
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
@@ -210,6 +212,15 @@ export default function MainApp() {
   // and change here only; they are sent once account_get confirms the same server, email and workspace.
   const liveViews = viewsAccount(status?.serverUrl, account?.email, account?.workspace?.id);
   const signIn = status ? (status.paired ? status.signIn ?? null : null) : undefined;
+  // The places' memory is one sign-in's: another sign-in (or none) starts every place afresh.
+  useEffect(() => {
+    libraryPlace.current = null;
+    lastProject.current = null;
+    lastSettings.current = null;
+    setAskProject((a) => ({ id: null, seq: a.seq + 1 }));
+    setActivityShow("all");
+    setLibraryScope(ALL_SCOPE);
+  }, [signIn]);
   useEffect(() => {
     if (signIn !== undefined) settleViewsAccount(signIn);
   }, [signIn]);
@@ -334,7 +345,8 @@ export default function MainApp() {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat || typingIn(e.target)) return;
       const open = !!document.querySelector(".palette-backdrop, .sheet-backdrop");
       // "[" folds the sidebar to its rail and back; "?" lists every key (v1.6, P4.1).
-      if (e.key === "[" && statusRef.current?.paired && !open) {
+      // Not with the three levels: the panel's ⊟ and ⌘\ hide it there (a single key never folds it).
+      if (e.key === "[" && statusRef.current?.paired && !open && !threeLevels.current) {
         e.preventDefault();
         toggleSidebar();
         return;
@@ -999,7 +1011,7 @@ export default function MainApp() {
             <Suspense fallback={null}>
               <div className="el-root el-embedded">
                 <ProjectsListV2 projects={ctx.projects} error={ctx.error} onRetry={ctx.onReload} items={ctx.items} expanded={ctx.expanded} onToggle={ctx.onToggle}
-                  onOpen={ctx.onOpenProject} onNew={ctx.onNew} onRequest={ctx.onRequest} />
+                  onOpen={ctx.onOpenProject} onNew={ctx.onNew} onRequest={ctx.onRequest} overview={ui.flags["ui_v2.library"]} />
               </div>
             </Suspense>
           ) : null}

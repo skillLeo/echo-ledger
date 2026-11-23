@@ -216,6 +216,30 @@ describe("Find in the Library", () => {
       ["Remove Source: WhatsApp, Zoom", "Remove Project: No project"]);
   });
 
+  it("the page's tabs (All · Calls · Meetings · Voice notes) by Source; the panel's counts are counted inside the tab, so they match the list", async () => {
+    await show();
+    const tabs = () => within(screen.getByRole("tablist", { name: "Kinds of recording" }));
+    expect(tabs().getAllByRole("tab").map((t) => t.textContent)).toEqual(["All4", "Calls2", "Meetings1", "Voice notes1"]);
+    fireEvent.click(tabs().getByRole("tab", { name: /^Calls/ }));
+    expect(rows()).toEqual(["c", "a"]);
+    fireEvent.click(filtersButton());
+    // Only the calls are counted: Zoom (a meeting) and the voice note are 0 here.
+    expect(options("Source")).toEqual(["WhatsApp2", "Voice notes0", "Zoom0"]);
+    expect(options("Device")).toEqual(["Phone2", "Desktop0"]);
+    // An option's count is what the list shows with it.
+    expect(options("Status")).toEqual(["Transcribed1", "Not transcribed1", "Processing0", "Failed0"]);
+    fireEvent.click(option("Status", /^Not transcribed/));
+    await followed();
+    expect(rows()).toEqual(["c"]);
+    expect(tabs().getByRole("tab", { name: /^Calls/ })).toHaveTextContent("Calls1");
+    // Back to All: counted among everything again.
+    fireEvent.click(tabs().getByRole("tab", { name: /^All/ }));
+    expect(options("Source")).toEqual(["WhatsApp1", "Voice notes0", "Zoom0"]);
+    fireEvent.click(section("Status").getByRole("button", { name: "Clear Status" }));
+    await followed();
+    expect(options("Source")).toEqual(["WhatsApp2", "Voice notes1", "Zoom1"]);
+  });
+
   it("an option at 0 is dimmed but can be ticked; each section's Clear; nothing matching says so with Clear filters", async () => {
     await show();
     fireEvent.click(filtersButton());

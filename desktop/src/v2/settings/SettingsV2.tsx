@@ -12,6 +12,7 @@ import { getThemeChoice } from "../../lib/theme";
 import { useEntitlements } from "../../lib/entitlements";
 import { Button, Card, Chip, EmptyState, Icon, Icons, List, ListRow, ListSection, SearchField, Toggle, type IconType } from "../components";
 import { AccountCard } from "./AccountCard";
+import { SHOW_PANEL_EVENT } from "../shell/NavRail";
 
 /**
  * The goal groups of IA 5 and the root entries each holds (one home per feature), each with its icon and a one-line
@@ -91,7 +92,8 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
   if (opened && inPanel) {
     // The group's sections beside the page (Level 3: an inner list, as a site's settings have).
     const group = groupOf(opened.id);
-    const ids = (group?.ids ?? []).filter((id) => id === "setup_health" ? setupHealth : !!SETTINGS.find((e) => e.id === id && available(e)));
+    // Setup & health is the rail's own (one home): never in the inner list.
+    const ids = (group?.ids ?? []).filter((id) => id !== "setup_health" && !!SETTINGS.find((e) => e.id === id && available(e)));
     const here = opened.id.split("#")[0];
     return (
       <div className="el-settings-split">
@@ -122,7 +124,10 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
       <div className="el-page el-page--narrow" data-v2="settings">
         <header className="el-page__head"><h1 className="el-title-l">Settings</h1></header>
         <AccountCard />
-        <p className="el-secondary">Choose a group in the panel, or search there for any setting.</p>
+        <div className="el-settings-home__groups">
+          <p className="el-secondary">Choose a group in the panel, or search there for any setting.</p>
+          <Button onClick={() => window.dispatchEvent(new Event(SHOW_PANEL_EVENT))}>Show groups</Button>
+        </div>
         {onSignOut && (
           <Card>
             <List label="Sign out" className="el-group__rows">

@@ -22,6 +22,11 @@ export type ProjectsListV2Props = {
   onNew: () => void;
   /** Request files (when the server has request links). */
   onRequest?: (() => void) | null;
+  /**
+   * The three levels (PLAN_NAV_3_LEVELS): the Projects panel has the tree, New project and Request files, so this page
+   * is an overview of the top-level projects as cards (recordings, last call, folders, pinned) and repeats neither.
+   */
+  overview?: boolean;
 };
 
 /** "3 recordings · last call Today 09:12 · 2 folders" (classic's line under a project). */
@@ -31,7 +36,7 @@ export function projectLine(project: ClientFolder, projects: readonly ClientFold
   return `${clientSummary(count, last)}${folders > 0 ? ` · ${folders} folder${folders === 1 ? "" : "s"}` : ""}`;
 }
 
-export function ProjectsListV2({ projects, error, onRetry, items, expanded, onToggle, onOpen, onNew, onRequest }: ProjectsListV2Props) {
+export function ProjectsListV2({ projects, error, onRetry, items, expanded, onToggle, onOpen, onNew, onRequest, overview = false }: ProjectsListV2Props) {
   const rows = useMemo(() => (projects ? visibleRows(projectTree(projects), expanded) : []), [projects, expanded]);
   const names = useMemo(() => new Map((projects ?? []).map((p) => [p.id, p.name])), [projects]);
   return (
@@ -41,10 +46,12 @@ export function ProjectsListV2({ projects, error, onRetry, items, expanded, onTo
           <h1 className="el-title-l">Projects</h1>
           <p className="el-secondary">Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in All recordings, under Project › No project.</p>
         </div>
-        <div className="el-page__actions">
-          {onRequest && <Button icon={Icons.RequestFilesIcon} title="A link anyone can use to send you voice notes and files" onClick={onRequest}>Request files</Button>}
-          <Button variant="primary" icon={Icons.PlusIcon} onClick={onNew}>New project</Button>
-        </div>
+        {!overview && (
+          <div className="el-page__actions">
+            {onRequest && <Button icon={Icons.RequestFilesIcon} title="A link anyone can use to send you voice notes and files" onClick={onRequest}>Request files</Button>}
+            <Button variant="primary" icon={Icons.PlusIcon} onClick={onNew}>New project</Button>
+          </div>
+        )}
       </header>
       {error && (
         <Banner tone="danger" icon={Icons.ErrorIcon} testId="projects-error" action={<Button size="sm" onClick={onRetry}>Retry</Button>}>
@@ -54,8 +61,25 @@ export function ProjectsListV2({ projects, error, onRetry, items, expanded, onTo
       {projects === null && !error ? (
         <Loading label="Loading projects">{[0, 1, 2].map((n) => <SkeletonRow key={n} />)}</Loading>
       ) : projects && projects.length === 0 ? (
-        <EmptyState icon={Icons.FolderIcon} title="No projects yet" body="A project keeps its calls, files, a brief and notes together, and Ask answers from all of them."
-          action={<Button variant="primary" icon={Icons.PlusIcon} onClick={onNew}>New project</Button>} />
+        <EmptyState icon={Icons.FolderIcon} title="No projects yet"
+          body={overview ? "A project keeps its calls, files, a brief and notes together, and Ask answers from all of them. Make one with New project in the panel."
+            : "A project keeps its calls, files, a brief and notes together, and Ask answers from all of them."}
+          action={overview ? undefined : <Button variant="primary" icon={Icons.PlusIcon} onClick={onNew}>New project</Button>} />
+      ) : projects && projects.length > 0 && overview ? (
+        <ul className="el-project-cards" aria-label="Projects">
+          {projectTree(projects).map(({ project, children }) => (
+            <li key={project.id}>
+              <button type="button" className="el-project-card" onClick={() => onOpen(project.id)}>
+                <span className="el-project-card__head">
+                  <Avatar initials={initials(project.name, "")} size="sm" />
+                  <span className="el-body-strong el-project-card__name" dir="auto">{project.name}</span>
+                  {project.pinned && <span className="el-project-card__pin" title="Pinned"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">, pinned</span></span>}
+                </span>
+                <span className="el-caption el-secondary">{projectLine(project, projects, items, children.length)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : projects && projects.length > 0 ? (
         <List label="Projects" className="el-projects">
           {rows.map(({ project, depth, children }) => {

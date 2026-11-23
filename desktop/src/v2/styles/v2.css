@@ -1993,3 +1993,15 @@ button.el-row__label:hover { color: var(--el-role-text-primary); }
 }
 .el-shell--short-rail .el-rail__item { padding: var(--el-space-8) 0; }
 .el-shell--short-rail .el-rail__record { margin-block: var(--el-space-2) var(--el-space-4); }
+/* All projects with the three levels: the top-level projects as cards (the tree is the panel's). */
+.el-project-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--el-space-64) * 4), 1fr)); gap: var(--el-space-12); }
+.el-project-card {
+  display: flex; flex-direction: column; gap: var(--el-space-8); inline-size: 100%; padding: var(--el-space-16); text-align: start; font: inherit; cursor: pointer;
+  background: var(--el-role-bg-surface); border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-md); color: inherit;
+}
+.el-project-card:hover { border-color: var(--el-role-border-strong); }
+.el-project-card__head { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; }
+.el-project-card__name { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-project-card__pin { display: inline-flex; color: var(--el-role-text-secondary); }
+.el-shell--nav > .el-shell__main:focus { outline: none; }
+.el-settings-home__groups { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-12); flex-wrap: wrap; }

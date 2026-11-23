@@ -106,7 +106,7 @@ describe("the three levels", () => {
     field.remove();
   });
 
-  it("under 1100 px the panel is a flyout from the rail that closes once something is chosen, or on Esc", () => {
+  it("under 1100 px the panel is a flyout from the rail that closes once something is chosen, or on Esc", async () => {
     // The width is the token's: tokens.css --el-breakpoint-flyout.
     const tokens = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "tokens.css"), "utf8");
     expect(tokens).toContain(`--el-breakpoint-flyout: ${FLYOUT_BELOW}px;`);
@@ -114,25 +114,56 @@ describe("the three levels", () => {
     const onPlace = vi.fn();
     render(<App onPlace={onPlace} />);
     expect(panel()).toBeNull();
-    // The selected place's icon opens it (nothing starts over).
-    fireEvent.click(rail().getByRole("button", { name: "Library, 4" }));
+    const library = rail().getByRole("button", { name: "Library, 4" });
+    expect(library).toHaveAttribute("aria-expanded", "false");
+    // The selected place's icon starts it over (the way back) and opens its flyout.
+    fireEvent.click(library);
+    expect(onPlace).toHaveBeenLastCalledWith("library", true);
     expect(panel()).toHaveClass("el-panel--flyout");
-    expect(onPlace).not.toHaveBeenCalled();
+    expect(library).toHaveAttribute("aria-expanded", "true");
+    // Pressed again while open: it starts over again and stays open.
+    fireEvent.click(library);
+    expect(onPlace).toHaveBeenCalledTimes(2);
+    expect(panel()).not.toBeNull();
     // A fold stays open; a view chosen closes it.
     fireEvent.click(within(panel()!).getByRole("button", { name: "A group" }));
     expect(panel()).not.toBeNull();
     fireEvent.click(within(panel()!).getByRole("button", { name: "First Library view" }));
-    act(() => undefined);
-    return new Promise<void>((done) => setTimeout(() => {
-      expect(panel()).toBeNull();
-      // Another place: it goes there and its flyout opens.
-      fireEvent.click(rail().getByRole("button", { name: "Projects" }));
-      expect(onPlace).toHaveBeenLastCalledWith("projects", false);
-      expect(panel()).toHaveClass("el-panel--flyout");
-      fireEvent.keyDown(document.body, { key: "Escape" });
-      expect(panel()).toBeNull();
-      done();
-    }, 10));
+    await act(() => new Promise((r) => setTimeout(r, 10)));
+    expect(panel()).toBeNull();
+    // Another place: it goes there and its flyout opens.
+    fireEvent.click(rail().getByRole("button", { name: "Projects" }));
+    expect(onPlace).toHaveBeenLastCalledWith("projects", false);
+    expect(panel()).toHaveClass("el-panel--flyout");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(panel()).toBeNull();
+  });
+
+  it("the flyout's focus: back to its rail item on Esc, a press outside or ⊟; to the page after a choice", async () => {
+    setWidth(1024);
+    render(<App />);
+    const library = () => rail().getByRole("button", { name: "Library, 4" });
+    const open = () => {
+      library().focus();
+      fireEvent.click(library());
+      expect(panel()).not.toBeNull();
+      // Focus moves into it.
+      expect(panel()!.contains(document.activeElement)).toBe(true);
+    };
+    open();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(library()).toHaveFocus();
+    open();
+    fireEvent.pointerDown(screen.getByText("The page"));
+    expect(panel()).toBeNull();
+    expect(library()).toHaveFocus();
+    open();
+    fireEvent.click(within(panel()!).getByRole("button", { name: "Close panel" }));
+    expect(library()).toHaveFocus();
+    open();
+    fireEvent.click(within(panel()!).getByRole("button", { name: "First Library view" }));
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(document.activeElement).toBe(screen.getByRole("main"));
   });
 
   it("in a short window the rail keeps its icons only, every place and its foot still named (the old sidebar's short foot)", () => {

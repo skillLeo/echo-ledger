@@ -85,7 +85,8 @@ export function SettingsPanel({ current, onOpen, available }: { current: string 
   const [find, setFind] = useState("");
   const answer = find.trim().length >= 2 ? searchSettings(find, available) : null;
   const here = current ? groupOf(current) : null;
-  const groups = GOAL_GROUPS.filter((g) => g.ids.some((id) => id === "setup_health" || SETTINGS.some((e) => e.id === id && available(e))));
+  // Setup & health is the rail's own (one home), so not a group here.
+  const groups = GOAL_GROUPS.filter((g) => g.ids.some((id) => id !== "setup_health" && SETTINGS.some((e) => e.id === id && available(e))));
   return (
     <>
       <SearchField label="Search settings" value={find} onChange={setFind} className="el-panel__search" />

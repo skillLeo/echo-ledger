@@ -7,7 +7,7 @@ import { Avatar, Icon, Icons, Status } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
 import { BrandMark } from "../../components/BrandMark";
 import { initials } from "../settings/initials";
-import { PLACE_NAMES, PlacePanel, RAIL_PLACES, RailItem, railItemProps, type Place } from "./NavRail";
+import { PLACE_NAMES, PlacePanel, RAIL_PLACES, RailItem, railItemProps, SHOW_PANEL_EVENT, type FlyoutClose, type Place } from "./NavRail";
 import type { ShellStatus } from "./status";
 
 /** Below this window width the panel is a flyout from the rail: tokens.css `--el-breakpoint-flyout` (a test keeps them one). */
@@ -115,10 +115,23 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     setLastPlace(place);
     if (flyout && !narrow) setFlyout(false);
   }
+  // The flyout's opener (its rail item), to take focus back when it closes without a choice.
+  const opener = useRef<HTMLElement | null>(null);
+  const main = useRef<HTMLElement>(null);
+  const closeFlyout = useCallback((why: FlyoutClose) => {
+    setFlyout(false);
+    if (why === "chose") window.setTimeout(() => main.current?.focus(), 0);
+    else opener.current?.focus();
+  }, []);
+  // A place pressed (or its ⌘ key): there, as it was left, or started over when it was the place shown already; in a
+  // narrow window its flyout opens too (and stays open when it was).
   const press = (p: Place) => {
     const again = p === place;
-    if (narrow) setFlyout(again ? !flyout : !!panels[p]);
-    if (!again || !narrow) onPlace(p, again);
+    if (narrow) {
+      opener.current = document.querySelector<HTMLElement>(`.el-rail [data-place="${p}"]`);
+      setFlyout(!!panels[p]);
+    }
+    onPlace(p, again);
   };
   // ⌘1…⌘6 (Ctrl elsewhere): the places; ⌘\ the panel. Never while typing or behind a dialog.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
@@ -139,6 +152,22 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     const on = (e: KeyboardEvent) => keys.current(e);
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
+  }, []);
+  // A page asks for its panel (Settings' home: Show groups).
+  const showPanel = useRef<() => void>(() => undefined);
+  showPanel.current = () => {
+    if (!place || !panels[place]) return;
+    if (narrow) {
+      opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setFlyout(true);
+      return;
+    }
+    if (hidden.has(place)) togglePanel();
+  };
+  useEffect(() => {
+    const on = () => showPanel.current();
+    window.addEventListener(SHOW_PANEL_EVENT, on);
+    return () => window.removeEventListener(SHOW_PANEL_EVENT, on);
   }, []);
   // One press records or stops; while the core answers, more presses do nothing.
   const [pressing, setPressing] = useState<{ from: boolean } | null>(null);
@@ -168,7 +197,8 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
     library: Icons.LibraryIcon, projects: Icons.FolderIcon, live: Icons.WaveIcon, ask: Icons.AskIcon, activity: Icons.BellIcon, settings: Icons.SettingsIcon,
   };
   const railPlace = (p: Place) => (
-    <RailItem key={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} onClick={() => press(p)}
+    <RailItem key={p} place={p} icon={icons[p]} {...railItemProps(p)} current={place === p} count={counts[p]} onClick={() => press(p)}
+      expanded={narrow && panels[p] ? flyout && place === p : undefined}
       dot={p === "live" ? liveDot : undefined} dotLabel={p === "live" ? liveDotWords : undefined} />
   );
   return (
@@ -199,7 +229,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
         </div>
       </nav>
       {shown && (
-        <PlacePanel place={place!} onHide={togglePanel} flyout={narrow} onClose={() => setFlyout(false)}
+        <PlacePanel place={place!} onHide={togglePanel} flyout={narrow} onClose={closeFlyout}
           foot={<>
             {feet?.[place!]}
             {uploading && <p className="el-shell__uploads el-caption el-secondary" aria-live="polite" data-testid="sidebar-uploads"><span className="el-spinner" aria-hidden="true" /><span dir="auto">{uploading}</span></p>}
@@ -217,7 +247,7 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
         <button type="button" className="el-panel-show" aria-label={`Show the ${PLACE_NAMES[place!]} panel`} title={`Show panel (${mac ? "⌘" : "Ctrl+"}\\)`}
           aria-keyshortcuts="Meta+\ Control+\" onClick={togglePanel}><Icon icon={Icons.SidebarIcon} /></button>
       )}
-      <main className="el-shell__main">
+      <main className="el-shell__main" ref={main} tabIndex={-1}>
         {notices}
         {banners}
         {children}

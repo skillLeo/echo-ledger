@@ -304,7 +304,7 @@ export function Shell(props: ShellProps) {
 }
 
 /** The three levels: Live and Ask are the shell's own pages, as in the sidebar; the rest are MainApp's tabs. */
-function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onSearch,
+function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity, recording, onRecord, onSetup, onVoiceNote, onUpload, onNewProject, onRequestLink, onSearch,
   searchKeys, onHelp, projectTree, projectId = null, onProject, uploading, library, footStart, nav, children }: ShellProps) {
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   const [lastTab, setLastTab] = useState(tab);
@@ -334,7 +334,7 @@ function ShellNav({ tab, onGo, status, me, live, ask, notices, banners, activity
   );
   const projectsPanel = onProject && (
     <ProjectsPanel projects={projectTree ?? []} current={tab === "projects" ? projectId : null} allCurrent={tab === "projects" && !projectId}
-      onAll={() => { setOwn(null); onGo("projects"); }} onOpen={(id) => { setOwn(null); onProject(id); }} onNew={onNewProject}
+      onAll={() => { setOwn(null); onGo("projects"); }} onOpen={(id) => { setOwn(null); onProject(id); }} onNew={onNewProject} onRequest={onRequestLink}
       tree={(list, current, open) => <ProjectTreeNav projects={list} current={current} onOpen={open} />} />
   );
   return (

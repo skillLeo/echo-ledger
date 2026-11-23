@@ -9,6 +9,9 @@ import { Menu, type MenuItem } from "../components/Menu";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 import { recentProjects } from "./recentProjects";
 
+/** Sent by a page to show its place's panel (Settings' home: Show groups): the panel, or in a narrow window its flyout. */
+export const SHOW_PANEL_EVENT = "echoledger:show-panel";
+
 /** The rail's places, in their order (⌘1…⌘6); Home is the logo's, Record the round button's. */
 export type Place = "library" | "projects" | "live" | "ask" | "activity" | "settings";
 export const RAIL_PLACES: readonly Place[] = ["library", "projects", "live", "ask", "activity", "settings"];
@@ -22,15 +25,18 @@ export const placeKey = (place: Place) => `${MAC ? "⌘" : "Ctrl+"}${RAIL_PLACES
 const placeShortcut = (place: Place) => `Meta+${RAIL_PLACES.indexOf(place) + 1} Control+${RAIL_PLACES.indexOf(place) + 1}`;
 
 /** One place in the rail: its icon, its short name under it, a count (Library's Needs you, Activity's) or a dot. */
-export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, shortcut, keys }: {
-  icon: IconType; label: string; current: boolean; onClick: () => void; count?: number; dot?: boolean; dotLabel?: string;
+export function RailItem({ icon, label, current, onClick, count, dot, dotLabel, shortcut, keys, expanded, place }: {
+  icon: IconType; label: string; current: boolean; onClick: (e: React.MouseEvent<HTMLButtonElement>) => void; count?: number; dot?: boolean; dotLabel?: string;
+  /** Its flyout is open (a narrow window); left out where there is none. */
+  expanded?: boolean;
+  place?: Place;
   /** For the tooltip and assistive tools: "⌘1" and "Meta+1 Control+1". */
   shortcut?: string; keys?: string;
 }) {
   const name = count ? `${label}, ${count}` : dot && dotLabel ? `${label}, ${dotLabel}` : label;
   return (
-    <button type="button" className="el-rail__item" aria-current={current ? "page" : undefined} aria-label={name}
-      title={shortcut ? `${label} (${shortcut})` : label} aria-keyshortcuts={keys} onClick={onClick}>
+    <button type="button" className="el-rail__item" aria-current={current ? "page" : undefined} aria-label={name} aria-expanded={expanded}
+      data-place={place} title={shortcut ? `${label} (${shortcut})` : label} aria-keyshortcuts={keys} onClick={onClick}>
       <span className="el-rail__icon">
         <Icon icon={icon} size="md" />
         {count ? <span className="el-rail__count el-num" aria-hidden="true">{count > 99 ? "99+" : count}</span>
@@ -49,17 +55,20 @@ export function railItemProps(place: Place) {
  * A place's panel: its name, its ⋯ menu and ⊟ (hide; ⌘\ too), what it lists, and its foot. As a flyout (a narrow
  * window) it floats over the page and closes once something in it is chosen, on Esc, or on a press outside.
  */
+/** Why a flyout closed: something chosen in it (focus goes to the page), else Esc, a press outside or ⊟ (back to its opener). */
+export type FlyoutClose = "chose" | "esc" | "outside" | "hide";
+
 export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foot }: {
-  place: Place; menu?: MenuItem[]; onHide: () => void; flyout: boolean; onClose: () => void; children: ReactNode; foot?: ReactNode;
+  place: Place; menu?: MenuItem[]; onHide: () => void; flyout: boolean; onClose: (why: FlyoutClose) => void; children: ReactNode; foot?: ReactNode;
 }) {
   const box = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!flyout) return;
     const away = (e: PointerEvent) => {
-      if (!box.current?.contains(e.target as Node) && !(e.target as HTMLElement).closest?.(".el-rail")) onClose();
+      if (!box.current?.contains(e.target as Node) && !(e.target as HTMLElement).closest?.(".el-rail")) onClose("outside");
     };
     const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) onClose();
+      if (e.key === "Escape" && !e.defaultPrevented) onClose("esc");
     };
     document.addEventListener("pointerdown", away);
     document.addEventListener("keydown", esc);
@@ -74,7 +83,7 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
     if (!flyout) return;
     const button = (e.target as HTMLElement).closest("button");
     if (!button || button.hasAttribute("aria-expanded") || button.hasAttribute("aria-haspopup") || button.closest(".el-panel__head")) return;
-    window.setTimeout(onClose, 0);
+    window.setTimeout(() => onClose("chose"), 0);
   };
   return (
     <aside ref={box} className={`el-panel${flyout ? " el-panel--flyout" : ""}`} aria-label={`${PLACE_NAMES[place]} panel`} onClickCapture={chose}
@@ -83,7 +92,7 @@ export function PlacePanel({ place, menu, onHide, flyout, onClose, children, foo
         <h2 className="el-panel__title">{PLACE_NAMES[place]}</h2>
         {menu && menu.length > 0 && <Menu label={`More for ${PLACE_NAMES[place]}`} items={menu} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />}
         <Button size="sm" variant="quiet" icon={Icons.SidebarIcon} aria-label={flyout ? "Close panel" : "Hide panel"} title={`${flyout ? "Close" : "Hide"} panel (${MAC ? "⌘" : "Ctrl+"}\\)`}
-          aria-keyshortcuts="Meta+\ Control+\" onClick={flyout ? onClose : onHide} />
+          aria-keyshortcuts="Meta+\ Control+\" onClick={flyout ? () => onClose("hide") : onHide} />
       </div>
       <div className="el-panel__body">{children}</div>
       {foot && <div className="el-panel__foot">{foot}</div>}
@@ -100,8 +109,10 @@ export const PROJECT_SEARCH_FROM = 11;
  * The Projects panel: All projects (the page), then which projects the list below shows (every one as a tree,
  * Pinned, or Recent: opened here lately), + New project, and the list, with a search box from 11 projects.
  */
-export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, onNew, tree }: {
+export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, onNew, onRequest, tree }: {
   projects: readonly PanelProject[]; current: string | null; onAll: () => void; allCurrent: boolean; onOpen: (id: string) => void; onNew?: () => void;
+  /** Request files: a link anyone can use to send voice notes and files (into no project). */
+  onRequest?: () => void;
   /** The tree as the sidebar drew it (folds kept), the current project marked. */
   tree: (projects: readonly PanelProject[], current: string | null, onOpen: (id: string) => void) => ReactNode;
 }) {
@@ -137,6 +148,13 @@ export function ProjectsPanel({ projects, current, onAll, allCurrent, onOpen, on
           <li>
             <button type="button" className="el-nav-item el-nav-item--row el-nav-item--add" onClick={onNew}>
               <Icon icon={Icons.PlusIcon} /><span className="el-nav-item__label">New project</span>
+            </button>
+          </li>
+        )}
+        {onRequest && (
+          <li>
+            <button type="button" className="el-nav-item el-nav-item--row" onClick={onRequest} title="A link anyone can use to send you voice notes and files">
+              <Icon icon={Icons.RequestFilesIcon} /><span className="el-nav-item__label">Request files</span>
             </button>
           </li>
         )}

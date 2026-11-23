@@ -581,13 +581,13 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     const words = searchWords(query);
     return prepared.facts.filter((f) => inLibraryView(f, baseView) && (!labelKey || f.values.labels.includes(labelKey)) && matchesSearch(f, words));
   }, [prepared, baseView, labelKey, query, trash]);
-  // Counted among what the view and the search keep; every option of the whole library offered.
-  // Worked out only when asked for (the panel open, or a pill being edited), once per change: typing in the search
-  // never counts every option on every key.
+  // Counted among what the view, the search and the tab keep (all apps: an option's count is what the list would show
+  // with it, so the panel and the list never disagree); every option of the whole library offered. Worked out only
+  // when asked for (the panel open, or a pill being edited), once per change: typing never counts on every key.
   const counts = useMemo(() => {
     let made: ReturnType<typeof facetCounts> | null = null;
-    return () => (made ??= facetCounts(searched, applied, prepared.names, Date.now(), undefined, prepared.facts));
-  }, [searched, applied, prepared]);
+    return () => (made ??= facetCounts(searched.filter((f) => inTab(f, tab)), applied, prepared.names, Date.now(), undefined, prepared.facts));
+  }, [searched, applied, prepared, tab]);
   // Needs you lists the server's waiting recordings too (a call waiting for Keep or Discard: session `recording`,
   // which no other view has), whatever the filters and the search, as the server's Needs you does.
   const waitingHere = useMemo(() => (baseView === "needs" && !trash ? (items ?? []).filter((i) => !i.deleted && i.status === "recording") : []), [items, baseView, trash]);
