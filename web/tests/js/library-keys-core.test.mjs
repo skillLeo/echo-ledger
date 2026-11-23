@@ -136,7 +136,23 @@ test('⌘[ and ⌘] go Back and Forward on a Mac, Ctrl+[ and Ctrl+] elsewhere, n
     assert.equal(core.historyKey(key('[', { metaKey: true, altKey: true, code: 'BracketLeft' }), mac), null);
     assert.equal(core.historyKey(key('{', { metaKey: true, shiftKey: true, code: 'BracketLeft' }), mac), null);
     assert.equal(core.historyKey(key('[', { code: 'BracketLeft' }), mac), null);
-    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', target: { typing: true } }), mac), null);
-    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft' }), { mac: true, modal: true }), null);
     assert.equal(core.historyKey(key('x', { metaKey: true, code: 'KeyX' }), mac), null);
+});
+
+test('⌘[ and ⌘] in a form field or over a dialog keep the page (the browser\'s Back would lose the typing); an editor keeps them', () => {
+    const mac = { mac: true, modal: false };
+    // The Save as view name, a search box, a list: the key is taken from the browser and nothing moves.
+    for (const field of [{ tagName: 'INPUT' }, { tagName: 'TEXTAREA' }, { tagName: 'SELECT' }, { field: true }]) {
+        assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', target: field }), mac), 'stay');
+        assert.equal(core.historyKey(key(']', { metaKey: true, code: 'BracketRight', target: field }), mac), 'stay');
+    }
+    // A dialog is open: the same, wherever the focus is.
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft' }), { mac: true, modal: true }), 'stay');
+    assert.equal(core.historyKey(key('[', { ctrlKey: true, code: 'BracketLeft', target: { tagName: 'INPUT' } }), { mac: false, modal: false }), 'stay');
+    // An editor of rich text keeps ⌘[ / ⌘] for outdent and indent, in a dialog too.
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', target: { editable: true } }), mac), null);
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', target: { isContentEditable: true } }), { mac: true, modal: true }), null);
+    // Other keys in a field stay the field's.
+    assert.equal(core.historyKey(key('a', { metaKey: true, code: 'KeyA', target: { tagName: 'INPUT' } }), mac), null);
+    assert.equal(core.historyKey(key('[', { code: 'BracketLeft', target: { tagName: 'INPUT' } }), mac), null);
 });

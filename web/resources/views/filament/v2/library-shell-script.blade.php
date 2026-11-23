@@ -60,11 +60,14 @@
         document.addEventListener('keydown', (e) => {
             const core = window.ElLibraryKeysCore;
             if (! core || typeof core.historyKey !== 'function') return;
-            const field = (t) => t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]') !== null ? { typing: true } : t;
+            // An editor of rich text keeps ⌘[ / ⌘] (outdent, indent); a form field and a dialog keep the page (and the typing).
+            const where = (t) => ! (t instanceof Element) ? t
+                : (t.closest('[contenteditable]:not([contenteditable="false"])') !== null ? { editable: true } : (t.closest('input, textarea, select') !== null ? { field: true } : t));
             const way = core.historyKey({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey,
-                defaultPrevented: e.defaultPrevented, target: field(e.target) }, { mac, modal: document.querySelector('.fi-modal-open[aria-modal="true"]') !== null });
+                defaultPrevented: e.defaultPrevented, target: where(e.target) }, { mac, modal: document.querySelector('.fi-modal-open[aria-modal="true"]') !== null });
             if (! way) return;
             e.preventDefault();
+            if (way === 'stay') return;
             e.stopImmediatePropagation();
             if (way === 'back') window.history.back(); else window.history.forward();
         }, true);

@@ -158,6 +158,8 @@ it('keeps Back and Forward: the place, the filters and the view in the address, 
     // The places are links of their own, so each is a step of the browser's history.
     expect(($this->page)())->toContain('href="'.$this->library.'?tab=unread"');
     $script = (string) file_get_contents(resource_path('views/filament/v2/library-shell-script.blade.php'));
-    expect($script)->toContain('core.historyKey(')->toContain('window.history.back()')->toContain('window.history.forward()');
+    expect($script)->toContain('core.historyKey(')->toContain('window.history.back()')->toContain('window.history.forward()')
+        // In a form field or over a dialog the key is taken from the browser (whose own ⌘[ would leave the page).
+        ->toContain("e.preventDefault();\n            if (way === 'stay') return;");
     expect(collect(ManagesAppPages::shortcuts()['Everywhere'])->pluck(1)->all())->toContain('Back and forward');
 });

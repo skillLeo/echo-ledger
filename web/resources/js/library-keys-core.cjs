@@ -85,19 +85,27 @@
         return null;
     }
 
+    /** Whether a key lands in a form field (an input, a text area or a list), not an editor of rich text. */
+    const FIELDS = ['input', 'textarea', 'select'];
+    function isField(target) {
+        return !! target && (FIELDS.includes(String(target.tagName || '').toLowerCase()) || target.field === true);
+    }
+
     /**
      * Back and Forward from the keyboard (docs/PLAN_NAV_3_LEVELS.md sections 0 and 6): ⌘[ and ⌘] on a Mac, Ctrl+[ and
      * Ctrl+] elsewhere, as the apps have them; the browser's own Back, Forward and the mouse's back button keep working
-     * (the Library keeps its place, filters and view in the address). Not while typing, nor over a dialog. e as
-     * keyAction's (with code and shiftKey); s: {mac, modal}. Returns 'back', 'forward' or null.
+     * (the Library keeps its place, filters and view in the address). On a Mac ⌘[ and ⌘] are the browser's Back and
+     * Forward too, so in a form field and over a dialog they do nothing ('stay': the page keeps what is being typed);
+     * an editor of rich text (contenteditable) keeps them for itself (outdent, indent). e as keyAction's (with code
+     * and shiftKey; target.editable for contenteditable); s: {mac, modal}. Returns 'back', 'forward', 'stay' or null.
      */
     function historyKey(e, s) {
-        if (e.defaultPrevented || s.modal || e.altKey || e.shiftKey || isTyping(e.target)) return null;
+        if (e.defaultPrevented || e.altKey || e.shiftKey) return null;
         if (s.mac ? ! (e.metaKey && ! e.ctrlKey) : ! (e.ctrlKey && ! e.metaKey)) return null;
-        if (e.code === 'BracketLeft' || e.key === '[') return 'back';
-        if (e.code === 'BracketRight' || e.key === ']') return 'forward';
-        return null;
+        const way = e.code === 'BracketLeft' || e.key === '[' ? 'back' : (e.code === 'BracketRight' || e.key === ']' ? 'forward' : null);
+        if (! way || (e.target && (e.target.editable === true || e.target.isContentEditable === true))) return null;
+        return s.modal || isField(e.target) ? 'stay' : way;
     }
 
-    return { isTyping, isControl, keyAction, clickAction, contextAction, shellKey, historyKey };
+    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey };
 });
