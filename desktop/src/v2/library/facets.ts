@@ -96,11 +96,14 @@ export function languageOf(item: LibraryItem): string {
   return languageCode(item.transcript?.final_language) ?? languageCode(item.language) ?? languageCode(item.language_chip) ?? "unknown";
 }
 
-/** A recording's Source value (Imported, else its app; WhatsApp Web is WhatsApp) and its words: a row's logo filters by it. */
+/**
+ * A recording's Source value (Imported, else its app; WhatsApp Web is WhatsApp; an app the contract doesn't name is
+ * Other, as the server files it) and its words: a row's logo filters by it.
+ */
 export function sourceOf(item: LibraryItem, imported?: ReadonlySet<string>): { value: string; label: string } {
-  const sent = facetsOf(item)?.source;
-  const value = sent ?? (imported?.has(item.id) ? "imported" : item.source_app ? SOURCE_ALIASES[item.source_app] ?? item.source_app : "other");
-  return { value, label: SOURCE_NAMES[value] ?? item.source_app_label ?? value.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) };
+  const raw = facetsOf(item)?.source ?? (imported?.has(item.id) ? "imported" : item.source_app ? SOURCE_ALIASES[item.source_app] ?? item.source_app : "other");
+  const value = raw in SOURCE_NAMES ? raw : "other";
+  return { value, label: SOURCE_NAMES[value] };
 }
 
 /** When a recording ended (else started), as ms. */
@@ -229,9 +232,10 @@ export function prepare(items: readonly LibraryItem[], context: Context = {}): {
       },
       unread: item.opened === false && !context.read?.has(item.id),
       needs: needsYou(item, now),
-      title: (item.title ?? "").toLowerCase(),
-      text: (item.transcript?.preview ?? "").toLowerCase(),
-      project: item.client ? chain(item.client.id).map((id) => names.project.get(id) ?? "").join(" ").toLowerCase() : "",
+      title: foldText(item.title ?? ""),
+      text: foldText(item.transcript?.preview ?? ""),
+      // Its project's name and the folders above it, kept apart (a word never runs from one name into the next).
+      project: item.client ? chain(item.client.id).map((id) => foldText(names.project.get(id) ?? "")).join("\n") : "",
     });
   }
   return { facts, names };
@@ -256,11 +260,44 @@ export function libraryViewCounts(facts: readonly Facts[]): Record<LibraryViewId
   return counts;
 }
 
-/** The search's words (2 to 200 characters; shorter, or only punctuation, is no search), in small letters. */
+// Urdu spelling variants made one for the search, as the server folds them (App\Support\UrduText): Arabic Yeh, Alef
+// Maksura and Yeh with Hamza → ی; Arabic Kaf → ک; Arabic Heh, Teh Marbuta and Heh with Yeh above → ہ; Alef with Hamza,
+// Madda or Wasla → ا; Waw with Hamza → و; Yeh Barree with Hamza → ے; Arabic-Indic digits → 0-9; harakat, superscript
+// Alef, tatweel and zero-width joiners dropped. Latin and Devanagari stay as they are.
+const FOLD: Record<string, string> = {
+  "\u064A": "\u06CC", "\u0649": "\u06CC", "\u0626": "\u06CC",
+  "\u0643": "\u06A9",
+  "\u0647": "\u06C1", "\u0629": "\u06C1", "\u06C0": "\u06C1", "\u06C3": "\u06C1",
+  "\u0623": "\u0627", "\u0625": "\u0627", "\u0622": "\u0627", "\u0671": "\u0627",
+  "\u0624": "\u0648",
+  "\u06D3": "\u06D2",
+};
+const FOLD_DROP = /[\u064B-\u065F\u0670\u0640\u200C\u200D\u200E\u200F]/gu;
+
+/** Text as the search compares it: Urdu spellings folded to one, in small letters. */
+export function foldText(text: string): string {
+  let out = "";
+  for (const ch of text.replace(FOLD_DROP, "")) {
+    const cp = ch.codePointAt(0)!;
+    out += cp >= 0x0660 && cp <= 0x0669 ? String(cp - 0x0660) : cp >= 0x06F0 && cp <= 0x06F9 ? String(cp - 0x06F0) : FOLD[ch] ?? ch;
+  }
+  return out.toLowerCase();
+}
+
+/**
+ * The search's words, as the server reads a query (2 to 200 characters; shorter, or only punctuation, is no search):
+ * a "quoted phrase" stays one word, the rest split on spaces; quotes and + - * ( ) < > ~ @ round a word are dropped;
+ * each word once, at most 8, each at most 64 characters; folded (foldText).
+ */
 export function searchWords(q: string): string[] {
   const s = q.trim().slice(0, 200);
   if (s.length < 2 || !/[\p{L}\p{N}]/u.test(s)) return [];
-  return s.toLowerCase().split(/\s+/).filter(Boolean);
+  const words: string[] = [];
+  for (const m of s.matchAll(/"([^"]+)"|(\S+)/gu)) {
+    const word = foldText((m[1] ?? m[2] ?? "").trim().replace(/^[\s"'+\-*()<>~@]+|[\s"'+\-*()<>~@]+$/gu, "").slice(0, 64));
+    if (word && !words.includes(word)) words.push(word);
+  }
+  return words.slice(0, 8);
 }
 /**
  * The search keeps a recording when every word is somewhere among its title, its transcript and its project's path (the
@@ -297,22 +334,24 @@ export function sectionOn(spec: FilterSpec, section: SectionKey): boolean {
 /** The sections that are on, in the panel's order: the pills, and the n of [Filters n]. */
 export const activeSections = (spec: FilterSpec): SectionKey[] => SECTIONS.filter((s) => sectionOn(spec, s));
 
-function hits(f: Facts, section: SectionKey, clause: Clause, now: number, tz?: string): boolean {
-  if (section === "date") {
-    return clause.values.some((v) => DATE_PRESETS.includes(v as DatePreset) && inDays(f.day, dateRange(v as DatePreset, now, tz, clause)));
-  }
-  return f.values[section].some((v) => clause.values.includes(v));
-}
-function passes(f: Facts, spec: FilterSpec, section: SectionKey, now: number, tz?: string): boolean {
-  const clause = spec[section]!;
-  const hit = hits(f, section, clause, now, tz);
-  return clause.op === "is_not" ? !hit : hit;
+/** A section that is on, made ready once per call: its date ranges worked out, its values in a set. */
+type Test = { section: SectionKey; passes: (f: Facts) => boolean };
+function tests(spec: FilterSpec, now: number, tz?: string): Test[] {
+  return activeSections(spec).map((section) => {
+    const clause = spec[section]!;
+    const not = clause.op === "is_not";
+    if (section === "date") {
+      const ranges = clause.values.filter((v): v is DatePreset => DATE_PRESETS.includes(v as DatePreset)).map((v) => dateRange(v, now, tz, clause));
+      return { section, passes: (f) => ranges.some((r) => inDays(f.day, r)) !== not };
+    }
+    const values = new Set(clause.values);
+    return { section, passes: (f) => f.values[section].some((v) => values.has(v)) !== not };
+  });
 }
 
 /** Whether a recording passes every section that is on. */
 export function matches(f: Facts, spec: FilterSpec, now: number = Date.now(), tz?: string): boolean {
-  for (const s of SECTIONS) if (sectionOn(spec, s) && !passes(f, spec, s, now, tz)) return false;
-  return true;
+  return tests(spec, now, tz).every((t) => t.passes(f));
 }
 
 export type FacetOption = { value: string; label: string; count: number };
@@ -327,10 +366,10 @@ export type FacetOption = { value: string; label: string; count: number };
  * Device and Status keep their own order.
  */
 export function facetCounts(facts: readonly Facts[], spec: FilterSpec, names: Names, now: number = Date.now(), tz?: string, offered: readonly Facts[] = facts): Record<SectionKey, FacetOption[]> {
-  const on = activeSections(spec);
   const out = {} as Record<SectionKey, FacetOption[]>;
   // Which sections each recording fails: it counts for a section's options when it fails no other section.
-  const fails = facts.map((f) => on.filter((s) => !passes(f, spec, s, now, tz)));
+  const checks = tests(spec, now, tz);
+  const fails = facts.map((f) => checks.filter((t) => !t.passes(f)).map((t) => t.section));
   const counted = (i: number, section: SectionKey) => fails[i].length === 0 || (fails[i].length === 1 && fails[i][0] === section);
 
   out.date = (["today", "last_7_days", "this_month"] as const).map((p) => {
@@ -413,8 +452,9 @@ export function pillWords(spec: FilterSpec, section: SectionKey, names: Names): 
 
 /** The recordings of a view (or a label) that pass the filters: the list before it is sorted and grouped. */
 export function filterFacts(facts: readonly Facts[], spec: FilterSpec, now: number = Date.now(), tz?: string): Facts[] {
-  if (activeSections(spec).length === 0) return [...facts];
-  return facts.filter((f) => matches(f, spec, now, tz));
+  const checks = tests(spec, now, tz);
+  if (checks.length === 0) return [...facts];
+  return facts.filter((f) => checks.every((t) => t.passes(f)));
 }
 
 /** A filter set without empty sections, every section with its op: what a saved view keeps and two are compared by. */

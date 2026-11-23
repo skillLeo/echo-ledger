@@ -11,7 +11,7 @@ import { makeItem } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
 import { LibraryNav } from "./LibraryNav";
 import { libraryViewCounts, prepare } from "./facets";
-import { fromServer, MAX_VIEWS, syncedViewsStore, toServer, VIEW_WORDS, viewsStore, type ViewSpec } from "./myViews";
+import { fromServer, MAX_VIEWS, syncedViewsStore, toServer, VIEW_WORDS, viewsAccount, viewsStore, type ViewSpec } from "./myViews";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "./scope";
 import { resetSyncClock } from "./syncClock";
 
@@ -22,41 +22,63 @@ const SPEC: ViewSpec = { filters: { source: { op: "is", values: ["whatsapp"] } }
 const server = (id: string, name: string, extra: Partial<ServerView> = {}): ServerView => ({
   id, name, filters: { source: { op: "is", values: ["whatsapp"] } }, search: null, sort: "newest", group: "date", density: "comfortable", position: 0, ...extra,
 });
-/** The server's views, as a test keeps them: creates answered with ids, the version counted. */
-function fakeServer(start: ServerView[] = []) {
-  const state = { views: [...start], version: 1, offline: false };
-  const answer = <T,>(f: () => T) => (state.offline ? Promise.reject("The server didn't answer.") : Promise.resolve(f()));
-  respondWith("views_get", () => answer(() => ({ data: state.views, views_version: state.version })));
-  respondWith("library_views_version", () => answer(() => state.version));
-  respondWith("view_create", ({ view }) => answer(() => {
+type Fake = {
+  views: ServerView[]; version: number; offline: boolean;
+  /** Answers wait for this while set (a sync caught on its way). */
+  gate: Promise<void> | null;
+  /** A refusal for good (as the core answers a 4xx), or null to answer. */
+  refuse: (command: string, args: Record<string, unknown>) => { status: number; code: string; message: string } | null;
+};
+/** The server's views, as a test keeps them: creates answered with ids, the version counted, refusals as the core gives them. */
+function fakeServer(start: ServerView[] | Fake = []): Fake {
+  const state: Fake = Array.isArray(start) ? { views: [...start], version: 1, offline: false, gate: null, refuse: () => null } : start;
+  const answer = (command: string, f: (args: Record<string, unknown>) => unknown) => async (args: Record<string, unknown>) => {
+    if (state.gate) await state.gate;
+    if (state.offline) throw "The server didn't answer.";
+    const refused = state.refuse(command, args);
+    return refused ? { refused } : f(args);
+  };
+  respondWith("views_get", answer("views_get", () => ({ data: state.views, views_version: state.version })));
+  respondWith("library_views_version", answer("library_views_version", () => state.version));
+  respondWith("view_create", answer("view_create", ({ view }) => {
     const v = view as Omit<ServerView, "id" | "position">;
     // Idempotent: a client_ref seen before answers with the view it made.
     const twin = state.views.find((x) => x.client_ref && x.client_ref === v.client_ref);
     if (twin) return { data: twin, views_version: state.version };
-    if (state.views.length >= MAX_VIEWS) throw "views_limit: You can keep up to 30 views.";
+    if (state.views.length >= MAX_VIEWS) return { refused: { status: 422, code: "views_limit", message: "The server did not accept this." } };
     const made = { ...v, id: `v${state.views.length + 1}`, position: state.views.length } as ServerView;
     state.views.push(made);
     state.version++;
     return { data: made, views_version: state.version };
   }));
-  respondWith("view_update", ({ id, patch }) => answer(() => {
+  respondWith("view_update", answer("view_update", ({ id, patch }) => {
     const at = state.views.findIndex((v) => v.id === id);
-    if (at < 0) throw "view_not_found";
+    if (at < 0) return { refused: { status: 404, code: "view_not_found", message: "That is no longer on the server." } };
     state.views[at] = { ...state.views[at], ...(patch as Partial<ServerView>) };
     state.version++;
     return { data: state.views[at], views_version: state.version };
   }));
-  respondWith("view_delete", ({ id }) => answer(() => {
+  respondWith("view_delete", answer("view_delete", ({ id }) => {
     state.views = state.views.filter((v) => v.id !== id);
     state.version++;
     return { id, views_version: state.version };
   }));
-  respondWith("views_order", ({ ids }) => answer(() => {
+  respondWith("views_order", answer("views_order", ({ ids }) => {
     state.views = (ids as string[]).map((id) => state.views.find((v) => v.id === id)!).filter(Boolean);
     state.version++;
     return { data: state.views, views_version: state.version };
   }));
   return state;
+}
+/** A gate the server's answers wait at, and its opening. */
+function gate(srv: Fake): () => Promise<void> {
+  let open: () => void = () => undefined;
+  srv.gate = new Promise((r) => { open = r; });
+  return async () => {
+    srv.gate = null;
+    open();
+    await act(flushAsync);
+  };
 }
 
 describe("the views store, synced through /api/views", () => {
@@ -183,6 +205,114 @@ describe("the views store, synced through /api/views", () => {
     expect(srv.views).toEqual([]);
   });
 
+  it("nothing shows, is made or is sent until the account is known; then that account's own copy", async () => {
+    fakeServer([server("v1", "Clients")]);
+    window.localStorage.setItem("echoledger-my-views", JSON.stringify({ views: [{ id: "old", name: "Shared by nobody", spec: SPEC }], version: null, reorder: false }));
+    const store = syncedViewsStore();
+    const seen = vi.fn();
+    const un = store.subscribe(seen);
+    await act(flushAsync);
+    expect(store.list()).toEqual([]);
+    await expect(store.create("Early", SPEC)).rejects.toThrow(VIEW_WORDS.notReady);
+    await store.sync();
+    expect(callsOf("views_get")).toEqual([]);
+    expect(callsOf("library_views_version")).toEqual([]);
+    store.use(viewsAccount("https://ledger.example.test/", "Me@Example.test", 7));
+    await act(flushAsync);
+    expect(store.list().map((v) => v.name)).toEqual(["Clients"]);
+    expect(window.localStorage.getItem("echoledger-my-views:https://ledger.example.test|me@example.test|7")).toContain("Clients");
+    // The server, the email and the workspace are all needed.
+    expect([viewsAccount("", "me@x.test", 1), viewsAccount("https://s", null, 1), viewsAccount("https://s", "me@x.test", null)]).toEqual([null, null, null]);
+    un();
+  });
+
+  it("switching account or workspace mid-sync: what the older sync hears back is dropped, and each keeps its own copy", async () => {
+    const one = fakeServer();
+    const store = syncedViewsStore();
+    const un = store.subscribe(() => undefined);
+    store.use("srv|me|1");
+    await act(flushAsync);
+    const open = gate(one);
+    const made = await store.create("Mine", SPEC);
+    await act(flushAsync);
+    expect(callsOf("view_create")).toHaveLength(1);
+    // Workspace 2 (its own server copy) while workspace 1's create is on its way.
+    const two = fakeServer([server("w1", "Theirs")]);
+    store.use("srv|me|2");
+    expect(store.list()).toEqual([]);
+    await act(flushAsync);
+    expect(store.list().map((v) => v.name)).toEqual(["Theirs"]);
+    await open();
+    // Workspace 1's answer changes nothing here, nor workspace 1's copy (its view still waits, sent again by its ref).
+    expect(store.list().map((v) => v.name)).toEqual(["Theirs"]);
+    const kept = JSON.parse(window.localStorage.getItem("echoledger-my-views:srv|me|1")!);
+    expect(kept.views).toEqual([expect.objectContaining({ id: made.id, pending: "create" })]);
+    expect(JSON.parse(window.localStorage.getItem("echoledger-my-views:srv|me|2")!).views.map((v: { name: string }) => v.name)).toEqual(["Theirs"]);
+    // Back to workspace 1: the same view is sent again and made once.
+    fakeServer(one);
+    store.use("srv|me|1");
+    await act(flushAsync);
+    expect(one.views).toHaveLength(1);
+    expect(store.list()).toEqual([expect.objectContaining({ id: "v1", name: "Mine" })]);
+    expect(two.views.map((v) => v.name)).toEqual(["Theirs"]);
+    // Another account on the same server: none of these.
+    fakeServer();
+    store.use("srv|someone@else|1");
+    await act(flushAsync);
+    expect(store.list()).toEqual([]);
+    un();
+  });
+
+  it("a change the server refuses for good doesn't hold up the rest: a new view goes, a change goes back to the server's copy, each said", async () => {
+    const srv = fakeServer([server("v1", "One"), server("v2", "Two")]);
+    srv.refuse = (command, args) => {
+      const body = (args.view ?? args.patch) as { name?: string } | undefined;
+      return body?.name?.includes("!") ? { status: 422, code: "validation_failed", message: "Names can't have “!”." } : command === "view_delete" && args.id === "v2"
+        ? { status: 409, code: "conflict", message: "The server did not accept this." } : null;
+    };
+    const store = syncedViewsStore();
+    store.use("a");
+    await store.sync();
+    const heard: string[] = [];
+    store.onProblem((t) => heard.push(t));
+    srv.offline = true;
+    await store.create("Bad!", SPEC);
+    await store.rename("v1", "One!");
+    await store.remove("v2");
+    await store.create("Good", SPEC);
+    await store.sync();
+    srv.offline = false;
+    await store.sync();
+    await store.sync();
+    // In the views' order, each by the name the person gave it.
+    expect(heard).toEqual([
+      "Your changes to One! weren't saved: Names can't have “!”.",
+      "Two wasn't deleted: The server did not accept this.",
+      "Bad! wasn't saved: Names can't have “!”.",
+    ]);
+    // Good was sent after them; One and Two are as the server has them.
+    expect(srv.views.map((v) => v.name)).toEqual(["One", "Two", "Good"]);
+    expect(store.list().map((v) => [v.name, v.pending])).toEqual([["One", undefined], ["Two", undefined], ["Good", undefined]]);
+  });
+
+  it("a view deleted while its rename is on its way is deleted on the server after", async () => {
+    const srv = fakeServer([server("v1", "One"), server("v2", "Two")]);
+    const store = syncedViewsStore();
+    store.use("a");
+    await store.sync();
+    const open = gate(srv);
+    await store.rename("v1", "First");
+    await act(flushAsync);
+    expect(callsOf("view_update")).toHaveLength(1);
+    await store.remove("v1");
+    expect(store.list().map((v) => v.name)).toEqual(["Two"]);
+    await open();
+    await store.sync();
+    expect(callsOf("view_delete")).toEqual([{ id: "v1" }]);
+    expect(srv.views.map((v) => v.name)).toEqual(["Two"]);
+    expect(store.list().map((v) => v.name)).toEqual(["Two"]);
+  });
+
   it("a server view read leniently: a sort or group this app lacks shows as Newest and Date; unknown sections are left out", () => {
     expect(fromServer(server("v", "Odd", { sort: "loudest", group: "mood", filters: { colour: { values: ["red"] }, source: { op: "is_not", values: ["zoom"] } } })).spec)
       .toEqual({ filters: { source: { op: "is_not", values: ["zoom"] } }, search: null, sort: "newest", group: "date", density: "comfortable" });
@@ -235,6 +365,7 @@ describe("My views in the sidebar and the Library", () => {
     respond("lists_get", []);
     fakeServer();
     viewsStore.use(null);
+    viewsStore.use("https://ledger.example.test|me@example.test|1");
   });
   afterEach(() => {
     Object.defineProperty(window, "innerWidth", { value: 1024, configurable: true, writable: true });
@@ -286,6 +417,45 @@ describe("My views in the sidebar and the Library", () => {
     fireEvent.click(myViews().getByRole("button", { name: "New view" }));
     await act(flushAsync);
     expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
+  });
+
+  it("a view dragged (pointer events, as on Windows the page's drag and drop is off) moves in the order; Escape moves nothing", async () => {
+    render(<App />);
+    await act(flushAsync);
+    for (const name of ["One", "Two", "Three"]) await viewsStore.create(name, SPEC);
+    await act(flushAsync);
+    const names = () => myViews().getAllByRole("button").filter((b) => !b.className.includes("el-nav-row__more")).map((b) => b.textContent);
+    expect(names()).toEqual(["One", "Two", "Three", "New view"]);
+    const rowOf = (name: string) => myViews().getByRole("button", { name }).closest("li")!;
+    const drag = (from: HTMLElement, to: HTMLElement | null, escape = false) => {
+      document.elementFromPoint = vi.fn(() => to) as typeof document.elementFromPoint;
+      fireEvent.pointerDown(from, { button: 0, clientX: 10, clientY: 10, buttons: 1 });
+      fireEvent.pointerMove(window, { clientX: 10, clientY: 40, buttons: 1 });
+      if (to && !escape) expect(to).toHaveClass("el-nav-row--drop");
+      if (escape) fireEvent.keyDown(window, { key: "Escape" });
+      fireEvent.pointerUp(window, { clientX: 10, clientY: 40 });
+      fireEvent.click(from.querySelector("button")!);
+    };
+    // Three before One: first.
+    drag(rowOf("Three"), rowOf("One"));
+    await act(flushAsync);
+    expect(names()).toEqual(["Three", "One", "Two", "New view"]);
+    // The press that ended the drag didn't open it.
+    expect(title()).toHaveTextContent(/^All/);
+    // One onto + New view: last.
+    drag(rowOf("One"), rowOf("New view"));
+    await act(flushAsync);
+    expect(names()).toEqual(["Three", "Two", "One", "New view"]);
+    drag(rowOf("One"), rowOf("Three"), true);
+    await act(flushAsync);
+    expect(names()).toEqual(["Three", "Two", "One", "New view"]);
+    expect(document.querySelector(".el-nav-row--drop")).toBeNull();
+    // A press without a drag opens it.
+    fireEvent.pointerDown(rowOf("Two"), { button: 0, clientX: 10, clientY: 10, buttons: 1 });
+    fireEvent.pointerUp(window, { clientX: 10, clientY: 10 });
+    fireEvent.click(myViews().getByRole("button", { name: "Two" }));
+    await act(flushAsync);
+    expect(title()).toHaveTextContent(/^Two/);
   });
 
   it("⌘1…⌘9 open the sidebar's first nine: the library views, then My views", async () => {

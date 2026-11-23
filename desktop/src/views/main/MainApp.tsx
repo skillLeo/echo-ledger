@@ -53,7 +53,7 @@ import { shellChip } from "../../v2/shell/status";
 import { libraryViewCounts, needsYouCount, prepare } from "../../v2/library/facets";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
 import { syncLibrary } from "../../v2/library/syncClock";
-import { useViewsAccount, viewsStore } from "../../v2/library/myViews";
+import { useViewsAccount, viewsAccount, viewsStore } from "../../v2/library/myViews";
 import { sourceAppLabel } from "../../lib/format";
 import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
@@ -187,8 +187,9 @@ export default function MainApp() {
   const [filtersRequest, setFiltersRequest] = useState<{ seq: number } | null>(null);
   const [libraryItems, setLibraryItems] = useState<{ items: readonly LibraryItem[]; read: ReadonlySet<string> } | null>(null);
   const libraryFacts = useMemo(() => (libraryItems ? prepare(libraryItems.items, { read: libraryItems.read }) : null), [libraryItems]);
-  // My views are each account's own (the server and the email), synced through /api/views.
-  useViewsAccount(account?.email ? `${status?.serverUrl ?? ""}:${account.email.trim().toLowerCase()}` : null);
+  // My views are each account's own in each workspace (the server, the email, the workspace), synced through
+  // /api/views; none show until the account is read.
+  useViewsAccount(viewsAccount(status?.serverUrl, account?.email, account?.workspace?.id));
   const [sharedFocus, setSharedFocus] = useState<string | null>(null);
   // An echoledger://open link waiting to be opened (since v1.5), and a request link it pointed at.
   const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);
@@ -804,7 +805,8 @@ export default function MainApp() {
   // waiting and the uploads that failed on this computer; each label's.
   const libraryCounts = libraryFacts ? {
     ...libraryViewCounts(libraryFacts.facts),
-    needs: needsYouCount(libraryFacts.facts.map((f) => f.item), { waiting: status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
+    // From every item: the server's waiting recordings (session `recording`) are in no other view, so not in the facts.
+    needs: needsYouCount(libraryItems?.items ?? [], { waiting: status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
   } : null;
   const labelCounts: Record<string, number> = {};
   for (const f of libraryFacts?.facts ?? []) for (const key of f.values.labels) labelCounts[key] = (labelCounts[key] ?? 0) + 1;

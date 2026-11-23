@@ -38,7 +38,7 @@ describe("the Library as a table", () => {
   it("Show as Table: the default columns, sections as header rows, remembered on this computer", async () => {
     await show();
     showAs("Table");
-    expect(within(table()).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Select", "Recording", "Date", "Length", "App", "Project", "Status", "Actions"]);
+    expect(within(table()).getAllByRole("columnheader").map((h) => h.querySelector("input")?.getAttribute("aria-label") ?? h.textContent)).toEqual(["Select all", "Recording", "Date", "Length", "App", "Project", "Status", "Actions"]);
     const rows = within(table()).getAllByRole("row").map((r) => r.textContent);
     expect(rows[1]).toBe("Today · 1");
     expect(rows[2]).toMatch(/^Ali18 Nov1:00WhatsAppAcmeReady/);
@@ -67,7 +67,7 @@ describe("the Library as a table", () => {
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Labels" }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Device" }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Date" }));
-    expect(within(table()).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Select", "Recording", "Length", "App", "Project", "Status", "Labels", "Device", "Actions"]);
+    expect(within(table()).getAllByRole("columnheader").map((h) => h.querySelector("input")?.getAttribute("aria-label") ?? h.textContent)).toEqual(["Select all", "Recording", "Length", "App", "Project", "Status", "Labels", "Device", "Actions"]);
     expect(within(table()).getAllByRole("row")[2]).toHaveTextContent(/Q4Phone$/);
     expect(JSON.parse(window.localStorage.getItem("echoledger-v2-library-columns")!)).toEqual(["length", "app", "project", "status", "labels", "device"]);
     // The ticks leave the menu open; a press away closes it.
@@ -75,6 +75,23 @@ describe("the Library as a table", () => {
     showAs("List");
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
+  });
+
+  it("the header's box picks every row shown, mixed while some are, and picks none again", async () => {
+    window.localStorage.setItem("echoledger-v2-library-layout", "table");
+    await show();
+    const all = () => within(table()).getByRole("columnheader", { name: /Select all|Unselect all/ }).querySelector("input")!;
+    expect(all()).toHaveAccessibleName("Select all");
+    expect(all()).not.toBeChecked();
+    fireEvent.click(within(table()).getByRole("checkbox", { name: "Select Bina" }));
+    expect(all().indeterminate).toBe(true);
+    fireEvent.click(all());
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("2 selected");
+    expect(all()).toBeChecked();
+    expect(all()).toHaveAccessibleName("Unselect all");
+    fireEvent.click(all());
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("Select recordings");
+    expect(all()).not.toBeChecked();
   });
 
   it("a row opens its recording; its checkbox picks it, and then a press ticks it; its ⋮ and right-click are the one menu", async () => {

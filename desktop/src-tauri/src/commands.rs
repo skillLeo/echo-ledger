@@ -2283,16 +2283,27 @@ pub async fn views_get(app: AppHandle) -> AppResult<Option<serde_json::Value>> {
     }
 }
 
+/// A view change the server refused for good (a 4xx with its code: `views_limit`, `view_not_found`,
+/// `validation_failed`…) comes back as data, `{"refused": {"status", "code", "message"}}` (the message in the app's
+/// words), so the page's sync drops or restores that one view and goes on with the next. Offline, a busy or a held
+/// server (429, 426, 503) and 5xx stay errors: the change waits and is sent again later.
+pub(crate) fn view_answer(result: AppResult<serde_json::Value>) -> AppResult<serde_json::Value> {
+    match result {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
+        Err(e @ AppError::Server { status: 400..=499, .. }) if !matches!(e.status(), Some(401 | 408 | 425 | 426 | 429)) => {
+            Ok(serde_json::json!({ "refused": { "status": e.status(), "code": e.code(), "message": e.to_string() } }))
+        }
+        other => other,
+    }
+}
+
 /// Save as view: `{name, filters, search, sort, group, density, client_ref}`; the same `client_ref` again answers the
 /// view it made, so a view saved offline and sent twice is made once.
 #[tauri::command]
 pub async fn view_create(app: AppHandle, view: serde_json::Value) -> AppResult<serde_json::Value> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    match state.api()?.create_view(&view).await {
-        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
-        other => other,
-    }
+    view_answer(state.api()?.create_view(&view).await)
 }
 
 /// Rename… or Save changes on a view: any of its fields.
@@ -2300,10 +2311,7 @@ pub async fn view_create(app: AppHandle, view: serde_json::Value) -> AppResult<s
 pub async fn view_update(app: AppHandle, id: String, patch: serde_json::Value) -> AppResult<serde_json::Value> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    match state.api()?.update_view(&id, &patch).await {
-        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
-        other => other,
-    }
+    view_answer(state.api()?.update_view(&id, &patch).await)
 }
 
 /// Delete view…
@@ -2311,10 +2319,7 @@ pub async fn view_update(app: AppHandle, id: String, patch: serde_json::Value) -
 pub async fn view_delete(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    match state.api()?.delete_view(&id).await {
-        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
-        other => other,
-    }
+    view_answer(state.api()?.delete_view(&id).await)
 }
 
 /// A view dragged, or Move up / Move down: every view's id once, in the new order.
@@ -2322,10 +2327,7 @@ pub async fn view_delete(app: AppHandle, id: String) -> AppResult<serde_json::Va
 pub async fn views_order(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
     let state = app.state::<AppState>();
     ensure_unlocked(&state)?;
-    match state.api()?.order_views(&ids).await {
-        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
-        other => other,
-    }
+    view_answer(state.api()?.order_views(&ids).await)
 }
 
 /// The saved views' version the last library sync carried (None before a sync did, or from an older server): the page

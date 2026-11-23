@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { LibraryItem } from "../../lib/ipc";
-import { callsOf, emitEvent, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeItem } from "../../test/fixtures";
 import { sections } from "./filters";
 import { DRAWER_BELOW, FILTER_DEBOUNCE_MS, LibraryV2 } from "./LibraryV2";
@@ -366,12 +366,14 @@ describe("Find in the Library", () => {
 
   it("keys: F opens and closes the filters, Esc closes them, ⌘F and / put the cursor in search; never while typing", async () => {
     await show();
-    fireEvent.keyDown(document.body, { key: "f" });
+    const row = screen.getByRole("button", { name: "Ali" });
+    row.focus();
+    fireEvent.keyDown(row, { key: "f" });
     expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
-    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.keyDown(row, { key: "Escape" });
     expect(screen.queryByTestId("filter-panel")).toBeNull();
-    fireEvent.keyDown(document.body, { key: "f" });
-    fireEvent.keyDown(document.body, { key: "F" });
+    fireEvent.keyDown(row, { key: "f" });
+    fireEvent.keyDown(row, { key: "F" });
     expect(screen.queryByTestId("filter-panel")).toBeNull();
     const search = screen.getByRole("searchbox", { name: "Search recordings" });
     fireEvent.keyDown(document.body, { key: "f", metaKey: true });
@@ -380,8 +382,37 @@ describe("Find in the Library", () => {
     fireEvent.keyDown(search, { key: "f" });
     expect(screen.queryByTestId("filter-panel")).toBeNull();
     search.blur();
-    fireEvent.keyDown(document.body, { key: "/" });
+    row.focus();
+    fireEvent.keyDown(row, { key: "/" });
     expect(search).toHaveFocus();
+  });
+
+  it("WCAG 2.1.4: F, /, J, K and X answer only while focus is in the Library, not anywhere in the window", async () => {
+    render(<><nav aria-label="Elsewhere"><button type="button">Somewhere else</button></nav><LibraryV2 /></>);
+    await act(flushAsync);
+    const elsewhere = screen.getByRole("button", { name: "Somewhere else" });
+    const search = screen.getByRole("searchbox", { name: "Search recordings" });
+    for (const target of [elsewhere, document.body]) {
+      if (target instanceof HTMLElement && target !== document.body) target.focus();
+      for (const key of ["f", "F", "/", "j", "k", "x"]) fireEvent.keyDown(target, { key });
+      expect(screen.queryByTestId("filter-panel")).toBeNull();
+      expect(search).not.toHaveFocus();
+      expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
+      expect(document.activeElement?.closest("[data-row-id]")).toBeNull();
+    }
+    // ⌘F is not a one-letter key: it still finds the Library's search.
+    elsewhere.focus();
+    fireEvent.keyDown(elsewhere, { key: "f", metaKey: true });
+    expect(search).toHaveFocus();
+    // In the Library: J moves to a row, X ticks it, F opens the filters.
+    const title = screen.getByRole("heading", { level: 1 });
+    fireEvent.keyDown(title, { key: "j" });
+    expect(document.activeElement?.closest("[data-row-id]")).not.toBeNull();
+    fireEvent.keyDown(document.activeElement!, { key: "x" });
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("1 selected");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    fireEvent.keyDown(title, { key: "f" });
+    expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
   });
 
   it("under 1280 px (the panel's breakpoint token) the panel is a drawer over the list that starts closed; the scrim and Esc close it", async () => {
@@ -397,10 +428,31 @@ describe("Find in the Library", () => {
     expect(drawer).toHaveAttribute("role", "dialog");
     expect(drawer).toHaveClass("el-filter--drawer");
     expect(document.querySelector(".el-filter-scrim")).not.toBeNull();
-    // It takes focus, and a press on the scrim closes it.
+    // Modal: it takes focus; Tab and Shift+Tab stay inside; ⌘F and F leave the list behind it alone.
+    expect(drawer).toHaveAttribute("aria-modal", "true");
     expect(drawer.contains(document.activeElement)).toBe(true);
+    const inside = within(drawer);
+    const close = inside.getByRole("button", { name: "Close filters" });
+    const save = inside.getByRole("button", { name: "Save as view" });
+    const last = [...drawer.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])")].at(-1)!;
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(close).toHaveFocus();
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(last).toHaveFocus();
+    expect(save).toBeDisabled();
+    fireEvent.keyDown(last, { key: "f", metaKey: true });
+    expect(last).toHaveFocus();
+    fireEvent.keyDown(last, { key: "f" });
+    expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
+    // A press on the scrim closes it; focus goes back to what opened it.
     fireEvent.mouseDown(document.querySelector(".el-filter-scrim")!);
     expect(screen.queryByTestId("filter-panel")).toBeNull();
+    filtersButton().focus();
+    fireEvent.click(filtersButton());
+    expect(screen.getByTestId("filter-panel").contains(document.activeElement)).toBe(true);
+    fireEvent.mouseDown(document.querySelector(".el-filter-scrim")!);
+    expect(filtersButton()).toHaveFocus();
     fireEvent.click(filtersButton());
     fireEvent.keyDown(screen.getByTestId("filter-panel"), { key: "Escape" });
     expect(screen.queryByTestId("filter-panel")).toBeNull();
@@ -484,15 +536,29 @@ describe("Find in the Library", () => {
     render(<><LibraryFoot trashCurrent={false} onTrash={() => undefined} onSync={() => void import("./syncClock").then((m) => m.syncLibrary())} /><LibraryV2 /></>);
     await act(flushAsync);
     const line = screen.getByTestId("sidebar-synced");
+    const said = screen.getByTestId("sidebar-synced-said");
+    expect(said).toHaveAttribute("role", "status");
     expect(line).toHaveTextContent("Synced just now");
+    // The line is quiet; the Library's own syncs say nothing.
+    expect(line).not.toHaveAttribute("aria-live");
+    expect(said).toHaveTextContent("");
     const before = callsOf("library_refresh").length;
     respond("library_refresh", ITEMS.slice(0, 2));
     respond("library_list", ITEMS.slice(0, 2));
     fireEvent.click(line);
     await act(flushAsync);
     expect(callsOf("library_refresh").length).toBe(before + 1);
+    // Pressed: how it went is said once.
+    expect(said).toHaveTextContent("Synced just now");
     await emitEvent("library:updated", 2);
     await act(flushAsync);
     expect(rows()).toEqual(["a", "b"]);
+    // A sync that fails is said, pressed or not.
+    fail("library_refresh", "The server didn't answer.");
+    await act(async () => {
+      await import("./syncClock").then((m) => m.syncLibrary().catch(() => undefined));
+    });
+    await act(flushAsync);
+    expect(said).toHaveTextContent("Couldn't sync: The server didn't answer.");
   });
 });

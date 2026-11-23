@@ -808,6 +808,15 @@ export interface ServerView {
   client_ref?: string | null;
 }
 
+/** A view change the server refused for good (a 4xx: `views_limit`, `view_not_found`, `validation_failed`…), its
+ * message in the app's words; offline and passing trouble are errors instead (the change is sent again later). */
+export interface ViewRefusal {
+  status: number;
+  code: string | null;
+  message: string;
+}
+export type ViewAnswer<T> = T | { refused: ViewRefusal };
+
 export interface ListItem {
   /** The name in lower case. */
   key: string;
@@ -1950,10 +1959,10 @@ export const api = {
   orderLists: (keys: string[]) => invoke<ListItem[]>("lists_order", { keys }),
   /** My views (contract 2.0.0-p "Saved views"): null on a server without them. */
   views: () => invoke<{ data: ServerView[]; views_version: number; limit?: number } | null>("views_get"),
-  createView: (view: Omit<ServerView, "id" | "position">) => invoke<{ data: ServerView; views_version: number }>("view_create", { view }),
-  updateView: (id: string, patch: Partial<Omit<ServerView, "id" | "position">>) => invoke<{ data: ServerView; views_version: number }>("view_update", { id, patch }),
-  deleteView: (id: string) => invoke<{ id: string; views_version: number }>("view_delete", { id }),
-  orderViews: (ids: string[]) => invoke<{ data: ServerView[]; views_version: number }>("views_order", { ids }),
+  createView: (view: Omit<ServerView, "id" | "position">) => invoke<ViewAnswer<{ data: ServerView; views_version: number }>>("view_create", { view }),
+  updateView: (id: string, patch: Partial<Omit<ServerView, "id" | "position">>) => invoke<ViewAnswer<{ data: ServerView; views_version: number }>>("view_update", { id, patch }),
+  deleteView: (id: string) => invoke<ViewAnswer<{ id: string; views_version: number }>>("view_delete", { id }),
+  orderViews: (ids: string[]) => invoke<ViewAnswer<{ data: ServerView[]; views_version: number }>>("views_order", { ids }),
   /** The saved views' version the last library sync carried (null before one did, or from an older server). */
   viewsVersion: () => invoke<number | null>("library_views_version"),
   libraryFolder: (folder: SmartFolder) => invoke<LibraryItem[]>("library_folder", { folder }),

@@ -27,7 +27,8 @@ type Fixture = {
   filter_sets: { name: string; filters: unknown; search: string | null; expect: { total: number; ids: string[]; facets: Record<string, Record<string, number>> } }[];
 };
 
-const file = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "web", "tests", "Fixtures", "library-facets.json");
+// The server's file (LIBRARY_FACETS_FIXTURE: another copy of it, to try one before it lands).
+const file = process.env.LIBRARY_FACETS_FIXTURE ?? join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "web", "tests", "Fixtures", "library-facets.json");
 const fixture = JSON.parse(readFileSync(file, "utf8")) as Fixture;
 const now = Date.parse(fixture.now);
 
@@ -48,7 +49,8 @@ const { facts, names } = prepare(items, { now, tz: fixture.tz, projects: fixture
 describe("the shared fixture (contract 2.0.0-p)", () => {
   it("reads every recording and filter set", () => {
     expect(fixture.recordings.length).toBeGreaterThan(40);
-    expect(fixture.filter_sets).toHaveLength(28);
+    // The contract's 28 at least; every set the file has is checked below.
+    expect(fixture.filter_sets.length).toBeGreaterThanOrEqual(28);
   });
 
   it("the library views' counts: All, Needs you, Unread, Important, Not transcribed, Audio only", () => {

@@ -3,8 +3,8 @@
 // a search box in long sections, each section's Clear and Save as view at its foot; and the pills row under the
 // toolbar, only while filters are on: one pill per section ("Source: WhatsApp, Zoom ×"), which opens to edit it with
 // "is" or "is not", then Clear all and Save as view.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Button, Icon, Icons, SearchField, Segmented } from "../components";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { Button, Icon, Icons, SearchField, Segmented, useFocusTrap } from "../components";
 import { Layer, placeMenu, regionOf } from "../components/Menu";
 import {
   activeSections, clearSection, pillWords, SECTION_NAMES, SECTIONS, sectionOn, setDate, setNot, toggleValue,
@@ -79,7 +79,7 @@ function SectionBody({ section, spec, onSpec, options, search = true }: {
   );
 }
 
-export function FilterPanel({ spec, onSpec, counts, drawer, onClose, onSaveView, canSave }: {
+type FilterPanelProps = {
   spec: FilterSpec;
   onSpec: (spec: FilterSpec) => void;
   counts: Record<SectionKey, FacetOption[]>;
@@ -88,9 +88,33 @@ export function FilterPanel({ spec, onSpec, counts, drawer, onClose, onSaveView,
   onClose: () => void;
   onSaveView: () => void;
   canSave: boolean;
+};
+
+/** The filter panel: a column beside the list, or under 1280 px a modal drawer over it (FilterDrawer). */
+export function FilterPanel(props: FilterPanelProps) {
+  return props.drawer ? <FilterDrawer {...props} /> : <FilterAside {...props} />;
+}
+
+/**
+ * The drawer: modal while open. Focus moves in, Tab and Shift+Tab stay inside, and focus goes back where it was when
+ * it closes; the Library's keys (⌘F, F) leave the list behind it alone meanwhile.
+ */
+function FilterDrawer(props: FilterPanelProps) {
+  const panel = useRef<HTMLElement>(null);
+  const trap = useFocusTrap(panel);
+  return (
+    <>
+      <div className="el-filter-scrim" aria-hidden="true" onMouseDown={props.onClose} />
+      <FilterAside {...props} panel={panel} onTab={trap} />
+    </>
+  );
+}
+
+function FilterAside({ spec, onSpec, counts, drawer, onClose, onSaveView, canSave, panel, onTab }: FilterPanelProps & {
+  panel?: RefObject<HTMLElement | null>;
+  onTab?: (e: KeyboardEvent<HTMLElement>) => void;
 }) {
   const [folded, setFolded] = useState<Set<SectionKey>>(loadFolds);
-  const panel = useRef<HTMLElement>(null);
   const fold = (s: SectionKey) => setFolded((now) => {
     const next = new Set(now);
     if (next.has(s)) next.delete(s);
@@ -102,14 +126,8 @@ export function FilterPanel({ spec, onSpec, counts, drawer, onClose, onSaveView,
     }
     return next;
   });
-  // A drawer takes focus when it opens, and gives it back where it was when it closes.
-  useEffect(() => {
-    if (!drawer) return;
-    const back = document.activeElement as HTMLElement | null;
-    panel.current?.querySelector<HTMLElement>("button, input")?.focus();
-    return () => back?.focus?.();
-  }, [drawer]);
-  const keyDown = (e: KeyboardEvent) => {
+  const keyDown = (e: KeyboardEvent<HTMLElement>) => {
+    onTab?.(e);
     if (e.key !== "Escape" || e.defaultPrevented) return;
     e.preventDefault();
     e.stopPropagation();
@@ -119,10 +137,10 @@ export function FilterPanel({ spec, onSpec, counts, drawer, onClose, onSaveView,
   const on = activeSections(spec).length;
   const body = (
     <aside ref={panel} className={`el-filter${drawer ? " el-filter--drawer" : ""}`} aria-label="Filters" onKeyDown={keyDown} data-testid="filter-panel"
-      role={drawer ? "dialog" : undefined} aria-modal={drawer ? false : undefined}>
+      role={drawer ? "dialog" : undefined} aria-modal={drawer ? true : undefined}>
       <div className="el-filter__head">
         <h2 className="el-body-strong">Filters{on > 0 && <span className="el-filter__on el-caption"><span className="el-num">{on}</span></span>}</h2>
-        <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close filters" aria-keyshortcuts="Escape F" onClick={onClose} />
+        <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close filters" aria-keyshortcuts="Escape F" onClick={onClose} data-close="" />
       </div>
       <div className="el-filter__sections">
         {sections.map((s) => {
@@ -148,20 +166,15 @@ export function FilterPanel({ spec, onSpec, counts, drawer, onClose, onSaveView,
       </div>
     </aside>
   );
-  if (!drawer) return body;
-  return (
-    <>
-      <div className="el-filter-scrim" aria-hidden="true" onMouseDown={onClose} />
-      {body}
-    </>
-  );
+  return body;
 }
 
 /** The pills row: one pill per section that is on, then Clear all and Save as view (and Save changes for a view). */
 export function FilterPills({ spec, onSpec, counts, names, onClearAll, onSaveView, onSaveChanges, extra }: {
   spec: FilterSpec;
   onSpec: (spec: FilterSpec) => void;
-  counts: Record<SectionKey, FacetOption[]>;
+  /** The options' counts, asked for only while a pill is being edited. */
+  counts: () => Record<SectionKey, FacetOption[]>;
   names: Names;
   onClearAll: () => void;
   onSaveView: () => void;
@@ -192,7 +205,7 @@ export function FilterPills({ spec, onSpec, counts, names, onClearAll, onSaveVie
       {onSaveChanges && <Button size="sm" variant="quiet" onClick={onSaveChanges}>Save changes</Button>}
       <Button size="sm" variant="quiet" icon={Icons.PlusIcon} onClick={onSaveView}>Save as view</Button>
       {editing && sectionOn(spec, editing) && (
-        <PillEditor section={editing} spec={spec} onSpec={onSpec} options={counts[editing]} anchor={anchors.current.get(editing) ?? null}
+        <PillEditor section={editing} spec={spec} onSpec={onSpec} options={counts()[editing]} anchor={anchors.current.get(editing) ?? null}
           onClose={(focus) => {
             const pill = anchors.current.get(editing);
             setEditing(null);

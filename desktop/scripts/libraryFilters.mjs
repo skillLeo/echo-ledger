@@ -30,7 +30,7 @@ async function footOnScreen(page) {
     const items = [
       ["Trash", side.querySelector(".el-shell__foot-start .el-nav-item")],
       ["the sync line", side.querySelector("[data-testid=sidebar-synced]")],
-      ...[...side.querySelectorAll(".el-shell__foot > .el-nav-item")].slice(0, 2).map((el) => [el.textContent.trim(), el]),
+      ...[...side.querySelectorAll(".el-shell__foot .el-shell__actions > .el-nav-item")].slice(0, 2).map((el) => [el.textContent.trim(), el]),
     ];
     for (const [name, el] of items) {
       if (!el) { out.push(`${name} missing`); continue; }
@@ -78,6 +78,12 @@ try {
       await list(page);
       await rest(page);
       await footOnScreen(page);
+      // How much room the middle (LIBRARY, MY VIEWS, LABELS, PROJECTS) has, and whether its edge says there is more.
+      const room = await page.evaluate(() => {
+        const m = document.querySelector(".el-sidebar__middle");
+        return m ? `${Math.round(m.clientHeight)} px of ${Math.round(m.scrollHeight)}${m.hasAttribute("data-more-below") ? ", more below shaded" : ""}` : "none";
+      });
+      console.log(`${width}x${height} ${theme}: the middle has ${room}`);
       if (shot) await shoot(page, `sidebar-${width}x${height}-${theme}.png`);
       else console.log(`${width}x${height} ${theme}: the foot is on screen`);
       await page.close();
@@ -90,6 +96,18 @@ try {
     await list(page);
     await rest(page);
     await shoot(page, `${prefix}-${width}-${lang}-${theme}.png`);
+    if (prefix === "after") {
+      // A row's box: 24 px to press, 16 px drawn.
+      const box = await page.evaluate(() => {
+        const input = document.querySelector(".el-row__pick input");
+        if (!input) return "no row box";
+        const r = input.getBoundingClientRect();
+        const s = getComputedStyle(input);
+        const drawn = r.width - parseFloat(s.borderLeftWidth) - parseFloat(s.borderRightWidth);
+        return Math.round(r.width) === 24 && Math.round(r.height) === 24 && Math.round(drawn) === 16 ? "" : `${r.width}x${r.height}, drawn ${drawn}`;
+      });
+      if (box) throw new Error(`Row checkbox target: ${box}`);
+    }
     if (prefix === "after") {
       // The filters open (F), Source: WhatsApp and Date: Last 7 days ticked: the panel (a drawer under 1280 px) and the pills.
       await page.keyboard.press("f");

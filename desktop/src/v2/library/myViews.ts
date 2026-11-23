@@ -7,7 +7,7 @@
 // `views_version` other than the copy's, the copy is read again from the server.
 import { useEffect, useSyncExternalStore } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type ServerView } from "../../lib/ipc";
+import { api, type ServerView, type ViewRefusal } from "../../lib/ipc";
 import type { SortKey } from "../../lib/library";
 import type { GroupKey } from "../../lib/libraryGroups";
 import type { Density } from "../../lib/shell";
@@ -30,6 +30,10 @@ export const VIEW_WORDS = {
   long: `Use at most ${VIEW_NAME_MAX} characters.`,
   taken: (name: string) => `You already have a view called ${name}.`,
   gone: "That view is gone. It may have been deleted on another device.",
+  notReady: "Your views are still loading. Try again in a moment.",
+  notSaved: (name: string, why: string) => `${name} wasn't saved: ${why}`,
+  notChanged: (name: string, why: string) => `Your changes to ${name} weren't saved: ${why}`,
+  notDeleted: (name: string, why: string) => `${name} wasn't deleted: ${why}`,
 } as const;
 
 export class ViewError extends Error {}
@@ -96,6 +100,7 @@ const newRef = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? 
 
 /** What is kept on this computer for one account: the views (with what waits to be sent), the version, the order. */
 type Kept = { views: MyView[]; version: number | null; reorder: boolean };
+const EMPTY: Kept = { views: [], version: null, reorder: false };
 
 function read(key: string): Kept {
   try {
@@ -109,53 +114,78 @@ function read(key: string): Kept {
   }
 }
 
-const isGone = (e: unknown) => /view_not_found|not found/i.test(errorMessage(e));
-const isFull = (e: unknown) => /views_limit|up to 30/i.test(errorMessage(e));
+const refusalOf = (answer: unknown): ViewRefusal | null =>
+  (answer && typeof answer === "object" && "refused" in answer ? (answer as { refused: ViewRefusal }).refused : null);
 
 /**
- * The views kept on this computer, one copy per account (`account`: the server and the email), in step with the
- * server's. `onProblem` hears what the sync couldn't do (a view the server refused: 30 already).
+ * The views kept on this computer, one copy per account and workspace (`account`: the server, the email and the
+ * workspace), in step with the server's. None shows, and nothing is sent, until the account is known: one account's
+ * views never show in another's. Each account switch starts a new generation; what a sync of an older one hears back
+ * is dropped (a view it was sending stays waiting in that account's copy, and its client_ref makes it once). A change
+ * the server refuses for good is dropped (a new view) or given back to the server's copy (a change), said through
+ * `onProblem`, and the sync goes on with the next.
  */
 export function syncedViewsStore(): ViewsStore & { use(account: string | null): void; sync(): Promise<void>; onProblem(f: (text: string) => void): () => void } {
-  let key = KEY;
-  let kept: Kept = read(key);
-  let shown: MyView[] = kept.views.filter((v) => v.pending !== "delete");
+  let key: string | null = null;
+  let kept: Kept = EMPTY;
+  let shown: MyView[] = [];
+  let gen = 0;
   const listeners = new Set<() => void>();
   const problems = new Set<(text: string) => void>();
   let unlisten: (() => void) | null = null;
-  let running: Promise<void> | null = null;
+  let running: { gen: number; promise: Promise<void> } | null = null;
   let again = false;
-  const save = (next: Kept) => {
+  const show = (next: Kept) => {
     kept = next;
     shown = next.views.filter((v) => v.pending !== "delete");
+    listeners.forEach((l) => l());
+  };
+  /** Keeps `next` as this account's copy; a write from another generation (another account's sync) is dropped. */
+  const save = (next: Kept, g = gen): boolean => {
+    if (g !== gen || key === null) return false;
     try {
       window.localStorage.setItem(key, JSON.stringify(next));
     } catch {
       // Storage can be unavailable: the views last until the window closes.
     }
-    listeners.forEach((l) => l());
+    show(next);
+    return true;
   };
+  const say = (text: string) => problems.forEach((p) => p(text));
   const find = (id: string) => {
     const at = kept.views.findIndex((v) => v.id === id && v.pending !== "delete");
     if (at < 0) throw new ViewError(VIEW_WORDS.gone);
     return at;
   };
+  const ready = () => {
+    if (key === null) throw new ViewError(VIEW_WORDS.notReady);
+  };
   const patch = (id: string, change: (v: MyView) => MyView) => save({ ...kept, views: kept.views.map((v) => (v.id === id ? change(v) : v)) });
-  const drop = (id: string) => save({ ...kept, views: kept.views.filter((v) => v.id !== id) });
+  const drop = (id: string, g = gen) => save({ ...kept, views: kept.views.filter((v) => v.id !== id) }, g);
+  /** A change refused: no longer waiting, and the server's copy is read (version forgotten) to put it back. */
+  const restore = (id: string, g: number) => save({ ...kept, version: null, views: kept.views.map((v) => (v.id === id ? { ...v, pending: undefined } : v)) }, g);
 
   /** Sends what waits, in order, then reads the server's copy when its version is not ours. Stops quietly when offline. */
-  const work = async () => {
+  const work = async (g: number) => {
     // Anything sent: the server's copy is read after (another device may have changed the views meanwhile, and the
     // version an answer carries already counts that change).
     let sent = false;
     for (const view of [...kept.views]) {
+      if (g !== gen) return;
       const now = kept.views.find((v) => v.id === view.id);
       if (!now?.pending) continue;
       try {
         if (now.pending === "create") {
           const answer = await api.createView(toServer(now));
-          const made = fromServer(answer.data);
+          if (g !== gen) return;
           sent = true;
+          const refused = refusalOf(answer);
+          if (refused) {
+            drop(now.id, g);
+            say(VIEW_WORDS.notSaved(now.name, refused.code === "views_limit" ? VIEW_WORDS.full : refused.message));
+            continue;
+          }
+          const made = fromServer((answer as { data: ServerView }).data);
           // Deleted here while it was on its way: it goes on the server too.
           if (!kept.views.some((v) => v.id === now.id)) {
             await api.deleteView(made.id).catch(() => undefined);
@@ -163,33 +193,43 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
           }
           // It keeps its place and what was changed since it was sent; the server's id from now on.
           save({
-            ...kept, version: answer.views_version,
+            ...kept, version: (answer as { views_version: number }).views_version,
             views: kept.views.map((v) => (v.id === now.id ? { ...v, id: made.id, pending: v.pending === "create" && v.spec === now.spec && v.name === now.name ? undefined : v.pending === "delete" ? "delete" : v.pending === "create" ? "update" : v.pending } : v)),
-          });
+          }, g);
         } else if (now.pending === "update") {
           const answer = await api.updateView(now.id, toServer({ ...now, client_ref: undefined }));
+          if (g !== gen) return;
           sent = true;
+          const refused = refusalOf(answer);
+          if (refused) {
+            // Deleted on another device: it goes quietly. Else the server's copy comes back, and why is said.
+            if (refused.code === "view_not_found") drop(now.id, g);
+            else {
+              restore(now.id, g);
+              say(VIEW_WORDS.notChanged(now.name, refused.message));
+            }
+            continue;
+          }
           // Done, unless it was changed again or deleted while on its way.
-          save({ ...kept, version: answer.views_version, views: kept.views.map((v) => (v.id === now.id && v.pending === "update" && v.spec === now.spec && v.name === now.name ? { ...v, pending: undefined } : v)) });
+          save({ ...kept, version: (answer as { views_version: number }).views_version, views: kept.views.map((v) => (v.id === now.id && v.pending === "update" && v.spec === now.spec && v.name === now.name ? { ...v, pending: undefined } : v)) }, g);
         } else {
           const answer = await api.deleteView(now.id);
+          if (g !== gen) return;
           sent = true;
-          save({ ...kept, version: answer.views_version, views: kept.views.filter((v) => v.id !== now.id) });
+          const refused = refusalOf(answer);
+          if (refused && refused.code !== "view_not_found") {
+            restore(now.id, g);
+            say(VIEW_WORDS.notDeleted(now.name, refused.message));
+            continue;
+          }
+          save({ ...kept, version: refused ? kept.version : (answer as { views_version: number }).views_version, views: kept.views.filter((v) => v.id !== now.id) }, g);
         }
-      } catch (e) {
-        if (now.pending === "create" && isFull(e)) {
-          drop(now.id);
-          problems.forEach((p) => p(`${now.name} wasn't saved: ${VIEW_WORDS.full}`));
-          continue;
-        }
-        if (now.pending !== "create" && isGone(e)) {
-          drop(now.id);
-          continue;
-        }
-        // Offline, or a server without saved views: kept here, sent next time.
+      } catch {
+        // Offline, a busy or held server, or a server without saved views: kept here, sent next time.
         return;
       }
     }
+    if (g !== gen) return;
     // What changed while the loop ran goes on the next round.
     if (kept.views.some((v) => v.pending)) {
       again = true;
@@ -198,54 +238,66 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
     if (kept.reorder) {
       try {
         const answer = await api.orderViews(kept.views.map((v) => v.id));
+        if (g !== gen) return;
         sent = true;
-        save({ ...kept, reorder: false, version: answer.views_version });
-      } catch (e) {
-        if (!isGone(e) && !/validation/i.test(errorMessage(e))) return;
-        save({ ...kept, reorder: false });
+        const refused = refusalOf(answer);
+        // Refused (a view deleted elsewhere meanwhile, say): the server's order is read back.
+        save({ ...kept, reorder: false, version: refused ? null : (answer as { views_version: number }).views_version }, g);
+      } catch {
+        return;
       }
     }
     try {
       const version = sent ? null : await api.viewsVersion();
+      if (g !== gen) return;
       if (!sent && version !== null && version === kept.version) return;
       const answer = await api.views();
-      if (!answer) return;
+      if (g !== gen || !answer) return;
       // Nothing waits: the server's copy is the copy, in its order.
-      if (!kept.views.some((v) => v.pending) && !kept.reorder) save({ views: answer.data.map(fromServer), version: answer.views_version, reorder: false });
+      if (!kept.views.some((v) => v.pending) && !kept.reorder) save({ views: answer.data.map(fromServer), version: answer.views_version, reorder: false }, g);
     } catch {
       // Offline: the copy stays.
     }
   };
-  /** One sync at a time; a change made while one runs is sent by one more round. */
+  /** One sync at a time per account; a change made while one runs is sent by one more round. */
   const sync = (): Promise<void> => {
-    if (running) {
+    if (key === null) return Promise.resolve();
+    if (running && running.gen === gen) {
       again = true;
-      return running;
+      return running.promise;
     }
+    const g = gen;
     again = false;
-    running = work().finally(() => {
-      running = null;
-      if (again && kept.views.some((v) => v.pending)) void sync();
+    const promise: Promise<void> = work(g).finally(() => {
+      if (running?.promise === promise) running = null;
+      if (g !== gen) return;
+      const more = again && kept.views.some((v) => v.pending);
       again = false;
+      if (more) void sync();
     });
-    return running;
+    running = { gen: g, promise };
+    return promise;
   };
 
   return {
     use(account) {
-      const next = account ? `${KEY}:${account}` : KEY;
+      const next = account ? `${KEY}:${account}` : null;
       if (next === key) return;
+      gen++;
       key = next;
-      save(read(key));
-      if (listeners.size) void sync();
+      again = false;
+      running = null;
+      show(next ? read(next) : EMPTY);
+      if (next && listeners.size) void sync();
     },
     sync,
     onProblem(f) {
       problems.add(f);
-      return () => problems.delete(f);
+      return () => void problems.delete(f);
     },
     list: () => shown,
     async create(name, spec) {
+      ready();
       if (shown.length >= MAX_VIEWS) throw new ViewError(VIEW_WORDS.full);
       const problem = nameProblem(name, kept.views);
       if (problem) throw new ViewError(problem);
@@ -256,6 +308,7 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
       return view;
     },
     async rename(id, name) {
+      ready();
       find(id);
       const problem = nameProblem(name, kept.views, id);
       if (problem) throw new ViewError(problem);
@@ -263,11 +316,13 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
       void sync();
     },
     async update(id, spec) {
+      ready();
       find(id);
       patch(id, (v) => ({ ...v, spec: cleanViewSpec(spec), pending: v.pending ?? "update" }));
       void sync();
     },
     async remove(id) {
+      ready();
       const at = find(id);
       // Never sent: it just goes. Else it waits to be deleted on the server (and shows nowhere meanwhile).
       if (kept.views[at].pending === "create") drop(id);
@@ -275,6 +330,7 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
       void sync();
     },
     async move(id, index) {
+      ready();
       find(id);
       const live = kept.views.filter((v) => v.pending !== "delete");
       const from = live.findIndex((v) => v.id === id);
@@ -287,8 +343,10 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
       // Read again when something starts showing them (another window, or the account, may have changed them), and
       // keep in step with the server while they show: now, and after every library sync.
       if (listeners.size === 0) {
-        save(read(key));
-        void sync();
+        if (key) {
+          show(read(key));
+          void sync();
+        }
         const un = listen("library:updated", () => void sync());
         unlisten = () => void un.then((f) => f());
       }
@@ -312,7 +370,18 @@ export function useMyViews(store: ViewsStore = viewsStore): readonly MyView[] {
   return useSyncExternalStore(store.subscribe, store.list, store.list);
 }
 
-/** Uses the signed-in account's own copy (the server and the email; none: this computer's). */
+/**
+ * Whose views these are: the server, the email and the workspace together; null until all three are known (then no
+ * view shows, and none is sent).
+ */
+export function viewsAccount(server: string | null | undefined, email: string | null | undefined, workspace: unknown): string | null {
+  const host = (server ?? "").trim().replace(/\/+$/, "").toLowerCase();
+  const who = (email ?? "").trim().toLowerCase();
+  const where = workspace === null || workspace === undefined ? "" : String(workspace).trim();
+  return host && who && where ? `${host}|${who}|${where}` : null;
+}
+
+/** Uses the signed-in account's own copy in its workspace (viewsAccount); none while it isn't known. */
 export function useViewsAccount(account: string | null) {
   useEffect(() => {
     viewsStore.use(account);

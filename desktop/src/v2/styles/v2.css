@@ -1544,6 +1544,8 @@ mark.el-find--current { background: var(--el-role-accent-default); color: var(--
 /* Moving recordings by dragging them (parity DT-LIB-082, 083, DT-PRJ-014): the drop targets in the sidebar. */
 .el-nav-drop { display: none; align-items: center; gap: var(--el-space-8); margin-inline: var(--el-space-8); padding: var(--el-space-8); border: var(--el-border-hairline) dashed var(--el-role-border-strong); border-radius: var(--el-radius-sm); color: var(--el-role-text-secondary); }
 .dragging-recordings .el-nav-drop { display: flex; }
+/* A view being dragged in MY VIEWS: the grabbing hand, and no text picked on the way. */
+body.dragging-views, body.dragging-views * { cursor: grabbing !important; user-select: none; }
 .el-shell [data-drop-project].drop-over { background: var(--el-role-accent-soft); border-radius: var(--el-radius-sm); outline: var(--el-focus-width) solid var(--el-role-accent-focus); }
 
 /* The Library's places under Library in the sidebar (parity DT-NAV-003, DT-LIB-115..117), each with its count. */
@@ -1765,6 +1767,35 @@ span.el-nav-section__title { cursor: default; }
 .el-shell--library .el-shell__foot { flex: none; margin-block-start: 0; gap: var(--el-space-2); padding-block-start: var(--el-space-4); border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-shell--library .el-shell__foot .el-nav-item, .el-shell--library .el-sidebar > .el-nav-item { min-block-size: var(--el-space-32); }
 .el-shell__tools { display: flex; align-items: center; gap: var(--el-space-2); padding-inline: var(--el-space-4); }
+.el-shell__actions, .el-shell__who { display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: 0; }
+/* The middle's edges shade where there is more to scroll to (Projects below the fold says so): a soft inner shadow,
+   as a scroll edge does (no gradients in v2). */
+.el-sidebar__middle {
+  --el-edge-shade: color-mix(in srgb, var(--el-role-text-secondary) 40%, transparent);
+  --el-edge-below: inset 0 calc(-1 * var(--el-space-16)) var(--el-space-16) calc(-1 * var(--el-space-12)) var(--el-edge-shade);
+  --el-edge-above: inset 0 var(--el-space-16) var(--el-space-16) calc(-1 * var(--el-space-12)) var(--el-edge-shade);
+}
+.el-sidebar__middle[data-more-below] { box-shadow: var(--el-edge-below); }
+.el-sidebar__middle[data-more-above] { box-shadow: var(--el-edge-above); }
+.el-sidebar__middle[data-more-above][data-more-below] { box-shadow: var(--el-edge-above), var(--el-edge-below); }
+/* A short window: Activity and Settings join the tools as icons (their names still said), the workspace and the
+   avatar share a row. */
+.el-shell--short .el-shell__actions { flex-direction: row; align-items: center; flex-wrap: wrap; gap: var(--el-space-2); padding-inline: var(--el-space-4); }
+.el-shell--short .el-shell__actions > .el-nav-item { position: relative; flex: none; inline-size: auto; min-block-size: var(--el-space-32); padding: var(--el-space-4) var(--el-space-8); }
+.el-shell--short .el-shell__actions > .el-nav-item .el-nav-item__label {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.el-shell--short .el-shell__actions > .el-nav-item .el-nav-item__count {
+  position: absolute; inset-block-start: 0; inset-inline-end: 0; min-inline-size: var(--el-space-16); padding-inline: var(--el-space-2); font-size: var(--el-text-caption-size);
+}
+.el-shell--short .el-shell__actions > .el-nav-item .el-nav-item__dot { display: none; }
+.el-shell--short .el-shell__actions > .el-shell__tools { padding-inline: 0; }
+.el-shell--short .el-shell__who { flex-direction: row; align-items: center; }
+.el-shell--short .el-shell__who > :first-child { flex: 1 1 auto; min-inline-size: 0; }
+.el-shell--short .el-shell__who .el-shell__me { flex: none; padding: var(--el-space-4); }
+.el-shell--short .el-shell__who .el-shell__me-text {
+  position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline); overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
 .el-sidebar[data-rail="on"] .el-shell__tools { flex-direction: column; padding-inline: 0; }
 @media (width < 780px) { .el-sidebar:not([data-rail="off"]) .el-shell__tools { flex-direction: column; padding-inline: 0; } }
 .el-shell__rail-only { display: none; }
@@ -1842,12 +1873,23 @@ span.el-nav-section__title { cursor: default; }
 /* Rows: a checkbox on hover (or while something is picked), the source logo and a label filter by themselves. */
 .el-row__pick { position: relative; z-index: calc(var(--el-layer-base) + 1); flex: none; display: inline-flex; align-items: center; justify-content: center; inline-size: var(--el-space-16); opacity: 0; }
 .el-row--pick:hover .el-row__pick, .el-row--pick:focus-within .el-row__pick, .el-row--picking .el-row__pick, .el-row--selected .el-row__pick { opacity: 1; }
+/* A row's box: 16 px drawn, 24 px to press (a transparent border takes the press; the box is its inside). */
+.el-row__pick .el-check, .el-table__pick .el-check {
+  inline-size: var(--el-space-24); block-size: var(--el-space-24); margin: calc(-1 * var(--el-space-4));
+  border: var(--el-space-4) solid transparent; background-clip: padding-box; border-radius: calc(var(--el-radius-sm) + var(--el-space-4));
+  box-shadow: inset 0 0 0 var(--el-border-hairline) var(--el-role-border-strong);
+}
+.el-row__pick .el-check-box > .el-check:checked, .el-table__pick .el-check-box > .el-check:checked,
+.el-row__pick .el-check-box > .el-check:indeterminate, .el-table__pick .el-check-box > .el-check:indeterminate {
+  border-color: transparent; box-shadow: none;
+}
 .el-row__source { position: relative; z-index: calc(var(--el-layer-base) + 1); flex: none; display: inline-flex; border: 0; padding: 0; background: transparent; border-radius: var(--el-radius-md); cursor: pointer; }
 .el-row__source:hover { box-shadow: 0 0 0 var(--el-border-strong) var(--el-role-border-default); }
 button.el-row__label { position: relative; z-index: calc(var(--el-layer-base) + 1); display: inline-flex; align-items: center; gap: var(--el-space-4); border: 0; font: inherit; font-size: var(--el-text-caption-size); cursor: pointer; }
 button.el-row__label:hover { color: var(--el-role-text-primary); }
 .el-table__pick { inline-size: var(--el-space-32); }
 .el-table__pick .el-check-box { opacity: 0; }
+.el-table thead .el-table__pick .el-check-box { opacity: 1; }
 .el-table__row:hover .el-table__pick .el-check-box, .el-table__row:focus-within .el-table__pick .el-check-box, .el-table__row--picking .el-table__pick .el-check-box, .el-table__row--picked .el-table__pick .el-check-box { opacity: 1; }
 .el-check-box > .el-check:indeterminate { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
 .el-check-box:has(> .el-check:indeterminate)::after { content: ""; position: absolute; inset-inline: var(--el-space-4); inset-block-start: 50%; block-size: var(--el-border-strong); margin-block-start: calc(var(--el-border-strong) / -2); background: var(--el-role-text-on-accent); pointer-events: none; }

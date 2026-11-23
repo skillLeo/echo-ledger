@@ -3,7 +3,8 @@
 // filter combinations: rename, drag to reorder or Move up / Move down, delete; "+ New view") and LABELS (lists.tsx).
 // Counts are muted; only Needs you's and Unread's are bold. ⌘1…⌘9 (Ctrl on Windows) open the first nine views.
 // At the sidebar's foot: Trash, then "Synced 2 min ago", which syncs again when pressed (LibraryFoot).
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { beginReorder, dragJustEnded, REORDER_ATTRIBUTE } from "../../lib/dragMove";
 import { Button, ContextMenu, Dialog, Icon, Icons, TextField, menuPointFor } from "../components";
 import type { IconType } from "../components/Button";
 import { LIBRARY_VIEWS, LIBRARY_VIEW_NAMES, type LibraryViewId } from "./facets";
@@ -177,7 +178,8 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
   const [folded, fold] = useFolded("views-folded");
   const [renaming, setRenaming] = useState<MyView | null>(null);
   const [deleting, setDeleting] = useState<MyView | null>(null);
-  const [dragging, setDragging] = useState<string | null>(null);
+  // Dragging a view (pointer events, as recordings are dragged: the page's own drag and drop is off on Windows): the
+  // place it would go before is marked.
   const [over, setOver] = useState<number | null>(null);
   const move = (view: MyView, to: number) => void viewsStore.move(view.id, to).catch((e) => say(e instanceof Error ? e.message : String(e)));
   const remove = async (view: MyView) => {
@@ -190,14 +192,13 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
       say(e instanceof Error ? e.message : String(e));
     }
   };
-  const drop = (e: DragEvent, index: number) => {
-    e.preventDefault();
-    const view = views.find((v) => v.id === dragging);
-    setDragging(null);
-    setOver(null);
-    if (!view) return;
-    const from = views.indexOf(view);
-    move(view, index > from ? index - 1 : index);
+  const press = (e: ReactPointerEvent, view: MyView) => {
+    if ((e.target as HTMLElement).closest(".el-nav-row__more")) return;
+    beginReorder(e, setOver, (index) => {
+      const from = views.indexOf(view);
+      const to = index > from ? index - 1 : index;
+      if (to !== from) move(view, to);
+    });
   };
   return (
     <section className="el-nav-section" aria-label="My views">
@@ -205,17 +206,15 @@ function MyViewsNav({ views, current, onOpen, onGone, onNew, say, shortcut }: {
         end={<Button size="sm" variant="quiet" icon={Icons.PlusIcon} aria-label="New view" title="New view" onClick={onNew} />} />
       {!folded && <ul className="el-nav-list" aria-label="My views">
         {views.map((v, i) => (
-          <li key={v.id} className={`el-nav-row${over === i ? " el-nav-row--drop" : ""}`} draggable onDragStart={(e) => { setDragging(v.id); e.dataTransfer?.setData("text/plain", v.id); }}
-            onDragOver={(e) => { if (dragging) { e.preventDefault(); setOver(i); } }} onDragLeave={() => setOver((o) => (o === i ? null : o))} onDrop={(e) => drop(e, i)}
-            onDragEnd={() => { setDragging(null); setOver(null); }}
+          <li key={v.id} className={`el-nav-row${over === i ? " el-nav-row--drop" : ""}`} {...{ [REORDER_ATTRIBUTE]: i }}
+            onPointerDown={(e) => press(e, v)}
             onContextMenu={(e) => { e.preventDefault(); setMenu({ view: v, at: { x: e.clientX, y: e.clientY } }); }}>
-            <Row icon={Icons.FilterIcon} label={v.name} current={current === v.id} onClick={() => onOpen(v.id)} aria-keyshortcuts={shortcut(v.id)} />
+            <Row icon={Icons.FilterIcon} label={v.name} current={current === v.id} onClick={() => { if (!dragJustEnded()) onOpen(v.id); }} aria-keyshortcuts={shortcut(v.id)} />
             <Button size="sm" variant="quiet" className="el-nav-row__more" icon={Icons.MoreIcon} aria-label={`More for ${v.name}`}
               onClick={(e) => setMenu({ view: v, at: menuPointFor(e.currentTarget) })} />
           </li>
         ))}
-        <li className={over === views.length ? "el-nav-row--drop" : undefined} onDragOver={(e) => { if (dragging) { e.preventDefault(); setOver(views.length); } }}
-          onDrop={(e) => drop(e, views.length)}>
+        <li className={over === views.length ? "el-nav-row--drop" : undefined} {...{ [REORDER_ATTRIBUTE]: views.length }}>
           <button type="button" className="el-nav-item el-nav-item--row el-nav-item--add" onClick={onNew}>
             <Icon icon={Icons.PlusIcon} /><span className="el-nav-item__label">New view</span>
           </button>
@@ -279,17 +278,32 @@ export function ViewNameDialog({ title, save, start = "", except, onClose, onSav
   );
 }
 
-/** The sidebar's foot for the Library: Trash, then when it last synced (pressed: sync now). */
+/**
+ * The sidebar's foot for the Library: Trash, then when it last synced (pressed: sync now). The line itself is quiet
+ * (it changes every few minutes); how a sync went is said once, after a press, and whenever one fails.
+ */
 export function LibraryFoot({ trashCurrent, onTrash, onSync }: { trashCurrent: boolean; onTrash: () => void; onSync: () => void }) {
   const clock = useSyncClock();
+  const pressed = useRef(false);
+  const was = useRef(clock.syncing);
+  const [said, setSaid] = useState("");
+  useEffect(() => {
+    if (was.current && !clock.syncing) {
+      if (clock.error) setSaid(`Couldn't sync: ${clock.error}`);
+      else if (pressed.current) setSaid(clock.words);
+      pressed.current = false;
+    }
+    was.current = clock.syncing;
+  }, [clock.syncing, clock.error, clock.words]);
   return (
     <div className="el-library-foot">
       <Row icon={Icons.TrashIcon} label="Trash" current={trashCurrent} onClick={onTrash} />
-      <button type="button" className="el-nav-item el-nav-item--row el-shell__synced el-caption" onClick={onSync} aria-busy={clock.syncing || undefined}
-        title={clock.error ? `Couldn't sync: ${clock.error}. Press to try again.` : "Sync now"} aria-live="polite" data-testid="sidebar-synced">
+      <button type="button" className="el-nav-item el-nav-item--row el-shell__synced el-caption" onClick={() => { pressed.current = true; setSaid(""); onSync(); }}
+        aria-busy={clock.syncing || undefined} title={clock.error ? `Couldn't sync: ${clock.error}. Press to try again.` : "Sync now"} data-testid="sidebar-synced">
         <Icon icon={Icons.RefreshIcon} />
         <span className="el-nav-item__label">{clock.words}</span>
       </button>
+      <span className="el-visually-hidden" role="status" data-testid="sidebar-synced-said">{said}</span>
     </div>
   );
 }

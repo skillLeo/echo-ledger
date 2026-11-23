@@ -486,8 +486,16 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     return prepared.facts.filter((f) => inLibraryView(f, baseView) && (!labelKey || f.values.labels.includes(labelKey)) && matchesSearch(f, words));
   }, [prepared, baseView, labelKey, query, trash]);
   // Counted among what the view and the search keep; every option of the whole library offered.
-  const counts = useMemo(() => facetCounts(searched, applied, prepared.names, Date.now(), undefined, prepared.facts), [searched, applied, prepared]);
-  const shownItems = useMemo(() => filterFacts(searched, applied).map((f) => f.item), [searched, applied]);
+  // Worked out only when asked for (the panel open, or a pill being edited), once per change: typing in the search
+  // never counts every option on every key.
+  const counts = useMemo(() => {
+    let made: ReturnType<typeof facetCounts> | null = null;
+    return () => (made ??= facetCounts(searched, applied, prepared.names, Date.now(), undefined, prepared.facts));
+  }, [searched, applied, prepared]);
+  // Needs you lists the server's waiting recordings too (a call waiting for Keep or Discard: session `recording`,
+  // which no other view has), whatever the filters and the search, as the server's Needs you does.
+  const waitingHere = useMemo(() => (baseView === "needs" && !trash ? (items ?? []).filter((i) => !i.deleted && i.status === "recording") : []), [items, baseView, trash]);
+  const shownItems = useMemo(() => [...waitingHere, ...filterFacts(searched, applied).map((f) => f.item)], [waitingHere, searched, applied]);
   // Only pinned recordings on screen already (Marked is Pinned alone): no Pinned section of its own.
   const onlyPinned = applied.marked?.values.length === 1 && applied.marked.values[0] === "pinned" && applied.marked.op !== "is_not";
   const groups = useMemo(() => sections(shownItems, choice.group, choice.sort, opened, !onlyPinned),
@@ -816,6 +824,10 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       return;
     }
     if (typing(e.target)) return;
+    // One-letter keys (F, /, J, K, X) answer only while focus is in the Library (WCAG 2.1.4, as the web): never while
+    // it is in the sidebar, the player or anywhere else in the window.
+    const inside = e.target instanceof Node && !!root.current?.contains(e.target);
+    if (!mod && !e.altKey && ["f", "F", "/", "j", "k", "x"].includes(e.key) && !inside) return;
     // Esc closes the open recording and goes back to the list (its row gets focus again).
     if (open && e.key === "Escape" && !e.defaultPrevented) {
       e.preventDefault();
@@ -967,7 +979,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     <div className="el-root el-embedded" data-v2="library" ref={root}>
       <div className={`el-lib${panelShown && !drawer ? " el-lib--panel" : ""}`} style={{ ["--el-lib-room" as string]: `${height}px` }}>
         {panelShown && (
-          <FilterPanel spec={spec} onSpec={(next) => setSpec(next, "soon")} counts={counts} drawer={drawer} onClose={() => setPanel(false)}
+          <FilterPanel spec={spec} onSpec={(next) => setSpec(next, "soon")} counts={counts()} drawer={drawer} onClose={() => setPanel(false)}
             onSaveView={() => setSavingView(true)} canSave={canSave} />
         )}
         <div className="el-page el-page--wide el-lib__main">
@@ -1113,6 +1125,7 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
           ) : layout === "table" ? (
             <LibraryTable viewsOf={rowViews.summaryFor} groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={choosing} picked={picked}
               onRow={rowClick} onRowMenu={rowMenu} onRowPointerDown={rowDrag} recovered={recovered} onPick={pickRow}
+              onPickAll={() => (allPicked ? setPicked(new Set()) : pickAll())}
               rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
           ) : (
             <List label="Recordings">

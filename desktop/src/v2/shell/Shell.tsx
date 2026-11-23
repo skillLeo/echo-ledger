@@ -13,6 +13,8 @@ import { clampSidebar, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN } from "../../l
 
 /** How long Record ignores presses when the status never changes (the core said no, or was slow to say). */
 const PRESS_HOLD_MS = 3000;
+/** Below this window height the foot packs tighter, so the sidebar's middle (the Library's sections) keeps its room. */
+export const SHORT_BELOW = 820;
 
 /** A key typed into a field, a select, editable text or an open dialog or menu is theirs, never app search's. */
 const typing = (target: EventTarget | null) =>
@@ -313,6 +315,40 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
   const search = onSearch && <Button size="sm" variant="quiet" icon={Icons.SearchIcon} aria-label="Search" title={hint.title} aria-keyshortcuts={hint.keys} onClick={onSearch} />;
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
+  // With the Library's sections, a short window keeps more of the middle: the foot's rows pack tighter (Activity and
+  // Settings beside the tools as icons; the workspace and the avatar on one row), and the middle's edges fade where
+  // there is more to scroll to.
+  const [short, setShort] = useState(() => typeof window !== "undefined" && window.innerHeight < SHORT_BELOW);
+  useEffect(() => {
+    const follow = () => setShort(window.innerHeight < SHORT_BELOW);
+    window.addEventListener("resize", follow);
+    return () => window.removeEventListener("resize", follow);
+  }, []);
+  const middle = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ above: false, below: false });
+  useEffect(() => {
+    const el = middle.current;
+    if (!el || !library) return;
+    const measure = () => {
+      const above = el.scrollTop > 1;
+      const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+      setEdges((now) => (now.above === above && now.below === below ? now : { above, below }));
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    const watch = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    watch?.observe(el);
+    for (const child of el.children) watch?.observe(child);
+    const changes = typeof MutationObserver === "function" ? new MutationObserver(measure) : null;
+    changes?.observe(el, { childList: true, subtree: true });
+    return () => {
+      el.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+      watch?.disconnect();
+      changes?.disconnect();
+    };
+  }, [library]);
   // Anything that opens a page of the app (a notice, the palette, a link) leaves Live or Ask. Worked out while
   // rendering, not in an effect: a page that suspends and shows again re-runs effects, which would close Live.
   const [lastTab, setLastTab] = useState(tab);
@@ -349,12 +385,14 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
     return !f;
   });
   return (
-    <div className={`el-root el-shell${library ? " el-shell--library" : ""}`} data-shell="v2" style={width !== undefined && !rail ? { ["--el-sidebar-width" as string]: `${width}px` } : undefined}>
+    <div className={`el-root el-shell${library ? " el-shell--library" : ""}${library && short && !rail ? " el-shell--short" : ""}`} data-shell="v2" style={width !== undefined && !rail ? { ["--el-sidebar-width" as string]: `${width}px` } : undefined}>
       {/* The name, and Search at its end (the start in RTL); in the rail Search stays at the top, the name goes. */}
       <Sidebar label="Main" brand={<>EchoLedger</>} brandEnd={search} rail={rail}
         footer={
           <div className="el-shell__foot">
             {footStart && <div className="el-shell__foot-start">{footStart}</div>}
+            {/* Activity, Settings and the tools: one row of icons in a short window (el-shell--short). */}
+            <div className="el-shell__actions">
             {item("activity", "Activity", Icons.BellIcon, activity ? activity : undefined)}
             {item("settings", "Settings", Icons.SettingsIcon)}
             {library ? (
@@ -377,6 +415,9 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
                 )}
               </>
             )}
+            </div>
+            {/* The workspace and who is signed in: one row in a short window. */}
+            <div className="el-shell__who">
             {workspace && <WorkspaceMenu workspace={workspace} />}
             {me && (
               <button type="button" className="el-shell__me" onClick={() => go("settings")} title={me.email} aria-describedby="el-shell-me-hint">
@@ -388,6 +429,7 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
                 <span className="el-visually-hidden" id="el-shell-me-hint">Opens Settings</span>
               </button>
             )}
+            </div>
             {uploading && (
               <p className={`el-shell__uploads el-caption el-secondary${uploadsWait ? " el-shell__uploads--wait" : ""}`} aria-live="polite" data-testid="sidebar-uploads">
                 {!uploadsWait && <span className="el-spinner" aria-hidden="true" />}<span dir="auto">{uploading}</span>
@@ -430,7 +472,8 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
             only the middle scrolls: LIBRARY, MY VIEWS, LABELS and PROJECTS. */}
         {library && item("live", "Live", Icons.WaveIcon)}
         {library && item("ask", "Ask", Icons.AskIcon)}
-        <div className={library ? "el-sidebar__middle" : "el-sidebar__flow"}>
+        <div ref={middle} className={library ? "el-sidebar__middle" : "el-sidebar__flow"}
+          data-more-above={library && edges.above ? "" : undefined} data-more-below={library && edges.below ? "" : undefined}>
         {library ? (
           <>
             <div className="el-shell__rail-only">

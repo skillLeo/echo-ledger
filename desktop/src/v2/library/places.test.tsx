@@ -26,10 +26,10 @@ const ITEMS: LibraryItem[] = [
 const rows = () => [...screen.getByRole("list", { name: "Recordings" }).querySelectorAll<HTMLButtonElement>("button[data-row-id]")].map((b) => b.dataset.rowId);
 const pills = () => within(screen.getByRole("group", { name: "Filters on" }));
 
-function inTheApp() {
-  respond("app_status", makeStatus({ failedUploads: 1, pendingDecisions: 2 }));
-  respond("library_list", ITEMS);
-  respond("library_refresh", ITEMS);
+function inTheApp(items: LibraryItem[] = ITEMS, local = { failedUploads: 1, pendingDecisions: 2 }) {
+  respond("app_status", makeStatus(local));
+  respond("library_list", items);
+  respond("library_refresh", items);
   respond("get_settings", makeSettings());
   respond("list_clients", { data: [{ id: "p1", name: "Qureshi Textiles" }] });
   respond("mic_users", []);
@@ -131,6 +131,30 @@ describe("the Library's places", () => {
     expect(within(list).getByRole("button", { name: "Audio only, 1" })).toHaveAttribute("aria-current", "page");
     expect(rows()).toEqual(["file"]);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Audio only/);
+  });
+
+  it("in the app, Needs you counts and lists the server's waiting recordings (a call waiting for Keep or Discard); no other view has them", async () => {
+    const call = makeItem("call", { title: "Phone call with Bilal", source_app: "phone_call", started_at: "2026-11-17T07:00:00Z", status: "recording", transcript: none });
+    respond("pending_list", []);
+    respond("upload_list", []);
+    inTheApp([...ITEMS, call], { failedUploads: 0, pendingDecisions: 0 });
+    await settle();
+    const list = await screen.findByRole("list", { name: "Library views" });
+    // The failed one and the waiting call; All counts what it lists (not the call).
+    expect(within(list).getByRole("button", { name: /^Needs you, / })).toHaveAccessibleName("Needs you, 2");
+    expect(within(list).getByRole("button", { name: /^All, / })).toHaveAccessibleName("All, 4");
+    expect(rows()).not.toContain("call");
+    fireEvent.click(within(list).getByRole("button", { name: "Needs you, 2" }));
+    await settle();
+    expect(rows()).toEqual(["call", "bad"]);
+    expect(document.querySelector("button[data-row-id=call]")!.closest("li")).toHaveTextContent("Waiting for decision");
+    // With a filter that the call doesn't have, it is still listed (as the server's Needs you keeps it).
+    fireEvent.click(screen.getAllByRole("button", { name: "Show only Teams" })[0]);
+    await settle();
+    expect(rows()).toEqual(["call", "bad"]);
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "nothing like it" } });
+    await settle();
+    expect(rows()).toEqual(["call"]);
   });
 
   it("in the app, All after a view shows every recording again", async () => {

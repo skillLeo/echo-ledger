@@ -79,9 +79,11 @@ export function columnsMenu(columns: readonly Column[], onChange: (c: Column[]) 
   }));
 }
 
-export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, onRowPointerDown, rowActions, recovered, viewsOf, onPick }: {
+export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, onRowPointerDown, rowActions, recovered, viewsOf, onPick, onPickAll }: {
   /** A checkbox before each row that picks it (the Library: no Select button); Shift ticks the range. */
   onPick?: (item: LibraryItem, e: MouseEvent<HTMLInputElement>) => void;
+  /** The header's box: every row shown picked, or none (mixed while some are). */
+  onPickAll?: () => void;
   /** A row's views as known last (the Library asks while they are written); its own otherwise. */
   viewsOf?: (item: LibraryItem) => ViewsSummary | null;
   /** Recordings recovered after a restart: their "Recovered" chip. */
@@ -104,7 +106,16 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
       <table className="el-table" aria-label="Recordings">
         <thead>
           <tr>
-            {onPick && <th scope="col" className="el-table__pick"><span className="el-visually-hidden">Select</span></th>}
+            {onPick && (
+              <th scope="col" className="el-table__pick">
+                {onPickAll ? (() => {
+                  const shown = groups.flatMap((g) => (collapsed.has(g.key) ? [] : g.items));
+                  const on = shown.filter((i) => picked.has(i.id)).length;
+                  const all = shown.length > 0 && on === shown.length;
+                  return <PickBox checked={all} mixed={on > 0} label={all ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A" onClick={onPickAll} />;
+                })() : <span className="el-visually-hidden">Select</span>}
+              </th>
+            )}
             <th scope="col">Recording</th>
             {columns.map((c) => <th key={c} scope="col">{COLUMN_NAMES[c]}</th>)}
             <th scope="col"><span className="el-visually-hidden">Actions</span></th>

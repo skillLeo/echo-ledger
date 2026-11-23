@@ -6,7 +6,7 @@ import { makeItem } from "../../test/fixtures";
 import type { LibraryItem } from "../../lib/ipc";
 import {
   activeSections, clearSection, cleanSpec, dateRange, facetCounts, filterFacts, inLibraryView, libraryViewCounts, matchesSearch, needsReason, needsYou,
-  needsYouCount, pillWords, prepare, readSpec, searchWords, setDate, setNot, statusOf, toggleValue, STUCK_MS, type FilterSpec,
+  foldText, needsYouCount, pillWords, prepare, readSpec, searchWords, setDate, setNot, sourceOf, statusOf, toggleValue, STUCK_MS, type FilterSpec,
 } from "./facets";
 
 const NOW = new Date(2026, 10, 23, 12, 0); // Mon 23 Nov 2026, local
@@ -29,6 +29,12 @@ describe("a recording's status, one of four", () => {
   it("failed first, then transcribed, processing (uploading or under way), else not transcribed (audio only, nothing asked)", () => {
     expect(ITEMS.slice(0, 7).map(statusOf)).toEqual(["transcribed", "transcribed", "transcribed", "not_transcribed", "failed", "processing", "processing"]);
     expect(statusOf(makeItem("u", { status: "uploaded", transcript: none }))).toBe("not_transcribed");
+  });
+  it("an app the contract doesn't name is Other, as the server files it; WhatsApp Web is WhatsApp", () => {
+    expect(sourceOf(makeItem("u", { source_app: "facetime", source_app_label: "FaceTime" }))).toEqual({ value: "other", label: "Other" });
+    expect(sourceOf({ ...makeItem("s"), facets: { source: "carrier_pigeon" } } as LibraryItem)).toEqual({ value: "other", label: "Other" });
+    expect(sourceOf(makeItem("w", { source_app: "whatsapp_web" }))).toEqual({ value: "whatsapp", label: "WhatsApp" });
+    expect(sourceOf(makeItem("n", { source_app: undefined }))).toEqual({ value: "other", label: "Other" });
   });
   it("the server's facet when it sends one", () => {
     expect(statusOf({ ...makeItem("s"), facets: { status: "processing" } } as LibraryItem)).toBe("processing");
@@ -190,6 +196,32 @@ describe("the search", () => {
     expect(found("northwind clause")).toEqual([]);
     // No project: nothing to match.
     expect(found("no project")).toEqual([]);
+  });
+  it("Urdu spellings are one, as the server folds them, in the title, the transcript and the project path alike", () => {
+    // Arabic Kaf and Keheh, Arabic Yeh and Farsi Yeh, Heh and Heh Goal, harakat, Arabic-Indic digits.
+    expect(foldText("كتاب")).toBe(foldText("کتاب"));
+    expect(foldText("علي")).toBe("علی");
+    expect(foldText("مُلاقات")).toBe("ملاقات");
+    expect(foldText("شاه")).toBe("شاہ");
+    expect(foldText("۲۰۲۶ ٣")).toBe("2026 3");
+    expect(foldText("Acme")).toBe("acme");
+    const { facts: urdu } = prepare([
+      makeItem("t", { title: "كراچی کی ملاقات", transcript: none }),
+      makeItem("x", { title: "Call", transcript: { ...none, preview: "قيمت پر بات ہوئی" } }),
+      makeItem("p", { title: "Call", transcript: none, client: { id: "u2", name: "كراچي دفتر" } }),
+    ], { now: NOW.getTime(), projects: [{ id: "u1", name: "پاکستان" }, { id: "u2", name: "كراچي دفتر", parent_id: "u1" }] });
+    const hit = (q: string) => urdu.filter((f) => matchesSearch(f, searchWords(q))).map((f) => f.item.id);
+    expect(hit("کراچی")).toEqual(["t", "p"]);
+    expect(hit("قیمت")).toEqual(["x"]);
+    expect(hit("دفتر پاکستان")).toEqual(["p"]);
+  });
+  it("the words as the server reads them: a quoted phrase is one, punctuation round a word goes, each once, at most 8", () => {
+    expect(searchWords('"budget call" acme')).toEqual(["budget call", "acme"]);
+    expect(searchWords("(acme) +invoice- ACME")).toEqual(["acme", "invoice"]);
+    expect(searchWords("a b c d e f g h i j")).toHaveLength(8);
+    expect(searchWords(`${"x".repeat(80)} y`)[0]).toHaveLength(64);
+    expect(found('"budget call"')).toEqual(["a"]);
+    expect(found('"call budget"')).toEqual([]);
   });
   it("one character, or only punctuation, is no search", () => {
     expect(searchWords("a")).toEqual([]);
