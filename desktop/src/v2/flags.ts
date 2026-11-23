@@ -129,21 +129,31 @@ function shownFrom(server: UiState): UiState {
 }
 
 /**
- * readUiState, and whether the answer is the server's. It is not when the read failed, or before the core's first
- * `GET /api/config` answer, when it says everything off with no design (as an older server with nothing on does, which
- * is taken the same way).
+ * readUiState, whether the read failed, and whether the answer is the server's. It is not when the read failed, or
+ * before the core's first `GET /api/config` answer, when it says everything off with no design (as an older server with
+ * nothing on does, which is taken the same way).
  */
-async function readFromCore(): Promise<{ state: UiState; heard: boolean }> {
+async function readFromCore(): Promise<{ state: UiState; heard: boolean; failed: boolean }> {
   const forced = forcedFlags();
-  if (forced) return { state: forced, heard: true };
+  if (forced) return { state: forced, heard: true, failed: false };
   let server = ALL_OFF;
+  let failed = false;
   try {
     server = parseUiState(await api.uiFlags());
   } catch {
     // An older core: no feature flags; the design still decides the screens.
+    failed = true;
   }
-  return { state: shownFrom(server), heard: !same(server, ALL_OFF) };
+  return { state: shownFrom(server), heard: !same(server, ALL_OFF), failed };
 }
+
+/**
+ * A window that hears `ui:flags` and whose read failed before it had any answer tries again after these waits (ms),
+ * then takes the core's `ui:flags` at once. Without them a busy core at start would leave it waiting for an
+ * announcement that may never come (the core says only a change), and then take the next change at once, in the middle
+ * of a screen. The pill and the after-call card (`atOnce: false`) never wait: they draw at once and read again next time.
+ */
+export const READ_RETRY_MS: readonly number[] = [250, 1000];
 
 /** The flags for this person now, under the design chosen here; all v2 screens off when the core can't say. */
 export async function readUiState(): Promise<UiState> {
@@ -162,10 +172,12 @@ export async function setClassic(classic: boolean): Promise<UiState> {
  * equals its key.
  *
  * A window can open before the core has its first `GET /api/config` answer, and then reads everything off. Until it
- * has the server's answer (or while its last read failed) it takes the core's `ui:flags` at once, or when the
- * recording ends if one runs; after that, a `ui:flags` change waits for the next screen like any other. It listens
- * before its first read, so no announcement falls between the two. `atOnce: false` (the pill and the after-call card,
- * which read again before each thing they show) leaves `ui:flags` alone: what they show never changes under the person.
+ * has the server's answer (or while its last read failed, tried again first: READ_RETRY_MS) it takes the core's
+ * `ui:flags` at once, or when the recording ends if one runs; after that, a `ui:flags` change waits for the next screen
+ * like any other. It listens before its first read, so no announcement falls between the two. Every answer is shown by
+ * an effect of a render that is not recording, never straight from the event or the read. `atOnce: false` (the pill
+ * and the after-call card, which read again before each thing they show) leaves `ui:flags` alone: what they show never
+ * changes under the person.
  */
 export function useUiFlags(enabled: boolean, screen: string, recording: boolean, options: { atOnce?: boolean } = {}): [UiState, (next: UiState) => void, string | null] {
   const atOnce = options.atOnce !== false;
@@ -175,10 +187,13 @@ export function useUiFlags(enabled: boolean, screen: string, recording: boolean,
   recordingRef.current = recording;
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
-  const screenRef = useRef(screen);
-  screenRef.current = screen;
   // Whether this window shows the server's answer; until it does, `ui:flags` applies at once.
   const heard = useRef(false);
+  // An answer (a read's, or the core's first `ui:flags`) waits here and is shown by an effect of a render that is not
+  // recording: a recording whose status is set but not drawn yet never sees the flags change with its first render.
+  const [answer, setAnswer] = useState<Answer | null>(null);
+  // Reads tried again after a failure before any answer (READ_RETRY_MS), in this window's life.
+  const retries = useRef(0);
   // The server's answer in the last `ui:flags`, and how many came: one that comes while a read is on its way is newer.
   const announced = useRef<UiState | null>(null);
   const announcements = useRef(0);
@@ -202,11 +217,8 @@ export function useUiFlags(enabled: boolean, screen: string, recording: boolean,
       if (!live || forcedFlags()) return;
       announced.current = parseUiState(raw);
       announcements.current += 1;
-      if (heard.current || !enabledRef.current || recordingRef.current) return;
-      heard.current = true;
-      const next = shownFrom(announced.current);
-      setState((prev) => (same(prev, next) ? prev : next));
-      setReadFor(screenRef.current);
+      if (heard.current || !enabledRef.current) return;
+      setAnswer({ state: shownFrom(announced.current), heard: true, screen: null });
     });
     // Read even when listening fails (an older core): the window then works as before.
     const listens = () => live && setListening(true);
@@ -219,22 +231,37 @@ export function useUiFlags(enabled: boolean, screen: string, recording: boolean,
   useEffect(() => {
     if (!enabled || !listening || recordingRef.current) return;
     let live = true;
+    let timer = 0;
     const since = announcements.current;
-    void readFromCore().then((got) => {
-      if (!live || recordingRef.current) return;
+    const read = () => void readFromCore().then((got) => {
+      if (!live) return;
+      if (atOnce && got.failed && !heard.current && retries.current < READ_RETRY_MS.length) {
+        timer = window.setTimeout(() => { if (!heard.current) read(); }, READ_RETRY_MS[retries.current]);
+        retries.current += 1;
+        return;
+      }
       // `ui:flags` heard while this read was on its way is newer; one heard before stands when the read had no answer of
       // the server's (it failed, or the core said everything off).
       const latest = announced.current;
       const take = latest !== null && (announcements.current !== since || !got.heard);
-      const next = take ? shownFrom(latest) : got.state;
-      heard.current = take || got.heard;
-      setState((prev) => (same(prev, next) ? prev : next));
-      setReadFor(screen);
+      setAnswer({ state: take ? shownFrom(latest) : got.state, heard: take || got.heard, screen });
     });
+    read();
     return () => {
       live = false;
+      window.clearTimeout(timer);
     };
-  }, [enabled, listening, screen, chosen, recording]);
+  }, [atOnce, enabled, listening, screen, chosen, recording]);
+  useEffect(() => {
+    if (!answer || recording) return;
+    // Only this answer is done: one set after it was drawn (React runs this effect before that update) stays for next.
+    setAnswer((current) => (current === answer ? null : current));
+    // The core's first `ui:flags` comes second to a read that has had the server's answer meanwhile.
+    if (answer.screen === null && heard.current) return;
+    heard.current = answer.heard;
+    setState((prev) => (same(prev, answer.state) ? prev : answer.state));
+    setReadFor(answer.screen ?? screen);
+  }, [answer, recording, screen]);
   // The server's answer set from here ("Switch back to classic"): a later `ui:flags` waits for the next screen.
   const set = useCallback((next: UiState) => {
     heard.current = true;
@@ -242,6 +269,9 @@ export function useUiFlags(enabled: boolean, screen: string, recording: boolean,
   }, []);
   return [state, set, readFor];
 }
+
+/** An answer waiting to be shown: the flags, whether they are the server's, and the screen read for (null: `ui:flags`). */
+type Answer = { state: UiState; heard: boolean; screen: string | null };
 
 /** How many times `on` turned from false to true (a window shown, a recording started): a key for useUiFlags. */
 export function useRisingCount(on: boolean): number {
