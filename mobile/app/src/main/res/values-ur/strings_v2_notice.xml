@@ -144,4 +144,6 @@
     <string name="c_other_b">یہ ایک آزمائشی اطلاع ہے۔</string>
     <string name="c_decisions">کالز اور مسائل</string>
     <string name="c_decisions_d">کال کے بعد پوچھتا ہے کہ اسے رکھیں یا نہیں، اور بتاتا ہے جب کوئی کال ریکارڈ نہ ہو سکے</string>
+    <string name="c_after_call">کال کے بعد</string>
+    <string name="c_after_call_d">ہر کال کے بعد خاموشی سے پوچھتا ہے کہ ٹرانسکرپٹ بنائیں یا حذف کریں</string>
 </resources>

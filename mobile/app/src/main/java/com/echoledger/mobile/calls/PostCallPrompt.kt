@@ -12,7 +12,8 @@ import com.echoledger.mobile.overlay.DecisionPopup
 /**
  * What happens when a call recording ends (since 2.0.5, Settings › Recording › After each call; [CallChoice]):
  * - Ask me (the default): the after-call card ([DecisionPopup]); without the overlay permission a notification asks
- *   with Transcribe, Save audio only and Delete. Nobody choosing keeps the audio only.
+ *   with Transcribe, Save audio only and Delete. Nobody choosing keeps the audio only. Since v2.1, with
+ *   [CallChoice.NOTIFY_FLAG] on, a quiet notification asks instead ([AfterCallActions], UX-13).
  * - Transcribe every call, Save audio only, a choice made on the pill during the call, "At the start of the call", and
  *   quiet hours or Do Not Disturb: no question; the call is kept as [CallChoice.outcome] says and sent now.
  * Skipped calls (unanswered, short, silent) never reach this.
@@ -51,6 +52,12 @@ object PostCallPrompt {
     fun show(context: Context, rec: LocalRecording, themeMode: String, again: Boolean = false) {
         if (rec.state != "pending_decision") {
             UploadWorker.enqueue(context, rec.id)
+            return
+        }
+        // v2.1 UX-13: a quiet notification instead of the card (behind its flag; off, the card as before).
+        val settings = (context.applicationContext as? com.echoledger.mobile.EchoLedgerApp)?.graph?.liveSettings?.value
+        if (isCall(rec) && settings != null && CallChoice.notifies(settings)) {
+            AfterCallActions.ask(context, rec, settings)
             return
         }
         val shown = isCall(rec) && Settings.canDrawOverlays(context) && DecisionPopup.ask(context, rec, themeMode, again)

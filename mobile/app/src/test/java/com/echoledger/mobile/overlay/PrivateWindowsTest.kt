@@ -132,6 +132,8 @@ class PrivateWindowsTest : AppTest() {
         pill()
         captions()
         afterCallCard()
+        assertTrue(AfterCallBar.show(app, app.storeRecording(id = "call-2", durationMs = 158_000), "dark"))
+        closers += { AfterCallBar.hide() }
         assertTrue(StartBanner.show(app, "dark") {})
         closers += { StartBanner.hide() }
         assistCard()
@@ -157,7 +159,12 @@ class PrivateWindowsTest : AppTest() {
     fun `by default the live-words windows are secure from their first frame and the pill and the card are not`() {
         assertTrue(AppSettingsDefaults.hideLiveWords)
         assertEquals(
-            setOf(FloatingWindow.RECORDING_CONTROLS.title, FloatingWindow.AFTER_CALL_CARD.title, FloatingWindow.START_BANNER.title),
+            setOf(
+                FloatingWindow.RECORDING_CONTROLS.title,
+                FloatingWindow.AFTER_CALL_CARD.title,
+                FloatingWindow.AFTER_CALL_BAR.title,
+                FloatingWindow.START_BANNER.title
+            ),
             alwaysShown
         )
         everyWindow()
