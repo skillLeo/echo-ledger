@@ -10,11 +10,15 @@ use App\Filament\Auth\EmailVerificationPrompt;
 use App\Filament\Auth\Login;
 use App\Filament\Auth\Register;
 use App\Filament\Auth\RequestPasswordReset;
+use App\Filament\Pages\GetTheApps;
+use App\Filament\Pages\LiveAssist\AssistPreps;
+use App\Filament\Pages\LiveAssist\AssistSessions;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Filament\Support\CommandPalette;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
+use App\Filament\Support\NavFrame;
 use App\Filament\Support\Palette;
 use App\Filament\Support\Shell;
 use App\Http\Middleware\AccountGate;
@@ -84,6 +88,16 @@ class AppPanelProvider extends PanelProvider
         // The page pattern (P4.4): the section above the title and a one-line subtitle, where a page has neither.
         FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_BEFORE, fn (): View|HtmlString|string => self::pageHeader('crumbs'));
         FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_AFTER, fn (): View|HtmlString|string => self::pageHeader('subtitle'));
+        // Since docs/PLAN_NAV_3_LEVELS.md section 4: Live Assist's page tabs (Upcoming · Past reports · Practice) under
+        // its heading, with the three levels.
+        FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_WIDGETS_BEFORE, fn (): View|string => ConsoleV2::frame() ? view('filament.v2.page-tabs', ['tabs' => NavFrame::liveAssistTabs(Livewire::current())]) : '',
+            scopes: [AssistSessions::class, AssistPreps::class]);
+        // Setup & health's tabs (Devices · Get the apps), the rail's own place, on Get the apps.
+        FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_WIDGETS_BEFORE, fn (): View|string => ConsoleV2::frame() ? view('filament.v2.page-tabs', ['tabs' => NavFrame::setupTabs()]) : '',
+            scopes: [GetTheApps::class]);
+        // Signing out (any way: the menu, Settings, an ended session) lands here: this browser forgets where each place
+        // was left (resources/js/frame-core.cjs allMemory), so nothing of it shows to the next person.
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): View|string => auth()->check() ? '' : view('filament.v2.forget-places'));
     }
 
     /** The trail or the subtitle the app's page draws no copy of itself (the page being rendered decides). */

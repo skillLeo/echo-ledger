@@ -103,7 +103,7 @@ sealed interface V2Route {
     data class Project(val id: String) : V2Route
     data object ClassicProjects : V2Route
 
-    /** A smart folder of Projects (Inbox, an app, Imported, Shared with me); Back goes to [from]. */
+    /** A smart folder of Projects (No project, an app, Imported, Shared with me); Back goes to [from]. */
     data class Folder(val key: String, val from: V2Route = Tabs) : V2Route
 
     /** Request files; Back goes to [from]. */
@@ -242,6 +242,7 @@ private fun ShellBody(
         }
     }
     var libraryViews by remember { mutableStateOf(emptySet<SavedView>()) }
+    val tabState = androidx.compose.runtime.saveable.rememberSaveableStateHolder()
     var reselected by remember { mutableIntStateOf(0) }
     var recordSheet by remember { mutableStateOf(false) }
     var serverUnread by remember { mutableIntStateOf(0) }
@@ -534,16 +535,22 @@ private fun ShellBody(
                                 )
                             }
                             SideEffect { ShellStats.libraryCompositions++ }
-                            V2LibraryScreen(
-                                vm = vm,
-                                initials = initials,
-                                onOpen = { route = V2Route.Recording(it.id) },
-                                onTrash = { route = V2Route.Trash },
-                                onAccount = { route = V2Route.Settings },
-                                initialViews = libraryViews,
-                                onOpenAt = { item, at -> route = V2Route.Recording(item.id, atMs = at) },
-                                extras = extras
-                            )
+                            // Library keeps where it was (its view, filters, tab and search) while a recording is open.
+                            tabState.SaveableStateProvider(V2Tab.Library.name) {
+                                V2LibraryScreen(
+                                    vm = vm,
+                                    initials = initials,
+                                    onOpen = { route = V2Route.Recording(it.id) },
+                                    onTrash = { route = V2Route.Trash },
+                                    onAccount = { route = V2Route.Settings },
+                                    initialViews = libraryViews,
+                                    onOpenAt = { item, at -> route = V2Route.Recording(item.id, atMs = at) },
+                                    extras = extras,
+                                    onSharedWithMe = { route = V2Route.Folder(com.echoledger.mobile.ui.SmartFolder.SHARED.key) },
+                                    onRequests = { route = V2Route.Requests() },
+                                    onReviewWaiting = { route = V2Route.Activity }
+                                )
+                            }
                         } else {
                             Column(Modifier.fillMaxSize()) {
                                 // Without v2 Library the bell and the avatar still lead to Activity and to Settings

@@ -3,8 +3,9 @@
     @if ($withId ?? true) id="setting-{{ $meter['id'] }}" tabindex="-1" data-setting="{{ $meter['id'] }}" @endif
     role="group" aria-label="{{ $meter['label'] }}">
     <div class="el-meter-top">
-        <span class="el-set-title">{{ $meter['title'] }}</span>
-        <span class="el-set-value" style="max-width:60%">{{ $meter['value'] }}</span>
+        <span class="el-set-title">{{ __($meter['title']) }}</span>
+        {{-- An amount keeps its own order ("4 MB", never "MB 4") in a right-to-left page. --}}
+        <span class="el-set-value" style="max-width:60%"><bdi>{{ $meter['value'] }}</bdi></span>
     </div>
     @if ($meter['percent'] !== null)
         <div class="el-meter-bar" aria-hidden="true"><div class="el-meter-fill" style="width: {{ $meter['percent'] }}%"></div></div>

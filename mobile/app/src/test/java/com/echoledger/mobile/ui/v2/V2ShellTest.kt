@@ -2,12 +2,15 @@ package com.echoledger.mobile.ui.v2
 
 import androidx.compose.material3.Text
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -91,7 +94,7 @@ class V2ShellTest : ScreenTest() {
     fun libraryIsTheV2OneAndOtherTabsStayClassic() {
         seed()
         shell(v2)
-        compose.onNode(hasText("Library") and isHeading()).assertExists()
+        compose.onNode(hasText("All recordings") and isHeading()).assertExists()
         compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
         compose.onNodeWithText("Live").performClick()
         compose.onNodeWithText("Classic live").assertExists()
@@ -375,12 +378,12 @@ class V2ShellTest : ScreenTest() {
     }
 
     @Test
-    fun theFilterChipsNarrowTheListAndClearAllBringsItBack() {
+    fun theFiltersNarrowTheListAndClearAllBringsItBack() {
         seed()
         shell(v2)
-        compose.onNodeWithText("Views ▾").performClick()
-        compose.onNode(hasText("Untranscribed") and isToggleable()).performClick()
-        compose.onNodeWithText("Apply").performClick()
+        compose.onNode(hasContentDescription("Filters") and hasClickAction()).performClick()
+        compose.onNode(hasText("Not transcribed") and isToggleable()).performScrollTo().performClick()
+        compose.onAllNodes(hasText("Show ", substring = true) and hasClickAction()).onFirst().performClick()
         compose.onNodeWithText("Bilal Traders", substring = true).assertDoesNotExist()
         compose.onNodeWithText("Rehman and Sons Textiles", substring = true).assertExists()
         compose.onNodeWithText("Clear all").performClick()
@@ -391,7 +394,8 @@ class V2ShellTest : ScreenTest() {
     fun sortAndGroupIsRememberedForTheView() {
         seed()
         shell(v2)
-        compose.onNodeWithContentDescription("Sort and group").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNode(hasText("Sort & display") and hasClickAction()).performClick()
         compose.onNode(hasText("Name A–Z") and isSelectable()).performSemanticsAction(SemanticsActions.OnClick)
         pumpUntil("sort saved") { vm.settings.value.libraryViews.values.any { it.sort == "title" } }
     }

@@ -21,7 +21,11 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Livewire\Sidebar as FilamentSidebar;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
+use Illuminate\View\View as IlluminateView;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Renderless;
+use Throwable;
 
 /**
  * The console's sidebar (since v1.6, P4.1), in the desktop app's frame: the brand, "Find a page", then Home · Library
@@ -33,12 +37,46 @@ class Sidebar extends FilamentSidebar
 {
     use DropsRecordings;
 
-    /** The address the page was opened at: the sidebar draws again on its own requests and still marks where you are. */
+    /**
+     * The address the page was opened at: the sidebar draws again on its own requests and still marks where you are.
+     * Locked: only the page sets it (the frame is drawn from the route it names).
+     */
+    #[Locked]
     public ?string $here = null;
 
     public function mount(): void
     {
         $this->here = request()->getRequestUri();
+    }
+
+    /**
+     * With the three levels the frame is drawn from the page it is on (its place, its panel, what is chosen there). On
+     * the sidebar's own requests (a view renamed or deleted from the panel, a dialog closed, refresh-sidebar) the
+     * request is Livewire's update, not the page: this is the page's request again ($here, on the same scheme, host and
+     * port, with the same headers, person and session), for the frame's view to be drawn from. Null on the page itself,
+     * without the frame, or when $here names no page of the console.
+     */
+    private function pageRequest(): ?Request
+    {
+        $current = request();
+        $here = (string) $this->here;
+        if (! ConsoleV2::frame() || $here === '' || $here[0] !== '/' || str_starts_with($here, '//') || $current->getRequestUri() === $here) {
+            return null;
+        }
+        $page = Request::create($current->getSchemeAndHttpHost().$here, 'GET', [], [], [], $current->server->all());
+        try {
+            $route = app('router')->getRoutes()->match($page);
+        } catch (Throwable) {
+            return null;
+        }
+        $page->setUserResolver($current->getUserResolver());
+        if ($current->hasSession()) {
+            $page->setLaravelSession($current->session());
+        }
+        $route->bind($page);
+        $page->setRouteResolver(fn () => $route);
+
+        return $page;
     }
 
     /** Since 2.0.0-p: a saved view's ⋯ › Rename. */
@@ -144,6 +182,35 @@ class Sidebar extends FilamentSidebar
     public function render(): View
     {
         // Since v2.0: the five-module sidebar under ui_v2.shell (the classic one otherwise, unchanged).
-        return view(ConsoleV2::shell() ? 'filament.v2.sidebar' : 'filament.shell.sidebar');
+        // Since docs/PLAN_NAV_3_LEVELS.md: the rail, the place's panel and the page's tabs with the new frame and Library.
+        $view = view(match (true) {
+            ConsoleV2::frame() => 'filament.v2.frame',
+            ConsoleV2::shell() => 'filament.v2.sidebar',
+            default => 'filament.shell.sidebar',
+        });
+        $page = $this->pageRequest();
+        if ($page === null) {
+            return $view;
+        }
+
+        // Drawn with the page's request bound, and the update's bound again afterwards, also when drawing fails.
+        return new class($view, $page) extends IlluminateView
+        {
+            public function __construct(IlluminateView $view, private readonly Request $page)
+            {
+                parent::__construct($view->getFactory(), $view->getEngine(), $view->name(), $view->getPath(), $view->getData());
+            }
+
+            public function render(?callable $callback = null): string
+            {
+                $update = app('request');
+                app()->instance('request', $this->page);
+                try {
+                    return parent::render($callback);
+                } finally {
+                    app()->instance('request', $update);
+                }
+            }
+        };
     }
 }

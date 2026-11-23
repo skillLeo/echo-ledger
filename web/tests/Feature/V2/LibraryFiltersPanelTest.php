@@ -108,19 +108,22 @@ describe('one toolbar row', function () {
 });
 
 describe('the filter panel', function () {
-    it('is closed by default, 280 wide beside the list, a drawer under 1280, and lists every section with live counts', function () {
+    it('is closed by default, 320 wide from the right beside the list, over it under 1440, and lists every section with live counts', function () {
         $page = Livewire::test(ListCaptureSessions::class);
         $html = $page->html();
-        expect($html)->toContain('x-show="filtersOpen"')->toContain('data-filter-panel')->toContain("x-bind:class=\"{ 'is-drawer': drawer }\"");
-        // Narrower than the design token --el-breakpoint-panel (1280) the panel is a drawer over the list.
-        expect((string) file_get_contents(resource_path('css/tokens.css')))->toContain('--el-breakpoint-panel: 1280px;')
-            ->and((string) file_get_contents(resource_path('views/filament/v2/library-shell-script.blade.php')))->toContain("getPropertyValue('--el-breakpoint-panel')");
+        expect($html)->toContain('x-show="filtersOpen"')->toContain('data-filter-panel')->toContain("x-bind:class=\"{ 'is-drawer': drawer, 'is-pushing': filtersOpen && ! drawer }\"");
+        // Since docs/PLAN_NAV_3_LEVELS.md section 4 (the three levels): from the right, beside the list (pushing it) from
+        // the design token --el-breakpoint-wide (1440), over it below; LF2's --el-breakpoint-panel without the frame.
+        expect((string) file_get_contents(resource_path('css/tokens.css')))->toContain('--el-breakpoint-wide: 1440px;')->toContain('--el-breakpoint-panel: 1280px;')
+            ->and($html)->toContain('class="v2-lib-shell is-right"')->toContain("side: '--el-breakpoint-wide'")
+            ->and((string) file_get_contents(resource_path('views/filament/v2/library-shell-script.blade.php')))->toContain("getPropertyValue((config && config.side) || '--el-breakpoint-panel')");
         $sections = collect($page->instance()->filterPanel())->keyBy('key');
         expect($sections->keys()->all())->toBe(['date', 'source', 'device', 'project', 'language', 'status', 'labels', 'marked', 'bookmarks'])
             ->and(collect($sections['source']['options'])->pluck('count', 'value')->all())->toBe(['whatsapp' => 2, 'zoom' => 1, 'phone_call' => 1])
             ->and(collect($sections['status']['options'])->pluck('count', 'value')->all())->toBe(['transcribed' => 3, 'not_transcribed' => 0, 'processing' => 0, 'failed' => 1]);
         $css = (string) file_get_contents(resource_path('css/v2/console.css'));
-        expect($css)->toContain('inline-size: calc(var(--el-space-40) * 7);')->toContain('.v2-lib-shell.is-drawer .v2-lib-panel');
+        expect($css)->toContain('inline-size: calc(var(--el-space-40) * 8);')->toContain('.v2-lib-shell.is-drawer .v2-lib-panel')
+            ->toContain(".v2-lib-shell.is-right.is-drawer .v2-lib-panel {\n    inset-inline-start: auto;\n    inset-inline-end: 0;");
         // Custom dates: the two days show as soon as Custom is ticked, and nothing is sent until a day is set.
         expect($html)->toContain('x-show="custom"')->toContain('data-from')->toContain('data-to')->toContain('return waiting ? null : out;');
     });
@@ -366,23 +369,20 @@ describe('the sidebar', function () {
         expect($html)->toContain('data-place="all" data-shortcut="1"')->toMatch('~data-view="[0-9A-Za-z]{26}" data-shortcut="7"~');
     });
 
-    it('keeps LABELS, PROJECTS, Live and Ask in its middle, which scrolls with "More" when they outgrow the window', function () {
+    it('keeps LABELS in the Library\'s panel and PROJECTS in Projects\' panel, with Live and Ask in the rail, the panel scrolling on its own', function () {
+        // Since docs/PLAN_NAV_3_LEVELS.md: the rail holds the places (always in view); each place's panel scrolls.
         $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
-        $nav = (string) preg_replace('~^.*?(<nav class="v2-sb-nav"[^>]*data-sidebar-scroll.*?</nav>).*$~s', '$1', $html);
+        $library = (string) preg_replace('~^.*?(<section class="v2-panel" data-panel="library".*?</section>).*$~s', '$1', $html);
+        $projects = (string) preg_replace('~^.*?(<section class="v2-panel" data-panel="projects".*?</section>).*$~s', '$1', $html);
+        $rail = (string) preg_replace('~^.*?(<nav class="v2-rail".*?</nav>).*$~s', '$1', $html);
 
-        expect($nav)->toStartWith('<nav class="v2-sb-nav"')
-            ->toContain('data-labels-fold')->toContain('data-label="clients"')->toContain('v2-label-dot--red')->toContain('data-new-label')
-            ->toContain('data-projects-fold')->toContain('data-module="projects"')
-            ->toMatch('~href="[^"]*'.preg_quote($this->acme->id, '~').'[^"]*"[^>]*data-project="'.preg_quote($this->acme->id, '~').'"~')
-            ->toContain('data-module="live"')->toContain('data-module="ask"')
-            // The way down and back up, named, shown only while there is more that way.
-            ->toContain('x-show="below"')->toContain('data-scroll-down')->toContain('aria-label="Show more of the menu"')
-            ->toContain('x-show="above"')->toContain('data-scroll-up')->toContain('aria-label="Show the top of the menu"');
-        // Tabbing through it never leaves the focused item under "More" or the bar back to the top.
-        expect((string) file_get_contents(resource_path('css/v2/console.css')))->toMatch('~\.v2-sb-nav \{[^}]*overflow-y: auto;~')
-            ->toMatch('~\.v2-sb-nav \{[^}]*scroll-padding-block: var\(--el-space-24\);~');
-        // In a browser, scripts/screenshots.mjs (lf-window, `reach`) scrolls to each one, and focuses it from either end,
-        // and checks it is seen, not covered.
+        expect($library)->toContain('data-labels-fold')->toContain('data-label="clients"')->toContain('v2-label-dot--red')->toContain('data-new-label')->toContain('data-new-view')
+            ->and($projects)->toMatch('~href="[^"]*'.preg_quote($this->acme->id, '~').'[^"]*"[^>]*data-project="'.preg_quote($this->acme->id, '~').'"~')
+            ->and($rail)->toContain('data-module="projects"')->toContain('data-module="live"')->toContain('data-module="ask"');
+        // The panel scrolls on its own, and tabbing through it never leaves the focused item at its edge.
+        expect((string) file_get_contents(resource_path('css/v2/console.css')))->toMatch('~\.v2-panels \{[^}]*overflow-y: auto;~')
+            ->toMatch('~\.v2-panels \{[^}]*scroll-padding-block: var\(--el-space-24\);~');
+        // In a browser, scripts/screenshots.mjs (nav-window, `reach`) scrolls to each one, focuses it, and checks it is seen.
         expect((string) file_get_contents(base_path('scripts/screenshots.mjs')))->toContain("'[data-module=live]', '[data-module=ask]'");
     });
 

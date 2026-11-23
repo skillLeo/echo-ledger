@@ -122,7 +122,7 @@ class RequestLinksPage extends Page implements HasTable
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('title')->label(__('Title'))->limit(60)->searchable()->wrap(),
-                TextColumn::make('client.name')->label(__('Goes to'))->placeholder(ConsoleV2::library() ? __('All recordings') : __('Inbox')),
+                TextColumn::make('client.name')->label(__('Goes to'))->placeholder(ConsoleV2::library() ? __('No project') : __('Inbox')),
                 TextColumn::make('received')->label(__('Received'))
                     ->state(fn (RequestLink $link): string => __(':received of :max', ['received' => $link->received, 'max' => $link->max_files]))
                     ->description(fn (RequestLink $link): string => __('up to :mb MB each', ['mb' => $link->max_mb])),

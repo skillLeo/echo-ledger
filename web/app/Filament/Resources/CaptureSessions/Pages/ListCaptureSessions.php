@@ -144,6 +144,12 @@ class ListCaptureSessions extends ListRecords
     public ?string $compose = null;
 
     /**
+     * Since docs/PLAN_NAV_3_LEVELS.md section 4: the page's top tab, Calls, Meetings or Voice notes (null: All), in the
+     * address (`kind`); it narrows the place, the filters and the search by Source (LibraryFilters::KINDS).
+     */
+    public ?string $kind = null;
+
+    /**
      * The new Library's part of the address (2.0.0-p): the filters (`f`), the saved view (`v`) and "+ New view"
      * (`compose`), each change a step Back can undo. Only under ui_v2.library: the classic page's address stays as it was.
      *
@@ -151,7 +157,8 @@ class ListCaptureSessions extends ListRecords
      */
     protected function queryString(): array
     {
-        return ConsoleV2::library() ? ['lf' => ['as' => 'f', 'history' => true], 'savedView' => ['as' => 'v', 'history' => true], 'compose' => ['as' => 'compose', 'history' => false]] : [];
+        return ConsoleV2::library() ? ['lf' => ['as' => 'f', 'history' => true], 'savedView' => ['as' => 'v', 'history' => true], 'compose' => ['as' => 'compose', 'history' => false],
+            ...(ConsoleV2::frame() ? ['kind' => ['as' => 'kind', 'history' => true]] : [])] : [];
     }
 
     public function mount(): void
@@ -246,11 +253,60 @@ class ListCaptureSessions extends ListRecords
     public function libraryFacets(): array
     {
         return $this->facetsOnce ??= app(LibraryFacets::class)->facets((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId(),
-            $this->filterSet(), (string) $this->tableSearch, null, $this->libraryPlace());
+            $this->filterSet(), (string) $this->tableSearch, null, $this->libraryPlace(), $this->kindSources());
+    }
+
+    /**
+     * The open tab's Sources (null: All, or a tab this address does not name).
+     *
+     * @return list<string>|null
+     */
+    public function kindSources(): ?array
+    {
+        return ConsoleV2::frame() && is_string($this->kind) ? (LibraryFilters::KINDS[$this->kind] ?? null) : null;
+    }
+
+    /**
+     * The page's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4): All · Calls · Meetings · Voice notes, each with how many
+     * the place, the filters and the search keep in it.
+     *
+     * @return list<array{key: string, label: string, count: int, active: bool}>
+     */
+    public function libraryTabs(): array
+    {
+        // Asked by the tabs and the filter panel's count in one render: counted once (never kept between requests).
+        if ($this->tabsOnce !== null) {
+            return $this->tabsOnce;
+        }
+        $facets = app(LibraryFacets::class);
+        $ws = (int) CurrentWorkspace::id();
+        $user = (int) CurrentWorkspace::userId();
+        $current = $this->kindSources() !== null ? (string) $this->kind : 'all';
+        $tabs = [];
+        foreach (['all' => __('All'), 'calls' => __('Calls'), 'meetings' => __('Meetings'), 'voice_notes' => __('Voice notes')] as $key => $label) {
+            $tabs[] = ['key' => $key, 'label' => $label, 'active' => $current === $key,
+                'count' => $facets->total($ws, $user, $this->filterSet(), (string) $this->tableSearch, null, $this->libraryPlace(), $key === 'all' ? null : LibraryFilters::KINDS[$key])];
+        }
+
+        return $this->tabsOnce = $tabs;
+    }
+
+    /** A top tab: All (null) or one of LibraryFilters::KINDS. */
+    public function setLibraryKind(?string $kind): void
+    {
+        $this->kind = $kind !== null && isset(LibraryFilters::KINDS[$kind]) ? $kind : null;
+        $this->facetsOnce = null;
+        $this->tabsOnce = null;
+        $this->resetPage();
+        $this->deselectAllTableRecords();
+        $this->flushCachedTableRecords();
     }
 
     /** @var array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}|null */
     private ?array $facetsOnce = null;
+
+    /** @var list<array{key: string, label: string, count: int, active: bool}>|null the top tabs, for this render */
+    private ?array $tabsOnce = null;
 
     /** @return list<array<string, mixed>> the filter panel's sections */
     public function filterPanel(): array
@@ -360,6 +416,7 @@ class ListCaptureSessions extends ListRecords
     {
         $this->lf = $filters;
         $this->facetsOnce = null;
+        $this->tabsOnce = null;
         $this->resetPage();
         $this->deselectAllTableRecords();
         $this->flushCachedTableRecords();
@@ -553,6 +610,7 @@ class ListCaptureSessions extends ListRecords
         LibraryView::forgetCounts();
         $this->foldersOnce = null;
         $this->facetsOnce = null;
+        $this->tabsOnce = null;
     }
 
     /** @var array<string, array{label: string, icon: string, count: int, url: string|null}>|null the folders, for this render */
@@ -851,7 +909,7 @@ class ListCaptureSessions extends ListRecords
         // Since 2.0.0-p (ui_v2.library): the place and the filters, as LibraryFacets counts them (a call still waiting
         // for its decision is in Needs you only).
         if (! $isResolvingRecord && ConsoleV2::library()) {
-            app(LibraryFacets::class)->apply($query, (int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId(), $this->filterSet(), null, null, $this->libraryPlace());
+            app(LibraryFacets::class)->apply($query, (int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId(), $this->filterSet(), null, null, $this->libraryPlace(), $this->kindSources());
         }
         if ($isResolvingRecord || $this->folder === null || $this->folder === 'shared' || ! array_key_exists($this->folder, self::FOLDER_LABELS)) {
             return $query;
@@ -900,8 +958,11 @@ class ListCaptureSessions extends ListRecords
                         EmbeddedTable::make(),
                         RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
                     ])->extraAttributes(['class' => 'v2-library el-library']),
-                ])->extraAttributes(fn (): array => ['class' => 'v2-lib-shell', 'x-data' => 'elV2LibraryShell({ compose: '.($this->compose === 'view' ? 'true' : 'false').' })',
-                    'x-bind:class' => "{ 'is-drawer': drawer }"]),
+                    // Since docs/PLAN_NAV_3_LEVELS.md section 4 (the three levels): the filters come from the right, 320 wide,
+                    // beside the list from --el-breakpoint-wide (1440) and over it below.
+                ])->extraAttributes(fn (): array => ['class' => ConsoleV2::frame() ? 'v2-lib-shell is-right' : 'v2-lib-shell',
+                    'x-data' => 'elV2LibraryShell({ compose: '.($this->compose === 'view' ? 'true' : 'false').', side: '.(ConsoleV2::frame() ? "'--el-breakpoint-wide'" : "'--el-breakpoint-panel'").' })',
+                    'x-bind:class' => "{ 'is-drawer': drawer, 'is-pushing': filtersOpen && ! drawer }"]),
                 View::make('filament.library.detail')->viewData(fn (): array => ['detail' => $this->selectedRecording()]),
             ]);
         }

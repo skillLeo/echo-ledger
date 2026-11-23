@@ -8,6 +8,7 @@ import com.echoledger.mobile.testsupport.AesGcmSecretCipher
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.pairLocally
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.async
@@ -210,6 +211,217 @@ class LibraryRepositoryTest : AppTest() {
         server.on("GET", "/api/library", page(time = "2026-10-24T09:30:00+00:00"))
         reopened.refresh()
         assertEquals("2026-10-24T09:05:00+00:00", libraryRequests().last().url.queryParameter("since"))
+    }
+
+    /**
+     * The calls still waiting for Keep or Discard (status recording), which a sync leaves out, are read beside it with
+     * `status=recording`, every page, in place of the ones before; they are kept in the cache and go on sign-out.
+     */
+    @Test
+    fun `the waiting calls are read with status recording and replace the ones before`() = runBlocking {
+        val repo = repository()
+        fun waitingItem(id: String) = ServerFixtures.libraryItem(id, title = "Waiting $id", status = "recording", finalStatus = null)
+        server.on("GET", "/api/library") { req ->
+            when {
+                req.url.queryParameter("status") != "recording" -> FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a"))))
+
+                req.url.queryParameter(
+                    "cursor"
+                ) == null -> FakeServer.json(200, ServerFixtures.libraryPage(listOf(waitingItem("w1")), "page2"))
+
+                else -> FakeServer.json(200, ServerFixtures.libraryPage(listOf(waitingItem("w2"))))
+            }
+        }
+        repo.refresh()
+        repo.refreshWaiting()
+        assertEquals(listOf("a"), repo.items.value.map { it.id })
+        assertEquals(listOf("w1", "w2"), repo.waiting.value.map { it.id })
+        assertNull(libraryRequests().last().url.queryParameter("since"))
+        assertEquals(listOf("w1", "w2"), repository().waiting.value.map { it.id })
+        // Decided since: the next read has none, and none stays.
+        server.on("GET", "/api/library") { req ->
+            if (req.url.queryParameter("status") == "recording") {
+                FakeServer.json(200, ServerFixtures.libraryPage(emptyList()))
+            } else {
+                FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a"))))
+            }
+        }
+        repo.refreshWaiting()
+        assertTrue(repo.waiting.value.isEmpty())
+        repo.refreshWaiting()
+        repo.clear()
+        assertTrue(repository().waiting.value.isEmpty())
+    }
+
+    /**
+     * The waiting calls are read without the library's lock: a tap marking a recording opened never waits for a slow
+     * read. And an answer with the same calls keeps the cache as it is (it is not encrypted and written again).
+     */
+    @Test
+    fun `a slow waiting read never holds up marking a recording opened and the same calls write nothing`() = runBlocking {
+        val repo = repository()
+        val release = server.hold()
+        val asked = java.util.concurrent.atomic.AtomicBoolean(false)
+        val unopened = item("a").replace("\"updated_at\"", "\"opened\":false,\"updated_at\"")
+        val waitingOne = ServerFixtures.libraryItem("w1", title = "Waiting", status = "recording", finalStatus = null)
+        server.on("GET", "/api/library") { req ->
+            if (req.url.queryParameter("status") == "recording") {
+                asked.set(true)
+                release.await()
+                FakeServer.json(200, ServerFixtures.libraryPage(listOf(waitingOne)))
+            } else {
+                FakeServer.json(200, ServerFixtures.libraryPage(listOf(unopened)))
+            }
+        }
+        repo.refresh()
+        val slow = async(kotlinx.coroutines.Dispatchers.IO) { repo.refreshWaiting() }
+        com.echoledger.mobile.testsupport.waitFor("the waiting read on the network") { asked.get() }
+        kotlinx.coroutines.withTimeout(2_000) { repo.markOpenedLocally("a", repo.generation()) }
+        assertEquals(true, repo.items.value.single().opened)
+        release.open()
+        slow.await()
+        assertEquals(listOf("w1"), repo.waiting.value.map { it.id })
+        // The same calls again: the cache stays as it was (a write seals it anew, with a new nonce).
+        val sealed = cacheFile.readBytes()
+        repo.refreshWaiting()
+        assertTrue(sealed.contentEquals(cacheFile.readBytes()))
+    }
+
+    /**
+     * A sync and a waiting read still on the network when the person signs out (unpair) land after it: what they
+     * bring is dropped. Nothing shows, the sync point is gone and library.bin is not written again, so the next
+     * person's first sync starts from nothing.
+     */
+    @Test
+    fun `a sync and a waiting read landing after signing out bring nothing back`() {
+        kotlinx.coroutines.runBlocking { app.pairLocally(server) }
+        val release = server.hold()
+        val asked = java.util.concurrent.atomic.AtomicInteger(0)
+        val waitingOne = ServerFixtures.libraryItem("w1", title = "Waiting", status = "recording", finalStatus = null)
+        server.on("GET", "/api/library") { req ->
+            asked.incrementAndGet()
+            release.await()
+            if (req.url.queryParameter("status") == "recording") {
+                FakeServer.json(200, ServerFixtures.libraryPage(listOf(waitingOne)))
+            } else {
+                FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a"))))
+            }
+        }
+        val repo = app.graph.library
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+        val sync = scope.async { runCatching { repo.refresh() } }
+        val waiting = scope.async { runCatching { repo.refreshWaiting() } }
+        com.echoledger.mobile.testsupport.pumpUntil("both on the network") { asked.get() == 2 }
+        val vm = com.echoledger.mobile.ui.MainViewModel(app).clearedAfterTest()
+        val out = vm.unpair()
+        com.echoledger.mobile.testsupport.pumpUntil("signed out") { out.isCompleted }
+        release.open()
+        com.echoledger.mobile.testsupport.pumpUntil("both landed") { sync.isCompleted && waiting.isCompleted }
+        assertTrue(repo.items.value.isEmpty())
+        assertTrue(repo.waiting.value.isEmpty())
+        assertFalse(repo.hasSynced())
+        assertNull(repo.viewsVersion.value)
+        assertFalse(cacheFile.exists())
+    }
+
+    /**
+     * The local writes that follow a server call take the generation before it: a Transcribe held on the server
+     * across signing out (unpair) brings the last person's recording back nowhere, and library.bin isn't written again.
+     * The same for a views recheck and a recording marked opened.
+     */
+    @Test
+    fun `a transcribe answer landing after signing out writes nothing`() {
+        kotlinx.coroutines.runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a")))))
+        kotlinx.coroutines.runBlocking { app.graph.library.refresh() }
+        assertTrue(cacheFile.exists())
+        val release = server.hold()
+        val asked = java.util.concurrent.atomic.AtomicBoolean(false)
+        val started = item("a", updated = "2026-10-25T09:00:00+00:00")
+        server.on("POST", "/api/sessions/a/transcribe") {
+            asked.set(true)
+            release.await()
+            FakeServer.json(
+                202,
+                """{"session":$started,"transcript":{"id":"T9","kind":"final","provider":"assemblyai","status":"pending","language":null}}"""
+            )
+        }
+        val vm = com.echoledger.mobile.ui.MainViewModel(app).clearedAfterTest()
+        val transcribe = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).async { vm.transcribeOne("a") }
+        com.echoledger.mobile.testsupport.pumpUntil("the transcribe on the network") { asked.get() }
+        val out = vm.unpair()
+        com.echoledger.mobile.testsupport.pumpUntil("signed out") { out.isCompleted }
+        release.open()
+        com.echoledger.mobile.testsupport.pumpUntil("the answer landed") { transcribe.isCompleted }
+        assertTrue(app.graph.library.items.value.isEmpty())
+        assertFalse(cacheFile.exists())
+        // The other two writes that follow an await: nothing either, with a generation from before the sign-out.
+        val before = app.graph.library.generation() - 1
+        kotlinx.coroutines.runBlocking {
+            app.graph.library.markOpenedLocally("a", before)
+            app.graph.library.setViewsLocally("a", com.echoledger.mobile.data.RowViewsDto(status = "failed"), before)
+            app.graph.library.upsertLocally(
+                ServerFixtures.libraryItem("b").let {
+                    ApiJson.decodeFromString(LibraryItem.serializer(), it)
+                },
+                before
+            )
+        }
+        assertTrue(app.graph.library.items.value.isEmpty())
+        assertFalse(cacheFile.exists())
+    }
+
+    /** Two waiting reads at once: the answer of the one asked later is kept, whichever lands last. */
+    @Test
+    fun `an older waiting read landing last never undoes a newer one`() = runBlocking {
+        val repo = repository()
+        val holdFirst = server.hold()
+        val first = java.util.concurrent.atomic.AtomicBoolean(true)
+        val asked = java.util.concurrent.atomic.AtomicInteger(0)
+        server.on("GET", "/api/library") { _ ->
+            asked.incrementAndGet()
+            if (first.getAndSet(false)) {
+                holdFirst.await()
+                FakeServer.json(
+                    200,
+                    ServerFixtures.libraryPage(listOf(ServerFixtures.libraryItem("old", status = "recording", finalStatus = null)))
+                )
+            } else {
+                FakeServer.json(200, ServerFixtures.libraryPage(emptyList()))
+            }
+        }
+        val older = async(kotlinx.coroutines.Dispatchers.IO) { repo.refreshWaiting() }
+        com.echoledger.mobile.testsupport.waitFor("the older read on the network") { asked.get() >= 1 }
+        repo.refreshWaiting()
+        assertTrue(repo.waiting.value.isEmpty())
+        holdFirst.open()
+        older.await()
+        assertTrue("the newer answer (none waiting) stays", repo.waiting.value.isEmpty())
+    }
+
+    /**
+     * Contract 2.0.0-p: items carry ended_at, facets and processing_since, which a cache kept before has none of. Such a
+     * cache still shows at once; its next sync reads the whole library (no since) and replaces it, then syncs as before.
+     */
+    @Test
+    fun `a cache from before 2_0_0-p is read whole once and replaced`() = runBlocking {
+        val old = """{"since":"2026-10-24T09:05:00+00:00","items":[${item("a")},${item("gone")}]}"""
+        cacheFile.writeBytes(app.graph.secretCipher.encrypt(old.toByteArray(), "echoledger.library".toByteArray()))
+        val repo = repository()
+        assertEquals(setOf("a", "gone"), repo.items.value.map { it.id }.toSet())
+        val facets = "\"facets\":{\"source\":\"whatsapp\",\"status\":\"transcribed\",\"language\":\"ur\"}"
+        val fresh = item("a").replace("\"updated_at\"", "$facets,\"updated_at\"")
+        server.on("GET", "/api/library", page(fresh, time = "2026-11-23T10:00:00+00:00"))
+        repo.refresh()
+        assertNull("the whole library again", libraryRequests().last().url.queryParameter("since"))
+        assertEquals(listOf("a"), repo.items.value.map { it.id })
+        assertEquals("ur", repo.items.value.single().facets?.language)
+        // From then on only what changed, from this phone's copy too.
+        val reopened = repository()
+        assertEquals("ur", reopened.items.value.single().facets?.language)
+        server.on("GET", "/api/library", page(time = "2026-11-23T10:05:00+00:00"))
+        reopened.refresh()
+        assertEquals("2026-11-23T10:00:00+00:00", libraryRequests().last().url.queryParameter("since"))
     }
 
     @Test

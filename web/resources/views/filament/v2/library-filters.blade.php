@@ -7,6 +7,11 @@
 --}}
 @php
     $sections = $this->filterPanel();
+    // With the three levels the panel also says how many recordings the list holds: beside the list (from the wide
+    // width) the toolbar has no room for it, and the table's own count folds away with its narrower box.
+    $total = \App\Filament\Support\ConsoleV2::frame() ? (int) (collect($this->libraryTabs())->firstWhere('active', true)['count'] ?? 0) : null;
+    $totalHtml = $total === null ? '' : ' <span class="v2-lib-panel-total" data-filters-total>'
+        .e($total === 1 ? __(':n recording', ['n' => 1]) : __(':n recordings', ['n' => \Illuminate\Support\Number::format($total)])).'</span>';
 @endphp
 <div class="v2-lib-scrim" x-show="drawer && filtersOpen" x-cloak x-on:click="closeFilters()" aria-hidden="true"></div>
 {{-- Beside the list it is a region of the page; as a drawer it is a modal dialog that keeps the focus inside until closed. --}}
@@ -31,7 +36,7 @@
         } }"
     x-on:change="if ($event.target.closest('[data-section]') && ! $event.target.matches('[data-find]')) send()">
     <header class="v2-lib-panel-head">
-        <h2 class="v2-lib-panel-title">{{ __('Filters') }}</h2>
+        <h2 class="v2-lib-panel-title">{{ __('Filters') }}{!! $totalHtml !!}</h2>
         <button type="button" class="v2-icon-btn" x-on:click="closeFilters()" aria-label="{{ __('Close filters') }}" title="{{ __('Close filters') }} (Esc)">
             <x-el.v2.icon name="close" />
         </button>

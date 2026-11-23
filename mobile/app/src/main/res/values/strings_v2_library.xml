@@ -75,7 +75,7 @@
     <string name="v2_lib_sort_by">Sort by</string>
     <string name="v2_lib_density">Density</string>
     <string name="v2_lib_g_date">Date</string>
-    <string name="v2_lib_g_app">App / Type</string>
+    <string name="v2_lib_g_app">Source</string>
     <string name="v2_lib_g_project">Project</string>
     <string name="v2_lib_g_language">Language</string>
     <string name="v2_lib_g_status">Status</string>

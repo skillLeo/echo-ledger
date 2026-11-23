@@ -229,8 +229,8 @@ fun RowScope.SelectionActions(
             moveOpen = false
             newClient = null
         }) {
-            // Since v1.5: the Inbox (no project) and the projects as a tree, subfolders indented under their parent.
-            DropdownMenuItem(text = { Text("Inbox") }, onClick = {
+            // Since v1.5: No project and the projects as a tree, subfolders indented under their parent.
+            DropdownMenuItem(text = { Text("No project") }, onClick = {
                 moveOpen = false
                 onMove(null)
             })

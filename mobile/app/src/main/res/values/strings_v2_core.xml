@@ -179,7 +179,7 @@
     <string name="v2_vm_ws_the_suggestion_could_not_be_saved">The suggestion could not be saved.</string>
     <string name="v2_vm_ws_the_text_could_not_be_made">The text could not be made.</string>
     <string name="v2_vm_ws_project_deleted">Project deleted</string>
-    <string name="v2_vm_project_deleted_moved">Project deleted · %1$s moved to the Inbox</string>
+    <string name="v2_vm_project_deleted_moved">Project deleted · %1$s moved to No project</string>
     <string name="v2_vm_key_refused">Groq did not accept that key. Copy it again from console.groq.com.</string>
     <string name="v2_vm_link_not_revoked">The link could not be revoked.</string>
     <string name="v2_vm_not_deleted">The recording could not be deleted.</string>

@@ -31,6 +31,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\User;
 use App\Services\Accounts\SettingsRegistry;
+use App\Services\Library\LibraryFilters;
 use App\Services\LibraryOrganiser;
 use App\Services\Sharing\Teammates;
 use App\Services\Staff\StaffAccess;
@@ -358,6 +359,13 @@ final class Shell
             foreach (LibraryFilterBar::placeNames() as $key => $label) {
                 $pages[] = ['id' => 'place-'.$key, 'label' => $label, 'group' => 'Library', 'url' => $key === 'all' ? $base : $base.'?tab='.$key, 'words' => 'view place'];
             }
+            // The old smart folders' homes: each Source opens All recordings with that Source, "No project" the old Inbox.
+            foreach (LibraryFilters::SOURCES as $source) {
+                $pages[] = ['id' => 'source-'.$source, 'label' => LibraryFilterBar::optionLabel('source', $source), 'group' => 'Library',
+                    'url' => $base.'?'.http_build_query(['f' => ['source' => ['op' => 'is', 'values' => [$source]]]]), 'words' => 'source app folder'];
+            }
+            $pages[] = ['id' => 'place-no-project', 'label' => __('No project'), 'group' => 'Library',
+                'url' => $base.'?'.http_build_query(['f' => ['project' => ['op' => 'is', 'values' => [LibraryFilters::NO_PROJECT]]]]), 'words' => 'inbox unfiled without project'];
         } else {
             foreach (self::libraryPlaces() as $place) {
                 if ($place['key'] !== 'all') {

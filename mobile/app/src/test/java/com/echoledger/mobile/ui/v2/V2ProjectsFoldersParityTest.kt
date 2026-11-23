@@ -101,10 +101,12 @@ class V2ProjectsFoldersParityTest : ScreenTest() {
     fun theFoldersAreListedWithTheirCountsAndEachOpensItsRecordings() {
         seed()
         projects()
-        // The Inbox (no project: the voice note and the phone call), the apps that hold something, and the server's.
+        // No project (the voice note and the phone call), the apps that hold something, and the server's.
         await("Shared with me")
-        listOf("Inbox", "WhatsApp", "Voice notes", "Phone", "Imported").forEach { assertTrue(it, seen(it)) }
-        assertTrue(compose.onAllNodes(hasText("Inbox") and hasText("2 recordings", substring = true)).fetchSemanticsNodes().isNotEmpty())
+        listOf("No project", "WhatsApp", "Voice notes", "Phone", "Imported").forEach { assertTrue(it, seen(it)) }
+        assertTrue(
+            compose.onAllNodes(hasText("No project") and hasText("2 recordings", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        )
         assertTrue(compose.onAllNodes(hasText("Zoom")).fetchSemanticsNodes().isEmpty())
         press("Voice notes")
         await("Kitchen idea")
@@ -203,7 +205,7 @@ class V2ProjectsFoldersParityTest : ScreenTest() {
         projects()
         press("Request files")
         await("Send me the invoices")
-        assertTrue(seen("Inbox · 3 files received"))
+        assertTrue(seen("No project · 3 files received"))
         assertTrue(
             compose.onAllNodes(
                 hasContentDescription("Turn off Send me the invoices") and hasClickAction()

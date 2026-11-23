@@ -110,15 +110,10 @@ test('Esc closes the panel first; with it closed, Esc is the selection\'s', () =
     assert.deepEqual(core.keyAction(key('Escape'), list({ checked: 2, selected: 2 })), { do: 'clear' });
 });
 
-test('Cmd, Ctrl or Alt with 1 to 9 opens the sidebar\'s first nine places, and only those there are', () => {
-    assert.deepEqual(core.shellKey(key('1', { metaKey: true, code: 'Digit1' }), shell()), { do: 'place', at: 0 });
-    assert.deepEqual(core.shellKey(key('¡', { altKey: true, code: 'Digit1' }), shell()), { do: 'place', at: 0 });
-    assert.deepEqual(core.shellKey(key('7', { ctrlKey: true, code: 'Digit7' }), shell()), { do: 'place', at: 6 });
-    assert.equal(core.shellKey(key('8', { ctrlKey: true, code: 'Digit8' }), shell()), null);
-    assert.equal(core.shellKey(key('0', { metaKey: true, code: 'Digit0' }), shell()), null);
-    assert.equal(core.shellKey(key('2', { metaKey: true, code: 'Digit2', target: field }), shell()), null);
-    // A plain digit is the page's.
-    assert.equal(core.shellKey(key('2', { code: 'Digit2' }), shell()), null);
+test('The numbers are the frame\'s now (frame-core: ⌘1…⌘6 the rail, Alt+1…9 the panel), never the Library\'s', () => {
+    for (const more of [{ metaKey: true }, { ctrlKey: true }, { altKey: true }, {}]) {
+        assert.equal(core.shellKey(key('1', { code: 'Digit1', ...more }), shell()), null);
+    }
 });
 
 test('⌘[ and ⌘] go Back and Forward on a Mac, Ctrl+[ and Ctrl+] elsewhere, never while typing or over a dialog', () => {

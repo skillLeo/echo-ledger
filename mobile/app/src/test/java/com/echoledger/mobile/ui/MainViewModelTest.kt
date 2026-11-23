@@ -19,6 +19,7 @@ import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.time.Duration
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -663,5 +664,118 @@ class MainViewModelTest : AppTest() {
         // Not a vendor's name to replace: the code alone decides.
         assertNull(runBlocking { vm.makeNotes("s1", "en") })
         assertEquals("The AI assistant is not set up on the server yet.", vm.message.value)
+    }
+
+    /**
+     * The live status asks every 5 s while something moves (refreshQuietly): the waiting calls are read with it at
+     * most every 30 s, and with every full sync.
+     */
+    @Test
+    fun `the live status reads the waiting calls at most every 30 seconds`() {
+        pairLocally()
+        serveLibrary()
+        fun waitingReads() = server.requestsTo("GET", "/api/library").count { it.url.queryParameter("status") == "recording" }
+        fun quietly() = vm.refreshQuietly().let { job -> pumpUntil("the live status") { job.isCompleted } }
+        quietly()
+        quietly()
+        assertEquals(1, waitingReads())
+        org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(31))
+        quietly()
+        assertEquals(2, waitingReads())
+        syncNow()
+        pumpUntil("the full sync's read") { waitingReads() == 3 }
+    }
+
+    /**
+     * The projects and the lists are the signed-in person's: signing out clears them at once, and a read or a change
+     * still on its way when the person signs out (the lists, a new project) brings nothing back, so the next person
+     * never sees the last one's project or label names.
+     */
+    @Test
+    fun `the next person never sees the last ones projects or labels`() {
+        pairLocally()
+        serveLibrary()
+        server.on(
+            "GET",
+            "/api/lists",
+            FakeServer.json(200, """{"data":[{"key":"clients","name":"Clients","color":"#e15f56","position":0,"count":1}]}""")
+        )
+        syncNow()
+        val first = runBlocking { vm.loadLists() }
+        assertEquals(listOf("Acme Holdings", "Zed Logistics"), vm.clients.value.map { it.name })
+        assertEquals(listOf("Clients"), vm.lists.value.map { it.name })
+        // A read of the lists and a new project, both held on the server across the sign-out.
+        val gate = server.hold()
+        val asked = java.util.concurrent.atomic.AtomicInteger()
+        server.on("GET", "/api/lists") {
+            asked.incrementAndGet()
+            gate.await()
+            FakeServer.json(200, """{"data":[{"key":"clients","name":"Clients","color":"#e15f56","position":0,"count":1}]}""")
+        }
+        server.on("POST", "/api/clients") {
+            asked.incrementAndGet()
+            gate.await()
+            FakeServer.json(201, """{"data":{"id":"01JNEW","name":"Acme Secret"}}""")
+        }
+        val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+        val lists = io.async { vm.loadLists() }
+        val project = io.async { vm.createClient("Acme Secret") }
+        com.echoledger.mobile.testsupport.waitFor("both on the network") { asked.get() == 2 }
+        val out = vm.unpair()
+        pumpUntil("signed out") { out.isCompleted }
+        assertTrue(vm.clients.value.isEmpty())
+        assertTrue(vm.lists.value.isEmpty())
+        gate.open()
+        pumpUntil("both landed") { lists.isCompleted && project.isCompleted }
+        assertTrue("no project of the last person", vm.clients.value.isEmpty())
+        assertTrue("no label of the last person", vm.lists.value.isEmpty())
+        assertEquals(Unit, first)
+    }
+
+    /**
+     * The projects are written after a server call (a new project, a project's language from the after-call question)
+     * on the main thread, where a sign-out clears them: a check and its write never have a sign-out between them. A
+     * flow put in the view model's place records the thread of each write.
+     */
+    @Test
+    fun `a project written after a server call is written on the main thread`() {
+        pairLocally()
+        serveLibrary()
+        syncNow()
+        val writers = java.util.concurrent.CopyOnWriteArrayList<Thread>()
+        val field = MainViewModel::class.java.getDeclaredField("_clients").apply { isAccessible = true }
+
+        @Suppress("UNCHECKED_CAST")
+        val inner = field.get(vm) as kotlinx.coroutines.flow.MutableStateFlow<List<com.echoledger.mobile.data.ClientDto>>
+        field.set(vm, RecordingFlow(inner, writers))
+        server.on("POST", "/api/clients", FakeServer.json(201, """{"data":{"id":"01JNEW","name":"Karachi Cargo"}}"""))
+        server.on("PATCH", "/api/clients/.+", FakeServer.empty(204))
+        val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+        val made = io.async { vm.createClient("Karachi Cargo") }
+        pumpUntil("the new project") { made.isCompleted && vm.clients.value.any { it.name == "Karachi Cargo" } }
+        val learn = MainViewModel::class.java.getDeclaredField("_learn").apply { isAccessible = true }
+
+        @Suppress("UNCHECKED_CAST")
+        (learn.get(vm) as kotlinx.coroutines.flow.MutableStateFlow<MainViewModel.LearnLanguage?>).value =
+            MainViewModel.LearnLanguage("r-1", "01JNEW", "Always Urdu for Karachi Cargo?", "ur")
+        vm.answerLearn(true)
+        pumpUntil("the project's language") { vm.clients.value.any { it.id == "01JNEW" && it.language == "ur" } }
+        val main = android.os.Looper.getMainLooper().thread
+        assertEquals(2, writers.size)
+        assertTrue("every write on the main thread: ${writers.map { it.name }}", writers.all { it == main })
+    }
+
+    /** A projects flow that records the thread of each write. */
+    @OptIn(kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi::class)
+    private class RecordingFlow<T>(
+        private val inner: kotlinx.coroutines.flow.MutableStateFlow<T>,
+        private val writers: MutableList<Thread>
+    ) : kotlinx.coroutines.flow.MutableStateFlow<T> by inner {
+        override var value: T
+            get() = inner.value
+            set(next) {
+                writers += Thread.currentThread()
+                inner.value = next
+            }
     }
 }

@@ -10,11 +10,23 @@
     $searching = $this->isSearching();
     $mode = $searching ? 'search' : ($this->subpage === '' ? 'overview' : 'page');
     $sections = $this->settingsSections();
+    // With the three levels (docs/PLAN_NAV_3_LEVELS.md) Settings' groups and its search are the panel's: the page shows
+    // the open group's pages as its inner list when it has several, and its own list stays hidden (nothing twice).
+    $framed = \App\Filament\Support\ConsoleV2::frame();
+    $inner = $framed && $mode === 'page' ? \App\Filament\Support\NavFrame::settingsInnerList() : null;
+    $innerList = $inner !== null ? view('filament.settings.inner-list', ['inner' => $inner])->render() : '';
+    $frameClass = $framed ? ' is-framed'.($inner !== null ? ' has-inner' : '') : '';
+    // Setup & health (Devices here) is the rail's own place: its pages are its tabs, not a Settings group.
+    $setupTabs = $framed && $mode === 'page' && \App\Filament\Support\NavFrame::place() === 'setup'
+        ? view('filament.v2.page-tabs', ['tabs' => \App\Filament\Support\NavFrame::setupTabs()])->render() : '';
+    // Settings' home lists no groups of its own (the panel does): when the panel is folded away, a way to it.
+    $showGroups = $framed && $mode === 'overview'
+        ? '<button type="button" class="v2-chip el-set-show-groups" x-data x-on:click="$dispatch(\'el-nav-show-panel\')" data-show-groups>'.e(__('Show groups')).'</button>' : '';
 @endphp
 <x-filament-panels::page class="el-settings-page">
     <div class="el-settings-wrap">
-        <div class="el-settings" data-mode="{{ $mode }}" data-page="{{ $this->subpage ?: 'overview' }}">
-            <nav class="el-settings-nav" aria-label="{{ __('Settings') }}">
+        <div class="el-settings{{ $frameClass }}" data-mode="{{ $mode }}" data-page="{{ $this->subpage ?: 'overview' }}">
+            {!! $innerList !!}<nav class="el-settings-nav" aria-label="{{ __('Settings') }}"{!! $framed ? ' hidden' : '' !!}>
                 <div class="el-set-search" role="search" x-data
                     x-on:keydown.escape.prevent="$wire.clearSettingsSearch(); $refs.q.blur()"
                     x-on:keydown.down.prevent="window.elSettings?.move(1)" x-on:keydown.up.prevent="window.elSettings?.move(-1)"
@@ -61,13 +73,13 @@
                 @if ($searching)
                     @include('filament.settings.search-results', ['results' => $this->searchResults(), 'query' => $this->settingsQuery])
                 @elseif ($this->subpage === '')
-                    <h1 class="el-set-h1">Settings</h1>
+                    <h1 class="el-set-h1">{{ __('Settings') }}</h1>{!! $showGroups !!}
                     @include('filament.settings.profile-card')
                     @include('filament.settings.state-row')
                     @include('filament.settings.this-month')
                 @else
                     <a href="{{ EditProfile::settingsUrl() }}" class="el-set-back el-set-only-narrow">@svg('heroicon-o-chevron-left', ['aria-hidden' => 'true']) {{ __('Settings') }}</a>
-                    <h1 class="el-set-h1">{{ $this->getTitle() }}</h1>
+                    <h1 class="el-set-h1">{{ $this->getTitle() }}</h1>{!! $setupTabs !!}
                     {{ $this->content }}
                 @endif
             </main>

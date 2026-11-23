@@ -153,17 +153,18 @@ final class LibraryFacets
      * "Needs you" for the whole library, whatever the filters.
      *
      * @param  Filters  $filters
+     * @param  list<string>|null  $sources  a Library tab's Sources (null: every one)
      * @return array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}
      */
-    public function facets(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null): array
+    public function facets(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null, ?array $sources = null): array
     {
         $zone ??= $this->settings->displayTimezone();
         $query = self::cleanQuery($query);
         $place = self::place($place);
         $version = $this->version($workspaceId, $userId);
-        $key = 'library-facets:result:'.$workspaceId.':'.$userId.':'.sha1((string) json_encode([$version, $filters, $query, $zone, $place, intdiv(Carbon::now()->getTimestamp(), self::RESULT_TTL)]));
+        $key = 'library-facets:result:'.$workspaceId.':'.$userId.':'.sha1((string) json_encode([$version, $filters, $query, $zone, $place, $sources, intdiv(Carbon::now()->getTimestamp(), self::RESULT_TTL)]));
 
-        return self::kept($version, $key, self::RESULT_TTL, fn (): array => $this->count($workspaceId, $userId, $filters, $query, $zone, $version, $place));
+        return self::kept($version, $key, self::RESULT_TTL, fn (): array => $this->count($workspaceId, $userId, $filters, $query, $zone, $version, $place, $sources));
     }
 
     /**
@@ -202,14 +203,17 @@ final class LibraryFacets
      * The ids of the person's recordings the filters and the search keep (never a call still waiting for its decision);
      * null when nothing is asked (every recording).
      *
+     * [$sources] narrows to those Sources as well (a Library tab, docs/API.md "The Library's tabs"; null: every one).
+     *
      * @param  Filters  $filters
+     * @param  list<string>|null  $sources
      * @return list<string>|null
      */
-    public function matchingIds(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null): ?array
+    public function matchingIds(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null, ?array $sources = null): ?array
     {
         $query = self::cleanQuery($query);
         $place = self::place($place);
-        if ($filters === [] && $query === null && $place === 'all') {
+        if ($filters === [] && $query === null && $place === 'all' && $sources === null) {
             return null;
         }
         $zone ??= $this->settings->displayTimezone();
@@ -217,8 +221,9 @@ final class LibraryFacets
         $ranges = self::ranges($filters, $zone);
         $now = Carbon::now()->getTimestamp();
         $ids = [];
+        $kept = $sources === null ? null : array_flip($sources);
         foreach ($rows as $row) {
-            if (self::inPlace($row, $place, $now) && self::passes($row, $filters, $ranges) === true) {
+            if (($kept === null || isset($kept[$row['source']])) && self::inPlace($row, $place, $now) && self::passes($row, $filters, $ranges) === true) {
                 $ids[] = $row['id'];
             }
         }
@@ -231,12 +236,13 @@ final class LibraryFacets
      *
      * @param  Builder<CaptureSession>  $builder
      * @param  Filters  $filters
+     * @param  list<string>|null  $sources  a Library tab's Sources (null: every one)
      * @return Builder<CaptureSession>
      */
-    public function apply(Builder $builder, int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null): Builder
+    public function apply(Builder $builder, int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null, ?array $sources = null): Builder
     {
         $place = self::place($place);
-        $ids = $this->matchingIds($workspaceId, $userId, $filters, $query, $zone, $place);
+        $ids = $this->matchingIds($workspaceId, $userId, $filters, $query, $zone, $place, $sources);
         if ($ids === null) {
             // Every recording: a call still waiting is in Needs you only.
             return $builder->where($builder->qualifyColumn('status'), '!=', SessionStatus::Recording->value);
@@ -249,10 +255,11 @@ final class LibraryFacets
      * How many recordings [$filters] keep in [$place] (a saved view's count in the sidebar), without the facets.
      *
      * @param  Filters  $filters
+     * @param  list<string>|null  $sources  a Library tab's Sources (null: every one)
      */
-    public function total(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null): int
+    public function total(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null, ?array $sources = null): int
     {
-        $ids = $this->matchingIds($workspaceId, $userId, $filters, $query, $zone, $place);
+        $ids = $this->matchingIds($workspaceId, $userId, $filters, $query, $zone, $place, $sources);
 
         return $ids === null ? count($this->liveIds($workspaceId, $userId)) : count($ids);
     }
@@ -320,13 +327,17 @@ final class LibraryFacets
 
     /**
      * @param  Filters  $filters
+     * @param  list<string>|null  $sources
      * @return array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}
      */
-    private function count(int $workspaceId, int $userId, array $filters, ?string $query, string $zone, string $version, string $place = 'all'): array
+    private function count(int $workspaceId, int $userId, array $filters, ?string $query, string $zone, string $version, string $place = 'all', ?array $sources = null): array
     {
         $now = Carbon::now()->getTimestamp();
         $all = array_values(array_filter($this->rows($workspaceId, $userId, $version), fn (array $r): bool => $r['session_status'] !== SessionStatus::Recording->value));
-        $rows = array_values(array_filter($this->searched($workspaceId, $userId, $query, $version), fn (array $r): bool => self::inPlace($r, $place, $now)));
+        // A Library tab narrows what is counted to its Sources, as it narrows the list (docs/API.md "The Library's tabs").
+        $kept = $sources === null ? null : array_flip($sources);
+        $rows = array_values(array_filter($this->searched($workspaceId, $userId, $query, $version),
+            fn (array $r): bool => ($kept === null || isset($kept[$r['source']])) && self::inPlace($r, $place, $now)));
         $ranges = self::ranges($filters, $zone);
         $optionRanges = [];
         foreach (['today', 'last_7_days', 'this_month'] as $date) {
