@@ -63,27 +63,28 @@ describe("dragging recordings onto the sidebar", () => {
     expect(document.body).not.toHaveClass("dragging-recordings");
   });
 
-  it("DT-LIB-083: with rows picked, dragging one of them moves them all; the Inbox takes them out of their project", async () => {
+  it("DT-LIB-083: with rows picked, dragging one of them moves them all; No project (today's Inbox) takes them out of their project", async () => {
     app();
     await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
-    fireEvent.click(row("Kick-off"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Kick-off" }));
     fireEvent.click(row("Board call"));
     await drag(row("Board call"), inbox());
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["a", "c"], action: "move", clientId: null, label: null }]);
-    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("2 recordings moved to the Inbox");
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("2 recordings taken out of their projects");
   });
 
   it("DT-LIB-082 in the Table layout: a table row drags onto a pinned project the same way", async () => {
     app();
     await act(flushAsync);
-    fireEvent.click(screen.getByRole("radio", { name: "Table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Table" }));
     await act(flushAsync);
     const tableRow = screen.getByRole("button", { name: "Follow-up" });
     expect(tableRow.closest("table, [role=grid], [role=table]")).not.toBeNull();
     await drag(tableRow, project());
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["b"], action: "move", clientId: "p1", label: null }]);
-    fireEvent.click(screen.getByRole("radio", { name: "List" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "List" }));
   });
 
   it("Escape, or letting go away from a target, moves nothing", async () => {
@@ -113,7 +114,7 @@ describe("dragging recordings onto the sidebar", () => {
     expect(document.querySelector(".el-nav-drop")).toBeNull();
     await drag(row("Kick-off"), placesInbox);
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["a"], action: "move", clientId: null, label: null }]);
-    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Moved to the Inbox");
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Taken out of its project");
     // Pinned is a place, not a target: nothing there takes a drop.
     expect(within(screen.getByRole("list", { name: "Library places" })).getByRole("button", { name: "Pinned, 0" }).closest("[data-drop-project]")).toBeNull();
   });

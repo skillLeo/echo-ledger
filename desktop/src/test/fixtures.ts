@@ -46,6 +46,7 @@ export function makeStatus(overrides: Partial<AppStatus> = {}): AppStatus {
     pillHidden: false,
     pendingDecisions: 0,
     failedUploads: 0,
+    signIn: "sign-in-1",
     trayState: "idle",
     budget: "ok",
     plan: makePlan(),
@@ -94,6 +95,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     deviceId: "dev-1",
     deviceName: "Work laptop",
     installId: null,
+    signInId: null,
     shortcuts: {
       record_now: "CommandOrControl+Alt+R",
       toggle_captions: "CommandOrControl+Shift+Space",

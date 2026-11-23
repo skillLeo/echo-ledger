@@ -1,5 +1,6 @@
 import { useId, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { Icon, type IconType } from "./Button";
+import { PickBox } from "./choices";
 import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
 
 /** A list of rows with an accessible name. */
@@ -61,6 +62,11 @@ export type ListRowProps = {
   onContextMenu?: (e: MouseEvent<HTMLElement> | KeyboardEvent<HTMLButtonElement>) => void;
   /** Selection mode: the row ticks and unticks (aria-pressed) and shows a tick in a circle instead of its icon. */
   checked?: boolean;
+  /**
+   * A checkbox before the row's leading content that picks the row (the Library: no Select button). It shows while
+   * the row is hovered or has focus, while it is ticked, and while `shown` (something is picked).
+   */
+  pick?: { checked: boolean; label: string; onToggle: (e: MouseEvent<HTMLInputElement>) => void; shown?: boolean };
   /** Buttons on the end side next to the row's own button (a recording's ⋮), shown on hover and focus. */
   actions?: ReactNode;
   /** "always": the actions stay on screen, quiet (a list whose rows have no other way to their actions, as Shared). */
@@ -93,11 +99,11 @@ export type ListRowProps = {
  */
 export function ListRow({
   title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId, label, mark, anchor, disabled, expanded,
-  onContextMenu, checked, actions, strong, actionsShown = "hover", metaLines = 1,
+  onContextMenu, checked, actions, strong, actionsShown = "hover", metaLines = 1, pick,
 }: ListRowProps) {
   const id = useId();
   const interactive = Boolean(onClick) && !control;
-  const cls = ["el-row", interactive && "el-row--interactive", disabled && "el-row--disabled", (selected || checked) && "el-row--selected", compact && "el-row--compact", actions && "el-row--actions", actions && actionsShown === "always" && "el-row--actions-always", metaLines === 2 && "el-row--meta-2"]
+  const cls = ["el-row", interactive && "el-row--interactive", disabled && "el-row--disabled", (selected || checked || pick?.checked) && "el-row--selected", pick && "el-row--pick", pick?.shown && "el-row--picking", compact && "el-row--compact", actions && "el-row--actions", actions && actionsShown === "always" && "el-row--actions-always", metaLines === 2 && "el-row--meta-2"]
     .filter(Boolean).join(" ");
   const describedBy = [mark && `${id}-mark`, meta && `${id}-meta`, (endTop || endBottom) && `${id}-end`, value && `${id}-value`, badge && `${id}-badge`]
     .filter(Boolean).join(" ") || undefined;
@@ -109,7 +115,12 @@ export function ListRow({
           aria-current={selected || undefined} aria-pressed={checked ?? undefined} onClick={onClick} onPointerDown={onPointerDown} data-row-id={rowId} disabled={disabled} aria-expanded={expanded}
           onKeyDown={onContextMenu ? (e) => { if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) { e.preventDefault(); onContextMenu(e); } } : undefined} />
       )}
-      {checked !== undefined ? (
+      {pick && (
+        <span className="el-row__pick">
+          <PickBox checked={pick.checked} label={pick.label} onClick={(e) => pick.onToggle(e)} />
+        </span>
+      )}
+      {checked !== undefined && !pick ? (
         <span className="el-row__leading el-row__leading--tick" aria-hidden="true">
           <span className={`el-row__tick${checked ? " el-row__tick--on" : ""}`}>{checked && <Icon icon={CheckIcon} />}</span>
         </span>

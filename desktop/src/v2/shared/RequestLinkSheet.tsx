@@ -13,11 +13,11 @@ import { Banner, Button, Icons, Select, Sheet, TextField } from "../components";
 /** A whole number from a field, or null when it is empty. */
 const count = (text: string): number | null => (text.trim() === "" ? null : Number.parseInt(text, 10));
 
-export const REQUEST_INTRO = "Anyone with a request link can send you voice notes, audio and video, without an account. They become recordings in the project you choose or the Inbox; a project also takes PDF, Word, text and images into its Files.";
+export const REQUEST_INTRO = "Anyone with a request link can send you voice notes, audio and video, without an account. They become recordings in the project you choose, or in no project; a project also takes PDF, Word, text and images into its Files.";
 
 export function RequestLinkSheet({ projects, projectId = null, notify, onMade, onShowLinks, onClose }: {
   projects: readonly ClientFolder[];
-  /** The project new links send into (null: the Inbox). */
+  /** The project new links send into (null: none). */
   projectId?: string | null;
   notify: Notify;
   /** A link was made (the Request links tab reads its list again). */
@@ -63,7 +63,7 @@ export function RequestLinkSheet({ projects, projectId = null, notify, onMade, o
       notify("Could not access the clipboard", true);
     }
   };
-  const places = [{ value: "", label: "Inbox" }, ...visibleRows(projectTree(projects), "all").map(({ project }) => ({ value: project.id, label: projectLabel(projects, project.id) }))];
+  const places = [{ value: "", label: "No project" }, ...visibleRows(projectTree(projects), "all").map(({ project }) => ({ value: project.id, label: projectLabel(projects, project.id) }))];
 
   return (
     <Sheet open title="Request files" description={REQUEST_INTRO} onClose={onClose}

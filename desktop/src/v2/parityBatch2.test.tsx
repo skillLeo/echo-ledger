@@ -146,14 +146,14 @@ describe("the Library (parity batch 2)", () => {
     expect(rowModel(making).meta).toBe("WhatsApp · Transcribing… part 3 of 5");
   });
 
-  it("DT-LIB-043: Density is in the Library's Sort and group menu, saved for Settings › Appearance too", async () => {
+  it("DT-LIB-043: Density is in the Library's Sort & display menu, saved for Settings › Appearance too", async () => {
     library([item()]);
     await act(flushAsync);
-    fireEvent.click(screen.getByRole("button", { name: "Sort and group" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Compact" }));
     expect(loadPreferences().density).toBe("compact");
     expect(document.documentElement.dataset.density).toBe("compact");
-    fireEvent.click(screen.getByRole("button", { name: "Sort and group" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
     expect(screen.getByRole("menuitemradio", { name: "Compact" })).toHaveAttribute("aria-checked", "true");
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Comfortable" }));
     expect(loadPreferences().density).toBe("comfortable");

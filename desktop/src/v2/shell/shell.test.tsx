@@ -71,7 +71,7 @@ describe("the shell", () => {
     expect(screen.getByRole("menuitem", { name: "Record page" })).not.toHaveAttribute("aria-checked");
   });
 
-  it("Search (with its keys) as an icon at the end of the header, Upload files in Record's menu, and Help & shortcuts at the foot", () => {
+  it("Search (with its keys) as an icon at the end of the header, Record now and Import audio files in Record's menu, and Help & shortcuts at the foot", () => {
     const onSearch = vi.fn();
     const onUpload = vi.fn();
     const onHelp = vi.fn();
@@ -89,7 +89,9 @@ describe("the shell", () => {
     fireEvent.click(search);
     expect(onSearch).toHaveBeenCalled();
     fireEvent.click(within(nav).getByRole("button", { name: "More ways to record" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Upload files…" }));
+    // ● Record ▾ (PLAN_LIBRARY_FILTERS): Record now and Import audio files first (files can be dropped on the window too).
+    expect(screen.getAllByRole("menuitem").slice(0, 2).map((m) => m.textContent)).toEqual(["Record now", "Import audio files…"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Import audio files…" }));
     expect(onUpload).toHaveBeenCalled();
     fireEvent.click(within(nav).getByRole("button", { name: "Help & shortcuts" }));
     expect(onHelp).toHaveBeenCalled();
@@ -464,7 +466,8 @@ describe("the app with the flags", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Review" }));
     await act(flushAsync);
     await act(flushAsync);
-    expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+    // The Library on Needs you (the waiting calls' home, PLAN_LIBRARY_FILTERS), its list of waiting calls open.
+    expect(within(nav).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
     expect(await screen.findByRole("list", { name: "Waiting recordings" })).toHaveTextContent("Board call");
   });
 

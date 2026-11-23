@@ -50,6 +50,10 @@ import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type Not
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { useUiFlags } from "../../v2/flags";
 import { shellChip } from "../../v2/shell/status";
+import { libraryViewCounts, needsYouCount, prepare } from "../../v2/library/facets";
+import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
+import { syncLibrary } from "../../v2/library/syncClock";
+import { lastViewsAccount, rememberViewsAccount, settleViewsAccount, useViewsAccount, viewsAccount, viewsStore } from "../../v2/library/myViews";
 import { sourceAppLabel } from "../../lib/format";
 import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
@@ -59,6 +63,8 @@ import { hasV2Page } from "../../v2/settings/pages/route";
 const v2 = () => import("../../v2/app");
 const ShellV2 = lazy(() => v2().then((m) => ({ default: m.Shell })));
 const LibraryV2 = lazy(() => v2().then((m) => ({ default: m.LibraryV2 })));
+const LibraryNavV2 = lazy(() => v2().then((m) => ({ default: m.LibraryNav })));
+const LibraryFootV2 = lazy(() => v2().then((m) => ({ default: m.LibraryFoot })));
 const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
@@ -173,6 +179,30 @@ export default function MainApp() {
   // Waiting, Pinned and Failed uploads (v1.6, P4.2): views of the whole Library, not server folders.
   const [libraryView, setLibraryView] = useState<LibraryViewKey | null>(null);
   const [sharedTab, setSharedTab] = useState<SharedTab>("with-me");
+  // The new design's Library (PLAN_LIBRARY_FILTERS): what the sidebar chose (a library view, one of My views, a label,
+  // Trash), the request that tells the Library, and the recordings the sidebar counts from (read here, and fresher from
+  // the Library while it is open, with what was opened there).
+  const [libraryScope, setLibraryScope] = useState<LibraryScope>(ALL_SCOPE);
+  const [scopeRequest, setScopeRequest] = useState<{ scope: LibraryScope; seq: number } | null>(null);
+  const [filtersRequest, setFiltersRequest] = useState<{ seq: number } | null>(null);
+  const [libraryItems, setLibraryItems] = useState<{ items: readonly LibraryItem[]; read: ReadonlySet<string> } | null>(null);
+  const libraryFacts = useMemo(() => (libraryItems ? prepare(libraryItems.items, { read: libraryItems.read }) : null), [libraryItems]);
+  // My views are each account's own in each workspace (the server, the email, the workspace), synced through
+  // /api/views. Whose they were last is kept on this computer for this sign-in: an offline start shows (and saves) that
+  // account's views until the account can be read; signing out forgets it, and another account's sign-in replaces it.
+  // What is kept for this is tied to the core's id for this sign-in: another sign-in, or none, finds nothing of it (and
+  // the copies of a sign-in that is over go, but for what still waits to be sent). The remembered account's views show
+  // and change here only; they are sent once account_get confirms the same server, email and workspace.
+  const liveViews = viewsAccount(status?.serverUrl, account?.email, account?.workspace?.id);
+  const signIn = status ? (status.paired ? status.signIn ?? null : null) : undefined;
+  useEffect(() => {
+    if (signIn !== undefined) settleViewsAccount(signIn);
+  }, [signIn]);
+  useEffect(() => {
+    if (liveViews && signIn) rememberViewsAccount(status?.serverUrl, liveViews, signIn);
+  }, [liveViews, signIn, status?.serverUrl]);
+  const lastViews = useMemo(() => (signIn ? lastViewsAccount(status?.serverUrl, signIn) : null), [signIn, status?.serverUrl, liveViews]);
+  useViewsAccount(liveViews ?? lastViews, liveViews !== null);
   const [sharedFocus, setSharedFocus] = useState<string | null>(null);
   // An echoledger://open link waiting to be opened (since v1.5), and a request link it pointed at.
   const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);
@@ -422,7 +452,11 @@ export default function MainApp() {
   const [libraryTotal, setLibraryTotal] = useState(0);
   // The smart folders' counts; a server older than v1.5 sends none and the sidebar lists no smart folders.
   const loadViews = useCallback(async () => {
-    api.library().then((items) => setLibraryTotal(Array.isArray(items) ? items.filter((i) => !i.deleted).length : 0)).catch(() => undefined);
+    api.library().then((items) => {
+      const list = Array.isArray(items) ? items : [];
+      setLibraryTotal(list.filter((i) => !i.deleted).length);
+      setLibraryItems((now) => ({ items: list, read: now?.read ?? new Set() }));
+    }).catch(() => undefined);
     let tz: string | null = null;
     try {
       tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
@@ -482,9 +516,20 @@ export default function MainApp() {
     }
     if (!ready) return;
     let alive = true;
-    api.account().then((a) => alive && setAccount(a ?? null), () => alive && setAccount(null));
+    let read = false;
+    const ask = () => api.account().then((a) => {
+      if (!alive) return;
+      read = true;
+      setAccount(a ?? null);
+    }, () => alive && setAccount((now) => now ?? null));
+    void ask();
+    // Not read (offline at the start): asked again after the next library sync that worked.
+    const un = listen("library:updated", () => {
+      if (!read) void ask();
+    });
     return () => {
       alive = false;
+      void un.then((f) => f()).catch(() => undefined);
     };
   }, [paired, ready]);
   const entitlements = useEntitlements();
@@ -588,6 +633,8 @@ export default function MainApp() {
   }, [toast]);
 
   const notify: Notify = showToast;
+  // A view saved offline that the server then refused (30 already): said once, where the views are.
+  useEffect(() => viewsStore.onProblem((text) => showToast(text, true, { kind: "library", view: null })), [showToast]);
   /** The Import button: the core's multi-select picker, then the sheet for the chosen files. */
   const pickImport = async () => {
     if (viewer.current) {
@@ -690,6 +737,17 @@ export default function MainApp() {
     setLibraryFolder(folder);
     setLibraryView(null);
     setSharedFocus(null);
+    // The new design's sidebar: every recording is All (a folder is a Source or Project filter there now).
+    if (folder === null && ui.flags["ui_v2.library"]) openScope(ALL_SCOPE);
+  };
+  /** The new design's Library on what the sidebar chose: a library view, one of My views, a label or Trash. */
+  const openScope = (scope: LibraryScope) => {
+    setTab("library");
+    setLibraryFolder(null);
+    setLibraryView(null);
+    setSharedFocus(null);
+    setLibraryScope(scope);
+    setScopeRequest({ scope, seq: ++navigations.current });
   };
   /** The Library on Waiting, Pinned or Failed uploads (v1.6, P4.2). */
   const openLibraryView = (view: LibraryViewKey | null) => {
@@ -767,6 +825,17 @@ export default function MainApp() {
   const voiceNote = () => void run(api.toggleMicNote);
 
   // The Library's places with their counts: the server's, and what only this computer knows (v1.6, P4.2).
+  // The new sidebar's counts (PLAN_LIBRARY_FILTERS): each library view's, from the synced list; Needs you with the calls
+  // waiting and the uploads that failed on this computer; each label's.
+  const libraryCounts = libraryFacts ? {
+    ...libraryViewCounts(libraryFacts.facts),
+    // From every item: the server's waiting recordings (session `recording`) are in no other view, so not in the facts.
+    needs: needsYouCount(libraryItems?.items ?? [], { waiting: status.pendingDecisions, failedUploads: status.failedUploads }, Date.now()),
+  } : null;
+  const labelCounts: Record<string, number> = {};
+  for (const f of libraryFacts?.facts ?? []) for (const key of f.values.labels) labelCounts[key] = (labelCounts[key] ?? 0) + 1;
+  /** A place's words in the new design: the Inbox is "No project" (no "Inbox" anywhere). */
+  const placeWords = (p: { key: string; label: string }) => (p.key === "inbox" ? "No project" : p.label);
   const places = libraryPlaces(views, {
     total: libraryTotal,
     waiting: status.pendingDecisions,
@@ -782,7 +851,8 @@ export default function MainApp() {
   const pages: ShellPage[] = [
     { id: "home", label: "Home", keywords: "record start ready check calls voice note captions", open: () => goTo("record") },
     { id: "library", label: "Library", keywords: "recordings transcripts all", open: () => openFolder(null) },
-    ...places.filter((p) => p.key !== "all").map((p) => ({ id: `place-${p.key}`, label: p.label, group: "Library", keywords: "smart folder recordings", open: () => openPlace(p) })),
+    // The new design says no "Inbox": recordings in no project are Project › No project.
+    ...places.filter((p) => p.key !== "all").map((p) => ({ id: `place-${p.key}`, label: placeWords(p), group: "Library", keywords: `smart folder recordings${p.key === "inbox" ? " inbox" : ""}`, open: () => openPlace(p) })),
     { id: "projects", label: "Projects", keywords: "clients folders", open: () => openProject(null) },
     ...(projects ?? []).map((p) => ({ id: `project-${p.id}`, label: p.name, group: "Projects", keywords: "project client", open: () => openProject(p.id) })),
     { id: "activity", label: "Activity", keywords: "notifications bell", open: () => goTo("activity") },
@@ -843,7 +913,9 @@ export default function MainApp() {
       {tab === "library" && ui.flags["ui_v2.library"] && (
         <Suspense fallback={null}>
           <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} reviewRequest={reviewV2}
-            folder={libraryFolder === "shared" ? null : libraryFolder} onFolder={openFolder}
+            folder={libraryFolder === "shared" ? null : libraryFolder} onFolder={() => setLibraryFolder(null)}
+            scopeRequest={scopeRequest} onScope={setLibraryScope} filtersRequest={filtersRequest}
+            onItems={(items, read) => setLibraryItems({ items, read })}
             onOpenProject={(id) => openProject(id)} initialOpen={restoredRecording} onOpenChange={rememberRecording}
             top={ui.flags["ui_v2.shell"] ? {
               status, onRecord: canRecord && !status.recording ? record : undefined, onActivity: () => goTo("activity"),
@@ -1020,10 +1092,26 @@ export default function MainApp() {
             projectTree={(projects ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null, pinned: !!p.pinned }))}
             shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
             onUpload={canRecord ? () => void pickImport() : undefined} onNewProject={newProject} onRequestLink={() => setRequestSheet({ projectId: null })} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} onHelp={openHelp}
+            library={ui.flags["ui_v2.library"] ? (
+              <Suspense fallback={null}>
+                <LibraryNavV2 current={tab === "library" ? scopeKey(libraryScope) : tab === "shared" ? `shared:${sharedTab}` : null}
+                  counts={libraryCounts} labelCounts={labelCounts} onScope={openScope}
+                  shared={{ tabs: SHARED_TABS, current: tab === "shared" ? sharedTab : null, open: (t) => openShared(t as SharedTab) }}
+                  onNewView={() => { if (tab !== "library") openScope(libraryScope); setFiltersRequest({ seq: ++navigations.current }); }}
+                  say={(text) => notify(text, false, NO_TARGET)} onLibraryChanged={() => void syncLibrary().catch(() => undefined)} />
+              </Suspense>
+            ) : undefined}
+            libraryAttention={(libraryCounts?.needs ?? 0) > 0}
+            footStart={ui.flags["ui_v2.library"] ? (
+              <Suspense fallback={null}>
+                <LibraryFootV2 trashCurrent={tab === "library" && libraryScope.kind === "trash"} onTrash={() => openScope({ kind: "trash" })}
+                  onSync={() => void syncLibrary().catch((e) => notify(errorMessage(e), true))} />
+              </Suspense>
+            ) : undefined}
             places={{
               // Classic's sidebar form: no All, the places that hold something, the Inbox always (it takes drops). Shared
               // with me is Shared's own, under Library.
-              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView)))
+              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView))).map((p) => ({ ...p, label: placeWords(p) }))
                 .map((p) => ({ key: p.key, label: p.label, count: p.count, drop: p.drop })),
               current: libraryFolder ?? libraryView ?? null,
               open: (key) => { const p = places.find((x) => x.key === key); if (p) openPlace(p); },

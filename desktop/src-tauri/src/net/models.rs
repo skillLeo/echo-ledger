@@ -735,6 +735,10 @@ pub struct LibraryResponse {
     pub data: Vec<LibraryItem>,
     pub next_cursor: Option<String>,
     pub server_time: String,
+    /// The person's saved views' version (since 2.0.0-p): when it differs from the one the app has, it reads
+    /// `GET /api/views` again. None from an older server.
+    #[serde(default)]
+    pub views_version: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

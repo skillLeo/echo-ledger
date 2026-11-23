@@ -26,6 +26,8 @@ pub struct AppStatus {
     pub paired: bool,
     pub server_url: Option<String>,
     pub device_name: Option<String>,
+    /// This sign-in's id, made at each sign-in (none while signed out): see Settings.sign_in_id.
+    pub sign_in: Option<String>,
     pub pinned: bool,
     pub recording: Option<crate::audio::RecordingInfo>,
     pub captions_live: bool,
@@ -96,6 +98,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
     crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches.clone(), state.viewer_refusal());
     AppStatus {
         paired: state.is_paired(),
+        sign_in: state.sign_in_id(),
         server_url: settings.server_url.clone(),
         device_name: settings.device_name.clone(),
         pinned: !settings.pins.is_empty(),
@@ -204,12 +207,8 @@ async fn adopt_registration(app: &AppHandle, api: &ApiClient, registered: crate:
     // Another account may be signing in: the last one's WhatsApp share copies and kept pictures go.
     forget_whatsapp_shares(app);
     forget_avatars(app);
-    state.update_settings(|s| {
-        s.server_url = Some(api.base_url().to_string());
-        s.pins = final_pins.clone();
-        s.device_id = Some(registered.device.id.clone());
-        s.device_name = Some(registered.device.name.clone());
-    })?;
+    // A new sign-in: what the window kept for the last one is not this one's (a fresh sign-in id).
+    state.note_sign_in(api.base_url(), &final_pins, &registered.device.id, &registered.device.name)?;
     state.apply_config(registered.config);
     state.upload_notify.notify_one();
     let _ = refresh_library_inner(app).await;
@@ -453,10 +452,7 @@ pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     state.token_store.forget().map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = None;
     state.api_cache.clear();
-    state.update_settings(|s| {
-        s.device_id = None;
-        s.device_name = None;
-    })?;
+    state.note_sign_out()?;
     let _ = std::fs::remove_file(paths::library(&state.data_dir));
     *state.library.lock().await = LibraryCache::default();
     Ok(status(&app))
@@ -1730,8 +1726,9 @@ pub async fn whatsapp_share_voice(app: AppHandle, id: String, text: String, shar
 
 /// Keys never exported or imported: the pairing (server, pins, device) and the client of this server.
 /// `consentAcknowledged` stays out too: the recording-laws notice is acknowledged by the person using this install, never by a file.
-/// `installId` (v1.6) is this install's own: another computer that imported it would sign in as this one.
-pub const NOT_PORTABLE: [&str; 8] = ["serverUrl", "pins", "deviceId", "deviceName", "installId", "clientId", "onboardingDone", "consentAcknowledged"];
+/// `installId` (v1.6) is this install's own: another computer that imported it would sign in as this one. `signInId`
+/// (2.0.0-p) is this sign-in's: imported, the window would read what it kept for another sign-in as this one's.
+pub const NOT_PORTABLE: [&str; 9] = ["serverUrl", "pins", "deviceId", "deviceName", "installId", "signInId", "clientId", "onboardingDone", "consentAcknowledged"];
 /// The `format` marker of an exported settings file.
 pub const SETTINGS_FORMAT: &str = "echoledger-settings";
 
@@ -2267,6 +2264,79 @@ pub async fn session_opened(app: AppHandle, id: String) -> AppResult<()> {
         cache.save(&paths::library(&state.data_dir))?;
     }
     Ok(())
+}
+
+/// My views (contract 2.0.0-p "Saved views"): the person's saved filter sets, the same on every device. The page keeps
+/// a copy and works offline (v2/library/myViews.ts); these send its changes and read the server's list. The server
+/// checks every field; the core passes the JSON through. `None` from `views_get` on a server without saved views yet.
+#[tauri::command]
+pub async fn views_get(app: AppHandle) -> AppResult<Option<serde_json::Value>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.views().await {
+        Ok(answer) => Ok(Some(answer)),
+        Err(e) if e.is_missing_route() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// What these routes say about a view change itself, for good: the change can never go as it is. Any other answer
+/// (another 4xx such as 403 `account_suspended`, a 4xx without a code from a captive portal or a proxy, 429, 426, 5xx,
+/// offline) is not about the view, so it stays an error and the change waits to be sent again.
+const VIEW_REFUSALS: [&str; 3] = ["validation_failed", "views_limit", "view_not_found"];
+
+/// A view change the server refused for good comes back as data, `{"refused": {"status", "code", "message"}}` (the
+/// message in the app's words), so the page's sync drops or restores that one view and goes on with the next.
+pub(crate) fn view_answer(result: AppResult<serde_json::Value>) -> AppResult<serde_json::Value> {
+    match result {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
+        Err(e @ AppError::Server { .. }) if e.code().is_some_and(|c| VIEW_REFUSALS.contains(&c)) => {
+            Ok(serde_json::json!({ "refused": { "status": e.status(), "code": e.code(), "message": e.to_string() } }))
+        }
+        other => other,
+    }
+}
+
+/// Save as view: `{name, filters, search, sort, group, density, client_ref}`; the same `client_ref` again answers the
+/// view it made, so a view saved offline and sent twice is made once.
+#[tauri::command]
+pub async fn view_create(app: AppHandle, view: serde_json::Value) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    view_answer(state.api()?.create_view(&view).await)
+}
+
+/// Rename… or Save changes on a view: any of its fields.
+#[tauri::command]
+pub async fn view_update(app: AppHandle, id: String, patch: serde_json::Value) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    view_answer(state.api()?.update_view(&id, &patch).await)
+}
+
+/// Delete view…
+#[tauri::command]
+pub async fn view_delete(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    view_answer(state.api()?.delete_view(&id).await)
+}
+
+/// A view dragged, or Move up / Move down: every view's id once, in the new order.
+#[tauri::command]
+pub async fn views_order(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    view_answer(state.api()?.order_views(&ids).await)
+}
+
+/// The saved views' version the last library sync carried (None before a sync did, or from an older server): the page
+/// reads `GET /api/views` again when it differs from its own.
+#[tauri::command]
+pub async fn library_views_version(app: AppHandle) -> AppResult<Option<u64>> {
+    let state = app.state::<AppState>();
+    let cache = state.library.lock().await;
+    Ok(cache.views_version)
 }
 
 /// Move left / Move right on a list chip: every list's key once, in the new order.

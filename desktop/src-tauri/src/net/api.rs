@@ -1135,6 +1135,44 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    fn views_url(&self, tail: Option<&str>) -> AppResult<reqwest::Url> {
+        let mut url = reqwest::Url::parse(&self.url("views")).map_err(|e| AppError::msg(format!("Bad server address: {e}")))?;
+        if let Some(tail) = tail {
+            url.path_segments_mut().map_err(|()| AppError::msg("Bad server address"))?.push(tail);
+        }
+        Ok(url)
+    }
+
+    /// `GET /api/views` (since 2.0.0-p): the person's saved views in their order, with `views_version` and `limit`.
+    pub async fn views(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.views_url(None)?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/views` (since 2.0.0-p): a view at the end; its `client_ref` sent again answers the view it made.
+    pub async fn create_view(&self, body: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.views_url(None)?))?.json(body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/views/{id}` (since 2.0.0-p): any of name, filters, search, sort, group, density.
+    pub async fn update_view(&self, id: &str, patch: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.patch(self.views_url(Some(id))?))?.json(patch).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/views/{id}` (since 2.0.0-p).
+    pub async fn delete_view(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.delete(self.views_url(Some(id))?))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PUT /api/views/order` (since 2.0.0-p): every view's id once, in the new order.
+    pub async fn order_views(&self, ids: &[String]) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.put(self.views_url(Some("order"))?))?.json(&json!({ "ids": ids })).send().await?;
+        Self::parse(resp).await
+    }
+
     /// `GET /api/library/views?tz=` (since v1.1): the smart views' counts and the labels; since v1.5 `folders`, the
     /// smart folders' counts.
     pub async fn library_views(&self, tz: Option<&str>) -> AppResult<serde_json::Value> {

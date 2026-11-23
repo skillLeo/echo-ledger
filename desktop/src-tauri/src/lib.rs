@@ -297,6 +297,46 @@ impl AppState {
         id
     }
 
+    /// A sign-in saved (adopt_registration): the server, its pins and this device, and a fresh id for this sign-in, so
+    /// nothing the window kept for an earlier one is read as this one's.
+    pub fn note_sign_in(&self, server_url: &str, pins: &[String], device_id: &str, device_name: &str) -> AppResult<Settings> {
+        self.update_settings(|s| {
+            s.server_url = Some(server_url.to_string());
+            s.pins = pins.to_vec();
+            s.device_id = Some(device_id.to_string());
+            s.device_name = Some(device_name.to_string());
+            s.sign_in_id = Some(uuid::Uuid::new_v4().to_string());
+        })
+    }
+
+    /// Signed out (unpair): this device and the sign-in's id are forgotten (the server stays, for the next sign-in).
+    pub fn note_sign_out(&self) -> AppResult<Settings> {
+        self.update_settings(|s| {
+            s.device_id = None;
+            s.device_name = None;
+            s.sign_in_id = None;
+        })
+    }
+
+    /// This sign-in's id (AppStatus.signIn), none while signed out. A sign-in kept from before 2.0.0-p gets one now.
+    pub fn sign_in_id(&self) -> Option<String> {
+        if !self.is_paired() {
+            return None;
+        }
+        if let Some(id) = self.settings().sign_in_id {
+            return Some(id);
+        }
+        let id = uuid::Uuid::new_v4().to_string();
+        match self.update_settings(|s| s.sign_in_id = Some(id.clone())) {
+            Ok(_) => Some(id),
+            // Not kept: none (the window keeps nothing for this sign-in rather than something for any).
+            Err(e) => {
+                eprintln!("[echoledger] the sign-in id could not be kept: {e}");
+                None
+            }
+        }
+    }
+
     pub fn is_paired(&self) -> bool {
         self.token.lock().map(|t| t.is_some()).unwrap_or(false) && self.lock_settings().server_url.is_some()
     }
@@ -755,6 +795,12 @@ pub fn run() {
             commands::list_update,
             commands::list_delete,
             commands::lists_order,
+            commands::views_get,
+            commands::view_create,
+            commands::view_update,
+            commands::view_delete,
+            commands::views_order,
+            commands::library_views_version,
             commands::client_update,
             commands::client_delete,
             commands::library_views,
