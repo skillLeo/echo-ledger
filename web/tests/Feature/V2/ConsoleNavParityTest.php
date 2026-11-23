@@ -41,17 +41,21 @@ function navSidebar(string $html): string
     return (string) preg_replace(['/<!--.*?-->/s', '/\s+/', '/> </'], ['', ' ', '><'], substr($html, (int) $start, (int) $end - (int) $start + 600));
 }
 
-it('puts Upload recording at the top of the sidebar, then Home, Library, Projects, Live and Ask, and Activity and Settings at its foot', function () {
+it('puts ● Record ▾ at the top of the sidebar, then Home, Library, Projects, Live and Ask, and Trash, Activity and Settings at its foot', function () {
+    // Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md): Upload recording is ● Record ▾ (Record a voice note; Import audio
+    // files in its menu), and Recently deleted is Trash at the foot.
     $side = navSidebar(navPage($this, $this->owner, $this->pages['library']));
     $at = fn (string $needle): int => (int) strpos($side, $needle);
 
-    expect($side)->toContain('data-sidebar-upload')->toContain('href="https://echoledger.test/app/upload"')->toContain('Upload recording')
+    expect($side)->toContain('data-sidebar-upload')->toContain('href="https://echoledger.test/app/upload?record=1"')->toContain('href="https://echoledger.test/app/upload"')
+        ->toContain('Record a voice note')->toContain('Import audio files')
         ->and($at('data-sidebar-upload'))->toBeLessThan($at('data-module="home"'))
         ->and($at('data-module="home"'))->toBeLessThan($at('data-module="library"'))
         ->and($at('data-module="library"'))->toBeLessThan($at('data-module="projects"'))
         ->and($at('data-module="projects"'))->toBeLessThan($at('data-module="live"'))
         ->and($at('data-module="live"'))->toBeLessThan($at('data-module="ask"'))
-        ->and($at('class="v2-sb-foot"'))->toBeLessThan($at('data-module="activity"'))
+        ->and($at('class="v2-sb-foot"'))->toBeLessThan($at('data-place="trash"'))
+        ->and($at('data-place="trash"'))->toBeLessThan($at('data-module="activity"'))
         ->and($at('data-module="activity"'))->toBeLessThan($at('data-module="settings"'));
 });
 
@@ -59,7 +63,7 @@ it('lists the projects under Projects with their counts, and My links and Reques
     $side = navSidebar(navPage($this, $this->owner, $this->pages['library']));
 
     // Qureshi Textiles holds two of the person's recordings (the third was deleted).
-    expect($side)->toMatch('~data-project="[^"]+"><span class="v2-sb-label"><bdi>Qureshi Textiles</bdi></span><span class="v2-sb-subcount">2</span>~')
+    expect($side)->toMatch('~data-project="[^"]+"><span class="v2-sb-label" dir="auto"><bdi>Qureshi Textiles</bdi></span><span class="v2-sb-subcount">2</span>~')
         ->toContain('data-place="links"')->toContain('data-place="requests"')
         ->toContain('href="https://echoledger.test/app/shares"')->toContain('href="https://echoledger.test/app/request-links"');
     // On My links, that place is the one you are on.

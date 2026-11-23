@@ -85,7 +85,6 @@ describe("v2 uses tokens only", () => {
   });
 
   it("lets a media query name a breakpoint from tokens.css, and no other width", () => {
-    // compact, rail, medium, wide, and the Library's filter panel (a drawer below it).
     expect([...BREAKPOINTS].sort()).toEqual(["1024px", "1280px", "1440px", "720px", "780px"]);
     expect(violations("@media (width < 720px) {")).toEqual([]);
     expect(violations("@media (width >= 1024px) and (width < 1440px) {")).toEqual([]);

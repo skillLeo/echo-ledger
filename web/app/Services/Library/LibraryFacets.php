@@ -18,6 +18,8 @@ use App\Models\Transcript;
 use App\Services\LibrarySearch;
 use App\Services\Lists\LabelLists;
 use App\Services\SettingsRepository;
+use App\Services\Titles\TitleSql;
+use App\Support\UrduText;
 use ArrayObject;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -38,7 +40,7 @@ use Illuminate\Support\Facades\DB;
  * transactions: a read in between never keeps uncommitted rows under the new stamp); until then this request reads the
  * person's library afresh and keeps nothing of it. A change made some other way is seen within ROWS_TTL at most.
  *
- * @phpstan-type Row array{id: string, started: int, ended: int|null, session_status: string, source: string, device: string, projects: list<string>, language: string, status: string, labels: list<string>, marked: list<string>, bookmarks: list<string>, opened: bool}
+ * @phpstan-type Row array{id: string, started: int, ended: int|null, since: int|null, session_status: string, source: string, device: string, projects: list<string>, language: string, status: string, labels: list<string>, marked: list<string>, bookmarks: list<string>, opened: bool}
  * @phpstan-type Filters array<string, array{op: string, values: list<string>, from?: string, to?: string}>
  */
 final class LibraryFacets
@@ -181,7 +183,7 @@ final class LibraryFacets
     private static function inPlace(array $row, string $place, int $now): bool
     {
         if ($place === 'needs_you') {
-            return LibraryFilters::needsYou($row['session_status'], $row['status'], $row['ended'], $row['started'], $now) !== null;
+            return LibraryFilters::needsYou($row['session_status'], $row['status'], $row['ended'], $row['started'], $now, $row['since']) !== null;
         }
         if ($row['session_status'] === SessionStatus::Recording->value) {
             return false;
@@ -291,6 +293,21 @@ final class LibraryFacets
         }
 
         return $counts;
+    }
+
+    /**
+     * The ids of the person's recordings the search finds (waiting calls too), or null when it holds no word.
+     *
+     * @return list<string>|null
+     */
+    public function searchIds(int $workspaceId, int $userId, ?string $query): ?array
+    {
+        $query = self::cleanQuery($query);
+        if ($query === null) {
+            return null;
+        }
+
+        return array_column($this->searched($workspaceId, $userId, $query, $this->version($workspaceId, $userId)), 'id');
     }
 
     /** The search as the counts use it: null when it holds no word (under 2 characters, or only punctuation). */
@@ -538,7 +555,7 @@ final class LibraryFacets
         $now = Carbon::now()->getTimestamp();
         $found = [];
         foreach ($this->rows($workspaceId, $userId, $this->version($workspaceId, $userId)) as $row) {
-            $reason = LibraryFilters::needsYou($row['session_status'], $row['status'], $row['ended'], $row['started'], $now);
+            $reason = LibraryFilters::needsYou($row['session_status'], $row['status'], $row['ended'], $row['started'], $now, $row['since']);
             if ($reason !== null) {
                 $found[$row['id']] = $reason;
             }
@@ -548,7 +565,9 @@ final class LibraryFacets
     }
 
     /**
-     * The rows the search finds (every row without one).
+     * The rows the search finds (every row without one): every word somewhere among the recording's title shown, its
+     * transcripts (and screen moments) and its project path, the project's name and the names of the folders above it;
+     * the words may be in different places (docs/API.md "Library filters").
      *
      * @return list<Row>
      */
@@ -559,12 +578,58 @@ final class LibraryFacets
             return $rows;
         }
         $key = 'library-facets:search:'.$workspaceId.':'.$userId.':'.sha1($version.'|'.$query);
-        $ids = $this->memo[$key] ??= self::kept($version, $key, self::ROWS_TTL, fn (): array => $this->search->matching(
-            CaptureSession::acrossPeople()->where('capture_sessions.workspace_id', $workspaceId)->where('capture_sessions.user_id', $userId), $query,
-        )->pluck('capture_sessions.id')->map(fn ($id): string => (string) $id)->all());
+        $ids = $this->memo[$key] ??= self::kept($version, $key, self::ROWS_TTL, fn (): array => $this->searchMatches($workspaceId, $userId, $query, $rows));
         $found = array_flip($ids);
 
         return array_values(array_filter($rows, fn (array $row): bool => isset($found[$row['id']])));
+    }
+
+    /**
+     * The ids of the rows that hold every word of [$query]: one query a word for the transcripts and screen moments
+     * (LibrarySearch, folded there), and the titles as shown and the project paths here (a row's projects are its own
+     * and every one above), all folded alike: Urdu spelling variants made one, capitals ignored (UrduText).
+     *
+     * @param  list<Row>  $rows
+     * @return list<string>
+     */
+    private function searchMatches(int $workspaceId, int $userId, string $query, array $rows): array
+    {
+        $person = fn () => CaptureSession::acrossPeople()->where('capture_sessions.workspace_id', $workspaceId)->where('capture_sessions.user_id', $userId);
+        $names = Client::acrossPeople()->where('workspace_id', $workspaceId)->where('user_id', $userId)->pluck('name', 'id')
+            ->map(fn (mixed $name): string => UrduText::fold((string) $name))->all();
+        $titles = [];
+        $shown = $person();
+        [$expression, $bindings] = TitleSql::shown($shown);
+        foreach ($shown->toBase()->selectRaw("capture_sessions.id AS id, {$expression} AS shown", $bindings)->get() as $title) {
+            $titles[(string) $title->id] = UrduText::fold((string) $title->shown);
+        }
+        $kept = null;
+        foreach (LibrarySearch::terms($query) as $term) {
+            $found = array_fill_keys($this->search->matchingTerms($person(), [$term], titles: false)
+                ->pluck('capture_sessions.id')->map(fn ($id): string => (string) $id)->all(), true);
+            $needle = UrduText::fold($term);
+            if ($needle !== '') {
+                foreach ($titles as $id => $title) {
+                    if (str_contains($title, $needle)) {
+                        $found[$id] = true;
+                    }
+                }
+                $named = array_filter($names, fn (string $name): bool => str_contains($name, $needle));
+                if ($named !== []) {
+                    foreach ($rows as $row) {
+                        if (array_intersect_key(array_flip($row['projects']), $named) !== []) {
+                            $found[$row['id']] = true;
+                        }
+                    }
+                }
+            }
+            $kept = $kept === null ? $found : array_intersect_key($kept, $found);
+            if ($kept === []) {
+                break;
+            }
+        }
+
+        return array_map('strval', array_keys($kept ?? []));
     }
 
     /**
@@ -615,7 +680,8 @@ final class LibraryFacets
      */
     private function rows(int $workspaceId, int $userId, string $version): array
     {
-        $key = 'library-facets:rows:'.$workspaceId.':'.$userId.':'.$version;
+        // `rows2`: the rows carry `since` (2.0.0-p, Needs you's "stuck"); rows kept before it are never read.
+        $key = 'library-facets:rows2:'.$workspaceId.':'.$userId.':'.$version;
 
         /** @var list<Row> */
         return $this->memo[$key] ??= self::kept($version, $key, self::ROWS_TTL, fn (): array => $this->readRows($workspaceId, $userId));
@@ -626,9 +692,17 @@ final class LibraryFacets
     {
         $mine = self::personSessions($workspaceId, $userId);
         $finals = [];
+        $attempts = [];
         foreach (DB::table('transcripts')->whereIn('capture_session_id', $mine)->where('kind', TranscriptKind::Final->value)
-            ->orderBy('created_at')->orderBy('id')->get(['capture_session_id', 'status', 'language']) as $t) {
+            ->orderBy('created_at')->orderBy('id')->get(['capture_session_id', 'status', 'language', 'attempt_started_at']) as $t) {
             $finals[(string) $t->capture_session_id] = [(string) $t->status, $t->language === null ? null : (string) $t->language];
+            $attempts[(string) $t->capture_session_id] = $t->attempt_started_at === null ? null : self::instant((string) $t->attempt_started_at);
+        }
+        // The start of each recording's latest upload (2.0.0-p), with the transcript's run: when its processing began.
+        foreach (DB::table('recordings')->whereIn('capture_session_id', $mine)->whereNotNull('upload_started_at')
+            ->groupBy('capture_session_id')->selectRaw('capture_session_id, MAX(upload_started_at) AS at')->get() as $u) {
+            $at = self::instant((string) $u->at);
+            $attempts[(string) $u->capture_session_id] = max($at, $attempts[(string) $u->capture_session_id] ?? $at);
         }
         $failedUploads = array_flip(DB::table('recordings')->whereIn('capture_session_id', $mine)->where('upload_status', UploadStatus::Failed->value)
             ->distinct()->pluck('capture_session_id')->map(fn ($id): string => (string) $id)->all());
@@ -659,6 +733,7 @@ final class LibraryFacets
                 'id' => $id,
                 'started' => self::instant((string) $s->started_at),
                 'ended' => $s->ended_at === null ? null : self::instant((string) $s->ended_at),
+                'since' => $attempts[$id] ?? null,
                 'session_status' => (string) $s->status,
                 'source' => LibraryFilters::source((string) $s->source_app, $s->origin === null ? null : (string) $s->origin),
                 'device' => (string) $s->source_device,

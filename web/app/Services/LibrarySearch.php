@@ -73,14 +73,27 @@ final class LibrarySearch
 
     /**
      * [$base] narrowed to the recordings the words find: every word in the title shown, a transcript or a screen
-     * moment (since 2.0.0-p also the Library's search box and its filter counts). Sets [$engine].
+     * moment. Sets [$engine].
      *
      * @param  Builder<CaptureSession>  $base
      * @return Builder<CaptureSession>
      */
     public function matching(Builder $base, string $query): Builder
     {
-        $terms = self::terms($query);
+        return $this->matchingTerms($base, self::terms($query));
+    }
+
+    /**
+     * [$base] narrowed to the recordings that hold every one of [$terms] in the title shown, in one transcript or in
+     * one screen moment. Without [$titles] the transcripts and screen moments only: since 2.0.0-p the Library's search
+     * asks it one word at a time and reads the titles itself, folded (LibraryFacets). Sets [$engine].
+     *
+     * @param  Builder<CaptureSession>  $base
+     * @param  list<string>  $terms
+     * @return Builder<CaptureSession>
+     */
+    public function matchingTerms(Builder $base, array $terms, bool $titles = true): Builder
+    {
         // Transcripts are searched in their folded form (Urdu spelling variants made one, App\Support\UrduText), with
         // folded terms; titles keep the original letters and the original terms.
         $folded = array_values(array_unique(array_map(UrduText::fold(...), $terms)));
@@ -89,12 +102,12 @@ final class LibrarySearch
         $matching = (clone $base)->where(fn (Builder $q) => $q
             ->whereHas('transcripts', fn (Builder $t) => $this->likeAll($t, 'search_text', $folded))
             ->orWhereHas('screens', fn (Builder $s) => $this->likeAll($s, 'search_text', $folded))
-            ->orWhere(fn (Builder $title) => $this->likeShown($title, $terms)));
+            ->when($titles, fn (Builder $q) => $q->orWhere(fn (Builder $title) => $this->likeShown($title, $terms))));
         if ($this->fulltextUsable($folded)) {
             $fulltext = (clone $base)->where(fn (Builder $q) => $q
                 ->whereHas('transcripts', fn (Builder $t) => $t->whereFullText('search_text', self::booleanQuery($folded), ['mode' => 'boolean']))
                 ->orWhereHas('screens', fn (Builder $s) => $s->whereFullText('search_text', self::booleanQuery($folded), ['mode' => 'boolean']))
-                ->orWhere(fn (Builder $title) => $this->likeShown($title, $terms)));
+                ->when($titles, fn (Builder $q) => $q->orWhere(fn (Builder $title) => $this->likeShown($title, $terms))));
             // The engine is chosen for the whole query, never per page, so paging stays consistent.
             try {
                 if ((clone $fulltext)->exists()) {

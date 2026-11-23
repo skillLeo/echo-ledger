@@ -82,3 +82,41 @@ test('right-click opens ⋮ of the selection on a selected row, else the row\'s 
     assert.equal(core.contextAction({ target: page }, { inRow: true, rowChecked: true, checked: 1 }), 'row-menu');
     assert.equal(core.contextAction({ target: page }, { inRow: false, rowChecked: false, checked: 0 }), null);
 });
+
+// Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): F, ⌘F / Ctrl+F, Esc and ⌘1…⌘9.
+const shell = (more = {}) => ({ modal: false, panelOpen: false, places: 7, focused: true, ...more });
+const field = { tagName: 'INPUT' };
+
+test('F opens and closes the filter panel, but never while typing or with a modifier', () => {
+    assert.deepEqual(core.shellKey(key('f'), shell()), { do: 'toggle-filters' });
+    // A single key answers only while the Library has the focus (WCAG 2.1.4).
+    assert.equal(core.shellKey(key('f'), shell({ focused: false })), null);
+    assert.deepEqual(core.shellKey(key('F'), shell({ panelOpen: true })), { do: 'toggle-filters' });
+    assert.equal(core.shellKey(key('f', { target: field }), shell()), null);
+    assert.equal(core.shellKey(key('f', { altKey: true }), shell()), null);
+    assert.equal(core.shellKey(key('f'), shell({ modal: true })), null);
+});
+
+test('Cmd+F and Ctrl+F go to the Library search, from another field too', () => {
+    assert.deepEqual(core.shellKey(key('f', { metaKey: true }), shell()), { do: 'search' });
+    assert.deepEqual(core.shellKey(key('F', { ctrlKey: true, target: field }), shell()), { do: 'search' });
+    assert.equal(core.shellKey(key('f', { ctrlKey: true, defaultPrevented: true }), shell()), null);
+});
+
+test('Esc closes the panel first; with it closed, Esc is the selection\'s', () => {
+    assert.deepEqual(core.shellKey(key('Escape'), shell({ panelOpen: true })), { do: 'close-filters' });
+    assert.deepEqual(core.shellKey(key('Escape', { target: field }), shell({ panelOpen: true })), { do: 'close-filters' });
+    assert.equal(core.shellKey(key('Escape'), shell()), null);
+    assert.deepEqual(core.keyAction(key('Escape'), list({ checked: 2, selected: 2 })), { do: 'clear' });
+});
+
+test('Cmd, Ctrl or Alt with 1 to 9 opens the sidebar\'s first nine places, and only those there are', () => {
+    assert.deepEqual(core.shellKey(key('1', { metaKey: true, code: 'Digit1' }), shell()), { do: 'place', at: 0 });
+    assert.deepEqual(core.shellKey(key('¡', { altKey: true, code: 'Digit1' }), shell()), { do: 'place', at: 0 });
+    assert.deepEqual(core.shellKey(key('7', { ctrlKey: true, code: 'Digit7' }), shell()), { do: 'place', at: 6 });
+    assert.equal(core.shellKey(key('8', { ctrlKey: true, code: 'Digit8' }), shell()), null);
+    assert.equal(core.shellKey(key('0', { metaKey: true, code: 'Digit0' }), shell()), null);
+    assert.equal(core.shellKey(key('2', { metaKey: true, code: 'Digit2', target: field }), shell()), null);
+    // A plain digit is the page's.
+    assert.equal(core.shellKey(key('2', { code: 'Digit2' }), shell()), null);
+});

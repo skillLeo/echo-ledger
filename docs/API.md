@@ -4,7 +4,7 @@ Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mob
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
 **Contract revision: 2.0.0-p (2026-11-23, waiting for the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
-2.0.0-p (proposed 2026-11-23, accepted when merged; the Library's filters and views, see "Library filters (since 2.0.0-p)" and "Saved views (since 2.0.0-p)"): one definition of every Library filter (Date, Source, Device, Project, Language, Status, Labels, Marked, Bookmarks, each with "is" and "is not", and the search) and of "Needs you", the same on the server, the desktop and the phone, with a shared test file of recordings and their counts (`web/tests/Fixtures/library-facets.json`). `GET /api/library` takes `filters` and `q`, and `view=needs_you` / `view=unread`; its answer carries `views_version`. Every library item carries `facets` (its Source, Status and Language). New `GET /api/library/facets` (the filter panel's counts, Needs you and the sidebar's counts) and saved views: `GET`/`POST /api/views`, `PATCH`/`DELETE /api/views/{id}`, `PUT /api/views/order`, at most 30 a person. New codes `views_limit`, `view_not_found`. Only additions: older apps ignore them.
+2.0.0-p (proposed 2026-11-23, accepted when merged; the Library's filters and views, see "Library filters (since 2.0.0-p)" and "Saved views (since 2.0.0-p)"): one definition of every Library filter (Date, Source, Device, Project, Language, Status, Labels, Marked, Bookmarks, each with "is" and "is not", and the search) and of "Needs you", the same on the server, the desktop and the phone, with a shared test file of recordings and their counts (`web/tests/Fixtures/library-facets.json`). `GET /api/library` takes `filters` and `q` (the search: every word somewhere among the title, the transcript and the project path), and `view=needs_you` / `view=unread`; its answer carries `views_version`. Every library item carries `facets` (its Source, Status and Language) and `processing_since` (when its current upload or transcript attempt began, for Needs you's "stuck"). New `GET /api/library/facets` (the filter panel's counts, Needs you and the sidebar's counts) and saved views: `GET`/`POST /api/views`, `PATCH`/`DELETE /api/views/{id}`, `PUT /api/views/order`, at most 30 a person. New codes `views_limit`, `view_not_found`. Only additions: older apps ignore them.
 2.0.0-o (proposed 2026-11-22, accepted when merged; B12, see "Ask about a recording and across recordings (since 2.0.0-o)"): Ask beyond one project. `POST /api/sessions/{id}/ask` asks about one recording of the person's (its transcript and its notes) and `POST /api/ask` across all of their own recordings in the workspace, with the request, answer, citations, throttle, plan feature and AI budget of `POST /api/clients/{id}/ask`. New code `409 no_transcript` (nothing transcribed to ask about). Every Segment carries `language` (the line's language when the engine knew it: `ur`, `en`, `ar`…; `null` otherwise and on every line before 2.0.0-o), so the apps can skip a language's lines; `POST /api/sessions/{id}/transcripts` takes it too. Only additions: older apps ignore them.
 2.0.0-n (proposed 2026-11-21, accepted when merged; U19 "Roman Urdu by default"): `views.status` (a transcript's `views`, `GET /api/transcripts/{id}/views` and a library item's `transcript.views`) is `making` from the moment a finished transcript's default view is on its way, also before its job has started (`progress` is `{}` until the job counts the lines), so apps show "Converting to Roman Urdu…" at once; a `making` that moved no line for 20 minutes, and a view that never started within 20 minutes of the transcript (until 24 hours after it, `none` then), is `failed` (`error` "Converting took too long. Try again."), never busy for ever, and `POST` starts it again. A library item's `transcript.views` counts only views made (or failed) after the transcript's last edit. A library item's `transcript.preview` is in the default view once it is `ready`, and the new `transcript.preview_view` (`"roman"` | `"urdu"` | `"english"` | `"original"`) says which, so rows need not fetch the views. A recording that opens in Roman Urdu gets its automatic title in Roman Urdu, and an automatic title in Urdu letters is written again in Roman Urdu when the view is made. No other field changes.
 2.0.0-m (proposed 2026-11-21, accepted when merged): lists (B11, see "Lists (since 2.0.0-m)"). A person's lists are their labels with a name, a colour and a place in the apps' row, kept by the server so every device shows the same ones: `GET /api/lists`, `POST /api/lists` (an empty list), `PATCH` and `DELETE /api/lists/{key}` (rename or delete changes every recording of the person in one transaction) and `PUT /api/lists/order`. Labelling a recording makes its list when it is new (never for a label spelt All, Unread or Important, which stays a plain label). `GET /api/library/views` gives the labels in list order. A label's colour is its list's (`PUT /api/labels/color` and `label_colors` answer as before). New codes `name_reserved`, `list_exists`, `list_not_found`. Only additions: older apps ignore them.
@@ -1078,14 +1078,16 @@ when `status=recording`, `view=waiting` or, since 2.0.0-p, `view=needs_you` is g
                    "live_transcript_id": "01JB…", "preview": "first 160 characters…", "preview_view": "roman"},
     "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"], "opened": false,
     "important": false, "label_colors": {"Invoice": "#16a34a"}, "expires_at": "2026-12-14T09:00:00+00:00",
-    "facets": {"source": "zoom", "status": "transcribed", "language": "en"},
+    "facets": {"source": "zoom", "status": "transcribed", "language": "en"}, "processing_since": null,
     "updated_at": "…"},
    {"id": "01JC…", "client_ref": "9a1d…", "deleted": true, "updated_at": "…"}
  ],
  "next_cursor": null, "server_time": "2026-10-24T09:05:00+00:00", "views_version": 4}
 ```
 `facets` (since 2.0.0-p): the recording's value in the Library's Source, Status and Language filters, worked out by the
-server as "Library filters" says; the apps count with these instead of working them out again. `views_version` (since
+server as "Library filters" says; the apps count with these instead of working them out again. `processing_since`
+(since 2.0.0-p): when the current upload or transcript attempt began, the later of the two (a retry starts it again), or
+null when none is stored (recordings from before 2.0.0-p); "Needs you" counts a recording stuck from it. `views_version` (since
 2.0.0-p): a number that changes whenever the person's saved views change (0 before the first one); when it differs from
 the one stored, read `GET /api/views` again (see "Saved views").
 Sync rule **(since v1.1: inclusive boundary)**:
@@ -1235,9 +1237,21 @@ brackets (`filters[source][op]=is&filters[source][values][]=zoom`).
 | `marked` | `pinned`, `important`, `keep_forever` | `pinned`, `important`, `keep` (a recording can have several) |
 | `bookmarks` | `any` (any bookmark) and bookmark tags (in lower case; any capitals are accepted) | `any` when `marker_count` > 0, and each of `tags` in lower case (the web's "Has bookmarks" and "Bookmark tag", the apps' Bookmark chip) |
 
-**Search** (`q`, 2 to 200 characters; shorter, or only punctuation, is no search): the recordings `GET /api/search`
-finds, every word in the title shown or every word in one transcript (or screen moment), capitals ignored. The apps
-search what they hold the same way: every word in the title, or every word in the transcript text.
+**Search** (`q`, at most 200 characters; under 2, or only punctuation, is no search): a recording matches when every
+word appears somewhere among its title (as shown), its transcript and its project path, capitals ignored. The project
+path is the project's name plus the names of the folders above it. The title, the transcript and the project names are
+compared folded, so an Urdu word is found however the keyboard or the engine spelt it: Arabic Yeh, Alef Maksura and
+Yeh with Hamza → ی, Arabic Kaf → ک, Arabic Heh, Teh Marbuta, Heh with Yeh above and Teh Marbuta Goal → ہ, Alef with
+Hamza, Madda or Wasla → ا, Waw with Hamza → و, Yeh Barree with Hamza → ے, Arabic-Indic digits → 0-9; harakat,
+superscript Alef, tatweel and zero-width joiners dropped (the words of the search are folded the same way). `کراچی`
+finds the project "كراچي آفس" written with Arabic Kaf and Yeh, and `قیمت` the title "قيمت كی بات" written with Arabic
+Yeh. The words may be in different places: `contracts clause` finds a recording in "Contracts" whose transcript says
+"clause", and `acme` finds the recordings in "Acme" and in its folder "Acme › Contracts". Words are split on spaces,
+`"quoted phrases"` stay together, and at most 8 words of up to 64 characters each are read (as `GET /api/search` reads
+them). On the server "its transcript" is any of its transcripts and its screen moments; the apps search the transcript
+text they hold, and the project tree of `GET /api/clients`. A teammate's project never counts. The shared test file
+has the cases (`search_*`). `GET /api/search` keeps its own rule (every word in the title as written, or every word in
+one transcript or screen moment).
 
 **What is counted:** the person's own recordings in the device's workspace, not in Trash and not still `recording`
 (those are only in Needs you); never a teammate's or another workspace's (Shared with me is its own list).
@@ -1246,7 +1260,9 @@ search what they hold the same way: every word in the title, or every word in th
 1. `waiting`: a call waiting for Keep or Discard (session `recording`; on the phone and the desktop also the after-call
    card still open, and "Choose again").
 2. `failed`: Status `failed` (an upload or a transcript that failed, or the recording failed).
-3. `stuck`: Status `processing`, and it ended (`ended_at`, else `started_at`) 24 hours ago or more.
+3. `stuck`: Status `processing` for more than 24 hours since the current attempt began: `processing_since` (the start
+   of the current upload or transcript attempt, so a retry starts the clock again); only when none is stored, since
+   `ended_at`, else `started_at`.
 The server knows what reached it. Only the apps know their own: an upload that failed or waits on the device (never
 reached the server), a call waiting on the device's card, and an upload stuck on the device for 24 hours; each app adds
 those to the server's, never counting one recording twice.

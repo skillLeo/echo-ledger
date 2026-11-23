@@ -9,6 +9,7 @@ use App\Filament\Support\V2RecordingRow;
 use App\Models\LabelColor;
 use App\Models\LabelList;
 use App\Services\AuditLog;
+use App\Services\Library\LibraryFacets;
 use App\Services\LibraryOrganiser;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -101,6 +102,8 @@ final class LabelLists
             }
             // Two devices labelling at once: the unique index keeps one list, the other insert is skipped.
             LabelList::query()->insertOrIgnore($rows);
+            // Written without model events: the Library's counts are told themselves (a new list is an option).
+            LibraryFacets::forget($workspaceId, $userId);
             // With no list of the person's to lock yet (their first ones), two inserts can still take one place: the
             // row is put back in order, with no gaps.
             $this->renumber($workspaceId, $userId);
@@ -284,6 +287,8 @@ final class LabelLists
         $this->ensure($workspaceId, $userId, [$spelt]);
         LabelList::query()->where('workspace_id', $workspaceId)->where('user_id', $userId)->where('label_key', self::key($spelt))
             ->update(['color' => $color, 'updated_at' => now()]);
+        // Written without model events: the Labels section's colour is read again (LibraryFacets).
+        LibraryFacets::forget($workspaceId, $userId);
     }
 
     /**

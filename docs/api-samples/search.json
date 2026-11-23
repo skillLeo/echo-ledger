@@ -2,8 +2,8 @@
     "data": [
         {
             "session": {
-                "id": "01m7xxrxb5ghkccma0wa73pr5w",
-                "client_ref": "2b72303a-0923-4d16-81e6-176e8259b28f",
+                "id": "01m82z8pcr6e8dk1cj8t0b0s7t",
+                "client_ref": "52a6bd70-239e-4be9-a2f0-1b548e777fe2",
                 "deleted": false,
                 "source_device": "phone",
                 "source_device_label": "Phone",
@@ -11,11 +11,11 @@
                 "source_app": "whatsapp",
                 "source_app_label": "WhatsApp",
                 "device": {
-                    "id": "01m7xxrxa7wkrcb1xej2mmtr8e",
+                    "id": "01m82z8pc8f06f192sax017vf4",
                     "name": "Galaxy S25 Ultra"
                 },
                 "client": {
-                    "id": "01m7xxrxa0wxd8kqqea9cmgb5y",
+                    "id": "01m82z8pc2jqdshc5s38c7jvkj",
                     "name": "Acme Holdings",
                     "color": "#8B5CF6",
                     "avatar": null
@@ -25,15 +25,15 @@
                 "title_auto": false,
                 "title_source": "own",
                 "caller": null,
-                "started_at": "2026-11-20T10:15:00+00:00",
-                "ended_at": "2026-11-20T10:15:19+00:00",
+                "started_at": "2026-11-22T10:15:00+00:00",
+                "ended_at": "2026-11-22T10:15:19+00:00",
                 "duration_ms": 19375,
                 "status": "completed",
                 "language": null,
                 "language_chip": "EN",
                 "transcript": {
                     "final_status": "completed",
-                    "final_transcript_id": "01m7xxrz96dkn245s6t018bqb8",
+                    "final_transcript_id": "01m82z8pj2mezrmsg3tjsabev2",
                     "live_available": false,
                     "live_transcript_id": null,
                     "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
@@ -63,18 +63,19 @@
                 "labels": [],
                 "important": false,
                 "label_colors": {},
-                "expires_at": "2026-12-21T02:08:11+00:00",
+                "expires_at": "2026-12-23T01:10:29+00:00",
                 "transcribe_estimate": null,
                 "facets": {
                     "source": "whatsapp",
                     "status": "transcribed",
                     "language": "en"
                 },
-                "updated_at": "2026-11-21T02:08:13+00:00"
+                "processing_since": "2026-11-23T01:10:29+00:00",
+                "updated_at": "2026-11-23T01:10:29+00:00"
             },
             "hits": [
                 {
-                    "transcript_id": "01m7xxrz96dkn245s6t018bqb8",
+                    "transcript_id": "01m82z8pj2mezrmsg3tjsabev2",
                     "kind": "final",
                     "segment_index": 1,
                     "start_ms": 4235,

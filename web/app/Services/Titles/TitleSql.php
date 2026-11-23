@@ -54,6 +54,24 @@ final class TitleSql
     }
 
     /**
+     * The shown title as one SQL expression, lower case (ASCII; the caller folds the rest): the own title, else the
+     * person called, else the stored title, as whereShownLike reads it. Since 2.0.0-p for the Library's search, which
+     * folds the titles in PHP (App\Support\UrduText).
+     *
+     * @param  Builder<CaptureSession>  $query
+     * @return array{0: string, 1: list<string>}
+     */
+    public static function shown(Builder $query): array
+    {
+        [$own, $ownBindings] = self::own($query);
+        [$named, $namedBindings] = self::named($query);
+        $title = $query->qualifyColumn('title');
+
+        return ["CASE WHEN {$own} THEN LOWER({$title}) WHEN {$named} THEN ".self::shownName($query).' WHEN '.self::numbered($query).' THEN '.self::shownNumber($query)
+            ." ELSE LOWER(COALESCE({$title}, '')) END", [...$ownBindings, ...$namedBindings]];
+    }
+
+    /**
      * Recordings whose shown title has [$pattern] (a LIKE pattern, lower case, `!` escapes): the own title, else the
      * person called, else the stored title.
      *

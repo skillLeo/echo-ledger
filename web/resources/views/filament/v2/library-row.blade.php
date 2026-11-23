@@ -4,15 +4,17 @@
     "Audio · N days left" and a snippet of what was said; the flag when it is important; the star pins it to the top;
     at the end the time above the length. From 1024 px a plain click opens the recording beside the list, as in the
     classic Library (Ctrl, Cmd, Shift and middle clicks open its page). data-important feeds the selection's Mark /
-    Unmark important.
+    Unmark important. Since 2.0.0-p a click on the source's mark or a label's dot filters the Library by it (another
+    click takes it away), and the select box has its own place before the mark, shown on the row's hover.
 --}}
 @php($row = \App\Filament\Support\V2RecordingRow::for($getRecord()))
 <div class="v2-lib-row" data-recording="{{ $row['id'] }}" data-important="{{ $row['important'] ? '1' : '0' }}"
     x-on:click="if (window.matchMedia('(min-width: 1024px)').matches && ! ($event.ctrlKey || $event.metaKey || $event.shiftKey || $event.button !== 0) && typeof $wire.selectRecording === 'function') { $event.preventDefault(); $wire.selectRecording('{{ $row['id'] }}') }">
-    {{-- The app's own mark and the device badge (EL-Design's source-logo); the tile keeps its place for the select box. --}}
-    <span class="v2-row-tile" title="{{ $row['source_words'] }}" style="background-color: transparent">
+    {{-- The app's own mark and the device badge (EL-Design's source-logo); a click shows only that source's recordings. --}}
+    <button type="button" class="v2-row-tile" title="{{ __('Show only :source recordings', ['source' => $row['quick_source_words']]) }}" style="background-color: transparent"
+        x-on:click.stop="$wire.quickFilter('source', @js($row['quick_source']))" data-quick-source="{{ $row['quick_source'] }}">
         @include('filament.v2.components.source-logo', ['app' => $row['app'], 'device' => $row['device_kind'], 'label' => $row['source_words'], 'fallback' => $row['icon']])
-    </span>
+    </button>
     <span class="v2-row-main">
         <span class="v2-lib-line">
             @if ($row['unread'])
@@ -37,8 +39,10 @@
             @endif
             <span class="v2-row-meta"><bdi>{{ $row['line'] }}</bdi></span>
             @foreach ($row['labels'] as $label)
-                <span class="v2-label-dot {{ $label['class'] }}" role="img" aria-label="{{ __('Label: :name', ['name' => $label['name']]) }}" title="{{ $label['name'] }}"
-                    data-label-dot="{{ $label['name'] }}" @if ($label['own'] !== null) style="--label-own: {{ $label['own'] }}" @endif></span>
+                {{-- The dot as it was (named for screen readers); the button around it shows only that label's recordings. --}}
+                <button type="button" class="v2-label-quick" aria-label="{{ __('Show only the :label label', ['label' => $label['name']]) }}" title="{{ __('Show only the :label label', ['label' => $label['name']]) }}"
+                    x-on:click.stop="$wire.quickFilter('labels', @js(mb_strtolower($label['name'])))" data-quick-label="{{ mb_strtolower($label['name']) }}"><span class="v2-label-dot {{ $label['class'] }}" role="img" aria-label="{{ __('Label: :name', ['name' => $label['name']]) }}" title="{{ $label['name'] }}"
+                    data-label-dot="{{ $label['name'] }}" @if ($label['own'] !== null) style="--label-own: {{ $label['own'] }}" @endif></span></button>
             @endforeach
         </span>
         {{-- A line of its own, so on a phone the days stay whole beside the status; the snippet follows and ends in "…". --}}

@@ -134,6 +134,8 @@ final class FinalTranscriptCoordinator
             'attempts' => 0,
             'language' => $language,
             'meta' => ['route' => $route->toArray(), ...($ownKey ? ['own_key' => true] : [])],
+            // Since 2.0.0-p: a (re)start starts the clock of Needs you's "stuck" again (an engine's own reroutes do not).
+            'attempt_started_at' => now(),
         ];
 
         $transcript = $existing ?? $session->transcripts()->firstOrNew(['kind' => TranscriptKind::Final]);

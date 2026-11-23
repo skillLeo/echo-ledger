@@ -8,6 +8,7 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\V2DismissedBanners;
 use App\Models\User;
+use App\Services\Library\LibraryFacets;
 use App\Services\LibraryOrganiser;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Widgets\Widget;
@@ -85,14 +86,15 @@ class V2NeedsActionWidget extends Widget
         $all = [
             'waiting' => [(int) ($counts['waiting'] ?? 0), ':count waiting for a decision|:count waiting for a decision'],
             'failed' => [(int) ($counts['failed'] ?? 0), '1 failed upload|:count failed uploads'],
-            // The Library's Untranscribed view is the new Library's (ui_v2.library) only.
-            'untranscribed' => [ConsoleV2::library() ? $organiser->untranscribedCount($workspace) : 0, '1 not transcribed|:count not transcribed'],
+            // The new Library's (ui_v2.library) only: its place Not transcribed, counted as the sidebar counts it.
+            'untranscribed' => [ConsoleV2::library() ? app(LibraryFacets::class)->libraryCounts($workspace, (int) CurrentWorkspace::userId())['not_transcribed'] : 0, '1 not transcribed|:count not transcribed'],
         ];
         $items = [];
         foreach ($all as $key => [$count, $words]) {
             if ($count > 0) {
                 $items[] = ['key' => $key, 'count' => $count, 'words' => trans_choice($words, $count, ['count' => $count]),
-                    'url' => CaptureSessionResource::getUrl('index', ['activeTab' => $key])];
+                    // The list reads its view from `tab`; the new Library keeps the waiting calls and the failures in Needs you.
+                    'url' => CaptureSessionResource::getUrl('index', ['tab' => ! ConsoleV2::library() ? $key : ($key === 'untranscribed' ? 'not_transcribed' : 'needs_you')])];
             }
         }
 
