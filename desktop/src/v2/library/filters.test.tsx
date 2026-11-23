@@ -174,6 +174,7 @@ describe("Find in the Library", () => {
       ["Date", "Source", "Device", "Project", "Language", "Status", "Labels", "Marked", "Bookmarks"]);
     // A column beside the list, not a dialog over it.
     expect(screen.getByTestId("filter-panel")).not.toHaveAttribute("role", "dialog");
+    expect(panel().getByRole("button", { name: "Close filters" })).toHaveAttribute("aria-keyshortcuts", "Escape F");
     unmount();
     await show();
     expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
@@ -433,6 +434,8 @@ describe("Find in the Library", () => {
     expect(drawer.contains(document.activeElement)).toBe(true);
     const inside = within(drawer);
     const close = inside.getByRole("button", { name: "Close filters" });
+    // F is a letter while the drawer has focus (it is modal): only Escape is said to close it.
+    expect(close).toHaveAttribute("aria-keyshortcuts", "Escape");
     const save = inside.getByRole("button", { name: "Save as view" });
     const last = [...drawer.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])")].at(-1)!;
     last.focus();

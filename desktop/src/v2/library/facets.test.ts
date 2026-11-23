@@ -205,6 +205,9 @@ describe("the search", () => {
     expect(foldText("شاه")).toBe("شاہ");
     expect(foldText("۲۰۲۶ ٣")).toBe("2026 3");
     expect(foldText("Acme")).toBe("acme");
+    // One character at a time, as the server's mb_strtolower: a word-final Σ is σ (a whole-string lower case gives ς).
+    expect(foldText("ΟΔΟΣ")).toBe("οδοσ");
+    expect("ΟΔΟΣ".toLowerCase()).toBe("οδος");
     const { facts: urdu } = prepare([
       makeItem("t", { title: "كراچی کی ملاقات", transcript: none }),
       makeItem("x", { title: "Call", transcript: { ...none, preview: "قيمت پر بات ہوئی" } }),

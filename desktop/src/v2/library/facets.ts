@@ -274,14 +274,17 @@ const FOLD: Record<string, string> = {
 };
 const FOLD_DROP = /[\u064B-\u065F\u0670\u0640\u200C\u200D\u200E\u200F]/gu;
 
-/** Text as the search compares it: Urdu spellings folded to one, in small letters. */
+/**
+ * Text as the search compares it: Urdu spellings folded to one, in small letters one character at a time, as the
+ * server's mb_strtolower does (a word-final Σ is σ, never ς).
+ */
 export function foldText(text: string): string {
   let out = "";
   for (const ch of text.replace(FOLD_DROP, "")) {
     const cp = ch.codePointAt(0)!;
-    out += cp >= 0x0660 && cp <= 0x0669 ? String(cp - 0x0660) : cp >= 0x06F0 && cp <= 0x06F9 ? String(cp - 0x06F0) : FOLD[ch] ?? ch;
+    out += (cp >= 0x0660 && cp <= 0x0669 ? String(cp - 0x0660) : cp >= 0x06F0 && cp <= 0x06F9 ? String(cp - 0x06F0) : FOLD[ch] ?? ch).toLowerCase();
   }
-  return out.toLowerCase();
+  return out;
 }
 
 /**

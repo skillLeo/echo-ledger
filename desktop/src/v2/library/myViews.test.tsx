@@ -268,7 +268,7 @@ describe("the views store, synced through /api/views", () => {
     srv.refuse = (command, args) => {
       const body = (args.view ?? args.patch) as { name?: string } | undefined;
       return body?.name?.includes("!") ? { status: 422, code: "validation_failed", message: "Names can't have “!”." } : command === "view_delete" && args.id === "v2"
-        ? { status: 409, code: "conflict", message: "The server did not accept this." } : null;
+        ? { status: 422, code: "validation_failed", message: "That view is in use." } : null;
     };
     const store = syncedViewsStore();
     store.use("a");
@@ -287,12 +287,32 @@ describe("the views store, synced through /api/views", () => {
     // In the views' order, each by the name the person gave it.
     expect(heard).toEqual([
       "Your changes to One! weren't saved: Names can't have “!”.",
-      "Two wasn't deleted: The server did not accept this.",
+      "Two wasn't deleted: That view is in use.",
       "Bad! wasn't saved: Names can't have “!”.",
     ]);
     // Good was sent after them; One and Two are as the server has them.
     expect(srv.views.map((v) => v.name)).toEqual(["One", "Two", "Good"]);
     expect(store.list().map((v) => [v.name, v.pending])).toEqual([["One", undefined], ["Two", undefined], ["Good", undefined]]);
+  });
+
+  it("a refused rename or Save changes puts back the server's last copy at once, and the list is read again", async () => {
+    const srv = fakeServer([server("v1", "One", { search: "invoice", sort: "oldest" })]);
+    const store = syncedViewsStore();
+    store.use("a");
+    await store.sync();
+    srv.refuse = (command) => (command === "view_update" ? { status: 422, code: "validation_failed", message: "Not like that." } : null);
+    // The list can't be read meanwhile: what is shown is the copy kept here.
+    respondWith("views_get", () => Promise.reject("The server didn't answer."));
+    await store.update("v1", { ...SPEC, search: "budget", sort: "longest" });
+    await store.rename("v1", "Uno");
+    expect(store.list()[0]).toMatchObject({ name: "Uno", spec: { search: "budget", sort: "longest" }, pending: "update" });
+    await store.sync();
+    expect(store.list()[0]).toMatchObject({ name: "One", spec: { search: "invoice", sort: "oldest" } });
+    expect(store.list()[0].pending).toBeUndefined();
+    // Its version forgotten: the server's list is asked for again.
+    const kept = JSON.parse(window.localStorage.getItem("echoledger-my-views:a")!);
+    expect(kept.version).toBeNull();
+    expect(kept.views[0].saved).toMatchObject({ name: "One" });
   });
 
   it("a view deleted while its rename is on its way is deleted on the server after", async () => {

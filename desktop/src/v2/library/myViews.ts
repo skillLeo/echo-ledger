@@ -21,7 +21,11 @@ export type ViewSpec = { filters: FilterSpec; search: string | null; sort: SortK
  * A view: its server id once the server has it (a view made offline has a local id until then), the `client_ref` it
  * was made with, and `pending` while a change waits to be sent.
  */
-export type MyView = { id: string; name: string; spec: ViewSpec; client_ref?: string; pending?: "create" | "update" | "delete" };
+export type MyView = {
+  id: string; name: string; spec: ViewSpec; client_ref?: string; pending?: "create" | "update" | "delete";
+  /** The server's last copy of its name and settings: what a refused rename or Save changes puts back. */
+  saved?: { name: string; spec: ViewSpec };
+};
 
 /** Why a view can't be saved or renamed, in the words the dialog shows. */
 export const VIEW_WORDS = {
@@ -74,13 +78,11 @@ const GROUP_IN = inverse(GROUP_OUT);
 
 /** A view as the server sends it, as this app keeps it (a sort or group it lacks shows as Newest or Date). */
 export function fromServer(v: ServerView): MyView {
-  return {
-    id: v.id, name: v.name, client_ref: v.client_ref ?? undefined,
-    spec: {
-      filters: readSpec(v.filters), search: v.search ?? null, sort: SORT_IN[v.sort] ?? "newest", group: GROUP_IN[v.group] ?? "date",
-      density: v.density === "compact" ? "compact" : v.density === "comfortable" ? "comfortable" : null,
-    },
+  const spec: ViewSpec = {
+    filters: readSpec(v.filters), search: v.search ?? null, sort: SORT_IN[v.sort] ?? "newest", group: GROUP_IN[v.group] ?? "date",
+    density: v.density === "compact" ? "compact" : v.density === "comfortable" ? "comfortable" : null,
   };
+  return { id: v.id, name: v.name, client_ref: v.client_ref ?? undefined, spec, saved: { name: v.name, spec } };
 }
 /** A view as the server takes it. */
 export function toServer(v: MyView): Omit<ServerView, "id" | "position"> {
@@ -107,7 +109,10 @@ function read(key: string): Kept {
     const saved = JSON.parse(window.localStorage.getItem(key) ?? "null") as Partial<Kept> | MyView[] | null;
     const list = Array.isArray(saved) ? saved : saved?.views ?? [];
     const views = list.filter((v): v is MyView => !!v && typeof v.id === "string" && typeof v.name === "string" && !!v.spec)
-      .map((v) => ({ ...v, spec: { ...v.spec, filters: readSpec(v.spec.filters), search: v.spec.search ?? null } }));
+      .map((v) => ({
+        ...v, spec: { ...v.spec, filters: readSpec(v.spec.filters), search: v.spec.search ?? null },
+        saved: v.saved?.spec ? { name: v.saved.name, spec: { ...v.saved.spec, filters: readSpec(v.saved.spec.filters), search: v.saved.spec.search ?? null } } : undefined,
+      }));
     return { views, version: Array.isArray(saved) ? null : saved?.version ?? null, reorder: !Array.isArray(saved) && !!saved?.reorder };
   } catch {
     return { views: [], version: null, reorder: false };
@@ -163,7 +168,11 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
   const patch = (id: string, change: (v: MyView) => MyView) => save({ ...kept, views: kept.views.map((v) => (v.id === id ? change(v) : v)) });
   const drop = (id: string, g = gen) => save({ ...kept, views: kept.views.filter((v) => v.id !== id) }, g);
   /** A change refused: no longer waiting, and the server's copy is read (version forgotten) to put it back. */
-  const restore = (id: string, g: number) => save({ ...kept, version: null, views: kept.views.map((v) => (v.id === id ? { ...v, pending: undefined } : v)) }, g);
+  /** A change refused: the server's last copy of it is put back (its version forgotten, so the list is read again). */
+  const restore = (id: string, g: number) => save({
+    ...kept, version: null,
+    views: kept.views.map((v) => (v.id === id ? { ...v, ...(v.saved ? { name: v.saved.name, spec: v.saved.spec } : {}), pending: undefined } : v)),
+  }, g);
 
   /** Sends what waits, in order, then reads the server's copy when its version is not ours. Stops quietly when offline. */
   const work = async (g: number) => {
@@ -194,7 +203,10 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
           // It keeps its place and what was changed since it was sent; the server's id from now on.
           save({
             ...kept, version: (answer as { views_version: number }).views_version,
-            views: kept.views.map((v) => (v.id === now.id ? { ...v, id: made.id, pending: v.pending === "create" && v.spec === now.spec && v.name === now.name ? undefined : v.pending === "delete" ? "delete" : v.pending === "create" ? "update" : v.pending } : v)),
+            views: kept.views.map((v) => (v.id === now.id ? {
+              ...v, id: made.id, saved: made.saved,
+              pending: v.pending === "create" && v.spec === now.spec && v.name === now.name ? undefined : v.pending === "delete" ? "delete" : v.pending === "create" ? "update" : v.pending,
+            } : v)),
           }, g);
         } else if (now.pending === "update") {
           const answer = await api.updateView(now.id, toServer({ ...now, client_ref: undefined }));
@@ -211,7 +223,11 @@ export function syncedViewsStore(): ViewsStore & { use(account: string | null): 
             continue;
           }
           // Done, unless it was changed again or deleted while on its way.
-          save({ ...kept, version: (answer as { views_version: number }).views_version, views: kept.views.map((v) => (v.id === now.id && v.pending === "update" && v.spec === now.spec && v.name === now.name ? { ...v, pending: undefined } : v)) }, g);
+          const saved = fromServer((answer as { data: ServerView }).data).saved;
+          save({
+            ...kept, version: (answer as { views_version: number }).views_version,
+            views: kept.views.map((v) => (v.id !== now.id ? v : v.pending === "update" && v.spec === now.spec && v.name === now.name ? { ...v, saved, pending: undefined } : { ...v, saved })),
+          }, g);
         } else {
           const answer = await api.deleteView(now.id);
           if (g !== gen) return;
@@ -375,10 +391,39 @@ export function useMyViews(store: ViewsStore = viewsStore): readonly MyView[] {
  * view shows, and none is sent).
  */
 export function viewsAccount(server: string | null | undefined, email: string | null | undefined, workspace: unknown): string | null {
-  const host = (server ?? "").trim().replace(/\/+$/, "").toLowerCase();
+  const host = hostOf(server);
   const who = (email ?? "").trim().toLowerCase();
   const where = workspace === null || workspace === undefined ? "" : String(workspace).trim();
   return host && who && where ? `${host}|${who}|${where}` : null;
+}
+
+const LAST_ACCOUNT_KEY = "echoledger-my-views-account";
+const hostOf = (server: string | null | undefined) => (server ?? "").trim().replace(/\/+$/, "").toLowerCase();
+
+/** Keeps whose views were shown last on this computer (for this sign-in), to show them while the account can't be read. */
+export function rememberViewsAccount(server: string | null | undefined, account: string) {
+  try {
+    window.localStorage.setItem(LAST_ACCOUNT_KEY, JSON.stringify({ server: hostOf(server), account }));
+  } catch {
+    // Storage unavailable: offline, no views until the account is read.
+  }
+}
+/** Whose views were shown last with this server, or null (another server, or none kept). */
+export function lastViewsAccount(server: string | null | undefined): string | null {
+  try {
+    const kept = JSON.parse(window.localStorage.getItem(LAST_ACCOUNT_KEY) ?? "null") as { server?: unknown; account?: unknown } | null;
+    return kept && kept.server === hostOf(server) && hostOf(server) && typeof kept.account === "string" ? kept.account : null;
+  } catch {
+    return null;
+  }
+}
+/** Signed out: whose views they were is forgotten (the next sign-in may be someone else). */
+export function forgetViewsAccount() {
+  try {
+    window.localStorage.removeItem(LAST_ACCOUNT_KEY);
+  } catch {
+    // Nothing kept.
+  }
 }
 
 /** Uses the signed-in account's own copy in its workspace (viewsAccount); none while it isn't known. */

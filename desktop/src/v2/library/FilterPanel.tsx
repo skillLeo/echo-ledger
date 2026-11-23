@@ -140,7 +140,8 @@ function FilterAside({ spec, onSpec, counts, drawer, onClose, onSaveView, canSav
       role={drawer ? "dialog" : undefined} aria-modal={drawer ? true : undefined}>
       <div className="el-filter__head">
         <h2 className="el-body-strong">Filters{on > 0 && <span className="el-filter__on el-caption"><span className="el-num">{on}</span></span>}</h2>
-        <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close filters" aria-keyshortcuts="Escape F" onClick={onClose} data-close="" />
+        <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Close filters"
+          aria-keyshortcuts={drawer ? "Escape" : "Escape F"} onClick={onClose} data-close="" />
       </div>
       <div className="el-filter__sections">
         {sections.map((s) => {

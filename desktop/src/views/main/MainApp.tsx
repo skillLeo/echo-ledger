@@ -53,7 +53,7 @@ import { shellChip } from "../../v2/shell/status";
 import { libraryViewCounts, needsYouCount, prepare } from "../../v2/library/facets";
 import { ALL_SCOPE, scopeKey, type LibraryScope } from "../../v2/library/scope";
 import { syncLibrary } from "../../v2/library/syncClock";
-import { useViewsAccount, viewsAccount, viewsStore } from "../../v2/library/myViews";
+import { forgetViewsAccount, lastViewsAccount, rememberViewsAccount, useViewsAccount, viewsAccount, viewsStore } from "../../v2/library/myViews";
 import { sourceAppLabel } from "../../lib/format";
 import type { HelpTab } from "../../v2/help/HelpV2";
 import { helpV2Reachable } from "../../v2/help/route";
@@ -188,8 +188,17 @@ export default function MainApp() {
   const [libraryItems, setLibraryItems] = useState<{ items: readonly LibraryItem[]; read: ReadonlySet<string> } | null>(null);
   const libraryFacts = useMemo(() => (libraryItems ? prepare(libraryItems.items, { read: libraryItems.read }) : null), [libraryItems]);
   // My views are each account's own in each workspace (the server, the email, the workspace), synced through
-  // /api/views; none show until the account is read.
-  useViewsAccount(viewsAccount(status?.serverUrl, account?.email, account?.workspace?.id));
+  // /api/views. Whose they were last is kept on this computer for this sign-in: an offline start shows (and saves) that
+  // account's views until the account can be read; signing out forgets it, and another account's sign-in replaces it.
+  const liveViews = viewsAccount(status?.serverUrl, account?.email, account?.workspace?.id);
+  useEffect(() => {
+    if (liveViews) rememberViewsAccount(status?.serverUrl, liveViews);
+  }, [liveViews, status?.serverUrl]);
+  useEffect(() => {
+    if (status && status.paired === false) forgetViewsAccount();
+  }, [status]);
+  const lastViews = useMemo(() => (status?.paired === true ? lastViewsAccount(status.serverUrl) : null), [status?.paired, status?.serverUrl, liveViews]);
+  useViewsAccount(liveViews ?? lastViews);
   const [sharedFocus, setSharedFocus] = useState<string | null>(null);
   // An echoledger://open link waiting to be opened (since v1.5), and a request link it pointed at.
   const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);
@@ -503,9 +512,20 @@ export default function MainApp() {
     }
     if (!ready) return;
     let alive = true;
-    api.account().then((a) => alive && setAccount(a ?? null), () => alive && setAccount(null));
+    let read = false;
+    const ask = () => api.account().then((a) => {
+      if (!alive) return;
+      read = true;
+      setAccount(a ?? null);
+    }, () => alive && setAccount((now) => now ?? null));
+    void ask();
+    // Not read (offline at the start): asked again after the next library sync that worked.
+    const un = listen("library:updated", () => {
+      if (!read) void ask();
+    });
     return () => {
       alive = false;
+      void un.then((f) => f()).catch(() => undefined);
     };
   }, [paired, ready]);
   const entitlements = useEntitlements();

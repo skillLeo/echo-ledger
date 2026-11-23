@@ -2283,14 +2283,17 @@ pub async fn views_get(app: AppHandle) -> AppResult<Option<serde_json::Value>> {
     }
 }
 
-/// A view change the server refused for good (a 4xx with its code: `views_limit`, `view_not_found`,
-/// `validation_failed`…) comes back as data, `{"refused": {"status", "code", "message"}}` (the message in the app's
-/// words), so the page's sync drops or restores that one view and goes on with the next. Offline, a busy or a held
-/// server (429, 426, 503) and 5xx stay errors: the change waits and is sent again later.
+/// What these routes say about a view change itself, for good: the change can never go as it is. Any other answer
+/// (another 4xx such as 403 `account_suspended`, a 4xx without a code from a captive portal or a proxy, 429, 426, 5xx,
+/// offline) is not about the view, so it stays an error and the change waits to be sent again.
+const VIEW_REFUSALS: [&str; 3] = ["validation_failed", "views_limit", "view_not_found"];
+
+/// A view change the server refused for good comes back as data, `{"refused": {"status", "code", "message"}}` (the
+/// message in the app's words), so the page's sync drops or restores that one view and goes on with the next.
 pub(crate) fn view_answer(result: AppResult<serde_json::Value>) -> AppResult<serde_json::Value> {
     match result {
         Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
-        Err(e @ AppError::Server { status: 400..=499, .. }) if !matches!(e.status(), Some(401 | 408 | 425 | 426 | 429)) => {
+        Err(e @ AppError::Server { .. }) if e.code().is_some_and(|c| VIEW_REFUSALS.contains(&c)) => {
             Ok(serde_json::json!({ "refused": { "status": e.status(), "code": e.code(), "message": e.to_string() } }))
         }
         other => other,

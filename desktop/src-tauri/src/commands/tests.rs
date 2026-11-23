@@ -578,6 +578,13 @@ fn a_view_change_that_can_wait_stays_an_error() {
         server(500, None, "boom"), AppError::Network("offline".into())] {
         assert!(view_answer(Err(e)).is_err());
     }
+    // Not about the view: a suspended account, or a captive portal's or a proxy's 4xx without a code.
+    for e in [server(403, Some("account_suspended"), "This account is suspended."), server(403, None, "Forbidden"),
+        server(407, None, "Proxy Authentication Required"), server(400, None, "<html>Sign in to the Wi-Fi</html>"),
+        server(409, Some("conflict"), "")] {
+        let status = e.status();
+        assert!(view_answer(Err(e)).is_err(), "{status:?}");
+    }
     // A server without saved views yet.
     assert!(view_answer(Err(server(404, None, ""))).unwrap_err().to_string().contains("Saved views"));
 }
