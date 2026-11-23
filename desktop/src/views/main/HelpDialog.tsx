@@ -8,10 +8,13 @@ import { paletteKeys } from "../../lib/shell";
 import { PLAYER_KEYS } from "../../lib/player";
 import { Sheet } from "./ProjectDialogs";
 
-/** The keys of the main window (they work while EchoLedger is in front, never while typing in a field). */
-export function windowKeys(platform: string): readonly (readonly [string, string])[] {
+/**
+ * The keys of the main window (they work while EchoLedger is in front, never while typing in a field). `threeLevels`:
+ * the rail · panel · page layout (ui_v2.library), whose keys replace the sidebar's "[".
+ */
+export function windowKeys(platform: string, threeLevels = false): readonly (readonly [string, string])[] {
   const mod = platform === "macos" ? "⌘" : "Ctrl+";
-  return [
+  const keys: [string, string][] = [
     [paletteKeys(platform), "Search recordings, transcripts and pages, or run a command"],
     ["/", "Search this page's list"],
     ["J / K", "Next / previous recording in the list"],
@@ -26,7 +29,21 @@ export function windowKeys(platform: string): readonly (readonly [string, string
     ["[", "Collapse or expand the sidebar"],
     ["?", "This list"],
   ];
+  return threeLevels ? keys.flatMap((row) => (row[0] === "[" ? navKeys(platform) : [row])) : keys;
 }
+
+/** The three levels' own keys (PLAN_NAV_3_LEVELS §6), in place of the sidebar's "[" (one list for Help and Settings). */
+export function navKeys(platform: string): readonly [string, string][] {
+  const mod = platform === "macos" ? "⌘" : "Ctrl+";
+  const alt = platform === "macos" ? "⌥" : "Alt+";
+  return [
+    [`${mod}1 … ${mod}6`, "Library, Projects, Live, Ask, Activity, Settings"],
+    [`${alt}1 … ${alt}9`, "The panel's views: the Library's, then My views"],
+    [`${mod}\\`, "Hide or show the panel"],
+    [`${mod}[ / ${mod}]`, "Back or forward through the Library's views and filters"],
+  ];
+}
+
 
 export const GLOBAL_SHORTCUTS: readonly (readonly [ShortcutAction, string])[] = [
   ["record_now", "Record now"],

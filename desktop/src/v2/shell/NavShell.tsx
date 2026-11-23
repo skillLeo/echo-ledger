@@ -95,10 +95,22 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
   const [flyout, setFlyout] = useState(false);
   const hasPanel = !!place && !!panels[place];
   const shown = hasPanel && (narrow ? flyout : !hidden.has(place!));
+  // The flyout's opener (its rail item), to take focus back when it closes without a choice.
+  const opener = useRef<HTMLElement | null>(null);
+  const main = useRef<HTMLElement>(null);
+  const closeFlyout = useCallback((why: FlyoutClose) => {
+    setFlyout(false);
+    if (why === "chose") window.setTimeout(() => main.current?.focus(), 0);
+    else opener.current?.focus();
+  }, []);
   const togglePanel = useCallback(() => {
     if (!place || !panels[place]) return;
     if (narrow) {
-      setFlyout((f) => !f);
+      // ⌘\ opens the flyout from where focus is (the place's rail item when it has it), and closes it back there.
+      if (flyout) return closeFlyout("hide");
+      opener.current = document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement : document.querySelector<HTMLElement>(`.el-rail [data-place="${place}"]`);
+      setFlyout(true);
       return;
     }
     setHidden((now) => {
@@ -108,21 +120,13 @@ export function NavShell({ place, onPlace, onHome, status, panels, feet, library
       saveHidden(next);
       return next;
     });
-  }, [place, panels, narrow]);
+  }, [place, panels, narrow, flyout, closeFlyout]);
   // Another place: the flyout closes (it opens again from the rail).
   const [lastPlace, setLastPlace] = useState(place);
   if (place !== lastPlace) {
     setLastPlace(place);
     if (flyout && !narrow) setFlyout(false);
   }
-  // The flyout's opener (its rail item), to take focus back when it closes without a choice.
-  const opener = useRef<HTMLElement | null>(null);
-  const main = useRef<HTMLElement>(null);
-  const closeFlyout = useCallback((why: FlyoutClose) => {
-    setFlyout(false);
-    if (why === "chose") window.setTimeout(() => main.current?.focus(), 0);
-    else opener.current?.focus();
-  }, []);
   // A place pressed (or its ⌘ key): there, as it was left, or started over when it was the place shown already; in a
   // narrow window its flyout opens too (and stays open when it was).
   const press = (p: Place) => {

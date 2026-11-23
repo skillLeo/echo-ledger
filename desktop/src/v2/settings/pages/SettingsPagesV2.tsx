@@ -26,8 +26,10 @@ import { StoragePageV2 } from "./StorageV2";
 import { AppearancePageV2, ShortcutsPageV2, useThemeChoice } from "./AppV2";
 import type { ThemeChoice } from "../../../lib/theme";
 
-export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnpaired, theme, onTheme }: {
+export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnpaired, theme, onTheme, threeLevels = false }: {
   section: { id: string; seq: number };
+  /** The rail · panel · page layout (its keys on the shortcuts page). */
+  threeLevels?: boolean;
   onHome: () => void;
   /** Opens a section outside these pages (Help, from the Mac check); without it the way back is Settings. */
   onSection?: (id: string) => void;
@@ -84,7 +86,7 @@ export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnp
       case "screen.excluded": return <ExcludedAppsPageV2 settings={settings} patch={patch} platform={platform} />;
       case "storage": return <StoragePageV2 limitBytes={entitlements?.limits.storage_bytes?.limit ?? status.plan.storageBytes} />;
       case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} />;
-      case "shortcuts": return <ShortcutsPageV2 settings={settings} status={status} run={run} onSettings={setSettings} />;
+      case "shortcuts": return <ShortcutsPageV2 settings={settings} status={status} run={run} onSettings={setSettings} threeLevels={threeLevels} />;
       case "profile": return account === undefined ? <PageLoading /> : account ? <ProfilePageV2 account={account} status={status} run={run} /> : null;
       case "plan": return entitlements === undefined ? <PageLoading /> : entitlements
         ? <PlanPageV2 e={entitlements} role={roleOf(account, status)} workspace={account?.workspace?.name || status.plan.workspace || null} onKey={() => open("key")} />

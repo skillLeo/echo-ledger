@@ -166,6 +166,28 @@ describe("the three levels", () => {
     expect(document.activeElement).toBe(screen.getByRole("main"));
   });
 
+  it("in a narrow window ⌘ with the backslash key opens the flyout from where focus is and Esc gives it back there", () => {
+    setWidth(1024);
+    render(<App />);
+    // From the page.
+    const page = document.createElement("button");
+    page.textContent = "On the page";
+    screen.getByRole("main").appendChild(page);
+    page.focus();
+    fireEvent.keyDown(page, { key: "\\", metaKey: true });
+    expect(panel()).toHaveClass("el-panel--flyout");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(panel()).toBeNull();
+    expect(page).toHaveFocus();
+    // From nowhere: the place's rail item takes it back; the key again closes it there.
+    page.blur();
+    fireEvent.keyDown(document.body, { key: "\\", metaKey: true });
+    expect(panel()).not.toBeNull();
+    fireEvent.keyDown(document.body, { key: "\\", metaKey: true });
+    expect(panel()).toBeNull();
+    expect(rail().getByRole("button", { name: "Library, 4" })).toHaveFocus();
+  });
+
   it("in a short window the rail keeps its icons only, every place and its foot still named (the old sidebar's short foot)", () => {
     setWidth(1440);
     Object.defineProperty(window, "innerHeight", { value: 640, configurable: true, writable: true });

@@ -284,3 +284,28 @@ describe("the app with ui_v2.settings", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
   });
 });
+
+describe("Help › Shortcuts and Settings › Keyboard shortcuts follow the layout", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    respond("get_settings", makeSettings());
+  });
+
+  it("with the three levels: ⌘1…⌘6, ⌥1…⌥9, ⌘\\ and ⌘[ / ⌘] in place of the sidebar's [; without, the [ stays", async () => {
+    const { windowKeys } = await import("../../views/main/HelpDialog");
+    const { appKeys } = await import("../../views/main/AppSettings");
+    for (const keys of [windowKeys("macos", true).map(([k]) => k), appKeys("macos", true).map(([k]) => k)]) {
+      expect(keys).not.toContain("[");
+      expect(keys).toEqual(expect.arrayContaining(["⌘1 … ⌘6", "⌥1 … ⌥9", "⌘\\", "⌘[ / ⌘]"]));
+    }
+    expect(appKeys("windows", true).map(([k]) => k)).toEqual(expect.arrayContaining(["Ctrl+1 … Ctrl+6", "Alt+1 … Alt+9", "Ctrl+\\", "Ctrl+[ / Ctrl+]"]));
+    expect(windowKeys("windows").map(([k]) => k)).toContain("[");
+    expect(appKeys("windows").map(([k]) => k)).toContain("[");
+    // Help's Shortcuts tab reads the layout's list.
+    render(<div className="el-root"><HelpV2 platform="macos" onBack={() => undefined} start={{ tab: "shortcuts", seq: 1 }} threeLevels /></div>);
+    await act(flushAsync);
+    const list = within(document.querySelector<HTMLElement>('dl[aria-label="In this window"]')!);
+    expect(list.queryByText("Collapse or expand the sidebar")).toBeNull();
+    expect(list.getByText("Hide or show the panel")).toBeInTheDocument();
+  });
+});

@@ -220,6 +220,13 @@ export default function MainApp() {
     setAskProject((a) => ({ id: null, seq: a.seq + 1 }));
     setActivityShow("all");
     setLibraryScope(ALL_SCOPE);
+    // And what was asked of the Library for the last sign-in: a Library opened later (a notice, a shared item) never
+    // applies it.
+    setScopeRequest(null);
+    setLibraryViewV2(null);
+    setOpenRequest(null);
+    setReviewV2(null);
+    setFiltersRequest(null);
   }, [signIn]);
   useEffect(() => {
     if (signIn !== undefined) settleViewsAccount(signIn);
@@ -1097,13 +1104,13 @@ export default function MainApp() {
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
                 ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
-                  ? <HelpV2 platform={status.platform} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
+                  ? <HelpV2 platform={status.platform} threeLevels={ui.flags["ui_v2.library"]} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })}
                     start={helpStart} onSettings={openAccount}
                     {...(helpStart?.from && settingsSection?.seq === helpStart.seq
                       ? { onBack: () => setTab(helpStart.from!), backLabel: TAB_NAMES[helpStart.from] }
                       : { onBack: onHome })} />
                   : hasV2Page(section.id)
-                    ? <SettingsPagesV2 section={section} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
+                    ? <SettingsPagesV2 section={section} threeLevels={ui.flags["ui_v2.library"]} onHome={onHome} onSection={(id) => setSettingsSection({ id, seq: ++navigations.current })} run={run} status={status} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />
                     : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>
