@@ -605,13 +605,46 @@ object DecisionPopup {
         countAfter(app, rec.id, chosen, doneMs)
     }
 
-    /** An app line still running when the app left the screen: the rest of it in the after-call notification. */
+    /**
+     * An app line still running when the app left the screen: the rest of it in the after-call notification. A Delete's
+     * Undo must stay reachable all the while ([deleted]'s rule):
+     * - posted: its Undo is in the shade, which outlives the process, so the call no longer names this process
+     *   ([LocalRecording.undoIn]) and the delete is applied at its time even if EchoLedger is closed meanwhile;
+     * - not posted (notifications not allowed): the rest of the line on the card when it can show it;
+     * - else the delete is taken back and the call is left to the person to choose again, nothing deleted unseen.
+     * A kept call's line that cannot be posted just ends: the call stays kept, as chosen.
+     */
     private suspend fun moveOut(app: Context, id: String, pick: Pick, leftMs: Long) {
-        val rec = (app as? EchoLedgerApp)?.graph?.recordings?.get(id) ?: return
+        val graph = (app as? EchoLedgerApp)?.graph ?: return
+        val rec = graph.recordings.get(id) ?: return
         when {
-            pick == Pick.DELETE && rec.state == Decisions.DISCARDING -> Notifications.discardedWithUndo(app, rec, leftMs)
+            pick == Pick.DELETE && rec.state == Decisions.DISCARDING -> {
+                if (Notifications.discardedWithUndo(app, rec, leftMs)) {
+                    graph.recordings.update(id) { if (it.state == Decisions.DISCARDING) it.copy(undoIn = null) else it }
+                    return
+                }
+                val onCard = withContext(Dispatchers.Main) { deletedOnCard(app, rec, leftMs) }
+                if (onCard) return
+                choices.remove(id)
+                val back = Decisions.undoDiscard(app, id, widget = false) ?: return
+                if (back.state == "pending_decision") Decisions.chooseAgain(app, id, notDeletedYet = true)
+            }
+
             pick != Pick.DELETE && rec.state == "queued" -> Notifications.choiceLine(app, rec, pick == Pick.TRANSCRIBE, leftMs)
         }
+    }
+
+    /**
+     * The rest of an app's "Deleted · Undo" line on the card, for [leftMs] (main thread): the call is already on its way
+     * out, with its file kept until after that time, and the card's Undo takes it back ([undo]). False when the card
+     * cannot show it (no overlay permission, or another call's question or line on it).
+     */
+    private fun deletedOnCard(app: Context, rec: LocalRecording, leftMs: Long): Boolean {
+        if (isShowing && showingMode in setOf(Mode.ASK, Mode.GROUPED, Mode.DELETED)) return false
+        commitPick(app)
+        if (!open(app, rec, settings(app).themeMode, CallCardScreen.Done(Pick.DELETE))) return false
+        go(app, Mode.DELETED, CallCardScreen.Done(Pick.DELETE), leftMs)
+        return true
     }
 
     /** Undo on a line out of the card: nothing decided, and the question again (after one already on the card). */

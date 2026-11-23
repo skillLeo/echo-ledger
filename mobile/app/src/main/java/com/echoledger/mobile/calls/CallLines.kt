@@ -48,4 +48,30 @@ object CallLines {
     fun detach(host: Host) {
         if (this.host === host) this.host = null
     }
+
+    /** A line handed from a host being made again (a rotation) to the next one: it ends at [endsAt], as before. */
+    class Carried(val line: Line, val endsAt: Long, val actions: Actions)
+
+    private val carried = mutableListOf<Carried>()
+
+    /**
+     * The app's screen is being made again (a rotation): its lines wait for the next host ([takeCarried]) and keep their
+     * end times. One the next host never takes (the app did not come back to the screen) goes on in the notification
+     * ([Actions.away]) after [CARRY_MS]. Main thread.
+     */
+    fun carry(lines: List<Carried>, clock: () -> Long) {
+        if (lines.isEmpty()) return
+        carried += lines
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val left = lines.filter { carried.remove(it) }
+            val now = clock()
+            left.forEach { c -> (c.endsAt - now).takeIf { it > 0 }?.let(c.actions.away) }
+        }, CARRY_MS)
+    }
+
+    /** The lines handed over by the host before this one (main thread). */
+    fun takeCarried(): List<Carried> = carried.toList().also { carried.clear() }
+
+    /** How long a rotation may take before the lines it carried go on in the notification. */
+    const val CARRY_MS = 2_000L
 }

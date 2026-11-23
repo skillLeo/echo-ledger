@@ -991,6 +991,57 @@ class PostCallPromptTest : AppTest() {
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
     }
 
+    /** Review of FIX-03: the shade outlives the process, so a moved Delete no longer names it and is applied at its time. */
+    @Test
+    fun `a Delete moved to the notification is applied at its time even when EchoLedger closes meanwhile`() {
+        val lines = inApp()
+        asked()
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertEquals("its Undo on this process's screen", Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("Deleted · Undo in the shade") { title(lineOf()) == "Deleted · WhatsApp call · 0:44" }
+        pumpUntil("its Undo is the shade's now") { app.peekRecording("call-1")?.undoIn == null }
+        // EchoLedger closed meanwhile: a call still naming a process would be taken back; this one is not.
+        app.graph.recordings.update("call-1") { it.copy(undoIn = it.undoIn?.let { "a process that has gone" }) }
+        runDiscardWork("call-1")
+        pumpUntil("deleted once its time is over") { app.graph.recordings.get("call-1") == null }
+    }
+
+    @Test
+    fun `with notifications denied a moved Delete shows on the card, or is left to choose again, never deleted unseen`() {
+        val lines = inApp()
+        asked()
+        DecisionPopup.delete(app)
+        pumpUntil("on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        cardOnly()
+        CallLines.detach(lines)
+        lines.shown.single().actions.away(4_000)
+        pumpUntil("the rest of the line on the card") {
+            DecisionPopup.showingFor == "call-1" && DecisionPopup.showingMode == DecisionPopup.Mode.DELETED
+        }
+        assertEquals("its Undo is this process's card", Decisions.PROCESS, app.peekRecording("call-1")?.undoIn)
+        DecisionPopup.undo(app)
+        pumpUntil("taken back") { app.peekRecording("call-1")?.state == "pending_decision" }
+
+        // No overlay either: nothing can show the Undo, so the delete is taken back and the call waits for the person.
+        DecisionPopup.hide()
+        val again = inApp()
+        DecisionPopup.deleted(app, app.peekRecording("call-1")!!, "dark", 5_000)
+        pumpUntil("on its way out again") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        ShadowSettings.setCanDrawOverlays(false)
+        CallLines.detach(again)
+        again.shown.single().actions.away(4_000)
+        pumpUntil("left to choose again") {
+            app.peekRecording("call-1")?.let { it.state == "pending_decision" && it.restoredDelete } == true
+        }
+        assertTrue("not deleted yet", app.peekRecording("call-1")!!.notDeletedYet)
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+        pumpUntil("its delete called off") { discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED } }
+        assertTrue("never kept by itself either", timeoutWork("call-1").none { it.state == WorkInfo.State.ENQUEUED })
+    }
+
     @Test
     fun `in the app a choice decided elsewhere meanwhile takes its snackbar away`() {
         val lines = inApp()

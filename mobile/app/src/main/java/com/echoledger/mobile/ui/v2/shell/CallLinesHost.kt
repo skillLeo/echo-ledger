@@ -1,5 +1,8 @@
 package com.echoledger.mobile.ui.v2.shell
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.res.Resources
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -28,29 +31,44 @@ import kotlinx.coroutines.launch
 @Composable
 fun CallLinesHost(toasts: EchoToastState) {
     val res by rememberUpdatedState(LocalContext.current.resources)
+    val activity = LocalContext.current.findActivity()
     val scope = rememberCoroutineScope()
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner, toasts) {
         val host = ShellCallLines(toasts, scope) { res }
+
+        // A rotation (the activity made again) is not leaving the screen: the lines go to the next host as they are.
+        fun rotating() = activity?.isChangingConfigurations == true
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> CallLines.attach(host)
-                Lifecycle.Event.ON_STOP -> host.leave()
+                Lifecycle.Event.ON_START -> {
+                    CallLines.attach(host)
+                    host.resume(CallLines.takeCarried())
+                }
+
+                Lifecycle.Event.ON_STOP -> if (!rotating()) host.leave()
+
                 else -> Unit
             }
         }
         owner.lifecycle.addObserver(observer)
         onDispose {
             owner.lifecycle.removeObserver(observer)
-            host.leave()
+            if (rotating()) host.handOver() else host.leave()
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 /** [CallLines.Host] on the shell's toasts, in the app's language ([words]). Main thread. */
 internal class ShellCallLines(private val toasts: EchoToastState, private val scope: CoroutineScope, private val words: () -> Resources) :
     CallLines.Host {
-    private class Out(val job: Job, val endsAt: Long, val actions: CallLines.Actions)
+    private class Out(val job: Job, val endsAt: Long, val actions: CallLines.Actions, val line: CallLines.Line)
 
     /** The lines shown or waiting, by call id (null: the group's). */
     private val out = HashMap<String?, Out>()
@@ -61,6 +79,17 @@ internal class ShellCallLines(private val toasts: EchoToastState, private val sc
         // After every line with an end time already out (this host's own too, even before it reached the toasts), so
         // this one is on screen for its whole time.
         val endsAt = maxOf(now, toasts.busyUntil(), out.values.maxOfOrNull { it.endsAt } ?: 0L) + lineMs
+        put(line, endsAt, actions)
+        return endsAt - now
+    }
+
+    /** Lines a host before this one handed over (a rotation): each shows again until its own end time. */
+    fun resume(lines: List<CallLines.Carried>) {
+        val now = toasts.clock()
+        lines.forEach { c -> if (c.endsAt > now) put(c.line, c.endsAt, c.actions) else c.actions.ended() }
+    }
+
+    private fun put(line: CallLines.Line, endsAt: Long, actions: CallLines.Actions) {
         val res = words()
         val message = message(res, line)
         val label = res.getString(if (line.id == null) R.string.cc_grouped_review else R.string.cc_undo)
@@ -71,12 +100,20 @@ internal class ShellCallLines(private val toasts: EchoToastState, private val sc
             if (result == EchoToastResult.Action) actions.action() else actions.ended()
         }
         self = job
-        out[line.id] = Out(job, endsAt, actions)
-        return endsAt - now
+        out[line.id] = Out(job, endsAt, actions, line)
     }
 
     override fun cancel(id: String?) {
         out.remove(id)?.job?.cancel()
+    }
+
+    /** The activity is being made again (a rotation): the lines still running wait for the next host, unchanged. */
+    fun handOver() {
+        CallLines.detach(this)
+        val left = out.values.toList()
+        out.clear()
+        left.forEach { it.job.cancel() }
+        CallLines.carry(left.map { CallLines.Carried(it.line, it.endsAt, it.actions) }, toasts.clock)
     }
 
     /** The app left the screen: no more lines here, and the ones still running go on in a notification. */
