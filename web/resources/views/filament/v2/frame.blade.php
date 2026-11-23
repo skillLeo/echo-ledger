@@ -35,8 +35,9 @@
         data-place="{{ $here ?? 'home' }}"
     >
         <div class="v2-frame-inner" x-data="elV2Frame(@js($config))" x-bind:class="{ 'is-flyout': flyout !== null, 'is-narrow': narrow }"
-            x-on:keydown.escape.window="if (flyout !== null) closeFlyout('escape')" x-on:click.outside="closeFlyout('outside')"
-            x-on:focusin.window="if (flyout !== null && ! $el.contains($event.target)) closeFlyout('outside')"
+            x-on:keydown.escape.window="if (flyout !== null && ! inDialog($event.target)) closeFlyout('escape')"
+            x-on:click.outside="if (! inDialog($event.target)) closeFlyout('outside')"
+            x-on:focusin.window="if (flyout !== null && ! $el.contains($event.target) && ! inDialog($event.target)) closeFlyout('outside')"
             x-on:blur.window="if (flyout !== null && document.activeElement?.tagName === 'IFRAME') closeFlyout('outside')"
             x-on:el-nav-show-panel.window="showPanel($event)">
             <nav class="v2-rail" aria-label="{{ __('Places') }}">

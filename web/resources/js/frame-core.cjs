@@ -73,6 +73,14 @@
         return !! panel && typeof panel.contains === 'function' && panel.contains(active);
     }
 
+    /** The dialogs a flyout leaves open behind it: Filament's, and any other dialog or alert dialog. */
+    const DIALOGS = '.fi-modal, [role="dialog"], [role="alertdialog"]';
+
+    /** Whether an event's target is in a dialog (a key, a click or the focus there never closes the flyout). */
+    function inDialog(target) {
+        return !! target && typeof target.closest === 'function' && target.closest(DIALOGS) !== null;
+    }
+
     /**
      * This browser's memory of each place (where you left it, whether its panel was folded) belongs to one person in one
      * workspace: scope is an opaque name of both (person.workspace, from the server), so it never carries over to
@@ -136,5 +144,5 @@
         return null;
     }
 
-    return { isField, railTarget, sameConsole, railFlyout, flyoutFocusBack, focusLost, memoryKey, staleMemory, allMemory, panelOpen, frameKey };
+    return { isField, railTarget, sameConsole, railFlyout, flyoutFocusBack, focusLost, inDialog, memoryKey, staleMemory, allMemory, panelOpen, frameKey };
 });

@@ -6,11 +6,15 @@ use App\Filament\Resources\Clients\Pages\CreateClient;
 use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Support\SettingsContext;
 use App\Models\Client;
+use App\Models\Plan;
+use App\Models\UsageLedgerEntry;
+use App\Models\Workspace;
 use App\Services\InterfaceFlags;
 use App\Stt\LanguageChoice;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\App;
 use Livewire\Livewire;
+use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
  * W-212: the last English on classic pages inside the new frame in Urdu: the recording rows' dates and "app · device"
@@ -160,6 +164,19 @@ it('keeps the same words in English in the new frame and in classic', function (
     }
 });
 
+/** The usage meters of a Settings page (This month, Plan & usage), each one's markup. */
+function leftoverMeters(string $html): string
+{
+    $dom = new DOMDocument;
+    @$dom->loadHTML('<?xml encoding="UTF-8">'.$html, LIBXML_NOERROR | LIBXML_NOWARNING);
+    $out = '';
+    foreach ((new DOMXPath($dom))->query('//div[contains(concat(" ", normalize-space(@class), " "), " el-meter ")]') ?: [] as $meter) {
+        $out .= $dom->saveHTML($meter);
+    }
+
+    return $out;
+}
+
 /** Signed in, in the new frame, in Urdu, for a Livewire page tested on its own (no middleware sets the language). */
 function leftoverUrdu(object $test): void
 {
@@ -254,4 +271,50 @@ it('shows the Upload page\'s intro and record box in Urdu, and keeps them in Eng
     foreach ($english as $phrase) {
         expect($words)->toContain($phrase);
     }
+});
+
+it('says a limited plan\'s meters in Urdu: amounts of their limits, the near, paused and full lines, Upgrade and the labels', function () {
+    $workspace = (int) $this->owner->current_workspace_id;
+    $plan = fn (string $key) => Workspace::query()->whereKey($workspace)->update(['plan_id' => Plan::query()->where('key', $key)->value('id'),
+        'plan_expires_at' => $key === 'free' ? null : now()->addDays(30)]);
+    $minutes = function (int $used) use ($workspace): void {
+        UsageLedgerEntry::query()->where('report_id', 'like', 'leftover-%')->delete();
+        UsageLedgerEntry::query()->create(['workspace_id' => $workspace, 'user_id' => $this->owner->id, 'source' => 'server', 'report_id' => 'leftover-'.$used,
+            'use_case' => 'final_transcript', 'provider' => 'assemblyai', 'duration_ms' => $used * 60000, 'channels' => 1, 'billed_ms' => $used * 60000,
+            'unit_price_usd' => 0, 'cost_usd' => 0, 'billable' => true, 'occurred_at' => now()]);
+    };
+    // Free: the storage full (2 GB stored on a 1 GB plan), so its line shows; the devices of their limit.
+    $plan('free');
+    $full = Fx::readyRecording(Fx::session($this->owner), 'full');
+    $full->forceFill(['stored_size_bytes' => 2 * 1024 ** 3])->save();
+    $english = ['Your Groq key', 'Not added.', 'Add key', ' of 1 GB', ' of 2', "New recordings can't upload", '="Storage, ', '="Devices, ', '="Transcription, '];
+    foreach (['settings', 'settings-plan'] as $page) {
+        $html = leftoverPage($this, true, 'ur', $page);
+        foreach ($english as $phrase) {
+            expect(leftoverHas(leftoverMeters($html), $phrase))->toBeFalse("Free {$page}: \"{$phrase}\" is still in English");
+        }
+        expect(leftoverMeters($html))->not->toBe('');
+        expect(leftoverWords(leftoverMeters($html)))->toContain('1 GB میں سے')->toContain('نئی ریکارڈنگز اپ لوڈ نہیں ہو سکتیں')->toContain('آپ کی Groq کلید');
+        expect(leftoverBare(html_entity_decode(leftoverMeters($html))))->toContain('aria-label="اسٹوریج، ')->toContain('aria-label="ڈیوائسز، ');
+        // In English nothing changes.
+        $en = leftoverMeters(leftoverPage($this, true, 'en', $page));
+        foreach (['Your Groq key', ' of 1 GB', "New recordings can't upload until you free up space or upgrade.", '="Storage, ', '="Devices, '] as $phrase) {
+            expect(leftoverHas($en, $phrase))->toBeTrue("Free {$page}: \"{$phrase}\" is missing in English");
+        }
+    }
+    // Pro near its minutes (500 of 600): the near line, Upgrade and its trailing words; at 600 the paused line.
+    $plan('pro');
+    $minutes(500);
+    $near = leftoverMeters(leftoverPage($this, true, 'ur', 'settings-plan'));
+    foreach (['of 600 min', "You've used", 'or wait until', 'Upgrade', '="Transcription, '] as $phrase) {
+        expect(leftoverHas($near, $phrase))->toBeFalse("Pro near: \"{$phrase}\" is still in English");
+    }
+    expect(leftoverWords($near))->toContain('600 میں سے 500 منٹ')->toContain('آپ اپنے 83% منٹ استعمال کر چکے ہیں۔')->toContain('اپ گریڈ کریں یا 1 دسمبر تک انتظار کریں۔')
+        ->not->toMatch('/[٠-٩۰-۹]/u');
+    expect(leftoverWords(leftoverPage($this, true, 'en', 'settings-plan')))->toContain('500 of 600 min')->toContain("You've used 83% of your minutes.")->toContain('Upgrade or wait until 1 Dec.');
+    $minutes(600);
+    $paused = leftoverMeters(leftoverPage($this, true, 'ur', 'settings-plan'));
+    expect(leftoverHas($paused, 'Transcription is paused until'))->toBeFalse()
+        ->and(leftoverWords($paused))->toContain('1 دسمبر تک ٹرانسکرپشن رکی ہوئی ہے۔');
+    expect(leftoverWords(leftoverPage($this, true, 'en', 'settings-plan')))->toContain('Transcription is paused until 1 Dec.');
 });

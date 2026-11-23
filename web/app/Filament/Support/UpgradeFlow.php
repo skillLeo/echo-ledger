@@ -314,54 +314,62 @@ final class UpgradeFlow
             $key = $context->flag('key');
             $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => __('Your Groq key'), 'percent' => null, 'tone' => 'neutral',
                 'line' => $key ? __('Key added') : __('Not added.'), 'link' => $key ? null : ['label' => __('Add key'), 'url' => EditProfile::settingsUrl('transcription-key')], 'after' => null,
-                'label' => 'Transcription, with your own Groq key, '.($key ? 'key added' : 'not added')];
+                'label' => $key ? __('Transcription, with your own Groq key, key added') : __('Transcription, with your own Groq key, not added')];
         } else {
             $used = (int) ($minutes['used'] ?? 0);
             $meter = self::meter($used, $limit === null ? null : (int) $limit);
             // In the console's language: "230 of 600 min" · "600 میں سے 230 منٹ"; "Resets 1 Dec" · "1 دسمبر کو دوبارہ شروع ہوگا".
             $value = $limit === null ? __(':n min', ['n' => number_format($used)]) : __(':used of :limit min', ['used' => number_format($used), 'limit' => number_format((int) $limit)]);
-            $day = $resets->format('j M');
+            // "1 Dec" · "1 دسمبر"; the screen readers' "1 December" · "1 دسمبر".
+            $day = ConsoleDates::format($resets, 'j M', 'j F');
             $near = $meter['percent'] !== null && $meter['percent'] >= 80 && $meter['percent'] < 100;
             $line = match (true) {
-                $meter['percent'] !== null && $meter['percent'] >= 100 => "Transcription is paused until {$day}.",
-                $near => "You've used {$meter['percent']}% of your minutes.".($buyer ? '' : " They reset on {$day}."),
-                default => __('Resets :date', ['date' => ConsoleDates::format($resets, 'j M', 'j F')]),
+                $meter['percent'] !== null && $meter['percent'] >= 100 => __('Transcription is paused until :date.', ['date' => $day]),
+                $near => $buyer ? __("You've used :percent% of your minutes.", ['percent' => $meter['percent']])
+                    : __("You've used :percent% of your minutes. They reset on :date.", ['percent' => $meter['percent'], 'date' => $day]),
+                default => __('Resets :date', ['date' => $day]),
             };
             $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-                'line' => $line, 'link' => $near && $buyer ? ['label' => 'Upgrade', 'url' => $upgradeUrl] : null, 'after' => $near && $buyer ? " or wait until {$day}." : null,
-                'label' => "Transcription, {$value} used, resets ".$resets->format('j F')];
+                'line' => $line, 'link' => $near && $buyer ? ['label' => __('Upgrade'), 'url' => $upgradeUrl] : null, 'after' => $near && $buyer ? ' '.__('or wait until :date.', ['date' => $day]) : null,
+                'label' => __('Transcription, :value used, resets :date', ['value' => $value, 'date' => ConsoleDates::format($resets, 'j F', 'j F')])];
         }
 
         $storage = (array) ($limits['storage_bytes'] ?? []);
         $meter = self::meter((int) ($storage['used'] ?? 0), isset($storage['limit']) ? (int) $storage['limit'] : null);
-        $value = Formats::bytes((int) ($storage['used'] ?? 0)).(isset($storage['limit']) ? ' of '.Formats::bytes((int) $storage['limit']) : '');
+        $value = self::ofLimit(Formats::bytes((int) ($storage['used'] ?? 0)), isset($storage['limit']) ? Formats::bytes((int) $storage['limit']) : null);
         $out[] = ['id' => 'plan.usage.storage', 'title' => 'Storage', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? ($buyer ? "New recordings can't upload until you free up space or upgrade." : "New recordings can't upload until you free up space.") : null,
-            'link' => null, 'after' => null, 'label' => "Storage, {$value} used"];
+            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? ($buyer ? __("New recordings can't upload until you free up space or upgrade.") : __("New recordings can't upload until you free up space.")) : null,
+            'link' => null, 'after' => null, 'label' => __('Storage, :value used', ['value' => $value])];
 
         $devices = (array) ($limits['devices'] ?? []);
         $meter = self::meter((int) ($devices['used'] ?? 0), isset($devices['limit']) ? (int) $devices['limit'] : null);
-        $value = number_format((int) ($devices['used'] ?? 0)).(isset($devices['limit']) ? ' of '.number_format((int) $devices['limit']) : '');
+        $value = self::ofLimit(number_format((int) ($devices['used'] ?? 0)), isset($devices['limit']) ? number_format((int) $devices['limit']) : null);
         $out[] = ['id' => 'plan.usage.devices', 'title' => 'Devices', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? 'Sign out a device to add another.' : null, 'link' => null, 'after' => null, 'label' => "Devices, {$value} signed in"];
+            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? __('Sign out a device to add another.') : null, 'link' => null, 'after' => null, 'label' => __('Devices, :value signed in', ['value' => $value])];
 
         $seats = (array) ($limits['seats'] ?? []);
         if (! isset($seats['limit']) || (int) $seats['limit'] > 1) {
-            $value = number_format((int) ($seats['used'] ?? 1)).(isset($seats['limit']) ? ' of '.number_format((int) $seats['limit']) : '');
+            $value = self::ofLimit(number_format((int) ($seats['used'] ?? 1)), isset($seats['limit']) ? number_format((int) $seats['limit']) : null);
             $meter = self::meter((int) ($seats['used'] ?? 1), isset($seats['limit']) ? (int) $seats['limit'] : null);
             $out[] = ['id' => 'plan.usage.members', 'title' => 'Team members', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['percent'] !== null && $meter['percent'] >= 100 ? 'warning' : $meter['tone'],
-                'line' => null, 'link' => null, 'after' => null, 'label' => "Team members, {$value}"];
+                'line' => null, 'link' => null, 'after' => null, 'label' => __('Team members, :value', ['value' => $value])];
         }
 
         $uploads = (array) ($limits['uploads_per_day'] ?? []);
         if (isset($uploads['limit']) && (int) $uploads['limit'] > 0 && (int) ($uploads['used'] ?? 0) * 100 >= 80 * (int) $uploads['limit']) {
             $meter = self::meter((int) $uploads['used'], (int) $uploads['limit']);
-            $value = number_format((int) $uploads['used']).' of '.number_format((int) $uploads['limit']);
+            $value = self::ofLimit(number_format((int) $uploads['used']), number_format((int) $uploads['limit']));
             $out[] = ['id' => 'plan.usage.uploads', 'title' => 'Uploads in the last 24 hours', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-                'line' => null, 'link' => null, 'after' => null, 'label' => "Uploads in the last 24 hours, {$value}"];
+                'line' => null, 'link' => null, 'after' => null, 'label' => __('Uploads in the last 24 hours, :value', ['value' => $value])];
         }
 
         return $out;
+    }
+
+    /** "4 MB of 1 GB" · "1 GB میں سے 4 MB", or the amount alone when there is no limit. */
+    private static function ofLimit(string $used, ?string $limit): string
+    {
+        return $limit === null ? $used : __(':used of :limit', ['used' => $used, 'limit' => $limit]);
     }
 
     /** @return array{percent: int|null, tone: string} */

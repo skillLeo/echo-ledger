@@ -79,6 +79,16 @@ test('after a click outside, focus counts as lost only on nothing, the body, the
     assert.equal(core.focusLost(el('main'), body, null), true);
 });
 
+test('a key, a click or the focus in a dialog opened from the flyout never closes it', () => {
+    const at = (selector) => ({ closest: (sel) => (sel.split(',').map((x) => x.trim()).includes(selector) ? {} : null) });
+    assert.equal(core.inDialog(at('.fi-modal')), true);
+    assert.equal(core.inDialog(at('[role="dialog"]')), true);
+    assert.equal(core.inDialog(at('[role="alertdialog"]')), true);
+    assert.equal(core.inDialog(at('main')), false);
+    assert.equal(core.inDialog(null), false);
+    assert.equal(core.inDialog({}), false);
+});
+
 test('the places\' memory is one person\'s in one workspace: anyone else\'s goes, and the login page forgets it all', () => {
     const mine = 'aaaaaaaaaaaa.11111111';
     assert.equal(core.memoryKey(mine, 'last', 'library'), 'el-nav:aaaaaaaaaaaa.11111111:last:library');

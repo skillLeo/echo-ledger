@@ -72,6 +72,9 @@
             },
             memory(what, place) { return window.ElFrameCore.memoryKey(this.scope, what, place); },
             hasPanel(key) { return this.panels.includes(key); },
+            // A dialog opened from the flyout (⋮ › Rename, + New label) is the flyout's own: a key, a click or the focus in
+            // it never closes the flyout, so focus comes back to what opened the dialog when it closes.
+            inDialog(target) { return window.ElFrameCore.inDialog(target); },
             shown() { return this.flyout ?? this.place; },
             folded() { return this.narrow || ! wide(); },
             // The rail icon's state for assistive tools while its panel is a flyout: expanded or not, and what it opens.

@@ -21,7 +21,9 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Livewire\Sidebar as FilamentSidebar;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
 use Livewire\Attributes\Renderless;
+use Throwable;
 
 /**
  * The console's sidebar (since v1.6, P4.1), in the desktop app's frame: the brand, "Find a page", then Home · Library
@@ -39,6 +41,46 @@ class Sidebar extends FilamentSidebar
     public function mount(): void
     {
         $this->here = request()->getRequestUri();
+    }
+
+    /** The request of the sidebar's own update while it is drawn for its page (rendering() to rendered()). */
+    private ?Request $updateRequest = null;
+
+    /**
+     * With the three levels the frame is drawn from the page it is on (its place, its panel, what is chosen there). On
+     * the sidebar's own requests (a view renamed or deleted from the panel, refresh-sidebar) the request is Livewire's
+     * update, not the page: for the time it is drawn, the request is the page's address ($here) again, so the frame
+     * never turns into Home's (the rail alone) after one.
+     */
+    public function rendering(): void
+    {
+        $current = request();
+        if (! ConsoleV2::frame() || $this->here === null || $current->getRequestUri() === $this->here) {
+            return;
+        }
+        $page = Request::create($this->here, 'GET');
+        try {
+            $route = app('router')->getRoutes()->match($page);
+        } catch (Throwable) {
+            return;
+        }
+        $page->headers->replace($current->headers->all());
+        $page->setUserResolver($current->getUserResolver());
+        if ($current->hasSession()) {
+            $page->setLaravelSession($current->session());
+        }
+        $route->bind($page);
+        $page->setRouteResolver(fn () => $route);
+        $this->updateRequest = $current;
+        app()->instance('request', $page);
+    }
+
+    public function rendered(): void
+    {
+        if ($this->updateRequest !== null) {
+            app()->instance('request', $this->updateRequest);
+            $this->updateRequest = null;
+        }
     }
 
     /** Since 2.0.0-p: a saved view's ⋯ › Rename. */
