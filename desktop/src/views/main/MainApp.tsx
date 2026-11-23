@@ -1162,6 +1162,9 @@ export default function MainApp() {
   if (ui.flags["ui_v2.shell"]) {
     return (
       <>
+        {/* macOS, a normal window: the empty strip for the window's own buttons, which drags and zooms the window (D-214,
+            lib/titlebar.ts); in full screen it is not drawn and the classic strip below keeps 2.0.12's window. */}
+        <div className="el-titlebar" data-tauri-drag-region aria-hidden="true" data-testid="titlebar-strip" />
         <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellChip(status, sourceAppLabel)}

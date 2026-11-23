@@ -5,6 +5,8 @@ import "./styles.css";
 import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
 import { api } from "./lib/ipc";
+import { watchTitlebar } from "./lib/titlebar";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WindowErrorBoundary } from "./components/WindowErrorBoundary";
 
 // One index.html for every window; the view is chosen from the window label.
@@ -58,6 +60,8 @@ api
   .then((a) => {
     document.documentElement.dataset.platform = a.platform;
     if (label === "main" && a.material !== "none") document.documentElement.dataset.material = a.material;
+    // The main window's title bar is overlaid on a Mac: its buttons get their strip, except in full screen (D-214).
+    if (label === "main") watchTitlebar(a.platform, () => getCurrentWindow().isFullscreen());
   })
   .catch(() => undefined);
 if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined);

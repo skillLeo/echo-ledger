@@ -155,6 +155,7 @@
   --el-layout-control-height: 36px;
   --el-layout-control-height-mobile: 48px;
   --el-layout-control-touch-min: 48px;
+  --el-layout-titlebar-macos: 38px;
   --el-component-button-radius: 4px;
   --el-component-button-height: 36px;
   --el-component-button-padding-x: 12px;
