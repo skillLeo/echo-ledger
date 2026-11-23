@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import DictationApp, { ENDED_MESSAGE_MS } from "./DictationApp";
 import { callsOf, emitEvent, listenerCount, pushChannelMessage, resetTauriMock, respond } from "../../test/tauri";
 
@@ -152,5 +152,91 @@ describe("dictation box", () => {
     unmount();
     await waitFor(() => expect(listenerCount("overlay:visibility")).toBe(0));
     expect(listenerCount("dictation:level") + listenerCount("dictation:state")).toBe(0);
+  });
+
+  describe("when the microphone kept dictation from starting (D-108)", () => {
+    const NO_DICTATION = "The microphone is off for EchoLedger. Allow it in your computer's privacy settings.";
+    /** What the core sends when the microphone is off: the box opens, the reason, and the state naming the permission. */
+    async function refuse() {
+      await emitEvent("overlay:visibility", true);
+      await pushChannelMessage({ kind: "clear" });
+      await pushChannelMessage({ kind: "status", live: false, recording: false, provider: null, message: NO_DICTATION });
+      await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle", permission: "microphone" });
+    }
+    afterEach(() => {
+      delete document.documentElement.dataset.platform;
+      vi.useRealTimers();
+    });
+
+    it("stays until it is closed, with the button that opens the microphone's settings, focused, and a close", async () => {
+      document.documentElement.dataset.platform = "macos";
+      respond("open_privacy_settings", null);
+      const { container } = await renderDictation();
+      vi.useFakeTimers();
+      await refuse();
+      await act(async () => void vi.advanceTimersByTime(ENDED_MESSAGE_MS * 5));
+      expect(root(container)).not.toHaveClass("overlay-hidden");
+      const card = container.querySelector(".dictation-card") as HTMLElement;
+      expect(within(card).getByText("Dictation did not start")).toBeInTheDocument();
+      expect(within(card).getByText(NO_DICTATION)).toBeInTheDocument();
+      const open = within(card).getByRole("button", { name: "Open System Settings" });
+      expect(open).toHaveFocus();
+      // The window lets clicks through except where it says: the buttons are its hit regions.
+      expect(open).toHaveAttribute("data-hit");
+      expect(within(card).getByRole("button", { name: "Close" })).toHaveAttribute("data-hit");
+      fireEvent.click(open);
+      expect(callsOf("open_privacy_settings")).toEqual([{ kind: "microphone" }]);
+      expect(root(container)).not.toHaveClass("overlay-hidden");
+
+      fireEvent.click(within(card).getByRole("button", { name: "Close" }));
+      expect(root(container)).toHaveClass("overlay-hidden");
+      // Hidden, nothing in it takes clicks any more.
+      expect(callsOf("overlay_set_hit_regions").at(-1)).toEqual({ regions: [], scale: 1 });
+    });
+
+    it("Esc closes it", async () => {
+      const { container } = await renderDictation();
+      await refuse();
+      expect(root(container)).not.toHaveClass("overlay-hidden");
+      fireEvent.keyDown(window, { key: "Escape" });
+      expect(root(container)).toHaveClass("overlay-hidden");
+    });
+
+    it("says Windows Settings on Windows (its microphone privacy page)", async () => {
+      document.documentElement.dataset.platform = "windows";
+      respond("open_privacy_settings", null);
+      await renderDictation();
+      await refuse();
+      fireEvent.click(screen.getByRole("button", { name: "Open Windows Settings" }));
+      expect(callsOf("open_privacy_settings")).toEqual([{ kind: "microphone" }]);
+    });
+
+    it("the next press that fails for another reason hides after a few seconds as before, with no settings button or close", async () => {
+      const { container } = await renderDictation();
+      await refuse();
+      expect(screen.getByRole("button", { name: "Open settings" })).toBeInTheDocument();
+      vi.useFakeTimers();
+      await emitEvent("overlay:visibility", true);
+      await emitEvent("dictation:state", { active: true, sounds: false, mode: "toggle", permission: null });
+      await pushChannelMessage({ kind: "status", live: false, recording: false, provider: null, message: "This computer is not signed in to an EchoLedger server yet." });
+      await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle", permission: null });
+      expect(screen.queryByRole("button", { name: "Open settings" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
+      expect(container.querySelector("[data-hit]")).toBeNull();
+      await act(async () => void vi.advanceTimersByTime(ENDED_MESSAGE_MS - 100));
+      expect(root(container)).not.toHaveClass("overlay-hidden");
+      await act(async () => void vi.advanceTimersByTime(200));
+      expect(root(container)).toHaveClass("overlay-hidden");
+    });
+
+    it("a dictation that starts has no settings button, no close and takes no clicks", async () => {
+      const { container } = await renderDictation();
+      await refuse();
+      await emitEvent("overlay:visibility", true);
+      await emitEvent("dictation:state", { active: true, sounds: false, mode: "toggle", permission: null });
+      expect(screen.getByText("Dictating — press the shortcut again to insert")).toBeInTheDocument();
+      expect(screen.queryByRole("button")).not.toBeInTheDocument();
+      expect(container.querySelector("[data-hit]")).toBeNull();
+    });
   });
 });

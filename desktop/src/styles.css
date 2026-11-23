@@ -714,6 +714,11 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .overlay-idle .overlay-card { opacity: 0; pointer-events: none; }
 .caption-message { color: var(--danger); }
 .dictation-card { display: block; min-height: 64px; }
+/* A permission kept dictation from starting: the settings button (the pill's text button on the same glass) and the
+   close, at the end of the box's head and at full strength. */
+.dictation-actions { opacity: 1; align-items: center; }
+.overlay-action { height: 24px; padding: 0 var(--space-3); border-radius: 12px; border: 1px solid var(--glass-border); background: var(--glass-hover); color: var(--glass-text); font: inherit; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out); }
+.overlay-action:hover { background: var(--glass-press); }
 .listening { display: inline-flex; gap: 3px; align-items: flex-end; height: 12px; }
 /* The bars grow from the bottom by scaling, not by their height (a layout property never moves). */
 .listening span { width: 3px; height: 12px; background: var(--accent); border-radius: 2px; transform-origin: bottom; animation: bar 1s infinite ease-in-out; }

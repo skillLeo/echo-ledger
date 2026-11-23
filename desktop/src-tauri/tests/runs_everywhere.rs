@@ -406,7 +406,8 @@ fn dictation_refused_opens_its_box_to_say_why() {
     let refused = &start[start.find("Access::Denied").unwrap()..start.find("dictation_text").unwrap()];
     assert!(refused.contains("set_overlay_visible(app, DICTATION, true)"));
     assert!(refused.contains("NO_DICTATION"));
-    assert!(refused.contains("emit_state(app, false)"), "the box hides by itself after a few seconds");
+    // D-108: the refusal names the permission, so the box stays with the button that opens its settings until closed.
+    assert!(refused.contains("emit_state_with(app, false, Some(\"microphone\"))"), "the box hears which permission refused");
 }
 
 /// What a recording says it is missing is read during the recording, not only before the prompts that settle it.
