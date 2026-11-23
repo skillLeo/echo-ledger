@@ -29,6 +29,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.R
+import com.echoledger.mobile.core.FilterSection
+import com.echoledger.mobile.core.LibraryFacets
+import com.echoledger.mobile.core.LibraryFilterSet
+import com.echoledger.mobile.core.LibraryKind
+import com.echoledger.mobile.core.LibraryPlace
+import com.echoledger.mobile.core.ProjectNode
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.ListDto
@@ -138,7 +144,10 @@ fun V2LibraryScreen(
     /** A transcript match of a search opens the recording at its moment. */
     onOpenAt: (LibraryItem, Long) -> Unit = { item, _ -> onOpen(item) },
     /** What the shell adds: the Calls chip, the Activity bell, the setup card and the Needs action banner. */
-    extras: LibraryExtras? = null
+    extras: LibraryExtras? = null,
+    /** The title menu's Shared ▸ Shared with me and Request files. */
+    onSharedWithMe: () -> Unit = {},
+    onRequests: () -> Unit = {}
 ) {
     val text = v2Text
     // U19: each row's snippet comes in its default view (Roman Urdu) once ready (transcript.preview_view says which).
@@ -173,40 +182,72 @@ fun V2LibraryScreen(
         }
     }
     val lists by vm.lists.collectAsState()
-    // The chip row (D14): one chip at a time; a list that is gone goes back to All.
-    var chosen by rememberSaveable { mutableStateOf(com.echoledger.mobile.core.LibraryLists.ALL) }
-    val chip = com.echoledger.mobile.core.LibraryLists.resolve(chosen, lists)
-    LaunchedEffect(chip) { if (chip != chosen) chosen = chip }
+    val savedViews by vm.savedViews.collectAsState()
+    val viewsReady by vm.savedViewsReady.collectAsState()
     // The lists are read on opening and again after each sync (another device may have changed them).
     LaunchedEffect(syncing) { if (!syncing) vm.loadLists() }
     var addingToList by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf<TranscribeAsk?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
-    var filters by remember(initialViews) {
-        mutableStateOf(
-            V2Filters(
-                base = com.echoledger.mobile.core.LibraryFilters(
-                    views = if (SavedView.Today in initialViews) setOf(com.echoledger.mobile.core.SmartView.TODAY) else emptySet()
-                ),
-                untranscribed = SavedView.Untranscribed in initialViews
-            )
-        )
+    // Where Library is (the title menu: a view, one of My views or a label), its filters (the contract's filter set) and
+    // its tab (All · Calls · Meetings · Voice notes), each kept across a rotation.
+    var targetKey by rememberSaveable(initialViews) { mutableStateOf(LibraryScreenState.initialTarget(initialViews).key) }
+    var filtersJson by rememberSaveable(initialViews) {
+        mutableStateOf(LibraryScreenState.json(LibraryScreenState.initialFilters(initialViews)))
     }
-    val viewKey = com.echoledger.mobile.core.LibraryGrouping.viewKey(filters.base)
+    val filters = remember(filtersJson) { LibraryScreenState.filters(filtersJson) }
+    fun setFilters(next: LibraryFilterSet) {
+        filtersJson = LibraryScreenState.json(next)
+    }
+    var kindKey by rememberSaveable { mutableStateOf(LibraryKind.ALL.name) }
+    val kind = LibraryKind.entries.firstOrNull { it.name == kindKey } ?: LibraryKind.ALL
+    // A list or a view that is gone (deleted here or elsewhere) goes back to All recordings.
+    val target = LibraryScreenState.resolve(LibraryTarget.parse(targetKey), lists, savedViews, viewsReady)
+    LaunchedEffect(target.key) { if (target.key != targetKey) targetKey = target.key }
+    // The Library tab tapped again: All recordings, with the filters, the tab and the search cleared (and the list at
+    // its top, LibraryExtras.scrollToTop).
+    val reset = extras?.scrollToTop ?: 0
+    var seenReset by rememberSaveable { androidx.compose.runtime.mutableIntStateOf(reset) }
+    LaunchedEffect(reset) {
+        if (reset > seenReset) {
+            seenReset = reset
+            targetKey = LibraryTarget.ALL.key
+            setFilters(LibraryFilterSet())
+            kindKey = LibraryKind.ALL.name
+            query = ""
+        }
+    }
+    val viewKey = LibraryScreenState.choiceKey(target, savedViews)
     val choice = settings.libraryViews[viewKey] ?: com.echoledger.mobile.core.LibraryViewChoice.DEFAULT
     var sortOpen by remember { mutableStateOf(false) }
     var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var folded by rememberSaveable { mutableStateOf(emptySet<String>()) }
     val locale = screenLocale()
     val now = remember(library) { ZonedDateTime.now() }
+    val today = now.toLocalDate()
     val yesterday = stringResource(R.string.v2_lib_yesterday)
     val todayWord = stringResource(R.string.v2_lib_today)
     val thisWeek = stringResource(R.string.v2_lib_this_week)
-    val visible = remember(library, filters, query, choice, settings.libraryOpened, chip, lists) {
-        val chipped = com.echoledger.mobile.core.LibraryLists.filter(library, chip, lists)
-        com.echoledger.mobile.core.LibraryQuery.apply(chipped, filters.base, query, choice.sortBy, opened = settings.libraryOpened)
-            .filter { !filters.untranscribed || LibraryModel.status(it).let { s -> s == RowStatus.Untranscribed || s == RowStatus.Failed } }
-            .filter { !filters.audioOnly || LibraryModel.audioOnly(it) }
+    // The person's projects as a tree; one a recording is in that the list doesn't have yet (offline) is offered too.
+    val projects = remember(clients, library) { LibraryScreenState.projects(clients, library) }
+    // Every rule of contract 2.0.0-p worked out here, from the synced library (LibraryFacets): instant and offline.
+    val facts = remember(library, projects, text) {
+        LibraryFacets.prepare(library, projects, now.zone, now.toInstant()) { LibraryScreenState.shownTitle(it, text) }
+    }
+    val words = remember(query) { LibraryFacets.searchWords(query) }
+    val searched = remember(facts, words) { facts.filter { it.matches(words) } }
+    val placed = remember(searched, target) { LibraryScreenState.inTarget(searched, target) }
+    val filtered = remember(placed, filters, today) { LibraryFacets.filter(placed, filters, today) }
+    val kindCounts = remember(filtered) { LibraryKind.entries.associateWith { k -> filtered.count { k.holds(it.source) } } }
+    val counted = remember(placed, kind) { placed.filter { kind.holds(it.source) } }
+    val visible = remember(filtered, kind, choice, settings.libraryOpened) {
+        com.echoledger.mobile.core.LibraryQuery.apply(
+            filtered.filter { kind.holds(it.source) }.map { it.item },
+            com.echoledger.mobile.core.LibraryFilters(),
+            "",
+            choice.sortBy,
+            opened = settings.libraryOpened
+        )
     }
     val groupNames = groupNames()
     val groups = remember(visible, choice, text, locale, groupNames) {
@@ -217,12 +258,34 @@ fun V2LibraryScreen(
     }
     val rows = remember(groups) { groups.flatMap { it.rows } }
     val sending by com.echoledger.mobile.core.RowProgress.uploads.collectAsState()
-    val uploads = remember(pending, text, sending) { uploadRows(pending, text, sending) }
+    // What waits on this phone: in All recordings, and in Needs you the ones that failed or are stuck.
+    val uploads = remember(pending, text, sending, target, now) {
+        when (target) {
+            LibraryTarget.ALL -> uploadRows(pending, text, sending)
+
+            LibraryTarget.Place(LibraryPlace.NEEDS_YOU) ->
+                uploadRows(pending.filter { LibraryScreenState.localNeeds(it, now.toInstant()) }, text, sending)
+
+            else -> emptyList()
+        }
+    }
     val folders = remember(library, clients) { com.echoledger.mobile.core.Organise.folders(library, clients) }
     val labels = remember(library) { com.echoledger.mobile.core.Organise.labels(library) }
-    val tags = remember(library) { com.echoledger.mobile.core.Bookmarks.tags(library) }
-    val viewCounts = remember(library, now) { com.echoledger.mobile.core.Organise.counts(library, now) }
-    val languages = remember(library) { library.mapNotNull { it.languageChip?.takeIf { l -> l.isNotBlank() } }.distinct().sorted() }
+    val res0 = androidx.compose.ui.platform.LocalContext.current.resources
+    val filterWords = remember(res0, locale, clients, lists, library) { LibraryScreenState.words(res0, locale, clients, lists, library) }
+    val depth = remember(projects) { LibraryFacets.depth(projects) }
+    val placeCounts = remember(facts, pending, now) {
+        LibraryFacets.placeCounts(facts) + (
+            LibraryPlace.NEEDS_YOU to LibraryFacets.needsYouCount(
+                facts,
+                pending.filter { LibraryScreenState.localNeeds(it, now.toInstant()) }.map { it.clientRef ?: it.id }
+            )
+            )
+    }
+    val labelCounts = remember(facts) { LibraryScreenState.labelCounts(facts) }
+    val openView = (target as? LibraryTarget.View)?.let { t -> savedViews.firstOrNull { it.id == t.id } }
+    val spec = LibraryScreenState.spec(filters, query, choice)
+    val viewChanged = openView != null && openView.spec.clean() != spec.clean()
     // Transcript words found on the server (two characters or more), beside the titles matched here.
     var found by remember { mutableStateOf<List<TranscriptMatch>>(emptyList()) }
     val q = query.trim()
@@ -419,6 +482,53 @@ fun V2LibraryScreen(
             s.copy(recentSearches = (listOf(w) + s.recentSearches.filterNot { it.equals(w, ignoreCase = true) }).take(5))
         }
     }
+    // A change to My views the server refused for good: given back or dropped, and said.
+    LaunchedEffect(vm) { vm.viewProblems.collect { toasts.show(viewWords(res, it)) } }
+    var menuOpen by remember { mutableStateOf(false) }
+    var filtersAt by remember { mutableStateOf<FilterSection?>(null) }
+    var filtersOpen by remember { mutableStateOf(false) }
+    var savingView by remember { mutableStateOf(false) }
+    var renamingView by remember { mutableStateOf<com.echoledger.mobile.data.MyView?>(null) }
+    var deletingView by remember { mutableStateOf<com.echoledger.mobile.data.MyView?>(null) }
+    var newLabel by remember { mutableStateOf(false) }
+    var renamingLabel by remember { mutableStateOf<ListDto?>(null) }
+    var recolouringLabel by remember { mutableStateOf<ListDto?>(null) }
+    var deletingLabel by remember { mutableStateOf<ListDto?>(null) }
+
+    /** Opens [t]: one of My views brings its filters, search and display; leaving one clears them. */
+    fun choose(t: LibraryTarget) {
+        menuOpen = false
+        picked = emptySet()
+        val view = (t as? LibraryTarget.View)?.let { v -> savedViews.firstOrNull { it.id == v.id } }
+        when {
+            view != null -> {
+                setFilters(view.spec.filterSet)
+                query = view.spec.search.orEmpty()
+                kindKey = LibraryKind.ALL.name
+                val key = LibraryScreenState.choiceKey(t, savedViews)
+                vm.updateSettings { it.copy(libraryViews = it.libraryViews + (key to LibraryScreenState.choiceOf(view.spec))) }
+            }
+
+            target is LibraryTarget.View -> {
+                setFilters(LibraryFilterSet())
+                query = ""
+            }
+        }
+        targetKey = t.key
+    }
+
+    /** Runs a change to My views; a refusal here (a name in use, 30 views…) is said, or returned for the sheet. */
+    fun views(change: () -> Unit): String? = try {
+        change()
+        null
+    } catch (e: com.echoledger.mobile.data.ViewError) {
+        viewWords(res, e)
+    }
+    val title = when (target) {
+        is LibraryTarget.Place -> placeName(target.place)
+        is LibraryTarget.Label -> lists.firstOrNull { it.key == target.label }?.name.orEmpty()
+        is LibraryTarget.View -> openView?.name.orEmpty()
+    }
     V2LibraryContent(
         state = state,
         query = query,
@@ -474,24 +584,47 @@ fun V2LibraryScreen(
                     canTranscribe = visible.any { it.id in ticked && LibraryModel.audioOnly(it) }
                 )
             },
-            filterRow = { LibraryFilterRow(filters, folders, labels, tags, languages, viewCounts) { filters = it } },
-            listRow = {
-                LibraryListRow(
-                    lists = lists,
-                    chip = chip,
-                    unread = com.echoledger.mobile.core.LibraryLists.unread(library),
-                    onChip = { chosen = it },
-                    actions = listActions
-                )
+            filterRow = {
+                LibraryKindRow(kind, kindCounts, filters.count, { kindKey = it.name }) {
+                    filtersAt = null
+                    filtersOpen = true
+                }
+                if (!filters.isEmpty) {
+                    LibraryPillsRow(
+                        filters,
+                        filterWords,
+                        onEdit = {
+                            filtersAt = it
+                            filtersOpen = true
+                        },
+                        onRemove = { setFilters(filters.clear(it)) },
+                        onClearAll = { setFilters(LibraryFilterSet()) },
+                        saveLabel = when {
+                            !viewsReady -> null
+                            viewChanged -> stringResource(R.string.v2_lf_save_changes)
+                            openView == null -> stringResource(R.string.v2_lf_save_view)
+                            else -> null
+                        },
+                        onSave = {
+                            val v = openView
+                            if (v != null && viewChanged) {
+                                views { vm.updateView(v.id, spec) }?.let { scope.launch { toasts.show(it) } }
+                            } else {
+                                savingView = true
+                            }
+                        }
+                    )
+                }
             },
-            emptyList = when (chip) {
-                com.echoledger.mobile.core.LibraryLists.ALL -> null
-                com.echoledger.mobile.core.LibraryLists.UNREAD -> stringResource(R.string.v2_lists_unread)
-                com.echoledger.mobile.core.LibraryLists.IMPORTANT -> stringResource(R.string.v2_lists_important)
-                else -> com.echoledger.mobile.core.LibraryLists.chosenList(chip, lists)?.name
+            emptyList = when (target) {
+                LibraryTarget.ALL -> null
+                else -> title
             },
-            filtered = filters.count > 0,
-            onClearFilters = { filters = V2Filters() },
+            filtered = !filters.isEmpty || kind != LibraryKind.ALL,
+            onClearFilters = {
+                setFilters(LibraryFilterSet())
+                kindKey = LibraryKind.ALL.name
+            },
             onSortGroup = { sortOpen = true },
             compact = choice.densityOf == com.echoledger.mobile.core.Density.COMPACT,
             swipes = settings.librarySwipes,
@@ -505,8 +638,136 @@ fun V2LibraryScreen(
                 onOpenAt(m.row.item, m.atMs)
             },
             recent = settings.recentSearches,
-            onKeepSearch = ::keepSearch
+            onKeepSearch = ::keepSearch,
+            title = title,
+            onTitle = { menuOpen = true }
         )
+    )
+    if (menuOpen) {
+        LibraryMenuSheet(
+            LibraryMenuData(target, placeCounts, savedViews, viewsReady, lists, labelCounts),
+            LibraryMenuActions(
+                onChoose = ::choose,
+                onNewView = {
+                    menuOpen = false
+                    if (filters.isEmpty && query.isBlank()) {
+                        filtersAt = null
+                        filtersOpen = true
+                    } else {
+                        savingView = true
+                    }
+                },
+                onRenameView = {
+                    menuOpen = false
+                    renamingView = it
+                },
+                onMoveView = { v, delta -> views { vm.moveView(v.id, delta) }?.let { scope.launch { toasts.show(it) } } },
+                onDeleteView = {
+                    menuOpen = false
+                    deletingView = it
+                },
+                onNewLabel = {
+                    menuOpen = false
+                    newLabel = true
+                },
+                onRenameLabel = {
+                    menuOpen = false
+                    renamingLabel = it
+                },
+                onRecolourLabel = {
+                    menuOpen = false
+                    recolouringLabel = it
+                },
+                onMoveLabel = { list, delta -> scope.launch { listActions.move(list, delta) } },
+                onDeleteLabel = {
+                    menuOpen = false
+                    deletingLabel = it
+                },
+                onSharedWithMe = {
+                    menuOpen = false
+                    onSharedWithMe()
+                },
+                onRequests = {
+                    menuOpen = false
+                    onRequests()
+                },
+                onTrash = {
+                    menuOpen = false
+                    onTrash()
+                }
+            ),
+            onDismiss = { menuOpen = false }
+        )
+    }
+    if (filtersOpen) {
+        LibraryFiltersSheet(
+            start = filters,
+            words = filterWords,
+            counts = { draft -> LibraryFacets.facets(counted, draft, facts, today, projects, lists.map { it.name }) },
+            total = { draft -> LibraryFacets.filter(counted, draft, today).size },
+            depth = depth,
+            labelColour = { key -> lists.firstOrNull { it.key == key }?.color },
+            focus = filtersAt,
+            canSave = viewsReady && openView == null,
+            onSave = { draft ->
+                setFilters(draft)
+                filtersOpen = false
+                savingView = true
+            },
+            onDismiss = { filtersOpen = false }
+        ) { draft ->
+            setFilters(draft)
+            filtersOpen = false
+        }
+    }
+    if (savingView) {
+        ViewNameSheet(stringResource(R.string.v2_lf_save_view_title), "", { savingView = false }) { name ->
+            try {
+                val made = vm.createView(name, spec)
+                savingView = false
+                targetKey = LibraryTarget.View(made.id).key
+                val key = LibraryScreenState.choiceKey(LibraryTarget.View(made.id), listOf(made))
+                vm.updateSettings { it.copy(libraryViews = it.libraryViews + (key to choice)) }
+                null
+            } catch (e: com.echoledger.mobile.data.ViewError) {
+                viewWords(res, e)
+            }
+        }
+    }
+    renamingView?.let { v ->
+        ViewNameSheet(stringResource(R.string.v2_lf_rename_view), v.name, { renamingView = null }) { name ->
+            views { vm.renameView(v.id, name) }.also { if (it == null) renamingView = null }
+        }
+    }
+    deletingView?.let { v ->
+        com.echoledger.mobile.ui.v2.components.EchoDialog(
+            title = stringResource(R.string.v2_lf_delete_view_title, v.name),
+            text = stringResource(R.string.v2_lf_delete_view_body),
+            confirmLabel = text.delete,
+            onConfirm = {
+                deletingView = null
+                if (target == LibraryTarget.View(v.id)) choose(LibraryTarget.ALL)
+                views { vm.deleteView(v.id) }?.let { scope.launch { toasts.show(it) } }
+            },
+            dismissLabel = text.cancel,
+            onDismiss = { deletingView = null },
+            destructive = true
+        )
+    }
+    LabelSheets(
+        lists = lists,
+        creating = newLabel,
+        renaming = renamingLabel,
+        recolouring = recolouringLabel,
+        deleting = deletingLabel,
+        actions = listActions,
+        onDone = {
+            newLabel = false
+            renamingLabel = null
+            recolouringLabel = null
+            deletingLabel = null
+        },
+        onMade = { choose(LibraryTarget.Label(it.key)) }
     )
 }
 
@@ -531,6 +792,7 @@ class LibraryTools(
     val onToggle: (V2Row) -> Unit,
     val onSelectGroup: (RowGroup) -> Unit,
     val selectionBar: @Composable () -> Unit,
+    /** Under the search: [Filters n] and the tabs All · Calls · Meetings · Voice notes, then the pills while filters are on. */
     val filterRow: @Composable () -> Unit,
     val filtered: Boolean,
     val onClearFilters: () -> Unit,
@@ -542,16 +804,17 @@ class LibraryTools(
     val onPin: (V2Row) -> Unit,
     val matches: List<TranscriptMatch>,
     val onOpenAt: (TranscriptMatch) -> Unit,
-    /** The chip row of lists (D14): All · Unread · Important · the person's lists · "+". */
-    val listRow: (@Composable () -> Unit)? = null,
-    /** The chosen chip's name while one other than All is chosen: an empty list says "Nothing in Clients yet". */
+    /** The place's name while one other than All recordings shows: an empty one says "Nothing in Clients yet". */
     val emptyList: String? = null,
     /** The last five searches on this phone (classic's), offered while the search field is focused and empty. */
     val recent: List<String> = emptyList(),
     /** Keeps a search among [recent]: on the keyboard's Search, on leaving search, on opening what it found. */
     val onKeepSearch: (String) -> Unit = {},
     /** Rows swipe (right Pin, left Delete); Settings › Appearance › Swipe actions turns them off. */
-    val swipes: Boolean = true
+    val swipes: Boolean = true,
+    /** What the list shows ("All recordings", a label, one of My views): the title, which opens [onTitle]'s menu. */
+    val title: String? = null,
+    val onTitle: (() -> Unit)? = null
 )
 
 /** LibraryGrouping's fixed English names in the screen's language. */
@@ -621,7 +884,13 @@ fun V2LibraryContent(
         if (selecting) {
             tools!!.selectionBar()
         } else {
-            EchoTopBar(stringResource(R.string.v2_library), large = true) {
+            // With the full Library the title says what the list shows and opens the menu of places (All recordings ▾).
+            EchoTopBar(
+                tools?.title ?: stringResource(R.string.v2_library),
+                large = tools?.onTitle == null,
+                onTitleClick = tools?.onTitle,
+                titleClickLabel = stringResource(R.string.v2_lf_choose_view)
+            ) {
                 onProjects?.let { EchoIconButton(EchoIcons.Folder, stringResource(R.string.v2_ws_projects), it) }
                 if (tools == null) EchoIconButton(EchoIcons.Delete, text.trash, onTrash)
                 extras?.actions?.invoke()
@@ -647,12 +916,13 @@ fun V2LibraryContent(
                                         tools.onSync()
                                     }
                                 )
+                                // Sort & display (PLAN_LIBRARY_FILTERS §2); Trash is in the title's menu.
                                 androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.v2_lib_recently_deleted), style = EchoV2.type.body) },
-                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Delete, null) },
+                                    text = { Text(stringResource(R.string.v2_lf_sort_display), style = EchoV2.type.body) },
+                                    leadingIcon = { androidx.compose.material3.Icon(EchoIcons.Sort, null) },
                                     onClick = {
                                         menu = false
-                                        onTrash()
+                                        tools.onSortGroup()
                                     }
                                 )
                             }
@@ -687,10 +957,8 @@ fun V2LibraryContent(
                     Modifier.weight(1f).onFocusChanged { searchFocused = it.isFocused },
                     onSearch = { tools?.onKeepSearch?.invoke(it) }
                 )
-                tools?.let { EchoIconButton(EchoIcons.Sort, stringResource(R.string.v2_lib_sort_group), it.onSortGroup) }
             }
             if (tools != null) {
-                tools.listRow?.invoke()
                 tools.filterRow()
             } else {
                 EchoFilterBar(
@@ -759,8 +1027,8 @@ fun V2LibraryContent(
                                 )
 
                                 tools?.filtered == true -> EchoEmptyState(
-                                    stringResource(R.string.v2_lib_nothing_matches),
-                                    stringResource(R.string.v2_lib_nothing_matches_body),
+                                    stringResource(R.string.v2_lf_no_match),
+                                    stringResource(R.string.v2_lf_no_match_body),
                                     icon = EchoIcons.Search,
                                     actionLabel = stringResource(R.string.v2_lib_clear_filters),
                                     onAction = tools.onClearFilters

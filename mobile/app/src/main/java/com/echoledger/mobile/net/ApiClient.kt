@@ -760,6 +760,38 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(request("lists/order").put(body).build(), com.echoledger.mobile.data.ListsResponse.serializer())!!.data
     }
 
+    // ---- Saved views (contract 2.0.0-p) ----------------------------------------------------------------------------
+
+    /** `GET /api/views`: the person's views in their order, and their version. */
+    suspend fun views(): com.echoledger.mobile.data.SavedViewsAnswer =
+        call(request("views").get().build(), com.echoledger.mobile.data.SavedViewsAnswer.serializer())!!
+
+    /** `POST /api/views`: a new view at the end of My views; the same [body]'s `client_ref` again answers the one it made. */
+    suspend fun createView(body: kotlinx.serialization.json.JsonObject): com.echoledger.mobile.data.SavedViewAnswer = call(
+        request("views").post(body.toString().toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.SavedViewAnswer.serializer()
+    )!!
+
+    /** `PATCH /api/views/{id}`: the fields in [body] change, the others stay. */
+    suspend fun updateView(id: String, body: kotlinx.serialization.json.JsonObject): com.echoledger.mobile.data.SavedViewAnswer = call(
+        request("views/" + java.net.URLEncoder.encode(id, "UTF-8")).patch(body.toString().toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.SavedViewAnswer.serializer()
+    )!!
+
+    /** `DELETE /api/views/{id}`. */
+    suspend fun deleteView(id: String): com.echoledger.mobile.data.SavedViewDeleted = call(
+        request("views/" + java.net.URLEncoder.encode(id, "UTF-8")).delete().build(),
+        com.echoledger.mobile.data.SavedViewDeleted.serializer()
+    )!!
+
+    /** `PUT /api/views/order`: every view's id once, in the new order. */
+    suspend fun orderViews(ids: List<String>): com.echoledger.mobile.data.SavedViewsAnswer {
+        val body = buildJsonObject {
+            put("ids", buildJsonArray { ids.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+        }.toString().toRequestBody(jsonType)
+        return call(request("views/order").put(body).build(), com.echoledger.mobile.data.SavedViewsAnswer.serializer())!!
+    }
+
     /** `POST /api/sessions/bulk` (since v1.1): one action for up to 200 recordings; how many changed. */
     suspend fun bulk(ids: List<String>, action: String, clientId: String? = null, label: String? = null): Int {
         val body = buildJsonObject {
@@ -841,7 +873,7 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(request("clients/$id").patch(body).build(), ClientResponse.serializer())!!.data
     }
 
-    /** `DELETE /api/clients/{id}`: its recordings go to the Inbox, its subfolders up a level. */
+    /** `DELETE /api/clients/{id}`: its recordings go to No project, its subfolders up a level. */
     suspend fun deleteProject(id: String): DeletedProjectAnswer =
         call(request("clients/$id").delete().build(), DeletedProjectAnswer.serializer())!!
 

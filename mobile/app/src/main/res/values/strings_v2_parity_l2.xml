@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The new design's Projects folders, Shared with me and Request files (parity.csv PH-OTH-019…021). values-ur/ has the same keys. -->
 <resources>
-    <string name="v2_fold_inbox">Inbox</string>
+    <string name="v2_fold_inbox">No project</string>
     <string name="v2_fold_whatsapp">WhatsApp</string>
     <string name="v2_fold_whatsapp_business">WhatsApp Business</string>
     <string name="v2_fold_google_meet">Google Meet</string>
@@ -29,7 +29,7 @@
     <string name="v2_fold_remove">Remove</string>
     <string name="v2_req_title">Request files</string>
     <string name="v2_req_new">New request link</string>
-    <string name="v2_req_intro">Anyone with a request link can send you voice notes and audio (and files, for a project). They land in the Inbox or the project.</string>
+    <string name="v2_req_intro">Anyone with a request link can send you voice notes and audio (and files, for a project). They land in No project or in the project.</string>
     <string name="v2_req_title_they_see">Title they see</string>
     <string name="v2_req_files_go_to">Files go to</string>
     <string name="v2_req_make">Make link</string>

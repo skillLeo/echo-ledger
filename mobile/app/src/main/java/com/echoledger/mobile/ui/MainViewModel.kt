@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -122,6 +123,39 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         SelfUpdate.restore(app)
+        // My views are the account's own (the server, the email and the workspace): the copy follows who is signed in.
+        viewModelScope.launch {
+            settings.map { s ->
+                com.echoledger.mobile.data.SavedViewsRepository.accountKey(s.serverUrl, s.account?.email, s.plan.workspaceId)
+                    ?: s.serverUrl?.let { graph.views.lastAccount(it) }
+            }.distinctUntilChanged().collect { graph.views.use(it) }
+        }
+    }
+
+    /** My views (contract 2.0.0-p): the account's saved filter sets, in their order; empty until the account is known. */
+    val savedViews: StateFlow<List<com.echoledger.mobile.data.MyView>> = graph.views.views
+
+    /** Whether My views can show and change (the account is known). */
+    val savedViewsReady: StateFlow<Boolean> = graph.views.ready
+
+    /** A change to My views the server refused for good: given back or dropped, and said once. */
+    val viewProblems: kotlinx.coroutines.flow.SharedFlow<com.echoledger.mobile.data.ViewProblem> = graph.views.problems
+
+    /** Makes one of My views; throws [com.echoledger.mobile.data.ViewError] when it can't be made. */
+    fun createView(name: String, spec: com.echoledger.mobile.data.ViewSpec): com.echoledger.mobile.data.MyView =
+        graph.views.create(name, spec)
+
+    fun renameView(id: String, name: String) = graph.views.rename(id, name)
+
+    fun updateView(id: String, spec: com.echoledger.mobile.data.ViewSpec) = graph.views.update(id, spec)
+
+    fun deleteView(id: String) = graph.views.remove(id)
+
+    fun moveView(id: String, delta: Int) = graph.views.move(id, delta)
+
+    /** After a library sync: My views sent and read again when the sync's `views_version` is not the copy's. */
+    private suspend fun syncViews() {
+        runCatching { graph.views.sync(graph.library.viewsVersion.value) }
     }
 
     /** Since v1.5: the website build's own updates (the Google Play build always stays idle). */
@@ -469,6 +503,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         workspaceCall("Signing out failed.") { it.signOutEverywhere() } ?: return false
         graph.settings.clearPairing()
         graph.library.clear()
+        graph.views.clear()
         return true
     }
 
@@ -492,6 +527,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun unpair() = viewModelScope.launch {
         graph.settings.clearPairing()
         graph.library.clear()
+        graph.views.clear()
         graph.invalidateApi()
         WidgetStateStore.refresh(getApplication())
     }
@@ -518,7 +554,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The live status (since 1.3.2): the library again, without the pull-to-refresh spinner or a config fetch. */
     fun refreshQuietly() = viewModelScope.launch(Dispatchers.IO) {
-        runCatching { graph.library.refresh() }
+        if (runCatching { graph.library.refresh() }.isSuccess) syncViews()
         // Since v1.6: the widget's "Transcribing · part 2 of 3" moves with the app's.
         WidgetStateStore.refresh(getApplication())
     }
@@ -565,6 +601,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState.withEntitlements(it.plan, e)) }
                 }
                 graph.library.refresh()
+                syncViews()
             }
             com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())
             com.echoledger.mobile.calls.MissedRecordingWorker.schedule(getApplication(), graph.settings.current())
@@ -576,6 +613,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             // Revoked on the server: back to the pairing screen. Recordings waiting to upload stay on the phone.
             graph.settings.clearPairing()
             graph.library.clear()
+            graph.views.clear()
             graph.invalidateApi()
             WidgetStateStore.refresh(getApplication())
             _message.value = "This phone was signed out on the server. Sign in again."
@@ -1018,12 +1056,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         (workspaceCall("The project could not be moved.") { it.updateProject(id, parentId = parentId, toTop = parentId == null) } != null)
             .also { if (it) reloadClients() }
 
-    /** Deletes a project: its recordings go to the Inbox and its subfolders up a level (said in the message). */
+    /** Deletes a project: its recordings go to No project and its subfolders up a level (said in the message). */
     suspend fun deleteProject(id: String): Boolean {
         val answer = workspaceCall("The project could not be deleted.") { it.deleteProject(id) } ?: return false
         _message.value = buildString {
             append("Project deleted")
-            if (answer.movedSessions > 0) append(" · ${countLabel(answer.movedSessions)} moved to the Inbox")
+            if (answer.movedSessions > 0) append(" · ${countLabel(answer.movedSessions)} moved to No project")
         }
         reloadClients()
         refresh()

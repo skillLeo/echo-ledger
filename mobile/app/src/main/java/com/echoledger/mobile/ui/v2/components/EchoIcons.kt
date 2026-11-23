@@ -31,6 +31,8 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.FolderShared
@@ -46,12 +48,14 @@ import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.KeyboardVoice
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.ManageAccounts
+import androidx.compose.material.icons.outlined.MarkChatUnread
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MicOff
 import androidx.compose.material.icons.outlined.MoreVert
@@ -235,4 +239,16 @@ object EchoIcons {
 
     /** Copy one detail (a payment detail, a reference). */
     val Copy: ImageVector get() = Icons.Outlined.ContentCopy
+
+    /** Library's [Filters n]. */
+    val Filters: ImageVector get() = Icons.Outlined.FilterList
+
+    /** One of My views (a saved filter set). */
+    val SavedView: ImageVector get() = Icons.Outlined.FilterAlt
+
+    /** Library › Unread. */
+    val Unread: ImageVector get() = Icons.Outlined.MarkChatUnread
+
+    /** An open group folds up again. */
+    val Collapse: ImageVector get() = Icons.Outlined.KeyboardArrowUp
 }

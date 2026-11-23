@@ -31,9 +31,6 @@ import com.echoledger.mobile.ui.v2.components.RenameListWords
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import kotlinx.coroutines.launch
 
-/** The chip row's tag: its chips are tabs of the Library's own, apart from the bar's (tests tell the two apart). */
-const val LIST_ROW_TAG = "library-lists"
-
 /** What the chip row asks of the screen: create answers the new list (null when it was refused), rename whether it worked. */
 interface ListActions {
     suspend fun create(name: String, colour: String): ListDto?
@@ -90,92 +87,36 @@ fun newListWords(): NewListWords = NewListWords(
 )
 
 /**
- * The Library's chip row (D14): All · Unread (with its count) · Important · the person's lists in their order · "+".
- * One is chosen at a time ([chip], [onChip]). "+" makes a list in two steps (its name, then its colour with the least
- * used one chosen) and chooses it. A long press on a list opens its menu: Rename…, Change colour…, Move left / Move
- * right (as the screen reads: swapped right to left), and Delete list… after asking.
+ * The title menu's Labels (lists are labels, contract 2.0.0-m): + New label makes one in two steps (its name, then its
+ * colour with the least used one chosen) and shows it; a label's ⋮ renames it, changes its colour or deletes it after
+ * asking. One sheet at a time, the one whose state is set; [onDone] closes it.
  */
 @Composable
-fun LibraryListRow(
+fun LabelSheets(
     lists: List<ListDto>,
-    chip: String,
-    unread: Int,
-    onChip: (String) -> Unit,
+    creating: Boolean,
+    renaming: ListDto?,
+    recolouring: ListDto?,
+    deleting: ListDto?,
     actions: ListActions,
-    modifier: Modifier = Modifier
+    onDone: () -> Unit,
+    onMade: (ListDto) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var creating by remember { mutableStateOf(false) }
-    var menuFor by remember { mutableStateOf<String?>(null) }
-    var renaming by remember { mutableStateOf<ListDto?>(null) }
-    var recolouring by remember { mutableStateOf<ListDto?>(null) }
-    var deleting by remember { mutableStateOf<ListDto?>(null) }
     val names = lists.map { it.name }
     val reserved = LibraryLists.RESERVED + fixedChipWords()
-    EchoListChipRow(
-        onAdd = { creating = true },
-        addLabel = stringResource(R.string.v2_lists_add),
-        modifier = modifier.testTag(LIST_ROW_TAG)
-    ) {
-        EchoListChip(stringResource(R.string.v2_lists_all), chip == LibraryLists.ALL, { onChip(LibraryLists.ALL) }, fixed = true)
-        EchoListChip(
-            stringResource(R.string.v2_lists_unread),
-            chip == LibraryLists.UNREAD,
-            { onChip(LibraryLists.UNREAD) },
-            fixed = true,
-            count = unread
-        )
-        EchoListChip(
-            stringResource(R.string.v2_lists_important),
-            chip == LibraryLists.IMPORTANT,
-            { onChip(LibraryLists.IMPORTANT) },
-            fixed = true
-        )
-        lists.forEachIndexed { i, list ->
-            Box {
-                EchoListChip(
-                    list.name,
-                    chip == LibraryLists.chipOf(list),
-                    { onChip(LibraryLists.chipOf(list)) },
-                    stored = list.color,
-                    onMenu = { menuFor = list.key },
-                    menuLabel = stringResource(R.string.v2_lists_options),
-                    menu = {
-                        EchoListChipMenu(
-                            expanded = menuFor == list.key,
-                            onDismiss = { menuFor = null },
-                            words = ListChipMenuWords(
-                                stringResource(R.string.v2_lists_rename),
-                                stringResource(R.string.v2_lists_recolour),
-                                stringResource(R.string.v2_lists_move_left),
-                                stringResource(R.string.v2_lists_move_right),
-                                stringResource(R.string.v2_lists_delete)
-                            ),
-                            canMoveEarlier = i > 0,
-                            canMoveLater = i < lists.lastIndex,
-                            onRename = { renaming = list },
-                            onRecolour = { recolouring = list },
-                            onMoveEarlier = { scope.launch { actions.move(list, -1) } },
-                            onMoveLater = { scope.launch { actions.move(list, +1) } },
-                            onDelete = { deleting = list }
-                        )
-                    }
-                )
-            }
-        }
-    }
     if (creating) {
         EchoNewListSheet(
             existing = names,
             usedColours = lists.map { it.color },
-            words = newListWords(),
-            onDismiss = { creating = false },
+            words = newListWords().copy(title = stringResource(R.string.v2_lf_new_label), name = stringResource(R.string.v2_lf_label_name)),
+            onDismiss = onDone,
             reserved = reserved
         ) { name, colour ->
             scope.launch {
                 actions.create(name, colour)?.let { made ->
-                    creating = false
-                    onChip(LibraryLists.chipOf(made))
+                    onDone()
+                    onMade(made)
                 }
             }
         }
@@ -185,14 +126,14 @@ fun LibraryListRow(
             current = list.name,
             existing = names,
             words = RenameListWords(
-                stringResource(R.string.v2_lists_rename_title),
-                stringResource(R.string.v2_lists_name),
+                stringResource(R.string.v2_lf_rename_label),
+                stringResource(R.string.v2_lf_label_name),
                 stringResource(R.string.v2_lists_save),
                 nameClash()
             ),
-            onDismiss = { renaming = null },
+            onDismiss = onDone,
             reserved = reserved
-        ) { name -> scope.launch { if (actions.rename(list, name)) renaming = null } }
+        ) { name -> scope.launch { if (actions.rename(list, name)) onDone() } }
     }
     recolouring?.let { list ->
         EchoListColourSheet(
@@ -200,9 +141,9 @@ fun LibraryListRow(
             stored = list.color,
             names = colourNames(),
             saveLabel = stringResource(R.string.v2_lists_save),
-            onDismiss = { recolouring = null }
+            onDismiss = onDone
         ) { colour ->
-            recolouring = null
+            onDone()
             scope.launch { actions.recolour(list, colour) }
         }
     }
@@ -212,15 +153,15 @@ fun LibraryListRow(
             name = list.name,
             words = DeleteListWords(
                 title = { res.getString(R.string.v2_lists_delete_title, it) },
-                body = stringResource(R.string.v2_lists_delete_body),
+                body = stringResource(R.string.v2_lf_delete_label_body),
                 confirm = stringResource(R.string.v2_lists_delete_confirm),
                 cancel = v2Text.cancel
             ),
             onConfirm = {
-                deleting = null
+                onDone()
                 scope.launch { actions.delete(list) }
             },
-            onDismiss = { deleting = null }
+            onDismiss = onDone
         )
     }
 }

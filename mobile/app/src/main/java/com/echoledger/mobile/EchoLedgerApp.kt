@@ -120,6 +120,11 @@ class AppGraph(val context: Context) {
 
     val recordings: RecordingStore by lazy { RecordingStore(context, recordingCipher) }
     val library: LibraryRepository by lazy { LibraryRepository(context, secretCipher) { api() } }
+
+    /** My views (contract 2.0.0-p): a copy per account, kept in step with `/api/views`. */
+    val views: com.echoledger.mobile.data.SavedViewsRepository by lazy {
+        com.echoledger.mobile.data.SavedViewsRepository(context, secretCipher, scope) { api() }
+    }
     val helper: HelperConnection by lazy { HelperConnection(context) }
 
     /** When this phone last sent its device report (Help v2's Contact support). */

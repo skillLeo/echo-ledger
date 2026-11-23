@@ -38,7 +38,7 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import kotlinx.coroutines.launch
 
 /**
- * The Projects list (Workspaces, behind `ui_v2.ask`), as classic's Projects tab: the smart folders (Inbox, each app,
+ * The Projects list (Workspaces, behind `ui_v2.ask`), as classic's Projects tab: the smart folders (No project, each app,
  * Imported, Shared with me) with their counts, then the top-level projects with their recordings, folders and last
  * call; New project, and Request files in the top bar.
  */

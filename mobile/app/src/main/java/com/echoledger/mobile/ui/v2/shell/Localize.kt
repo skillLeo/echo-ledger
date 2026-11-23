@@ -137,10 +137,10 @@ object VmMessages {
         Template("Signed in as \$email", Regex("""Signed in as (.+)"""), R.string.v2_vm_signed_in_as),
         Template("Sent to \$sent people", Regex("""Sent to (\d+) people"""), R.string.v2_vm_sent_many),
         Template(
-            " · \${countLabel(answer.movedSessions)} moved to the Inbox",
-            Regex("""Project deleted · (\d+ recordings?) moved to the Inbox"""),
+            " · \${countLabel(answer.movedSessions)} moved to No project",
+            Regex("""Project deleted · (\d+ recordings?) moved to No project"""),
             R.string.v2_vm_project_deleted_moved,
-            sample = "Project deleted · 3 recordings moved to the Inbox"
+            sample = "Project deleted · 3 recordings moved to No project"
         ),
         Template("\$changed deleted", Regex("""(\d+) deleted"""), R.string.v2_vm_many_deleted),
         Template("\$changed recordings updated", Regex("""(\d+) recordings updated"""), R.string.v2_vm_many_updated),

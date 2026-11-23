@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
@@ -146,16 +147,16 @@ class V2LibraryParityTest : ScreenTest() {
     }
 
     @Test
-    fun eachAppliedFilterChipHasItsOwnClear() {
+    fun eachAppliedFilterHasItsPillWithItsOwnRemove() {
         twoRows()
-        compose.onAllNodes(hasContentDescription("Clear Views")).assertCountEquals(0)
-        compose.onNodeWithText("Views ▾").performClick()
-        compose.onNode(hasText("Untranscribed") and isToggleable()).performClick()
-        compose.onNodeWithText("Apply").performClick()
+        compose.onAllNodes(hasContentDescription("Remove Status: Not transcribed")).assertCountEquals(0)
+        compose.onNode(hasContentDescription("Filters") and hasClickAction()).performClick()
+        compose.onNode(hasText("Not transcribed") and isToggleable()).performScrollTo().performClick()
+        compose.onNodeWithText("Show 1 result").performClick()
         compose.onNodeWithText("Bilal Traders", substring = true).assertDoesNotExist()
-        compose.onNodeWithContentDescription("Clear Views").performClick()
+        compose.onNodeWithContentDescription("Remove Status: Not transcribed").performClick()
         compose.onNodeWithText("Bilal Traders", substring = true).assertExists()
-        compose.onAllNodes(hasContentDescription("Clear Views")).assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("Remove Status: Not transcribed")).assertCountEquals(0)
     }
 
     @Test

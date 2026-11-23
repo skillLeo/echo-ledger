@@ -97,7 +97,7 @@ fun folderIcon(folder: SmartFolder): ImageVector = when (folder) {
 }
 
 /**
- * The Folders of the Projects list (classic's rule, [SmartFolder.listed]): the Inbox always, Shared with me when the
+ * The Folders of the Projects list (classic's rule, [SmartFolder.listed]): No project always, Shared with me when the
  * server has it, the others once they hold something, each with how many it holds.
  */
 @Composable
@@ -286,7 +286,7 @@ private fun requestMeta(link: RequestLinkDto, projects: List<ClientDto>): String
 
 /**
  * Request files (classic's RequestLinksScreen on the new components): a request link lets anyone send voice notes and
- * audio (and files, for a project) into the Inbox or a project. New request link takes the title they see, where the
+ * audio (and files, for a project) into No project or a project. New request link takes the title they see, where the
  * files go and how long it works; the new link is shown once with Copy and Share…; Turn off asks first, as it stops
  * the link for everyone who has it.
  */

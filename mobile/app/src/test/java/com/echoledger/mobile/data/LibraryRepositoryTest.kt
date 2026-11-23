@@ -212,6 +212,31 @@ class LibraryRepositoryTest : AppTest() {
         assertEquals("2026-10-24T09:05:00+00:00", libraryRequests().last().url.queryParameter("since"))
     }
 
+    /**
+     * Contract 2.0.0-p: items carry ended_at, facets and processing_since, which a cache kept before has none of. Such a
+     * cache still shows at once; its next sync reads the whole library (no since) and replaces it, then syncs as before.
+     */
+    @Test
+    fun `a cache from before 2_0_0-p is read whole once and replaced`() = runBlocking {
+        val old = """{"since":"2026-10-24T09:05:00+00:00","items":[${item("a")},${item("gone")}]}"""
+        cacheFile.writeBytes(app.graph.secretCipher.encrypt(old.toByteArray(), "echoledger.library".toByteArray()))
+        val repo = repository()
+        assertEquals(setOf("a", "gone"), repo.items.value.map { it.id }.toSet())
+        val facets = "\"facets\":{\"source\":\"whatsapp\",\"status\":\"transcribed\",\"language\":\"ur\"}"
+        val fresh = item("a").replace("\"updated_at\"", "$facets,\"updated_at\"")
+        server.on("GET", "/api/library", page(fresh, time = "2026-11-23T10:00:00+00:00"))
+        repo.refresh()
+        assertNull("the whole library again", libraryRequests().last().url.queryParameter("since"))
+        assertEquals(listOf("a"), repo.items.value.map { it.id })
+        assertEquals("ur", repo.items.value.single().facets?.language)
+        // From then on only what changed, from this phone's copy too.
+        val reopened = repository()
+        assertEquals("ur", reopened.items.value.single().facets?.language)
+        server.on("GET", "/api/library", page(time = "2026-11-23T10:05:00+00:00"))
+        reopened.refresh()
+        assertEquals("2026-11-23T10:00:00+00:00", libraryRequests().last().url.queryParameter("since"))
+    }
+
     @Test
     fun `the cache keeps up with later syncs`() = runBlocking {
         val repo = repository()

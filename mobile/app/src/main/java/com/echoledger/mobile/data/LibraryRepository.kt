@@ -17,18 +17,31 @@ class LibraryRepository(
     private val cipher: SecretCipher,
     private val api: suspend () -> com.echoledger.mobile.net.ApiClient?
 ) {
+    /**
+     * [format] 2 since 2.0.0-p: the items carry `ended_at`, `facets` and `processing_since`. A cache kept before has
+     * none of them, so its next sync reads the whole library again (and replaces it) instead of only what changed.
+     */
     @Serializable
-    private data class Cache(val since: String? = null, val items: List<LibraryItem> = emptyList())
+    private data class Cache(val since: String? = null, val items: List<LibraryItem> = emptyList(), val format: Int = 1)
 
     private val file = File(context.noBackupFilesDir, "library.bin")
     private val lock = Mutex()
     private var since: String? = null
+
+    /** The cache is from before 2.0.0-p: the next sync reads everything and replaces it. */
+    private var stale = false
     private val _items = MutableStateFlow(emptyList<LibraryItem>())
     val items: StateFlow<List<LibraryItem>> = _items
 
+    private val _viewsVersion = MutableStateFlow<Long?>(null)
+
+    /** The person's saved views' version, as the last sync said (2.0.0-p); null before one or from an older server. */
+    val viewsVersion: StateFlow<Long?> = _viewsVersion
+
     init {
         load()?.let {
-            since = it.since
+            stale = it.format < FORMAT
+            since = it.since.takeUnless { _ -> stale }
             _items.value = it.items
         }
     }
@@ -38,15 +51,20 @@ class LibraryRepository(
         var cursor: String? = null
         var changed = 0
         var serverTime: String? = null
-        var current = _items.value
+        // The whole read owed after an update of the cache's format replaces the items: nothing old stays.
+        var current = if (stale) emptyList() else _items.value
         do {
             val page = client.library(since, cursor)
             changed += page.data.size
-            if (serverTime == null) serverTime = page.serverTime
+            if (serverTime == null) {
+                serverTime = page.serverTime
+                page.viewsVersion?.let { _viewsVersion.value = it }
+            }
             current = merge(current, page.data)
             cursor = page.nextCursor
         } while (cursor != null)
         since = serverTime // the do/while runs once and always sets it
+        stale = false
         _items.value = current
         save(Cache(since, current))
         changed
@@ -88,7 +106,9 @@ class LibraryRepository(
 
     fun clear() {
         since = null
+        stale = false
         _items.value = emptyList()
+        _viewsVersion.value = null
         file.delete()
     }
 
@@ -97,8 +117,10 @@ class LibraryRepository(
         ApiJson.decodeFromString(Cache.serializer(), String(plain))
     }.getOrNull()
 
+    /** Keeps [cache] in the current format (still the old one while a whole read is owed). */
     private fun save(cache: Cache) {
-        val enc = cipher.encrypt(ApiJson.encodeToString(Cache.serializer(), cache).toByteArray(), CONTEXT)
+        val kept = cache.copy(format = if (stale) 1 else FORMAT)
+        val enc = cipher.encrypt(ApiJson.encodeToString(Cache.serializer(), kept).toByteArray(), CONTEXT)
         val tmp = File(file.parentFile, "library.bin.tmp")
         tmp.writeBytes(enc)
         tmp.renameTo(file)
@@ -106,6 +128,9 @@ class LibraryRepository(
 
     companion object {
         private val CONTEXT = "echoledger.library".toByteArray()
+
+        /** The cache's format: 2 since 2.0.0-p (see [Cache]). */
+        private const val FORMAT = 2
 
         /** Pure merge (unit-tested): tombstones remove, newer versions replace, unknown items insert. */
         fun merge(existing: List<LibraryItem>, incoming: List<LibraryItem>): List<LibraryItem> {

@@ -1,20 +1,25 @@
 package com.echoledger.mobile.ui.v2
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollTo
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
+import com.echoledger.mobile.ui.v2.library.PILLS_ROW_TAG
 import com.echoledger.mobile.ui.v2.library.V2LibraryScreen
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
@@ -25,10 +30,11 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 /**
- * Each of Library's filter chips does what classic's does (parity.csv PH-LIB-015…021, 044): Source (Phone, Desktop, Web,
- * several at once, with a count), Date (Today and This week with how many each holds; a date and a mark narrow each
- * other), Project (No project and every project), Language (the languages the recordings have), Bookmark (Any bookmark
- * and each tag), Label (only when there are labels), and the row's source mark with its device badge.
+ * Each of classic's Library filters has its home in the Filters sheet (parity.csv PH-LIB-015…021, 044; contract
+ * 2.0.0-p): Device (Phone, Desktop, Web, several at once), Date (Today and Last 7 days with how many each holds; a date
+ * and a mark narrow each other), Project (No project and every project), Language (the languages the recordings
+ * have), Bookmarks (Any bookmark and each tag), Labels (only when there are labels), and the row's source mark with
+ * its device badge.
  */
 class V2LibraryFilterChipsParityTest : ScreenTest() {
     // Read once the test has set its clock and zone up (after @Before), never while the class is made.
@@ -75,51 +81,58 @@ class V2LibraryFilterChipsParityTest : ScreenTest() {
         }
     }
 
-    private fun choose(chip: String, vararg choices: String) {
-        // "Source ▾", or "Source · 2 ▾" once some are on; the chip's own action, as a touch on a narrow applied chip
-        // may land on its ✕.
-        compose.onNode(
-            androidx.compose.ui.test.SemanticsMatcher("the $chip chip") { node ->
-                node.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.Text) { null }.orEmpty()
-                    .any { it.text.startsWith(chip) && it.text.endsWith("▾") }
-            }
-        ).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
-        compose.waitForIdle()
-        choices.forEach { compose.onNode(hasText(it) and isToggleable()).performClick() }
-        compose.onNodeWithText("Apply").performClick()
+    private fun openFilters() {
+        compose.onAllNodes(hasContentDescription("Filters", substring = true) and hasClickAction()).onFirst().performClick()
         compose.waitForIdle()
     }
 
+    /** An option of the sheet (a box, or Date's round choice), brought into view. */
+    private fun option(words: String) =
+        compose.onAllNodes(hasText(words) and (isToggleable() or isSelectable())).onFirst().performScrollTo()
+
+    /** Ticks [choices] in the sheet and shows the results. */
+    private fun choose(vararg choices: String) {
+        openFilters()
+        choices.forEach { option(it).performClick() }
+        compose.onAllNodes(hasText("Show ", substring = true) and hasClickAction()).onFirst().performClick()
+        compose.waitForIdle()
+    }
+
+    private fun pill(words: String) = compose.onNode(hasText(words) and hasAnyAncestor(hasTestTag(PILLS_ROW_TAG)))
+
     @Test
-    fun sourceTakesPhoneDesktopAndWebSeveralAtOnceAndSaysHowManyAreOn() {
+    fun deviceTakesPhoneDesktopAndWebSeveralAtOnceAndSaysHowManyAreOn() {
         seed(item("01JA", "Rec A"), item("01JB", "Rec B", device = "desktop"), item("01JC", "Rec C", device = "web"))
-        choose("Source", "Desktop", "Web")
+        choose("Desktop", "Web")
         shown("Rec B", "Rec C")
-        compose.onNodeWithText("Source · 2 ▾").assertExists()
-        choose("Source", "Web", "Phone")
+        pill("Device: Desktop, Web").assertExists()
+        compose.onNode(hasContentDescription("Filters, 1 on")).assertExists()
+        choose("Web", "Phone")
         shown("Rec A", "Rec B")
-        // The chip's own ✕ clears only Source.
-        compose.onNodeWithContentDescription("Clear Source", substring = true).performClick()
+        // The pill's own ✕ clears only Device.
+        compose.onNode(hasContentDescription("Remove Device: Desktop, Phone")).performClick()
         shown("Rec A", "Rec B", "Rec C")
-        compose.onNodeWithText("Source ▾").assertExists()
+        compose.onAllNodes(hasAnyAncestor(hasTestTag(PILLS_ROW_TAG))).assertCountEquals(0)
     }
 
     @Test
-    fun dateSaysHowManyEachDateHoldsAndATickedDateAndAMarkNarrowEachOther() {
+    fun dateSaysHowManyEachDateHoldsAndADateAndAMarkNarrowEachOther() {
         seed(
             item("01JA", "Rec A", startedAt = today),
             item("01JB", "Rec B", startedAt = today, extra = "\"pinned\":true"),
             item("01JC", "Rec C", extra = "\"pinned\":true")
         )
-        compose.onNodeWithText("Date ▾").performClick()
-        compose.onNode(hasText("Today (2)") and isToggleable()).assertExists()
-        compose.onNode(hasText("This week (2)") and isToggleable()).performClick()
-        compose.onNodeWithText("Apply").performClick()
-        shown("Rec A", "Rec B")
-        compose.onNodeWithText("Date · 1 ▾").assertExists()
-        // Pinned (a mark) and This week (a date): the pinned recording from this week only, not either one.
-        choose("Views", "Pinned (2)")
+        openFilters()
+        // Today 2 and Last 7 days 2 (each count at its end); This month counts the day too.
+        compose.onNodeWithText("Show 3 results").assertExists()
+        option("Last 7 days").performClick()
+        compose.onNodeWithText("Show 2 results").assertExists()
+        // Pinned (Marked) and Last 7 days (Date): the pinned recording from this week only, not either one.
+        option("Pinned").performClick()
+        compose.onNodeWithText("Show 1 result").performClick()
         shown("Rec B")
+        pill("Date: Last 7 days").assertExists()
+        pill("Marked: Pinned").assertExists()
     }
 
     @Test
@@ -129,48 +142,50 @@ class V2LibraryFilterChipsParityTest : ScreenTest() {
             item("01JB", "Rec B", client = "Zed Traders", clientId = "01JCLIENT0000000000000000Z"),
             item("01JC", "Rec C")
         )
-        compose.onNodeWithText("Project ▾").performClick()
-        listOf("No project", "Acme Holdings", "Zed Traders").forEach { compose.onNode(hasText(it) and isToggleable()).assertExists() }
-        compose.onNode(hasText("No project") and isToggleable()).performClick()
-        compose.onNodeWithText("Apply").performClick()
+        openFilters()
+        listOf("No project", "Acme Holdings", "Zed Traders").forEach { option(it).assertExists() }
+        option("No project").performClick()
+        compose.onNodeWithText("Show 1 result").performClick()
         shown("Rec C")
-        choose("Project", "Zed Traders")
+        choose("Zed Traders")
         shown("Rec B", "Rec C")
-        compose.onNodeWithText("Project · 2 ▾").assertExists()
+        pill("Project: No project, Zed Traders").assertExists()
     }
 
     @Test
     fun languageListsTheLanguagesTheRecordingsHaveAndNarrowsToOne() {
         seed(
-            item("01JA", "Rec A", extra = "\"language_chip\":\"UR+EN\""),
-            item("01JB", "Rec B", extra = "\"language_chip\":\"EN\""),
-            item("01JC", "Rec C")
+            item("01JA", "Rec A", extra = "\"facets\":{\"source\":\"whatsapp\",\"status\":\"transcribed\",\"language\":\"ur\"}"),
+            item("01JB", "Rec B", extra = "\"facets\":{\"source\":\"whatsapp\",\"status\":\"transcribed\",\"language\":\"en\"}"),
+            item("01JC", "Rec C", extra = "\"facets\":{\"source\":\"whatsapp\",\"status\":\"transcribed\",\"language\":\"en\"}")
         )
-        compose.onNodeWithText("Language ▾").performClick()
-        compose.onAllNodes(isToggleable()).assertCountEquals(2)
-        compose.onNode(hasText("EN") and isToggleable()).assertExists()
-        compose.onNode(hasText("UR+EN") and isToggleable()).performClick()
-        compose.onNodeWithText("Apply").performClick()
+        openFilters()
+        option("English").assertExists()
+        compose.onAllNodes(hasText("Arabic") and isToggleable()).assertCountEquals(0)
+        option("Urdu").performClick()
+        compose.onNodeWithText("Show 1 result").performClick()
         shown("Rec A")
     }
 
     @Test
-    fun bookmarkFindsAnyBookmarkOrOneTag() {
+    fun bookmarksFindAnyBookmarkOrOneTag() {
         seed(
             item("01JA", "Rec A", extra = "\"marker_count\":2,\"tags\":[\"Price\"]"),
             item("01JB", "Rec B", extra = "\"marker_count\":1,\"tags\":[\"Follow up\"]"),
             item("01JC", "Rec C")
         )
-        choose("Bookmark", "Any bookmark")
+        choose("Any bookmark")
         shown("Rec A", "Rec B")
-        choose("Bookmark", "Any bookmark", "Price")
+        choose("Any bookmark", "Price")
         shown("Rec A")
     }
 
     @Test
-    fun labelIsOfferedOnlyWhenThereAreLabelsAndNarrowsToThem() {
+    fun labelsAreOfferedOnlyWhenThereAreLabelsAndNarrowToThem() {
         seed(item("01JA", "Rec A"), item("01JB", "Rec B"))
-        compose.onAllNodesWithText("Label ▾").assertCountEquals(0)
+        openFilters()
+        compose.onAllNodesWithText("Labels").assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("Close", substring = true) and hasClickAction()).onFirst().performClick()
         server.on(
             "GET",
             "/api/library",
@@ -182,9 +197,10 @@ class V2LibraryFilterChipsParityTest : ScreenTest() {
             )
         )
         runBlocking { app.graph.library.refresh() }
-        pumpUntil("the Label chip") { compose.onAllNodesWithText("Label ▾").fetchSemanticsNodes().isNotEmpty() }
-        choose("Label", "Paid")
+        pumpUntil("the labels") { vm.library.value.any { it.labels.isNotEmpty() } }
+        choose("Paid")
         shown("Rec B")
+        pill("Labels: Paid").assertExists()
     }
 
     @Test

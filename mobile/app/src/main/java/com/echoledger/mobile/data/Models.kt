@@ -509,7 +509,7 @@ data class LibraryItem(
     val language: String? = null,
     /** Whether this user has opened it (since v1.3); false shows the unopened dot, null (an older server) does not. */
     val opened: Boolean? = null,
-    /** How it got its project (since v1.5): "user", "contact", "rule", or null (the Inbox). */
+    /** How it got its project (since v1.5): "user", "contact", "rule", or null (No project). */
     @SerialName("filed_by") val filedBy: String? = null,
     /** Screen moments kept during the meeting (since v1.5); null from an older server. */
     @SerialName("screen_count") val screenCount: Int? = null,
@@ -520,8 +520,51 @@ data class LibraryItem(
     /** When retention moves it to Trash (contract 2.0.0-i); null when kept forever or still recording. */
     @SerialName("expires_at") val expiresAt: String? = null,
     /** An audio-only recording (2.0.0-j): the plan minutes its transcript would use and the month's minutes left. */
-    @SerialName("transcribe_estimate") val transcribeEstimate: TranscribeEstimateDto? = null
+    @SerialName("transcribe_estimate") val transcribeEstimate: TranscribeEstimateDto? = null,
+    /** When it ended; null while still recording. */
+    @SerialName("ended_at") val endedAt: String? = null,
+    /** Its value in the Library's Source, Status and Language filters, as the server works them out (2.0.0-p). */
+    val facets: ItemFacetsDto? = null,
+    /** When the current upload or transcript attempt began (2.0.0-p): Needs you's 24 hours count from it. */
+    @SerialName("processing_since") val processingSince: String? = null
 )
+
+/**
+ * One of My views (contract 2.0.0-p "Saved views"): a saved filter set with a name, the search and how the list is
+ * shown. [filters] is read forgivingly ([com.echoledger.mobile.core.LibraryFilterSet.read]); `[]` is no filter too.
+ */
+@Serializable
+data class SavedViewDto(
+    val id: String,
+    val name: String,
+    val filters: kotlinx.serialization.json.JsonElement? = null,
+    val search: String? = null,
+    val sort: String? = null,
+    val group: String? = null,
+    val density: String? = null,
+    val position: Int = 0,
+    @SerialName("client_ref") val clientRef: String? = null
+)
+
+/** `GET /api/views` and `PUT /api/views/order`: the views in their order, and the version they are. */
+@Serializable
+data class SavedViewsAnswer(
+    val data: List<SavedViewDto> = emptyList(),
+    @SerialName("views_version") val viewsVersion: Long = 0,
+    val limit: Int = 30
+)
+
+/** `POST /api/views` and `PATCH /api/views/{id}`: the view as it is now. */
+@Serializable
+data class SavedViewAnswer(val data: SavedViewDto, @SerialName("views_version") val viewsVersion: Long = 0)
+
+/** `DELETE /api/views/{id}`. */
+@Serializable
+data class SavedViewDeleted(val id: String? = null, @SerialName("views_version") val viewsVersion: Long = 0)
+
+/** A library item's `facets` (contract 2.0.0-p): the apps count with these instead of working them out again. */
+@Serializable
+data class ItemFacetsDto(val source: String? = null, val status: String? = null, val language: String? = null)
 
 @Serializable
 data class NamedRef(val id: String, val name: String, val color: String? = null, val avatar: String? = null)
@@ -753,7 +796,9 @@ data class CreateSessionResponse(
 data class LibraryResponse(
     val data: List<LibraryItem>,
     @SerialName("next_cursor") val nextCursor: String? = null,
-    @SerialName("server_time") val serverTime: String
+    @SerialName("server_time") val serverTime: String,
+    /** Changes whenever the person's saved views change (2.0.0-p); null from an older server. */
+    @SerialName("views_version") val viewsVersion: Long? = null
 )
 
 @Serializable
@@ -961,7 +1006,7 @@ data class FilingRulesResponse(val data: List<FilingRuleDto> = emptyList())
 @Serializable
 data class FilingRuleResponse(val data: FilingRuleDto)
 
-/** DELETE /api/clients/{id} (since v1.5): its recordings went to the Inbox, its subfolders up a level. */
+/** DELETE /api/clients/{id} (since v1.5): its recordings went to No project, its subfolders up a level. */
 @Serializable
 data class DeletedProjectAnswer(
     @SerialName("moved_sessions") val movedSessions: Int = 0,
@@ -1015,7 +1060,7 @@ data class SentAnswer(val sent: Int = 0)
 @Serializable
 data class SavedSharedAnswer(@SerialName("session_id") val sessionId: String? = null, @SerialName("client_id") val clientId: String? = null)
 
-/** A "Request files" link (since v1.5): anyone with it can send files into the Inbox or a project. */
+/** A "Request files" link (since v1.5): anyone with it can send files into No project or a project. */
 @Serializable
 data class RequestLinkDto(
     val id: String,

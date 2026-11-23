@@ -214,6 +214,8 @@ suspend fun EchoLedgerApp.resetPersistedState() {
     com.echoledger.mobile.calls.CallSightings.clear(this)
     com.echoledger.mobile.calls.MissedRecordingStore.clear(this)
     File(noBackupFilesDir, "library.bin").delete()
+    // Since 2.0.0-p: My views' copy.
+    File(noBackupFilesDir, "views.bin").delete()
     File(noBackupFilesDir, "recordings").listFiles()?.forEach { it.deleteRecursively() }
 }
 
