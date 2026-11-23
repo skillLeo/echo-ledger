@@ -62,6 +62,16 @@ final class LibraryFilters
     /** A section takes at most this many values. */
     public const MAX_VALUES = 50;
 
+    /**
+     * The Library's tabs (docs/API.md "The Library's tabs", UI guidance the apps share): each tab's Sources. All is every
+     * Source; imported and other are under All only.
+     */
+    public const KINDS = [
+        'calls' => ['whatsapp', 'whatsapp_business', 'phone_call', 'telegram', 'signal', 'messenger', 'instagram', 'skype'],
+        'meetings' => ['zoom', 'google_meet', 'microsoft_teams', 'slack', 'discord'],
+        'voice_notes' => ['voice_note'],
+    ];
+
     /** "Needs you": a recording stuck uploading or being transcribed for more than this since its current attempt began. */
     public const STUCK_HOURS = 24;
 

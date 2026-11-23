@@ -144,6 +144,11 @@ class Sidebar extends FilamentSidebar
     public function render(): View
     {
         // Since v2.0: the five-module sidebar under ui_v2.shell (the classic one otherwise, unchanged).
-        return view(ConsoleV2::shell() ? 'filament.v2.sidebar' : 'filament.shell.sidebar');
+        // Since docs/PLAN_NAV_3_LEVELS.md: the rail, the place's panel and the page's tabs with the new frame and Library.
+        return view(match (true) {
+            ConsoleV2::frame() => 'filament.v2.frame',
+            ConsoleV2::shell() => 'filament.v2.sidebar',
+            default => 'filament.shell.sidebar',
+        });
     }
 }

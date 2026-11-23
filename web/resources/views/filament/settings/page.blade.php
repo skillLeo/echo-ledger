@@ -10,11 +10,17 @@
     $searching = $this->isSearching();
     $mode = $searching ? 'search' : ($this->subpage === '' ? 'overview' : 'page');
     $sections = $this->settingsSections();
+    // With the three levels (docs/PLAN_NAV_3_LEVELS.md) Settings' groups and its search are the panel's: the page shows
+    // the open group's pages as its inner list when it has several, and its own list stays hidden (nothing twice).
+    $framed = \App\Filament\Support\ConsoleV2::frame();
+    $inner = $framed && $mode === 'page' ? \App\Filament\Support\NavFrame::settingsInnerList() : null;
+    $innerList = $inner !== null ? view('filament.settings.inner-list', ['inner' => $inner])->render() : '';
+    $frameClass = $framed ? ' is-framed'.($inner !== null ? ' has-inner' : '') : '';
 @endphp
 <x-filament-panels::page class="el-settings-page">
     <div class="el-settings-wrap">
-        <div class="el-settings" data-mode="{{ $mode }}" data-page="{{ $this->subpage ?: 'overview' }}">
-            <nav class="el-settings-nav" aria-label="{{ __('Settings') }}">
+        <div class="el-settings{{ $frameClass }}" data-mode="{{ $mode }}" data-page="{{ $this->subpage ?: 'overview' }}">
+            {!! $innerList !!}<nav class="el-settings-nav" aria-label="{{ __('Settings') }}"{!! $framed ? ' hidden' : '' !!}>
                 <div class="el-set-search" role="search" x-data
                     x-on:keydown.escape.prevent="$wire.clearSettingsSearch(); $refs.q.blur()"
                     x-on:keydown.down.prevent="window.elSettings?.move(1)" x-on:keydown.up.prevent="window.elSettings?.move(-1)"

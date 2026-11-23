@@ -24,8 +24,8 @@
 
     <x-filament::dropdown placement="bottom-end" max-height="32rem" wire:key="v2-library-display">
         <x-slot name="trigger">
-            <button type="button" class="v2-chip" aria-haspopup="menu" data-menu="display">
-                <x-el.v2.icon name="list" />{{ __('Sort & display') }}
+            <button type="button" class="v2-chip" aria-haspopup="menu" data-menu="display" title="{{ __('Sort & display') }}">
+                <x-el.v2.icon name="list" /><span class="v2-chip-words">{{ __('Sort & display') }}</span>
                 <x-el.v2.icon name="chevron-down" />
             </button>
         </x-slot>

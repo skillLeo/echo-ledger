@@ -24,6 +24,7 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Livewire\Attributes\Url;
 use UnitEnum;
 
 /**
@@ -34,6 +35,15 @@ class AssistSessions extends Page implements HasTable
 {
     use InteractsWithTable;
     use LiveAssistOnly;
+
+    /**
+     * Since docs/PLAN_NAV_3_LEVELS.md (Live's panel and Live Assist's tabs): the Show filter in the address, as a list
+     * page keeps it, so Past reports (calls) and Practice are links of their own and Back keeps them.
+     *
+     * @var array<string, mixed>|null
+     */
+    #[Url(as: 'filters')]
+    public ?array $tableFilters = null;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSparkles;
 

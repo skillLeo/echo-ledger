@@ -23,6 +23,7 @@ use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Carbon;
+use Livewire\Attributes\Url;
 
 /**
  * Activity (plan B18), as the phone shows it: what needs the person first (calls waiting for Keep or Discard, failed
@@ -50,6 +51,13 @@ class Activity extends Page
     protected static ?string $slug = 'activity';
 
     protected string $view = 'filament.pages.activity';
+
+    /**
+     * Since docs/PLAN_NAV_3_LEVELS.md (Activity's panel): All (''), Needs you (what needs action and is not done yet,
+     * and the waiting calls) or Done (what was read). Kept in the address, so the panel's links and Back open it.
+     */
+    #[Url(except: '')]
+    public string $show = '';
 
     public function getTitle(): string
     {
@@ -118,10 +126,15 @@ class Activity extends Page
                 : ($at !== null && $at->gte($today) ? 'today' : 'earlier');
             $groups[$group][] = $item;
         }
+        if ($this->show === 'needs_you') {
+            $groups = ['needs' => $groups['needs'], 'today' => [], 'earlier' => []];
+        } elseif ($this->show === 'done') {
+            $groups = array_map(fn (array $items): array => array_values(array_filter($items, fn (array $item): bool => (bool) $item['read'])), $groups);
+        }
 
         return [
             'groups' => $groups,
-            'waiting' => app(LibraryOrganiser::class)->waitingSummary((int) CurrentWorkspace::id()),
+            'waiting' => $this->show === 'done' ? null : app(LibraryOrganiser::class)->waitingSummary((int) CurrentWorkspace::id()),
             // Since 2.0.0-p the new Library keeps the waiting calls in Needs you.
             'reviewUrl' => CaptureSessionResource::getUrl('index', ['tab' => ConsoleV2::library() ? 'needs_you' : 'waiting']),
         ];

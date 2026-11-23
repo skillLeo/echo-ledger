@@ -278,6 +278,12 @@ trait ManagesAppPages
                 ['Esc', 'Close a panel, a menu or a dialog'],
                 // Since docs/PLAN_NAV_3_LEVELS.md section 0 (the new Library's frame): Back and Forward, as the apps have them.
                 ...(ConsoleV2::library() ? [[$mac ? '⌘ [  ⌘ ]' : 'Ctrl [  Ctrl ]', 'Back and forward']] : []),
+                // Since docs/PLAN_NAV_3_LEVELS.md section 6: the rail's places, the panel's first nine and the panel itself.
+                ...(ConsoleV2::frame() ? [
+                    [$mac ? '⌘ 1…6' : 'Ctrl 1…6', 'Library, Projects, Live, Ask, Activity, Settings'],
+                    [$mac ? '⌥ 1…9' : 'Alt 1…9', 'The panel\'s first nine (the Library\'s views, then My views)'],
+                    [$mac ? '⌘ \\' : 'Ctrl \\', 'Hide or show the panel'],
+                ] : []),
             ],
             'In the Library' => [
                 ['J  K', 'Next and previous recording'],
@@ -293,7 +299,7 @@ trait ManagesAppPages
                     // Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): the filters, the search and the places.
                     ['F', 'Open or close the filters (while the Library has focus)'],
                     [$mac ? '⌘ F' : 'Ctrl F', 'Search titles, transcripts and projects in the Library'],
-                    [$mac ? '⌘ 1…9  ⌥ 1…9' : 'Ctrl 1…9  Alt 1…9', 'Open the sidebar\'s first nine places'],
+                    ...(ConsoleV2::frame() ? [] : [[$mac ? '⌘ 1…9  ⌥ 1…9' : 'Ctrl 1…9  Alt 1…9', 'Open the sidebar\'s first nine places']]),
                 ] : []),
             ],
             'On a recording' => [

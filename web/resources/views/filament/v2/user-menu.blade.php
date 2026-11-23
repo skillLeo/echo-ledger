@@ -14,7 +14,7 @@
     $upgrade = $context !== null && $context->flag('can_upgrade') && ! $context->flag('member');
 @endphp
 @if ($context !== null)
-    <x-filament::dropdown placement="bottom-end" teleport width="xs" class="fi-user-menu v2-um">
+    <x-filament::dropdown :placement="$placement ?? 'bottom-end'" teleport width="xs" class="fi-user-menu v2-um">
         <x-slot name="trigger">
             <button type="button" class="fi-user-menu-trigger v2-um-trigger" aria-label="{{ __('Open the menu for :name', ['name' => $name]) }}">
                 <span class="v2-avatar" aria-hidden="true">{{ InitialsAvatarProvider::initials($name) }}</span>

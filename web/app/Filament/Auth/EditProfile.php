@@ -10,6 +10,7 @@ use App\Filament\Auth\Settings\ManagesPlanPage;
 use App\Filament\Auth\Settings\ManagesSecurityPages;
 use App\Filament\Concerns\WatchesPairing;
 use App\Filament\Pages\WorkspaceSettings;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SettingsContext;
 use App\Models\User;
@@ -73,6 +74,10 @@ class EditProfile extends BaseEditProfile
             }
         }
         $this->subpage = $subpage;
+        // With the three levels the search is in Settings' panel, which opens this page with its words (?q=).
+        if (ConsoleV2::frame() && is_string($query = request()->query('q')) && trim($query) !== '') {
+            $this->settingsQuery = mb_substr(trim($query), 0, 100);
+        }
         parent::mount();
         $status = session()->pull('google.status');
         if (is_string($status)) {

@@ -12,7 +12,11 @@
 @endphp
 @if ($nav['places'] !== [])
     <div class="v2-sb-lib" data-sidebar-library>
-        <ul class="v2-sb-sub" aria-label="{{ __('Library') }}">
+        @if ($inPanel ?? false)
+            {{-- In the Library's panel (docs/PLAN_NAV_3_LEVELS.md section 3) the places are its Views. --}}
+            <p class="v2-panel-group-title" id="v2-panel-views">{{ __('Views') }}</p>
+        @endif
+        <ul class="v2-sb-sub" aria-label="{{ ($inPanel ?? false) ? __('Views') : __('Library') }}">
             @foreach ($nav['places'] as $place)
                 <li>
                     <a href="{{ $place['url'] }}" @class(['v2-sb-subitem', 'is-on' => $place['active']]) @if ($place['active']) aria-current="page" @endif

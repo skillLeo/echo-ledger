@@ -13,7 +13,7 @@
  },
  "WEB-NAV-003": {
   "type": "controls",
-  "page": "library",
+  "page": "projects",
   "scope": "sidebar",
   "keys": [
    "a|projects",
@@ -95,13 +95,13 @@
   "type": "control",
   "page": "library",
   "scope": "sidebar",
-  "key": "button|collapse"
+  "key": "button|hide the panel"
  },
  "WEB-NAV-017": {
   "type": "control",
   "page": "library",
   "scope": "sidebar",
-  "key": "button|help and shortcuts"
+  "key": "button|help"
  },
  "WEB-NAV-018": {
   "type": "control",
@@ -113,7 +113,8 @@
   "type": "html",
   "page": "library",
   "contains": [
-   "wire:name=\"App\\Livewire\\ActivityBell\""
+   "data-module=\"activity\"",
+   "class=\"v2-rail-badge\""
   ]
  },
  "WEB-NAV-022": {
@@ -1130,9 +1131,9 @@
   "type": "html",
   "page": "library",
   "contains": [
-   "class=\"v2-sb-resize\" role=\"separator\"",
-   "x-on:pointerdown=\"startResize($event)\"",
-   "x-on:keydown=\"resizeKey($event)\""
+   "data-panel-toggle",
+   "x-on:click=\"togglePanel()\"",
+   "x-bind:hidden=\"shown() !=="
   ]
  },
  "WEB-NAV-019": {

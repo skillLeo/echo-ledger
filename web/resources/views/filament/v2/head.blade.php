@@ -54,6 +54,8 @@
     });
 </script>
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-keys')
+{{-- The three levels of navigation (docs/PLAN_NAV_3_LEVELS.md): the rail, the panels, the flyout, the memory and their keys. --}}
+@includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::frame(), 'filament.v2.frame-script')
 {{-- Since 2.0.0-p: the filter panel (open, closed, a drawer) and the keys F, ⌘F / Ctrl+F, Esc and ⌘1…⌘9. --}}
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.library-shell-script')
 @includeWhen(($sheet ?? 'console') === 'console' && \App\Filament\Support\ConsoleV2::library(), 'filament.v2.copy')

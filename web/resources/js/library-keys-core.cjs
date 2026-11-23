@@ -63,22 +63,17 @@
 
 
     /**
-     * Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): the keys of the filter panel, the search and the sidebar's
-     * places, decided before keyAction. e as keyAction's (with code); s: {modal, panelOpen, places (how many places
-     * answer a number)}. F opens or closes the filters, ⌘F / Ctrl+F goes to the search (also from another field), Esc
-     * closes the panel before it clears a selection, and ⌘1…⌘9 (Alt+1…9 too, where the browser keeps ⌘ and Ctrl for its
-     * tabs) opens the sidebar's first nine places. A single key with no modifier (F) answers only while the Library has
-     * the focus (s.focused), so speech input and stray keys elsewhere never trigger it (WCAG 2.1.4). Returns {do, at?} or null.
+     * Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): the keys of the filter panel and the search, decided
+     * before keyAction. e as keyAction's (with code); s: {modal, panelOpen}. F opens or closes the filters, ⌘F / Ctrl+F
+     * goes to the search (also from another field), and Esc closes the panel before it clears a selection. A single key
+     * with no modifier (F) answers only while the Library has the focus (s.focused), so speech input and stray keys
+     * elsewhere never trigger it (WCAG 2.1.4). The numbers are the frame's since docs/PLAN_NAV_3_LEVELS.md (⌘1…⌘6 the
+     * rail, Alt+1…9 the panel: resources/js/frame-core.cjs). Returns {do} or null.
      */
     function shellKey(e, s) {
         if (e.defaultPrevented || s.modal) return null;
         const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
         if ((e.ctrlKey || e.metaKey) && ! e.altKey && key === 'f') return { do: 'search' };
-        const digit = /^Digit([1-9])$/.exec(e.code || '') || /^([1-9])$/.exec(e.key || '');
-        if (digit && (e.ctrlKey || e.metaKey || e.altKey) && ! isTyping(e.target)) {
-            const at = Number(digit[1]) - 1;
-            return at < s.places ? { do: 'place', at } : null;
-        }
         if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return key === 'Escape' && s.panelOpen ? { do: 'close-filters' } : null;
         if (key === 'f') return s.focused ? { do: 'toggle-filters' } : null;
         if (key === 'Escape' && s.panelOpen) return { do: 'close-filters' };

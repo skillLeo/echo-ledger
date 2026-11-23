@@ -2,8 +2,9 @@
     The new Library's filter panel and keys (2.0.0-p, docs/PLAN_LIBRARY_FILTERS.md sections 1 and 5), only under
     ui_v2.library. elV2LibraryShell keeps the panel open or closed (remembered by this browser, closed by default) and
     makes it a drawer over the list when the window is narrower than --el-breakpoint-panel (tokens.css), a modal dialog
-    then; the keys: F opens or closes the filters while the Library has the focus (WCAG 2.1.4), ⌘F / Ctrl+F goes to the search, Esc closes the panel before it clears a selection, and ⌘1…⌘9
-    (Alt+1…9 too) opens the sidebar's first nine places. ElLibraryKeysCore.shellKey decides (tests/js). On every page
+    then; the keys: F opens or closes the filters while the Library has the focus (WCAG 2.1.4), ⌘F / Ctrl+F goes to the
+    search, and Esc closes the panel before it clears a selection (the numbers are the frame's: filament.v2.frame-script).
+    ElLibraryKeysCore.shellKey decides (tests/js). On every page
     of the console, ⌘[ / ⌘] (Ctrl+[ / Ctrl+] off a Mac) go Back and Forward (ElLibraryKeysCore.historyKey).
 --}}
 <script>
@@ -16,8 +17,9 @@
             filtersOpen: false,
             drawer: false,
             init() {
-                // The design token --el-breakpoint-panel (1280): narrower than it, the panel is a drawer over the list.
-                const panel = getComputedStyle(document.documentElement).getPropertyValue('--el-breakpoint-panel').trim() || '0';
+                // The design token --el-breakpoint-panel (1280): narrower than it, the panel is a drawer over the list. With
+                // the three levels (config.side) the filters come from the right and stay beside the list from --el-breakpoint-wide.
+                const panel = getComputedStyle(document.documentElement).getPropertyValue((config && config.side) || '--el-breakpoint-panel').trim() || '0';
                 const wide = window.matchMedia('(min-width: ' + panel + ')');
                 const decide = () => { this.drawer = ! wide.matches; this.filtersOpen = this.drawer ? false : remembered(); };
                 decide();
@@ -78,13 +80,11 @@
             const shellEl = document.querySelector('.v2-lib-shell');
             const core = window.ElLibraryKeysCore;
             if (! shellEl || ! core || typeof core.shellKey !== 'function') return;
-            const places = Array.from(document.querySelectorAll('[data-shortcut]')).filter((a) => a.dataset.shortcut !== '')
-                .sort((a, b) => Number(a.dataset.shortcut) - Number(b.dataset.shortcut));
             const data = window.Alpine ? window.Alpine.$data(shellEl) : null;
             const field = (t) => t instanceof Element && t.closest('input, textarea, select, [contenteditable="true"]') !== null ? { typing: true } : t;
             // The single key F answers only while the Library has the focus (WCAG 2.1.4): the list, its toolbar or the panel.
             const act = core.shellKey({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, defaultPrevented: e.defaultPrevented, target: field(e.target) }, {
-                modal: document.querySelector('.fi-modal-open[aria-modal="true"]') !== null, panelOpen: !! (data && data.filtersOpen), places: Math.min(9, places.length),
+                modal: document.querySelector('.fi-modal-open[aria-modal="true"]') !== null, panelOpen: !! (data && data.filtersOpen),
                 focused: e.target instanceof Element && shellEl.contains(e.target),
             });
             if (! act) return;
@@ -98,8 +98,6 @@
                 data?.toggleFilters();
             } else if (act.do === 'close-filters') {
                 data?.closeFilters();
-            } else if (act.do === 'place' && places[act.at]) {
-                window.location.href = places[act.at].href;
             }
         }, true);
     })();

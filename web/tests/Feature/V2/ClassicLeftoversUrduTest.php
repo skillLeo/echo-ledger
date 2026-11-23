@@ -123,7 +123,10 @@ it('keeps the same words in English in the new frame and in classic', function (
     foreach ([true, false] as $v2) {
         foreach (LEFTOVER_ENGLISH as $page => [$library, $phrases]) {
             $html = leftoverPage($this, $v2, 'en', $page, $library);
-            foreach ([...$phrases, ...LEFTOVER_FRAME] as $english) {
+            // With the three levels (the new frame and the new Library) the bell is the rail's Activity
+            // (docs/PLAN_NAV_3_LEVELS.md section 2: never the same thing at two levels), so the top bar has none.
+            $frame = $v2 && $library ? ['="Notifications, 1 needs you"'] : [];
+            foreach ([...$phrases, ...array_diff(LEFTOVER_FRAME, $frame)] as $english) {
                 expect(leftoverHas($html, $english))->toBeTrue(($v2 ? 'v2' : 'classic')." {$page}: \"{$english}\" is missing");
             }
         }

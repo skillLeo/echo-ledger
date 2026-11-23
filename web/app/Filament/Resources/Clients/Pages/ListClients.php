@@ -12,10 +12,18 @@ use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\RenderHook;
 use Filament\Schemas\Schema;
 use Filament\View\PanelsRenderHook;
+use Livewire\Attributes\Url;
 
 class ListClients extends ListRecords
 {
     protected static string $resource = ClientResource::class;
+
+    /**
+     * Since docs/PLAN_NAV_3_LEVELS.md (Projects' panel): All projects (''), Pinned or Recent (those with a recording in
+     * the last 30 days, the latest first), every level of the tree; in the address, so the panel's links and Back open it.
+     */
+    #[Url(except: '')]
+    public string $show = '';
 
     protected function getHeaderActions(): array
     {

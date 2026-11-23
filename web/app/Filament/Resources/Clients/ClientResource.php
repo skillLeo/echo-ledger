@@ -15,6 +15,7 @@ use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\SharingActions;
 use App\Http\Controllers\Api\OrganiseController;
+use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\Projects\ProjectTree;
 use App\Services\SettingsRepository;
@@ -169,13 +170,31 @@ class ClientResource extends Resource
         ]);
     }
 
+    /**
+     * Projects' panel views (docs/PLAN_NAV_3_LEVELS.md section 3): Pinned, or Recent (a recording in the last 30 days, the
+     * latest first); anything else is every project.
+     *
+     * @param  Builder<Client>  $query
+     * @return Builder<Client>
+     */
+    public static function shown(Builder $query, string $show): Builder
+    {
+        return match ($show) {
+            'pinned' => $query->where($query->qualifyColumn('pinned'), true),
+            'recent' => $query->whereHas('captureSessions', fn (Builder $s): Builder => $s->where('started_at', '>=', now()->subDays(30)))
+                ->orderByDesc(CaptureSession::query()->select('started_at')->whereColumn('capture_sessions.client_id', 'clients.id')->orderByDesc('started_at')->limit(1)),
+            default => $query,
+        };
+    }
+
     public static function table(Table $table): Table
     {
         return $table
             ->defaultSort('name')
             // The top level, like a file browser; a search looks through every level (rows then show their folder).
-            ->modifyQueryUsing(fn (Builder $query, ListRecords $livewire): Builder => $query->with('parent:id,name')->orderByDesc('pinned')
-                ->when(blank($livewire->getTableSearch()), fn (Builder $q): Builder => $q->whereNull('parent_id')))
+            ->modifyQueryUsing(fn (Builder $query, ListRecords $livewire): Builder => self::shown($query->with('parent:id,name'), $livewire instanceof ListClients ? $livewire->show : '')
+                ->orderByDesc('pinned')
+                ->when(blank($livewire->getTableSearch()) && ! ($livewire instanceof ListClients && in_array($livewire->show, ['pinned', 'recent'], true)), fn (Builder $q): Builder => $q->whereNull('parent_id')))
             // The phone's client list: initials avatar, name, "2 recordings · Last call Oct 24"; a row opens the workspace.
             ->columns([
                 Split::make([

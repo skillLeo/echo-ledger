@@ -69,11 +69,21 @@ const pages = {
     // The Library's filters and views (contract 2.0.0-p): the window as it opens, the whole page, the filter panel open
     // (a drawer under 1280 px), filters applied as pills, and nothing matching.
     // listTop: the guard of docs/PLAN_LIBRARY_FILTERS.md section 4 (below).
-    // reach: every one of these can be scrolled to in the sidebar's middle, and focused from either end, and is then
-    // seen, not covered (below).
-    'lf-window': { path: '/app/sessions', full: false, listTop: true, reach: ['[data-place]', '[data-new-view]', '[data-label]', '[data-new-label]', '[data-projects-fold] > summary', '[data-sidebar-scroll] [data-project]', '[data-module=projects]', '[data-module=live]', '[data-module=ask]'] },
-    // The sidebar's middle scrolled to its end at 1440 × 900: LABELS, PROJECTS, Live and Ask, and the way back up.
-    'lf-sidebar-end': { path: '/app/sessions', full: false, run: "document.querySelector('[data-sidebar-scroll]').scrollTop = 100000" },
+    // reach: every one of these is in the rail or can be scrolled to in the open place's panel, and focused from
+    // either end, and is then seen, not covered (below).
+    'lf-window': { path: '/app/sessions', full: false, listTop: true, reach: ['[data-place]', '[data-new-view]', '[data-label]', '[data-new-label]', '[data-module=library]', '[data-module=projects]', '[data-module=live]', '[data-module=ask]', '[data-module=activity]', '[data-module=settings]', '[data-module=help]', '[data-module=setup]'] },
+    // The three levels (docs/PLAN_NAV_3_LEVELS.md): each place with its panel, the flyout, the filters beside or over
+    // the list, Settings' inner list, and the browser checks of section 8 (navChecks, below).
+    'nav-library': { path: '/app/sessions', full: false, listTop: true, checks: (page, width) => navChecks(page, width) },
+    'nav-projects': { path: '/app/clients', full: false, reach: ['[data-projects-view]', '[data-new-project]', '.v2-panels [data-project]'] },
+    'nav-live': { path: '/app/live', full: false },
+    'nav-ask': { path: '/app/ask', full: false },
+    'nav-activity': { path: '/app/activity?show=needs_you', full: false },
+    'nav-settings': { path: '/app/settings/profile', full: false },
+    'nav-flyout': { path: '/app/sessions', full: false, click: '[data-rail="library"]' },
+    'nav-filters': { path: '/app/sessions', full: false, run: "window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } }))" },
+    'nav-folded': { path: '/app/sessions', full: false, run: "document.querySelector('[data-panel-toggle]')?.click()" },
+    'nav-tab': { path: '/app/sessions?kind=calls', full: false },
     'lf-full': { path: '/app/sessions' },
     'lf-panel': { path: '/app/sessions', run: "window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } }))", full: false },
     'lf-pills': { path: '/app/sessions?f[source][op]=is&f[source][values][0]=whatsapp&f[date][op]=is_not&f[date][values][0]=today', full: false },
@@ -222,6 +232,79 @@ mkdirSync(out, { recursive: true });
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 let signedIn = null;
 
+/**
+ * docs/PLAN_NAV_3_LEVELS.md section 8 in a browser, on the Library: a row's source mark filters the list in place; ⌘[
+ * goes back in the address and ⌘] forward; the rail's Library icon starts the Library over, and from another place
+ * brings you back where you left it; ⌘\\ folds the panel and it stays folded for that place; under the flyout width a
+ * rail icon opens the panel over the page and choosing closes it; the filters sit beside the list from 1440 and over it
+ * below. Answers what went wrong.
+ */
+async function navChecks(page, width) {
+    const wrong = [];
+    const at = () => decodeURIComponent(new URL(page.url()).pathname + new URL(page.url()).search);
+    const settle = async () => { await page.waitForLoadState('networkidle'); await page.waitForTimeout(500); };
+    const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+    await page.goto(base + '/app/sessions', { waitUntil: 'networkidle' });
+    await page.evaluate(() => { try { localStorage.removeItem('el-nav-last:library'); localStorage.removeItem('el-nav-panel:library'); } catch (e) {} });
+    // A row's source mark filters; the recording does not open.
+    await page.locator('.v2-lib-row [data-quick-source]').first().click();
+    await settle();
+    if (!at().startsWith('/app/sessions?') || !at().includes('f[source]')) wrong.push(`source mark went to ${at()}`);
+    // Back and forward from the keyboard.
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.keyboard.press(mod + '+BracketLeft');
+    await settle();
+    if (at() !== '/app/sessions') wrong.push(`⌘[ left ${at()}`);
+    await page.keyboard.press(mod + '+BracketRight');
+    await settle();
+    if (!at().includes('f[source]')) wrong.push(`⌘] left ${at()}`);
+    // The Library's rail icon from inside the Library starts it over.
+    await page.click('[data-rail="library"]');
+    await settle();
+    if (width >= 1100 && at() !== '/app/sessions') wrong.push(`the Library's icon in the Library went to ${at()}`);
+    if (width < 1100) {
+        // Under the flyout width the icon opens the panel over the page instead; choosing closes it.
+        const open = await page.evaluate(() => document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout'));
+        if (!open) wrong.push('the rail icon did not open the flyout');
+        await page.click('.v2-panel[data-panel="library"] [data-place="unread"]');
+        await settle();
+        if (at() !== '/app/sessions?tab=unread') wrong.push(`choosing in the flyout went to ${at()}`);
+        const still = await page.evaluate(() => document.querySelector('.v2-frame-inner')?.classList.contains('is-flyout'));
+        if (still) wrong.push('the flyout stayed open after choosing');
+        return wrong;
+    }
+    // Where you left it: Unread, then Projects, then the Library's icon brings Unread back.
+    await page.click('[data-place="unread"]');
+    await settle();
+    await page.click('[data-rail="projects"]');
+    await settle();
+    if (!at().startsWith('/app/clients')) wrong.push(`Projects' icon went to ${at()}`);
+    await page.click('[data-rail="library"]');
+    await settle();
+    if (at() !== '/app/sessions?tab=unread') wrong.push(`the Library's icon from Projects went to ${at()} (not where it was left)`);
+    // ⌘\ folds the panel, and the Library stays folded when you come back.
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.keyboard.press(mod + '+Backslash');
+    await page.waitForTimeout(300);
+    const folded = await page.evaluate(() => ! document.querySelector('#fi-main-sidebar')?.classList.contains('fi-sidebar-open'));
+    if (!folded) wrong.push('⌘\\ did not fold the panel');
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(400);
+    const stillFolded = await page.evaluate(() => ! document.querySelector('#fi-main-sidebar')?.classList.contains('fi-sidebar-open'));
+    if (!stillFolded) wrong.push('the Library did not stay folded');
+    await page.keyboard.press(mod + '+Backslash');
+    await page.waitForTimeout(300);
+    // The filters: beside the list (pushing it) from 1440, over it below.
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('el-filters', { detail: { open: true } })));
+    await page.waitForTimeout(500);
+    const shell = await page.evaluate(() => { const s = document.querySelector('.v2-lib-shell'); return { push: s?.classList.contains('is-pushing'), drawer: s?.classList.contains('is-drawer') }; });
+    if (width >= 1440 && !shell.push) wrong.push('the filters do not push the list at this width');
+    if (width < 1440 && !shell.drawer) wrong.push('the filters are not over the list at this width');
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('el-filters', { detail: { action: 'close' } })));
+    await page.evaluate(() => { try { localStorage.removeItem('el-lib-filters'); localStorage.removeItem('el-nav-last:library'); } catch (e) {} });
+    return wrong;
+}
+
 for (const theme of themes) {
     for (const width of widths) {
         const context = await browser.newContext({
@@ -325,20 +408,24 @@ for (const theme of themes) {
                         process.exitCode = 1;
                     }
                 }
-                // The sidebar's middle scrolls when it outgrows the window ("More" says so): each place, view, label and
-                // project, Live and Ask can be scrolled to and is then the thing under the pointer at its middle (what a
-                // fold holds, with the fold opened). From 1024 px wide, where the sidebar is open beside the page.
+                // Reach (docs/PLAN_NAV_3_LEVELS.md): every rail item is in view, and every item of the open place's panel can be
+                // scrolled to in the panel (or, with the earlier sidebar, its scrolling middle) and focused from either end,
+                // and is then the thing under the pointer at the middle of its name (what a fold holds, with the fold
+                // opened). From 1024 px wide, where the frame sits beside the page.
                 if (spec.reach && width >= 1024) {
                     const missed = await page.evaluate(async (selectors) => {
-                        const nav = document.querySelector('[data-sidebar-scroll]');
                         const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
                         const out = [];
-                        if (nav === null) return ['the sidebar has no scrolling middle'];
-                        if (nav.scrollHeight > nav.clientHeight + 1 && getComputedStyle(nav.querySelector('[data-scroll-down]')).display === 'none') out.push('no "More" while the middle overflows');
+                        const scroller = (el) => el.closest('.v2-panels, [data-sidebar-scroll]') ?? el.closest('.v2-rail');
+                        // Under the flyout width the panel is folded away: its rail icon opens it over the page (as here).
+                        const frameData = window.Alpine && document.querySelector('.v2-frame-inner') ? window.Alpine.$data(document.querySelector('.v2-frame-inner')) : null;
+                        if (frameData && frameData.narrow && frameData.place) frameData.flyout = frameData.place;
+                        await frame();
                         for (const selector of selectors) {
-                            const found = [...document.querySelectorAll(selector)].filter((el) => el.closest('[data-sidebar-scroll]'));
-                            if (found.length === 0) out.push(`${selector}: not in the sidebar`);
+                            const found = [...document.querySelectorAll(selector)].filter((el) => scroller(el) !== null && el.closest('[hidden]') === null);
+                            if (found.length === 0) out.push(`${selector}: not in the rail or the open panel`);
                             for (const el of found) {
+                                const box = scroller(el);
                                 const folds = [];
                                 for (let d = el.parentElement?.closest('details'); d; d = d.parentElement?.closest('details')) {
                                     if (!d.open && !(el.tagName === 'SUMMARY' && el.parentElement === d)) {
@@ -349,24 +436,23 @@ for (const theme of themes) {
                                 await frame();
                                 const seen = () => {
                                     const r = el.getBoundingClientRect();
-                                    const n = nav.getBoundingClientRect();
-                                    // At the middle of its name (a row's other end may hold its own button, such as PROJECTS' fold).
-                                    const name = (el.querySelector('.v2-sb-label') ?? el).getBoundingClientRect();
+                                    const n = box.getBoundingClientRect();
+                                    // At the middle of its name (a row's other end may hold its own button).
+                                    const name = (el.querySelector('.v2-sb-label, .v2-rail-label') ?? el).getBoundingClientRect();
                                     const hit = document.elementFromPoint(name.left + name.width / 2, name.top + name.height / 2);
                                     return r.height > 0 && r.top >= n.top - 1 && r.bottom <= n.bottom + 1 && hit !== null && (el === hit || el.contains(hit));
                                 };
                                 const label = `${selector} "${(el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30)}"`;
-                                // Scrolled within the sidebar only (scrollIntoView would move the page too).
+                                // Scrolled within its own box only (scrollIntoView would move the page too).
                                 const before = el.getBoundingClientRect();
-                                const box = nav.getBoundingClientRect();
-                                nav.scrollTop += before.top - box.top - (box.height - before.height) / 2;
+                                const area = box.getBoundingClientRect();
+                                box.scrollTop += before.top - area.top - (area.height - before.height) / 2;
                                 await frame();
                                 if (!seen()) out.push(label);
-                                // Reached with the keyboard, from either end: the browser scrolls it in, clear of the
-                                // sticky "More" and back-to-top bars (the middle's scroll-padding).
-                                for (const [end, top] of [['top', 0], ['end', nav.scrollHeight]]) {
+                                // Reached with the keyboard, from either end: the browser scrolls it in, clear of the box's edges.
+                                for (const [end, top] of [['top', 0], ['end', box.scrollHeight]]) {
                                     document.activeElement?.blur();
-                                    nav.scrollTop = top;
+                                    box.scrollTop = top;
                                     await frame();
                                     el.focus();
                                     await frame();
@@ -374,18 +460,31 @@ for (const theme of themes) {
                                 }
                                 el.blur();
                                 for (const d of folds) d.open = false;
+                                box.scrollTop = 0;
                             }
                         }
-                        nav.scrollTop = 0;
+                        if (frameData) frameData.flyout = null;
                         await frame();
                         return out;
                     }, spec.reach);
                     if (missed.length > 0) {
-                        console.error(`${name} ${width} ${theme}: out of reach in the sidebar: ${missed.join('; ')}`);
+                        console.error(`${name} ${width} ${theme}: out of reach: ${missed.join('; ')}`);
                         process.exitCode = 1;
                     } else {
-                        console.log(`${name} ${width} ${theme}: every sidebar place, view, label and project, Live and Ask can be reached`);
+                        console.log(`${name} ${width} ${theme}: every rail and panel item can be reached`);
                     }
+                }
+                // Browser checks of a page (docs/PLAN_NAV_3_LEVELS.md section 8): `checks` is an async function of the
+                // page and the width that answers a list of what went wrong; the page is loaded again afterwards.
+                if (spec.checks) {
+                    const wrong = await spec.checks(page, width).catch((e) => [`threw: ${e.message.split('\n')[0]}`]);
+                    if (wrong.length > 0) {
+                        console.error(`${name} ${width} ${theme}: ${wrong.join('; ')}`);
+                        process.exitCode = 1;
+                    } else {
+                        console.log(`${name} ${width} ${theme}: checks passed`);
+                    }
+                    await page.goto(base + path, { waitUntil: 'networkidle' });
                 }
                 // Alpine fades the sidebar labels in; give it time so every picture shows the settled page.
                 await page.waitForTimeout(spec.settle ?? 900);

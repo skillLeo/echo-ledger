@@ -2652,3 +2652,556 @@ button.v2-row-tile:focus-visible,
 .v2-sb-scroll.is-up .v2-icon {
     transform: rotate(180deg);
 }
+
+/* ================================================================== the three levels: rail, panel, page
+   docs/PLAN_NAV_3_LEVELS.md: the rail (72), the place's panel (260; folded, the rail alone), then the page. Filament's
+   sidebar is both: open, its width is the rail and the panel; folded, the rail. Under the flyout width the panel opens
+   over the page from a rail icon; on a phone the whole frame is the menu's drawer. Right to left it all mirrors. */
+:root:has(.v2-frame) {
+    --sidebar-width: calc(var(--el-space-24) * 3 + var(--el-space-20) * 13);
+    --collapsed-sidebar-width: calc(var(--el-space-24) * 3);
+}
+
+:root:has(.v2-frame[data-place='home']) {
+    --sidebar-width: calc(var(--el-space-24) * 3);
+}
+
+.v2-frame {
+    overflow: visible;
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-primary);
+}
+
+.v2-frame-inner {
+    position: relative;
+    display: flex;
+    height: 100%;
+}
+
+.v2-rail {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-4);
+    width: calc(var(--el-space-24) * 3);
+    padding-block: var(--el-space-12);
+    overflow-y: auto;
+    border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-rail-logo {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-40);
+    height: var(--el-space-40);
+    margin-block-end: var(--el-space-8);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+}
+
+.v2-rail-logo::before {
+    content: attr(data-initial);
+}
+
+.v2-rail-logo:hover,
+.v2-rail-logo.is-on {
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+}
+
+/* ● Record: the round accent button, the only primary action; its menu on the small chevron at its corner. */
+.v2-rail-record {
+    position: relative;
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    margin-block-end: var(--el-space-8);
+}
+
+.v2-rail-rec {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-2);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-rail-rec-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-40);
+    height: var(--el-space-40);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+    box-shadow: var(--el-shadow-1);
+}
+
+.v2-rail-rec:hover .v2-rail-rec-dot,
+.v2-rail-rec.is-on .v2-rail-rec-dot {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-rail-record > .fi-dropdown {
+    position: absolute;
+    inset-block-start: var(--el-space-24);
+    inset-inline-end: calc(var(--el-space-4) * -1);
+}
+
+.v2-rail-rec-more {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--el-space-20);
+    height: var(--el-space-20);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-rail-rec-more .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-rail-list {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-4);
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.v2-rail-list > li {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.v2-rail-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-2);
+    width: calc(var(--el-space-32) * 2);
+    padding-block: var(--el-space-8) var(--el-space-4);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+    text-align: center;
+    transition: background-color var(--el-motion-fast) var(--el-motion-ease-out);
+}
+
+.v2-rail-item:hover {
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+}
+
+/* Selected: a soft accent tint, the icon and its name in the accent. */
+.v2-rail-item.is-on {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-rail-item.is-off {
+    color: var(--el-role-text-disabled);
+    cursor: not-allowed;
+}
+
+.v2-rail-icon {
+    position: relative;
+    display: inline-flex;
+}
+
+.v2-rail-icon .v2-icon {
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+}
+
+.v2-rail-label {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-caption-line);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-rail-badge {
+    position: absolute;
+    inset-block-start: var(--el-space-2);
+    inset-inline-start: calc(50% + var(--el-space-4));
+    min-width: var(--el-icon-sm);
+    padding-inline: var(--el-space-4);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-danger-default);
+    color: var(--el-role-text-on-accent);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+    line-height: var(--el-text-caption-line);
+    text-align: center;
+}
+
+.v2-rail-dot {
+    position: absolute;
+    inset-block-start: calc(var(--el-space-2) * -1);
+    inset-inline-end: calc(var(--el-space-2) * -1);
+    width: var(--el-space-8);
+    height: var(--el-space-8);
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-warning-default);
+}
+
+.v2-rail-foot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--el-space-4);
+    width: 100%;
+    margin-block-start: auto;
+    padding-block-start: var(--el-space-8);
+}
+
+.v2-rail-avatar {
+    padding-block-start: var(--el-space-4);
+}
+
+/* The place's panel: its name, ⊟, then its groups (titles small, in sentence case, quiet). */
+.v2-panels {
+    flex: none;
+    width: calc(var(--el-space-20) * 13);
+    overflow-y: auto;
+    border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
+    background-color: var(--el-role-bg-subtle);
+    scroll-padding-block: var(--el-space-24);
+}
+
+.v2-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    min-height: 100%;
+    padding: var(--el-space-12) var(--el-space-8) var(--el-space-16);
+}
+
+.v2-panel[hidden] {
+    display: none;
+}
+
+.v2-panel-head {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-4);
+    min-height: var(--el-layout-control-height);
+    padding-inline: var(--el-space-8) 0;
+}
+
+.v2-panel-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    line-height: var(--el-text-title-s-line);
+}
+
+.v2-panel-title a:hover {
+    text-decoration: underline;
+}
+
+.v2-panel-group-title {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    margin: 0;
+    padding-inline: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-panel .v2-sb-sub {
+    margin-block: 0;
+    padding-inline-start: 0;
+}
+
+.v2-panel .v2-sb-sub.is-nested {
+    padding-inline-start: var(--el-space-24);
+}
+
+.v2-panel .v2-sb-subitem .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    flex: none;
+}
+
+.v2-panel .v2-sb-subitem.is-on {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-panel .v2-sb-group-title {
+    padding-inline-start: var(--el-space-8);
+}
+
+.v2-panel-foot {
+    margin-block-start: auto;
+    padding-block-start: var(--el-space-8);
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-panel-find,
+.v2-panel-search input {
+    width: 100%;
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-8);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-panel-find {
+    margin-block-end: var(--el-space-4);
+}
+
+.v2-panel-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.v2-panel-search > .v2-icon {
+    position: absolute;
+    inset-inline-start: var(--el-space-8);
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    color: var(--el-role-text-secondary);
+    pointer-events: none;
+}
+
+.v2-panel-search input {
+    padding-inline-start: var(--el-space-32);
+}
+
+@media (min-width: 1024px) {
+    /* Folded: the rail alone; under the flyout width the panel opens over the page from a rail icon. */
+    .v2-frame:not(.fi-sidebar-open) .v2-panels {
+        display: none;
+    }
+
+    .v2-frame .v2-frame-inner.is-flyout .v2-panels {
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: calc(var(--el-space-24) * 3);
+        z-index: var(--el-layer-overlay);
+        display: block;
+        box-shadow: var(--el-shadow-3);
+    }
+
+    .v2-frame .v2-frame-inner.is-narrow .v2-panel-hide {
+        display: none;
+    }
+}
+
+/* A page's inner list (Settings' groups of several pages): the group's pages, the open one as a card. */
+.v2-inner-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-2);
+}
+
+.v2-inner-list-title {
+    margin: 0 0 var(--el-space-4);
+    padding-inline: var(--el-space-12);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-inner-item {
+    display: flex;
+    align-items: center;
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12);
+    border: var(--el-border-hairline) solid transparent;
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-inner-item:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-inner-item.is-on {
+    border-color: var(--el-role-border-default);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* A page's top tabs (docs/PLAN_NAV_3_LEVELS.md section 4): the Library's All · Calls · Meetings · Voice notes with
+   their counts, Live Assist's Upcoming · Past reports · Practice. The open one is underlined. */
+.v2-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: var(--el-space-16);
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.v2-tab {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--el-space-4);
+    min-height: var(--el-component-chip-height);
+    padding-inline: var(--el-space-2);
+    border-block-end: var(--el-focus-width) solid transparent;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+    white-space: nowrap;
+}
+
+.v2-tab:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-tab.is-on {
+    border-block-end-color: var(--el-role-text-primary);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-tab-count {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--el-text-body-weight);
+}
+
+.v2-lib-tabs {
+    margin-inline-end: var(--el-space-8);
+}
+
+/* The page's tabs under its heading (Live Assist). */
+.v2-page-tabs {
+    margin-block: var(--el-space-4) var(--el-space-8);
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+/* With the three levels (docs/PLAN_NAV_3_LEVELS.md section 4): the filters come from the end side (the right; the left
+   in Urdu), 320 wide (eight of space-40); beside the list from --el-breakpoint-wide, over it below. */
+.v2-lib-shell.is-right > .fi-sc > .fi-grid-col:has(.v2-lib-panel) {
+    order: 2;
+}
+
+.v2-lib-shell.is-right .v2-lib-panel {
+    inline-size: calc(var(--el-space-40) * 8);
+}
+
+.v2-lib-shell.is-right.is-drawer .v2-lib-panel {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+}
+
+/* With the three levels the toolbar row also holds the tabs: on a computer it stays one line, the search giving way
+   first, and narrower than --el-breakpoint-wide Sort & display keeps its icon (its name in the tooltip and for screen
+   readers). */
+.v2-lib-shell.is-right .v2-library .fi-ta-search-field {
+    flex: 0 1 calc(var(--el-space-40) * 5);
+    min-inline-size: calc(var(--el-space-40) * 3);
+}
+
+@media (min-width: 1024px) {
+    .v2-lib-shell.is-right .v2-library .fi-ta-header-toolbar > div:last-child {
+        flex-wrap: nowrap;
+    }
+}
+
+/* The breadcrumb keeps its words; the tabs scroll sideways when the row is short (the filters beside the list). */
+.v2-library .fi-ta-header-toolbar > div:last-child > .v2-lib-crumbs {
+    display: flex;
+    flex: none;
+}
+
+.v2-lib-shell.is-right .v2-lib-tabs {
+    flex: 0 1 auto;
+}
+
+.v2-lib-shell.is-right.is-pushing [data-menu='display'] .v2-chip-words {
+    position: absolute;
+    width: var(--el-border-hairline);
+    height: var(--el-border-hairline);
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+@media not all and (min-width: 1440px) {
+    .v2-lib-shell.is-right [data-menu='display'] .v2-chip-words {
+        position: absolute;
+        width: var(--el-border-hairline);
+        height: var(--el-border-hairline);
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}
+
+/* Settings › Appearance › Sidebar style for the rail and its panels: Soft grey (their own), Light, or Dark (the light
+   theme's frame drawn in its text colour; under the dark theme it is dark already). */
+.v2-frame[data-style='light'],
+.v2-frame[data-style='light'] .v2-rail,
+.v2-frame[data-style='light'] .v2-panels {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-frame[data-style='light'] .v2-rail-item:hover,
+.v2-frame[data-style='light'] .v2-sb-subitem:hover,
+.v2-frame[data-style='light'] .v2-panel .v2-sb-subitem.is-on {
+    background-color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'],
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panels {
+    border-inline-end-color: var(--el-role-text-primary);
+    background-color: var(--el-role-text-primary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-item,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-rec,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-title,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-group-title,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-sb-subitem,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-sb-subcount {
+    color: var(--el-role-bg-subtle);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-item:hover,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-rail-item.is-on,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-sb-subitem:hover,
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel .v2-sb-subitem.is-on {
+    background-color: var(--el-role-text-secondary);
+    color: var(--el-role-bg-surface);
+}
+
+:root[data-theme='light'] .v2-frame[data-style='dark'] .v2-panel-foot {
+    border-block-start-color: var(--el-role-text-secondary);
+}
