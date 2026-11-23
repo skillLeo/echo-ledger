@@ -30,18 +30,24 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 when (intent.action) {
-                    // Transcribe or Save audio only (since 2.0.5); an older notification's Keep keeps it as before.
-                    ACTION_KEEP -> Decisions.apply(
-                        context,
-                        id,
-                        keep = true,
-                        transcribe = if (intent.hasExtra(EXTRA_TRANSCRIBE)) intent.getBooleanExtra(EXTRA_TRANSCRIBE, false) else null
-                    )
+                    // Transcribe or Save audio only (since 2.0.5); an older notification's Keep keeps it as before. From
+                    // "Saved as audio" (v2.1), Transcribe changes the choice, which then does not count toward "Always".
+                    ACTION_KEEP -> {
+                        withContext(Dispatchers.Main) { DecisionPopup.forgetChoice(id) }
+                        Decisions.apply(
+                            context,
+                            id,
+                            keep = true,
+                            transcribe = if (intent.hasExtra(EXTRA_TRANSCRIBE)) intent.getBooleanExtra(EXTRA_TRANSCRIBE, false) else null
+                        )
+                    }
 
                     // Undo on "Saved · …" is a Discard too: "Discarded · Undo" first, the file only after that.
                     ACTION_DISCARD, ACTION_UNDO -> discard(context, id)
 
                     ACTION_UNDO_DISCARD -> undoDiscard(context, id)
+
+                    ACTION_UNDO_CHOICE -> undoChoice(context, id)
                 }
             } finally {
                 pending.finish()
@@ -64,7 +70,20 @@ class SaveDecisionReceiver : BroadcastReceiver() {
      */
     private suspend fun undoDiscard(context: Context, id: String) {
         Notifications.cancelDecision(context, id)
+        withContext(Dispatchers.Main) { DecisionPopup.forgetChoice(id) }
         val back = Decisions.undoDiscard(context, id) ?: return
+        val settings = (context.applicationContext as EchoLedgerApp).graph.settings.current()
+        withContext(Dispatchers.Main) { PostCallPrompt.again(context, back, settings.themeMode) }
+    }
+
+    /**
+     * Undo on "Transcribing…" or "Saved as audio" in the after-call notification (v2.1): the call waits for the question
+     * again with nothing decided, its upload called off, and is asked about again. Nothing when it was sent meanwhile.
+     */
+    private suspend fun undoChoice(context: Context, id: String) {
+        Notifications.cancelDecision(context, id)
+        withContext(Dispatchers.Main) { DecisionPopup.forgetChoice(id) }
+        val back = Decisions.undoKeep(context, id) ?: return
         val settings = (context.applicationContext as EchoLedgerApp).graph.settings.current()
         withContext(Dispatchers.Main) { PostCallPrompt.again(context, back, settings.themeMode) }
     }
@@ -78,6 +97,9 @@ class SaveDecisionReceiver : BroadcastReceiver() {
 
         /** Since v1.8.1: Undo on "Discarded · …" (Discard in the notification). */
         const val ACTION_UNDO_DISCARD = "com.echoledger.mobile.UNDO_DISCARD"
+
+        /** Since v2.1: Undo on "Transcribing…" or "Saved as audio" (a choice made on the after-call card). */
+        const val ACTION_UNDO_CHOICE = "com.echoledger.mobile.UNDO_CHOICE"
         const val EXTRA_ID = "recording_id"
 
         /** With [ACTION_KEEP] (since 2.0.5): true for Transcribe, false for Save audio only. */

@@ -83,8 +83,10 @@ internal fun isolated(text: String): String = "\u2068$text\u2069"
  * to keep audio only". A swipe left or right, or nothing for 8 s, keeps the audio only ([onAudio], also TalkBack's
  * custom action). A solid surface from the tokens with radius 16; the buttons go onto two rows when they don't fit (a
  * 360 dp phone, the largest text, Urdu). It slides up in 200 ms; the progress line is its only animation and stands
- * still under Remove animations ([still]). No sound and no vibration. After a choice the same card is one line with
- * Undo, never two lines and never a toast on top.
+ * still under Remove animations ([still]). No sound and no vibration. After a choice the card goes and its line is the
+ * app's snackbar or the after-call notification (v2.1); only when neither can show it is the same card one line with
+ * Undo, never two lines and never a toast on top, and a swipe left or right dismisses that line ([onDismiss], also
+ * TalkBack's custom action).
  */
 @Composable
 fun CallChoiceCard(
@@ -96,6 +98,8 @@ fun CallChoiceCard(
     modifier: Modifier = Modifier,
     onAlwaysYes: () -> Unit = {},
     onReview: () -> Unit = {},
+    /** A swipe on a line (not the question): it goes now and its choice stands. */
+    onDismiss: () -> Unit = {},
     still: Boolean = false,
     /** Ask's time to answer (tests and screenshots hold it still). */
     askMs: Long = CallChoice.CARD_MS
@@ -106,8 +110,10 @@ fun CallChoiceCard(
     LaunchedEffect(Unit) { if (!still) rise.animateTo(0f, tween(RISE_MS, easing = LinearEasing)) }
     val swipe = remember(screen) { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    val audioLabel = stringResource(R.string.cc_save_audio_only)
-    val swipes = screen is CallCardScreen.Ask
+    val asking = screen is CallCardScreen.Ask
+    // A swipe on the question keeps the audio only; on a line it dismisses the line.
+    val swipeLabel = stringResource(if (asking) R.string.cc_save_audio_only else R.string.v2_close)
+    val swiped = if (asking) onAudio else onDismiss
     Surface(
         shape = RoundedCornerShape(EchoTokens.Radius.sheet),
         // Solid: never the home screen through it.
@@ -123,33 +129,26 @@ fun CallChoiceCard(
                 translationX = swipe.value
                 alpha = 1f - (abs(swipe.value) / (size.width.coerceAtLeast(1f))).coerceIn(0f, 1f)
             }
-            .then(
-                if (swipes) {
-                    Modifier
-                        .pointerInput(screen) {
-                            detectHorizontalDragGestures(
-                                onDragEnd = {
-                                    scope.launch {
-                                        if (abs(swipe.value) > size.width * SWIPE_FRACTION) {
-                                            onAudio()
-                                        } else if (still) {
-                                            swipe.snapTo(0f)
-                                        } else {
-                                            swipe.animateTo(0f, tween(RISE_MS))
-                                        }
-                                    }
-                                },
-                                onDragCancel = { scope.launch { swipe.snapTo(0f) } }
-                            ) { change, amount ->
-                                change.consume()
-                                scope.launch { swipe.snapTo(swipe.value + amount) }
+            .pointerInput(screen) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        scope.launch {
+                            if (abs(swipe.value) > size.width * SWIPE_FRACTION) {
+                                swiped()
+                            } else if (still) {
+                                swipe.snapTo(0f)
+                            } else {
+                                swipe.animateTo(0f, tween(RISE_MS))
                             }
                         }
-                        .semantics { customActions = listOf(CustomAccessibilityAction(audioLabel) { onAudio().let { true } }) }
-                } else {
-                    Modifier
+                    },
+                    onDragCancel = { scope.launch { swipe.snapTo(0f) } }
+                ) { change, amount ->
+                    change.consume()
+                    scope.launch { swipe.snapTo(swipe.value + amount) }
                 }
-            )
+            }
+            .semantics { customActions = listOf(CustomAccessibilityAction(swipeLabel) { swiped().let { true } }) }
             .semantics { liveRegion = LiveRegionMode.Polite }
     ) {
         when (screen) {
