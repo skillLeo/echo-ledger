@@ -237,3 +237,73 @@ test('a held step is dropped when the person went somewhere since, so its replay
     assert.equal(core.stillCurrent({ key: null, pushes: 3 }, { key: null, pushes: 4 }), false);
     assert.equal(core.stillCurrent(null, { key: 'k1', pushes: 0 }), false);
 });
+
+/** Fake timers: set() returns an id, run(ms) moves the clock and fires what is due. */
+function fakeTimers() {
+    let now = 0;
+    let next = 1;
+    const due = new Map();
+    return {
+        set: (fn, ms) => { const id = next++; due.set(id, { at: now + ms, fn }); return id; },
+        clear: (id) => { due.delete(id); },
+        run(ms) {
+            now += ms;
+            for (const [id, t] of [...due].sort((a, b) => a[1].at - b[1].at)) {
+                if (t.at <= now) { due.delete(id); t.fn(); }
+            }
+        },
+        pending: () => due.size,
+    };
+}
+
+test('a held step goes through at ten seconds while one request hangs and others keep ending', () => {
+    const timers = fakeTimers();
+    const gate = core.historyGate();
+    const replayed = [];
+    const guard = core.historyGuard(gate, timers, (step) => replayed.push(step), 10000);
+    const request = () => {
+        const callbacks = [];
+        return { hooks: { respond: (cb) => callbacks.push(cb) }, finish: () => callbacks.forEach((cb) => cb()) };
+    };
+    // A request that never ends (a server that never answers).
+    core.watchRequest(gate, request().hooks, guard.handBack);
+    assert.equal(guard.pop({ url: '/forward' }, 0), 'hold');
+    assert.equal(guard.limited(), true);
+    // The poll keeps ending requests meanwhile: each hands nothing back and leaves the limit alone.
+    for (let i = 0; i < 4; i++) {
+        const poll = request();
+        core.watchRequest(gate, poll.hooks, guard.handBack);
+        timers.run(2000);
+        poll.finish();
+        assert.equal(guard.limited(), true, `poll ${i}`);
+        assert.deepEqual(replayed, [], `poll ${i}`);
+    }
+    // A later step held moves nothing: still ten seconds from the first.
+    assert.equal(guard.pop({ url: '/back' }, 8000), 'hold');
+    timers.run(1999);
+    assert.deepEqual(replayed, []);
+    timers.run(1);
+    assert.deepEqual(replayed, [{ url: '/back' }]);
+    assert.equal(guard.limited(), false);
+    assert.equal(timers.pending(), 0);
+    // Released: the next step goes straight through.
+    assert.equal(guard.pop({ url: '/next' }, 10001), 'pass');
+});
+
+test('a step handed back when the last request ends clears its limit, so it never goes through twice', () => {
+    const timers = fakeTimers();
+    const gate = core.historyGate();
+    const replayed = [];
+    const guard = core.historyGuard(gate, timers, (step) => replayed.push(step), 10000);
+    const callbacks = [];
+    core.watchRequest(gate, { respond: (cb) => callbacks.push(cb) }, guard.handBack);
+    assert.equal(guard.pop({ url: '/forward' }, 0), 'hold');
+    timers.run(300);
+    callbacks.forEach((cb) => cb());
+    assert.deepEqual(replayed, [{ url: '/forward' }]);
+    assert.equal(guard.limited(), false);
+    assert.equal(timers.pending(), 0);
+    timers.run(20000);
+    assert.deepEqual(replayed, [{ url: '/forward' }]);
+});
+

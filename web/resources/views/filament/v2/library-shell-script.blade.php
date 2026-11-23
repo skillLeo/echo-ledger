@@ -80,11 +80,12 @@
         // waits for that answer, then its address and state are put back as it left them and it goes through, so a late
         // answer never rewrites the address of the step after it, and that step replaces its entry instead of adding one.
         // Held before Livewire hears it (capture, on the window). Each request is counted back on respond(), which every
-        // ending reaches (ElLibraryKeysCore.watchRequest). A held step goes through after ten seconds from the first one
-        // held at the latest, and is dropped if the person went somewhere since (a filter or a tab pushed an entry).
+        // ending reaches (ElLibraryKeysCore.watchRequest). A held step goes through ten seconds after the first one held at
+        // the latest, also while a request hangs and others end (ElLibraryKeysCore.historyGuard), and is dropped if the
+        // person went somewhere since (a filter or a tab pushed an entry).
         let gate = null;
+        let guard = null;
         let replaying = false;
-        let limit = null;
         let pushes = 0;
         const push = history.pushState.bind(history);
         history.pushState = function (...args) { pushes += 1; return push(...args); };
@@ -93,10 +94,8 @@
             const el = component && component.el;
             return el instanceof Element && (el.querySelector('.v2-library') !== null || el.matches('.v2-library'));
         };
+        // A step handed back (ElLibraryKeysCore.historyGuard: the last request out ended, or the limit came).
         const replay = (step) => {
-            clearTimeout(limit);
-            limit = null;
-            if (! step) return;
             // After Livewire is done with the answer: its render a frame later, and the previous step's reset after it.
             requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => {
                 if (! window.ElLibraryKeysCore.stillCurrent(step.at, where())) return;
@@ -109,23 +108,22 @@
                 }
             }, 0)));
         };
+        const timers = { set: (fn, ms) => setTimeout(fn, ms), clear: (id) => clearTimeout(id) };
         const watch = () => {
             window.Livewire.hook('commit', ({ component, respond }) => {
                 const core = window.ElLibraryKeysCore;
-                if (! library(component) || ! core || typeof core.watchRequest !== 'function') return;
+                if (! library(component) || ! core || typeof core.historyGuard !== 'function') return;
                 gate = gate || core.historyGate();
-                core.watchRequest(gate, { respond }, replay);
+                guard = guard || core.historyGuard(gate, timers, replay, 10000);
+                core.watchRequest(gate, { respond }, guard.handBack);
             });
         };
         if (window.Livewire && typeof window.Livewire.hook === 'function') watch(); else document.addEventListener('livewire:init', watch);
         window.addEventListener('popstate', (e) => {
-            if (replaying || gate === null) return;
+            if (replaying || guard === null) return;
             let state = e.state;
             try { state = structuredClone(e.state); } catch (err) { /* kept as it is */ }
-            if (gate.pop({ state, url: location.href, at: where() }, Date.now()) !== 'hold') return;
-            e.stopImmediatePropagation();
-            // From the first step held only: a later one never moves the limit.
-            if (limit === null) limit = setTimeout(() => replay(gate.release()), 10000);
+            if (guard.pop({ state, url: location.href, at: where() }, Date.now()) === 'hold') e.stopImmediatePropagation();
         }, true);
 
         // The keys, before the list's own (library-keys): ElLibraryKeysCore.shellKey decides.

@@ -171,13 +171,14 @@ it('lets a Back or Forward taken while the Library is still answering wait for t
     // The rule is ElLibraryKeysCore.historyGate (tests/js/library-keys-core.test.mjs); in a browser with every answer
     // held back, scripts/screenshots.mjs (nav-library) checks that a quick ⌘[ ⌘] lands on the filtered list and keeps it.
     $html = ($this->page)();
-    expect($html)->toContain("if (gate.pop({ state, url: location.href, at: where() }, Date.now()) !== 'hold') return;")->toContain('e.stopImmediatePropagation();')
+    expect($html)->toContain("if (guard.pop({ state, url: location.href, at: where() }, Date.now()) === 'hold') e.stopImmediatePropagation();")
         ->toContain('}, true);')->toContain("history.replaceState(step.state, '', step.url);")
         ->toContain("window.dispatchEvent(new PopStateEvent('popstate', { state: step.state }));")
         // Counted back on respond (every ending), the limit from the first step held, a step dropped after a push.
-        ->toContain("window.Livewire.hook('commit', ({ component, respond }) => {")->toContain('core.watchRequest(gate, { respond }, replay);')
+        ->toContain("window.Livewire.hook('commit', ({ component, respond }) => {")->toContain('core.watchRequest(gate, { respond }, guard.handBack);')
         ->not->toContain('succeed(end)')
-        ->toContain('if (limit === null) limit = setTimeout(() => replay(gate.release()), 10000);')
+        // The limit and what hands a step back are ElLibraryKeysCore.historyGuard's (Node, with fake timers).
+        ->toContain('guard = guard || core.historyGuard(gate, timers, replay, 10000);')->not->toContain('clearTimeout(limit)')
         ->toContain('if (! window.ElLibraryKeysCore.stillCurrent(step.at, where())) return;')
         ->toContain('historyGate()');
     $result = Process::path(base_path())->timeout(60)->run(['node', '--test', 'tests/js/library-keys-core.test.mjs']);

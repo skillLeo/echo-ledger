@@ -165,6 +165,40 @@
     }
 
     /**
+     * The gate with its time limit: a step held goes through when the Library's last request out ends, or ten seconds
+     * (limitMs) after the first step held at the latest, even while a request hangs (a server that never answers) and
+     * other requests (the poll) keep ending. Only handing a step back clears the limit; an ending that hands nothing
+     * back (another request still out) leaves the held step and its limit as they are. timers: {set(fn, ms), clear(id)};
+     * replay(step): what the page does with a step handed back. handBack is what each request's ending calls with
+     * gate.end() (watchRequest's replay); pop(entry, now) is each step's, as the gate's, starting the limit at the first.
+     */
+    function historyGuard(gate, timers, replay, limitMs) {
+        let limit = null;
+        const handBack = (step) => {
+            if (! step) return;
+            if (limit !== null) {
+                timers.clear(limit);
+                limit = null;
+            }
+            replay(step);
+        };
+        return {
+            handBack,
+            pop(entry, now) {
+                const result = gate.pop(entry, now);
+                if (result === 'hold' && limit === null) {
+                    limit = timers.set(() => {
+                        limit = null;
+                        handBack(gate.release());
+                    }, typeof limitMs === 'number' ? limitMs : 10000);
+                }
+                return result;
+            },
+            limited() { return limit !== null; },
+        };
+    }
+
+    /**
      * Whether a held step may still go through when it is handed back: not when the person went somewhere since (a filter
      * or a tab pushed a new entry while it was held), or its replay would overwrite that newer entry. held and now:
      * {key (the Navigation API's current entry key, where the browser has it), pushes (how many entries the page pushed)}.
@@ -175,5 +209,5 @@
         return !! held && !! now && held.pushes === now.pushes;
     }
 
-    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey, historyGate, watchRequest, stillCurrent };
+    return { isTyping, isField, isControl, keyAction, clickAction, contextAction, shellKey, historyKey, historyGate, historyGuard, watchRequest, stillCurrent };
 });
