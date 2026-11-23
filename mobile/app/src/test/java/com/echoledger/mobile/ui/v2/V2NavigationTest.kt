@@ -3,8 +3,10 @@ package com.echoledger.mobile.ui.v2
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
@@ -12,9 +14,11 @@ import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.testsupport.FakeServer
@@ -85,7 +89,10 @@ class V2NavigationTest : ScreenTest() {
         runBlocking { app.graph.library.refresh() }
     }
 
-    private fun shell(flags: UiFlags = v2) = show {
+    private fun shell(flags: UiFlags = v2) = show { shellContent(flags) }
+
+    @androidx.compose.runtime.Composable
+    private fun shellContent(flags: UiFlags = v2) {
         EchoV2Shell(
             vm,
             flags,
@@ -106,17 +113,21 @@ class V2NavigationTest : ScreenTest() {
     fun theBarIsLibraryProjectsRecordLiveAskAndLibraryComesFirst() {
         seed()
         shell()
-        // The page is called what its tab is called.
-        compose.onNode(hasText("Library") and isHeading()).assertExists()
-        // The bar's tabs (the Library's list chips are tabs of the page's own).
+        // The page says what it shows, All recordings first, and its title opens the menu of the Library's places.
+        compose.onNode(hasText("All recordings") and isHeading()).assertExists()
+        compose.onNode(
+            hasText("All recordings") and
+                androidx.compose.ui.test.SemanticsMatcher.expectValue(
+                    androidx.compose.ui.semantics.SemanticsProperties.Role,
+                    androidx.compose.ui.semantics.Role.DropdownList
+                )
+        ).assertExists()
+        // The bar's tabs, and no other (the Library's chips under the search are choices of the page's own).
         val tabs = compose.onAllNodes(
             androidx.compose.ui.test.SemanticsMatcher.expectValue(
                 androidx.compose.ui.semantics.SemanticsProperties.Role,
                 androidx.compose.ui.semantics.Role.Tab
-            ) and
-                !androidx.compose.ui.test.hasAnyAncestor(
-                    androidx.compose.ui.test.hasTestTag(com.echoledger.mobile.ui.v2.library.LIST_ROW_TAG)
-                )
+            )
         ).fetchSemanticsNodes().map { com.echoledger.mobile.ui.v2.ParityKit.name(it) }
         assertEquals(listOf("Library", "Projects", "Live", "Ask"), tabs)
         compose.onNodeWithContentDescription("Record").assertExists()
@@ -237,7 +248,55 @@ class V2NavigationTest : ScreenTest() {
         }
         compose.onNodeWithText("Caller 060", substring = true).assertDoesNotExist()
         compose.onAllNodesWithText("Caller 05", substring = true).fetchSemanticsNodes()
-        compose.onNode(hasText("Library") and isHeading()).assertIsDisplayed()
+        compose.onNode(hasText("All recordings") and isHeading()).assertIsDisplayed()
+    }
+
+    /** PLAN_NAV_3_LEVELS §0: from any view, the Library tab tapped again is All recordings, with the filters cleared. */
+    @Test
+    fun theLibraryTabTappedAgainIsAllRecordingsWithTheFiltersCleared() {
+        seed(rows = 3)
+        server.on("POST", "/api/sessions/.+/opened", FakeServer.empty(204))
+        shell()
+        // Unread, then a filter on (Marked › Pinned: nothing has it).
+        compose.onNode(hasText("All recordings") and isHeading()).performClick()
+        compose.onNode(hasContentDescription("Unread", substring = true) and androidx.compose.ui.test.hasClickAction()).performClick()
+        compose.onNode(hasText("Unread") and isHeading()).assertExists()
+        compose.onNode(hasContentDescription("Filters") and androidx.compose.ui.test.hasClickAction()).performClick()
+        compose.onNode(hasText("Pinned") and androidx.compose.ui.test.isToggleable()).performScrollTo().performClick()
+        compose.onNode(hasText("Show 0 results")).performClick()
+        compose.onNodeWithText("No recordings match these filters").assertExists()
+        compose.onNode(hasText("Clear filters")).assertExists()
+        // The tab tapped again: All recordings, nothing filtered.
+        compose.onNode(hasText("Library") and !isHeading()).performClick()
+        pumpUntil("all recordings again") {
+            compose.onAllNodes(hasText("All recordings") and isHeading()).fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithText("Caller 00", substring = true).fetchSemanticsNodes().size == 3
+        }
+        compose.onAllNodes(hasContentDescription("Filters, 1 on")).assertCountEquals(0)
+    }
+
+    /** Opening a recording and coming back keeps where Library was: its view, filters, tab and search. */
+    @Test
+    fun aRecordingOpenedAndClosedKeepsWhereLibraryWas() {
+        seed(rows = 3)
+        server.on("POST", "/api/sessions/.+/opened", FakeServer.empty(204))
+        server.on("GET", "/api/sessions/.+", FakeServer.json(404, """{"message":"Not found","code":"not_found"}"""))
+        var back: androidx.activity.OnBackPressedDispatcher? = null
+        show {
+            back = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            shellContent()
+        }
+        compose.onNode(hasContentDescription("Filters") and androidx.compose.ui.test.hasClickAction()).performClick()
+        compose.onNode(hasText("WhatsApp") and isToggleable()).performScrollTo().performClick()
+        compose.onNode(hasText("Show 3 results")).performClick()
+        compose.onNode(hasContentDescription("Filters, 1 on")).assertExists()
+        compose.onAllNodesWithText("Caller 001", substring = true).onFirst().performClick()
+        pumpUntil("the recording") { compose.onAllNodes(hasContentDescription("Filters, 1 on")).fetchSemanticsNodes().isEmpty() }
+        compose.runOnIdle { back!!.onBackPressed() }
+        pumpUntil("back in Library, as it was") {
+            compose.onAllNodes(hasContentDescription("Filters, 1 on")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("Source: WhatsApp").assertExists()
     }
 
     @Test

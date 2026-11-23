@@ -86,6 +86,7 @@ object SettingsTransfer {
         "serverUrl",
         "pins",
         "deviceId",
+        "signIns",
         "deviceName",
         "clientId",
         "serverApiVersion",

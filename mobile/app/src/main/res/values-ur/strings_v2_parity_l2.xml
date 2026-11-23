@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="v2_fold_inbox">ان باکس</string>
+    <string name="v2_fold_inbox">کوئی پروجیکٹ نہیں</string>
     <string name="v2_fold_whatsapp">واٹس ایپ</string>
     <string name="v2_fold_whatsapp_business">واٹس ایپ بزنس</string>
     <string name="v2_fold_google_meet">گوگل میٹ</string>
@@ -28,7 +28,7 @@
     <string name="v2_fold_remove">ہٹائیں</string>
     <string name="v2_req_title">فائلیں منگوائیں</string>
     <string name="v2_req_new">نیا ریکویسٹ لنک</string>
-    <string name="v2_req_intro">ریکویسٹ لنک رکھنے والا کوئی بھی آپ کو وائس نوٹس اور آڈیو (اور پروجیکٹ کے لیے فائلیں) بھیج سکتا ہے۔ یہ ان باکس یا پروجیکٹ میں آتی ہیں۔</string>
+    <string name="v2_req_intro">ریکویسٹ لنک رکھنے والا کوئی بھی آپ کو وائس نوٹس اور آڈیو (اور پروجیکٹ کے لیے فائلیں) بھیج سکتا ہے۔ یہ بغیر پروجیکٹ کی ریکارڈنگز میں یا پروجیکٹ میں آتی ہیں۔</string>
     <string name="v2_req_title_they_see">عنوان جو انہیں دکھے گا</string>
     <string name="v2_req_files_go_to">فائلیں کہاں جائیں</string>
     <string name="v2_req_make">لنک بنائیں</string>

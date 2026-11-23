@@ -21,6 +21,7 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
@@ -47,10 +48,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Lists in the v2 Library (D14 on contract 2.0.0-m): the chip row All · Unread · Important · the person's lists · "+",
- * filtering by one chip, an empty list's words, making a list in two steps (the payload with its hex colour), the chip
- * menu (Rename with the name checks, Change colour, Move left / Move right as the screen reads, Delete after asking),
- * Add to list from the selection with Undo for only what changed, Unread clearing on opening, and right to left.
+ * Lists in the v2 Library (D14 on contract 2.0.0-m; lists are labels, PLAN_LIBRARY_FILTERS's lead decisions): the
+ * title menu's Views (All recordings, Unread, Important) and Labels (the person's lists, + New label), choosing one at a
+ * time, an empty one's words, making a label in two steps (the payload with its hex colour), each label's ⋮ (Rename
+ * with the name checks, Change colour, Move up / Move down, Delete after asking), Add to list from the selection with
+ * Undo for only what changed, Unread clearing on opening, and right to left.
  */
 class V2LibraryListsTest : ScreenTest() {
     private val listsJson = """{"data":[
@@ -101,7 +103,37 @@ class V2LibraryListsTest : ScreenTest() {
     private fun nameField() =
         compose.onAllNodes(hasSetTextAction() and hasImeAction(androidx.compose.ui.text.input.ImeAction.Done)).onFirst()
 
-    private fun chip(name: String) = compose.onAllNodes(hasText(name) and hasClickAction()).onFirst()
+    /** Opens the title's menu (whatever the title says now). */
+    private fun menu() {
+        compose.onNode(
+            SemanticsMatcher.expectValue(SemanticsProperties.Role, androidx.compose.ui.semantics.Role.DropdownList) and
+                SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)
+        ).performClick()
+        compose.waitForIdle()
+    }
+
+    /**
+     * One of the menu's views or labels (the menu open), by what TalkBack hears: its name, then its count (not a
+     * recording's row in the list, which says its labels too).
+     */
+    private fun row(name: String) = compose.onAllNodes(
+        (
+            hasContentDescription(name) or hasContentDescription("$name, ", substring = true) or
+                hasContentDescription("$name، ", substring = true)
+            ) and hasClickAction() and !hasAnyAncestor(androidx.compose.ui.test.hasScrollToIndexAction())
+    ).onFirst()
+
+    /** Chooses [name] in the title's menu. */
+    private fun choose(name: String) {
+        menu()
+        row(name).performScrollTo().performClick()
+        compose.waitForIdle()
+    }
+
+    /** The title says what the list shows. */
+    private fun titled(name: String) = pumpUntil("titled $name") {
+        compose.onAllNodes(hasText(name) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Heading)).fetchSemanticsNodes().isNotEmpty()
+    }
 
     private fun awaitText(words: String) =
         pumpUntil("\"$words\"") { compose.onAllNodesWithText(words, substring = true).fetchSemanticsNodes().isNotEmpty() }
@@ -113,34 +145,34 @@ class V2LibraryListsTest : ScreenTest() {
     }
 
     @Test
-    fun theChipRowFiltersByOneChipAndAnEmptyListSaysSo() {
+    fun theMenusViewsAndLabelsShowOneAtATimeAndAnEmptyOneSaysSo() {
         seed()
-        listOf("All", "Unread", "Important", "Clients", "Home", "Family").forEach { chip(it).assertExistsNamed(it) }
-        compose.onNodeWithContentDescription("New list").assertExists()
-        chip("All").assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
-        chip("Clients").performClick()
-        chip("Clients").assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        menu()
+        listOf("All recordings", "Unread", "Important", "Clients", "Home", "Family", "New label").forEach { row(it).assertExistsNamed(it) }
+        row("All recordings").assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Selected"))
+        row("Clients").performClick()
+        titled("Clients")
         assertTrue(shows("Bilal Traders"))
         assertTrue(!shows("Rehman Textiles") && !shows("Qureshi Builders"))
-        // "home" on the recording is the list Home: capitals ignored.
-        chip("Home").performClick()
+        // "home" on the recording is the label Home: capitals ignored.
+        choose("Home")
         assertTrue(shows("Rehman Textiles") && !shows("Bilal Traders"))
-        chip("Important").performClick()
+        choose("Important")
         assertTrue(shows("Qureshi Builders") && !shows("Bilal Traders"))
-        chip("Family").performClick()
+        choose("Family")
         compose.onNodeWithText("Nothing in Family yet").assertExists()
         compose.onNodeWithText("Add recordings from their ⋮ menu: Add to list.").assertExists()
-        chip("All").performClick()
+        choose("All recordings")
         assertTrue(shows("Bilal Traders") && shows("Rehman Textiles") && shows("Qureshi Builders"))
     }
 
     private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertExistsNamed(what: String) =
-        runCatching { assertExists() }.getOrElse { throw AssertionError("missing chip: $what", it) }
+        runCatching { assertExists() }.getOrElse { throw AssertionError("missing in the menu: $what", it) }
 
     @Test
     fun unreadCountsTheUnopenedAndClearsWhenOneIsOpened() {
         seed()
-        chip("Unread").performClick()
+        choose("Unread")
         assertTrue(shows("Rehman Textiles") && !shows("Bilal Traders"))
         compose.onNodeWithText("Rehman Textiles").performClick()
         pumpUntil("opened") { server.requestsTo("POST", "/api/sessions/01JB/opened").isNotEmpty() }
@@ -149,15 +181,15 @@ class V2LibraryListsTest : ScreenTest() {
     }
 
     @Test
-    fun plusMakesAListInTwoStepsWithTheLeastUsedColourChosenAndSendsItsHex() {
+    fun newLabelMakesOneInTwoStepsWithTheLeastUsedColourChosenAndSendsItsHex() {
         seed()
         server.on(
             "POST",
             "/api/lists",
             FakeServer.json(201, """{"data":{"key":"suppliers","name":"Suppliers","color":"#8e8a80","position":3,"count":0}}""")
         )
-        compose.onNodeWithContentDescription("New list").performClick()
-        awaitText("List name")
+        choose("New label")
+        awaitText("Label name")
         val create = compose.onNode(hasText("Create") and hasClickAction())
         create.assert(isNotEnabled())
         nameField().performTextInput("  Suppliers ")
@@ -170,15 +202,15 @@ class V2LibraryListsTest : ScreenTest() {
         assertEquals("Suppliers", sent["name"]?.jsonPrimitive?.content)
         assertEquals(labelColourValue("grey").lowercase(), sent["color"]?.jsonPrimitive?.content)
         assertTrue(Regex("#[0-9a-f]{6}").matches(sent["color"]!!.jsonPrimitive.content))
-        // The new chip is chosen and its empty state shows.
+        // The new label is chosen and its empty state shows.
         awaitText("Nothing in Suppliers yet")
     }
 
     @Test
-    fun aNameAlreadyTakenOrAFixedChipsWordIsRefusedWithItsOwnWords() {
+    fun aNameAlreadyTakenOrAFixedViewsWordIsRefusedWithItsOwnWords() {
         seed()
-        compose.onNodeWithContentDescription("New list").performClick()
-        awaitText("List name")
+        choose("New label")
+        awaitText("Label name")
         nameField().performTextInput("home")
         awaitText("You already have a list called Home.")
         compose.onNode(hasText("Create") and hasClickAction()).assert(isNotEnabled())
@@ -188,13 +220,15 @@ class V2LibraryListsTest : ScreenTest() {
         assertTrue(server.requestsTo("POST", "/api/lists").isEmpty())
     }
 
+    /** A label's ⋮ in the title's menu. */
     private fun menuOf(name: String) {
-        chip(name).performTouchInput { longClick() }
+        menu()
+        compose.onNode(hasContentDescription("$name options")).performScrollTo().performClick()
         compose.waitForIdle()
     }
 
     @Test
-    fun renameChecksTheOtherListsNamesAndSendsTheNewOne() {
+    fun renameChecksTheOtherLabelsNamesAndSendsTheNewOne() {
         seed()
         server.on(
             "PATCH",
@@ -203,7 +237,7 @@ class V2LibraryListsTest : ScreenTest() {
         )
         menuOf("Clients")
         compose.onNodeWithText("Rename…").performClick()
-        awaitText("Rename list")
+        awaitText("Rename label")
         val save = compose.onNode(hasText("Save") and hasClickAction())
         nameField().performTextReplacement("Family")
         awaitText("You already have a list called Family.")
@@ -215,17 +249,17 @@ class V2LibraryListsTest : ScreenTest() {
         save.performClick()
         pumpUntil("renamed") { server.requestsTo("PATCH", "/api/lists/clients").isNotEmpty() }
         assertEquals("Customers", body("PATCH", "/api/lists/clients")["name"]?.jsonPrimitive?.content)
-        pumpUntil("chip renamed") { vm.lists.value.any { it.name == "Customers" } }
+        pumpUntil("label renamed") { vm.lists.value.any { it.name == "Customers" } }
     }
 
     @Test
-    fun moveLeftAndMoveRightSendTheNewOrder() {
+    fun moveUpAndMoveDownSendTheNewOrder() {
         seed()
         server.on("PUT", "/api/lists/order", FakeServer.json(200, listsJson))
         menuOf("Clients")
-        // The first list can only go right.
-        compose.onAllNodesWithText("Move left").assertCountEquals(0)
-        compose.onNodeWithText("Move right").performClick()
+        // The first label can only go down.
+        compose.onAllNodesWithText("Move up").assertCountEquals(0)
+        compose.onNodeWithText("Move down").performClick()
         pumpUntil("ordered") { server.requestsTo("PUT", "/api/lists/order").isNotEmpty() }
         assertEquals(
             listOf("home", "clients", "family"),
@@ -233,9 +267,11 @@ class V2LibraryListsTest : ScreenTest() {
                 it.jsonPrimitive.content
             }
         )
+        compose.onAllNodes(hasContentDescription("Close", substring = true) and hasClickAction()).onFirst().performClick()
+        compose.waitForIdle()
         menuOf("Family")
-        compose.onAllNodesWithText("Move right").assertCountEquals(0)
-        compose.onNodeWithText("Move left").performClick()
+        compose.onAllNodesWithText("Move down").assertCountEquals(0)
+        compose.onNodeWithText("Move up").performClick()
         pumpUntil("ordered again") { server.requestsTo("PUT", "/api/lists/order").size == 2 }
         assertEquals(
             listOf("clients", "family", "home"),
@@ -246,13 +282,17 @@ class V2LibraryListsTest : ScreenTest() {
     }
 
     @Test
-    fun inUrduMoveLeftTakesAListLaterInTheOrder() {
+    fun inUrduTheMenuIsInUrduAndMoveDownStillTakesALabelLater() {
         seed(EchoLanguage.Urdu)
         server.on("PUT", "/api/lists/order", FakeServer.json(200, listsJson))
-        menuOf("Clients")
-        // Right to left, the first list is on the right: it can only go left, which is later in the order.
-        compose.onAllNodesWithText("دائیں منتقل کریں").assertCountEquals(0)
-        compose.onNodeWithText("بائیں منتقل کریں").performClick()
+        menu()
+        // The fixed views are in Urdu.
+        listOf("تمام ریکارڈنگز", "نہ پڑھی گئی", "اہم").forEach { row(it).assertExistsNamed(it) }
+        compose.onNode(hasContentDescription("Clients کے اختیارات")).performScrollTo().performClick()
+        compose.waitForIdle()
+        // A list read top to bottom in either direction: down is later in the order.
+        compose.onAllNodesWithText("اوپر لے جائیں").assertCountEquals(0)
+        compose.onNodeWithText("نیچے لے جائیں").performClick()
         pumpUntil("ordered") { server.requestsTo("PUT", "/api/lists/order").isNotEmpty() }
         assertEquals(
             listOf("home", "clients", "family"),
@@ -260,23 +300,22 @@ class V2LibraryListsTest : ScreenTest() {
                 it.jsonPrimitive.content
             }
         )
-        // The fixed chips are in Urdu too.
-        listOf("سب", "نہ پڑھی گئی", "اہم").forEach { chip(it).assertExistsNamed(it) }
     }
 
     @Test
-    fun deleteAsksFirstAndTheChosenListGoneGoesBackToAll() {
+    fun deleteAsksFirstAndTheChosenLabelGoneGoesBackToAllRecordings() {
         seed()
         server.on("DELETE", "/api/lists/home", FakeServer.json(200, """{"key":"home","changed":1}"""))
-        chip("Home").performClick()
+        choose("Home")
+        titled("Home")
         menuOf("Home")
-        compose.onNodeWithText("Delete list…").performClick()
+        compose.onNodeWithText("Delete label…").performClick()
         awaitText("Delete Home?")
-        compose.onNodeWithText("Its recordings stay in your Library; only the list goes.").assertExists()
+        compose.onNodeWithText("The label comes off its recordings; they stay in your Library.").assertExists()
         compose.onNode(hasText("Cancel") and hasAnyAncestor(isDialog())).performClick()
         assertTrue(server.requestsTo("DELETE", "/api/lists/home").isEmpty())
         menuOf("Home")
-        compose.onNodeWithText("Delete list…").performClick()
+        compose.onNodeWithText("Delete label…").performClick()
         awaitText("Delete Home?")
         server.on(
             "GET",
@@ -288,8 +327,8 @@ class V2LibraryListsTest : ScreenTest() {
         )
         compose.onNode(hasText("Delete") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
         pumpUntil("deleted") { server.requestsTo("DELETE", "/api/lists/home").isNotEmpty() }
-        pumpUntil("back to All") { shows("Bilal Traders") && shows("Qureshi Builders") }
-        chip("All").assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, true))
+        pumpUntil("back to All recordings") { shows("Bilal Traders") && shows("Qureshi Builders") }
+        titled("All recordings")
     }
 
     @Test
@@ -316,18 +355,22 @@ class V2LibraryListsTest : ScreenTest() {
     }
 
     @Test
-    fun theUnreadChipCountsWhatIsNotOpened() {
+    fun theMenuCountsWhatIsNotOpenedAndEachLabel() {
         seed()
-        compose.onAllNodes(hasText("Unread") and hasText("1")).assertCountEquals(1)
-        compose.onAllNodes(hasContentDescription("New list")).assertCountEquals(1)
+        menu()
+        compose.onNode(hasContentDescription("Unread, 1")).assertExists()
+        compose.onNode(hasContentDescription("Clients, 1")).assertExists()
+        // A count of 0 is not shown: the empty label is just its name.
+        compose.onNode(hasContentDescription("Family")).assertExists()
+        compose.onAllNodes(hasText("New label") and hasClickAction()).assertCountEquals(1)
     }
 
     @Test
     fun aNameAnotherDeviceTookSaysTheServersSpellingAndTheListsAreReadAgain() {
         seed()
         server.on("POST", "/api/lists", FakeServer.json(409, """{"message":"Taken","code":"list_exists","name":"Suppliers"}"""))
-        compose.onNodeWithContentDescription("New list").performClick()
-        awaitText("List name")
+        choose("New label")
+        awaitText("Label name")
         nameField().performTextInput("suppliers")
         compose.onNode(hasText("Create") and hasClickAction()).performClick()
         awaitText("You already have a list called Suppliers.")
@@ -346,11 +389,11 @@ class V2LibraryListsTest : ScreenTest() {
     }
 
     @Test
-    fun aListChipsLongPressIsNamedListOptionsAndAFixedChipHasNone() {
+    fun eachLabelsMenuIsNamedForItAndAFixedViewHasNone() {
         seed()
-        val clients = chip("Clients").fetchSemanticsNode().config
-        assertEquals("List options", clients[androidx.compose.ui.semantics.SemanticsActions.OnLongClick].label)
-        val all = chip("All").fetchSemanticsNode().config
-        assertTrue(!all.contains(androidx.compose.ui.semantics.SemanticsActions.OnLongClick))
+        menu()
+        listOf("Clients", "Home", "Family").forEach { compose.onNode(hasContentDescription("$it options")).assertExists() }
+        compose.onAllNodes(hasContentDescription("All recordings options")).assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("Unread options")).assertCountEquals(0)
     }
 }

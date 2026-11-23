@@ -20,6 +20,11 @@ data class AppSettings(
     val serverUrl: String? = null,
     val pins: List<String> = emptyList(),
     val deviceId: String? = null,
+    /**
+     * Counts this phone's sign-ins (since 2.0.0-p), one more at each: whose My views are is confirmed for one sign-in
+     * only. The device id can't say it: the server gives the same person's same install its device again.
+     */
+    val signIns: Long = 0,
     val deviceName: String? = null,
     val autoRecordArmed: Boolean = false,
     val captionsEnabled: Boolean = true,

@@ -49,7 +49,7 @@ import org.junit.Test
 
 /**
  * Audio only and Transcribe later on the v2 screens (docs/v2/audit/parity.csv PH-LIB-067, PH-LIB-070; contract
- * 2.0.0-j): Views ▾ › Audio only; the selection's Transcribe… asks the server what it uses first, then starts only
+ * 2.0.0-j): the title menu › Audio only; the selection's Transcribe… asks the server what it uses first, then starts only
  * the audio-only ones (all or nothing for the minutes); an audio-only recording's page offers Transcribe with its
  * estimate.
  */
@@ -117,15 +117,15 @@ class V2TranscribeParityTest : ScreenTest() {
         .jsonArray.map { it.jsonPrimitive.content }
 
     @Test
-    fun viewsAudioOnlyShowsOnlyTheRecordingsKeptAsAudio() {
+    fun audioOnlyInTheTitlesMenuShowsOnlyTheRecordingsKeptAsAudio() {
         library(listOf(done, audio("01JB", "Rehman Textiles")))
-        click("Views")
-        click("Audio only")
-        click("Apply")
+        click("All recordings")
+        // The menu counts it (TalkBack hears the count with the name).
+        compose.onNode(androidx.compose.ui.test.hasContentDescription("Audio only, 1") and hasClickAction()).performClick()
         pumpUntil("filtered") { compose.onAllNodesWithText("Bilal Traders", substring = true).fetchSemanticsNodes().isEmpty() }
         shows("Rehman Textiles")
-        // The chip counts it.
-        shows(V2Testing.resources(EchoLanguage.English).getString(com.echoledger.mobile.R.string.v2_lib_with_count, "Views", 1))
+        // The title says where the list is.
+        compose.onNode(hasText("Audio only") and androidx.compose.ui.test.isHeading()).assertExists()
     }
 
     @Test
