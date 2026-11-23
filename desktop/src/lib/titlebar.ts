@@ -5,10 +5,15 @@
 // shows them over the content: there is no strip, and the window looks as it did before the strip (2.0.12).
 //
 // <html data-titlebar="strip"> says the strip is on; styles key off it (v2/styles/v2.css). Windows has its own title
-// bar outside the page, so it never gets one.
+// bar outside the page, so it never gets one. On a Mac the core sets it before the page's first frame (titlebarStart.js,
+// run at document start), so the first paint is right; the answer here then only takes it away in full screen, and is
+// kept for the page after a reload (TITLEBAR_KEY).
 
 /** The strip on, or not. */
 export type TitlebarMode = "strip" | "none";
+
+/** The window's last answer, for titlebarStart.js after a reload ("strip" or "none"; this window's session only). */
+export const TITLEBAR_KEY = "echoledger-titlebar";
 
 /** How long macOS's full-screen animation takes, after which the window is asked again (its first answer can be early). */
 export const FULLSCREEN_SETTLE_MS = 700;
@@ -45,7 +50,16 @@ export function watchTitlebar(
   const ask = () => {
     const mine = ++asked;
     isFullscreen().then(
-      (fullscreen) => { if (!stopped && mine === asked) applyTitlebar(titlebarMode(platform, fullscreen), root); },
+      (fullscreen) => {
+        if (stopped || mine !== asked) return;
+        const mode = titlebarMode(platform, fullscreen);
+        applyTitlebar(mode, root);
+        try {
+          win.sessionStorage.setItem(TITLEBAR_KEY, mode);
+        } catch {
+          // Storage off: a reload starts from the normal window's strip.
+        }
+      },
       () => undefined,
     );
   };

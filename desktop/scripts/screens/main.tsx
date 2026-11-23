@@ -19,7 +19,7 @@ import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOU
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder, UploadItem } from "../../src/lib/ipc";
 import conf from "../../src-tauri/tauri.conf.json";
-import { applyTitlebar, titlebarMode } from "../../src/lib/titlebar";
+import { applyTitlebar, titlebarMode, watchTitlebar } from "../../src/lib/titlebar";
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
@@ -42,8 +42,12 @@ document.documentElement.dataset.window = controls ? "controls" : "main";
 const platform = params.get("platform");
 if (platform === "macos" || platform === "windows") document.documentElement.dataset.platform = platform;
 const fullscreen = params.get("fullscreen") === "1";
-// As main.tsx decides it from the window (lib/titlebar.ts): the strip in a normal Mac window.
-applyTitlebar(titlebarMode(platform, fullscreen));
+// "&start=<ms>": the app starting on a Mac. The core's start script (src/lib/titlebarStart.js, which
+// scripts/navLevels.mjs adds before the page as the core does) has set the strip, and the window answers whether it is
+// full screen only after that many milliseconds, as main.tsx asks it. Otherwise the answer is the one main.tsx keeps.
+const start = params.get("start");
+if (start !== null && platform === "macos") watchTitlebar("macos", () => new Promise((done) => window.setTimeout(() => done(fullscreen), Number(start))));
+else applyTitlebar(titlebarMode(platform, fullscreen));
 if (platform === "macos" && params.get("lights") === "1" && !fullscreen) drawTrafficLights(params.get("inactive") === "1");
 
 /**

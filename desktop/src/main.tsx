@@ -55,13 +55,21 @@ applyPreferences(loadPreferences());
 // C2: the window material (Mica / vibrancy). The accent stays the design system's indigo, as on the phone, so the OS
 // accent colour is not applied (lib/accent.ts can still map one). Backgrounds turn translucent only when the core
 // says the material applied; the native title bar follows the app's theme.
+// The main window's title bar is overlaid on a Mac: its buttons get their strip, except in full screen (D-214). The core
+// ran titlebarStart.js before this page, so the strip is already drawn: the window is asked at once whether it is full
+// screen (no wait for window_appearance), and only that answer can take the strip away.
+const isFullscreen = () => getCurrentWindow().isFullscreen();
+let watchingTitlebar = false;
+if (label === "main" && document.documentElement.dataset.platform === "macos") {
+  watchingTitlebar = true;
+  watchTitlebar("macos", isFullscreen);
+}
 api
   .windowAppearance()
   .then((a) => {
     document.documentElement.dataset.platform = a.platform;
     if (label === "main" && a.material !== "none") document.documentElement.dataset.material = a.material;
-    // The main window's title bar is overlaid on a Mac: its buttons get their strip, except in full screen (D-214).
-    if (label === "main") watchTitlebar(a.platform, () => getCurrentWindow().isFullscreen());
+    if (label === "main" && !watchingTitlebar) watchTitlebar(a.platform, isFullscreen);
   })
   .catch(() => undefined);
 if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined);

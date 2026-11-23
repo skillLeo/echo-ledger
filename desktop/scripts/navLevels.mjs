@@ -13,6 +13,8 @@
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import os from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FLAGS as V2_FLAGS } from "../src/v2/gallery/cases.mjs";
@@ -29,9 +31,15 @@ const WINDOWS = [
   ...["window", "inactive", "fullscreen"].flatMap((look) => ["en", "ur"].flatMap((lang) => ["light", "dark"].map((theme) => ["macos", look, lang, theme]))),
   ...["en", "ur"].map((lang) => ["windows", "windows", lang, "light"]),
 ];
-/** The full-screen pictures kept from 2.0.12 (scripts/baselines/titlebar-fullscreen), compared on every run. */
+/**
+ * The full-screen pictures kept from 2.0.12 (scripts/baselines/titlebar-fullscreen), compared pixel for pixel on every
+ * run, with no tolerance. A picture is only the same on the machine, browser and fonts it was made with, written down
+ * next to them in made-on.json by `--baseline` (the first ones: MADE_ON below). On another machine, or after a Playwright
+ * update, make them again from 2.0.12's code (git worktree of the v2.0.12 tag with this script and the fixture) first.
+ */
 const BASELINE_CASES = new Set(["1024-en-light", "1280-en-light", "1440-en-light", "1024-ur-dark", "1280-ur-dark", "1440-ur-dark"]);
 const baselines = join(desktop, "scripts", "baselines", "titlebar-fullscreen");
+const MADE_ON_FILE = join(baselines, "made-on.json");
 /** `--baseline`: keep this run's full-screen pictures as the ones to compare with (run it on the code to match). */
 const writeBaselines = process.argv.includes("--baseline");
 /** `--platforms`: only the Mac and Windows pass. `--report`: a failed check is said and the run goes on (old code). */
@@ -86,6 +94,22 @@ const stripEmpty = async (page) => {
   });
   if (problems.length) throw new Error(`strip: ${problems.join(", ")}`);
 };
+/** The machine, the browser and the page's fonts, as made-on.json says them (no names of people or computers). */
+const whereMade = async (page) => {
+  const sh = (cmd, args) => { try { return execFileSync(cmd, args, { encoding: "utf8" }).trim(); } catch { return "unknown"; } };
+  const fonts = await page.evaluate(() => ({
+    loaded: [...new Set([...document.fonts].filter((f) => f.status === "loaded").map((f) => `${f.family.replace(/"/g, "")} ${f.weight}`))].sort(),
+    body: getComputedStyle(document.body).fontFamily,
+  }));
+  return {
+    machine: { system: process.platform === "darwin" ? `macOS ${sh("sw_vers", ["-productVersion"])}` : `${os.type()} ${os.release()}`, arch: os.arch(), model: process.platform === "darwin" ? sh("sysctl", ["-n", "hw.model"]) : "unknown" },
+    chromium: browser.version(),
+    playwright: JSON.parse(await readFile(join(desktop, "node_modules", "playwright", "package.json"), "utf8")).version,
+    fonts,
+  };
+};
+const said = (m) => `${m.machine.model} (${m.machine.system} ${m.machine.arch}), Chromium ${m.chromium}, fonts ${m.fonts.loaded.join(", ")}`;
+let madeOn = null;
 /** Two pictures the same, pixel for pixel (compared in the browser, no library); throws with how many differ. */
 const samePicture = async (page, now, kept, name) => {
   const differing = await page.evaluate(async ([a, b]) => {
@@ -102,9 +126,58 @@ const samePicture = async (page, now, kept, name) => {
     for (let i = 0; i < x.data.length; i += 4) if (x.data[i] !== y.data[i] || x.data[i + 1] !== y.data[i + 1] || x.data[i + 2] !== y.data[i + 2]) n++;
     return n;
   }, [now.toString("base64"), kept.toString("base64")]);
-  if (differing !== 0) throw new Error(`${name}: full screen is not 2.0.12's (${differing < 0 ? "another size" : `${differing} pixels differ`})`);
+  if (differing !== 0) {
+    const here = await whereMade(page);
+    let then = null;
+    try { then = JSON.parse(await readFile(MADE_ON_FILE, "utf8")); } catch { /* none kept */ }
+    const elsewhere = !then || said(then) !== said(here);
+    throw new Error(`${name}: full screen is not 2.0.12's (${differing < 0 ? "another size" : `${differing} pixels differ`}). `
+      + (elsewhere
+        ? `Made on another machine? The pictures were made on ${then ? said(then) : "(no made-on.json)"}; this is ${said(here)}. Make them again from 2.0.12's code with --baseline, then compare.`
+        : "Same machine, browser and fonts as the pictures: full screen has changed."));
+  }
   console.log(`${name}: the same as 2.0.12`);
 };
+/** One first frame (see the pass at the end): the picture as soon as the shell is drawn, then what follows. */
+async function firstPaint(width, lang, theme, look, { kept, answerMs }) {
+  const page = await browser.newPage({ viewport: { width, height: MAC_HEIGHT }, colorScheme: theme, reducedMotion: "reduce" });
+  await page.clock.setFixedTime(FIXED_NOW);
+  if (kept) await page.addInitScript((value) => sessionStorage.setItem("echoledger-titlebar", value), kept);
+  await page.addInitScript({ path: join(desktop, "src", "lib", "titlebarStart.js") });
+  // When the shell is first drawn and when the strip goes, in ms since the page began.
+  await page.addInitScript(() => {
+    const seen = new MutationObserver(() => {
+      if (!window.__shellAt && document.querySelector(".el-shell")) window.__shellAt = performance.now();
+      if (window.__shellAt && !window.__stripGoneAt && !document.documentElement.dataset.titlebar) window.__stripGoneAt = performance.now();
+    });
+    seen.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-titlebar"] });
+  });
+  const fullscreen = look !== "window";
+  await page.goto(`${base}scripts/screens/index.html?screen=library&theme=${theme}&uiflags=${V2_FLAGS}&platform=macos&start=${answerMs}${fullscreen ? "&fullscreen=1" : "&lights=1"}${lang === "ur" ? "&lang=ur" : ""}`);
+  await page.locator(".el-shell").waitFor();
+  const strip = () => page.evaluate(() => {
+    const el = document.querySelector("[data-testid=titlebar-strip]");
+    return { strip: !!el && getComputedStyle(el).display !== "none", shellTop: Math.round(document.querySelector(".el-shell").getBoundingClientRect().top) };
+  });
+  const first = await strip();
+  const file = join(out, `mac-firstpaint-${look}-${width}-${lang}-${theme}.png`);
+  await page.screenshot({ path: file });
+  console.log(file);
+  const problem = (what, want) => `first frame (${look}, ${width}-${lang}-${theme}): ${what} ${JSON.stringify(first)}, wanted ${want}`;
+  const fail = (message) => check(Promise.reject(new Error(message)), `first frame ${width}-${lang}-${theme}`);
+  if (look === "window") {
+    if (!first.strip || first.shellTop === 0) await fail(problem("no strip", "the strip"));
+    await check(clearOfLights(page), `first frame ${width}-${lang}-${theme}`);
+    await check(stripEmpty(page), `first frame ${width}-${lang}-${theme}`);
+  } else if (look === "fullscreen-reload") {
+    if (first.strip || first.shellTop !== 0) await fail(problem("a strip", "none"));
+  } else {
+    await check(page.waitForFunction(() => window.__stripGoneAt, null, { timeout: 5000 }), "first frame full screen");
+    const [shellAt, goneAt] = await page.evaluate(() => [window.__shellAt, window.__stripGoneAt]);
+    console.log(`first frame (a window opened full screen): the shell drew at ${Math.round(shellAt)} ms, the strip went at ${Math.round(goneAt)} ms (the answer came ${answerMs} ms after the page began)`);
+  }
+  await page.close();
+}
 /** What the page shows under the drawn traffic lights (with a few pixels round them): nothing, or it throws. */
 const clearOfLights = async (page) => {
   const under = await page.evaluate(() => {
@@ -188,7 +261,10 @@ try {
       // Full screen is 2.0.12's window, unchanged: the same picture, pixel for pixel, as the one kept from it.
       if (look === "fullscreen" && name === "library" && BASELINE_CASES.has(`${width}-${lang}-${theme}`)) {
         const kept = join(baselines, `${stem}.png`);
-        if (writeBaselines) await writeFile(kept, picture);
+        if (writeBaselines) {
+          await writeFile(kept, picture);
+          madeOn ??= { made: new Date().toISOString(), ...(await whereMade(page)), cases: [...BASELINE_CASES] };
+        }
         else await check(samePicture(page, picture, await readFile(kept), stem), name);
       }
     };
@@ -201,6 +277,13 @@ try {
     const hide = page.getByTestId("nav-panel").getByRole("button", { name: "Hide panel" });
     if (await hide.count()) await hide.click();
     await shoot("library");
+    // Full screen: nothing over "Show the panel" any more; pressed like a person would (it fails when covered).
+    if (look === "fullscreen" && width >= 1100) {
+      const show = page.getByRole("button", { name: /^Show the Library panel/ });
+      await (reportOnly ? show.dispatchEvent("click") : show.click({ timeout: 5000 }));
+      await page.getByTestId("nav-panel").waitFor();
+      await shoot("library-panel");
+    }
     if (look === "window") {
       if (width < 1100) {
         await rail.getByRole("button", { name: /^Library/ }).click();
@@ -221,6 +304,17 @@ try {
     }
     await page.close();
   }
+  if (madeOn) await writeFile(MADE_ON_FILE, `${JSON.stringify(madeOn, null, 2)}\n`);
+  // The first frame of a Mac window as the app starts (D-214): the core's start script runs before the page, as it
+  // does in the app (page.addInitScript is WebKit's document-start user script), and the window says whether it is
+  // full screen only much later. A new window: the strip from the first frame, nothing under the buttons. A page
+  // reloaded in full screen: no strip from the first frame. (A window never opens full screen; if one did, the strip
+  // would show until the first answer, before the core shows the window: the third case says how long.)
+  for (const width of widths) for (const [lang, theme] of [["en", "light"], ["ur", "dark"]]) {
+    await firstPaint(width, lang, theme, "window", { kept: null, answerMs: 60_000 });
+  }
+  await firstPaint(1280, "en", "light", "fullscreen-reload", { kept: "none", answerMs: 60_000 });
+  await firstPaint(1280, "en", "light", "fullscreen-new", { kept: null, answerMs: 300 });
 } finally {
   await browser.close();
   await server.close();

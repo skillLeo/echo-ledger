@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FULLSCREEN_SETTLE_MS, applyTitlebar, titlebarMode, watchTitlebar } from "./titlebar";
+import { FULLSCREEN_SETTLE_MS, TITLEBAR_KEY, applyTitlebar, titlebarMode, watchTitlebar } from "./titlebar";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (...path: string[]) => readFileSync(join(here, ...path), "utf8");
@@ -89,6 +89,45 @@ describe("the macOS title-bar strip (D-214)", () => {
     await flush();
     expect(root.dataset.titlebar).toBeUndefined();
     stop();
+  });
+
+  it("the core's start script draws the strip from the first frame, and none after a reload in full screen", () => {
+    const start = read("titlebarStart.js");
+    const run = () => new Function(start)();
+    delete root.dataset.platform;
+    sessionStorage.clear();
+    // A new main window: never full screen when it is built.
+    run();
+    expect(root.dataset.platform).toBe("macos");
+    expect(root.dataset.titlebar).toBe("strip");
+    // The page kept the window's answer: a reload in full screen starts without the strip.
+    applyTitlebar("none");
+    sessionStorage.setItem(TITLEBAR_KEY, "none");
+    run();
+    expect(root.dataset.titlebar).toBeUndefined();
+    sessionStorage.setItem(TITLEBAR_KEY, "strip");
+    run();
+    expect(root.dataset.titlebar).toBe("strip");
+    sessionStorage.clear();
+    delete root.dataset.platform;
+  });
+
+  it("keeps the window's answer for the page after a reload", async () => {
+    sessionStorage.clear();
+    let fullscreen = true;
+    const stop = watchTitlebar("macos", async () => fullscreen);
+    await flush();
+    expect(sessionStorage.getItem(TITLEBAR_KEY)).toBe("none");
+    fullscreen = false;
+    window.dispatchEvent(new Event("resize"));
+    await flush();
+    expect(sessionStorage.getItem(TITLEBAR_KEY)).toBe("strip");
+    stop();
+    sessionStorage.clear();
+  });
+
+  it("full screen frees the top: the classic drag strip goes when there is no data-titlebar", () => {
+    expect(read("..", "styles.css")).toContain('html[data-platform="macos"]:not([data-titlebar]) .titlebar-drag { display: none; }');
   });
 
   it("is as tall as the buttons' native row: 16 px buttons + tauri.conf.json's trafficLightPosition.y", () => {
