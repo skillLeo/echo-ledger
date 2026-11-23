@@ -20,6 +20,7 @@ fn customised() -> Settings {
         ],
         device_id: Some("01JB8Q3R0Z5V1K7M9N2P4S6T8W".into()),
         device_name: Some("Büro-PC 🖥️".into()),
+        sign_in_id: Some("6f1d2c3b-4a5e-4f60-8a7b-9c0d1e2f3a4b".into()),
         install_id: Some("3f1c5e0b7a9d2c4e6f8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e".into()),
         shortcuts,
         captions_on_record: false,
@@ -212,12 +213,13 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "shareNotice",
             "shareOneWindow",
             "shortcuts",
+            "signInId",
             "siteRules",
             "skipCallsShorterThanS",
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 54, "section 4.7 of the IPC contract, with the call choice's four keys");
+    assert_eq!(keys.len(), 55, "section 4.7 of the IPC contract, with the call choice's four keys and the sign-in id");
     assert_eq!(v["mainShareHide"], json!({"until": {"kind": "at", "at_ms": 1_795_000_000_000_i64}, "sinceMs": 1_794_999_100_000_i64}));
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");

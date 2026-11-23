@@ -37,10 +37,16 @@ export function queueCovers(q: LibraryQueueState): { waiting: boolean; failed: b
  * follows the core's events while this list is away (Trash, a selection, a recording open), so what the header says
  * about it is right the moment the list is back. `openWaiting`: the Waiting place is open, so its calls are listed.
  */
-export function QueueV2({ queue: q, reviewRequest, openWaiting = false }: {
+export function QueueV2({ queue: q, reviewRequest, openWaiting = false, parts = "all" }: {
   queue: LibraryQueueState;
   reviewRequest?: { seq: number } | null;
   openWaiting?: boolean;
+  /**
+   * Which parts it shows (PLAN_LIBRARY_FILTERS): "needs", what needs the person (calls waiting for a decision, uploads
+   * that failed, recordings waiting for another account: Needs you's own list); "progress", what is on its way
+   * (imports with Cancel, uploads being checked: every other view); "all", both.
+   */
+  parts?: "all" | "needs" | "progress";
 }) {
   const { pending, failed, verifying, importing, held, clients, busy, bulkBusy, learn } = q;
   const [open, setOpen] = useState(false);
@@ -74,7 +80,9 @@ export function QueueV2({ queue: q, reviewRequest, openWaiting = false }: {
       setOpen(false);
     }
   }, [pending.length]);
-  if (pending.length === 0 && failed.length === 0 && verifying.length === 0 && importing.length === 0 && held.length === 0) return null;
+  const needs = parts !== "progress";
+  const progress = parts !== "needs";
+  if ((!needs || (pending.length === 0 && failed.length === 0 && held.length === 0)) && (!progress || (verifying.length === 0 && importing.length === 0))) return null;
   const shown = open && pending.length > 0;
 
   const review = () => {
@@ -113,7 +121,7 @@ export function QueueV2({ queue: q, reviewRequest, openWaiting = false }: {
 
   return (
     <div className="el-library-top" data-testid="library-queue">
-      {pending.length > 0 && (
+      {needs && pending.length > 0 && (
         <Card className="el-library-setup" label="Waiting recordings">
           <div className="el-group__head" data-testid="waiting-line" title={waitingSummary(pending)}>
             <h2 className="el-title-s">{waitingLine(pending)}</h2>
@@ -162,7 +170,7 @@ export function QueueV2({ queue: q, reviewRequest, openWaiting = false }: {
           )}
         </Card>
       )}
-      {importing.length > 0 && (
+      {progress && importing.length > 0 && (
         <Section title="Importing" count={importing.length}>
           {importing.map((item) => {
             const title = uploadTitle(item);
@@ -175,7 +183,7 @@ export function QueueV2({ queue: q, reviewRequest, openWaiting = false }: {
           })}
         </Section>
       )}
-      {failed.length > 0 && (
+      {needs && failed.length > 0 && (
         <Section title="Uploads that need you" count={failed.length}>
           {failed.map((item) => (
             <UploadRow key={item.id} item={item} meta={meta(item.sourceApp, item.startedAt, item.durationMs, item.lastError)}
@@ -186,7 +194,7 @@ export function QueueV2({ queue: q, reviewRequest, openWaiting = false }: {
           ))}
         </Section>
       )}
-      {held.map(([account, items]) => (
+      {needs && held.map(([account, items]) => (
         <Section key={account} title="Waiting for another account" count={items.length} label={`Waiting for ${account}`} testId="held-uploads"
           note={heldLine(account, items.length)}
           end={items.length > 1 && <Button size="sm" disabled={bulkBusy} onClick={() => void q.discardHeld(items)}>Discard all {items.length}</Button>}>
@@ -196,7 +204,7 @@ export function QueueV2({ queue: q, reviewRequest, openWaiting = false }: {
           ))}
         </Section>
       ))}
-      {verifying.length > 0 && (
+      {progress && verifying.length > 0 && (
         <List label="Checking uploads">
           {verifying.map((item) => (
             <UploadRow key={item.id} item={item} meta={meta(item.sourceApp, item.startedAt, item.durationMs)}

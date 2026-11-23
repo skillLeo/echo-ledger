@@ -134,30 +134,35 @@ describe("the sidebar's workspace menu", () => {
 });
 
 describe("breadcrumbs", () => {
-  it("DT-LIB-001: Library › the place shown; Library shows every recording again", async () => {
+  // PLAN_LIBRARY_FILTERS: one toolbar row, no breadcrumbs. Where the list is shows in the toolbar's title (the sidebar marks
+  // it too); today's folders and views from elsewhere arrive as filters, each a pill whose × (or Clear all) shows everything.
+  it("DT-LIB-001: a folder from before arrives as its filter, a pill; its × shows every recording again", async () => {
     respondWith("library_folder", () => [ITEMS[2]]);
     const onFolder = vi.fn();
     const { rerender } = render(<LibraryV2 folder={null} onFolder={onFolder} />);
     await act(flushAsync);
-    expect(screen.queryByRole("navigation", { name: "Breadcrumbs" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: /^All/ })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
     rerender(<LibraryV2 folder="zoom" onFolder={onFolder} />);
     await act(flushAsync);
-    const crumbs = within(screen.getByRole("navigation", { name: "Breadcrumbs" }));
-    expect(crumbs.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Library", "Zoom"]);
-    expect(crumbs.getByText("Zoom")).toHaveAttribute("aria-current", "page");
-    fireEvent.click(crumbs.getByRole("button", { name: "Library" }));
+    // Taken at once, so the same folder can be asked for again.
     expect(onFolder).toHaveBeenCalledWith(null);
+    const pills = within(screen.getByRole("group", { name: "Filters on" }));
+    expect(pills.getByRole("button", { name: "Source: Zoom" })).toBeInTheDocument();
+    fireEvent.click(pills.getByRole("button", { name: "Remove Source: Zoom" }));
+    await act(flushAsync);
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
   });
 
-  it("DT-LIB-001: a view (Pinned) shows in the crumbs too, and Library goes back to All", async () => {
+  it("DT-LIB-001: a view from before (Pinned) arrives as its filter too, and Clear all goes back to every recording", async () => {
     render(<LibraryV2 viewRequest={{ view: "pinned", seq: 1 }} />);
     await act(flushAsync);
-    const crumbs = within(screen.getByRole("navigation", { name: "Breadcrumbs" }));
-    expect(crumbs.getAllByRole("listitem").map((li) => li.textContent)).toEqual(["Library", "Pinned"]);
-    fireEvent.click(crumbs.getByRole("button", { name: "Library" }));
+    const pills = within(screen.getByRole("group", { name: "Filters on" }));
+    expect(pills.getByRole("button", { name: "Marked: Pinned" })).toBeInTheDocument();
+    fireEvent.click(pills.getByRole("button", { name: "Clear all" }));
     await act(flushAsync);
-    expect(screen.queryByRole("navigation", { name: "Breadcrumbs" })).toBeNull();
-    expect(within(screen.getByRole("group", { name: "Filter recordings" })).getByRole("button", { name: /^Views/ })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Filters on" })).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: /^All/ })).toBeInTheDocument();
   });
 
   it("DT-PRJ-005: a project's page says Projects › its folders › itself; each step opens its page", async () => {
@@ -258,7 +263,7 @@ describe("request links", () => {
     respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.ask": true }, ui_classic: false });
   }
 
-  it("DT-PRJ-003 and DT-SHR-006: the Projects page's Request files opens the new Request files sheet, into the Inbox", async () => {
+  it("DT-PRJ-003 and DT-SHR-006: the Projects page's Request files opens the new Request files sheet, into no project", async () => {
     app();
     render(<MainApp />);
     await act(flushAsync);
@@ -273,7 +278,7 @@ describe("request links", () => {
     expect(dialog.closest(".el-root")).not.toBeNull();
     expect(document.querySelector(".sheet-backdrop")).toBeNull();
     const sheet = within(dialog);
-    expect(sheet.getByRole("combobox", { name: /^Files go to/ })).toHaveTextContent("Inbox");
+    expect(sheet.getByRole("combobox", { name: /^Files go to/ })).toHaveTextContent("No project");
     expect(sheet.getByRole("textbox", { name: "Title people see" })).toHaveValue("Send me your voice notes");
   });
 
@@ -362,7 +367,8 @@ describe("the Library's group headers", () => {
     const headers = [...list.children].filter((c) => c.classList.contains("el-list-section"));
     expect(headers.length).toBeGreaterThan(0);
     expect(document.querySelector(".el-selectbar")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    // No Select button: the toolbar's Select all (or a row's checkbox) starts picking.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all" }));
     expect(document.querySelector('[data-v2="library"] .el-selectbar')).not.toBeNull();
   });
 });

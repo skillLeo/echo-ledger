@@ -304,7 +304,7 @@ describe("the v2 Shared page", () => {
     expect(active).toHaveTextContent("Into Acme Ltd · 4 files received · Up to 20 files of 100 MB");
     expect(active).toHaveTextContent("Active");
     expect(active).toHaveTextContent("Never stops");
-    expect(row("Old drop")).toHaveTextContent("Into The Inbox · Nothing received yet");
+    expect(row("Old drop")).toHaveTextContent("Into no project · Nothing received yet");
     expect(row("Old drop")).toHaveTextContent("Revoked");
     expect(screen.getByText("Old drop")).toHaveAttribute("dir", "auto");
 

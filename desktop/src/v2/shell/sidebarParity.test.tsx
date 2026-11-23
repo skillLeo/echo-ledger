@@ -322,7 +322,7 @@ describe("Home's needs you", () => {
     expect(list().getByRole("button", { name: "3 notifications need you" })).toBeInTheDocument();
   });
 
-  it("DT-HOME-003 in the app: the uploads that need you open the Library's Failed uploads", async () => {
+  it("DT-HOME-003 in the app: the uploads that need you open the Library's Needs you (Failed uploads' home now)", async () => {
     backend({ "ui_v2.shell": true, "ui_v2.home": true, "ui_v2.library": true }, makeStatus({ platform: "macos", failedUploads: 2 }));
     respond("pending_list", []);
     await app();
@@ -333,10 +333,11 @@ describe("Home's needs you", () => {
     fireEvent.click(await screen.findByRole("button", { name: "2 recordings didn't upload" }));
     await act(flushAsync);
     await act(flushAsync);
-    expect(within(screen.getByRole("group", { name: "Filter recordings" })).getByRole("button", { name: /^Failed/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /^Needs you/ })).toBeInTheDocument();
+    expect(within(nav()).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
   });
 
-  it("DT-HOME-002 to DT-HOME-004 in the app: Review opens the Library's Waiting view, and the notifications open Activity", async () => {
+  it("DT-HOME-002 to DT-HOME-004 in the app: Review opens the Library's Needs you (Waiting's home now), and the notifications open Activity", async () => {
     backend({ "ui_v2.shell": true, "ui_v2.home": true, "ui_v2.library": true, "ui_v2.activity": true }, makeStatus({ platform: "macos", pendingDecisions: 1 }));
     respond("activity_list", { data: [{ id: "n1", kind: "transcript_failed", read: false, title: "A transcript failed", body: null, created_at: "2026-11-17T10:00:00Z", session_id: null }] });
     respond("pending_list", []);
@@ -348,7 +349,8 @@ describe("Home's needs you", () => {
     fireEvent.click(await screen.findByRole("button", { name: "1 call waits for your decision" }));
     await act(flushAsync);
     await act(flushAsync);
-    expect(within(screen.getByRole("group", { name: "Filter recordings" })).getByRole("button", { name: /^Waiting/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /^Needs you/ })).toBeInTheDocument();
+    expect(within(nav()).getByRole("button", { name: /^Needs you/ })).toHaveAttribute("aria-current", "page");
     fireEvent.click(within(nav()).getByRole("button", { name: "More ways to record" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Record page" }));
     await act(flushAsync);
@@ -384,7 +386,8 @@ describe("the Library after the main window opens again", () => {
     await act(async () => {
       await new Promise((r) => setTimeout(r, 300));
     });
-    expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+    // The list, on All.
+    expect(screen.getByRole("heading", { level: 1, name: /^All/ })).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
     const saved = callsOf("main_view_set").map((c) => JSON.parse((c as { view: string }).view));
     expect(saved.at(-1)).toMatchObject({ recordingId: null });

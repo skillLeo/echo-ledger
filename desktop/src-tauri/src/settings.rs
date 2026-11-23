@@ -271,6 +271,9 @@ pub struct Settings {
     pub pins: Vec<String>,
     pub device_id: Option<String>,
     pub device_name: Option<String>,
+    /// A fresh id made at each sign-in and forgotten at sign-out (2.0.0-p): what the window keeps for one sign-in only
+    /// (whose My views it showed last) is tied to it, so another sign-in, or none, never reads it.
+    pub sign_in_id: Option<String>,
     /// This install's id (v1.6, P3, `identity`): made once, sent with every sign-in; never exported.
     pub install_id: Option<String>,
     pub shortcuts: HashMap<Action, String>,
@@ -383,6 +386,7 @@ impl Default for Settings {
             pins: vec![],
             device_id: None,
             device_name: None,
+            sign_in_id: None,
             install_id: None,
             shortcuts: default_map(),
             captions_on_record: true,
