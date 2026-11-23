@@ -178,7 +178,8 @@ describe("dictation box", () => {
       expect(root(container)).not.toHaveClass("overlay-hidden");
       const card = container.querySelector(".dictation-card") as HTMLElement;
       expect(within(card).getByText("Dictation did not start")).toBeInTheDocument();
-      expect(within(card).getByText(NO_DICTATION)).toBeInTheDocument();
+      // A screen reader hears why, as a status.
+      expect(within(card).getByRole("status")).toHaveTextContent(NO_DICTATION);
       const open = within(card).getByRole("button", { name: "Open System Settings" });
       expect(open).toHaveFocus();
       // The window lets clicks through except where it says: the buttons are its hit regions.

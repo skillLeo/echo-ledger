@@ -25,8 +25,12 @@ function settingsLabel(): string {
 
 /**
  * The refused box's settings button and close. The window takes no clicks but where it says (lib/hitRegions), so the
- * two buttons are its only regions while they show, and none once they are gone. The window cannot take focus: the
- * button has the focus for when it does (as in a browser), and Esc then closes.
+ * two buttons are its only regions while they show, and none once they are gone.
+ *
+ * Keyboard: the dictation window is built unfocusable (`.focusable(false)`, overlay/mod.rs), so the person keeps typing
+ * in their own app. The button's focus and Esc therefore work only where the page has focus (a plain browser, the tests),
+ * never in the app; there the box is closed with the ×. From the keyboard the same fix is in the main window, Settings ›
+ * Microphone & audio › Permissions, as with the after-call card.
  */
 function RefusedActions({ permission, onClose }: { permission: PermissionKind; onClose: () => void }) {
   const open = useRef<HTMLButtonElement | null>(null);
@@ -127,7 +131,8 @@ export default function DictationApp() {
             <span style={fillWidth(meterLevel(level))} />
           </div>
         )}
-        {message && <div className="caption-line small caption-message">{message}</div>}
+        {/* A status, so a screen reader says why dictation did not start (or what it says now). */}
+        {message && <div className="caption-line small caption-message" role="status">{message}</div>}
         <div ref={textRef} className="caption-line dictation-text">{finals.join(" ")} <span className="partial" style={{ opacity: 0.7 }}>{partial}</span></div>
       </div>
     </div>
