@@ -13,11 +13,13 @@ export const BADGE_LABEL: Record<PrivacyBadge, string> = {
 };
 
 /** What a tap on the badge is for, for screen readers and the tooltip. */
+/** The badge sits on the recording controls, the dictation box and Live Translate (FIX-01): the first two always show in
+ * screen shares, so it speaks of the live words, never of the window it is on. */
 export const BADGE_HINT: Record<PrivacyBadge, string> = {
-  private: "Private: hidden from screen share. Check screen-share privacy",
-  black_box: "Black box: people see a black box instead of EchoLedger. Check screen-share privacy",
+  private: "Private: live words are hidden from screen shares. Check screen-share privacy",
+  black_box: "Black box: people see a black box instead of the live words. Check screen-share privacy",
   not_checked: "Not checked on this system yet. Check screen-share privacy",
-  visible: "Visible in screen share. Check screen-share privacy",
+  visible: "Live words may show in screen shares. Check screen-share privacy",
 };
 
 /** "Zoom", "Zoom and Teams", "Zoom, Teams and Slack" (pure). */

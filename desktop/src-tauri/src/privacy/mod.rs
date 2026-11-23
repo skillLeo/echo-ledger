@@ -1101,6 +1101,30 @@ pub fn read_flag<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<share::R
     share::ShareFlag::read_share_flag(&SystemFlag { app: app.clone() }, label)
 }
 
+/// macOS: what the window server says of window `number` in screen capture, `kCGWindowSharingState` from
+/// `CGWindowListCopyWindowInfo` (0 none, 1 read-only, 2 read-write); none when it does not list the window. The smoke
+/// test holds every window to the capture policy by this (FIX-01).
+#[cfg(target_os = "macos")]
+pub fn window_server_sharing(number: i64) -> Option<u64> {
+    use objc2_core_foundation::{CFDictionary, CFNumber, CFString, CFType};
+    use objc2_core_graphics::{CGWindowListCopyWindowInfo, CGWindowListOption, kCGWindowNumber, kCGWindowSharingState};
+    let id = u32::try_from(number).ok()?;
+    let list = CGWindowListCopyWindowInfo(CGWindowListOption::OptionIncludingWindow, id)?;
+    // SAFETY: the window-list keys are constants of CoreGraphics.
+    let (number_key, sharing_key): (&CFString, &CFString) = unsafe { (kCGWindowNumber, kCGWindowSharingState) };
+    let field = |dict: &CFDictionary, key: &CFString| -> Option<i64> {
+        // SAFETY: the key is a CFString; the value, when present, is a CF object the dictionary keeps alive.
+        let value = unsafe { dict.value((key as *const CFString).cast()) } as *const CFType;
+        unsafe { value.as_ref() }.and_then(|v| v.downcast_ref::<CFNumber>()).and_then(CFNumber::as_i64)
+    };
+    (0..list.count()).find_map(|i| {
+        // SAFETY: the index is in range; each value of this array is a CFDictionary the array keeps alive.
+        let item = unsafe { list.value_at_index(i) } as *const CFType;
+        let dict = unsafe { item.as_ref() }.and_then(|t| t.downcast_ref::<CFDictionary>())?;
+        (field(dict, number_key) == Some(number)).then(|| field(dict, sharing_key)).flatten().and_then(|s| u64::try_from(s).ok())
+    })
+}
+
 /// The system did not keep the flag EchoLedger set on this window (Windows read it back otherwise, or macOS refused it):
 /// the service knows, says so and keeps a hidden window off the screen.
 pub fn flag_not_held<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool {

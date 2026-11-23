@@ -481,9 +481,9 @@ mod tests {
 
     #[test]
     fn the_mac_smoke_test_fails_without_the_quit_answer_the_panels_or_the_capture_flag() {
-        let panel = |label: &'static str| crate::mac_check::WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, ns_panel: true, activation_setter: true, sharing: 0 };
+        let panel = |label: &'static str| crate::mac_check::WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, ns_panel: true, activation_setter: true, sharing: 0, server_sharing: Some(0) };
         // The capture policy: the captions hidden (sharing 0), the recording controls shown (sharing 1).
-        let shown_panel = |label: &'static str| crate::mac_check::WindowFacts { sharing: 1, ..panel(label) };
+        let shown_panel = |label: &'static str| crate::mac_check::WindowFacts { sharing: 1, server_sharing: Some(1), ..panel(label) };
         let main = main_window();
         let good = [panel("overlay"), shown_panel("pill")];
         assert_eq!(mac_app_problem(true, &main, &good), None);
@@ -491,8 +491,13 @@ mod tests {
         let plain = crate::mac_check::WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, ns_panel: false, ..shown_panel("pill") };
         assert!(mac_app_problem(true, &main, &[panel("overlay"), plain]).unwrap().starts_with("the pill window is not a non-activating panel (TaoWindow, style 0x0"));
         // The capture flag must survive the class change: captions shown in screen capture fail.
-        let shown = crate::mac_check::WindowFacts { sharing: 1, ..panel("overlay") };
-        assert!(mac_app_problem(true, &main, &[shown, shown_panel("pill")]).unwrap().starts_with("captions: in screen shares and screenshots, but the capture policy hides it (EchoLedgerFloatingPanel, style 0x80, sharing 1"));
+        let shown = crate::mac_check::WindowFacts { sharing: 1, server_sharing: Some(1), ..panel("overlay") };
+        assert!(mac_app_problem(true, &main, &[shown, shown_panel("pill")]).unwrap().starts_with("captions: in screen shares and screenshots, but the capture policy hides it (EchoLedgerFloatingPanel, style 0x80, sharing 1 (window server 1)"));
+        // The window server's word counts (kCGWindowSharingState): a window that says none but is listed shared fails.
+        let listed_shared = crate::mac_check::WindowFacts { server_sharing: Some(1), ..panel("overlay") };
+        assert!(mac_app_problem(true, &main, &[listed_shared, shown_panel("pill")]).unwrap().starts_with("captions: in screen shares and screenshots"));
+        let not_listed = crate::mac_check::WindowFacts { server_sharing: None, ..panel("overlay") };
+        assert_eq!(mac_app_problem(true, &main, &[not_listed, shown_panel("pill")]), None, "not in the window list yet: the window's own word");
         // I-02: the recording controls, the after-call card and the dictation box hidden from the person's screenshots fail.
         for label in ["pill", "review", "dictation"] {
             let problem = mac_app_problem(true, &main, &[panel("overlay"), panel(label)]).unwrap();
@@ -500,7 +505,7 @@ mod tests {
         }
         assert!(mac_app_problem(true, &main, &[panel("overlay"), shown_panel("review"), shown_panel("dictation"), panel("assist")]).is_none(), "the Live Assist card hidden");
         // The main window too: shown by default.
-        let hidden_main = crate::mac_check::WindowFacts { sharing: 0, ..main.clone() };
+        let hidden_main = crate::mac_check::WindowFacts { sharing: 0, server_sharing: Some(0), ..main.clone() };
         assert!(mac_app_problem(true, &hidden_main, &good).unwrap().starts_with("main window: hidden from screen shares"));
         // Without the activation setter it still passes (the output says how many got it).
         assert_eq!(mac_app_problem(true, &main, &[crate::mac_check::WindowFacts { activation_setter: false, ..shown_panel("pill") }]), None);
@@ -526,7 +531,7 @@ mod tests {
     /// The main window as a Mac builds it: tao's class (KVO's once its content is in), titled, closable, miniaturizable,
     /// resizable and with its content under the title bar (`titleBarStyle: Overlay`).
     fn main_window() -> crate::mac_check::WindowFacts {
-        crate::mac_check::WindowFacts { exists: true, visible: true, on_screen: true, class: "NSKVONotifying_TaoWindow".into(), style: 0x800f, sharing: 1, ..crate::mac_check::WindowFacts::missing(lifecycle::MAIN) }
+        crate::mac_check::WindowFacts { exists: true, visible: true, on_screen: true, class: "NSKVONotifying_TaoWindow".into(), style: 0x800f, sharing: 1, server_sharing: Some(1), ..crate::mac_check::WindowFacts::missing(lifecycle::MAIN) }
     }
 
     #[test]

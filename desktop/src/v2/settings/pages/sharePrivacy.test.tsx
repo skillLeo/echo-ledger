@@ -96,8 +96,8 @@ describe("Screen-share privacy v2", () => {
     respond("privacy_status", makePrivacyStatus({ hiding: "off" }));
     page(makeSettings({ hideFromSharing: "off" }));
     await act(flushAsync);
-    expect(screen.getByRole("button", { name: "Show in screen share for 10 min" })).toBeDisabled();
-    expect(screen.getByText("Everything EchoLedger shows can be seen by people watching your screen share.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show Live Translate for 10 min" })).toBeDisabled();
+    expect(screen.getByText("Live Translate's words can be seen by people watching your screen share.")).toBeInTheDocument();
   });
 
   it("no Show while the sharing bar is on screen, with the tray's words; Show again once the bar went", async () => {
@@ -163,10 +163,10 @@ describe("the page promises no more than the last check saw", () => {
   const hidings = ["all", "floating", "off"] as const;
   const badges = ["private", "visible", "not_checked", "black_box"] as const;
   it.each(hidings.flatMap((hiding) => badges.map((badge) => [hiding, badge] as const)))("hiding %s, badge %s: today's page, onboarding and the v2 page", async (hiding, badge) => {
-    expect(SHARE_PRIVACY_INTRO).toBe("EchoLedger hides the Live Assist card, the captions and its other floating windows from screen sharing and checks on this computer whether it works.");
+    expect(SHARE_PRIVACY_INTRO).toBe("Live words (Live Assist, captions, translation) are hidden from screen shares. To show one, use its own window's menu.");
     // One sentence for what EchoLedger does; what the last check saw is said once, in its own sentence.
     expect(SHARE_PRIVACY_INTRO).not.toMatch(/last check/i);
-    expect(SHARE_PRIVACY_OFF).toBe("EchoLedger's other floating windows show in a screen share. The Live Assist card and the captions stay hidden unless you show them.");
+    expect(SHARE_PRIVACY_OFF).toBe("Live Translate shows in screen shares. Live Assist and the captions stay hidden unless you show one from its own window's menu.");
     const settings = makeSettings({ hideFromSharing: hiding });
     const pages: [string, () => ReactElement][] = [
       ["today's page", () => <SharePrivacyPage settings={settings} patch={async () => true} onCheck={() => undefined} />],
@@ -188,16 +188,16 @@ describe("the page promises no more than the last check saw", () => {
         expect(text, name).not.toContain(SHARE_PRIVACY_OFF);
         // What the last check saw, and nothing more.
         const said = {
-          visible: "The last check saw EchoLedger's windows in the screen share.",
+          visible: "The last check saw the live words in the screen share.",
           not_checked: "not checked yet",
-          black_box: "The last check saw a black box where EchoLedger's windows are.",
-          private: "The last check saw EchoLedger's windows hidden from the screen share.",
+          black_box: "The last check saw a black box where the live words are.",
+          private: "The last check saw the live words hidden from the screen share.",
         }[badge];
         expect(text, `${name}: ${badge}`).toContain(said);
         // ...and none of the other results.
         for (const [other, sentence] of Object.entries(LAST_CHECK_SENTENCE)) if (other !== badge) expect(text, `${name}: ${badge}, not ${other}`).not.toContain(sentence);
-        // Only the floating windows hidden: the main window shows.
-        if (hiding === "floating") expect(text, name).toContain("The main window is visible in screen share");
+        // Since FIX-01 "floating" (v1.8.1's choice) reads as hidden, like "all": the same lines, no main-window one.
+        if (hiding === "floating") expect(text, name).not.toContain("The main window is visible in screen share");
       }
       cleanup();
     }
@@ -281,7 +281,7 @@ describe("parity with today's Screen-share privacy pages", () => {
   type State = { name: string; status: PrivacyStatus; today: () => ReactElement; v2: () => ReactElement; run?: ShareCheckView; guided?: boolean;
     map?: Record<string, [ControlRole | "password", string | RegExp]> };
   const pageMap: State["map"] = {
-    "combobox: Other floating windows": ["combobox", /^Other floating windows/],
+    "combobox: Live Translate": ["combobox", /^Live Translate/],
     "combobox: On this Windows version": ["combobox", /^On this Windows version/],
   };
   const STATES: State[] = [
@@ -291,7 +291,7 @@ describe("parity with today's Screen-share privacy pages", () => {
     { name: "Mac with Zoom, the demo running, a line with its fix", status: makePrivacyStatus({ platform: "macos", zoomInstalled: true, apps: MAC_APPS, demoSecondsLeft: 300,
       lines: [{ warning: true, text: "Something changed a flag.", fix: "hide_again" }] }),
       today: () => <SharePrivacyPage settings={settings} patch={patch} onCheck={() => undefined} />, v2: () => <SharePrivacyPageV2 settings={settings} patch={patch} onCheck={() => undefined} />,
-      map: { "combobox: Other floating windows": pageMap["combobox: Other floating windows"], "button: Check screen-share privacyHidden, today": ["button", "Check screen-share privacy"], "button: Set up Zoom1 setting": ["button", "Set up Zoom"],
+      map: { "combobox: Live Translate": pageMap["combobox: Live Translate"], "button: Check screen-share privacyHidden, today": ["button", "Check screen-share privacy"], "button: Set up Zoom1 setting": ["button", "Set up Zoom"],
         "button: Hide from screen share again5 min left": ["button", "Hide from screen share again"] } },
     { name: "Check, Mac, after a run", status: makePrivacyStatus({ platform: "macos", apps: [{ app: "zoom", name: "Zoom", version: "7.1.9", state: "not_checked", line: "Zoom: not checked", needsTest: true }] }),
       run: view(), today: () => <ShareCheckPage />, v2: () => <ShareCheckPageV2 />, map: { "button: Test": ["button", "Test Zoom"] } },

@@ -14,7 +14,7 @@ import { useCopied } from "../../../views/main/SettingsControls";
 import { PrivacyBadgeView } from "../../../components/PrivacyBadge";
 import { MainShareControl, PinnedShareControl, mainShareValue } from "../../../components/ShareVisibility";
 import {
-  GUIDED_ALONE, HIDDEN_WHILE_SHARING, SHARE_PRIVACY_MAIN, sharePrivacyTop, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
+  GUIDED_ALONE, HIDDEN_WHILE_SHARING, LIVE_TRANSLATE_SHOWN, SHARE_PRIVACY_MAIN, sharePrivacyTop, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
   displaysValue, hiddenReason, hiddenValue, lastCheckValue, statusValue, useCountdown, versionLine,
 } from "../../../views/main/PrivacySettings";
 import { Badge, Button, Card, Icons, List, ListRow } from "../../components";
@@ -50,7 +50,7 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
   const barHolds = hiddenReason(status) === "share_bar";
   const shortcut = settings.shortcuts.hide_all ? prettyShortcut(settings.shortcuts.hide_all, status?.platform ?? "windows") : "No shortcut";
   const notes = [
-    status?.hiding === "off" ? "Everything EchoLedger shows can be seen by people watching your screen share." : null,
+    status?.hiding === "off" ? LIVE_TRANSLATE_SHOWN : null,
   ].filter(Boolean) as string[];
   const lines = status?.lines ?? [];
   const act = (done: Promise<unknown>, after?: () => void) => {
@@ -60,7 +60,7 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
 
   return (
     <div className="el-settings-v2" data-testid="share-privacy">
-      <div className="el-share-top">{sharePrivacyTop(settings.hideFromSharing, status?.badge).map((l) => <p key={l} className="el-secondary">{l}</p>)}</div>
+      <div className="el-share-top">{sharePrivacyTop(settings.hideFromSharing, status?.badge, status?.platform).map((l) => <p key={l} className="el-secondary">{l}</p>)}</div>
       <Group footer={<p>{SHARE_PRIVACY_MAIN}</p>}>
         <ListRow compact anchor="share_privacy.main" title={setting("share_privacy.main").title} value={mainShareValue(status)} control={<MainShareControl status={status} />} />
         <ListRow compact anchor="share_privacy.card" title={setting("share_privacy.card").title} control={<PinnedShareControl which="card" />} />

@@ -385,7 +385,7 @@ describe("MainApp sidebar and keys", () => {
     expect(help).not.toHaveTextContent(/Account → Preferences|console under Help/);
     expect(help).toHaveTextContent("Change the shortcuts in Settings › Keyboard shortcuts. Answers to common questions are in Settings › Help.");
     expect(help).not.toHaveTextContent(/user guide/i);
-    expect(within(help).getByTestId("capture-help")).toHaveTextContent(/Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support/);
+    expect(within(help).getByTestId("capture-help")).toHaveTextContent(/EchoLedger's windows show in your screenshots; only the live words \(Live Assist, captions, translation\) are hidden from them\. For support, send Copy diagnostics/);
     expect(within(help).getByText(/Shift\+← \/ Shift\+→/)).toBeInTheDocument();
     fireEvent.click(within(help).getByRole("button", { name: "Help articles" }));
     expect(await screen.findByRole("heading", { name: "Help", level: 1 })).toBeInTheDocument();
