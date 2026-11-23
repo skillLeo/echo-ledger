@@ -55,12 +55,13 @@
         }));
         if (window.Alpine) register(); else document.addEventListener('alpine:init', register);
 
-        // ⌘[ / ⌘] (Ctrl+[ / Ctrl+] off a Mac): Back and Forward on every page of the console (ElLibraryKeysCore.historyKey).
+        // ⌘[ / ⌘] (Ctrl+[ / Ctrl+] off a Mac): Back and Forward on every page of the console (ElLibraryKeysCore.historyKey),
+        // asked as the key bubbles up, so an editor of rich text that uses it (outdent, indent) has claimed it first.
         const mac = /mac|iphone|ipad/i.test(navigator.userAgentData?.platform || navigator.platform || '');
         document.addEventListener('keydown', (e) => {
             const core = window.ElLibraryKeysCore;
             if (! core || typeof core.historyKey !== 'function') return;
-            // An editor of rich text keeps ⌘[ / ⌘] (outdent, indent); a form field and a dialog keep the page (and the typing).
+            // Any field left over (an input, a text area, a list, an editor that did not claim the key) and a dialog keep the page and the typing.
             const where = (t) => ! (t instanceof Element) ? t
                 : (t.closest('[contenteditable]:not([contenteditable="false"])') !== null ? { editable: true } : (t.closest('input, textarea, select') !== null ? { field: true } : t));
             const way = core.historyKey({ key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey,
@@ -70,7 +71,7 @@
             if (way === 'stay') return;
             e.stopImmediatePropagation();
             if (way === 'back') window.history.back(); else window.history.forward();
-        }, true);
+        });
 
         // The keys, before the list's own (library-keys): ElLibraryKeysCore.shellKey decides.
         document.addEventListener('keydown', (e) => {

@@ -139,7 +139,7 @@ test('⌘[ and ⌘] go Back and Forward on a Mac, Ctrl+[ and Ctrl+] elsewhere, n
     assert.equal(core.historyKey(key('x', { metaKey: true, code: 'KeyX' }), mac), null);
 });
 
-test('⌘[ and ⌘] in a form field or over a dialog keep the page (the browser\'s Back would lose the typing); an editor keeps them', () => {
+test('⌘[ and ⌘] in a form field, an editor or over a dialog keep the page (the browser\'s Back would lose the typing); an editor that uses them claims them first', () => {
     const mac = { mac: true, modal: false };
     // The Save as view name, a search box, a list: the key is taken from the browser and nothing moves.
     for (const field of [{ tagName: 'INPUT' }, { tagName: 'TEXTAREA' }, { tagName: 'SELECT' }, { field: true }]) {
@@ -149,9 +149,14 @@ test('⌘[ and ⌘] in a form field or over a dialog keep the page (the browser\
     // A dialog is open: the same, wherever the focus is.
     assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft' }), { mac: true, modal: true }), 'stay');
     assert.equal(core.historyKey(key('[', { ctrlKey: true, code: 'BracketLeft', target: { tagName: 'INPUT' } }), { mac: false, modal: false }), 'stay');
-    // An editor of rich text keeps ⌘[ / ⌘] for outdent and indent, in a dialog too.
-    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', target: { editable: true } }), mac), null);
-    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', target: { isContentEditable: true } }), { mac: true, modal: true }), null);
+    // An editor of rich text that uses ⌘[ / ⌘] (outdent, indent) claims the key before the page asks: nothing more.
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', defaultPrevented: true, target: { editable: true } }), mac), null);
+    assert.equal(core.historyKey(key(']', { metaKey: true, code: 'BracketRight', defaultPrevented: true, target: { isContentEditable: true } }), { mac: true, modal: true }), null);
+    // One that did not claim it keeps the page and the typing too (the browser's Back would leave it).
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', target: { editable: true } }), mac), 'stay');
+    assert.equal(core.historyKey(key(']', { metaKey: true, code: 'BracketRight', target: { isContentEditable: true } }), mac), 'stay');
+    // Claimed elsewhere on the page (another handler): nothing more either.
+    assert.equal(core.historyKey(key('[', { metaKey: true, code: 'BracketLeft', defaultPrevented: true }), mac), null);
     // Other keys in a field stay the field's.
     assert.equal(core.historyKey(key('a', { metaKey: true, code: 'KeyA', target: { tagName: 'INPUT' } }), mac), null);
     assert.equal(core.historyKey(key('[', { code: 'BracketLeft', target: { tagName: 'INPUT' } }), mac), null);
