@@ -437,6 +437,9 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   // `settling`: a Back or Forward is under way; whatever the Library settles on meanwhile (a view deleted since falls
   // back to All recordings, a view saved offline has the server's id now) is where it went, never a new step.
   const steps = useRef<{ back: Place[]; forward: Place[]; now: Place | null; settling: number }>({ back: [], forward: [], now: null, settling: 0 });
+  // A place that can't be shown any more: a view or a label deleted since.
+  const goneFrom = (p: Place) => (p.scope.kind === "saved" && !viewsStore.list().some((v) => isView(v, p.scope.kind === "saved" ? p.scope.id : "")))
+    || (p.scope.kind === "label" && !!lists && !lists.some((l) => l.key === (p.scope.kind === "label" ? p.scope.key : "")));
   // A view is the same place under the id it had here and the server's (its client_ref).
   const placeKey = (p: Place) => {
     const view = p.scope.kind === "saved" ? viewsStore.list().find((v) => isView(v, p.scope.kind === "saved" ? p.scope.id : "")) : undefined;
@@ -445,16 +448,25 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
   useEffect(() => {
     const here: Place = { scope, spec: applied, query: searchStep };
     const h = steps.current;
+    const key = placeKey(here);
+    // Never two steps alike in a row, nor a step that is where the Library is now: every Back changes the place.
+    const tidy = () => {
+      while (h.back.length && placeKey(h.back[h.back.length - 1]) === key) h.back = h.back.slice(0, -1);
+    };
     if (h.settling > 0) {
       h.now = here;
+      tidy();
       return;
     }
-    if (h.now && placeKey(h.now) === placeKey(here)) return;
-    if (h.now) {
+    if (h.now && placeKey(h.now) === key) return;
+    // The place left is a step, unless it is gone (a view or label deleted since: the Library fell back from it) or
+    // the same as the last step already.
+    if (h.now && !goneFrom(h.now) && (!h.back.length || placeKey(h.back[h.back.length - 1]) !== placeKey(h.now))) {
       h.back = [...h.back, h.now].slice(-HISTORY_MAX);
       h.forward = [];
     }
     h.now = here;
+    tidy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, applied, searchStep]);
   const walk = useCallback((way: "back" | "forward") => {
