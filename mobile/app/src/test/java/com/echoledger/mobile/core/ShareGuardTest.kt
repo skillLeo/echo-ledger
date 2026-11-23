@@ -121,12 +121,12 @@ class ShareGuardTest {
         val shows = AtomicInteger()
         val togglers = (1..4).map {
             thread {
-                start.await()
+                start.await(10, TimeUnit.SECONDS)
                 repeat(TOGGLES) { if (ShareGuard.toggleHidden()) hides.incrementAndGet() else shows.incrementAndGet() }
             }
         }
         val setting = thread {
-            start.await()
+            start.await(10, TimeUnit.SECONDS)
             repeat(TOGGLES) { i ->
                 ShareGuard.setHideLive(i % 2 != 0)
                 ShareGuard.setShared(i % 3 == 0)
@@ -136,6 +136,7 @@ class ShareGuardTest {
         }
         start.countDown()
         (togglers + setting).forEach { it.join(TimeUnit.SECONDS.toMillis(30)) }
+        assertTrue("every thread finished", (togglers + setting).none { it.isAlive })
 
         assertEquals("every tap counted once: as many hides as shows", hides.get(), shows.get())
         assertFalse("an even number of taps leaves the windows shown", ShareGuard.hiddenByUser.value)

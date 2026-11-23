@@ -687,17 +687,23 @@ class PostCallPromptTest : AppTest() {
         val undo = Thread {
             app.graph.recordings.update("call-1") {
                 inUndo.countDown()
-                release.await()
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS)
                 it.copy(state = "pending_decision", discardAt = null, discardedFrom = null)
             }
         }.apply { start() }
-        inUndo.await()
-        // ...while the delete runs: it waits for the Undo and then finds the call back, so it keeps it.
-        val finish = Thread { runBlocking { Decisions.finishDiscard(app, "call-1") } }.apply { start() }
-        Thread.sleep(200)
-        release.countDown()
-        undo.join()
-        finish.join()
+        try {
+            assertTrue("the Undo read the call", inUndo.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            // ...while the delete runs: it waits for the Undo and then finds the call back, so it keeps it.
+            val finish = Thread { runBlocking { Decisions.finishDiscard(app, "call-1") } }.apply { start() }
+            Thread.sleep(200)
+            release.countDown()
+            undo.join(10_000)
+            finish.join(10_000)
+            assertFalse("the Undo finished", undo.isAlive)
+            assertFalse("the delete finished", finish.isAlive)
+        } finally {
+            release.countDown()
+        }
         assertEquals("pending_decision", app.peekRecording("call-1")?.state)
         assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
     }

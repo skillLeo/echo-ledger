@@ -276,7 +276,7 @@ class LibraryRepositoryTest : AppTest() {
         repo.refresh()
         val slow = async(kotlinx.coroutines.Dispatchers.IO) { repo.refreshWaiting() }
         com.echoledger.mobile.testsupport.waitFor("the waiting read on the network") { asked.get() }
-        kotlinx.coroutines.withTimeout(2_000) { repo.markOpenedLocally("a") }
+        kotlinx.coroutines.withTimeout(2_000) { repo.markOpenedLocally("a", repo.generation()) }
         assertEquals(true, repo.items.value.single().opened)
         release.open()
         slow.await()
@@ -321,6 +321,53 @@ class LibraryRepositoryTest : AppTest() {
         assertTrue(repo.waiting.value.isEmpty())
         assertFalse(repo.hasSynced())
         assertNull(repo.viewsVersion.value)
+        assertFalse(cacheFile.exists())
+    }
+
+    /**
+     * The local writes that follow a server call take the generation before it: a Transcribe held on the server
+     * across signing out (unpair) brings the last person's recording back nowhere, and library.bin isn't written again.
+     * The same for a views recheck and a recording marked opened.
+     */
+    @Test
+    fun `a transcribe answer landing after signing out writes nothing`() {
+        kotlinx.coroutines.runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a")))))
+        kotlinx.coroutines.runBlocking { app.graph.library.refresh() }
+        assertTrue(cacheFile.exists())
+        val release = server.hold()
+        val asked = java.util.concurrent.atomic.AtomicBoolean(false)
+        val started = item("a", updated = "2026-10-25T09:00:00+00:00")
+        server.on("POST", "/api/sessions/a/transcribe") {
+            asked.set(true)
+            release.await()
+            FakeServer.json(
+                202,
+                """{"session":$started,"transcript":{"id":"T9","kind":"final","provider":"assemblyai","status":"pending","language":null}}"""
+            )
+        }
+        val vm = com.echoledger.mobile.ui.MainViewModel(app).clearedAfterTest()
+        val transcribe = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).async { vm.transcribeOne("a") }
+        com.echoledger.mobile.testsupport.pumpUntil("the transcribe on the network") { asked.get() }
+        val out = vm.unpair()
+        com.echoledger.mobile.testsupport.pumpUntil("signed out") { out.isCompleted }
+        release.open()
+        com.echoledger.mobile.testsupport.pumpUntil("the answer landed") { transcribe.isCompleted }
+        assertTrue(app.graph.library.items.value.isEmpty())
+        assertFalse(cacheFile.exists())
+        // The other two writes that follow an await: nothing either, with a generation from before the sign-out.
+        val before = app.graph.library.generation() - 1
+        kotlinx.coroutines.runBlocking {
+            app.graph.library.markOpenedLocally("a", before)
+            app.graph.library.setViewsLocally("a", com.echoledger.mobile.data.RowViewsDto(status = "failed"), before)
+            app.graph.library.upsertLocally(
+                ServerFixtures.libraryItem("b").let {
+                    ApiJson.decodeFromString(LibraryItem.serializer(), it)
+                },
+                before
+            )
+        }
+        assertTrue(app.graph.library.items.value.isEmpty())
         assertFalse(cacheFile.exists())
     }
 

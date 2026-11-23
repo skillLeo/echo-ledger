@@ -132,9 +132,16 @@ class LibraryRepository(
         }
     }
 
-    /** Marks [id] opened here at once (the dot goes away before the server hears of it). */
-    suspend fun markOpenedLocally(id: String) = lock.withLock {
+    /**
+     * The generation now: a caller takes it before its network call and hands it to the local write that follows
+     * ([markOpenedLocally], [setViewsLocally], [upsertLocally]), which then changes nothing when a sign-out came between.
+     */
+    fun generation(): Int = gen
+
+    /** Marks [id] opened here at once (the dot goes away before the server hears of it), unless signed out since [expected]. */
+    suspend fun markOpenedLocally(id: String, expected: Int) = lock.withLock {
         synchronized(this) {
+            if (expected != gen) return@withLock
             val current = _items.value
             if (current.none { it.id == id && it.opened == false }) return@withLock
             val updated = current.map { if (it.id == id) it.copy(opened = true) else it }
@@ -145,10 +152,12 @@ class LibraryRepository(
 
     /**
      * Gives [id]'s row the views state the server has now (its `/views`): a view that stopped (failed after 20 minutes
-     * with nothing done) does not change the recording, so no sync brings it.
+     * with nothing done) does not change the recording, so no sync brings it. Nothing changes when signed out since
+     * [expected] (the generation taken before asking the server).
      */
-    suspend fun setViewsLocally(id: String, views: RowViewsDto) = lock.withLock {
+    suspend fun setViewsLocally(id: String, views: RowViewsDto, expected: Int) = lock.withLock {
         synchronized(this) {
+            if (expected != gen) return@withLock
             val current = _items.value
             val updated = current.map { item ->
                 if (item.id == id) item.copy(transcript = item.transcript?.copy(views = views)) else item
@@ -159,9 +168,13 @@ class LibraryRepository(
         }
     }
 
-    /** Puts the server's answer for one recording ([item]) in the Library now, before the next sync brings it. */
-    suspend fun upsertLocally(item: LibraryItem) = lock.withLock {
+    /**
+     * Puts the server's answer for one recording ([item]) in the Library now, before the next sync brings it; nothing
+     * when signed out since [expected] (the generation taken before asking the server): the answer is the last person's.
+     */
+    suspend fun upsertLocally(item: LibraryItem, expected: Int) = lock.withLock {
         synchronized(this) {
+            if (expected != gen) return@withLock
             val current = _items.value
             val updated = if (current.any { it.id == item.id }) {
                 current.map {

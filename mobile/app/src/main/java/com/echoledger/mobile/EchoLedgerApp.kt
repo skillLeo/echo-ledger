@@ -121,6 +121,12 @@ class AppGraph(val context: Context) {
     val recordings: RecordingStore by lazy { RecordingStore(context, recordingCipher) }
     val library: LibraryRepository by lazy { LibraryRepository(context, secretCipher) { api() } }
 
+    /**
+     * Moves on at each sign-out and each sign-in: what a network call brings back (projects, lists) is kept only when
+     * the account is still the one it was asked for.
+     */
+    val accountEpoch = java.util.concurrent.atomic.AtomicInteger()
+
     /** My views (contract 2.0.0-p): a copy per account, kept in step with `/api/views`. */
     val views: com.echoledger.mobile.data.SavedViewsRepository by lazy {
         com.echoledger.mobile.data.SavedViewsRepository(context, secretCipher, scope) { api() }

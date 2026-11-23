@@ -229,7 +229,8 @@ class PrivateWindowsTest : AppTest() {
         // Saved from a background thread, the way a settings import or reset does it.
         val change = Thread { runBlocking { app.graph.settings.update { it.copy(hideLiveWords = true) } } }
         change.start()
-        change.join()
+        change.join(10_000)
+        assertFalse("the change finished", change.isAlive)
         assertTrue(ShareGuard.hideLive.value)
         assertFalse("not from the other thread itself", secure(flagsOf(FloatingWindow.CAPTIONS)))
         idle()

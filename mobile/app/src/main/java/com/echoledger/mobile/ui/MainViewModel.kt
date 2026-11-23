@@ -158,6 +158,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun moveView(id: String, delta: Int) = graph.views.move(id, delta)
 
+    /**
+     * Signed out: the library, My views, the projects and the lists of the person go, and what a network call still on
+     * its way brings back for them is dropped ([sameAccount]).
+     */
+    private fun forgetAccount() {
+        graph.accountEpoch.incrementAndGet()
+        graph.library.clear()
+        graph.views.clear()
+        _clients.value = emptyList()
+        _lists.value = emptyList()
+    }
+
+    /** Runs [write] only when no sign-out or sign-in came since [epoch] (taken before the network call). */
+    private inline fun sameAccount(epoch: Int, write: () -> Unit) {
+        if (epoch == graph.accountEpoch.get()) write()
+    }
+
     /** After a library sync: My views sent and read again when the sync's `views_version` is not the copy's. */
     private suspend fun syncViews() {
         runCatching { confirmViews() }
@@ -250,6 +267,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         // nothing. Counted again once the new token is in use (below).
         graph.views.use(null)
         graph.settings.update { it.copy(signIns = it.signIns + 1) }
+        // No project or list of the last person stays, nor comes back from a read still on its way.
+        graph.accountEpoch.incrementAndGet()
+        _clients.value = emptyList()
+        _lists.value = emptyList()
         graph.settings.saveToken(response.token)
         val finalPins = response.config.pins.ifEmpty { pins }
         graph.settings.update {
@@ -530,8 +551,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun signOutEverywhere(): Boolean {
         workspaceCall("Signing out failed.") { it.signOutEverywhere() } ?: return false
         graph.settings.clearPairing()
-        graph.library.clear()
-        graph.views.clear()
+        forgetAccount()
         return true
     }
 
@@ -554,8 +574,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun unpair() = viewModelScope.launch {
         graph.settings.clearPairing()
-        graph.library.clear()
-        graph.views.clear()
+        forgetAccount()
         graph.invalidateApi()
         WidgetStateStore.refresh(getApplication())
     }
@@ -645,14 +664,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())
             com.echoledger.mobile.calls.MissedRecordingWorker.schedule(getApplication(), graph.settings.current())
             SelfUpdate.schedule(getApplication())
-            _clients.value = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
+            val epoch = graph.accountEpoch.get()
+            val clients = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
+            sameAccount(epoch) { _clients.value = clients }
             WidgetStateStore.refresh(getApplication())
             _offline.value = false
         } catch (e: NotPairedException) {
             // Revoked on the server: back to the pairing screen. Recordings waiting to upload stay on the phone.
             graph.settings.clearPairing()
-            graph.library.clear()
-            graph.views.clear()
+            forgetAccount()
             graph.invalidateApi()
             WidgetStateStore.refresh(getApplication())
             _message.value = "This phone was signed out on the server. Sign in again."
@@ -700,9 +720,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!viewsRechecking.add(item.id)) return
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // Taken before the server is asked: a sign-out meanwhile makes the answer the last person's.
+                val gen = graph.library.generation()
                 val now = runCatching { graph.api()?.transcriptViews(id) }.getOrNull() ?: return@launch
                 val was = item.transcript?.views ?: return@launch
-                if (now.status != was.status) graph.library.setViewsLocally(item.id, was.copy(status = now.status, progress = now.progress))
+                if (now.status != was.status) {
+                    graph.library.setViewsLocally(item.id, was.copy(status = now.status, progress = now.progress), gen)
+                }
             } finally {
                 viewsRechecking.remove(item.id)
             }
@@ -852,7 +876,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Reads the lists again (on opening the Library and after each sync). */
     suspend fun loadLists() {
-        withContext(Dispatchers.IO) { runCatching { graph.api()?.lists() }.getOrNull() }?.let { _lists.value = it }
+        val epoch = graph.accountEpoch.get()
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.lists() }.getOrNull() }?.let { sameAccount(epoch) { _lists.value = it } }
     }
 
     /** What went wrong with a list's name, in the server's codes: the screen words them. */
@@ -865,43 +890,58 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** `POST /api/lists`: the new list, or what was wrong with its name. */
-    suspend fun createList(name: String, color: String?): Result<com.echoledger.mobile.data.ListDto> = withContext(Dispatchers.IO) {
-        runCatching { graph.api()?.createList(name, color) ?: error("Not signed in") }
-    }.onSuccess { made -> _lists.value = (_lists.value.filterNot { it.key == made.key } + made).sortedBy { it.position } }
+    suspend fun createList(name: String, color: String?): Result<com.echoledger.mobile.data.ListDto> {
+        val epoch = graph.accountEpoch.get()
+        return withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.createList(name, color) ?: error("Not signed in") }
+        }.onSuccess { made ->
+            sameAccount(epoch) { _lists.value = (_lists.value.filterNot { it.key == made.key } + made).sortedBy { it.position } }
+        }
+    }
 
     fun problemOf(e: Throwable): ListProblem = listProblem(e)
 
     /** `PATCH /api/lists/{key}`: a new name or colour; the library follows (every recording's label changed). */
-    suspend fun updateList(key: String, name: String? = null, color: String? = null): Result<com.echoledger.mobile.data.ListDto> =
-        withContext(Dispatchers.IO) { runCatching { graph.api()?.updateList(key, name, color) ?: error("Not signed in") } }
+    suspend fun updateList(key: String, name: String? = null, color: String? = null): Result<com.echoledger.mobile.data.ListDto> {
+        val epoch = graph.accountEpoch.get()
+        return withContext(Dispatchers.IO) { runCatching { graph.api()?.updateList(key, name, color) ?: error("Not signed in") } }
             .onSuccess { changed ->
-                _lists.value = _lists.value.map { if (it.key == key) changed else it }
-                if (name != null) refreshQuietly()
+                sameAccount(epoch) {
+                    _lists.value = _lists.value.map { if (it.key == key) changed else it }
+                    if (name != null) refreshQuietly()
+                }
             }
             // Another device may have changed or removed it: read the lists again.
-            .onFailure { loadLists() }
+            .onFailure { sameAccount(epoch) { loadLists() } }
+    }
 
     /** `DELETE /api/lists/{key}`: the list goes, its recordings stay. */
-    suspend fun deleteList(key: String): Boolean = withContext(Dispatchers.IO) {
-        runCatching { graph.api()?.deleteList(key) ?: error("Not signed in") }
-            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The list could not be deleted.") }.isSuccess
-    }.also { ok ->
-        if (ok) {
-            _lists.value = _lists.value.filterNot { it.key == key }
-            refreshQuietly()
-        } else {
-            loadLists()
+    suspend fun deleteList(key: String): Boolean {
+        val epoch = graph.accountEpoch.get()
+        return withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.deleteList(key) ?: error("Not signed in") }
+                .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The list could not be deleted.") }.isSuccess
+        }.also { ok ->
+            sameAccount(epoch) {
+                if (ok) {
+                    _lists.value = _lists.value.filterNot { it.key == key }
+                    refreshQuietly()
+                } else {
+                    loadLists()
+                }
+            }
         }
     }
 
     /** `PUT /api/lists/order`: [key] one place earlier ([delta] −1) or later (+1). */
     suspend fun moveList(key: String, delta: Int): Boolean {
         val keys = com.echoledger.mobile.core.LibraryLists.moved(_lists.value, key, delta) ?: return false
+        val epoch = graph.accountEpoch.get()
         val ordered = withContext(Dispatchers.IO) {
             runCatching { graph.api()?.orderLists(keys) ?: error("Not signed in") }
                 .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The lists could not be moved.") }.getOrNull()
-        } ?: return false.also { loadLists() }
-        _lists.value = ordered
+        } ?: return false.also { sameAccount(epoch) { loadLists() } }
+        sameAccount(epoch) { _lists.value = ordered }
         return true
     }
 
@@ -995,9 +1035,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Transcribe on an audio-only recording: its first transcript starts; the Library takes the answer at once. */
     suspend fun transcribeOne(id: String): TranscribeOutcome = withContext(Dispatchers.IO) {
+        // Taken before the server is asked: a sign-out meanwhile makes the answer the last person's.
+        val gen = graph.library.generation()
         runCatching { graph.api()?.transcribeSession(id) ?: error("Not signed in") }.fold(
             onSuccess = { answer ->
-                graph.library.upsertLocally(answer.session)
+                graph.library.upsertLocally(answer.session, gen)
                 refreshQuietly()
                 TranscribeOutcome.Started(listOf(id), emptyList(), answer.session.transcribeEstimate?.minutes ?: 0)
             },
@@ -1059,10 +1101,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** A new client folder, added to the list right away. */
-    suspend fun createClient(name: String): ClientDto? = withContext(Dispatchers.IO) {
-        runCatching { graph.api()?.createClient(name.trim()) }
-            .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be created.") }.getOrNull()
-            ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
+    suspend fun createClient(name: String): ClientDto? {
+        val epoch = graph.accountEpoch.get()
+        return withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.createClient(name.trim()) }
+                .onFailure {
+                    _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be created.")
+                }.getOrNull()
+                ?.also { created -> sameAccount(epoch) { _clients.value = _clients.value.filterNot { it.id == created.id } + created } }
+        }
     }
 
     // ---- Projects, filing rules and sharing (since v1.5) -----------------------------------------------------------
@@ -1077,7 +1124,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun reloadClients() {
-        withContext(Dispatchers.IO) { runCatching { graph.api()?.clients()?.data }.getOrNull() }?.let { _clients.value = it }
+        val epoch = graph.accountEpoch.get()
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.clients()?.data }.getOrNull() }?.let {
+            sameAccount(epoch) {
+                _clients.value =
+                    it
+            }
+        }
     }
 
     /** A new project, inside [parentId] when given; the list is reloaded so the counts and paths are the server's. */
@@ -1332,8 +1385,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         if (item.opened != false) return
+        val gen = graph.library.generation()
         viewModelScope.launch(Dispatchers.IO) {
-            graph.library.markOpenedLocally(item.id)
+            graph.library.markOpenedLocally(item.id, gen)
             runCatching { graph.api()?.markOpened(item.id) }
         }
     }
@@ -1613,8 +1667,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val asked = _learn.value ?: return@launch
         _learn.value = null
         if (!yes) return@launch
+        val epoch = graph.accountEpoch.get()
         runCatching { graph.api()?.setClientLanguage(asked.clientId, asked.language) }
-            .onSuccess { _clients.value = _clients.value.map { if (it.id == asked.clientId) it.copy(language = asked.language) else it } }
+            .onSuccess {
+                sameAccount(epoch) {
+                    _clients.value =
+                        _clients.value.map { if (it.id == asked.clientId) it.copy(language = asked.language) else it }
+                }
+            }
             .onFailure { _message.value = com.echoledger.mobile.core.Problems.text(it, "The project could not be updated.") }
     }
 

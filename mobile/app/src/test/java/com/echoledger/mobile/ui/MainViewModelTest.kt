@@ -19,6 +19,7 @@ import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.time.Duration
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -683,5 +684,51 @@ class MainViewModelTest : AppTest() {
         assertEquals(2, waitingReads())
         syncNow()
         pumpUntil("the full sync's read") { waitingReads() == 3 }
+    }
+
+    /**
+     * The projects and the lists are the signed-in person's: signing out clears them at once, and a read or a change
+     * still on its way when the person signs out (the lists, a new project) brings nothing back, so the next person
+     * never sees the last one's project or label names.
+     */
+    @Test
+    fun `the next person never sees the last ones projects or labels`() {
+        pairLocally()
+        serveLibrary()
+        server.on(
+            "GET",
+            "/api/lists",
+            FakeServer.json(200, """{"data":[{"key":"clients","name":"Clients","color":"#e15f56","position":0,"count":1}]}""")
+        )
+        syncNow()
+        val first = runBlocking { vm.loadLists() }
+        assertEquals(listOf("Acme Holdings", "Zed Logistics"), vm.clients.value.map { it.name })
+        assertEquals(listOf("Clients"), vm.lists.value.map { it.name })
+        // A read of the lists and a new project, both held on the server across the sign-out.
+        val gate = server.hold()
+        val asked = java.util.concurrent.atomic.AtomicInteger()
+        server.on("GET", "/api/lists") {
+            asked.incrementAndGet()
+            gate.await()
+            FakeServer.json(200, """{"data":[{"key":"clients","name":"Clients","color":"#e15f56","position":0,"count":1}]}""")
+        }
+        server.on("POST", "/api/clients") {
+            asked.incrementAndGet()
+            gate.await()
+            FakeServer.json(201, """{"data":{"id":"01JNEW","name":"Acme Secret"}}""")
+        }
+        val io = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
+        val lists = io.async { vm.loadLists() }
+        val project = io.async { vm.createClient("Acme Secret") }
+        com.echoledger.mobile.testsupport.waitFor("both on the network") { asked.get() == 2 }
+        val out = vm.unpair()
+        pumpUntil("signed out") { out.isCompleted }
+        assertTrue(vm.clients.value.isEmpty())
+        assertTrue(vm.lists.value.isEmpty())
+        gate.open()
+        pumpUntil("both landed") { lists.isCompleted && project.isCompleted }
+        assertTrue("no project of the last person", vm.clients.value.isEmpty())
+        assertTrue("no label of the last person", vm.lists.value.isEmpty())
+        assertEquals(Unit, first)
     }
 }
