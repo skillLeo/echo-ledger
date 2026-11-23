@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\InterfaceFlags;
 use App\Services\Library\LibraryFacets;
+use App\Services\Library\LibraryFilters;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Log\Events\MessageLogged;
@@ -185,6 +186,36 @@ it('lists as many items in each API view as the Library\'s counts say, the owner
     }
 });
 
+it('gives every library item its one state, and the facets count each state, adding up to the total (2.0.0-r)', function () {
+    $expected = [
+        'every state' => ['transcribed' => 2, 'audio_only' => 2, 'transcribing' => 2, 'waiting_to_upload' => 1, 'failed' => 3, 'waiting' => 0],
+        'all transcribed' => ['transcribed' => 3, 'audio_only' => 0, 'transcribing' => 0, 'waiting_to_upload' => 0, 'failed' => 0, 'waiting' => 0],
+        'audio only' => ['transcribed' => 0, 'audio_only' => 4, 'transcribing' => 0, 'waiting_to_upload' => 0, 'failed' => 0, 'waiting' => 0],
+        'failures' => ['transcribed' => 1, 'audio_only' => 0, 'transcribing' => 0, 'waiting_to_upload' => 0, 'failed' => 2, 'waiting' => 0],
+        'nothing yet' => ['transcribed' => 0, 'audio_only' => 0, 'transcribing' => 0, 'waiting_to_upload' => 0, 'failed' => 0, 'waiting' => 0],
+    ];
+    foreach (stateAccounts() as $name => [$owner, $token, $titles]) {
+        $answer = $this->api($token)->getJson('/api/library/facets')->assertOk()->json();
+        expect($answer['states'])->toBe($expected[$name], $name)
+            ->and(array_sum($answer['states']))->toBe($answer['total'], "{$name}: the states add up");
+
+        // Each item says its state; together they are the facets' counts, and only the owner's are there.
+        $items = $this->api($token)->getJson('/api/library?limit=100')->assertOk()->json('data');
+        $byState = array_fill_keys(LibraryFilters::STATE_NAMES, 0);
+        foreach ($items as $item) {
+            expect($item['title'])->toBeIn($titles, $name)
+                ->and($item['facets']['state'])->toBe(LibraryFilters::state($item['facets']['status'], $item['status']), "{$name}: {$item['title']}");
+            $byState[$item['facets']['state']]++;
+        }
+        expect($byState)->toBe($answer['states'], $name);
+
+        // The call waiting for the person's choice is `waiting`, in Needs you only.
+        foreach ($this->api($token)->getJson('/api/library?view=needs_you&limit=100')->assertOk()->json('data') as $item) {
+            expect($item['facets']['state'])->toBeIn(['failed', 'waiting', 'transcribing'], "{$name}: {$item['title']} in Needs you");
+        }
+    }
+});
+
 it('writes nothing of a recording to the log while it counts and lists', function () {
     $logged = [];
     Event::listen(MessageLogged::class, function (MessageLogged $event) use (&$logged): void {
@@ -227,15 +258,41 @@ it('uses the glossary\'s words in the console: the place, the rows and the Statu
     expect(__('In progress', [], 'ur'))->not->toBe('In progress');
 });
 
-it('never says "Not transcribed" or "Untranscribed" to a customer: the guides, the help, the Urdu words, the emails', function () {
-    $places = [dirname(base_path()).'/docs/USER_GUIDE.md', resource_path('help/user-guide.md'), lang_path('ur.json')];
-    foreach ([resource_path('views/mail'), resource_path('views/notifications')] as $folder) {
-        if (is_dir($folder)) {
-            $places = [...$places, ...glob($folder.'/*.blade.php') ?: []];
-        }
+it('shows what In progress holds from the glossary\'s states, while the Status filter keeps it (2.0.0-r)', function () {
+    [$owner] = stateAccounts()['every state'];
+    $this->actingAs($owner, 'web');
+    $processing = fn (array $filters = []): array => collect(collect(Livewire::test(ListCaptureSessions::class)->call('applyFilters', $filters)->instance()->filterPanel())
+        ->firstWhere('key', 'status')['options'])->firstWhere('value', 'processing');
+
+    expect($processing())->toMatchArray(['label' => 'In progress', 'count' => 3, 'parts' => '2 transcribing · 1 waiting to upload'])
+        ->and($processing(['status' => ['op' => 'is', 'values' => ['processing']]])['parts'])->toBe('2 transcribing · 1 waiting to upload')
+        // Status is Failed: In progress counts other recordings than the list, so its parts are not given.
+        ->and($processing(['status' => ['op' => 'is', 'values' => ['failed']]])['parts'])->toBeNull();
+    expect((string) $this->get('/app/sessions?f=1')->getContent())->toContain('data-parts');
+
+    $prefs = $owner->console_preferences ?? [];
+    $prefs['shell'] = ['app_language' => 'ur'];
+    $owner->forceFill(['console_preferences' => $prefs])->save();
+    $this->actingAs($owner->fresh(), 'web');
+    app()->setLocale('ur');
+    expect($processing()['parts'])->toBe(trans_choice('1 transcribing|:count transcribing', 2).' · '.trans_choice('1 waiting to upload|:count waiting to upload', 1))
+        ->and($processing()['parts'])->not->toContain('transcribing');
+});
+
+it('never says "Not transcribed" or "Untranscribed" to a customer: guides, help, views, every language, translated strings', function () {
+    $retired = '/not transcribed|untranscribed/i';
+    $files = [dirname(base_path()).'/docs/USER_GUIDE.md', ...glob(resource_path('help/*.md')) ?: [], ...glob(lang_path('*.json')) ?: []];
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(resource_path('views'), FilesystemIterator::SKIP_DOTS)) as $file) {
+        $files[] = (string) $file;
     }
-    foreach ($places as $file) {
-        $text = (string) file_get_contents($file);
-        expect(preg_match('/not transcribed|untranscribed/i', $text))->toBe(0, "{$file} still says it");
+    foreach ($files as $file) {
+        expect(preg_match($retired, (string) file_get_contents($file)))->toBe(0, "{$file} still says it");
+    }
+    // In the code only what is translated reaches people: the old addresses (?tab=untranscribed) and values stay.
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(app_path(), FilesystemIterator::SKIP_DOTS)) as $file) {
+        preg_match_all('/\\b(?:__|trans_choice|trans)\\(\\s*([\'"])((?:(?!\\1).)*)\\1/s', (string) file_get_contents((string) $file), $calls);
+        foreach ($calls[2] as $text) {
+            expect(preg_match($retired, $text))->toBe(0, "{$file}: {$text}");
+        }
     }
 });
