@@ -307,3 +307,34 @@ test('a step handed back when the last request ends clears its limit, so it neve
     assert.deepEqual(replayed, [{ url: '/forward' }]);
 });
 
+test('a request given up on at the limit counts nothing back when it ends later, so a newer step waits for its own request', () => {
+    const timers = fakeTimers();
+    const gate = core.historyGate();
+    const replayed = [];
+    const guard = core.historyGuard(gate, timers, (step) => replayed.push(step), 10000);
+    const request = () => {
+        const callbacks = [];
+        return { hooks: { respond: (cb) => callbacks.push(cb) }, finish: () => callbacks.forEach((cb) => cb()) };
+    };
+    // 1. Request A hangs, and a step is held behind it.
+    const a = request();
+    core.watchRequest(gate, a.hooks, guard.handBack);
+    assert.equal(guard.pop({ url: '/first' }, 0), 'hold');
+    // 2. The limit fires at 10 s: that step goes through.
+    timers.run(10000);
+    assert.deepEqual(replayed, [{ url: '/first' }]);
+    // 3. Request B starts and step S is held behind it.
+    const b = request();
+    core.watchRequest(gate, b.hooks, guard.handBack);
+    assert.equal(guard.pop({ url: '/s' }, 11000), 'hold');
+    // 4. A ends at last: it was given up on, so it counts nothing back and hands nothing back.
+    a.finish();
+    // 5. S is still held until B ends.
+    assert.deepEqual(gate.held(), { url: '/s' });
+    assert.deepEqual(replayed, [{ url: '/first' }]);
+    b.finish();
+    assert.deepEqual(replayed, [{ url: '/first' }, { url: '/s' }]);
+    assert.equal(gate.held(), null);
+    assert.equal(timers.pending(), 0);
+});
+

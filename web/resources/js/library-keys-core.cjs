@@ -111,7 +111,8 @@
      * ⌘[, a mouse's buttons, the browser's) had its address rewritten by the late answer and its own update pushed as a
      * new entry. The gate holds a step that comes while one of the Library's requests is out, and hands it back, the
      * latest one only, once none is: the page then puts that step's address and state back and lets it through.
-     * start()/end() around each request of the Library (end() returns the held step to replay, or null); pop(entry,
+     * start()/end(epoch) around each request of the Library (start() returns the epoch it started in, end() the held
+     * step to replay, or null, and nothing for a request from before a release); pop(entry,
      * now) for each step: 'hold' or 'pass'; heldSince() is when the first step now held came (the time limit counts from
      * it, never from a later one); release() hands the held step back and forgets the requests (the limit).
      */
@@ -119,6 +120,9 @@
         let out = 0;
         let waiting = null;
         let since = null;
+        // Each release() starts a new epoch: a request from before it was already given up on (it hung past the limit),
+        // so its ending, whenever it comes, counts nothing back and hands nothing back.
+        let epoch = 0;
         const take = () => {
             const step = waiting;
             waiting = null;
@@ -126,8 +130,12 @@
             return step;
         };
         return {
-            start() { out += 1; },
-            end() {
+            start() {
+                out += 1;
+                return epoch;
+            },
+            end(startedIn) {
+                if (typeof startedIn === 'number' && startedIn !== epoch) return null;
                 out = Math.max(0, out - 1);
                 return out > 0 || waiting === null ? null : take();
             },
@@ -141,6 +149,7 @@
             heldSince() { return since; },
             release() {
                 out = 0;
+                epoch += 1;
                 return take();
             },
         };
@@ -150,15 +159,17 @@
      * One request of the Library through the gate: counted out now and back exactly once, however it ends. Livewire calls
      * a commit's respond() on every end (answered, skipped, superseded by a newer one, failed, cancelled), while succeed()
      * and fail() miss some of them (a superseded or skipped message, a network failure), so the count never leaks.
-     * hooks: the commit hook's {respond}; replay(step): what to do with a held step handed back (or null).
+     * A request that ends after the gate gave up on it (release(), the time limit) counts nothing back: the count is
+     * newer requests' by then. hooks: the commit hook's {respond}; replay(step): what to do with a held step handed back
+     * (or null).
      */
     function watchRequest(gate, hooks, replay) {
-        gate.start();
+        const epoch = gate.start();
         let done = false;
         const end = () => {
             if (done) return;
             done = true;
-            replay(gate.end());
+            replay(gate.end(epoch));
         };
         hooks.respond(end);
         return end;
