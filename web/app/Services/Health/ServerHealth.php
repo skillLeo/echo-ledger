@@ -62,6 +62,9 @@ final class ServerHealth
 
             return ['missing' => $missing, 'cipher' => $this->cipherFault()];
         } catch (Throwable $e) {
+            // A bug in the check itself: its stack trace goes to the log, the answer stays a failed check.
+            report($e);
+
             return ['missing' => [], 'cipher' => 'the health check itself failed: '.Str::limit($e->getMessage(), 300)];
         }
     }
