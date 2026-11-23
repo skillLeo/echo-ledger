@@ -2,7 +2,10 @@ import { processName } from "./format";
 // Pure helpers behind the recording pill, the after-call toast and chip, and the ask chip (unit-tested in
 // controls.test.ts).
 import { SOURCE_APP_LABELS, formatDuration, timestamp } from "./format";
-import type { AskPayload, MissingPermission, PendingItem, RecordingState } from "./ipc";
+import type { AskPayload, MissingPermission, PendingItem, PermissionsStatus, RecordingState } from "./ipc";
+
+/** The button that opens the system's privacy settings, in the platform's words (none where there is no such page). */
+export const SETTINGS_LABEL: Record<PermissionsStatus["platform"], string> = { macos: "Open System Settings", windows: "Open Windows Settings", other: "" };
 
 /** Display label of a `source_app` value; unknown values read as words instead of a raw id. */
 export function sourceLabel(app: string | null | undefined): string {

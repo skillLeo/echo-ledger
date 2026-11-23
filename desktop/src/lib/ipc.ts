@@ -1759,7 +1759,8 @@ export interface EventPayloads {
   "capture:far_side": FarSidePayload;
   "mac_check:progress": CheckProgress;
   "capture:test_level": [number, number];
-  "dictation:state": { active: boolean; sounds: boolean; mode: DictationMode };
+  /** `permission`: the one that kept dictation from starting (the box offers its settings), else null. */
+  "dictation:state": { active: boolean; sounds: boolean; mode: DictationMode; permission?: PermissionKind | null };
   "dictation:level": number;
   "lock:changed": LockStatus;
   "activity:updated": number;
