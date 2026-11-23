@@ -120,10 +120,10 @@ describe("the Library's places", () => {
     const list = await screen.findByRole("list", { name: "Library views" });
     // Needs you: the failed one, the two calls waiting and the upload that failed here. Then Shared ▸, which folds.
     expect(within(list).getAllByRole("button").map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(
-      ["All, 4", "Needs you, 4", "Unread, 1", "Important, 0", "Not transcribed, 1", "Audio only, 1", "Shared"]);
+      ["All recordings, 4", "Needs you, 4", "Unread, 1", "Important, 0", "Not transcribed, 1", "Audio only, 1", "Shared"]);
     // No Library places list any more: these are the LIBRARY section's.
     expect(screen.queryByRole("list", { name: "Library places" })).toBeNull();
-    expect(within(list).getByRole("button", { name: "All, 4" })).toHaveAttribute("aria-current", "page");
+    expect(within(list).getByRole("button", { name: "All recordings, 4" })).toHaveAttribute("aria-current", "page");
     // Pinned comes first in its own section at the top of All.
     expect(screen.getAllByRole("button", { expanded: true }).find((b) => b.classList.contains("el-list-section__button"))).toHaveAccessibleName("Pinned · 1");
     fireEvent.click(within(list).getByRole("button", { name: "Audio only, 1" }));
@@ -142,7 +142,7 @@ describe("the Library's places", () => {
     const list = await screen.findByRole("list", { name: "Library views" });
     // The failed one and the waiting call; All counts what it lists (not the call).
     expect(within(list).getByRole("button", { name: /^Needs you, / })).toHaveAccessibleName("Needs you, 2");
-    expect(within(list).getByRole("button", { name: /^All, / })).toHaveAccessibleName("All, 4");
+    expect(within(list).getByRole("button", { name: /^All recordings, / })).toHaveAccessibleName("All recordings, 4");
     expect(rows()).not.toContain("call");
     fireEvent.click(within(list).getByRole("button", { name: "Needs you, 2" }));
     await settle();
@@ -164,7 +164,7 @@ describe("the Library's places", () => {
     fireEvent.click(within(list).getByRole("button", { name: "Not transcribed, 1" }));
     await settle();
     expect(rows()).toEqual(["file"]);
-    fireEvent.click(within(list).getByRole("button", { name: "All, 4" }));
+    fireEvent.click(within(list).getByRole("button", { name: "All recordings, 4" }));
     await settle();
     expect(rows()).toEqual(["wa", "zoom", "file", "bad"]);
     expect(within(list).getByRole("button", { name: "Not transcribed, 1" })).not.toHaveAttribute("aria-current");

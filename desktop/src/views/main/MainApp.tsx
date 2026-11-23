@@ -834,6 +834,8 @@ export default function MainApp() {
   } : null;
   const labelCounts: Record<string, number> = {};
   for (const f of libraryFacts?.facts ?? []) for (const key of f.values.labels) labelCounts[key] = (labelCounts[key] ?? 0) + 1;
+  /** A place's words in the new design: the Inbox is "No project" (no "Inbox" anywhere). */
+  const placeWords = (p: { key: string; label: string }) => (p.key === "inbox" ? "No project" : p.label);
   const places = libraryPlaces(views, {
     total: libraryTotal,
     waiting: status.pendingDecisions,
@@ -849,7 +851,8 @@ export default function MainApp() {
   const pages: ShellPage[] = [
     { id: "home", label: "Home", keywords: "record start ready check calls voice note captions", open: () => goTo("record") },
     { id: "library", label: "Library", keywords: "recordings transcripts all", open: () => openFolder(null) },
-    ...places.filter((p) => p.key !== "all").map((p) => ({ id: `place-${p.key}`, label: p.label, group: "Library", keywords: "smart folder recordings", open: () => openPlace(p) })),
+    // The new design says no "Inbox": recordings in no project are Project › No project.
+    ...places.filter((p) => p.key !== "all").map((p) => ({ id: `place-${p.key}`, label: placeWords(p), group: "Library", keywords: `smart folder recordings${p.key === "inbox" ? " inbox" : ""}`, open: () => openPlace(p) })),
     { id: "projects", label: "Projects", keywords: "clients folders", open: () => openProject(null) },
     ...(projects ?? []).map((p) => ({ id: `project-${p.id}`, label: p.name, group: "Projects", keywords: "project client", open: () => openProject(p.id) })),
     { id: "activity", label: "Activity", keywords: "notifications bell", open: () => goTo("activity") },
@@ -1108,7 +1111,7 @@ export default function MainApp() {
             places={{
               // Classic's sidebar form: no All, the places that hold something, the Inbox always (it takes drops). Shared
               // with me is Shared's own, under Library.
-              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView)))
+              places: places.filter((p) => p.key !== "all" && p.folder !== "shared" && (p.count > 0 || p.drop || p.key === (libraryFolder ?? libraryView))).map((p) => ({ ...p, label: placeWords(p) }))
                 .map((p) => ({ key: p.key, label: p.label, count: p.count, drop: p.drop })),
               current: libraryFolder ?? libraryView ?? null,
               open: (key) => { const p = places.find((x) => x.key === key); if (p) openPlace(p); },

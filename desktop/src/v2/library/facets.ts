@@ -11,7 +11,7 @@ import type { LibraryItem } from "../../lib/ipc";
 export type LibraryViewId = "all" | "needs" | "unread" | "important" | "not_transcribed" | "audio_only";
 export const LIBRARY_VIEWS: readonly LibraryViewId[] = ["all", "needs", "unread", "important", "not_transcribed", "audio_only"];
 export const LIBRARY_VIEW_NAMES: Record<LibraryViewId, string> = {
-  all: "All", needs: "Needs you", unread: "Unread", important: "Important", not_transcribed: "Not transcribed", audio_only: "Audio only",
+  all: "All recordings", needs: "Needs you", unread: "Unread", important: "Important", not_transcribed: "Not transcribed", audio_only: "Audio only",
 };
 
 /** The filter sections, in the panel's (and the contract's) order. */

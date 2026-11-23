@@ -409,7 +409,7 @@ describe("My views in the sidebar and the Library", () => {
     const sent = callsOf("view_create")[0].view as ServerView;
     expect(sent).toMatchObject({ name: "WhatsApp calls", filters: { source: { op: "is", values: ["whatsapp"] } }, search: "whatsapp", sort: "longest", group: "date" });
     // All again (no filters, no search; Longest stays this computer's choice), then the view: its filters and search come back.
-    fireEvent.click(nav().getByRole("button", { name: "All, 3" }));
+    fireEvent.click(nav().getByRole("button", { name: "All recordings, 3" }));
     await act(flushAsync);
     expect(rows()).toEqual(["wa2", "zoom", "wa"]);
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveValue("");

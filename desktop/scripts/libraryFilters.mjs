@@ -109,8 +109,9 @@ try {
       if (box) throw new Error(`Row checkbox target: ${box}`);
     }
     if (prefix === "after") {
-      // The filters open (F), Source: WhatsApp and Date: Last 7 days ticked: the panel (a drawer under 1280 px) and the pills.
-      await page.keyboard.press("f");
+      // The filters open ([Filters]: F answers only with focus in the Library), Source: WhatsApp and Date: Last 7 days
+      // ticked: the panel (a drawer under 1280 px) and the pills.
+      await page.getByRole("button", { name: /^Filters/ }).click();
       const panel = page.getByTestId("filter-panel");
       await panel.waitFor();
       await panel.getByRole("checkbox", { name: /^WhatsApp/ }).first().check();

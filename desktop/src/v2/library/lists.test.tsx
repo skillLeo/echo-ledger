@@ -102,7 +102,7 @@ describe("labels in the sidebar and the Library", () => {
     fireEvent.click(nav().getByRole("button", { name: /^Important, / }));
     await act(flushAsync);
     expect(rowTitles()).toEqual(["bilal"]);
-    fireEvent.click(nav().getByRole("button", { name: /^All, / }));
+    fireEvent.click(nav().getByRole("button", { name: /^All recordings, / }));
     await act(flushAsync);
     expect(rowTitles()).toEqual(["bilal", "ayesha", "usman"]);
   });
@@ -241,7 +241,7 @@ describe("labels in the sidebar and the Library", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
     await act(flushAsync);
     expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal"], action: "label", clientId: null, label: "Suppliers" }]);
-    expect(nav().getByRole("button", { name: /^All, / })).toHaveAttribute("aria-current", "page");
+    expect(nav().getByRole("button", { name: /^All recordings, / })).toHaveAttribute("aria-current", "page");
     expect(labelRows().some((r) => r?.startsWith("Suppliers, "))).toBe(true);
   });
 
@@ -327,7 +327,7 @@ describe("labels in the sidebar and the Library", () => {
     await act(flushAsync);
     expect(callsOf("list_delete")).toEqual([{ key: "clients" }]);
     expect(labelRows().some((r) => r?.startsWith("Clients"))).toBe(false);
-    expect(nav().getByRole("button", { name: /^All, / })).toHaveAttribute("aria-current", "page");
+    expect(nav().getByRole("button", { name: /^All recordings, / })).toHaveAttribute("aria-current", "page");
     expect(rowTitles()).toEqual(["bilal", "ayesha", "usman"]);
   });
 

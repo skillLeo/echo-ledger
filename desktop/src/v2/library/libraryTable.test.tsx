@@ -42,7 +42,7 @@ describe("the Library as a table", () => {
     const rows = within(table()).getAllByRole("row").map((r) => r.textContent);
     expect(rows[1]).toBe("Today · 1");
     expect(rows[2]).toMatch(/^Ali18 Nov1:00WhatsAppAcmeReady/);
-    expect(rows[4]).toMatch(/^Bina10 Nov10:00ZoomInboxFailed/);
+    expect(rows[4]).toMatch(/^Bina10 Nov10:00ZoomNo projectFailed/);
     expect(window.localStorage.getItem("echoledger-v2-library-layout")).toBe("table");
   });
 

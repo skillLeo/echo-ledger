@@ -27,7 +27,7 @@ import {
 } from "./facets";
 import { FilterPanel, FilterPills } from "./FilterPanel";
 import { isView, useMyViews, viewsStore, type ViewSpec } from "./myViews";
-import { ALL_SCOPE, fromFolder, fromOldView, scopeName, type LibraryScope } from "./scope";
+import { ALL_SCOPE, fromFolder, fromOldView, scopeKey, scopeName, type LibraryScope } from "./scope";
 import { syncLibrary } from "./syncClock";
 import { ViewNameDialog } from "./LibraryNav";
 import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type LibraryViewChoice } from "../../lib/libraryGroups";
@@ -72,9 +72,17 @@ export const FILTER_DEBOUNCE_MS = 150;
 /** Under this window width the filter panel is a drawer over the list: tokens.css `--el-breakpoint-panel` (a test keeps them one). */
 export const DRAWER_BELOW = 1280;
 const PANEL_KEY = "echoledger-library-filters-open";
+/** A search is one step of Back and Forward once typing has stopped this long. */
+const SEARCH_STEP_MS = 700;
+/** How many steps Back keeps. */
+const HISTORY_MAX = 50;
+/** A place Back and Forward go to: what the sidebar chose, the filters and the search. */
+type Place = { scope: LibraryScope; spec: FilterSpec; query: string };
 /** The search box's placeholder says what it finds where it has room (tokens.css --el-breakpoint-wide), less below
  * --el-breakpoint-medium. */
 const WIDE = 1440;
+/** …and with the filter panel open beside the list. */
+const WIDE_WITH_PANEL = 1600;
 const NARROW = 1024;
 
 /** Keys the Library answers anywhere but in a field, a dialog or a menu. */
@@ -352,13 +360,19 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
    * Shows a scope (from the sidebar, a request, or here): its filters, search and sort (a saved view's own), or none.
    * `report`: say so to the sidebar (when it came from here).
    */
-  const show = useCallback((next: LibraryScope, filters: FilterSpec = {}, report = false) => {
+  const show = useCallback((next: LibraryScope, filters: FilterSpec = {}, report = false, exact?: { query: string }) => {
     scopeNow.current = next;
     setScopeNow(next);
     setOpenIdNow(null);
     setCollapsed(new Set());
     const view = next.kind === "saved" ? viewsStore.list().find((v) => isView(v, next.id)) : null;
-    if (view) {
+    if (exact) {
+      // Back or Forward: the place as it was left, its filters and search exactly.
+      setSpec(filters);
+      setQuery(exact.query);
+      if (view) setChoiceNow({ sort: view.spec.sort, group: view.spec.group });
+      else setChoiceNow(loadChoice("all"));
+    } else if (view) {
       setSpec(view.spec.filters);
       setQuery(view.spec.search ?? "");
       setChoiceNow({ sort: view.spec.sort, group: view.spec.group });
@@ -412,6 +426,50 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       onScope?.(next);
     }
   }, [scope, lists, myViews, show, onScope]);
+
+  // Back and Forward (⌘[ and ⌘], the mouse's back and forward buttons): through the places shown, each with its
+  // filters and search as they were left. A search is one step once typing stops.
+  const [searchStep, setSearchStep] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearchStep(query), SEARCH_STEP_MS);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  const steps = useRef<{ back: Place[]; forward: Place[]; now: Place | null; walking: Place | null }>({ back: [], forward: [], now: null, walking: null });
+  const placeKey = (p: Place) => JSON.stringify([scopeKey(p.scope), cleanSpec(p.spec), p.query.trim()]);
+  useEffect(() => {
+    const here: Place = { scope, spec: applied, query: searchStep };
+    const h = steps.current;
+    if (h.walking) {
+      // Arrived where Back or Forward went (its search may still be settling).
+      if (placeKey(here) !== placeKey(h.walking)) return;
+      h.now = here;
+      h.walking = null;
+      return;
+    }
+    if (h.now && placeKey(h.now) === placeKey(here)) return;
+    if (h.now) {
+      h.back = [...h.back, h.now].slice(-HISTORY_MAX);
+      h.forward = [];
+    }
+    h.now = here;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, applied, searchStep]);
+  const walk = useCallback((way: "back" | "forward") => {
+    const h = steps.current;
+    const to = way === "back" ? h.back[h.back.length - 1] : h.forward[h.forward.length - 1];
+    if (!to || !h.now) return false;
+    if (way === "back") {
+      h.back = h.back.slice(0, -1);
+      h.forward = [...h.forward, h.now];
+    } else {
+      h.forward = h.forward.slice(0, -1);
+      h.back = [...h.back, h.now];
+    }
+    h.walking = to;
+    show(to.scope, to.spec, true, { query: to.query });
+    setSearchStep(to.query);
+    return true;
+  }, [show]);
 
   // The recording open when the main window closed opens again (classic's), once; what is opened after is kept.
   const restored = useRef(false);
@@ -823,6 +881,13 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
       return;
     }
+    // ⌘[ and ⌘] (Ctrl on Windows): Back and Forward; with a recording open, ⌘[ goes back to the list.
+    if (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      back.current(e.key === "[" ? "back" : "forward");
+      return;
+    }
     if (typing(e.target)) return;
     // One-letter keys (F, /, J, K, X) answer only while focus is in the Library (WCAG 2.1.4, as the web): never while
     // it is in the sidebar, the player or anywhere else in the window.
@@ -882,6 +947,35 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
     const on = (e: KeyboardEvent) => keys.current(e);
     document.addEventListener("keydown", on);
     return () => document.removeEventListener("keydown", on);
+  }, []);
+  // Back and Forward from a key or the mouse's side buttons: an open recording closes first (Back), else the places.
+  const back = useRef<(way: "back" | "forward") => void>(() => undefined);
+  back.current = (way) => {
+    if (open) {
+      if (way !== "back") return;
+      setOpenId(null);
+      setFocusAfter({ rowId: open.id, seq: ++seq.current });
+      return;
+    }
+    walk(way);
+  };
+  useEffect(() => {
+    // The mouse's back (button 3) and forward (4): never the web view's own page history.
+    const side = (e: MouseEvent) => e.button === 3 || e.button === 4;
+    const down = (e: MouseEvent) => {
+      if (side(e)) e.preventDefault();
+    };
+    const up = (e: MouseEvent) => {
+      if (!side(e)) return;
+      e.preventDefault();
+      back.current(e.button === 3 ? "back" : "forward");
+    };
+    window.addEventListener("mousedown", down);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousedown", down);
+      window.removeEventListener("mouseup", up);
+    };
   }, []);
   useEffect(() => {
     if (openId) endSelection();
@@ -1013,6 +1107,12 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
               {!trash && layout === "list" && shownIds.length > 0 && (
                 <PickBox className="el-lib-toolbar__all" label="Select all" keyshortcuts="Meta+A Control+A" checked={false} onClick={pickAll} />
               )}
+              {/* Library / <the place>: "Library" goes back to All recordings, its filters and search cleared. */}
+              <nav className="el-lib-crumbs" aria-label="Breadcrumbs">
+                <button type="button" className="el-lib-crumbs__root" onClick={() => show(ALL_SCOPE, {}, true)}
+                  title="All recordings, nothing filtered">Library</button>
+                <span className="el-lib-crumbs__sep" aria-hidden="true">/</span>
+              </nav>
               <h1 className="el-title-m el-lib-toolbar__title">
                 <span dir="auto">{title}</span>
                 {count !== null && <span className="el-lib-toolbar__count el-secondary el-num" aria-label={`, ${recordingsWord(count)}`}>{count}</span>}
@@ -1020,7 +1120,8 @@ export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, s
               {!trash && (
                 <>
                   <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
-                    placeholder={width >= WIDE ? `Search titles, transcripts and projects (${MOD}F)` : width >= NARROW ? `Search recordings (${MOD}F)` : `Search (${MOD}F)`}
+                    placeholder={width >= (panelShown && !drawer ? WIDE_WITH_PANEL : WIDE) ? `Search titles, transcripts and projects (${MOD}F)`
+                      : width >= NARROW ? `Search recordings (${MOD}F)` : `Search (${MOD}F)`}
                     className="el-lib-toolbar__search" />
                   <Button variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
                     title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>

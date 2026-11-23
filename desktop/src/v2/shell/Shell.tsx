@@ -519,7 +519,7 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, acti
         {/* While recordings are dragged (lib/dragMove.ts): the Inbox takes them out of their project. Pinned projects
             below take them too. Hidden otherwise; Move to project… is the way for the keyboard. */}
         {!places?.places.some((p) => p.drop) && <div className="el-nav-drop" aria-hidden="true" {...{ [DROP_ATTRIBUTE]: "" }}>
-          <Icon icon={Icons.InboxIcon} /><span>{library ? "No project" : "Inbox (no project)"}</span>
+          <Icon icon={Icons.InboxIcon} /><span>No project</span>
         </div>}
         {onProject && projectTree && projectTree.length > 0 && !(library && projectsFolded) && (
           <ProjectTreeNav projects={projectTree} current={current === "projects" ? projectId : null} onOpen={(id) => { setOwn(null); onProject(id); }} />

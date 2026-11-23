@@ -98,8 +98,8 @@ describe("the top of the Library", () => {
     expect(screen.queryByTestId("needs-action")).toBeNull();
     const toolbar = document.querySelector(".el-lib-toolbar") as HTMLElement;
     expect(within(toolbar).queryByRole("button", { name: /need you|not transcribed|waiting|didn't upload/ })).toBeNull();
-    // One toolbar row: Select all, the view's name, Search, Filters and Sort & display; nothing else.
-    expect(within(toolbar).getAllByRole("button").map((b) => b.textContent)).toEqual(["Filters", "Sort & display"]);
+    // One toolbar row: Select all, Library / the view's name, Search, Filters and Sort & display; nothing else.
+    expect(within(toolbar).getAllByRole("button").map((b) => b.textContent)).toEqual(["Library", "Filters", "Sort & display"]);
   });
 
   it("an old needs-action dismissal is cleared once (every account's); other settings stay", async () => {

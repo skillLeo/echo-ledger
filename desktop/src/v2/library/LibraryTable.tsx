@@ -58,7 +58,7 @@ function cell(item: LibraryItem, column: Column, views: ViewsSummary | null): Re
     case "date": return rowDate(item.started_at);
     case "length": return <span className="el-num">{formatDuration(item.duration_ms)}</span>;
     case "app": return sourceLabel(item);
-    case "project": return item.client?.name ?? "Inbox";
+    case "project": return item.client?.name ?? "No project";
     case "status": {
       // A ready transcript whose default view is still written: "Converting to Roman Urdu… 60%" (U19).
       const converting = itemState(item) === "ready" ? rowViewsLine(views) : null;

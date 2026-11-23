@@ -38,13 +38,27 @@ export function useFolded(key: string, start = false): [boolean, () => void] {
   return [folded, toggle];
 }
 
-/** A group's header: its name (pressed: folds the group, the chevron says which way) and what is at its end. */
-export function SectionHead({ title, folded, onFold, end }: { title: string; folded: boolean; onFold: () => void; end?: ReactNode }) {
+/**
+ * A group's header: its name (pressed: folds the group, the chevron says which way) and what is at its end. With
+ * `onTitle` the chevron alone folds, and the name is a link (Library: back to All recordings).
+ */
+export function SectionHead({ title, folded, onFold, end, onTitle, titleHint }: {
+  title: string; folded: boolean; onFold: () => void; end?: ReactNode; onTitle?: () => void; titleHint?: string;
+}) {
   return (
     <div className="el-nav-section__head">
-      <button type="button" className="el-nav-section__title el-caption" aria-expanded={!folded} onClick={onFold}>
-        <Icon icon={folded ? Icons.ChevronEndIcon : Icons.ChevronDownIcon} directional />{title}
-      </button>
+      {onTitle ? (
+        <>
+          <button type="button" className="el-nav-section__fold" aria-expanded={!folded} aria-label={folded ? `Show ${title}` : `Fold ${title}`} onClick={onFold}>
+            <Icon icon={folded ? Icons.ChevronEndIcon : Icons.ChevronDownIcon} directional />
+          </button>
+          <button type="button" className="el-nav-section__link el-caption" title={titleHint} onClick={onTitle}>{title}</button>
+        </>
+      ) : (
+        <button type="button" className="el-nav-section__title el-caption" aria-expanded={!folded} onClick={onFold}>
+          <Icon icon={folded ? Icons.ChevronEndIcon : Icons.ChevronDownIcon} directional />{title}
+        </button>
+      )}
       {end}
     </div>
   );
@@ -123,7 +137,8 @@ export function LibraryNav({ current, counts, labelCounts, onScope, shared, onNe
   return (
     <div className="el-library-nav">
       <section className="el-nav-section" aria-label="Library">
-        <SectionHead title="Library" folded={libraryFolded} onFold={foldLibrary} />
+        <SectionHead title="Library" folded={libraryFolded} onFold={foldLibrary} titleHint="All recordings, nothing filtered"
+          onTitle={() => onScope({ kind: "view", view: "all" })} />
         {!libraryFolded && <ul className="el-nav-list" aria-label="Library views">
           {LIBRARY_VIEWS.map((view) => (
             <li key={view}>

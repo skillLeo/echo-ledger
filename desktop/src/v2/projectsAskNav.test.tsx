@@ -263,7 +263,7 @@ describe("request links", () => {
     respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.ask": true }, ui_classic: false });
   }
 
-  it("DT-PRJ-003 and DT-SHR-006: the Projects page's Request files opens the new Request files sheet, into the Inbox", async () => {
+  it("DT-PRJ-003 and DT-SHR-006: the Projects page's Request files opens the new Request files sheet, into no project", async () => {
     app();
     render(<MainApp />);
     await act(flushAsync);
@@ -278,7 +278,7 @@ describe("request links", () => {
     expect(dialog.closest(".el-root")).not.toBeNull();
     expect(document.querySelector(".sheet-backdrop")).toBeNull();
     const sheet = within(dialog);
-    expect(sheet.getByRole("combobox", { name: /^Files go to/ })).toHaveTextContent("Inbox");
+    expect(sheet.getByRole("combobox", { name: /^Files go to/ })).toHaveTextContent("No project");
     expect(sheet.getByRole("textbox", { name: "Title people see" })).toHaveValue("Send me your voice notes");
   });
 

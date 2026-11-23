@@ -1852,6 +1852,14 @@ span.el-nav-section__title { cursor: default; }
 /* One toolbar row: Select all, the view's name and count, Search, [Filters n], [Sort & display ▾]. */
 .el-lib-toolbar { display: flex; align-items: center; gap: var(--el-space-8); min-block-size: var(--el-space-40); }
 .el-lib-toolbar__all { margin-inline: var(--el-space-12) var(--el-space-4); }
+/* Library / <the place>: the root a quiet button, the separator quieter; the place itself is the page's title. */
+.el-lib-crumbs { display: inline-flex; align-items: baseline; gap: var(--el-space-8); flex: none; }
+.el-lib-crumbs__root {
+  border: 0; padding: var(--el-space-2) var(--el-space-4); margin-inline-start: calc(-1 * var(--el-space-4)); border-radius: var(--el-radius-sm);
+  background: transparent; font: inherit; font-size: var(--el-text-title-m-size); color: var(--el-role-text-secondary); cursor: pointer;
+}
+.el-lib-crumbs__root:hover { color: var(--el-role-text-primary); background: var(--el-role-bg-subtle); }
+.el-lib-crumbs__sep { font-size: var(--el-text-title-m-size); color: var(--el-role-border-strong); }
 .el-lib-toolbar__title { display: inline-flex; align-items: baseline; gap: var(--el-space-8); min-inline-size: 0; flex: none; max-inline-size: calc(var(--el-space-64) * 4); }
 .el-lib-toolbar__title > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .el-lib-toolbar__count { font-size: var(--el-text-body-size); font-weight: var(--el-text-body-weight); }

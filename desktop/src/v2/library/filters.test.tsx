@@ -102,7 +102,7 @@ describe("Find in the Library", () => {
 
   it("one toolbar row: the title with its count, Search, Filters and Sort & display; no pills while nothing is filtered", async () => {
     await show();
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All\s*4$/);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^All recordings\s*4$/);
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("aria-keyshortcuts", "Meta+F Control+F /");
     expect(screen.getByRole("searchbox", { name: "Search recordings" })).toHaveAttribute("placeholder", expect.stringMatching(/^Search titles, transcripts and projects \(/));
     expect(filtersButton()).toHaveAttribute("aria-expanded", "false");
@@ -412,7 +412,7 @@ describe("Find in the Library", () => {
     fireEvent.keyDown(document.activeElement!, { key: "x" });
     expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("1 selected");
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
-    fireEvent.keyDown(title, { key: "f" });
+    fireEvent.keyDown(screen.getByRole("heading", { level: 1 }), { key: "f" });
     expect(screen.getByTestId("filter-panel")).toBeInTheDocument();
   });
 

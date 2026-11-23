@@ -27,7 +27,7 @@ export const LABEL_WORDS = {
 } as const;
 
 /** The library views' names are reserved: a label can't be called All, Unread or Important. */
-export const RESERVED_NAMES = ["All", "Unread", "Important"];
+export const RESERVED_NAMES = ["All", "All recordings", "Unread", "Important"];
 
 // The person's labels, one copy for the window (the sidebar and the Library show the same): read from the server when
 // first needed, again whenever the library changes; forgotten when nothing shows them any more.
