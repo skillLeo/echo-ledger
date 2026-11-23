@@ -29,6 +29,13 @@ final class InterfaceFlags
 
     public const LIVE_ASSIST = 'live_assist';
 
+    /**
+     * Since 2.0.0-r (docs/PLAN_V2_1_POLISH.md): v2.1's switches, where a quick way back may be needed. Like live_assist
+     * they are not the design: off (the admin's lists only) or everyone, never opt-in, and the person's design choice
+     * does not change them.
+     */
+    public const V21 = ['v21_aftercall_notify', 'v21_aftercall_card', 'v21_panel_flyout', 'v21_zoom', 'v21_preview_pane'];
+
     /** The nine console flags: "the new design" a person can try, and what `ui_design.current` reads. */
     public const CONSOLE = [
         'ui_v2.shell', 'ui_v2.home', 'ui_v2.library', 'ui_v2.recording_controls', 'ui_v2.after_call', 'ui_v2.live',
@@ -55,6 +62,11 @@ final class InterfaceFlags
         'ui_v2.admin' => 'New admin panel',
         'ui_v2.website' => 'New website',
         'live_assist' => 'Live Assist',
+        'v21_aftercall_notify' => 'v2.1 phone: the after-call notification (Transcribe, Delete)',
+        'v21_aftercall_card' => 'v2.1 desktop: the small after-call card',
+        'v21_panel_flyout' => 'v2.1: the panel opens over the page under 1200 px',
+        'v21_zoom' => 'v2.1 desktop and web: zoom in Settings › Appearance',
+        'v21_preview_pane' => 'v2.1 desktop and web: the Library\'s preview pane',
     ];
 
     /** @var array<string, InterfaceFlag>|null */
@@ -63,7 +75,13 @@ final class InterfaceFlags
     /** @return list<string> every flag, in the contract's order */
     public static function names(): array
     {
-        return [...self::UI_V2, self::LIVE_ASSIST];
+        return [...self::UI_V2, self::LIVE_ASSIST, ...self::V21];
+    }
+
+    /** Whether [$flag] can be opt-in: only the design's ui_v2.* flags; live_assist and the v21 flags are off or everyone. */
+    public static function hasOptIn(string $flag): bool
+    {
+        return in_array($flag, self::UI_V2, true);
     }
 
     /** Defines every flag with Pennant; called once at boot. */
@@ -138,7 +156,7 @@ final class InterfaceFlags
 
     /**
      * A row's availability. Null (a row not filled by the 2.0.0-g migration, or made without it) reads as before
-     * 2.0.0-g: everyone when its "everyone" is on, else off. live_assist has no opt_in.
+     * 2.0.0-g: everyone when its "everyone" is on, else off. Only the ui_v2.* flags have opt_in (hasOptIn).
      */
     public static function availabilityOf(InterfaceFlag $rule): string
     {
@@ -147,7 +165,7 @@ final class InterfaceFlags
             return 'everyone';
         }
 
-        return $availability === 'opt_in' && $rule->flag === self::LIVE_ASSIST ? 'off' : $availability;
+        return $availability === 'opt_in' && ! self::hasOptIn($rule->flag) ? 'off' : $availability;
     }
 
     /** The account's place, 0–99, for one flag: the same every time, and not the same accounts for every flag. */
@@ -172,7 +190,7 @@ final class InterfaceFlags
             $current = isset($this->rules()[$flag]) ? self::availabilityOf($this->rules()[$flag]) : 'off';
             $availability = $everyone ? 'everyone' : ($current === 'everyone' ? 'off' : $current);
         }
-        if ($flag === self::LIVE_ASSIST && $availability === 'opt_in') {
+        if ($availability === 'opt_in' && ! self::hasOptIn($flag)) {
             $availability = 'off';
         }
         InterfaceFlag::query()->updateOrCreate(['flag' => $flag], [
