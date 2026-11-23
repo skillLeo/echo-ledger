@@ -501,12 +501,14 @@ async function render() {
   if (screen === "controls-dictation-refused") {
     const { default: DictationApp } = await import("../../src/views/dictation/DictationApp");
     const { emit } = await import("@tauri-apps/api/event");
+    // The window's platform, as main.tsx sets it from window_appearance: the settings button says it in its words.
+    document.documentElement.dataset.platform = mac ? "macos" : "windows";
     root.render(<div className="screens-canvas"><div className="screens-window" style={{ width: 420, height: 110 }}><DictationApp /></div></div>);
     // What the core sends when it refuses.
     window.setTimeout(() => {
       void emit("overlay:visibility", true);
       captions?.onmessage({ kind: "status", live: false, recording: false, provider: null, message: "The microphone is off for EchoLedger. Allow it in your computer's privacy settings." });
-      void emit("dictation:state", { active: false, sounds: false, mode: "toggle" });
+      void emit("dictation:state", { active: false, sounds: false, mode: "toggle", permission: "microphone" });
     }, 300);
     return;
   }

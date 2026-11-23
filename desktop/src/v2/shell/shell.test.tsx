@@ -403,6 +403,25 @@ describe("the app with the flags", () => {
     expect(document.querySelector(".sidebar")).not.toBeNull();
   });
 
+  it("a window that read its flags before the core's first config answer switches to the new design when ui:flags comes, on the same page", async () => {
+    backend({});
+    render(<MainApp />);
+    await screen.findByRole("heading", { name: "Library" });
+    await act(flushAsync);
+    expect(document.querySelector("[data-shell=v2]")).toBeNull();
+    expect(document.querySelector(".sidebar")).not.toBeNull();
+    const v2 = { ui_flags: { "ui_v2.shell": true, "ui_v2.library": true }, ui_classic: false,
+      ui_design: { choice: "v2", current: "v2", can_try: false, can_switch_back: true } };
+    respond("ui_flags", v2);
+    await emitEvent("ui:flags", v2);
+    await act(flushAsync);
+    await act(flushAsync);
+    const nav = await screen.findByRole("navigation", { name: "Main" });
+    expect(document.querySelector("[data-shell=v2]")).not.toBeNull();
+    expect(document.querySelector(".sidebar")).toBeNull();
+    expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("ui_v2.shell shows the new shell around today's pages", async () => {
     backend({ "ui_v2.shell": true });
     render(<MainApp />);

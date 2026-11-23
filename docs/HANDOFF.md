@@ -1193,3 +1193,19 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
   - A read-only service check for the owner's account: facets total 211 with 9 sections, Needs you 5 failed; views [].
 - **Not done:** the device-token API round trip, because the lead keeps no tokens. It is covered when the owner's desktop 2.0.10 syncs a saved view.
 - **Open, as before:** ECHOLEDGER_ANDROID_FINGERPRINTS is empty; the hPanel cron is unconfirmed.
+
+## 2026-11-23 22:10 PKT — phone 2.0.10, Mac 2.0.11 installed; web ready for 2026-11-24
+- **Phone 2.0.10 (code 30)**, tag `phone-v2.0.10` on release/v2.0.11:
+  - the phone's Library filters and saved views (merge ebe1a02b);
+  - signing out now leaves nothing of the last person behind: every write after a server call is checked against the account (generation and epoch) and made on the main thread.
+  - The full suite passed 2684 + 11; SystemBarsThemeTest (known flake) passed alone.
+  - Installed on the S25 at 21:46 with `install -r`. Checked first: mCallState=0, and the recording service was only "Ready to record WhatsApp calls". The ready service came back on its own.
+- **Mac 2.0.11** was installed at 21:46 after "mac free". It was quit cleanly first, with no audio files open. The pinned signature was checked, and 2.0.8 is backed up in ~/EchoLedger-backups.
+  - **Known (D-211, S2):** after opening, the window kept the old look although production answers every ui_v2 flag for the account (checked with InterfaceFlags::for). The window reads the flags before the core's first config and never listens to `ui:flags`.
+  - Workaround: open another screen. The fix is on fix/D-flags-at-start, for 2.0.12.
+- **Web on v1.1 for the 2026-11-24 deploy:**
+  - b2cd2710: the frame keeps its place, dialogs from the flyout keep it open, menus sit above the next row, meters in Urdu;
+  - 9a636b8b: `$here` locked, https kept, the request restored in a `finally`.
+  - Full suite 7665 passed. The runbook is ~/EchoLedgerTeam/handover/deploy-nav3.md.
+- **After the deploy:** fix/W-forward-filters @ bfa51ddd (⌘] Forward), approved in four review rounds.
+- **Checking:** the S2 "fix now" bugs W-001–003 (provider costs and engine tools seen by customers, a credential name in an error). They join tomorrow's deploy if they are real and ready.

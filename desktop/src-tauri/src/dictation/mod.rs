@@ -31,12 +31,24 @@ pub struct DictationState {
     pub sounds: bool,
     /// `toggle` or `push_to_talk`, so the box says how to finish.
     pub mode: String,
+    /// The permission that kept dictation from starting (`microphone`), else none. The box then stays until it is
+    /// closed and opens that permission's settings (`open_privacy_settings`).
+    pub permission: Option<&'static str>,
+}
+
+impl DictationState {
+    pub fn new(active: bool, settings: &crate::settings::Settings, permission: Option<&'static str>) -> Self {
+        DictationState { active, sounds: settings.dictation_sounds, mode: settings.dictation_mode.clone(), permission }
+    }
 }
 
 fn emit_state(app: &AppHandle, active: bool) {
+    emit_state_with(app, active, None);
+}
+
+fn emit_state_with(app: &AppHandle, active: bool, permission: Option<&'static str>) {
     let settings = app.state::<crate::AppState>().settings();
-    let state = DictationState { active, sounds: settings.dictation_sounds, mode: settings.dictation_mode.clone() };
-    crate::lifecycle::emit(app, DICTATION, "dictation:state", state);
+    crate::lifecycle::emit(app, DICTATION, "dictation:state", DictationState::new(active, &settings, permission));
 }
 
 pub async fn start(app: &AppHandle) -> AppResult<()> {
@@ -45,13 +57,13 @@ pub async fn start(app: &AppHandle) -> AppResult<()> {
         return Ok(());
     }
     // Dictating without the microphone would silently type nothing (Phase 1B). The box says so where the person is
-    // typing: it stays long enough to read why, then hides (DictationApp).
+    // typing, and stays with the button that opens the microphone's settings until it is closed (DictationApp).
     if state.permissions_now().microphone == crate::permissions::Access::Denied {
         set_overlay_visible(app, DICTATION, true);
         let hub = app.state::<CaptionHub>();
         hub.send(TARGETS, CaptionEvent::Clear);
         hub.send(TARGETS, CaptionEvent::Status { live: false, recording: false, provider: None, message: Some(crate::permissions::NO_DICTATION.to_string()) });
-        emit_state(app, false);
+        emit_state_with(app, false, Some("microphone"));
         return Ok(());
     }
     state.dictation_text.lock().unwrap().clear();
@@ -186,4 +198,21 @@ fn paste() -> Result<(), String> {
     enigo.key(modifier, Direction::Press).map_err(|e| format!("{e:?}"))?;
     enigo.key(Key::Unicode('v'), Direction::Click).map_err(|e| format!("{e:?}"))?;
     enigo.key(modifier, Direction::Release).map_err(|e| format!("{e:?}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DictationState;
+
+    #[test]
+    fn the_box_hears_which_permission_kept_dictation_from_starting() {
+        let settings = crate::settings::Settings::default();
+        let refused = serde_json::to_value(DictationState::new(false, &settings, Some("microphone"))).unwrap();
+        assert_eq!(refused["active"], false);
+        assert_eq!(refused["permission"], "microphone", "the box offers that permission's settings");
+        let started = serde_json::to_value(DictationState::new(true, &settings, None)).unwrap();
+        assert_eq!(started["permission"], serde_json::Value::Null, "nothing refused: the box keeps its usual timing");
+        assert_eq!(started["mode"], settings.dictation_mode.as_str());
+        assert_eq!(started.as_object().unwrap().len(), 4);
+    }
 }

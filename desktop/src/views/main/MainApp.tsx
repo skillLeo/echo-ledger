@@ -129,7 +129,8 @@ export function typingIn(target: EventTarget | null): boolean {
 export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
-  // Interface flags: read at start and on each page change, never while recording (v2/flags.ts).
+  // Interface flags: read at start, on each page change and when a recording ends, never while recording; the core's
+  // first config answer (ui:flags) applies at once when the window read before it (v2/flags.ts).
   const [ui, setUi, flagsReadFor] = useUiFlags(!!status?.paired, tab, !!status?.recording);
   const threeLevels = useRef(false);
   threeLevels.current = ui.flags["ui_v2.library"];

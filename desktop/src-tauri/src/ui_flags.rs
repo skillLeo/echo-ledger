@@ -5,9 +5,10 @@
 //! The window asks with `ui_flags` (answered from the last config read, no request) and sets "Switch back to classic"
 //! with `ui_classic_set` (`PUT /api/account/ui`, which updates the cached config). Both answer
 //! `{"ui_flags": {"<name>": bool, …}, "ui_classic": bool}` (desktop/src/v2/flags.ts reads that shape), and `ui:flags`
-//! carries it whenever the cached flags change. The window reads them again on its next screen, never in the middle
-//! of a recording. The config is read at start, every minute while the app runs (so within a minute of a resume, well
-//! inside the contract's 15 minutes) and right after `ui_classic_set`.
+//! carries it whenever the cached flags change. A window that read before the first config answer (everything off)
+//! takes the first `ui:flags` at once, or when its recording ends; after that it reads them again on its next screen or
+//! when a recording ends, never in the middle of one. The config is read at start, every minute while the app runs
+//! (so within a minute of a resume, well inside the contract's 15 minutes) and right after `ui_classic_set`.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;

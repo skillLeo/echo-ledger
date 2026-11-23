@@ -8,7 +8,7 @@ import { useWindowShown } from "../../lib/visibility";
 import { AlertIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { Notice } from "../../components/Notice";
-import { otherSideNotRecorded } from "../../lib/controls";
+import { SETTINGS_LABEL, otherSideNotRecorded } from "../../lib/controls";
 import { StateBanner } from "../../components/StateBanner";
 import { useBannerTurn } from "../../components/BannerSlot";
 
@@ -207,7 +207,7 @@ export function PermissionGuide({ permissions, onChange, onClose }: { permission
   );
 }
 
-export const SETTINGS_LABEL: Record<PermissionsStatus["platform"], string> = { macos: "Open System Settings", windows: "Open Windows Settings", other: "" };
+export { SETTINGS_LABEL };
 
 /** Record page: what is missing and what a recording holds without it. */
 export function PermissionBanner({ recordingRef }: { recordingRef: string | null }) {
