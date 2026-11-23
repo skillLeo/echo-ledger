@@ -14,6 +14,9 @@ use crate::error::AppResult;
 pub struct LibraryCache {
     pub since: Option<String>,
     pub items: Vec<LibraryItem>,
+    /// The saved views' version the last sync carried (contract 2.0.0-p "Saved views"); None before one did.
+    #[serde(default)]
+    pub views_version: Option<u64>,
 }
 
 /// Applies a page of changes: tombstones remove, newer items replace, unknown items insert (pure).
@@ -86,6 +89,9 @@ impl LibraryCache {
             pages += 1;
             changed += page.data.len();
             server_time.get_or_insert(page.server_time.clone());
+            if page.views_version.is_some() {
+                self.views_version = page.views_version;
+            }
             merge(&mut self.items, page.data);
             match page.next_cursor {
                 Some(next) if pages < MAX_PAGES && seen.insert(next.clone()) => cursor = Some(next),

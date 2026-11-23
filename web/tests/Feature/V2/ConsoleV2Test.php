@@ -119,7 +119,7 @@ describe('the console language', function () {
 });
 
 describe('the Library', function () {
-    it('lists recordings as the apps\' rows with the saved views as chips, and Untranscribed narrows to recordings without a transcript', function () {
+    it('lists recordings as the apps\' rows under one toolbar row, and Not transcribed narrows to recordings without a transcript', function () {
         consoleV2For($this->admin);
         $done = $this->sessionWithTranscript($this->admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'Assalam o alaikum']],
             ['title' => 'Rate for 12 mm rebar', 'status' => SessionStatus::Completed]);
@@ -127,10 +127,16 @@ describe('the Library', function () {
 
         $page = $this->panelComponent(ListCaptureSessions::class);
         $html = $page->html();
+        // Since 2.0.0-p the saved views are the sidebar's places (Not transcribed among them) and My views; the page has
+        // one toolbar row: the place's name, Search, Filters and Sort & display.
         expect($html)->toContain('v2-lib-row')->toContain('Umrah group booking for 14 people')->toContain('Rate for 12 mm rebar')
-            ->toContain('data-view="untranscribed"')->toContain('data-view="folder:voice_notes"')->toContain('New voice note')
-            ->not->toContain('el-with-col');
+            ->toContain('data-library-title')->toContain('data-filters-button')->toContain('data-menu="display"')
+            ->not->toContain('data-view="untranscribed"')->not->toContain('el-with-col');
 
+        $page->call('openPlace', 'not_transcribed');
+        expect($page->get('activeTab'))->toBe('not_transcribed')->and($page->instance()->libraryHeading())->toBe('Not transcribed');
+        $page->assertCanSeeTableRecords([$open])->assertCanNotSeeTableRecords([$done]);
+        // An old address with Untranscribed still opens it.
         $page->call('openPlace', 'untranscribed');
         expect($page->get('activeTab'))->toBe('untranscribed');
         $page->assertCanSeeTableRecords([$open])->assertCanNotSeeTableRecords([$done]);

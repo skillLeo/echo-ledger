@@ -276,6 +276,8 @@ trait ManagesAppPages
                 ['[', 'Fold the sidebar to icons, and back'],
                 ['?', 'Help & shortcuts'],
                 ['Esc', 'Close a panel, a menu or a dialog'],
+                // Since docs/PLAN_NAV_3_LEVELS.md section 0 (the new Library's frame): Back and Forward, as the apps have them.
+                ...(ConsoleV2::library() ? [[$mac ? '⌘ [  ⌘ ]' : 'Ctrl [  Ctrl ]', 'Back and forward']] : []),
             ],
             'In the Library' => [
                 ['J  K', 'Next and previous recording'],
@@ -288,6 +290,10 @@ trait ManagesAppPages
                     ['Shift click', 'Select a range'],
                     ['Delete', 'Delete the selection (Undo in the notice)'],
                     ['Right-click', 'The recording\'s menu, or the selection\'s'],
+                    // Since 2.0.0-p (docs/PLAN_LIBRARY_FILTERS.md section 5): the filters, the search and the places.
+                    ['F', 'Open or close the filters (while the Library has focus)'],
+                    [$mac ? '⌘ F' : 'Ctrl F', 'Search titles, transcripts and projects in the Library'],
+                    [$mac ? '⌘ 1…9  ⌥ 1…9' : 'Ctrl 1…9  Alt 1…9', 'Open the sidebar\'s first nine places'],
                 ] : []),
             ],
             'On a recording' => [

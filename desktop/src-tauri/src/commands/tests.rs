@@ -555,3 +555,63 @@ fn a_list_colour_is_hash_and_six_hex_digits() {
         assert!(list_colour(bad).is_err(), "{bad}");
     }
 }
+
+fn server(status: u16, code: Option<&str>, message: &str) -> AppError {
+    AppError::Server { status, message: message.into(), code: code.map(String::from), retry_after_secs: None }
+}
+
+#[test]
+fn a_view_the_server_refuses_for_good_comes_back_as_data() {
+    let refused = view_answer(Err(server(422, Some("validation_failed"), "The name is too long."))).unwrap();
+    assert_eq!(refused, json!({"refused": {"status": 422, "code": "validation_failed", "message": "The name is too long."}}));
+    let full = view_answer(Err(server(422, Some("views_limit"), "You can keep up to 30 views."))).unwrap();
+    assert_eq!(full["refused"]["code"], "views_limit");
+    let gone = view_answer(Err(server(404, Some("view_not_found"), "No such view."))).unwrap();
+    assert_eq!(gone["refused"]["code"], "view_not_found");
+    assert_eq!(view_answer(Ok(json!({"data": {"id": "v1"}}))).unwrap(), json!({"data": {"id": "v1"}}));
+}
+
+#[test]
+fn a_view_change_that_can_wait_stays_an_error() {
+    // Busy, held for an update, the server's own trouble, or offline: sent again later.
+    for e in [server(429, Some("rate_limited"), ""), server(426, Some("update_required"), ""), server(503, Some("maintenance"), ""),
+        server(500, None, "boom"), AppError::Network("offline".into())] {
+        assert!(view_answer(Err(e)).is_err());
+    }
+    // Not about the view: a suspended account, or a captive portal's or a proxy's 4xx without a code.
+    for e in [server(403, Some("account_suspended"), "This account is suspended."), server(403, None, "Forbidden"),
+        server(407, None, "Proxy Authentication Required"), server(400, None, "<html>Sign in to the Wi-Fi</html>"),
+        server(409, Some("conflict"), "")] {
+        let status = e.status();
+        assert!(view_answer(Err(e)).is_err(), "{status:?}");
+    }
+    // A server without saved views yet.
+    assert!(view_answer(Err(server(404, None, ""))).unwrap_err().to_string().contains("Saved views"));
+}
+
+#[test]
+fn each_sign_in_has_its_own_id_and_signing_out_forgets_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = crate::AppState::load(dir.path().to_path_buf(), true);
+    // Signed out: no id.
+    assert_eq!(state.sign_in_id(), None);
+    // Signed in: an id, the same for as long as the sign-in lasts.
+    *state.token.lock().unwrap() = Some("token-1".into());
+    state.note_sign_in("https://ledger.example.test", &[], "dev-1", "Work laptop").unwrap();
+    let first = state.sign_in_id().expect("an id while signed in");
+    assert_eq!(state.sign_in_id().as_deref(), Some(first.as_str()));
+    // Kept with the settings on disk.
+    assert_eq!(Settings::load(&dir.path().join("settings.json")).sign_in_id.as_deref(), Some(first.as_str()));
+    // Signed out: gone, and the status says none.
+    *state.token.lock().unwrap() = None;
+    state.note_sign_out().unwrap();
+    assert_eq!(state.sign_in_id(), None);
+    assert_eq!(state.settings().sign_in_id, None);
+    // The next sign-in (the same account or another) has another id.
+    *state.token.lock().unwrap() = Some("token-2".into());
+    state.note_sign_in("https://ledger.example.test", &[], "dev-2", "Work laptop").unwrap();
+    let second = state.sign_in_id().expect("an id again");
+    assert_ne!(first, second);
+    // Never exported with the settings.
+    assert!(portable_settings(&state.settings())["settings"].get("signInId").is_none());
+}

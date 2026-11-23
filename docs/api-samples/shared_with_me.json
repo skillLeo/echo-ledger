@@ -1,21 +1,21 @@
 {
     "data": [
         {
-            "id": "01m7zddet30jk01e0wfv30x8ms",
+            "id": "01m82z8qjt4xxmqeyx5yceqfes",
             "kind": "session",
             "from": {
                 "name": "Sample Owner",
                 "email": "sample.new@example.test",
-                "avatar_url": "https://echoledger.test/api/avatars/1/1795276846?expires=sample&signature=sample",
-                "avatar_version": 1795276846
+                "avatar_url": "https://echoledger.test/api/avatars/1/1795396230?expires=sample&signature=sample",
+                "avatar_version": 1795396230
             },
             "note": "Please look.",
             "title": "Retainer check-in, renamed",
-            "sent_at": "2026-11-21T16:00:47+00:00",
+            "sent_at": "2026-11-23T01:10:30+00:00",
             "saved_at": null,
             "session": {
-                "id": "01m7zddc8p0rgf51yc3jva3z36",
-                "client_ref": "4f882c28-6ef8-4fac-8401-9254cd07cecc",
+                "id": "01m82z8pcr6e8dk1cj8t0b0s7t",
+                "client_ref": "52a6bd70-239e-4be9-a2f0-1b548e777fe2",
                 "deleted": false,
                 "source_device": "phone",
                 "source_device_label": "Phone",
@@ -29,15 +29,15 @@
                 "title_auto": false,
                 "title_source": "own",
                 "caller": null,
-                "started_at": "2026-11-20T10:15:00+00:00",
-                "ended_at": "2026-11-20T10:15:19+00:00",
+                "started_at": "2026-11-22T10:15:00+00:00",
+                "ended_at": "2026-11-22T10:15:19+00:00",
                 "duration_ms": 19375,
                 "status": "completed",
                 "language": null,
                 "language_chip": "EN",
                 "transcript": {
                     "final_status": "completed",
-                    "final_transcript_id": "01m7zddce5jvtdrpqbn3pjxe3q",
+                    "final_transcript_id": "01m82z8pj2mezrmsg3tjsabev2",
                     "live_available": false,
                     "live_transcript_id": null,
                     "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
@@ -71,9 +71,15 @@
                 ],
                 "important": false,
                 "label_colors": {},
-                "expires_at": "2026-12-21T16:00:45+00:00",
+                "expires_at": "2026-12-23T01:10:29+00:00",
                 "transcribe_estimate": null,
-                "updated_at": "2026-11-21T16:00:47+00:00"
+                "facets": {
+                    "source": "whatsapp",
+                    "status": "transcribed",
+                    "language": "en"
+                },
+                "processing_since": "2026-11-23T01:10:29+00:00",
+                "updated_at": "2026-11-23T01:10:30+00:00"
             },
             "client": null
         }

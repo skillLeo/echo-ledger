@@ -2007,3 +2007,648 @@ html[dir='rtl'] .v2-row-title {
 .v2-split > button:hover {
     background-color: var(--el-role-bg-canvas);
 }
+
+/* ================================================================== 4b. the Library's filters and views (2.0.0-p)
+   docs/PLAN_LIBRARY_FILTERS.md: one toolbar row (the view's name, Search, Filters, Sort & display), the pills on a
+   second row only while filters are on, and the filter panel left of the list (280: seven of space-40), closed until
+   opened; under the panel breakpoint (the page's Alpine adds .is-drawer) it is a drawer over the list. Logical
+   properties throughout, so Urdu mirrors it. */
+
+/* Filament draws the group as a grid of columns: the panel's keeps its width, the list's takes the rest. */
+.v2-lib-shell > .fi-sc {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--el-space-16);
+    min-width: 0;
+}
+
+.v2-lib-shell > .fi-sc > .fi-grid-col {
+    flex: none;
+    min-width: 0;
+}
+
+.v2-lib-shell > .fi-sc > .fi-grid-col:has(.v2-library) {
+    flex: 1 1 0;
+}
+
+.v2-lib-shell > .fi-sc > .fi-grid-col:has(.v2-lib-panel[style*='display: none']) {
+    display: none;
+}
+
+.v2-lib-shell.is-drawer > .fi-sc > .fi-grid-col:has(.v2-lib-panel) {
+    position: absolute;
+    inset: 0;
+    z-index: var(--el-layer-dialog);
+    pointer-events: none;
+}
+
+.v2-lib-shell.is-drawer > .fi-sc > .fi-grid-col:has(.v2-lib-panel) .v2-lib-panel,
+.v2-lib-shell.is-drawer > .fi-sc > .fi-grid-col:has(.v2-lib-panel) .v2-lib-scrim {
+    pointer-events: auto;
+}
+
+.v2-lib-panel {
+    position: sticky;
+    top: var(--el-space-16);
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    inline-size: calc(var(--el-space-40) * 7);
+    max-block-size: calc(100dvh - var(--el-space-64) - var(--el-space-32));
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-md);
+    background-color: var(--el-role-bg-surface);
+}
+
+/* Under --el-breakpoint-panel the panel is a drawer over the list (not over the sidebar), with a scrim on the list. */
+.v2-lib-shell {
+    position: relative;
+}
+
+.v2-lib-shell.is-drawer .v2-lib-panel {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    z-index: var(--el-layer-dialog);
+    box-shadow: var(--el-shadow-3);
+}
+
+.v2-lib-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: calc(var(--el-layer-dialog) - 1);
+    background-color: var(--el-role-bg-canvas);
+    opacity: 0.72;
+}
+
+.v2-lib-panel-head,
+.v2-lib-panel-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--el-space-8);
+    padding: var(--el-space-12) var(--el-space-16);
+}
+
+.v2-lib-panel-head {
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-lib-panel-foot {
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-lib-panel-title {
+    margin: 0;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+}
+
+.v2-lib-panel-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: var(--el-space-4) var(--el-space-16) var(--el-space-16);
+}
+
+.v2-lib-sec {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    padding-block: var(--el-space-12);
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-lib-sec:last-child {
+    border-block-end: 0;
+}
+
+.v2-lib-sec.is-target {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-lib-sec-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--el-space-8);
+}
+
+.v2-lib-sec-title {
+    margin: 0;
+    font-size: var(--el-text-body-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-lib-op {
+    align-self: flex-start;
+}
+
+.v2-lib-find {
+    inline-size: 100%;
+    min-block-size: var(--el-component-chip-height);
+    padding-inline: var(--el-space-8);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-lib-opts {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.v2-lib-opts > li.is-child {
+    padding-inline-start: var(--el-space-20);
+}
+
+.v2-lib-opt {
+    display: flex;
+    align-items: center;
+    gap: var(--el-space-8);
+    min-block-size: var(--el-space-32);
+    padding-inline: var(--el-space-4);
+    border-radius: var(--el-radius-sm);
+    cursor: pointer;
+}
+
+.v2-lib-opt:hover {
+    background-color: var(--el-role-bg-subtle);
+}
+
+.v2-lib-opt input {
+    flex: none;
+    accent-color: var(--el-role-accent-default);
+}
+
+.v2-lib-opt-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-lib-opt-count {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-variant-numeric: tabular-nums;
+}
+
+.v2-lib-range {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-lib-range input {
+    display: block;
+    inline-size: 100%;
+    margin-block-start: var(--el-space-4);
+    padding: var(--el-space-4) var(--el-space-8);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+}
+
+/* The view's name at the start of the one toolbar row, where the page's heading was. */
+/* "Library / Unread": the breadcrumb that leads the toolbar row; Library goes back to All recordings. */
+.v2-lib-crumbs {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+    min-width: 0;
+    margin-inline-end: var(--el-space-8);
+}
+
+.v2-lib-crumbs nav {
+    display: flex;
+    align-items: baseline;
+    gap: var(--el-space-4);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+    white-space: nowrap;
+}
+
+.v2-lib-crumb:hover,
+.v2-lib-crumb:focus-visible {
+    color: var(--el-role-text-primary);
+    text-decoration: underline;
+}
+
+.v2-lib-title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* The pills: a second row only while filters are on. */
+.v2-lib-pills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--el-space-8);
+    padding-block-end: var(--el-space-8);
+}
+
+.v2-pill {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    border: var(--el-border-hairline) solid var(--el-role-accent-default);
+    border-radius: var(--el-component-chip-radius);
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+}
+
+.v2-pill-main {
+    display: inline-flex;
+    gap: var(--el-space-4);
+    padding-inline: var(--el-space-12) var(--el-space-4);
+    font-size: var(--el-text-body-size);
+}
+
+.v2-pill-key {
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-pill-values {
+    max-inline-size: calc(var(--el-space-64) * 4);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v2-pill-x {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: var(--el-space-4) var(--el-space-8);
+    color: inherit;
+}
+
+.v2-pill-x .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+/* The sidebar's Library: groups with a quiet heading, counts quiet but for Needs you and Unread. */
+.v2-sb-lib {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+}
+
+.v2-sb-lib .v2-sb-subitem .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+    flex: none;
+}
+
+.v2-sb-subcount.is-strong {
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* MY VIEWS and LABELS: a quiet heading that folds its group, with + at its end. */
+.v2-sb-group {
+    position: relative;
+}
+
+.v2-sb-group-title {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--el-component-chip-height);
+    padding-inline: var(--el-space-12) var(--el-space-40);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.v2-sb-group > .v2-sb-add {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: var(--el-space-4);
+}
+
+.v2-sb-view {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.v2-sb-view > .v2-sb-subitem {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.v2-sb-view > .fi-dropdown {
+    position: absolute;
+    inset-inline-end: var(--el-space-4);
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.v2-sb-more {
+    opacity: 0;
+}
+
+.v2-sb-view:hover .v2-sb-subcount,
+.v2-sb-view:focus-within .v2-sb-subcount {
+    visibility: hidden;
+}
+
+.v2-sb-view:hover .v2-sb-more,
+.v2-sb-view:focus-within .v2-sb-more,
+.v2-sb-more[aria-expanded='true'] {
+    opacity: 1;
+}
+
+.v2-sb-empty {
+    padding: var(--el-space-4) var(--el-space-12);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+}
+
+.v2-sb-sub.is-nested {
+    padding-inline-start: var(--el-space-20);
+}
+
+.v2-sb-caret {
+    margin-inline-start: auto;
+}
+
+.v2-sb-fold > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.v2-sb-fold > summary::-webkit-details-marker {
+    display: none;
+}
+
+.v2-sb-fold:not([open]) .v2-sb-caret {
+    transform: rotate(-90deg);
+}
+
+[dir='rtl'] .v2-sb-fold:not([open]) .v2-sb-caret {
+    transform: rotate(90deg);
+}
+
+/* ● Record ▾: Record a voice note, and the menu with Import audio files; one accent button in two parts. */
+.v2-sb-split {
+    display: flex;
+    align-items: stretch;
+    gap: var(--el-space-2);
+    margin-inline: var(--el-space-4);
+}
+
+.v2-sb-split > .v2-sb-record {
+    flex: 1 1 auto;
+    margin-inline: 0;
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+}
+
+.v2-sb-split > .fi-dropdown,
+.v2-sb-split > .fi-dropdown > .fi-dropdown-trigger {
+    display: flex;
+}
+
+.v2-sb-record-more {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: var(--el-space-8);
+    border-start-end-radius: var(--el-radius-md);
+    border-end-end-radius: var(--el-radius-md);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+}
+
+.v2-sb-record-more:hover,
+.v2-sb-record-more[aria-expanded='true'] {
+    background-color: var(--el-role-accent-hover);
+}
+
+.v2-sb-record-more .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb.v2-rail .v2-sb-record-more {
+    display: none;
+}
+
+/* The Library's sidebar places: the one you are on has a quiet fill, never a bold row among bold rows. */
+.v2-sb-lib .v2-sb-subitem.is-on {
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+    font-weight: var(--el-text-body-weight);
+}
+
+/* The new Library starts high: no header, the one toolbar row just under the top bar (2.0.0-p: the list within 120). */
+.fi-resource-sessions:has(.v2-lib-shell) .fi-page-header-main-ctn {
+    padding-block-start: var(--el-space-8);
+}
+
+/* The one toolbar row sits close to the list, and the first group's heading close to the toolbar. */
+.v2-lib-shell .v2-library .fi-ta-header-toolbar {
+    padding-block-end: var(--el-space-4);
+}
+
+.v2-lib-shell .v2-library .fi-ta-content > .fi-ta-group-header:first-child {
+    padding-block-start: var(--el-space-4);
+}
+
+/* The search is as tall as the row's chips (32), so the row is one line of equal controls. */
+.v2-lib-shell .v2-library .fi-ta-search-field .fi-input-wrp {
+    min-height: var(--el-component-chip-height);
+}
+
+.v2-lib-shell .v2-library .fi-ta-search-field .fi-input {
+    padding-block: var(--el-space-4);
+}
+
+.fi-resource-sessions:has(.v2-lib-shell) .fi-page-content > .fi-sc {
+    row-gap: 0;
+}
+
+/* The row's content may shrink to the list's width (beside the filter panel too), so a long snippet ends in "…" and the
+   time stays in view. */
+.v2-library .fi-ta-record-content-ctn > * {
+    min-width: 0;
+}
+
+/* The select box has its own place before the source's mark (2.0.0-p), so a click on the mark filters by it. */
+.v2-library .fi-ta-record > .fi-ta-record-checkbox {
+    inset-inline-start: var(--el-space-4);
+}
+
+.v2-library .v2-lib-row {
+    padding-inline-start: var(--el-space-32);
+}
+
+.v2-library .fi-ta-record:hover .v2-row-tile,
+.v2-library .fi-ta-record:has(> .fi-ta-record-checkbox:checked) .v2-row-tile,
+.v2-library .fi-ta-record:has(> .fi-ta-record-checkbox:focus-visible) .v2-row-tile,
+.v2-library .fi-ta-ctn:has(.fi-ta-record-checkbox:checked) .v2-row-tile {
+    visibility: visible;
+}
+
+button.v2-row-tile {
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+}
+
+button.v2-row-tile:focus-visible,
+.v2-label-quick:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+.v2-label-quick {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--el-space-2);
+    border: 0;
+    border-radius: var(--el-radius-full);
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Compact density: one line less on each row. */
+:root[data-density='compact'] .v2-library .v2-lib-row {
+    min-height: auto;
+    padding-block: var(--el-space-4);
+}
+
+:root[data-density='compact'] .v2-library [data-snippet] {
+    display: none;
+}
+
+/* A menu's group names (Sort & display's View, Sort, Group by, Density; the selection's Organise, Export): quiet
+   headings, never items. */
+.fi-dropdown-header[data-menu-heading] {
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* The new Library's sidebar is denser (docs/PLAN_LIBRARY_FILTERS.md section 4: items 32 tall) so more of it shows. */
+.v2-sb:has(.v2-sb-lib) .v2-sb-item {
+    min-height: var(--el-component-chip-height);
+}
+
+.v2-sb-lib .v2-sb-sub,
+.v2-sb-folding .v2-sb-sub {
+    margin-block: var(--el-space-2);
+}
+
+.v2-sb-lib {
+    gap: var(--el-space-4);
+}
+
+/* PROJECTS folds with the arrow at the end of its row; the row itself still opens the Projects page. */
+.v2-sb-folding {
+    position: relative;
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: var(--el-space-4);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: var(--el-component-chip-height);
+    block-size: var(--el-component-chip-height);
+    border-radius: var(--el-radius-md);
+    color: var(--el-role-text-secondary);
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle:hover {
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-sb-fold-end > .v2-sb-fold-toggle .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-fold:not([open]) > .v2-sb-fold-toggle .v2-icon {
+    transform: rotate(-90deg);
+}
+
+[dir='rtl'] .v2-sb-fold:not([open]) > .v2-sb-fold-toggle .v2-icon {
+    transform: rotate(90deg);
+}
+
+.v2-sb.v2-rail .v2-sb-fold-toggle,
+.v2-sb.v2-rail .v2-sb-group,
+.v2-sb.v2-rail .v2-sb-scroll span {
+    display: none;
+}
+
+/* The scrolling middle says when there is more: "More" at its foot (and an arrow back at its top), on the sidebar's own
+   background, above what scrolls under it. */
+.v2-sb-inner,
+.v2-sb-nav {
+    background-color: inherit;
+}
+
+.v2-sb-nav {
+    position: relative;
+    /* The sticky "More" and back-to-top bars never cover the item the keyboard moved to. */
+    scroll-padding-block: var(--el-space-24);
+}
+
+.v2-sb-scroll {
+    position: sticky;
+    z-index: var(--el-layer-sticky);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--el-space-4);
+    inline-size: 100%;
+    min-block-size: var(--el-space-24);
+    border: 0;
+    background-color: inherit;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+    cursor: pointer;
+}
+
+.v2-sb-scroll:hover {
+    color: var(--el-role-text-primary);
+}
+
+.v2-sb-scroll .v2-icon {
+    width: var(--el-icon-sm);
+    height: var(--el-icon-sm);
+}
+
+.v2-sb-scroll.is-down {
+    inset-block-end: 0;
+    border-block-start: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-sb-scroll.is-up {
+    inset-block-start: 0;
+    border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-sb-scroll.is-up .v2-icon {
+    transform: rotate(180deg);
+}

@@ -79,6 +79,8 @@ final class ChunkedUploadService
             'total_chunks' => max(1, (int) ceil($size / $chunkSize)),
             'received_chunks' => [],
             'upload_status' => UploadStatus::Pending,
+            // Since 2.0.0-p: when this upload began (Needs you's "stuck" counts from it).
+            'upload_started_at' => now(),
         ]);
     }
 
@@ -170,12 +172,19 @@ final class ChunkedUploadService
         return DB::transaction(function () use ($recording, $index): Recording {
             /** @var Recording $locked */
             $locked = Recording::query()->lockForUpdate()->findOrFail($recording->id);
-            // The first chunk after a failure starts afresh: nothing received earlier is still on disk.
-            $earlier = $locked->upload_status === UploadStatus::Failed ? [] : $locked->received_chunks;
+            // The first chunk after a failure starts afresh: nothing received earlier is still on disk, and the upload's
+            // clock starts again (Needs you's "stuck", since 2.0.0-p).
+            $restart = $locked->upload_status === UploadStatus::Failed;
+            $earlier = $restart ? [] : $locked->received_chunks;
             $received = array_values(array_unique([...$earlier, $index]));
             sort($received);
-            $locked->update(['received_chunks' => $received, 'upload_status' => UploadStatus::Uploading, 'error' => null]);
+            $locked->update(['received_chunks' => $received, 'upload_status' => UploadStatus::Uploading, 'error' => null,
+                ...($restart ? ['upload_started_at' => now()] : [])]);
             $locked->captureSession->update(['status' => SessionStatus::Uploading]);
+            if ($restart) {
+                // No longer failed: the other devices hear of it with the library's changes.
+                $locked->captureSession->touch();
+            }
 
             return $locked;
         });

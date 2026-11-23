@@ -6,19 +6,24 @@ namespace App\Http\Resources;
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Enums\UploadStatus;
 use App\Http\Controllers\Api\SessionController;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Services\Library\LibraryFilters;
 use App\Services\LibraryOrganiser;
 use App\Services\RetentionPolicy;
 use App\Services\TranscribeLater;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Carbon;
 
 /**
  * Library item (docs/API.md "Library & sync"). Tombstones carry only id, client_ref, deleted and updated_at.
@@ -34,7 +39,7 @@ final class LibraryItemResource extends JsonResource
      */
     public const TRANSCRIPT_COLUMNS = ['id', 'capture_session_id', 'kind', 'provider', 'status', 'provider_job_id', 'provider_transcript_id',
         'provider_deleted_at', 'language', 'text', 'meta', 'error', 'error_code', 'attempts', 'submitted_at', 'completed_at', 'edited_at',
-        'created_at', 'updated_at'];
+        'created_at', 'updated_at', 'attempt_started_at'];
 
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
@@ -132,8 +137,62 @@ final class LibraryItemResource extends JsonResource
             // Only for the person whose recording it is: the minutes left are theirs, never a sender's (a recording a
             // teammate sent shows none).
             'transcribe_estimate' => self::asksOwner($request, $session) ? app(TranscribeLater::class)->estimate($session) : null,
+            // Since 2.0.0-p: the recording's Source, Status and Language in the Library's filters (docs/API.md "Library
+            // filters"), so every app counts with the same words.
+            'facets' => LibraryFilters::itemFacets($session, self::uploadFailed($session), $final?->status->value, $final?->language),
+            // Since 2.0.0-p: when the current upload or transcript attempt began (a retry starts it again), or null when
+            // none is stored; "Needs you" counts a recording stuck after 24 hours of processing from it.
+            'processing_since' => self::processingSince($session, $final)?->toAtomString(),
             'updated_at' => $session->updated_at->toAtomString(),
         ];
+    }
+
+    /**
+     * Reads, with the rows, whether an upload of each recording failed (the Status `failed`), so a page of items costs
+     * one query more instead of one an item.
+     *
+     * @template TBuilder of Builder<CaptureSession>
+     *
+     * @param  TBuilder  $query
+     * @return TBuilder
+     */
+    public static function withUploadFailed(Builder $query): Builder
+    {
+        return $query->withExists(['recordings as upload_failed' => fn (Builder $r): Builder => $r->where('upload_status', UploadStatus::Failed->value)])
+            ->withMax('recordings as upload_started', 'upload_started_at');
+    }
+
+    /**
+     * The same for recordings already read: whether an upload of each failed and when its latest upload began, in two
+     * queries for all of them (a page of search results, Shared with me).
+     *
+     * @param  EloquentCollection<int, CaptureSession>  $sessions
+     */
+    public static function loadUploadState(EloquentCollection $sessions): void
+    {
+        $sessions->loadExists(['recordings as upload_failed' => fn ($r) => $r->where('upload_status', UploadStatus::Failed->value)])
+            ->loadMax('recordings as upload_started', 'upload_started_at');
+    }
+
+    /** When the latest upload began (read with the rows, withUploadFailed, else asked now) or the final transcript's run, the later. */
+    private static function processingSince(CaptureSession $session, ?Transcript $final): ?Carbon
+    {
+        $upload = array_key_exists('upload_started', $session->getAttributes())
+            ? $session->getAttribute('upload_started')
+            : $session->recordings()->max('upload_started_at');
+        $times = array_filter([$upload !== null ? Carbon::parse((string) $upload, 'UTC') : null, $final?->attempt_started_at]);
+
+        return $times === [] ? null : max($times);
+    }
+
+    /** Whether an upload of the recording failed: read with the rows (withUploadFailed), else asked now. */
+    private static function uploadFailed(CaptureSession $session): bool
+    {
+        if (array_key_exists('upload_failed', $session->getAttributes())) {
+            return (bool) $session->getAttribute('upload_failed');
+        }
+
+        return $session->recordings()->where('upload_status', UploadStatus::Failed->value)->exists();
     }
 
     /** Whether the person asking (a device's, or the signed-in console user) made [$session], in its workspace. */

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { BinItem, LibraryItem } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeScreen, makeTranscript } from "../../test/fixtures";
@@ -7,6 +7,7 @@ import { answerConfirm } from "../../test/confirm";
 import { forgetPictures } from "../../lib/screens";
 import { BIN_HOURS, binHours, binSentence, dayGroups, isUntranscribed, rowModel, viewCounts, viewItems } from "./model";
 import { LibraryV2 } from "./LibraryV2";
+import type { LibraryScope } from "./scope";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -85,8 +86,17 @@ describe("LibraryV2", () => {
     respond("bin_list", { data: BIN });
   });
 
+  // The sidebar chooses what the Library shows (LibraryNav): `go` does what pressing a sidebar row does.
+  let shown: Parameters<typeof LibraryV2>[0] = {};
+  let again: (ui: React.ReactElement) => void = () => undefined;
+  let seq = 0;
   const show = async (props: Parameters<typeof LibraryV2>[0] = {}) => {
-    render(<LibraryV2 {...props} />);
+    shown = props;
+    again = render(<LibraryV2 {...props} />).rerender;
+    await act(flushAsync);
+  };
+  const go = async (scope: LibraryScope) => {
+    again(<LibraryV2 {...shown} scopeRequest={{ scope, seq: ++seq }} />);
     await act(flushAsync);
   };
 
@@ -103,17 +113,22 @@ describe("LibraryV2", () => {
     expect(callsOf("library_refresh")).toHaveLength(1);
   });
 
-  it("the saved view Untranscribed from Views ▾, and Today from the When chip, with their counts", async () => {
+  it("Not transcribed from the sidebar, and Date: Today from the filters, with their counts", async () => {
     await show();
-    fireEvent.click(screen.getByRole("button", { name: /^Views$/ }));
-    expect(screen.queryByRole("menuitemradio", { name: /^Today/ })).toBeNull();
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /^Untranscribed/ }));
-    const list = screen.getByRole("list", { name: "Recordings" });
-    expect(rowButtons(list)).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: /^Untranscribed$/ }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /^All recordings/ }));
-    fireEvent.click(screen.getByRole("button", { name: /^When$/ }));
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /^Today/ }));
+    // Not transcribed: no transcript and none on its way; the failed one is in Needs you (facets.ts).
+    await go({ kind: "view", view: "not_transcribed" });
+    expect(screen.getByRole("heading", { level: 1, name: /^Not transcribed/ })).toHaveTextContent("Not transcribed1");
+    expect(rowButtons(screen.getByRole("list", { name: "Recordings" })).map((b) => b.dataset.rowId)).toEqual(["voice"]);
+    await go({ kind: "view", view: "needs" });
+    expect(rowButtons(screen.getByRole("list", { name: "Recordings" })).map((b) => b.dataset.rowId)).toEqual(["usman"]);
+    await go({ kind: "view", view: "all" });
+    fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+    const date = within(screen.getByRole("region", { name: "Date" }));
+    expect(date.getByRole("radio", { name: /^Today/ }).closest("label")).toHaveTextContent("Today3");
+    fireEvent.click(date.getByRole("radio", { name: /^Today/ }));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 200));
+    });
     expect(rowButtons(screen.getByRole("list", { name: "Recordings" }))).toHaveLength(3);
   });
 
@@ -361,9 +376,9 @@ describe("LibraryV2", () => {
     respond("session_restore", { data: ITEMS[0] });
     respond("bin_erase", null);
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
-    await act(flushAsync);
-    expect(screen.getByRole("heading", { level: 1, name: "Trash" })).toBeInTheDocument();
+    // Trash is at the sidebar's foot now.
+    await go({ kind: "trash" });
+    expect(screen.getByRole("heading", { level: 1, name: /^Trash/ })).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Deleted recordings" });
     expect(within(list).getByText("Sadia Hassan · Zamzam Travels")).toBeInTheDocument();
     expect(screen.getByText("Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.")).toBeInTheDocument();
@@ -376,21 +391,24 @@ describe("LibraryV2", () => {
     const empty = screen.getByRole("region", { name: "Trash is empty" });
     expect(empty).toHaveTextContent("Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.");
     expect(document.body).not.toHaveTextContent(/30 days/);
-    // The header's Trash button stays pressed while Trash is open; pressing it again goes back to the recordings.
-    expect(screen.getByRole("button", { name: "Trash" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
-    await act(flushAsync);
-    expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+    // All, from the sidebar, goes back to the recordings.
+    await go({ kind: "view", view: "all" });
+    expect(screen.getByRole("heading", { level: 1, name: /^All/ })).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Trash" })).toHaveAttribute("aria-pressed", "false");
   });
 
   describe("parity rows that had no test (docs/v2/audit/parity.csv)", () => {
-    it("Import, clearing a search by its button and by Esc, and a search that matches nothing (DT-LIB-005, 008, 009, 138)", async () => {
+    it("Import (an empty Library's; the sidebar's ● Record ▾ has it too), clearing a search by its button and by Esc, and a search that matches nothing (DT-LIB-005, 008, 009, 138)", async () => {
       const onImport = vi.fn();
+      respond("library_list", []);
+      respond("library_refresh", []);
       await show({ onImport });
-      fireEvent.click(screen.getByRole("button", { name: "Import" }));
+      fireEvent.click(within(screen.getByRole("region", { name: "No recordings yet" })).getByRole("button", { name: "Import" }));
       expect(onImport).toHaveBeenCalled();
+      cleanup();
+      respond("library_list", ITEMS);
+      respond("library_refresh", ITEMS);
+      await show({ onImport });
       const search = screen.getByRole("searchbox", { name: "Search recordings" });
       fireEvent.change(search, { target: { value: "zzz nothing" } });
       const none = screen.getByRole("region", { name: "No recordings match" });
@@ -419,12 +437,10 @@ describe("LibraryV2", () => {
     it("Trash: a list that didn't load says so with Try again; All goes back to the recordings (DT-LIB-112, 113)", async () => {
       fail("bin_list", "The server is out of reach");
       await show();
-      fireEvent.click(screen.getByRole("button", { name: /^Trash/ }));
-      await act(flushAsync);
+      await go({ kind: "trash" });
       expect(screen.getByRole("alert")).toHaveTextContent("Trash didn't load");
       expect(within(screen.getByRole("alert")).getByRole("button", { name: "Try again" })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: /^All/ }));
-      await act(flushAsync);
+      await go({ kind: "view", view: "all" });
       expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
     });
 
@@ -460,8 +476,7 @@ describe("LibraryV2", () => {
   it("Restore from Trash says so and offers to open it", async () => {
     respond("session_restore", { data: ITEMS[0] });
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Trash" }));
-    await act(flushAsync);
+    await go({ kind: "trash" });
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     await act(flushAsync);
     expect(callsOf("session_restore")).toEqual([{ id: "old" }]);

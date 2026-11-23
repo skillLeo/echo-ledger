@@ -12,6 +12,7 @@ use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Http\Resources\LibraryItemResource;
 use App\Models\CaptureSession;
 use App\Models\SessionLabel;
+use App\Services\Library\LibraryFilters;
 use App\Services\RetentionPolicy;
 use App\Services\SettingsRepository;
 use App\Services\Views\TranscriptViews;
@@ -40,7 +41,7 @@ final class V2RecordingRow
 
     /**
      * @return array{id: string, title: string, icon: string, source: string, line: string, device: string|null, pinned: bool,
-     *     time: string, full_time: string, iso: string, app: string, device_kind: string|null, source_words: string, length: string, status: array{label: string, tone: string, icon: string}|null,
+     *     time: string, full_time: string, iso: string, app: string, device_kind: string|null, source_words: string, quick_source: string, quick_source_words: string, length: string, status: array{label: string, tone: string, icon: string}|null,
      *     important: bool, unread: bool, snippet: string|null, labels: list<array{name: string, class: string, own: string|null}>, left: array{text: string, days: int, soon: bool}|null,
      *     converting: array{state: string, view: string, label: string, percent: int|null}|null}
      */
@@ -63,6 +64,9 @@ final class V2RecordingRow
             'app' => $session->source_app->value,
             'device_kind' => self::deviceKind($session->source_device),
             'source_words' => self::sourceWords($session->source_app, $session->source_device),
+            // Since 2.0.0-p: the Source a click on the mark filters by (LibraryFilters::source), and its name.
+            'quick_source' => $quick = LibraryFilters::source($session->source_app->value, $session->origin),
+            'quick_source_words' => LibraryFilterBar::optionLabel('source', $quick),
             'source' => $source,
             'line' => implode(' · ', array_filter([$source, $device, $with, $labels[0] ?? null])),
             'device' => $device,

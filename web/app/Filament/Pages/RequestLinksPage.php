@@ -77,7 +77,7 @@ class RequestLinksPage extends Page implements HasTable
                 ->schema([
                     // Left empty, the server names it RequestLinks::DEFAULT_TITLE: only the placeholder is in the console's language.
                     TextInput::make('title')->label($t('What you ask for'))->placeholder($t(RequestLinks::DEFAULT_TITLE))->maxLength(200),
-                    Select::make('client_id')->label($t('Project'))->placeholder($t('Inbox (sound and video only)'))->searchable()
+                    Select::make('client_id')->label($t('Project'))->placeholder(ConsoleV2::library() ? __('No project (sound and video only)') : $t('Inbox (sound and video only)'))->searchable()
                         ->options(fn (): array => SharingActions::folderOptions())
                         ->helperText($t('With a project, PDF, Word, text and image files go to its Files too.')),
                     Select::make('expires')->label($t('Open for'))->default('604800')->selectablePlaceholder(false)
@@ -122,7 +122,7 @@ class RequestLinksPage extends Page implements HasTable
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('title')->label(__('Title'))->limit(60)->searchable()->wrap(),
-                TextColumn::make('client.name')->label(__('Goes to'))->placeholder(__('Inbox')),
+                TextColumn::make('client.name')->label(__('Goes to'))->placeholder(ConsoleV2::library() ? __('All recordings') : __('Inbox')),
                 TextColumn::make('received')->label(__('Received'))
                     ->state(fn (RequestLink $link): string => __(':received of :max', ['received' => $link->received, 'max' => $link->max_files]))
                     ->description(fn (RequestLink $link): string => __('up to :mb MB each', ['mb' => $link->max_mb])),

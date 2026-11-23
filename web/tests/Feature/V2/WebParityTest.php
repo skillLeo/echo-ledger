@@ -18,6 +18,8 @@ use Livewire\Livewire;
  *  - html: the page's HTML has every given string (the frame's key handler and its target, a marker class);
  *  - selected: the page as it draws once something is selected (the selection bar's own x-show is true then): every
  *    given control, and every given string (the count's words);
+ *  - panel: the page as it draws with the Library's filter panel open (its own x-show is true then): every given control
+ *    of the panel, by its role and name ("input|today", a checkbox or radio named by its label);
  *  - widget: a Home card renders with the given words;
  *  - exportformats: the selection's Export offers every given format, and each one downloads a zip.
  * Every page read must be drawn by the v2.0 frame, and a done web row without a test fails the sheet.
@@ -44,8 +46,15 @@ function webParityHolds(array $check, string $html): bool
         'html' => collect($check['contains'])->every(fn (string $needle): bool => str_contains($html, $needle)),
         'selected' => webParityHolds(['type' => 'controls', 'scope' => $check['scope'], 'keys' => $check['keys']], webParitySelected($html))
             && webParityHolds(['type' => 'html', 'contains' => $check['contains']], $html),
+        'panel' => webParityHolds(['type' => 'controls', 'scope' => 'panel', 'keys' => $check['keys']], webParityPanelOpen($html)),
         default => false,
     };
+}
+
+/** The page as it shows with the filter panel open (2.0.0-p): the panel's own x-show is true then. */
+function webParityPanelOpen(string $html): string
+{
+    return str_replace('x-show="filtersOpen"', '', $html);
 }
 
 /** The page as it shows with something selected: the selection's own x-show (the count, Select all) is true then. */
@@ -61,7 +70,7 @@ it('holds every web row\'s check in the new design, on pages drawn by the v2.0 f
     $html = [];
     $failed = [];
     foreach ($checks as $id => $check) {
-        if (in_array($check['type'], ['control', 'controls', 'controlmatch', 'html', 'selected'], true)) {
+        if (in_array($check['type'], ['control', 'controls', 'controlmatch', 'html', 'selected', 'panel'], true)) {
             $page = $check['page'];
             if (! isset($html[$page])) {
                 $this->app['auth']->forgetGuards();
@@ -124,6 +133,10 @@ it('fails a check when the control is taken away (the checks are not empty match
         ->and(webParityHolds($checks['WEB-LIB-025'], $library = (string) $this->get($pages['library'])->getContent()))->toBeTrue()
         ->and(webParityHolds($checks['WEB-LIB-025'], str_replace('aria-label="Move to project"', '', $library)))->toBeFalse()
         ->and(webParityHolds(['type' => 'controls', 'scope' => 'main', 'keys' => ['button|move to project']], $library))->toBeFalse()
+        // The filter panel's controls count only as drawn with the panel open, and only while the panel has them.
+        ->and(webParityHolds($checks['WEB-LIB-013'], $library))->toBeTrue()
+        ->and(webParityHolds(['type' => 'controls', 'scope' => 'panel', 'keys' => $checks['WEB-LIB-013']['keys']], $library))->toBeFalse()
+        ->and(webParityHolds($checks['WEB-LIB-013'], str_replace('data-section="status"', 'data-section="gone"', preg_replace('~<label class="v2-lib-opt" for="lf-status-[^"]*">.*?</label>~s', '', $library) ?? '')))->toBeFalse()
         // A control in the settings menu is not one of the page's own.
         ->and(webParityHolds(['type' => 'control', 'scope' => 'main', 'key' => 'a|appearance'], (string) $this->get($pages['settings-appearance'])->getContent()))->toBeFalse();
 });

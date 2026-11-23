@@ -394,6 +394,13 @@ export const LucidePinIcon = L(["M12 17v5", "M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.
 export const LucideFolderInputIcon = L(["M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1", "M2 13h10", "m9 16 3-3-3-3"]);
 export const LucideInfinityIcon = L(["M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z"]);
 export const LucideListChecksIcon = L(["m3 17 2 2 4-4", "m3 7 2 2 4-4", "M13 6h8", "M13 12h8", "M13 18h8"]);
+/** The Library's filters and views (PLAN_LIBRARY_FILTERS): Filters and My views (Lucide list-filter), Important (Lucide
+ * star) and Unread (Lucide mail). */
+export const LucideListFilterIcon = L(["M3 6h18", "M7 12h10", "M10 18h4"]);
+export const LucideStarIcon = L(["M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"]);
+export const LucideMailIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></Svg>
+);
 export const LucideSendIcon = L(["M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z", "m21.854 2.147-10.94 10.939"]);
 /** Back and forward 10 seconds in the player (Lucide rotate-ccw, rotate-cw). */
 export const LucideRotateCcwIcon = L(["M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5"]);

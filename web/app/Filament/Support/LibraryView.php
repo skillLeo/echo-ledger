@@ -109,7 +109,7 @@ final class LibraryView
             self::group('app', fn (CaptureSession $r): string => $r->source_app->value, fn (CaptureSession $r): string => self::words((string) $r->source_app->getLabel()),
                 fn (Builder $q, string $key): Builder => $q->where($q->qualifyColumn('source_app'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy($q->qualifyColumn('source_app'), $direction)),
-            self::group('project', fn (CaptureSession $r): string => $r->client_id ?? 'none', fn (CaptureSession $r): string => $r->client->name ?? self::words('Inbox'),
+            self::group('project', fn (CaptureSession $r): string => $r->client_id ?? 'none', fn (CaptureSession $r): string => $r->client->name ?? self::words(ConsoleV2::library() ? 'No project' : 'Inbox'),
                 fn (Builder $q, string $key): Builder => $key === 'none' ? $q->whereNull($q->qualifyColumn('client_id')) : $q->where($q->qualifyColumn('client_id'), $key),
                 fn (Builder $q, string $direction): Builder => $q->orderBy(Client::query()->select('name')->whereColumn('clients.id', 'capture_sessions.client_id')->limit(1), $direction)),
             self::group('language', fn (CaptureSession $r): string => LanguageChoice::normalize($r->language) ?? 'auto',

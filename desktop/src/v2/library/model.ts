@@ -83,7 +83,9 @@ export type RowModel = {
 export function rowModel(item: LibraryItem, now: Date = new Date(), views: ViewsSummary | null | undefined = item.transcript?.views): RowModel {
   const state = itemState(item);
   // Processing covers both a transcript under way and none asked for yet: only the second is "Untranscribed".
-  const waiting = state === "processing" && !item.transcript?.final_status;
+  // A call still waiting for Keep or Discard on the server (session `recording`): said so, not "Untranscribed".
+  const deciding = item.status === "recording";
+  const waiting = !deciding && state === "processing" && !item.transcript?.final_status;
   const app = item.source_app ?? (item.source_device === "phone" ? "phone_call" : "other");
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
   const preview = item.transcript?.preview?.trim() || null;
@@ -99,7 +101,8 @@ export function rowModel(item: LibraryItem, now: Date = new Date(), views: Views
   // Classic's sub-line after it: the project and how many bookmarks (the length is at the row's end).
   const marks = item.marker_count ?? 0;
   const meta = [base, item.client?.name, marks > 0 ? (marks === 1 ? "1 bookmark" : `${marks} bookmarks`) : null].filter(Boolean).join(" · ");
-  const badge = state === "failed" ? { tone: "danger" as const, text: "Failed" }
+  const badge = deciding ? { tone: "warning" as const, text: "Waiting for decision" }
+    : state === "failed" ? { tone: "danger" as const, text: "Failed" }
     : state === "no_audio" ? { tone: "neutral" as const, text: "No audio" }
       : waiting ? { tone: "warning" as const, text: "Untranscribed" } : null;
   const at = item.started_at ? new Date(item.started_at) : null;

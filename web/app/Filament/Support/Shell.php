@@ -352,9 +352,17 @@ final class Shell
                 }
             }
         }
-        foreach (self::libraryPlaces() as $place) {
-            if ($place['key'] !== 'all') {
-                $pages[] = ['id' => 'place-'.$place['key'], 'label' => $place['label'], 'group' => 'Library', 'url' => $place['url'], 'words' => 'smart folder view'];
+        if (ConsoleV2::library() && CaptureSessionResource::canAccess()) {
+            // The new Library's places (docs/PLAN_NAV_3_LEVELS.md section 0): All recordings first, no Inbox, no smart folders.
+            $base = CaptureSessionResource::getUrl('index', panel: 'app');
+            foreach (LibraryFilterBar::placeNames() as $key => $label) {
+                $pages[] = ['id' => 'place-'.$key, 'label' => $label, 'group' => 'Library', 'url' => $key === 'all' ? $base : $base.'?tab='.$key, 'words' => 'view place'];
+            }
+        } else {
+            foreach (self::libraryPlaces() as $place) {
+                if ($place['key'] !== 'all') {
+                    $pages[] = ['id' => 'place-'.$place['key'], 'label' => $place['label'], 'group' => 'Library', 'url' => $place['url'], 'words' => 'smart folder view'];
+                }
             }
         }
         foreach (array_slice(self::projects(), 0, 60) as $project) {

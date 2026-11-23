@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\CaptureSessions\Widgets;
 
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\ConsoleV2;
 use App\Models\CaptureSession;
 use App\Services\LibraryOrganiser;
 use App\Services\Workspaces\CurrentWorkspace;
@@ -40,7 +41,8 @@ class WaitingDecisionsWidget extends Widget
                 ->reorder()->orderBy('capture_sessions.id')->limit(500)->pluck('capture_sessions.id')->implode(',')), 0, 12),
             'label' => $count === 1 ? '1 call waiting' : "{$count} calls waiting",
             'detail' => $detail,
-            'reviewUrl' => CaptureSessionResource::getUrl('index', ['tab' => 'waiting']),
+            // Since 2.0.0-p the new Library keeps the waiting calls in Needs you.
+            'reviewUrl' => CaptureSessionResource::getUrl('index', ['tab' => ConsoleV2::library() ? 'needs_you' : 'waiting']),
         ];
     }
 

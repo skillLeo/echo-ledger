@@ -42,6 +42,7 @@ use Laravel\Passport\HasApiTokens;
  * @property string $email
  * @property Carbon|null $email_verified_at
  * @property bool $is_super_admin
+ * @property int $views_version moves with every change of the person's saved Library views (contract 2.0.0-p)
  * @property int|null $current_workspace_id
  * @property string|null $google_id the linked Google account (its stable `sub`), since v1.5
  * @property Carbon|null $deletion_requested_at

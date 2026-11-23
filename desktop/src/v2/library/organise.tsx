@@ -173,12 +173,12 @@ export async function copyForAiToClipboard(items: readonly LibraryItem[], say: S
 /** "1 recording", "3 recordings". */
 export const recordingsWord = (n: number) => (n === 1 ? "1 recording" : `${n} recordings`);
 
-/** Moves recordings to a project, the Inbox, or a new project made here. */
+/** Moves recordings to a project, out of every project (No project), or to a new project made here. */
 export function MoveDialog({ ids, title, current, onClose, say }: {
   ids: readonly string[];
   /** The recording's title when one is moved. */
   title?: string | null;
-  /** The project they are in now (null: the Inbox; undefined: not all the same). */
+  /** The project they are in now (null: none; undefined: not all the same). */
   current?: string | null;
   onClose: () => void;
   say: Say;
@@ -193,7 +193,7 @@ export function MoveDialog({ ids, title, current, onClose, say }: {
   }, []);
   const options = [
     { value: "", label: "Choose…" },
-    ...(current === null ? [] : [{ value: "inbox", label: "Inbox (no project)" }]),
+    ...(current === null ? [] : [{ value: "inbox", label: "No project" }]),
     ...(projects ?? []).filter((p) => p.id !== current).map((p) => ({ value: p.id, label: projectLabel(projects ?? [], p.id) })),
     { value: "new", label: "New project…" },
   ];
@@ -208,7 +208,8 @@ export function MoveDialog({ ids, title, current, onClose, say }: {
         projectId = data.id;
       }
       await moveRecordings(ids, projectId);
-      say(movedText(ids.length, title, list, projectId));
+      say(projectId ? movedText(ids.length, title, list, projectId)
+        : ids.length === 1 ? `Took “${title || "the recording"}” out of its project` : `Took ${ids.length} recordings out of their projects`);
       onClose();
     } catch (e) {
       setError(errorMessage(e));

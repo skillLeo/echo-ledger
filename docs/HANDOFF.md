@@ -1170,3 +1170,26 @@ All work stopped cleanly; see **docs/RESUME_HERE.md** for the full state, next s
   - the hPanel cron;
   - the Android fingerprint;
   - the VPS root password.
+
+## 2026-11-23 07:34 PKT — production web deploy of v1.1 78a3fcb5 (contract 2.0.0-p, Library filters, NAV §0)
+
+- **What went out:** 2bc45fc3 → 78a3fcb5 (110 commits).
+  - Web: 23 files added, 55 modified, 1 deleted (`resources/views/filament/v2/library-views.blade.php`, removed by hand).
+  - Uploaded: 53 files plus public/build. Bundle SHA-256 26559c13…3348.
+- **What it brings:**
+  - LF1/LF2: the facet counts, saved views (`/api/views`, `views_version`), and `facets` / `processing_since` on library items.
+  - The console's new Library (filter panel, pills, My views; Urdu-folded search across title, transcript and project path).
+  - NAV §0: All recordings first, the ways back, Clear all, ⌘[ / ⌘].
+  - Stuck counted from the current attempt.
+- **Migrations:** 2 in batch 22.
+  - `2026_12_27_000001_create_saved_views`: 0.48 s.
+  - `2026_12_28_000001_add_attempt_started_at`: 0.47 s; the transcripts rebuild at 252 rows.
+- **Downtime:** about 80 s, down 02:33 to up 02:34:22 server time.
+- **Backup:** `~/echoledger-backups/pre-2.0.0-p-20261123-023043` on the server (db.sql.gz, db-after-down.sql.gz, web.tgz, env.backup, SHA256SUMS). The dump is also on the Mac, in ~/echoledger-backups/pre-2.0.0-p/.
+- **Rehearsal:** on that dump with deploy/checks/2.0.0-p.sql, REHEARSAL PASSED (up, down, up).
+- **Checks after:**
+  - /app/login 200; /api/config and /api/views 401 without a token; /.env 403. /up 403 is the Hostinger edge, as before.
+  - Counts unchanged: 3 users, 281 sessions, 252 transcripts. failed_jobs 0, saved_views 0, no new log errors.
+  - A read-only service check for the owner's account: facets total 211 with 9 sections, Needs you 5 failed; views [].
+- **Not done:** the device-token API round trip, because the lead keeps no tokens. It is covered when the owner's desktop 2.0.10 syncs a saved view.
+- **Open, as before:** ECHOLEDGER_ANDROID_FINGERPRINTS is empty; the hPanel cron is unconfirmed.

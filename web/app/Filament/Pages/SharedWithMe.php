@@ -10,6 +10,7 @@ use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Models\CaptureSession;
@@ -94,7 +95,9 @@ class SharedWithMe extends Page implements HasTable
                     ->modalHeading('Save a copy?')
                     ->modalDescription(fn (SentItem $item): string => $item->kind === 'project'
                         ? 'The project and its recordings are copied into this workspace. Your copy stays when the sender deletes theirs.'
-                        : 'The recording, its audio and transcript are copied into this workspace\'s Inbox. Your copy stays when the sender deletes theirs.')
+                        : (ConsoleV2::library()
+                            ? __('The recording, its audio and transcript are copied into this workspace\'s recordings, with no project. Your copy stays when the sender deletes theirs.')
+                            : 'The recording, its audio and transcript are copied into this workspace\'s Inbox. Your copy stays when the sender deletes theirs.'))
                     ->modalSubmitActionLabel('Save')
                     ->action(fn (SentItem $item) => $this->save($item)),
                 Action::make('remove')->label('Remove')->icon(Heroicon::OutlinedXMark)->color('danger')

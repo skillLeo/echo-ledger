@@ -24,13 +24,15 @@
   "type": "control",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|recently deleted"
+  "key": "a|trash"
  },
  "WEB-NAV-005": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|shared"
+  "keys": [
+   "a|shared with me"
+  ]
  },
  "WEB-NAV-007": {
   "type": "control",
@@ -56,7 +58,7 @@
   "page": "library",
   "scope": "sidebar",
   "keys": [
-   "a|upload recording"
+   "menuitem|record options › import audio files"
   ]
  },
  "WEB-NAV-012": {
@@ -68,22 +70,26 @@
  "WEB-NAV-013": {
   "type": "controls",
   "page": "library",
-  "scope": "main",
+  "scope": "sidebar",
   "keys": [
-   "menuitem|views › all recordings",
-   "menuitem|views › today",
-   "menuitem|views › this week",
-   "menuitem|views › waiting for decision",
-   "menuitem|views › pinned",
-   "menuitem|views › failed uploads",
-   "button|voice notes"
+   "a|all recordings",
+   "a|needs you",
+   "a|unread",
+   "a|important",
+   "a|not transcribed",
+   "a|audio only"
   ]
  },
  "WEB-NAV-014": {
-  "type": "control",
+  "type": "panel",
   "page": "library",
-  "scope": "main",
-  "key": "menuitem|source › any source"
+  "keys": [
+   "input|whatsapp",
+   "input|zoom",
+   "input|phone call",
+   "input|voice note",
+   "input|no project"
+  ]
  },
  "WEB-NAV-015": {
   "type": "control",
@@ -219,38 +225,33 @@
   ]
  },
  "WEB-LIB-001": {
-  "type": "control",
-  "page": "library",
-  "scope": "main",
-  "key": "button|upload recording"
- },
- "WEB-LIB-002": {
   "type": "controls",
   "page": "library",
-  "scope": "main",
+  "scope": "sidebar",
   "keys": [
-   "button|views",
-   "menuitem|views › all recordings",
-   "menuitem|views › today",
-   "menuitem|views › this week",
-   "menuitem|views › waiting for decision",
-   "menuitem|views › bookmarked",
-   "menuitem|views › failed uploads",
-   "menuitem|views › pinned"
+   "menuitem|record options › import audio files"
+  ]
+ },
+ "WEB-LIB-002": {
+  "type": "panel",
+  "page": "library",
+  "keys": [
+   "input|today",
+   "input|last days",
+   "input|any bookmark",
+   "input|pinned",
+   "input|failed"
   ]
  },
  "WEB-LIB-003": {
-  "type": "controls",
+  "type": "panel",
   "page": "library",
-  "scope": "main",
   "keys": [
-   "button|source",
-   "menuitem|source › any source",
-   "menuitem|source › inbox",
-   "menuitem|source › whatsapp",
-   "menuitem|source › zoom",
-   "menuitem|source › phone",
-   "button|voice notes"
+   "input|whatsapp",
+   "input|zoom",
+   "input|phone call",
+   "input|voice note",
+   "input|no project"
   ]
  },
  "WEB-LIB-007": {
@@ -258,13 +259,12 @@
   "page": "library",
   "scope": "main",
   "keys": [
-   "button|newest",
-   "button|newest",
-   "menuitem|newest › oldest",
-   "menuitem|newest › longest",
-   "menuitem|newest › shortest",
-   "menuitem|newest › name a–z",
-   "menuitem|newest › recently opened"
+   "menuitem|sort & display › newest",
+   "menuitem|sort & display › oldest",
+   "menuitem|sort & display › longest",
+   "menuitem|sort & display › shortest",
+   "menuitem|sort & display › name a–z",
+   "menuitem|sort & display › recently opened"
   ]
  },
  "WEB-LIB-008": {
@@ -300,18 +300,19 @@
   ]
  },
  "WEB-LIB-013": {
-  "type": "controls",
+  "type": "panel",
   "page": "library",
-  "scope": "main",
   "keys": [
-   "menuitem|menu › reset",
-   "menuitem|menu › status",
-   "menuitem|menu › bookmark tag",
-   "menuitem|menu › label",
-   "menuitem|menu › has bookmarks",
-   "menuitem|menu › from",
-   "menuitem|menu › until",
-   "menuitem|menu › apply filters"
+   "button|close filters",
+   "input|is",
+   "input|is not",
+   "input|transcribed",
+   "input|not transcribed",
+   "input|processing",
+   "input|failed",
+   "input|any bookmark",
+   "input|custom dates",
+   "button|save as view"
   ]
  },
  "WEB-LIB-014": {
@@ -1066,40 +1067,38 @@
   "key": "button|switch back to classic"
  },
  "WEB-LIB-016": {
-  "type": "controls",
+  "type": "panel",
   "page": "library",
-  "scope": "main",
   "keys": [
-   "menuitem|views › this week",
-   "menuitem|views › waiting for decision",
-   "menuitem|views › bookmarked"
+   "input|last days",
+   "input|any bookmark"
   ]
  },
  "WEB-LIB-004": {
   "type": "control",
   "page": "library",
   "scope": "main",
-  "key": "button|list"
+  "key": "menuitem|sort & display › list"
  },
  "WEB-LIB-005": {
   "type": "control",
   "page": "library",
   "scope": "main",
-  "key": "button|table"
+  "key": "menuitem|sort & display › table"
  },
  "WEB-LIB-006": {
   "type": "controls",
   "page": "library",
   "scope": "main",
   "keys": [
-   "button|group by: date",
-   "menuitem|group by: date › date",
-   "menuitem|group by: date › source",
-   "menuitem|group by: date › project",
-   "menuitem|group by: date › language",
-   "menuitem|group by: date › status",
-   "menuitem|group by: date › device",
-   "menuitem|group by: date › none"
+   "button|sort & display",
+   "menuitem|sort & display › date",
+   "menuitem|sort & display › source",
+   "menuitem|sort & display › project",
+   "menuitem|sort & display › language",
+   "menuitem|sort & display › status",
+   "menuitem|sort & display › device",
+   "menuitem|sort & display › none"
   ]
  },
  "WEB-LIB-011": {
@@ -1118,10 +1117,14 @@
   ]
  },
  "WEB-NAV-010": {
-  "type": "control",
+  "type": "controls",
   "page": "library",
   "scope": "sidebar",
-  "key": "a|upload recording"
+  "keys": [
+   "a|record",
+   "menuitem|record options › record a voice note",
+   "menuitem|record options › import audio files"
+  ]
  },
  "WEB-NAV-016": {
   "type": "html",
@@ -1160,5 +1163,11 @@
    "button|dark",
    "button|soft grey"
   ]
+ },
+ "WEB-LIB-032": {
+  "type": "control",
+  "page": "library",
+  "scope": "sidebar",
+  "key": "a|needs you"
  }
 }

@@ -11,7 +11,7 @@ export { Chip, FilterBar } from "./FilterBar";
 export { Toast, ToastRegion, toastDuration } from "./Toast";
 export { Dialog, Sheet, useFocusTrap } from "./Dialog";
 export { Badge, Status, type Tone, type StatusKind } from "./Badge";
-export { Toggle, Checkbox, Radio, RadioGroup } from "./choices";
+export { Toggle, Checkbox, Radio, RadioGroup, PickBox } from "./choices";
 export { EmptyState } from "./EmptyState";
 export { Banner } from "./Banner";
 export { Skeleton, SkeletonRow, Loading, Progress } from "./Skeleton";

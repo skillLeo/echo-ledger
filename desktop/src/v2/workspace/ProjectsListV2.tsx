@@ -39,7 +39,7 @@ export function ProjectsListV2({ projects, error, onRetry, items, expanded, onTo
       <header className="el-page__head">
         <div className="el-page__titles">
           <h1 className="el-title-l">Projects</h1>
-          <p className="el-secondary">Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in the Inbox.</p>
+          <p className="el-secondary">Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in All recordings, under Project › No project.</p>
         </div>
         <div className="el-page__actions">
           {onRequest && <Button icon={Icons.RequestFilesIcon} title="A link anyone can use to send you voice notes and files" onClick={onRequest}>Request files</Button>}

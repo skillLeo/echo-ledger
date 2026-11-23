@@ -50,6 +50,7 @@ final class RecordingIngestor
             'total_chunks' => 1,
             'received_chunks' => [0],
             'upload_status' => UploadStatus::Assembling,
+            'upload_started_at' => now(),
         ]);
 
         $this->uploads->storeEncrypted($recording, $absolutePath);

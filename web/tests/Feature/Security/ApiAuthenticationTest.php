@@ -77,6 +77,13 @@ function secDeviceGuardedRoutes(): array
         'PUT lists/order' => ['PUT', '/api/lists/order', 'sessions:write'],
         'PATCH lists/{key}' => ['PATCH', '/api/lists/'.Fx::MISSING_ID, 'sessions:write'],
         'DELETE lists/{key}' => ['DELETE', '/api/lists/'.Fx::MISSING_ID, 'sessions:write'],
+        // Since 2.0.0-p: saved views and the filter panel's counts.
+        'GET views' => ['GET', '/api/views', 'library:read'],
+        'POST views' => ['POST', '/api/views', 'sessions:write'],
+        'PUT views/order' => ['PUT', '/api/views/order', 'sessions:write'],
+        'PATCH views/{id}' => ['PATCH', '/api/views/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE views/{id}' => ['DELETE', '/api/views/'.Fx::MISSING_ID, 'sessions:write'],
+        'GET library/facets' => ['GET', '/api/library/facets', 'library:read'],
         'POST sessions' => ['POST', '/api/sessions', 'sessions:write'],
         'POST sessions/{id}/finish' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/finish', 'sessions:write'],
         'POST sessions/{id}/markers' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/markers', 'sessions:write'],
@@ -256,8 +263,9 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes; 2.0.0-o: the two Ask routes.
-    expect($guarded)->toBe(168);
+    // 2.0.0-m: the five list routes; since 2.0.0-l 21 more, the account and security routes; 2.0.0-o: the two Ask routes;
+    // 2.0.0-p: the five saved view routes and the filter counts.
+    expect($guarded)->toBe(174);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

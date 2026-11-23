@@ -43,19 +43,22 @@ describe("selection mode", () => {
     await act(flushAsync);
   };
 
-  it("Select starts it: a click ticks a row, the bar counts, Select all and Unselect all, × ends it", async () => {
+  it("a row's checkbox starts it (no Select button): a click then ticks a row, the bar counts, Select all and Unselect all, × ends it", async () => {
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
-    expect(bar()).toHaveTextContent("Select recordings");
-    expect(screen.getByRole("button", { name: "Move to project" })).toBeDisabled();
-    fireEvent.click(row("Bilal Qureshi"));
+    expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select Bilal Qureshi" }));
     expect(row("Bilal Qureshi")).toHaveAttribute("aria-pressed", "true");
     expect(row("Voice note")).toHaveAttribute("aria-pressed", "false");
     expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
-    fireEvent.click(within(bar()).getByRole("button", { name: "Select all" }));
+    expect(screen.getByRole("checkbox", { name: "Select Bilal Qureshi" })).toBeChecked();
+    // While picking, a press on a row ticks it.
+    fireEvent.click(row("Voice note"));
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("2 selected");
+    fireEvent.click(within(bar()).getByRole("checkbox", { name: "Select all" }));
     expect(within(bar()).getByRole("heading")).toHaveTextContent("4 selected");
-    fireEvent.click(within(bar()).getByRole("button", { name: "Unselect all" }));
+    fireEvent.click(within(bar()).getByRole("checkbox", { name: "Unselect all" }));
     expect(within(bar()).getByRole("heading")).toHaveTextContent("Select recordings");
+    expect(screen.getByRole("button", { name: "Move to project" })).toBeDisabled();
     fireEvent.click(row("Bilal Qureshi"));
     fireEvent.click(row("Bilal Qureshi"));
     expect(row("Bilal Qureshi")).toHaveAttribute("aria-pressed", "false");
@@ -849,7 +852,7 @@ describe("Trash, Undo and the limits", () => {
     expect(bar()).toHaveTextContent("Up to 200 at a time: unselect 1");
     expect(within(bar()).getByRole("button", { name: "Delete" })).toBeDisabled();
     expect(within(bar()).getByRole("button", { name: "Move to project" })).toBeDisabled();
-    fireEvent.click(within(bar()).getByRole("button", { name: "Unselect all" }));
+    fireEvent.click(within(bar()).getByRole("checkbox", { name: "Unselect all" }));
     for (const r of rows().slice(0, 51)) fireEvent.click(r);
     fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     expect(menuItem("Transcribe (50 at a time)")).toHaveAttribute("aria-disabled", "true");

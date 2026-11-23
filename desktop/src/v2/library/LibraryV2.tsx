@@ -1,40 +1,46 @@
-// The v2 Library (ui_v2.library): the same recordings today's Library shows (library_list, refreshed from the server,
-// reloaded on library:updated), as WhatsApp-style rows with the saved views All, Today, Untranscribed and Trash. One
-// feedback system: the Toast, one at a time, with Undo after a delete. Selection mode (Select, a Cmd/Ctrl- or Shift-click,
-// Cmd/Ctrl+A or X) picks several; the row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
-// Lists (D14, lists.tsx): the chip row under the search shows All, Unread, Important or one of the person's lists.
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+// The v2 Library (ui_v2.library), as PLAN_LIBRARY_FILTERS lays it out: what it shows is chosen in the sidebar (a
+// library view, one of My views, a label, Trash: LibraryNav.tsx); one toolbar row (Search ⌘F, [Filters n],
+// [Sort & display ▾]); the filter panel on the start side (F; a drawer under 1280 px: FilterPanel.tsx); the pills row
+// only while filters are on; then the list, which starts within 120 px of the window's top. Rows have a checkbox on
+// hover and the toolbar a Select all, so there is no Select button; picking turns the toolbar into the selection bar.
+// A row's source logo or label filters by it. The recordings are the core's (library_list, refreshed from the server,
+// reloaded on library:updated); counts come from them here, offline (facets.ts). One feedback system: the Toast, one at
+// a time, with Undo after a delete. The row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem, type ListItem, type SearchResult, type SmartFolder } from "../../lib/ipc";
-import { folderKnownHere, folderLabel, inFolderHere } from "../../lib/folders";
 import { formatDuration, rowDate, timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import { eraseIn } from "../../views/main/LibraryOrganise";
 import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import {
-  Badge, Banner, Breadcrumbs, Button, Card, Chip, Dialog, Icon, Segmented, useFocusTrap, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
+  Badge, Banner, Button, Card, Dialog, Icon, LabelDot, PickBox, useFocusTrap, EmptyState, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
-import { binHours, binSentence, inView, isUntranscribed, LIST_VIEWS, rowModel, viewCounts, VIEW_NAMES, type ListView, type SavedView } from "./model";
+import { binHours, binSentence, isUntranscribed, rowModel, type SavedView } from "./model";
+import { GROUP_NAMES, GROUP_ORDER, sections, SORT_NAMES, SORT_ORDER } from "./filters";
 import {
-  applyFilters, chipLabel, FILTER_KEYS, FILTER_NAMES, filterCount, filterOptions, GROUP_NAMES, sections, SORT_NAMES, toggleFilter,
-  type FilterKey, type Filters,
-} from "./filters";
-import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
-import { recordingName, searchItems, type SortKey } from "../../lib/library";
+  activeSections, cleanSpec, clearSection, facetCounts, filterFacts, inLibraryView, matchesSearch, prepare, searchWords, sourceOf, toggleValue,
+  type FilterSpec, type LibraryViewId, type ProjectNode, type SectionKey,
+} from "./facets";
+import { FilterPanel, FilterPills } from "./FilterPanel";
+import { isView, useMyViews, viewsStore, type ViewSpec } from "./myViews";
+import { ALL_SCOPE, fromFolder, fromOldView, scopeKey, scopeName, type LibraryScope } from "./scope";
+import { syncLibrary } from "./syncClock";
+import { ViewNameDialog } from "./LibraryNav";
+import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type LibraryViewChoice } from "../../lib/libraryGroups";
+import { recordingName, type SortKey } from "../../lib/library";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, type Density, type Preferences } from "../../lib/shell";
 import { RecordingPage } from "./RecordingPage";
 import { useRowViews } from "../../lib/rowViews";
 import { SourceAvatar } from "./SourceAvatar";
-import { LibraryTop, NeedsButton, needsLabel, useLibraryNeeds, type LibraryTopProps } from "./LibraryTop";
-import { useHeaderFold, type Foldable } from "./headerFold";
-import type { NeedsAction } from "../home/HomeV2";
-import { QueueV2, queueCovers } from "./QueueV2";
+import { LibraryTop, type LibraryTopProps } from "./LibraryTop";
+import { QueueV2 } from "./QueueV2";
 import { useLibraryQueue } from "../../views/main/LibraryQueue";
-import { addToListMenu, inPlace, listKey, ListsRow, placeGone, placeName, unreadCount, useLists, type Place } from "./lists";
+import { addToListMenu, listKey, NewLabelFor, useLists } from "./lists";
 import { columnsMenu, LibraryTable, loadColumns, loadLayout, saveColumns, saveLayout, type Column, type Layout } from "./LibraryTable";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
@@ -42,7 +48,6 @@ import {
   TranscribeDialog, WhatsAppDialog,
 } from "./organise";
 
-/** What the recording page adds to the one menu: its language item, its view-aware Export ▸, Save audio. */
 /** The recording page's own parts of the menu; `ai` copies for AI in the view on screen (a row copies in its default view). */
 export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void; ai?: () => void };
 
@@ -62,6 +67,24 @@ const isUnderWay = (i: LibraryItem) => ["pending", "submitted", "processing"].in
 const MAX_BULK = 200;
 const MAX_TRANSCRIBE = 50;
 
+/** Results follow the panel this long after the last tick (counts and list, instantly enough, never on every key). */
+export const FILTER_DEBOUNCE_MS = 150;
+/** Under this window width the filter panel is a drawer over the list: tokens.css `--el-breakpoint-panel` (a test keeps them one). */
+export const DRAWER_BELOW = 1280;
+const PANEL_KEY = "echoledger-library-filters-open";
+/** A search is one step of Back and Forward once typing has stopped this long. */
+const SEARCH_STEP_MS = 700;
+/** How many steps Back keeps. */
+const HISTORY_MAX = 50;
+/** A place Back and Forward go to: what the sidebar chose, the filters and the search. */
+type Place = { scope: LibraryScope; spec: FilterSpec; query: string };
+/** The search box's placeholder says what it finds where it has room (tokens.css --el-breakpoint-wide), less below
+ * --el-breakpoint-medium. */
+const WIDE = 1440;
+/** …and with the filter panel open beside the list. */
+const WIDE_WITH_PANEL = 1600;
+const NARROW = 1024;
+
 /** Keys the Library answers anywhere but in a field, a dialog or a menu. */
 const typing = (target: EventTarget | null) =>
   target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"]'));
@@ -69,26 +92,64 @@ const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator
 
 type Message = { id: number; text: string; action?: { label: string; run: () => void } };
 
-/** The views the When and Marked chips own: asked for from outside, they open as the chip with that value ticked. */
-const CHIP_VIEWS: Partial<Record<ListView, { key: FilterKey; value: string }>> = {
-  today: { key: "when", value: "today" }, this_week: { key: "when", value: "this_week" },
-  pinned: { key: "marked", value: "pinned" }, bookmarked: { key: "marked", value: "bookmarked" },
+const readPanel = () => {
+  try {
+    return window.localStorage.getItem(PANEL_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+const savePanel = (open: boolean) => {
+  try {
+    window.localStorage.setItem(PANEL_KEY, open ? "1" : "0");
+  } catch {
+    // Remembered for this session only.
+  }
+};
+
+/** The window's size, kept up to date (the filter panel is a drawer under 1280 px, and as tall as the window). */
+function useWindowSize(): { width: number; height: number } {
+  const [size, setSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  useEffect(() => {
+    const on = () => setSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return size;
+}
+
+/** What a library view says when nothing is in it. */
+const EMPTY_VIEW: Partial<Record<LibraryViewId, { title: string; body: string }>> = {
+  needs: { title: "Nothing needs you", body: "Uploads and transcripts that failed, calls waiting for your decision and recordings stuck for a day show here." },
+  unread: { title: "You've opened every recording", body: "New recordings show here until you open them." },
+  important: { title: "Nothing marked important yet", body: "Recordings you mark important show here." },
+  not_transcribed: { title: "Everything is transcribed", body: "Recordings without a transcript show here." },
+  audio_only: { title: "No audio-only recordings", body: "Calls saved as audio only show here, to transcribe later." },
 };
 
 export type LibraryV2Props = {
+  /** Import (the empty Library's button; the sidebar's ● Record ▾ has it too). */
   onImport?: () => void;
   onRecord?: () => void;
   /** Open this recording (a notice, the palette, a link); `seq` makes the same one open again. */
   openRequest?: { id: string; seq: number; ms?: number } | null;
-  /** Open the waiting recordings at the top of the list (Activity's Review); `seq` makes it open again. */
+  /** Open the calls waiting for a decision (Activity's Review): Needs you, its list open; `seq` makes it open again. */
   reviewRequest?: { seq: number } | null;
-  /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
+  /** A view from before the redesign (Home's "isn't transcribed", a notice): opened where it lives now. */
   viewRequest?: { view: SavedView; seq: number } | null;
-  /** A smart folder of the sidebar (classic's: the Inbox, an app, Voice notes, Imported); null for every recording. */
+  /** What the sidebar chose: a library view, one of My views, a label or Trash; `seq` makes the same one open again. */
+  scopeRequest?: { scope: LibraryScope; seq: number } | null;
+  /** The Library moved somewhere itself (Save as view opens the new view; Needs you from Activity's Review). */
+  onScope?: (scope: LibraryScope) => void;
+  /** Open the filters (the sidebar's "+ New view"); `seq` makes it open again. */
+  filtersRequest?: { seq: number } | null;
+  /** The recordings and those opened here since they were read: the sidebar counts from them. */
+  onItems?: (items: readonly LibraryItem[], read: ReadonlySet<string>) => void;
+  /** A smart folder from before the redesign (the palette, a notice): its Source or Project filter. */
   folder?: SmartFolder | null;
-  /** The folder's way back to every recording (its chip's ×, Clear all). */
+  /** The filters were cleared: the folder asked for is done with. */
   onFolder?: (folder: SmartFolder | null) => void;
-  /** Library as the start screen (plan 2): the get-started card on top, and what needs action in the header. */
+  /** Library as the start screen (plan 2): the get-started card on top. */
   top?: Omit<LibraryTopProps, "items"> & { onActivity: () => void };
   /** Opens a project (the recording page's project name). */
   onOpenProject?: (id: string) => void;
@@ -98,11 +159,11 @@ export type LibraryV2Props = {
   onOpenChange?: (id: string | null) => void;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, reviewRequest, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
+export function LibraryV2({ onImport, openRequest, viewRequest, reviewRequest, scopeRequest, onScope, filtersRequest, onItems, top, onOpenProject, folder = null, onFolder, initialOpen = null, onOpenChange }: LibraryV2Props) {
   const recovered = useRecovered();
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<SavedView>("all");
+  const [scope, setScopeNow] = useState<LibraryScope>(ALL_SCOPE);
   const [query, setQuery] = useState("");
   const [openId, setOpenIdNow] = useState<string | null>(null);
   // Recently opened (Sort by) remembers each recording opened here.
@@ -118,15 +179,30 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     }
     setOpenIdNow(id);
   }, []);
-  const [filters, setFilters] = useState<Filters>({});
-  // Lists (D14): the chip chosen in the row, and the new-list dialog (from "+", or Add to list › New list… with its ids).
-  const { lists, setLists, reload: reloadLists } = useLists();
-  const [place, setPlace] = useState<Place>("all");
-  const [creatingList, setCreatingList] = useState<{ ids: string[] } | null>(null);
-  // The chosen list was deleted or renamed (here, on another device, or found missing): back to All.
-  useEffect(() => {
-    if (placeGone(place, lists)) setPlace("all");
-  }, [place, lists]);
+  // The filters: what the panel and the pills show at once (`spec`), and what the list and the counts follow
+  // (`applied`), 150 ms after the last tick; a change from elsewhere (a view, Clear all) applies at once.
+  const [spec, setSpecNow] = useState<FilterSpec>({});
+  const [applied, setApplied] = useState<FilterSpec>({});
+  const debounce = useRef(0);
+  const setSpec = useCallback((next: FilterSpec, at: "now" | "soon" = "now") => {
+    setSpecNow(next);
+    window.clearTimeout(debounce.current);
+    if (at === "now") setApplied(next);
+    else debounce.current = window.setTimeout(() => setApplied(next), FILTER_DEBOUNCE_MS);
+  }, []);
+  useEffect(() => () => window.clearTimeout(debounce.current), []);
+  const { lists, reload: reloadLists } = useLists();
+  const myViews = useMyViews();
+  const [newLabel, setNewLabel] = useState<{ ids: string[] } | null>(null);
+  const [savingView, setSavingView] = useState(false);
+  // The filter panel: open or closed is remembered; under 1280 px it is a drawer and starts closed.
+  const { width, height } = useWindowSize();
+  const drawer = width < DRAWER_BELOW;
+  const [panel, setPanelNow] = useState(() => readPanel() && window.innerWidth >= DRAWER_BELOW);
+  const setPanel = useCallback((open: boolean) => {
+    setPanelNow(open);
+    savePanel(open);
+  }, []);
   // Density, shared with Settings › Appearance (classic's View menu has it too): both follow each other at once.
   const [density, setDensityNow] = useState<Density>(() => loadPreferences().density);
   useEffect(() => {
@@ -143,9 +219,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     setDensityNow(next);
     window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: prefs }));
   };
-  /** The words of each value when it was ticked, for a chip whose value this view doesn't offer. */
-  const knownValues = useRef<Record<string, string>>({});
-  // Sort and group, remembered per view on this computer (classic's View menu).
+  // Sort and group, remembered on this computer (classic's View menu); a saved view keeps its own.
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [syncing, setSyncing] = useState(false);
@@ -190,8 +264,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
 
   const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
   // The queue at the top of the list (waiting calls, uploads), kept here rather than in the list: it stays loaded while
-  // the list is away (Trash, a selection, a recording open), so the header's needs button, which leaves to it what it
-  // shows, knows that the moment the list is back and never shows a count it then corrects.
+  // the list is away (Trash, a selection, a recording open).
   const queue = useLibraryQueue(useCallback((text: string) => say(text), [say]));
 
   const load = useCallback(async () => {
@@ -210,20 +283,39 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       setBinError(errorMessage(e));
     }
   }, []);
+  // Imported (a Source choice) is the server's word: recordings carry it in their facets since 2.0.0-p; for an older
+  // server this computer asks which recordings it files there, once and on each change.
+  const [imported, setImported] = useState<ReadonlySet<string> | undefined>(undefined);
+  // The person's projects as a tree: Project offers them all, and "Project is Acme" keeps Acme's subfolders too.
+  const [projects, setProjects] = useState<readonly ProjectNode[] | undefined>(undefined);
+  const loadImported = useCallback(() => {
+    api.libraryFolder("imported").then((list) => setImported(new Set((list ?? []).filter((i) => !i.deleted).map((i) => i.id)))).catch(() => undefined);
+    api.clients().then((r) => setProjects((r?.data ?? []).map((p) => ({ id: p.id, name: p.name, parent_id: p.parent_id ?? null })))).catch(() => undefined);
+  }, []);
 
   // The rows' "Converting to Roman Urdu… 60%" (U19): asked about while written; once one is ready or failed the
   // Library syncs, for the title the server may have written in Roman Urdu meanwhile.
   const quietSync = useCallback(() => {
-    api.refreshLibrary().then(setItems).catch(() => undefined);
+    syncLibrary().then(setItems).catch(() => undefined);
   }, []);
   const rowViews = useRowViews(items, quietSync);
   useEffect(() => {
-    void load().then(() => api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e))));
-    const un = listen("library:updated", () => void load());
+    void load().then(() => syncLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e))));
+    loadImported();
+    const un = listen("library:updated", () => {
+      void load();
+      loadImported();
+    });
     return () => {
       void un.then((f) => f());
     };
-  }, [load]);
+  }, [load, loadImported]);
+  // The sidebar counts from the same recordings.
+  const onItemsRef = useRef(onItems);
+  onItemsRef.current = onItems;
+  useEffect(() => {
+    if (items) onItemsRef.current?.(items, readHere);
+  }, [items, readHere]);
   // While something uploads or is transcribed the list syncs every 5 s (classic's), until nothing is under way.
   const busyItems = (items ?? []).some((i) => !i.deleted && (i.status === "uploading" || isUnderWay(i)));
   useEffect(() => {
@@ -232,26 +324,27 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     let timer = 0;
     const next = () => {
       timer = window.setTimeout(() => {
-        api.refreshLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e)));
+        syncLibrary().then((list) => { setItems(list); setSyncError(null); }).catch((e) => setSyncError(errorMessage(e)));
         next();
       }, Date.now() - started < RESYNC_FAST_FOR_MS ? RESYNC_MS : RESYNC_SLOW_MS);
     };
     next();
     return () => window.clearTimeout(timer);
   }, [busyItems]);
+  const trash = scope.kind === "trash";
   useEffect(() => {
-    if (view === "trash") void loadBin();
-    else setChoiceNow(loadChoice(view));
+    if (trash) void loadBin();
     endSelection();
-  }, [view, loadBin, endSelection]);
+  }, [trash, loadBin, endSelection]);
+  const savedView = scope.kind === "saved" ? myViews.find((v) => isView(v, scope.id)) ?? null : null;
   const setChoice = (next: LibraryViewChoice) => {
     setChoiceNow(next);
-    if (view !== "trash") saveChoice(view, next);
+    if (!savedView && !trash) saveChoice("all", next);
   };
   const sync = async () => {
     setSyncing(true);
     try {
-      setItems(await api.refreshLibrary());
+      setItems(await syncLibrary());
       setError(null);
       setSyncError(null);
     } catch (e) {
@@ -260,59 +353,132 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       setSyncing(false);
     }
   };
+
+  // The scope asked for last (set at once, before the state follows): what the checks below look at.
+  const scopeNow = useRef<LibraryScope>(ALL_SCOPE);
   /**
-   * The list as drawn: the view, the filters, the search, then sorted and in sections. `rows` are the rows on screen
-   * (folded sections left out): the only ones selection, Select all, a Shift-range and Delete can reach. `matching`
-   * counts every recording that fits, folded or not.
+   * Shows a scope (from the sidebar, a request, or here): its filters, search and sort (a saved view's own), or none.
+   * `report`: say so to the sidebar (when it came from here).
    */
-  const listOf = (all: readonly LibraryItem[] | null) => {
-    if (!all || view === "trash") return { groups: [], rows: [] as LibraryItem[], matching: 0 };
-    const inThis = applyFilters(all.filter((i) => inView(i, view as ListView) && inPlace(i, place, readHere) && inFolder(i)), filters);
-    const groups = sections(searchItems(inThis, query), choice.group, choice.sort, opened, view !== "pinned");
-    return { groups, rows: groups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.items), matching: groups.reduce((n, g) => n + g.items.length, 0) };
-  };
-  // A view the chips own (the sidebar's Pinned, the palette's Today) opens as that chip, the rest as the view.
+  const show = useCallback((next: LibraryScope, filters: FilterSpec = {}, report = false, exact?: { query: string }) => {
+    scopeNow.current = next;
+    setScopeNow(next);
+    setOpenIdNow(null);
+    setCollapsed(new Set());
+    const view = next.kind === "saved" ? viewsStore.list().find((v) => isView(v, next.id)) : null;
+    if (exact) {
+      // Back or Forward: the place as it was left, its filters and search exactly.
+      setSpec(filters);
+      setQuery(exact.query);
+      if (view) setChoiceNow({ sort: view.spec.sort, group: view.spec.group });
+      else setChoiceNow(loadChoice("all"));
+    } else if (view) {
+      setSpec(view.spec.filters);
+      setQuery(view.spec.search ?? "");
+      setChoiceNow({ sort: view.spec.sort, group: view.spec.group });
+    } else {
+      setSpec(filters);
+      setQuery("");
+      setChoiceNow(loadChoice("all"));
+    }
+    if (report) onScope?.(next);
+  }, [onScope, setSpec]);
+  useEffect(() => {
+    if (scopeRequest) show(scopeRequest.scope);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeRequest]);
+  // A view from before the redesign opens where it lives now (Today: All with Date: Today; Waiting: Needs you…).
   useEffect(() => {
     if (!viewRequest) return;
-    setOpenId(null);
-    const chip = CHIP_VIEWS[viewRequest.view as ListView];
-    if (chip) {
-      setView("all");
-      setFilters({ [chip.key]: [chip.value] });
-    } else setView(viewRequest.view);
+    const { scope: to, filters } = fromOldView(viewRequest.view);
+    show(to, filters, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewRequest]);
-  // A smart folder: what this computer can tell (the Inbox, an app's calls), else the server's list (Imported).
-  const [folderIds, setFolderIds] = useState<ReadonlySet<string> | null>(null);
-  // The server's list of the folder didn't come: said above the list, with Try again (what this computer can tell
-  // shows meanwhile).
-  const [folderError, setFolderError] = useState<string | null>(null);
-  const [folderTry, setFolderTry] = useState(0);
-  const [folderTrying, setFolderTrying] = useState(false);
+  // Activity's Review: Needs you, the waiting calls' list open (QueueV2 opens it for the request).
   useEffect(() => {
-    setFolderIds(null);
-    setFolderError(null);
+    if (reviewRequest) show({ kind: "view", view: "needs" }, {}, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewRequest]);
+  // A smart folder from before the redesign: All with its Source or Project chosen.
+  useEffect(() => {
     if (!folder) return;
-    setOpenId(null);
-    setView("all");
+    const filters = fromFolder(folder);
+    if (filters) show(ALL_SCOPE, filters, true);
+    // Taken: the same folder can be asked for again.
+    onFolder?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folder]);
+  // The sidebar's "+ New view": the filters open, to choose some and Save as view.
   useEffect(() => {
-    if (!folder) return;
-    let live = true;
-    setFolderTrying(true);
-    api.libraryFolder(folder).then((list) => {
-      if (!live) return;
-      setFolderIds(new Set(list.filter((i) => !i.deleted).map((i) => i.id)));
-      setFolderError(null);
-    }).catch((e) => live && setFolderError(errorMessage(e))).finally(() => live && setFolderTrying(false));
-    return () => {
-      live = false;
-    };
-  }, [folder, folderTry]);
-  const inFolder = (i: LibraryItem) => {
-    if (!folder) return true;
-    if (folderIds) return folderIds.has(i.id);
-    return inFolderHere(i, folder) ?? false;
+    if (filtersRequest) setPanel(true);
+  }, [filtersRequest, setPanel]);
+  // The label shown was deleted, or the view: back to All (the scope asked for last: a rename asks for the new name).
+  useEffect(() => {
+    const now = scopeNow.current;
+    if (now.kind === "label" && lists && !lists.some((l) => l.key === now.key)) show(ALL_SCOPE, {}, true);
+    if (now.kind === "saved" && !myViews.some((v) => v.id === now.id)) {
+      // A view saved here has the server's id once it is sent: the same view, shown as it is.
+      const sent = myViews.find((v) => isView(v, now.id));
+      if (!sent) return show(ALL_SCOPE, {}, true);
+      const next: LibraryScope = { kind: "saved", id: sent.id };
+      scopeNow.current = next;
+      setScopeNow(next);
+      onScope?.(next);
+    }
+  }, [scope, lists, myViews, show, onScope]);
+
+  // Back and Forward (⌘[ and ⌘], the mouse's back and forward buttons): through the places shown, each with its
+  // filters and search as they were left. A search is one step once typing stops.
+  const [searchStep, setSearchStep] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearchStep(query), SEARCH_STEP_MS);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+  // `settling`: a Back or Forward is under way; whatever the Library settles on meanwhile (a view deleted since falls
+  // back to All recordings, a view saved offline has the server's id now) is where it went, never a new step.
+  const steps = useRef<{ back: Place[]; forward: Place[]; now: Place | null; settling: number }>({ back: [], forward: [], now: null, settling: 0 });
+  // A view is the same place under the id it had here and the server's (its client_ref).
+  const placeKey = (p: Place) => {
+    const view = p.scope.kind === "saved" ? viewsStore.list().find((v) => isView(v, p.scope.kind === "saved" ? p.scope.id : "")) : undefined;
+    return JSON.stringify([view?.client_ref ? `saved-ref:${view.client_ref}` : scopeKey(p.scope), cleanSpec(p.spec), p.query.trim()]);
   };
+  useEffect(() => {
+    const here: Place = { scope, spec: applied, query: searchStep };
+    const h = steps.current;
+    if (h.settling > 0) {
+      h.now = here;
+      return;
+    }
+    if (h.now && placeKey(h.now) === placeKey(here)) return;
+    if (h.now) {
+      h.back = [...h.back, h.now].slice(-HISTORY_MAX);
+      h.forward = [];
+    }
+    h.now = here;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, applied, searchStep]);
+  const walk = useCallback((way: "back" | "forward") => {
+    const h = steps.current;
+    const to = way === "back" ? h.back[h.back.length - 1] : h.forward[h.forward.length - 1];
+    if (!to || !h.now) return false;
+    if (way === "back") {
+      h.back = h.back.slice(0, -1);
+      h.forward = [...h.forward, h.now];
+    } else {
+      h.forward = h.forward.slice(0, -1);
+      h.back = [...h.back, h.now];
+    }
+    // Where it goes is the place now, at once: a second press before the Library has settled steps on from there.
+    h.now = to;
+    h.settling++;
+    window.setTimeout(() => {
+      h.settling = Math.max(0, h.settling - 1);
+    }, 0);
+    show(to.scope, to.spec, true, { query: to.query });
+    setSearchStep(to.query);
+    return true;
+  }, [show]);
+
   // The recording open when the main window closed opens again (classic's), once; what is opened after is kept.
   const restored = useRef(false);
   const restoredId = useRef<string | null>(null);
@@ -344,7 +510,6 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   }, [openId]);
   useEffect(() => {
     if (openRequest) {
-      setView("all");
       setOpenAt(openRequest.ms ? { id: openRequest.id, ms: openRequest.ms, seq: openRequest.seq } : null);
       setOpenId(openRequest.id);
     }
@@ -353,7 +518,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const [found, setFound] = useState<SearchResult["data"]>([]);
   useEffect(() => {
     const q = query.trim();
-    if (q.length < 2 || view === "trash") {
+    if (q.length < 2 || trash) {
       setFound([]);
       return;
     }
@@ -365,13 +530,48 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [query, view]);
+  }, [query, trash]);
   /** A transcript match: the recording opened at its moment. */
   const [openAt, setOpenAt] = useState<{ id: string; ms: number; seq: number } | null>(null);
   const openHit = (id: string, ms: number) => {
     setOpenAt({ id, ms, seq: ++seq.current });
     setOpenId(id);
   };
+
+  // What the list is made of (facets.ts): every recording's facts once per change; the scope's (a library view, a
+  // saved view's starting view, a label); searched; then the counts for the panel and the list itself.
+  const prepared = useMemo(() => prepare(items ?? [], { read: readHere, imported, projects, lists: lists ?? undefined, now: Date.now() }),
+    [items, readHere, imported, projects, lists]);
+  // A saved view starts from All (the contract keeps filters, not a library view).
+  const baseView: LibraryViewId = scope.kind === "view" ? scope.view : "all";
+  const labelKey = scope.kind === "label" ? scope.key : null;
+  // The search (facets.ts, as the contract has it): every word in the title, or every word in the transcript.
+  const searched = useMemo(() => {
+    if (trash) return [];
+    const words = searchWords(query);
+    return prepared.facts.filter((f) => inLibraryView(f, baseView) && (!labelKey || f.values.labels.includes(labelKey)) && matchesSearch(f, words));
+  }, [prepared, baseView, labelKey, query, trash]);
+  // Counted among what the view and the search keep; every option of the whole library offered.
+  // Worked out only when asked for (the panel open, or a pill being edited), once per change: typing in the search
+  // never counts every option on every key.
+  const counts = useMemo(() => {
+    let made: ReturnType<typeof facetCounts> | null = null;
+    return () => (made ??= facetCounts(searched, applied, prepared.names, Date.now(), undefined, prepared.facts));
+  }, [searched, applied, prepared]);
+  // Needs you lists the server's waiting recordings too (a call waiting for Keep or Discard: session `recording`,
+  // which no other view has), whatever the filters and the search, as the server's Needs you does.
+  const waitingHere = useMemo(() => (baseView === "needs" && !trash ? (items ?? []).filter((i) => !i.deleted && i.status === "recording") : []), [items, baseView, trash]);
+  const shownItems = useMemo(() => [...waitingHere, ...filterFacts(searched, applied).map((f) => f.item)], [waitingHere, searched, applied]);
+  // Only pinned recordings on screen already (Marked is Pinned alone): no Pinned section of its own.
+  const onlyPinned = applied.marked?.values.length === 1 && applied.marked.values[0] === "pinned" && applied.marked.op !== "is_not";
+  const groups = useMemo(() => sections(shownItems, choice.group, choice.sort, opened, !onlyPinned),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [shownItems, choice, opened, onlyPinned]);
+  const shown = useMemo(() => groups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.items), [groups, collapsed]);
+  const matching = shownItems.length;
+  const filtersOn = activeSections(spec).length;
+  /** The list as drawn (for a delete's next row): the rows on screen, folded sections left out. */
+  const listOf = (_all: readonly LibraryItem[] | null) => ({ rows: shown });
 
   const remove = async (item: LibraryItem) => {
     const title = item.title?.trim() || "Recording";
@@ -519,7 +719,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     // a server without lists keeps Label….
     if (!lists) add("label", { label: "Label…", icon: Icons.LabelIcon, group: "Organise", onPick: () => setOrganise({ kind: "label", ids: [...ids] }) });
     if (lists) {
-      add("lists", addToListMenu({ lists, chosen, onToggle: (list, on) => void putInList(ids, list, on), onNew: () => setCreatingList({ ids: [...ids] }) }));
+      add("lists", addToListMenu({ lists, chosen, onToggle: (list, on) => void putInList(ids, list, on), onNew: () => setNewLabel({ ids: [...ids] }) }));
     }
     if (!all((i) => !!i.pinned)) add("pin", { label: "Pin", icon: Icons.PinIcon, group: "Organise", onPick: () => void bulk(ids, "pin", "Pinned") });
     if (!none((i) => !!i.pinned)) add("unpin", { label: "Unpin", icon: Icons.PinIcon, group: "Organise", onPick: () => void bulk(ids, "unpin", "Unpinned") });
@@ -544,7 +744,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       await api.restoreSession(b.id);
       setBin((list) => list?.filter((x) => x.id !== b.id) ?? list);
       await load();
-      say(`"${b.title || "Recording"}" restored`, { label: "Open", run: () => { setView("all"); setOpenId(b.id); } });
+      say(`"${b.title || "Recording"}" restored`, { label: "Open", run: () => { show(ALL_SCOPE, {}, true); setOpenId(b.id); } });
     } catch (e) {
       say(errorMessage(e));
     }
@@ -561,28 +761,6 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   };
 
   const open = openId ? items?.find((i) => i.id === openId) ?? null : null;
-  const counts = items ? viewCounts(items) : null;
-  // With the needs button in the header, its least-used actions fold into More where the row has no room for it
-  // (headerFold.ts): Select, then Sync, then Trash. `headKeys` names the actions as the header last drew them.
-  // The header as drawn now (a callback ref): it goes while a recording is open, and is measured again when it is back.
-  const [headEl, setHeadEl] = useState<HTMLElement | null>(null);
-  const headKeys = useRef<readonly string[]>([]);
-  // What needs action (LibraryTop.tsx): the quiet button before Trash, the only place the Library says it.
-  const needs = useLibraryNeeds(top?.status ?? null, items, queueCovers(queue), { waiting: queue.pending, uploads: queue.uploads });
-  const headerNeeds = !!needs && view !== "trash" && !selecting;
-  const foldable: Foldable[] = (counts?.all ?? 0) > 0 ? ["trash", "sync", "select"] : ["trash", "sync"];
-  const needsWords = needs ? Object.values(needsLabel(needs)).join(" ") : "";
-  const folded = useHeaderFold(headEl, headKeys, foldable, headerNeeds, `${syncing}|${needsWords}`);
-  const { groups, rows: shown, matching } = useMemo(() => listOf(items),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, view, filters, query, choice, opened, collapsed, folder, folderIds, place, readHere]);
-  // What the filters offer: the recordings of this view before the filters, so a tick never hides its own choice.
-  // Worked out once per change, for the chips' menus and their words alike.
-  const options = useMemo(() => {
-    const inThisView = items && view !== "trash" ? items.filter((i) => inView(i, view as ListView)) : [];
-    return Object.fromEntries(FILTER_KEYS.map((k) => [k, filterOptions(inThisView, k)])) as Record<FilterKey, ReturnType<typeof filterOptions>>;
-  }, [items, view]);
-  const filtersOn = filterCount(filters);
   const shownIds = useMemo(() => shown.map((i) => i.id), [shown]);
   // A row that leaves the screen (a filter, the search, a folded section, another view) leaves the selection too.
   useEffect(() => {
@@ -592,6 +770,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const pickedIds = shownIds.filter((id) => picked.has(id));
   const allPicked = shownIds.length > 0 && pickedIds.length === shownIds.length;
   shownCount.current = shownIds.length;
+  // Picking turns the toolbar into the selection bar; it stays until Esc, Cancel, or nothing is picked.
+  const choosing = selecting || pickedIds.length > 0;
   // More picked than the core takes at once: the actions wait and the bar says why.
   const tooMany = pickedIds.length > MAX_BULK;
   const toggle = (id: string) => {
@@ -604,6 +784,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       return next;
     });
   };
+  /** A range from the last ticked row to this one, added to what is picked. */
+  const pickRange = (id: string) => {
+    if (!anchor.current || !shownIds.includes(anchor.current)) return toggle(id);
+    const [a, b] = [shownIds.indexOf(anchor.current), shownIds.indexOf(id)].sort((x, y) => x - y);
+    setSelecting(true);
+    setPicked((now) => new Set([...now, ...shownIds.slice(a, b + 1)]));
+    anchor.current = id;
+  };
   const startSelecting = (id: string) => {
     setSelecting(true);
     anchor.current = id;
@@ -614,13 +802,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     setPicked(new Set(shownIds));
   };
   /**
-   * Dragging rows onto a project or the Inbox in the sidebar (classic's, lib/dragMove.ts): the row pressed, or every
-   * picked row when it is one of them; the same move as Move to project….
+   * Dragging rows onto a project in the sidebar (classic's, lib/dragMove.ts): the row pressed, or every picked row when
+   * it is one of them; the same move as Move to project….
    */
   const rowDrag = (item: LibraryItem, e: ReactPointerEvent<HTMLButtonElement>) => {
-    if (view === "trash") return;
+    if (trash) return;
     beginRecordingDrag(e, () => {
-      const ids = selecting && picked.has(item.id) ? pickedIds : [item.id];
+      const ids = choosing && picked.has(item.id) ? pickedIds : [item.id];
       const titles = (items ?? []).filter((i) => ids.includes(i.id)).map((i) => i.title);
       return { ids, label: dragLabel(titles) };
     }, (ids, projectId) => void dropMove(ids, projectId));
@@ -629,8 +817,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     if (ids.length > MAX_BULK) return say(`Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`);
     try {
       const changed = await api.bulkSessions(ids, "move", projectId);
-      const name = projectId ? (await api.clients().catch(() => null))?.data.find((c) => c.id === projectId)?.name ?? "the project" : "the Inbox";
-      say(ids.length === 1 ? `Moved to ${name}` : `${recordingsWord(changed)} moved to ${name}`);
+      if (!projectId) {
+        // No project (today's Inbox): out of every project.
+        say(ids.length === 1 ? "Taken out of its project" : `${recordingsWord(changed)} taken out of their projects`);
+      } else {
+        const name = (await api.clients().catch(() => null))?.data.find((c) => c.id === projectId)?.name ?? "the project";
+        say(ids.length === 1 ? `Moved to ${name}` : `${recordingsWord(changed)} moved to ${name}`);
+      }
       endSelection();
       await load();
     } catch (e) {
@@ -640,28 +833,75 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   const rowClick = (item: LibraryItem, e: ReactMouseEvent<HTMLButtonElement>) => {
     // The press that ended a drag never opens or ticks the row.
     if (dragJustEnded()) return;
-    if (e.shiftKey && anchor.current && shownIds.includes(anchor.current)) {
-      // A range from the last ticked row to this one, added to what is picked.
-      const [a, b] = [shownIds.indexOf(anchor.current), shownIds.indexOf(item.id)].sort((x, y) => x - y);
-      setSelecting(true);
-      setPicked((now) => new Set([...now, ...shownIds.slice(a, b + 1)]));
-      anchor.current = item.id;
-    } else if (selecting || e.shiftKey || e.metaKey || e.ctrlKey) {
-      toggle(item.id);
-    } else {
-      setOpenId(item.id);
-    }
+    if (e.shiftKey && anchor.current && shownIds.includes(anchor.current)) pickRange(item.id);
+    else if (choosing || e.shiftKey || e.metaKey || e.ctrlKey) toggle(item.id);
+    else setOpenId(item.id);
   };
   const rowMenu = (item: LibraryItem, e: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLButtonElement>) => {
     const at = "clientX" in e && (e.clientX || e.clientY) ? { x: e.clientX, y: e.clientY } : menuPointFor(e.currentTarget);
-    setContext({ at, ids: selecting && picked.has(item.id) ? pickedIds : [item.id] });
+    setContext({ at, ids: choosing && picked.has(item.id) ? pickedIds : [item.id] });
   };
+  /** A row's checkbox: ticks it (Shift: the range from the last one ticked). */
+  const pickRow = (item: LibraryItem, e: ReactMouseEvent<HTMLInputElement>) => (e.shiftKey ? pickRange(item.id) : toggle(item.id));
 
-  // Keys for the list: Cmd/Ctrl+A picks every row shown, Delete sends the picked (or the focused) ones to Trash with
-  // Undo, Esc ends selection, J and K move between rows, X ticks the focused row.
+  /** A row's source logo or label: the list shows only that source, or that label, too (it adds to the section). */
+  const quick = (section: Exclude<SectionKey, "date">, value: string) => {
+    const now = spec[section];
+    if (now?.values.includes(value) && now.op !== "is_not") return;
+    const base = now?.op === "is_not" ? { ...spec, [section]: { op: "is" as const, values: [] } } : spec;
+    setSpec(toggleValue(base, section, value));
+  };
+  const clearFilters = () => {
+    setSpec({});
+    setQuery("");
+  };
+  /**
+   * What Save as view keeps (contract 2.0.0-p: filters, search, sort, group, density). Where the list started from a
+   * label, Important or Not transcribed, that is kept as its filter; Needs you, Unread and Audio only have none, so a
+   * view saved there keeps the filters and the search (the dialog says so).
+   */
+  const viewSpec = (): ViewSpec => {
+    let filters = spec;
+    const add = (section: "labels" | "marked" | "status", value: string) => {
+      if (!filters[section]?.values.includes(value) || filters[section]?.op === "is_not") filters = toggleValue(filters[section]?.op === "is_not" ? clearSection(filters, section) : filters, section, value);
+    };
+    if (labelKey) add("labels", labelKey);
+    if (baseView === "important") add("marked", "important");
+    if (baseView === "not_transcribed") add("status", "not_transcribed");
+    return { filters, search: query.trim() || null, sort: choice.sort, group: choice.group, density };
+  };
+  const unsaved = baseView === "needs" || baseView === "unread" || baseView === "audio_only";
+  const canSave = filtersOn > 0 || !!query.trim() || (baseView !== "all" && !unsaved) || !!labelKey;
+  const changed = !!savedView && JSON.stringify([cleanSpec(spec), query.trim() || null, choice.sort, choice.group])
+    !== JSON.stringify([cleanSpec(savedView.spec.filters), savedView.spec.search ?? null, savedView.spec.sort, savedView.spec.group]);
+
+  // Keys for the list (PLAN_LIBRARY_FILTERS §5): F the filters; ⌘F / Ctrl+F (and /) the search; Esc ends a selection,
+  // else closes the filters; J and K move between rows, Enter opens one, X ticks it; ⌘A / Ctrl+A picks every row shown;
+  // Delete sends the picked (or the focused) ones to Trash with Undo.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keys.current = (e: KeyboardEvent) => {
-    if (organise || context || typing(e.target)) return;
+    if (organise || context || savingView || newLabel) return;
+    const mod = e.metaKey || e.ctrlKey;
+    // ⌘F / Ctrl+F: this Library's search, before the window's (the palette); an open recording keeps it for Find.
+    if (!open && !trash && items && mod && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "f" && !e.defaultPrevented) {
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+      return;
+    }
+    if (typing(e.target)) return;
+    // ⌘[ and ⌘] (Ctrl on Windows): Back and Forward; with a recording open, ⌘[ goes back to the list. Never while typing
+    // (the search, a field, the pill editor) or with a question open.
+    if (mod && !e.altKey && !e.shiftKey && (e.key === "[" || e.key === "]") && !e.defaultPrevented) {
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      e.preventDefault();
+      back.current(e.key === "[" ? "back" : "forward");
+      return;
+    }
+    // One-letter keys (F, /, J, K, X) answer only while focus is in the Library (WCAG 2.1.4, as the web): never while
+    // it is in the sidebar, the player or anywhere else in the window.
+    const inside = e.target instanceof Node && !!root.current?.contains(e.target);
+    if (!mod && !e.altKey && ["f", "F", "/", "j", "k", "x"].includes(e.key) && !inside) return;
     // Esc closes the open recording and goes back to the list (its row gets focus again).
     if (open && e.key === "Escape" && !e.defaultPrevented) {
       e.preventDefault();
@@ -669,19 +909,24 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       setFocusAfter({ rowId: open.id, seq: ++seq.current });
       return;
     }
-    if (open || view === "trash" || !items) return;
-    if (e.key === "/" && !e.metaKey && !e.ctrlKey) {
+    if (open || trash || !items) return;
+    if (e.key === "/" && !mod) {
       e.preventDefault();
       root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
       return;
     }
+    if ((e.key === "f" || e.key === "F") && !mod && !e.altKey) {
+      e.preventDefault();
+      setPanel(!panel);
+      return;
+    }
     const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-row-id]")?.dataset.rowId
       ?? (document.activeElement as HTMLElement | null)?.dataset?.rowId;
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a" && !e.shiftKey) {
+    if (mod && e.key.toLowerCase() === "a" && !e.shiftKey) {
       e.preventDefault();
       pickAll();
-    } else if (e.key === "Delete" || (e.key === "Backspace" && (e.metaKey || e.ctrlKey))) {
-      const ids = selecting && pickedIds.length ? pickedIds : focused ? [focused] : [];
+    } else if (e.key === "Delete" || (e.key === "Backspace" && mod)) {
+      const ids = choosing && pickedIds.length ? pickedIds : focused ? [focused] : [];
       if (!ids.length) return;
       e.preventDefault();
       if (ids.length > MAX_BULK) {
@@ -689,17 +934,20 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
         return;
       }
       deleteOrAsk(ids);
-    } else if (e.key === "Escape" && selecting) {
+    } else if (e.key === "Escape" && choosing) {
       e.preventDefault();
       endSelection();
-    } else if ((e.key === "j" || e.key === "k") && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    } else if (e.key === "Escape" && panel && !e.defaultPrevented) {
+      e.preventDefault();
+      setPanel(false);
+    } else if ((e.key === "j" || e.key === "k") && !mod && !e.altKey) {
       const rows = [...(root.current?.querySelectorAll<HTMLElement>("[data-row-id]") ?? [])];
       if (!rows.length) return;
       e.preventDefault();
       const at = rows.findIndex((r) => r.dataset.rowId === focused);
       const to = at < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, at + (e.key === "j" ? 1 : -1)));
       rows[to].focus();
-    } else if (e.key === "x" && focused && !e.metaKey && !e.ctrlKey) {
+    } else if (e.key === "x" && focused && !mod) {
       e.preventDefault();
       toggle(focused);
     }
@@ -708,6 +956,37 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
     const on = (e: KeyboardEvent) => keys.current(e);
     document.addEventListener("keydown", on);
     return () => document.removeEventListener("keydown", on);
+  }, []);
+  // Back and Forward from a key or the mouse's side buttons: an open recording closes first (Back), else the places.
+  const back = useRef<(way: "back" | "forward") => void>(() => undefined);
+  back.current = (way) => {
+    if (open) {
+      if (way !== "back") return;
+      setOpenId(null);
+      setFocusAfter({ rowId: open.id, seq: ++seq.current });
+      return;
+    }
+    walk(way);
+  };
+  useEffect(() => {
+    // The mouse's back (button 3) and forward (4): never the web view's own page history.
+    const side = (e: MouseEvent) => e.button === 3 || e.button === 4;
+    const down = (e: MouseEvent) => {
+      if (side(e)) e.preventDefault();
+    };
+    const up = (e: MouseEvent) => {
+      if (!side(e)) return;
+      e.preventDefault();
+      // Not behind a question or a dialog.
+      if (document.querySelector('[role="alertdialog"], [aria-modal="true"]')) return;
+      back.current(e.button === 3 ? "back" : "forward");
+    };
+    window.addEventListener("mousedown", down);
+    window.addEventListener("mouseup", up);
+    return () => {
+      window.removeEventListener("mousedown", down);
+      window.removeEventListener("mouseup", up);
+    };
   }, []);
   useEffect(() => {
     if (openId) endSelection();
@@ -725,6 +1004,18 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       {organise?.kind === "label" && <LabelDialog ids={organise.ids} known={knownLabels(items ?? [])} onClose={closeOrganise} say={say} />}
       {organise?.kind === "transcribe" && <TranscribeDialog ids={organise.ids} onClose={closeOrganise} say={say} />}
       {organise?.kind === "whatsapp" && <WhatsAppDialog item={organise.item} onClose={() => setOrganise(null)} say={say} />}
+      {newLabel && <NewLabelFor ids={newLabel.ids} onClose={() => setNewLabel(null)} onMade={(list, ids) => void putInList(ids, list, true)} />}
+      {savingView && (
+        <ViewNameDialog title="Save as view" save="Save view" onClose={() => setSavingView(false)}
+          note={unsaved ? `Saves these filters, the search and the sort as a view in the sidebar, on every device. ${scopeName(scope)} itself stays in the sidebar.`
+            : "Saves these filters, the search and the sort as a view in the sidebar, on every device."}
+          onSave={async (name) => {
+            const made = await viewsStore.create(name, viewSpec());
+            setSavingView(false);
+            show({ kind: "saved", id: made.id }, {}, true);
+            say(`Saved as ${made.name}`);
+          }} />
+      )}
       <Dialog open={!!askDelete} alert title={`Move ${recordingsWord(askDelete?.length ?? 0)} to Trash?`}
         description={`They stay in Trash for ${hoursWords(keepHours)}, then their audio and transcripts are erased. Undo brings them back.`}
         onClose={() => setAskDelete(null)}
@@ -754,7 +1045,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
   );
   // In the table a recording opens in a drawer on the end side, over the table, as classic's: Close, Esc or a press on
   // the scrim closes it. The list opens it as its own page.
-  if (open && (layout !== "table" || view === "trash")) {
+  if (open && (layout !== "table" || trash)) {
     return (
       <div className="el-root el-embedded" data-v2="library" ref={root}>
         {recordingPage}
@@ -763,307 +1054,245 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest, review
       </div>
     );
   }
-  const drawer = open && (
+  const drawerPage = open && (
     <>
       <div className="el-drawer-scrim" aria-hidden="true" onMouseDown={closeOpen} />
       <Drawer label={recordingName(open.title)} onClose={closeOpen}>{recordingPage}</Drawer>
     </>
   );
 
-  const viewMenu: MenuItem[] = [
-    // Today, This week, Pinned and Bookmarked are the When and Marked chips' now: Views ▾ has the rest, one at a time.
-    ...LIST_VIEWS.filter((v) => !CHIP_VIEWS[v]).map((v) => ({ label: VIEW_NAMES[v], checked: view === v, radio: true, count: counts?.[v], onPick: () => setView(v) })),
-  ];
-  const filterMenu = (key: FilterKey): MenuItem[] => options[key].map((o) => ({
-    label: o.label, checked: (filters[key] ?? []).includes(o.value), count: o.count, keepOpen: true,
-    onPick: () => {
-      knownValues.current[`${key}:${o.value}`] = o.label;
-      setFilters((f) => toggleFilter(f, key, o.value));
-    },
-  }));
-  const sortMenu: MenuItem[] = [
-    ...(Object.keys(SORT_NAMES) as SortKey[]).map((k) => ({ label: SORT_NAMES[k], group: "Sort by", checked: choice.sort === k, radio: true,
-      onPick: () => setChoice({ ...choice, sort: k }) })),
-    ...(Object.keys(GROUP_NAMES) as GroupKey[]).map((k) => ({ label: GROUP_NAMES[k], group: "Group by", checked: choice.group === k, radio: true,
-      onPick: () => setChoice({ ...choice, group: k }) })),
+  // Sort & display ▾: List or Table (and the table's Columns), Sort, Group by, Density.
+  const displayMenu: MenuItem[] = [
+    { label: "List", group: "Show as", checked: layout === "list", radio: true, onPick: () => setLayout("list") },
+    { label: "Table", group: "Show as", checked: layout === "table", radio: true, onPick: () => setLayout("table") },
+    ...(layout === "table" ? [{ label: "Columns", group: "Show as", icon: Icons.ColumnsIcon, items: columnsMenu(columns, setColumns) }] : []),
+    ...SORT_ORDER.map((k: SortKey) => ({ label: SORT_NAMES[k], group: "Sort", checked: choice.sort === k, radio: true, onPick: () => setChoice({ ...choice, sort: k }) })),
+    ...GROUP_ORDER.map((k) => ({ label: GROUP_NAMES[k], group: "Group by", checked: choice.group === k, radio: true, onPick: () => setChoice({ ...choice, group: k }) })),
     ...DENSITIES.map(([d, label]) => ({ label, group: "Density", checked: density === d, radio: true, onPick: () => setDensity(d) })),
   ];
-  // The place the list shows, after "Library" in the breadcrumbs.
-  // One chip-owned value on its own (Marked: Pinned from the sidebar) reads as that place.
-  const chipPlace = filterCount(filters) === 1 ? (Object.keys(CHIP_VIEWS) as ListView[]).find((v) => filters[CHIP_VIEWS[v]!.key]?.[0] === CHIP_VIEWS[v]!.value) : undefined;
-  const crumb = view === "trash" ? null : folder ? folderLabel(folder) : view !== "all" ? VIEW_NAMES[view as ListView]
-    : place !== "all" ? placeName(place, lists ?? []) : chipPlace ? VIEW_NAMES[chipPlace] : null;
-  const showEverything = () => {
-    onFolder?.(null);
-    setView("all");
-    setPlace("all");
-    setFilters({});
-  };
-  const clearAll = () => {
-    onFolder?.(null);
-    setFilters({});
-    setQuery("");
-    setView("all");
-    setPlace("all");
-  };
-  // A list chip with nothing in it (and nothing else narrowing the list) says how to fill it.
-  const inList = place.startsWith("list:") && view === "all" && !query && !filtersOn;
-  /** What needs action, from the header's button: missed calls are in Activity, the rest here. */
-  const openNeed = (a: NeedsAction["id"]) => (a === "missed" ? top?.onActivity() : setView(a === "failed" ? "failed" : a === "waiting" ? "waiting" : "untranscribed"));
-  // The header's actions in their order, by key (headerFold.ts measures them by it); a folded one is in More instead.
-  const headerActions: [string, ReactNode][] = [];
-  const add = (key: string, action: ReactNode) => headerActions.push([key, action]);
-  const more: MenuItem[] = [];
-  if (needs && headerNeeds) add("needs", <NeedsButton actions={needs} onAction={openNeed} />);
-  if (folded.has("trash")) more.push({ label: "Trash", icon: Icons.TrashIcon, onPick: () => setView("trash") });
-  else add("trash", <Button variant="quiet" icon={Icons.TrashIcon} aria-pressed={view === "trash"} title="Recently deleted recordings"
-    onClick={() => setView(view === "trash" ? "all" : "trash")}>Trash</Button>);
-  if (view !== "trash") {
-    if (folded.has("sync")) more.push({ label: syncing ? "Syncing…" : "Sync", icon: Icons.RefreshIcon, disabled: syncing, onPick: () => void sync() });
-    else add("sync", <Button variant="quiet" icon={Icons.RefreshIcon} loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Sync</Button>);
-  }
-  if (view !== "trash" && (counts?.all ?? 0) > 0) {
-    if (folded.has("select")) more.push({ label: "Select", icon: Icons.SelectIcon, shortcut: `${MOD}A`, onPick: () => setSelecting(true) });
-    else add("select", <Button variant="quiet" icon={Icons.SelectIcon} title={`Select (${MOD}A selects all)`} onClick={() => setSelecting(true)}>Select</Button>);
-  }
-  if (more.length) add("more", <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon, title: "More" }} items={more} />);
-  if (onImport) add("import", <Button onClick={onImport}>Import</Button>);
-  if (onRecord) add("record", <Button variant="primary" icon={Icons.RecordIcon} onClick={onRecord}>Record</Button>);
-  headKeys.current = headerActions.map(([key]) => key);
-  // The Waiting place counts the calls waiting on this computer too (MainApp's libraryPlaces): its view lists them, in
-  // the queue above the recordings (opened), and counts them with the rest. A search or filter leaves them out.
-  const waitingHere = view === "waiting" && !query && !filtersOn && !folder ? queue.pending.length : 0;
-  const subtitle = view === "trash" || !counts ? null
-    : folder ? `${recordingsWord(matching)} in ${folderLabel(folder)}`
-    : view === "all" && !filtersOn && !query ? `${recordingsWord(counts.all)} from your phone, this computer and the web.`
-      : `${recordingsWord(matching + waitingHere)} shown`;
+  const labelName = (key: string) => lists?.find((l) => l.key === key)?.name ?? prepared.names.labels.get(key) ?? key;
+  const labelColour = (item: LibraryItem, label: string) => lists?.find((l) => l.key === listKey(label))?.color ?? item.label_colors?.[label] ?? null;
+  const title = scopeName(scope, { saved: (id) => myViews.find((v) => isView(v, id))?.name, label: labelName });
+  // Needs you lists the calls waiting and the uploads that failed here too (the queue above the recordings).
+  const needsHere = baseView === "needs" && !filtersOn && !query.trim() && queue.loaded
+    ? queue.pending.length + queue.failed.length + queue.held.reduce((n, [, list]) => n + list.length, 0) : 0;
+  const count = trash ? bin?.length ?? null : items ? matching + needsHere : null;
+  const viewEmpty = scope.kind === "view" ? EMPTY_VIEW[scope.view] : undefined;
+  const panelShown = panel && !trash && !choosing;
 
   return (
     <div className="el-root el-embedded" data-v2="library" ref={root}>
-      <div className="el-page el-page--wide">
-        {selecting ? (
-          <header className="el-page__head el-selectbar" role="toolbar" aria-label="Selected recordings">
-            <div className="el-selectbar__start">
-              <Button variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" onClick={endSelection} />
-              <h1 className="el-title-m" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h1>
+      <div className={`el-lib${panelShown && !drawer ? " el-lib--panel" : ""}`} style={{ ["--el-lib-room" as string]: `${height}px` }}>
+        {panelShown && (
+          <FilterPanel spec={spec} onSpec={(next) => setSpec(next, "soon")} counts={counts()} drawer={drawer} onClose={() => setPanel(false)}
+            onSaveView={() => setSavingView(true)} canSave={canSave} />
+        )}
+        <div className="el-page el-page--wide el-lib__main">
+          {choosing ? (
+            <header className="el-lib-toolbar el-selectbar" role="toolbar" aria-label="Selected recordings">
+              <PickBox className="el-lib-toolbar__all" label={allPicked ? "Unselect all" : "Select all"} keyshortcuts="Meta+A Control+A"
+                checked={allPicked} mixed={pickedIds.length > 0} onClick={() => (allPicked ? setPicked(new Set()) : pickAll())} />
+              <h1 className="el-title-m el-lib-toolbar__title" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h1>
               {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
-              <Button variant="quiet" size="sm" aria-keyshortcuts="Meta+A Control+A" onClick={() => (allPicked ? setPicked(new Set()) : pickAll())}>
-                {allPicked ? "Unselect all" : "Select all"}
-              </Button>
-            </div>
-            <div className="el-page__actions">
-              <Button variant="quiet" icon={Icons.MoveIcon} aria-label="Move to project" title="Move to project" disabled={!pickedIds.length || tooMany}
-                onClick={() => setOrganise({ kind: "move", ids: pickedIds })} />
-              <Button variant="quiet" icon={Icons.LabelIcon} aria-label="Label" title="Label" disabled={!pickedIds.length || tooMany}
-                onClick={() => setOrganise({ kind: "label", ids: pickedIds })} />
-              {pickedIds.length > 0 && !tooMany && (
-                <Menu label="Share or export" button={{ variant: "quiet", icon: Icons.ShareIcon, title: "Share or export" }}
-                  items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
-                    { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
+              <div className="el-page__actions el-lib-toolbar__end">
+                <Button variant="quiet" icon={Icons.MoveIcon} aria-label="Move to project" title="Move to project" disabled={!pickedIds.length || tooMany}
+                  onClick={() => setOrganise({ kind: "move", ids: pickedIds })} />
+                <Button variant="quiet" icon={Icons.LabelIcon} aria-label="Label" title="Label" disabled={!pickedIds.length || tooMany}
+                  onClick={() => setOrganise({ kind: "label", ids: pickedIds })} />
+                {pickedIds.length > 0 && !tooMany && (
+                  <Menu label="Share or export" button={{ variant: "quiet", icon: Icons.ShareIcon, title: "Share or export" }}
+                    items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say, shownExportView((items ?? []).filter((i) => pickedIds.includes(i.id))))).items!.map((i) => ({ ...i, group: "Export transcripts" })),
+                      { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
+                )}
+                <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
+                  onClick={() => deleteOrAsk(pickedIds)} />
+                {pickedIds.length > 0 && !tooMany && (
+                  <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon }}
+                    items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "ai", "delete"]))} />
+                )}
+                <Button variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" aria-keyshortcuts="Escape" onClick={endSelection} />
+              </div>
+            </header>
+          ) : (
+            <header className="el-lib-toolbar">
+              {!trash && layout === "list" && shownIds.length > 0 && (
+                <PickBox className="el-lib-toolbar__all" label="Select all" keyshortcuts="Meta+A Control+A" checked={false} onClick={pickAll} />
               )}
-              <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
-                onClick={() => deleteOrAsk(pickedIds)} />
-              {pickedIds.length > 0 && !tooMany && (
-                <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon }}
-                  items={menuFor(pickedIds, new Set(["open", "select", "move", "label", "ai", "delete"]))} />
+              {/* Library / <the place>: "Library" goes back to All recordings, its filters and search cleared. */}
+              <nav className="el-lib-crumbs" aria-label="Breadcrumbs">
+                <button type="button" className="el-lib-crumbs__root" onClick={() => show(ALL_SCOPE, {}, true)}
+                  title="All recordings, nothing filtered">Library</button>
+                <span className="el-lib-crumbs__sep" aria-hidden="true">/</span>
+              </nav>
+              <h1 className="el-title-m el-lib-toolbar__title">
+                <span dir="auto">{title}</span>
+                {count !== null && <span className="el-lib-toolbar__count el-secondary el-num" aria-label={`, ${recordingsWord(count)}`}>{count}</span>}
+              </h1>
+              {!trash && (
+                <>
+                  <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="Meta+F Control+F /"
+                    placeholder={width >= (panelShown && !drawer ? WIDE_WITH_PANEL : WIDE) ? `Search titles, transcripts and projects (${MOD}F)`
+                      : width >= NARROW ? `Search recordings (${MOD}F)` : `Search (${MOD}F)`}
+                    className="el-lib-toolbar__search" />
+                  <Button variant={filtersOn ? "secondary" : "quiet"} icon={Icons.FilterIcon} aria-expanded={panelShown} aria-keyshortcuts="F"
+                    title="Filters (F)" className={filtersOn ? "el-lib-toolbar__filters el-lib-toolbar__filters--on" : "el-lib-toolbar__filters"} onClick={() => setPanel(!panel)}>
+                    Filters{filtersOn > 0 && <span className="el-lib-toolbar__n"><span className="el-num">{filtersOn}</span></span>}
+                  </Button>
+                  <Menu label="Sort & display" items={displayMenu}
+                    button={{ variant: "quiet", icon: Icons.SortIcon, iconEnd: Icons.ChevronDownIcon, text: "Sort & display", title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
+                </>
               )}
-            </div>
-          </header>
-        ) : (
-          <header className="el-page__head" ref={setHeadEl}>
-            <div className="el-page__titles">
-              {/* Library › the place shown (a smart folder, a view, a list); Library shows every recording again. */}
-              {crumb && <Breadcrumbs crumbs={[{ label: "Library", onOpen: showEverything }, { label: crumb }]} />}
-              <h1 className="el-title-l">{view === "trash" ? "Trash" : "Library"}</h1>
-              {subtitle && <p className="el-secondary" aria-live="polite">{subtitle}</p>}
-            </div>
-            <div className="el-page__actions">
-              {headerActions.map(([key, action]) => <Fragment key={key}>{action}</Fragment>)}
-            </div>
-          </header>
-        )}
-        {top && view !== "trash" && !selecting && (
-          <LibraryTop {...top} items={items} />
-        )}
-        {view !== "trash" && syncError && items && (
-          <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
-            action={<Button size="sm" loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Retry</Button>}>
-            Couldn't sync with the server. Showing what is saved on this computer.
-          </Banner>
-        )}
-        {view !== "trash" && folder && folderError && (
-          <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-folder-error"
-            action={<Button size="sm" loading={folderTrying} loadingLabel="Trying…" onClick={() => setFolderTry((n) => n + 1)}>Try again</Button>}>
-            {`${folderLabel(folder)} didn't load from the server: ${folderError}${folderKnownHere(folder) ? " Showing what this computer knows meanwhile." : ""}`}
-          </Banner>
-        )}
-        {view !== "trash" && !selecting && <QueueV2 queue={queue} reviewRequest={reviewRequest} openWaiting={view === "waiting"} />}
-        <div className="el-page__tools">
-          {view !== "trash" && (
-            <ListsRow lists={lists ?? []} setLists={setLists} reload={reloadLists} place={place} onPlace={setPlace} unread={items ? unreadCount(items, readHere) : 0}
-              say={(t) => say(t)} onLibraryChanged={() => void api.refreshLibrary().then(setItems).catch(() => undefined)} creating={creatingList}
-              onCreating={(request, made) => {
-                if (made && creatingList?.ids.length) void putInList(creatingList.ids, made, true);
-                setCreatingList(request);
-              }} />
+            </header>
           )}
-          {view !== "trash" && (
-            <div className="el-search-row">
-              <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="/" />
-              <Segmented label="Show as" value={layout} onChange={setLayout}
-                options={[{ value: "list" as Layout, label: "List" }, { value: "table" as Layout, label: "Table" }]} />
-              {layout === "table" && <Menu label="Columns" items={columnsMenu(columns, setColumns)} button={{ variant: "quiet", icon: Icons.ColumnsIcon, title: "Columns" }} />}
-              <Menu label="Sort and group" items={sortMenu}
-                button={{ variant: "quiet", icon: Icons.SortIcon, title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
-            </div>
+          {!trash && !choosing && (filtersOn > 0 || changed) && (
+            <FilterPills spec={spec} onSpec={(next) => setSpec(next)} counts={counts} names={prepared.names} onClearAll={clearFilters}
+              onSaveView={() => setSavingView(true)} onSaveChanges={changed && savedView ? () => {
+                void viewsStore.update(savedView.id, viewSpec()).then(() => say(`Saved ${savedView.name}`)).catch((e) => say(errorMessage(e)));
+              } : undefined} />
           )}
-          <FilterBar label="Filter recordings" end={(filtersOn > 0 || !!folder || (view !== "all" && view !== "trash")) && (
-            <Button variant="quiet" size="sm" onClick={clearAll}>Clear all</Button>
-          )}>
-            {view !== "trash" && found.length > 0 && (
-          <section className="el-group el-hits" aria-label="Matches in transcripts">
-            <h2 className="el-caption el-body-strong el-group__title">In transcripts</h2>
-            <Card>
-              <ul className="el-group__rows">
-                {found.map((r) => {
-                  const name = recordingName(r.session.title);
-                  return (
-                    <li key={r.session.id} className="el-hit">
-                      <div className="el-hit__head">
-                        <span className="el-body-strong" dir="auto">{name}</span>
-                        <span className="el-caption el-secondary">{rowDate(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</span>
-                      </div>
-                      {r.hits.map((h) => (
-                        <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="el-hit__line" onClick={() => openHit(r.session.id, h.start_ms)}
-                          aria-label={`Play ${name} from ${timestamp(h.start_ms)}`}>
-                          <span className="el-num el-caption el-secondary">{timestamp(h.start_ms)}</span>
-                          <span dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, k) => (p.hit ? <mark key={k}>{p.text}</mark> : <span key={k}>{p.text}</span>))}</span>
-                        </button>
-                      ))}
-                    </li>
-                  );
-                })}
-              </ul>
-            </Card>
-          </section>
-        )}
-        {view === "trash" ? (
-              <Chip label="All recordings" onToggle={() => setView("all")} />
+          {top && scope.kind === "view" && scope.view === "all" && !filtersOn && !query && !choosing && <LibraryTop {...top} items={items} />}
+          {!trash && syncError && items && (
+            <Banner tone="danger" icon={Icons.ErrorIcon} testId="library-sync"
+              action={<Button size="sm" loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Retry</Button>}>
+              Couldn't sync with the server. Showing what is saved on this computer.
+            </Banner>
+          )}
+          {!trash && !choosing && (
+            <QueueV2 queue={queue} reviewRequest={reviewRequest} openWaiting={baseView === "needs"} parts={baseView === "needs" ? "needs" : "progress"} />
+          )}
+          {!trash && found.length > 0 && (
+            <section className="el-group el-hits" aria-label="Matches in transcripts">
+              <h2 className="el-caption el-body-strong el-group__title">In transcripts</h2>
+              <Card>
+                <ul className="el-group__rows">
+                  {found.map((r) => {
+                    const name = recordingName(r.session.title);
+                    return (
+                      <li key={r.session.id} className="el-hit">
+                        <div className="el-hit__head">
+                          <span className="el-body-strong" dir="auto">{name}</span>
+                          <span className="el-caption el-secondary">{rowDate(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</span>
+                        </div>
+                        {r.hits.map((h) => (
+                          <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="el-hit__line" onClick={() => openHit(r.session.id, h.start_ms)}
+                            aria-label={`Play ${name} from ${timestamp(h.start_ms)}`}>
+                            <span className="el-num el-caption el-secondary">{timestamp(h.start_ms)}</span>
+                            <span dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, k) => (p.hit ? <mark key={k}>{p.text}</mark> : <span key={k}>{p.text}</span>))}</span>
+                          </button>
+                        ))}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+            </section>
+          )}
+          {trash ? (
+            binError ? (
+              <EmptyState tone="error" icon={Icons.ErrorIcon} title="Trash didn't load" body={binError} action={<Button variant="primary" onClick={() => void loadBin()}>Try again</Button>} />
+            ) : !bin ? (
+              <Loading label="Loading Trash">{Array.from({ length: 4 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
+            ) : bin.length === 0 ? (
+              <EmptyState icon={Icons.TrashIcon} title="Trash is empty" body={binSentence(binHours(bin, keepHours))} />
             ) : (
               <>
-                {folder && <Chip label={folderLabel(folder)} selected onRemove={() => onFolder?.(null)} removeLabel={`Show every recording, not only ${folderLabel(folder)}`} />}
-                <Menu label="Views" items={viewMenu} chip={{ text: view === "all" ? "Views" : VIEW_NAMES[view as ListView], on: view !== "all" }} />
-                {FILTER_KEYS.map((key) => {
-                  const menuItems = filterMenu(key);
-                  const on = (filters[key]?.length ?? 0) > 0;
-                  // Label and Bookmark tag only when there are some; the rest always, as classic's panel.
-                  if (!menuItems.length && !on && (key === "label" || key === "tag" || key === "device")) return null;
-                  return (
-                    <span key={key} className="el-chip-group">
-                      <Menu label={FILTER_NAMES[key]} items={menuItems} chip={{ text: chipLabel(options[key], filters, key, knownValues.current), on }} />
-                      {on && (
-                        <Button variant="quiet" size="sm" className="el-chip-clear" icon={Icons.CloseIcon} aria-label={`Clear ${FILTER_NAMES[key]}`}
-                          onClick={() => setFilters((f) => ({ ...f, [key]: [] }))} />
-                      )}
-                    </span>
-                  );
-                })}
+                <p className="el-secondary">{binSentence(binHours(bin, keepHours))}</p>
+                <List label="Deleted recordings">
+                  {bin.map((b) => (
+                    <ListRow key={b.id} icon={Icons.TrashIcon} title={b.title || "Recording"}
+                      meta={`Deleted ${rowDate(b.deleted_at)} · ${eraseIn(b.erase_at)}`}
+                      control={
+                        <span className="el-row__buttons">
+                          <Button size="sm" onClick={() => void restore(b)}>Restore</Button>
+                          <Button size="sm" variant="quiet" icon={Icons.TrashIcon} aria-label={`Delete "${b.title || "Recording"}" forever`} onClick={() => setErase(b)} />
+                        </span>
+                      }
+                      endTop={b.duration_ms ? <span className="el-num">{formatDuration(b.duration_ms)}</span> : undefined} />
+                  ))}
+                </List>
               </>
-            )}
-          </FilterBar>
-        </div>
-        {view === "trash" ? (
-          binError ? (
-            <EmptyState tone="error" icon={Icons.ErrorIcon} title="Trash didn't load" body={binError} action={<Button variant="primary" onClick={() => void loadBin()}>Try again</Button>} />
-          ) : !bin ? (
-            <Loading label="Loading Trash">{Array.from({ length: 4 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
-          ) : bin.length === 0 ? (
-            <EmptyState icon={Icons.TrashIcon} title="Trash is empty" body={binSentence(binHours(bin, keepHours))} />
+            )
+          ) : error && !items ? (
+            <EmptyState tone="error" icon={Icons.ErrorIcon} title="The library didn't load" body={error}
+              action={<Button variant="primary" onClick={() => void load()}>Try again</Button>} />
+          ) : !items ? (
+            <Loading label="Loading recordings">{Array.from({ length: 7 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
+          ) : prepared.facts.length === 0 && needsHere === 0 && scope.kind === "view" && scope.view === "all" ? (
+            <EmptyState icon={Icons.LibraryIcon} title="No recordings yet"
+              body="Calls and meetings you record on this computer or your phone, and files you import, appear here."
+              action={onImport ? <Button onClick={onImport}>Import</Button> : undefined} />
+          ) : matching === 0 && needsHere > 0 ? null : matching === 0 && filtersOn > 0 ? (
+            <EmptyState icon={Icons.FilterIcon} title="No recordings match these filters"
+              body={query ? "Take a filter off, or clear the search." : "Take a filter off, or clear them all."}
+              action={<Button onClick={clearFilters}>Clear filters</Button>} />
+          ) : matching === 0 && query.trim() ? (
+            <EmptyState icon={Icons.SearchIcon} title="No recordings match" body="Try another word, or clear the search to see every recording."
+              action={<Button onClick={() => setQuery("")}>Clear search</Button>} />
+          ) : matching === 0 && labelKey ? (
+            <EmptyState icon={Icons.LabelIcon} title={`Nothing in ${labelName(labelKey)} yet`} body="Add recordings from their ⋮ menu: Labels."
+              action={<Button onClick={() => show(ALL_SCOPE, {}, true)}>Show all</Button>} />
+          ) : matching === 0 ? (
+            <EmptyState icon={Icons.LibraryIcon} title={viewEmpty?.title ?? `Nothing in ${title} yet`} body={viewEmpty?.body ?? "Recordings appear here when they fit this view."}
+              action={<Button onClick={() => show(ALL_SCOPE, {}, true)}>Show all</Button>} />
+          ) : layout === "table" ? (
+            <LibraryTable viewsOf={rowViews.summaryFor} groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={choosing} picked={picked}
+              onRow={rowClick} onRowMenu={rowMenu} onRowPointerDown={rowDrag} recovered={recovered} onPick={pickRow}
+              onPickAll={() => (allPicked ? setPicked(new Set()) : pickAll())}
+              rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
           ) : (
-            <>
-            <p className="el-secondary">{binSentence(binHours(bin, keepHours))}</p>
-            <List label="Deleted recordings">
-              {bin.map((b) => (
-                <ListRow key={b.id} icon={Icons.TrashIcon} title={b.title || "Recording"}
-                  meta={`Deleted ${rowDate(b.deleted_at)} · ${eraseIn(b.erase_at)}`}
-                  control={
-                    <span className="el-row__buttons">
-                      <Button size="sm" onClick={() => void restore(b)}>Restore</Button>
-                      <Button size="sm" variant="quiet" icon={Icons.TrashIcon} aria-label={`Delete "${b.title || "Recording"}" forever`} onClick={() => setErase(b)} />
-                    </span>
-                  }
-                  endTop={b.duration_ms ? <span className="el-num">{formatDuration(b.duration_ms)}</span> : undefined} />
-              ))}
+            <List label="Recordings">
+              {groups.map((g) => [
+                g.label ? (
+                  <ListSection key={g.key} title={g.label} count={g.items.length} collapsed={collapsed.has(g.key)}
+                    onToggle={() => fold(g.key)}
+                    // A folded section's rows can't be picked: its box shows only while it is open.
+                    pick={choosing && !collapsed.has(g.key) ? {
+                      state: groupPick(g.items, picked), label: groupPick(g.items, picked) === "all" ? `Clear ${g.label}` : `Select all in ${g.label}`,
+                      onToggle: () => setPicked((p) => toggleGroup(g.items, p)),
+                    } : undefined} />
+                ) : null,
+                ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
+                  const r = rowModel(item, undefined, rowViews.summaryFor(item));
+                  const source = sourceOf(item);
+                  return (
+                    <ListRow key={item.id} strong title={r.title} compact={density === "compact"}
+                      leading={
+                        <button type="button" className="el-row__source" aria-label={`Show only ${source.label}`} title={`Show only ${source.label}`}
+                          onClick={() => quick("source", source.value)}>
+                          <SourceAvatar item={item} />
+                        </button>
+                      }
+                      meta={r.converting === "making" ? <span className="el-converting" data-testid="row-converting"><span className="el-spinner" aria-hidden="true" />{r.meta}</span> : r.meta}
+                      badge={r.badge || recovered.has(item.id) ? <>
+                        {r.badge && <Badge tone={r.badge.tone}>{r.badge.text}</Badge>}
+                        {recovered.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
+                      </> : undefined}
+                      mark={item.pinned || r.screens || item.labels?.length ? <>
+                        {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}{" "}
+                        {r.screens ? <ScreensMark count={r.screens} /> : null}
+                        {(item.labels ?? []).slice(0, 3).map((l) => [
+                          <button key={l} type="button" className="el-row__label" title={`Show only ${l}`} aria-label={`Show only label ${l}`}
+                            onClick={() => quick("labels", listKey(l))}>
+                            <LabelDot name={l} colour={labelColour(item, l)} decorative /><span dir="auto">{l}</span>
+                          </button>, " "])}
+                      </> : undefined}
+                      endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
+                      rowId={item.id} onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
+                      pick={{ checked: picked.has(item.id), label: `Select ${r.title}`, onToggle: (e) => pickRow(item, e), shown: choosing }}
+                      checked={choosing ? picked.has(item.id) : undefined}
+                      actions={choosing ? undefined : <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
+                  );
+                }),
+              ])}
             </List>
-            </>
-          )
-        ) : error && !items ? (
-          <EmptyState tone="error" icon={Icons.ErrorIcon} title="The library didn't load" body={error}
-            action={<Button variant="primary" onClick={() => void load()}>Try again</Button>} />
-        ) : !items ? (
-          <Loading label="Loading recordings">{Array.from({ length: 7 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
-        ) : counts?.all === 0 && waitingHere === 0 ? (
-          <EmptyState icon={Icons.LibraryIcon} title="No recordings yet"
-            body="Calls and meetings you record on this computer or your phone, and files you import, appear here."
-            action={onImport ? <Button onClick={onImport}>Import</Button> : undefined} />
-        ) : matching === 0 && inList ? (
-          <EmptyState icon={Icons.LabelIcon} title={`Nothing in ${placeName(place, lists ?? [])} yet`} body="Add recordings from their ⋮ menu: Add to list."
-            action={<Button onClick={() => setPlace("all")}>Show all</Button>} />
-        ) : matching === 0 && (place === "unread" || place === "important") && view === "all" && !query && !filtersOn ? (
-          <EmptyState icon={Icons.LibraryIcon} title={place === "unread" ? "You've opened every recording" : "Nothing marked important yet"}
-            body={place === "unread" ? "New recordings show here until you open them." : "Recordings you mark important show here."}
-            action={<Button onClick={() => setPlace("all")}>Show all</Button>} />
-        ) : matching === 0 && waitingHere > 0 ? null : matching === 0 ? (
-          <EmptyState icon={Icons.SearchIcon}
-            title={query || filtersOn ? "No recordings match" : view === "today" ? "Nothing recorded today" : view === "untranscribed" ? "Everything is transcribed" : `Nothing in ${VIEW_NAMES[view as ListView]}`}
-            body={query ? "Try another word, or clear the search to see every recording." : filtersOn ? "Take a filter off, or clear them all to see every recording."
-              : view === "today" ? "Today's calls and meetings appear here as they are recorded." : view === "untranscribed" ? "Recordings without a transcript appear here." : "Recordings appear here when they fit this view."}
-            action={<Button onClick={clearAll}>{query && !filtersOn ? "Clear search" : filtersOn ? "Clear filters" : "Show all"}</Button>} />
-        ) : layout === "table" ? (
-          <LibraryTable viewsOf={rowViews.summaryFor} groups={groups} columns={columns} collapsed={collapsed} onFold={fold} selecting={selecting} picked={picked}
-            onRow={rowClick} onRowMenu={rowMenu} onRowPointerDown={rowDrag} recovered={recovered}
-            rowActions={(item) => <Menu label={`More for ${recordingName(item.title)}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
-        ) : (
-          <List label="Recordings">
-            {groups.map((g) => [
-              g.label ? (
-                <ListSection key={g.key} title={g.label} count={g.items.length} collapsed={collapsed.has(g.key)}
-                  onToggle={() => setCollapsed((c) => { const n = new Set(c); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })}
-                  // A folded section's rows can't be picked: its box shows only while it is open.
-                  pick={selecting && !collapsed.has(g.key) ? {
-                    state: groupPick(g.items, picked), label: groupPick(g.items, picked) === "all" ? `Clear ${g.label}` : `Select all in ${g.label}`,
-                    onToggle: () => setPicked((p) => toggleGroup(g.items, p)),
-                  } : undefined} />
-              ) : null,
-              ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
-                const r = rowModel(item, undefined, rowViews.summaryFor(item));
-                return (
-                  <ListRow key={item.id} leading={<SourceAvatar item={item} />} strong title={r.title}
-                    meta={r.converting === "making" ? <span className="el-converting" data-testid="row-converting"><span className="el-spinner" aria-hidden="true" />{r.meta}</span> : r.meta}
-                    badge={r.badge || recovered.has(item.id) ? <>
-                      {r.badge && <Badge tone={r.badge.tone}>{r.badge.text}</Badge>}
-                      {recovered.has(item.id) && <Badge tone="accent">{RECOVERED_CHIP}</Badge>}
-                    </> : undefined}
-                    mark={item.pinned || r.screens || item.labels?.length ? <>
-                      {item.pinned && <span className="el-row__pin"><Icon icon={Icons.PinIcon} /><span className="el-visually-hidden">Pinned</span></span>}{" "}
-                      {r.screens ? <ScreensMark count={r.screens} /> : null}
-                      {(item.labels ?? []).slice(0, 3).map((l) => [<span key={l} className="el-row__label" dir="auto">{l}</span>, " "])}
-                    </> : undefined}
-                    endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
-                    rowId={item.id} onClick={(e) => rowClick(item, e)} onPointerDown={(e) => rowDrag(item, e)} onContextMenu={(e) => rowMenu(item, e)}
-                    checked={selecting ? picked.has(item.id) : undefined}
-                    actions={selecting ? undefined : <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
-                );
-              }),
-            ])}
-          </List>
-        )}
+          )}
+        </div>
       </div>
       <Dialog open={!!erase} alert title="Delete forever?"
         description={erase ? `"${erase.title || "Recording"}" and its transcript are erased from the server. This can't be undone.` : undefined}
         onClose={() => setErase(null)}
         actions={<><Button onClick={() => setErase(null)}>Cancel</Button><Button variant="danger" onClick={() => erase && void eraseNow(erase)}>Delete forever</Button></>} />
-      {drawer}
+      {drawerPage}
       {dialogs}
       {toasts}
     </div>
