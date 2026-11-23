@@ -96,7 +96,7 @@ export function placeMenu({ anchor, size, region, view, align, rtl: rightToLeft 
 }
 
 /** The part of the window `el` is shown in: its nearest ancestor that clips (a scrolling panel, the sidebar). */
-function regionOf(el: HTMLElement): Box {
+export function regionOf(el: HTMLElement): Box {
   for (let at = el.parentElement; at && at !== document.body; at = at.parentElement) {
     const style = getComputedStyle(at);
     if (/auto|scroll|hidden|clip/.test(`${style.overflow} ${style.overflowX} ${style.overflowY}`)) return at.getBoundingClientRect();
@@ -108,7 +108,7 @@ function regionOf(el: HTMLElement): Box {
  * A floating list's own layer, at the end of the page and above everything (the sidebar, a panel that clips, a
  * dialog), in the language and direction of where it opened, with the v2 look.
  */
-function Layer({ from, children }: { from: Element | null; children: ReactNode }) {
+export function Layer({ from, children }: { from: Element | null; children: ReactNode }) {
   const dir = from ? getComputedStyle(from).direction : undefined;
   const lang = from?.closest("[lang]")?.getAttribute("lang") ?? undefined;
   return createPortal(<div className="el-root el-embedded el-layer" dir={dir === "rtl" ? "rtl" : dir ? "ltr" : undefined} lang={lang}>{children}</div>, document.body);

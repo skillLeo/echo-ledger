@@ -2269,6 +2269,74 @@ pub async fn session_opened(app: AppHandle, id: String) -> AppResult<()> {
     Ok(())
 }
 
+/// My views (contract 2.0.0-p "Saved views"): the person's saved filter sets, the same on every device. The page keeps
+/// a copy and works offline (v2/library/myViews.ts); these send its changes and read the server's list. The server
+/// checks every field; the core passes the JSON through. `None` from `views_get` on a server without saved views yet.
+#[tauri::command]
+pub async fn views_get(app: AppHandle) -> AppResult<Option<serde_json::Value>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.views().await {
+        Ok(answer) => Ok(Some(answer)),
+        Err(e) if e.is_missing_route() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Save as view: `{name, filters, search, sort, group, density, client_ref}`; the same `client_ref` again answers the
+/// view it made, so a view saved offline and sent twice is made once.
+#[tauri::command]
+pub async fn view_create(app: AppHandle, view: serde_json::Value) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.create_view(&view).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
+        other => other,
+    }
+}
+
+/// Rename… or Save changes on a view: any of its fields.
+#[tauri::command]
+pub async fn view_update(app: AppHandle, id: String, patch: serde_json::Value) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.update_view(&id, &patch).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
+        other => other,
+    }
+}
+
+/// Delete view…
+#[tauri::command]
+pub async fn view_delete(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.delete_view(&id).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
+        other => other,
+    }
+}
+
+/// A view dragged, or Move up / Move down: every view's id once, in the new order.
+#[tauri::command]
+pub async fn views_order(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    match state.api()?.order_views(&ids).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Saved views")),
+        other => other,
+    }
+}
+
+/// The saved views' version the last library sync carried (None before a sync did, or from an older server): the page
+/// reads `GET /api/views` again when it differs from its own.
+#[tauri::command]
+pub async fn library_views_version(app: AppHandle) -> AppResult<Option<u64>> {
+    let state = app.state::<AppState>();
+    let cache = state.library.lock().await;
+    Ok(cache.views_version)
+}
+
 /// Move left / Move right on a list chip: every list's key once, in the new order.
 #[tauri::command]
 pub async fn lists_order(app: AppHandle, keys: Vec<String>) -> AppResult<Vec<crate::net::models::ListDto>> {

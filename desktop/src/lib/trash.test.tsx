@@ -68,9 +68,8 @@ describe("the sentences keep their words; only the number is the server's", () =
     respond("library_list", []);
     respond("library_refresh", []);
     respond("bin_list", { data: [] });
-    render(<LibraryV2 />);
-    await act(flushAsync);
-    act(() => screen.getByRole("button", { name: "Trash" }).click());
+    // Trash, from the sidebar's foot.
+    render(<LibraryV2 scopeRequest={{ scope: { kind: "trash" }, seq: 1 }} />);
     await act(flushAsync);
     expect(screen.getByRole("region", { name: "Trash is empty" })).toHaveTextContent("Deleted recordings stay here for 3 days, then their audio and transcripts are erased.");
   });

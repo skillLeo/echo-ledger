@@ -29,7 +29,7 @@ const ready = (id: string, preview: string) => ({
 
 export const ITEMS: LibraryItem[] = [
   makeItem("r1", { title: "Weekly sync with Northwind", source_app: "zoom", source_app_label: "Zoom", source_device: "desktop", source_device_label: "Desktop",
-    client: client("c-north", "Northwind"), started_at: at(0, 9, 0), duration_ms: 2_530_000, status: "completed", screen_count: 3, transcript: ready("r1", "Let us go over the roadmap for the next quarter.") }),
+    client: client("c-north", "Northwind"), opened: false, started_at: at(0, 9, 0), duration_ms: 2_530_000, status: "completed", screen_count: 3, transcript: ready("r1", "Let us go over the roadmap for the next quarter.") }),
   // v1.5: an Urdu call a backup engine transcribed ("Backup engine — Re-transcribe?").
   makeItem("r2", { title: "Invoice questions", source_app: "whatsapp", source_app_label: "WhatsApp", source_device: "phone", source_device_label: "Phone", pinned: true,
     client: client("c-aria", "Aria Studio"), started_at: at(0, 7, 10), duration_ms: 742_000, status: "completed", language: "ur", language_chip: "UR",
@@ -44,7 +44,7 @@ export const ITEMS: LibraryItem[] = [
     transcript: { ...ready("r5", "Welcome everyone, thanks for joining the kick-off."), script_warning: "latin" } }),
   // v1.5: recordings in Acme's folders.
   makeItem("r8", { title: "March invoice follow-up", source_app: "whatsapp_business", source_app_label: "WhatsApp Business", source_device: "phone", source_device_label: "Phone",
-    client: client("c-acme-inv", "Invoices"), started_at: at(2, 10, 20), duration_ms: 318_000, status: "completed", transcript: ready("r8", "The March invoice is still open.") }),
+    client: client("c-acme-inv", "Invoices"), important: true, opened: false, started_at: at(2, 10, 20), duration_ms: 318_000, status: "completed", transcript: ready("r8", "The March invoice is still open.") }),
   makeItem("r9", { title: "Contract review", source_app: "zoom", source_app_label: "Zoom", source_device: "desktop", source_device_label: "Desktop",
     client: client("c-acme-con", "Contracts"), started_at: at(4, 14, 0), duration_ms: 1_920_000, status: "completed", transcript: ready("r9", "Clause seven needs a change.") }),
   makeItem("r6", { title: "Budget review with Acme", source_app: "google_meet", source_app_label: "Google Meet", source_device: "web", source_device_label: "Web",

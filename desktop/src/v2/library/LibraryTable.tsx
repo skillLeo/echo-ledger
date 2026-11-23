@@ -8,7 +8,7 @@ import type { ItemGroup } from "../../lib/libraryGroups";
 import { formatDuration, rowDate } from "../../lib/format";
 import { itemState, recordingName } from "../../lib/library";
 import { sourceLabel } from "../../lib/libraryGroups";
-import { Badge, Icon, Icons } from "../components";
+import { Badge, Icon, Icons, PickBox } from "../components";
 import { RECOVERED_CHIP } from "../../lib/recovered";
 import type { MenuItem } from "../components/Menu";
 import { SourceAvatar } from "./SourceAvatar";
@@ -79,7 +79,9 @@ export function columnsMenu(columns: readonly Column[], onChange: (c: Column[]) 
   }));
 }
 
-export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, onRowPointerDown, rowActions, recovered, viewsOf }: {
+export function LibraryTable({ groups, columns, collapsed, onFold, selecting, picked, onRow, onRowMenu, onRowPointerDown, rowActions, recovered, viewsOf, onPick }: {
+  /** A checkbox before each row that picks it (the Library: no Select button); Shift ticks the range. */
+  onPick?: (item: LibraryItem, e: MouseEvent<HTMLInputElement>) => void;
   /** A row's views as known last (the Library asks while they are written); its own otherwise. */
   viewsOf?: (item: LibraryItem) => ViewsSummary | null;
   /** Recordings recovered after a restart: their "Recovered" chip. */
@@ -96,12 +98,13 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
   onRowPointerDown?: (item: LibraryItem, e: PointerEvent<HTMLButtonElement>) => void;
   rowActions: (item: LibraryItem) => ReactNode;
 }) {
-  const span = columns.length + 2;
+  const span = columns.length + 2 + (onPick ? 1 : 0);
   return (
     <div className="el-table-wrap">
       <table className="el-table" aria-label="Recordings">
         <thead>
           <tr>
+            {onPick && <th scope="col" className="el-table__pick"><span className="el-visually-hidden">Select</span></th>}
             <th scope="col">Recording</th>
             {columns.map((c) => <th key={c} scope="col">{COLUMN_NAMES[c]}</th>)}
             <th scope="col"><span className="el-visually-hidden">Actions</span></th>
@@ -123,8 +126,13 @@ export function LibraryTable({ groups, columns, collapsed, onFold, selecting, pi
               const name = recordingName(item.title);
               const on = picked.has(item.id);
               return (
-                <tr key={item.id} className={on ? "el-table__row el-table__row--picked" : "el-table__row"}
+                <tr key={item.id} className={`el-table__row${on ? " el-table__row--picked" : ""}${selecting ? " el-table__row--picking" : ""}`}
                   onContextMenu={(e) => { e.preventDefault(); onRowMenu(item, e); }}>
+                  {onPick && (
+                    <td className="el-table__pick">
+                      <PickBox checked={on} label={`Select ${name}`} onClick={(e) => onPick(item, e)} />
+                    </td>
+                  )}
                   <td>
                     <button type="button" className="el-table__open" data-row-id={item.id} aria-pressed={selecting ? on : undefined}
                       aria-label={selecting ? `Select ${name}` : name} onClick={(e) => onRow(item, e)} onPointerDown={onRowPointerDown ? (e) => onRowPointerDown(item, e) : undefined}

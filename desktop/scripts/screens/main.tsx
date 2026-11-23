@@ -9,6 +9,7 @@
 // results, "controls-permission", "controls-nothing" and "controls-device" what the pill says, "controls-dictation-refused"
 // the dictation box with the microphone off).
 import React from "react";
+import { LABEL_COLOURS } from "../../src/v2/components/Label";
 import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
@@ -309,6 +310,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   library_refresh: () => (empty ? [] : LISTED),
   list_clients: () => ({ data: CLIENTS }),
   library_views: () => (empty ? { views: {}, labels: [], folders: { inbox: 0 } } : LIBRARY_VIEWS),
+  // The person's labels (lists, contract 2.0.0-m): the Library filters redesign shows them in the sidebar.
+  lists_get: () => (empty ? [] : [
+    { key: "kick-off", name: "Kick-off", color: LABEL_COLOURS.teal, position: 0, count: 1 },
+    { key: "invoice", name: "Invoice", color: LABEL_COLOURS.amber, position: 1, count: 1 },
+    { key: "follow up", name: "Follow up", color: LABEL_COLOURS.pink, position: 2, count: 0 },
+  ]),
   library_folder: ({ folder }) => ITEMS.filter((i) => SERVER_FOLDERS[folder as SmartFolder]?.includes(i.id) ?? inFolderHere(i, folder as SmartFolder) === true),
   client_rules: ({ id }) => ({ data: RULES[id as string] ?? [] }),
   shares_of: () => ({ data: SHARES }),

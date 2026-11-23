@@ -795,6 +795,19 @@ export interface NotRecordedMic {
 }
 
 /** One of the person's lists (contract 2.0.0-m): a label with its colour and place in the Library's row. */
+/** A saved view as the server keeps it (contract 2.0.0-p): a filter set, the search and how the list is shown. */
+export interface ServerView {
+  id: string;
+  name: string;
+  filters: Record<string, unknown>;
+  search: string | null;
+  sort: string;
+  group: string;
+  density: string;
+  position: number;
+  client_ref?: string | null;
+}
+
 export interface ListItem {
   /** The name in lower case. */
   key: string;
@@ -872,6 +885,10 @@ export interface LibraryItem {
   };
   /** How it got into its project (since v1.5): by hand, the caller is a contact, a filing rule; null = the Inbox. */
   filed_by?: "user" | "contact" | "rule" | null;
+  /** When it ended (Needs you's 24 hours are counted from it). */
+  ended_at?: string | null;
+  /** Its value in the Library's Source, Status and Language filters, as the server works them out (since 2.0.0-p). */
+  facets?: { source?: string; status?: string; language?: string } | null;
 }
 
 /**
@@ -1931,6 +1948,14 @@ export const api = {
   deleteList: (key: string) => invoke<number>("list_delete", { key }),
   /** Every list's key once, in the new order. */
   orderLists: (keys: string[]) => invoke<ListItem[]>("lists_order", { keys }),
+  /** My views (contract 2.0.0-p "Saved views"): null on a server without them. */
+  views: () => invoke<{ data: ServerView[]; views_version: number; limit?: number } | null>("views_get"),
+  createView: (view: Omit<ServerView, "id" | "position">) => invoke<{ data: ServerView; views_version: number }>("view_create", { view }),
+  updateView: (id: string, patch: Partial<Omit<ServerView, "id" | "position">>) => invoke<{ data: ServerView; views_version: number }>("view_update", { id, patch }),
+  deleteView: (id: string) => invoke<{ id: string; views_version: number }>("view_delete", { id }),
+  orderViews: (ids: string[]) => invoke<{ data: ServerView[]; views_version: number }>("views_order", { ids }),
+  /** The saved views' version the last library sync carried (null before one did, or from an older server). */
+  viewsVersion: () => invoke<number | null>("library_views_version"),
   libraryFolder: (folder: SmartFolder) => invoke<LibraryItem[]>("library_folder", { folder }),
   /** null: the server has no filing rules yet. */
   clientRules: (id: string) => invoke<{ data: FilingRule[] } | null>("client_rules", { id }),

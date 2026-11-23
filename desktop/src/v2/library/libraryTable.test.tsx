@@ -29,11 +29,16 @@ describe("the Library as a table", () => {
     render(<LibraryV2 />);
     await act(flushAsync);
   };
+  // List or Table is in Sort & display ▾ now (PLAN_LIBRARY_FILTERS), with the table's Columns ▸.
+  const showAs = (layout: "List" | "Table") => {
+    fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: layout }));
+  };
 
   it("Show as Table: the default columns, sections as header rows, remembered on this computer", async () => {
     await show();
-    fireEvent.click(screen.getByRole("radio", { name: "Table" }));
-    expect(within(table()).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Recording", "Date", "Length", "App", "Project", "Status", "Actions"]);
+    showAs("Table");
+    expect(within(table()).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Select", "Recording", "Date", "Length", "App", "Project", "Status", "Actions"]);
     const rows = within(table()).getAllByRole("row").map((r) => r.textContent);
     expect(rows[1]).toBe("Today · 1");
     expect(rows[2]).toMatch(/^Ali18 Nov1:00WhatsAppAcmeReady/);
@@ -47,7 +52,7 @@ describe("the Library as a table", () => {
     respond("library_list", [failed]);
     respond("library_refresh", [failed]);
     await show();
-    fireEvent.click(screen.getByRole("radio", { name: "Table" }));
+    showAs("Table");
     const cell = within(table()).getByTestId("table-convert-failed");
     expect(cell).toHaveTextContent("Couldn't convert to Roman Urdu");
     expect(cell).toHaveClass("el-converting--danger");
@@ -56,28 +61,33 @@ describe("the Library as a table", () => {
 
   it("Columns: Labels and Device on, Date off, kept; List brings the rows back", async () => {
     await show();
-    fireEvent.click(screen.getByRole("radio", { name: "Table" }));
-    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    showAs("Table");
+    fireEvent.click(screen.getByRole("button", { name: "Sort & display" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Columns" }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Labels" }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Device" }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Date" }));
-    expect(within(table()).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Recording", "Length", "App", "Project", "Status", "Labels", "Device", "Actions"]);
+    expect(within(table()).getAllByRole("columnheader").map((h) => h.textContent)).toEqual(["Select", "Recording", "Length", "App", "Project", "Status", "Labels", "Device", "Actions"]);
     expect(within(table()).getAllByRole("row")[2]).toHaveTextContent(/Q4Phone$/);
     expect(JSON.parse(window.localStorage.getItem("echoledger-v2-library-columns")!)).toEqual(["length", "app", "project", "status", "labels", "device"]);
-    fireEvent.click(screen.getByRole("radio", { name: "List" }));
+    // The ticks leave the menu open; a press away closes it.
+    fireEvent.pointerDown(document.body);
+    showAs("List");
     expect(screen.queryByRole("table")).toBeNull();
     expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
   });
 
-  it("a row opens its recording; while selecting it ticks; its ⋮ and right-click are the one menu", async () => {
+  it("a row opens its recording; its checkbox picks it, and then a press ticks it; its ⋮ and right-click are the one menu", async () => {
     window.localStorage.setItem("echoledger-v2-library-layout", "table");
     respond("session_detail", { playback_url: null });
     respond("sessions_bulk", 1);
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    // No Select button: a row's checkbox (on hover) picks it; then a press on another row ticks that one.
+    fireEvent.click(within(table()).getByRole("checkbox", { name: "Select Bina" }));
     fireEvent.click(within(table()).getByRole("button", { name: "Select Ali" }));
     expect(within(table()).getByRole("button", { name: "Select Ali" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("1 selected");
+    expect(within(table()).getByRole("checkbox", { name: "Select Ali" })).toBeChecked();
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("2 selected");
     fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
     fireEvent.contextMenu(within(table()).getAllByRole("row")[2], { clientX: 40, clientY: 40 });
     fireEvent.click(screen.getByRole("menuitem", { name: "Pin" }));
