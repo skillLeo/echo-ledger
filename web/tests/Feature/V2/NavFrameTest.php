@@ -199,7 +199,9 @@ describe('the panels', function () {
 
     it('lists the Library\'s Views, My views, Labels and Trash; Projects\' views and projects; Live\'s, Ask\'s and Activity\'s; Settings\' groups', function () {
         $library = navPanelLinks(($this->page)('/app/sessions'), 'library');
-        expect(array_values($library))->toContain('All recordings', 'Needs you 1', 'Unread 5', 'Important', 'Not transcribed', 'Audio only', 'Shared with me', 'My links', 'Request links', 'Zoom calls 1', 'Clients 1', 'Trash');
+        expect(array_values($library))->toContain('All recordings', 'Needs you 1', 'Unread 5', 'Important', 'Shared with me', 'My links', 'Request links', 'Zoom calls 1', 'Clients 1', 'Trash')
+            // Since v2.1 Not transcribed is Audio only, counting what its rows say (docs/PLAN_V2_1_POLISH.md section 1).
+            ->and(implode(' | ', $library))->toMatch('~Audio only( \d+)?~')->not->toContain('Not transcribed');
         $projects = navPanelLinks(($this->page)('/app/clients'), 'projects');
         expect(array_values($projects))->toContain('All projects', 'Pinned', 'Recent', 'New project', 'Acme 1', 'Quiet project');
         expect(array_values(navPanelLinks(($this->page)('/app/live'), 'live')))->toContain('Call recording In the apps', 'Live Translate', 'Dictation', 'Captions');
@@ -244,22 +246,27 @@ describe('the panels', function () {
 });
 
 describe('the Library\'s tabs', function () {
-    it('splits the list by Source: All, Calls, Meetings, Voice notes, with their counts, in the address', function () {
+    it('splits the list by kind: All, Calls, Meetings, Voice notes and Other, with their counts, in the address', function () {
         $page = Livewire::test(ListCaptureSessions::class);
-        expect(collect($page->instance()->libraryTabs())->pluck('count', 'key')->all())->toBe(['all' => 5, 'calls' => 2, 'meetings' => 1, 'voice_notes' => 1])
+        // Since 2.0.0-q the imported file is Other, so the kind tabs add up to All.
+        expect(collect($page->instance()->libraryTabs())->pluck('count', 'key')->all())->toBe(['all' => 5, 'calls' => 2, 'meetings' => 1, 'voice_notes' => 1, 'other' => 1])
             ->and((fn (): array => $this->queryString())->call($page->instance()))->toMatchArray(['kind' => ['as' => 'kind', 'history' => true]]);
         Livewire::withQueryParams(['kind' => 'calls'])->test(ListCaptureSessions::class)
             ->assertCanSeeTableRecords([$this->call, $this->phone])->assertCanNotSeeTableRecords([$this->meeting, $this->note, $this->file, $this->waiting]);
         Livewire::test(ListCaptureSessions::class)->call('setLibraryKind', 'meetings')->assertSet('kind', 'meetings')
             ->assertCanSeeTableRecords([$this->meeting])->assertCanNotSeeTableRecords([$this->call]);
-        // Voice notes are the voice_note Source: a file imported with a voice-note name is under All only.
+        // Voice notes are the voice_note Source: a file imported with a voice-note name is Other (since 2.0.0-q).
         Livewire::withQueryParams(['kind' => 'voice_notes'])->test(ListCaptureSessions::class)->assertCanSeeTableRecords([$this->note])->assertCanNotSeeTableRecords([$this->file]);
+        Livewire::withQueryParams(['kind' => 'other'])->test(ListCaptureSessions::class)->assertCanSeeTableRecords([$this->file])
+            ->assertCanNotSeeTableRecords([$this->note, $this->call, $this->meeting]);
         Livewire::test(ListCaptureSessions::class)->call('setLibraryKind', 'nonsense')->assertSet('kind', null)->assertCanSeeTableRecords([$this->file, $this->call]);
-        expect(LibraryFilters::KINDS)->toBe([
-            'calls' => ['whatsapp', 'whatsapp_business', 'phone_call', 'telegram', 'signal', 'messenger', 'instagram', 'skype'],
-            'meetings' => ['zoom', 'google_meet', 'microsoft_teams', 'slack', 'discord'],
-            'voice_notes' => ['voice_note'],
-        ]);
+        // The address words stay plural (live since 2.0.0-p, saved links keep them); each names one kind.
+        expect(LibraryFilters::KINDS)->toBe(['calls' => 'call', 'meetings' => 'meeting', 'voice_notes' => 'voice_note', 'other' => 'other'])
+            ->and(LibraryFilters::KIND_SOURCES)->toBe([
+                'call' => ['whatsapp', 'whatsapp_business', 'phone_call', 'telegram', 'signal', 'messenger', 'instagram', 'skype'],
+                'meeting' => ['zoom', 'google_meet', 'microsoft_teams', 'slack', 'discord'],
+                'voice_note' => ['voice_note'],
+            ]);
     });
 
     it('narrows the place, the filters and the search, and the filter panel counts within the tab', function () {

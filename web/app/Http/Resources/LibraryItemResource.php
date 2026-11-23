@@ -151,10 +151,8 @@ final class LibraryItemResource extends JsonResource
      * Reads, with the rows, whether an upload of each recording failed (the Status `failed`), so a page of items costs
      * one query more instead of one an item.
      *
-     * @template TBuilder of Builder<CaptureSession>
-     *
-     * @param  TBuilder  $query
-     * @return TBuilder
+     * @param  Builder<CaptureSession>  $query
+     * @return Builder<CaptureSession>
      */
     public static function withUploadFailed(Builder $query): Builder
     {
@@ -186,7 +184,7 @@ final class LibraryItemResource extends JsonResource
     }
 
     /** Whether an upload of the recording failed: read with the rows (withUploadFailed), else asked now. */
-    private static function uploadFailed(CaptureSession $session): bool
+    public static function uploadFailed(CaptureSession $session): bool
     {
         if (array_key_exists('upload_failed', $session->getAttributes())) {
             return (bool) $session->getAttribute('upload_failed');

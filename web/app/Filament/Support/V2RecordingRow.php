@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
-use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\TranscriptStatus;
@@ -20,7 +19,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * One recording as the v2.0 Library draws it (the apps' RecordingRow): the source's glyph, the title, at most one
- * status (only what needs the person: Untranscribed, Transcribing, Waiting, Failed), a second line (the source and the
+ * state (only the glossary's: Audio only, Transcribing…, Waiting to upload, Failed · Retry, and Waiting), a second line (the source and the
  * project or caller), and on the end the time above the length. Since U9 (contract 2.0.0-i, parity plan 3) also the
  * row's indicators: the unread dot, the important flag, its labels' colour dots, "Audio · N days left" and a snippet
  * of what was said.
@@ -176,24 +175,26 @@ final class V2RecordingRow
     }
 
     /**
-     * The one status a row may carry, never "Completed".
+     * The one state a row may carry, never "Completed": the glossary's (docs/PLAN_V2_1_POLISH.md section 1), from the
+     * recording's one Status (LibraryFilters::status and ::state, as its facets and the Library's places count it).
+     * Failed · Retry is the only red; Audio only is plain grey text; a transcribed row shows its words instead.
      *
-     * @return array{label: string, tone: string, icon: string}|null
+     * @return array{label: string, tone: string, icon: string, state: string}|null
      */
     public static function status(CaptureSession $session): ?array
     {
-        if ($session->hasNoAudio()) {
-            return ['label' => __('No audio'), 'tone' => 'neutral', 'icon' => 'alert'];
-        }
         $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
+        $state = LibraryFilters::state(LibraryFilters::status($session->status->value, LibraryItemResource::uploadFailed($session), $final?->status->value),
+            $session->status->value);
 
-        return match (true) {
-            $session->status === SessionStatus::Recording => ['label' => __('Waiting'), 'tone' => 'neutral', 'icon' => 'clock'],
-            $session->status === SessionStatus::Uploading => ['label' => __('Uploading'), 'tone' => 'neutral', 'icon' => 'upload'],
-            $session->status === SessionStatus::Failed, $final?->status === TranscriptStatus::Failed => ['label' => __('Failed'), 'tone' => 'danger', 'icon' => 'alert'],
-            $session->status === SessionStatus::Processing,
-            in_array($final?->status, [TranscriptStatus::Pending, TranscriptStatus::Submitted, TranscriptStatus::Processing], true) => ['label' => __('Transcribing'), 'tone' => 'neutral', 'icon' => 'clock'],
-            $final === null => ['label' => __('Untranscribed'), 'tone' => 'warning', 'icon' => 'transcript'],
+        return match ($state) {
+            // A failure with no audio in it says so: Retry would not help.
+            'failed' => $session->hasNoAudio() ? ['label' => __('No audio'), 'tone' => 'danger', 'icon' => 'alert', 'state' => $state]
+                : ['label' => __('Failed · Retry'), 'tone' => 'danger', 'icon' => 'alert', 'state' => $state],
+            'waiting' => ['label' => __('Waiting'), 'tone' => 'neutral', 'icon' => 'clock', 'state' => $state],
+            'waiting_to_upload' => ['label' => __('Waiting to upload'), 'tone' => 'quiet', 'icon' => 'upload', 'state' => $state],
+            'transcribing' => ['label' => __('Transcribing…'), 'tone' => 'neutral', 'icon' => 'clock', 'state' => $state],
+            'audio_only' => ['label' => __('Audio only'), 'tone' => 'quiet', 'icon' => 'mic', 'state' => $state],
             default => null,
         };
     }

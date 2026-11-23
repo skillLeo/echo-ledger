@@ -21,6 +21,7 @@ use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\Shell;
 use App\Filament\Support\V2CopyForAi;
 use App\Filament\Support\WhatsAppActions;
+use App\Http\Resources\LibraryItemResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\FinalTranscriptCoordinator;
@@ -91,9 +92,11 @@ final class CaptureSessionsTable
             ->groupingSettingsHidden()
             ->groupingDirectionSettingHidden()
             // The new Library's rows also show the unread dot: whether this person opened each one (U9).
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(ConsoleV2::library()
-                ? ['labels', 'finalTranscript' => fn ($final) => self::rowTranscriptColumns($final), 'client', 'device', 'opens' => fn ($opens) => $opens->where('user_id', (int) auth()->id())]
-                : 'labels'))
+            // Since v2.1 also whether an upload of each failed: the row's state is its one Status (LibraryFilters::state).
+            ->modifyQueryUsing(fn (Builder $query): Builder => ConsoleV2::library()
+                ? LibraryItemResource::withUploadFailed($query->with(['labels', 'finalTranscript' => fn ($final) => self::rowTranscriptColumns($final), 'client', 'device',
+                    'opens' => fn ($opens) => $opens->where('user_id', (int) auth()->id())]))
+                : $query->with('labels'))
             // The phone's list: one row per recording (tile, title, time, a second line, a status only when needed).
             // Since v1.6 (P4.4) the Library's List/Table switch shows a table instead, its columns chosen in Columns.
             // Since v2.0 (ui_v2.library) the rows of the apps' Library: filament.v2.library-row.

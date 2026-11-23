@@ -1155,7 +1155,8 @@ class ViewCaptureSession extends ViewRecord
                         app(TranscribeLater::class)->startFor($person instanceof User ? $person : throw new ApiError(403, 'not_allowed', 'Sign in again.'), (int) $record->workspace_id, $record->id);
                     } catch (ApiError $e) {
                         $record->update(['language' => $before]);
-                        Notification::make()->title('Not transcribed')->body($e->getMessage())->danger()->send();
+                        // The glossary's words (docs/PLAN_V2_1_POLISH.md section 1): the recording stays Audio only.
+                        Notification::make()->title(__('Still audio only'))->body($e->getMessage())->danger()->send();
 
                         return;
                     }

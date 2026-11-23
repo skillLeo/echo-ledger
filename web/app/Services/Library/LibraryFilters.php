@@ -63,14 +63,24 @@ final class LibraryFilters
     public const MAX_VALUES = 50;
 
     /**
-     * The Library's tabs (docs/API.md "The Library's tabs", UI guidance the apps share): each tab's Sources. All is every
-     * Source; imported and other are under All only.
+     * The Library's kinds (docs/API.md "The Library's kinds", since 2.0.0-q): every recording has exactly one, worked out
+     * from its Source. These are the Sources of each named kind; every other Source (imported, other, and any Source
+     * added later) is `other`.
      */
-    public const KINDS = [
-        'calls' => ['whatsapp', 'whatsapp_business', 'phone_call', 'telegram', 'signal', 'messenger', 'instagram', 'skype'],
-        'meetings' => ['zoom', 'google_meet', 'microsoft_teams', 'slack', 'discord'],
-        'voice_notes' => ['voice_note'],
+    public const KIND_SOURCES = [
+        'call' => ['whatsapp', 'whatsapp_business', 'phone_call', 'telegram', 'signal', 'messenger', 'instagram', 'skype'],
+        'meeting' => ['zoom', 'google_meet', 'microsoft_teams', 'slack', 'discord'],
+        'voice_note' => ['voice_note'],
     ];
+
+    /** Every kind, in the tabs' order (a library item's `facets.kind`, the facets' `kinds`). */
+    public const KIND_NAMES = ['call', 'meeting', 'voice_note', 'other'];
+
+    /**
+     * The console's address words for the tabs (`kind=`), each the kind it names: plural, as they are live since 2.0.0-p
+     * and saved links keep them (docs/API.md "The Library's kinds"). All has none.
+     */
+    public const KINDS = ['calls' => 'call', 'meetings' => 'meeting', 'voice_notes' => 'voice_note', 'other' => 'other'];
 
     /** "Needs you": a recording stuck uploading or being transcribed for more than this since its current attempt began. */
     public const STUCK_HOURS = 24;
@@ -98,6 +108,33 @@ final class LibraryFilters
             : (in_array($sourceApp, self::SOURCES, true) ? $sourceApp : SourceApp::Other->value);
     }
 
+    /** A Source's kind (docs/API.md "The Library's kinds"): the named kind that lists it, else `other`. */
+    public static function kind(string $source): string
+    {
+        foreach (self::KIND_SOURCES as $kind => $sources) {
+            if (in_array($source, $sources, true)) {
+                return $kind;
+            }
+        }
+
+        return 'other';
+    }
+
+    /**
+     * The Sources of a kind, for narrowing to its tab: a named kind's list, or for `other` every Source no named kind
+     * lists. Null for a word that is no kind.
+     *
+     * @return list<string>|null
+     */
+    public static function kindSources(string $kind): ?array
+    {
+        if (isset(self::KIND_SOURCES[$kind])) {
+            return self::KIND_SOURCES[$kind];
+        }
+
+        return $kind === 'other' ? array_values(array_filter(self::SOURCES, fn (string $source): bool => self::kind($source) === 'other')) : null;
+    }
+
     /**
      * The Status of a recording, the first that holds: `failed` (the recording failed, an upload of it failed, or its
      * transcript failed), `transcribed` (its transcript is finished), `processing` (still uploading or being processed,
@@ -117,6 +154,26 @@ final class LibraryFilters
     }
 
     /**
+     * The glossary state of a recording (docs/PLAN_V2_1_POLISH.md section 1), from its one Status: `failed` ("Failed ·
+     * Retry"), `waiting` (a call waiting for Keep or Discard, in Needs you), `waiting_to_upload` (not uploaded yet),
+     * `transcribing` ("Transcribing…"), `audio_only` (audio kept, no transcript) or null (transcribed: the row shows its
+     * words). The console's rows, its Audio only place and its Status filter all read this, so they agree.
+     */
+    public static function state(string $status, string $sessionStatus): ?string
+    {
+        return match ($status) {
+            'failed' => 'failed',
+            'transcribed' => null,
+            'not_transcribed' => 'audio_only',
+            default => match ($sessionStatus) {
+                SessionStatus::Recording->value => 'waiting',
+                SessionStatus::Uploading->value => 'waiting_to_upload',
+                default => 'transcribing',
+            },
+        };
+    }
+
+    /**
      * The Language of a recording: the language its transcript was written in, else the one chosen for it, else
      * `unknown`. Old and engine spellings read as the offered codes ("en+ur" and Hindi are Urdu, "ar-EG" Arabic).
      */
@@ -127,16 +184,20 @@ final class LibraryFilters
 
     /**
      * What a library item carries since 2.0.0-p (`facets`): the recording's Source, Status and Language, so the apps
-     * count with the server's words for them.
+     * count with the server's words for them, and since 2.0.0-q its kind.
      *
-     * @return array{source: string, status: string, language: string}
+     * @return array{source: string, status: string, language: string, kind: string}
      */
     public static function itemFacets(CaptureSession $session, bool $uploadFailed, ?string $finalStatus, ?string $finalLanguage): array
     {
+        $source = self::source($session->source_app->value, $session->origin);
+
         return [
-            'source' => self::source($session->source_app->value, $session->origin),
+            'source' => $source,
             'status' => self::status($session->status->value, $uploadFailed, $finalStatus),
             'language' => self::language($finalLanguage, $session->language),
+            // Since 2.0.0-q: the recording's one kind (docs/API.md "The Library's kinds").
+            'kind' => self::kind($source),
         ];
     }
 

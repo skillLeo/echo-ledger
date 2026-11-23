@@ -118,13 +118,14 @@ it('names the device on the row and stars a recording to pin it to the top, or u
     expect($other->fresh()->pinned)->toBeFalse();
 });
 
-it('shows Uploading, Transcribing, Waiting and Failed on their rows, and nothing on a finished one', function () {
+it('shows Waiting to upload, Transcribing…, Waiting and Failed · Retry on their rows, and nothing on a finished one', function () {
+    // Since v2.1 the glossary's words (docs/PLAN_V2_1_POLISH.md section 1), from each recording's one Status.
     $rows = collect(libraryRows(Livewire::test(ListCaptureSessions::class)->html()));
     $row = fn (string $title): string => (string) $rows->first(fn (string $r): bool => str_contains($r, $title));
-    expect($row('Still on its way'))->toContain('Uploading')
-        ->and($row('Being written out'))->toContain('Transcribing')
-        ->and($row('Transcript that failed'))->toContain('Failed')
-        ->and($row('Payment terms'))->not->toContain('Uploading')->not->toContain('Transcribing')->not->toContain('Failed');
+    expect($row('Still on its way'))->toContain('Waiting to upload')
+        ->and($row('Being written out'))->toContain('Transcribing…')
+        ->and($row('Transcript that failed'))->toContain('Failed · Retry')
+        ->and($row('Payment terms'))->not->toContain('Waiting to upload')->not->toContain('Transcribing')->not->toContain('Failed');
     // Since 2.0.0-p the call waiting for its decision is in Needs you (with the failures), not among the recordings.
     expect($row('Call to keep or discard'))->toBe('');
     $needs = collect(libraryRows(Livewire::withQueryParams(['tab' => 'needs_you'])->test(ListCaptureSessions::class)->html()));

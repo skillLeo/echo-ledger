@@ -86,15 +86,16 @@ class V2NeedsActionWidget extends Widget
         $all = [
             'waiting' => [(int) ($counts['waiting'] ?? 0), ':count waiting for a decision|:count waiting for a decision'],
             'failed' => [(int) ($counts['failed'] ?? 0), '1 failed upload|:count failed uploads'],
-            // The new Library's (ui_v2.library) only: its place Not transcribed, counted as the sidebar counts it.
-            'untranscribed' => [ConsoleV2::library() ? app(LibraryFacets::class)->libraryCounts($workspace, (int) CurrentWorkspace::userId())['not_transcribed'] : 0, '1 not transcribed|:count not transcribed'],
+            // The new Library's (ui_v2.library) only: its place Audio only, counted as the sidebar counts it (since v2.1
+            // the glossary's name, docs/PLAN_V2_1_POLISH.md section 1).
+            'untranscribed' => [ConsoleV2::library() ? app(LibraryFacets::class)->libraryCounts($workspace, (int) CurrentWorkspace::userId())['not_transcribed'] : 0, '1 audio only|:count audio only'],
         ];
         $items = [];
         foreach ($all as $key => [$count, $words]) {
             if ($count > 0) {
                 $items[] = ['key' => $key, 'count' => $count, 'words' => trans_choice($words, $count, ['count' => $count]),
                     // The list reads its view from `tab`; the new Library keeps the waiting calls and the failures in Needs you.
-                    'url' => CaptureSessionResource::getUrl('index', ['tab' => ! ConsoleV2::library() ? $key : ($key === 'untranscribed' ? 'not_transcribed' : 'needs_you')])];
+                    'url' => CaptureSessionResource::getUrl('index', ['tab' => ! ConsoleV2::library() ? $key : ($key === 'untranscribed' ? 'audio_only' : 'needs_you')])];
             }
         }
 

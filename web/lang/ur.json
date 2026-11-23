@@ -1087,5 +1087,10 @@
     "Team members": "ٹیم ممبرز",
     "Team members, :value": "ٹیم ممبرز، :value",
     "Uploads in the last 24 hours": "پچھلے 24 گھنٹوں میں اپ لوڈز",
-    "Uploads in the last 24 hours, :value": "پچھلے 24 گھنٹوں میں اپ لوڈز، :value"
+    "Uploads in the last 24 hours, :value": "پچھلے 24 گھنٹوں میں اپ لوڈز، :value",
+    "Transcribing…": "ٹرانسکرپٹ بن رہا ہے…",
+    "Failed · Retry": "ناکام · دوبارہ کوشش کریں",
+    "Waiting to upload": "اپ لوڈ کا انتظار",
+    "1 audio only|:count audio only": "1 صرف آڈیو|:count صرف آڈیو",
+    "Still audio only": "ابھی صرف آڈیو"
 }

@@ -76,7 +76,6 @@
    "a|needs you",
    "a|unread",
    "a|important",
-   "a|not transcribed",
    "a|audio only"
   ]
  },
@@ -308,8 +307,8 @@
    "input|is",
    "input|is not",
    "input|transcribed",
-   "input|not transcribed",
-   "input|processing",
+   "input|audio only",
+   "input|transcribing…",
    "input|failed",
    "input|any bookmark",
    "input|custom dates",

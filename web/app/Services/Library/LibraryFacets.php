@@ -154,7 +154,7 @@ final class LibraryFacets
      *
      * @param  Filters  $filters
      * @param  list<string>|null  $sources  a Library tab's Sources (null: every one)
-     * @return array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}
+     * @return array{total: int, kinds: array<string, int>, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}
      */
     public function facets(int $workspaceId, int $userId, array $filters, ?string $query = null, ?string $zone = null, ?string $place = null, ?array $sources = null): array
     {
@@ -162,7 +162,7 @@ final class LibraryFacets
         $query = self::cleanQuery($query);
         $place = self::place($place);
         $version = $this->version($workspaceId, $userId);
-        $key = 'library-facets:result:'.$workspaceId.':'.$userId.':'.sha1((string) json_encode([$version, $filters, $query, $zone, $place, $sources, intdiv(Carbon::now()->getTimestamp(), self::RESULT_TTL)]));
+        $key = 'library-facets:result2:'.$workspaceId.':'.$userId.':'.sha1((string) json_encode([$version, $filters, $query, $zone, $place, $sources, intdiv(Carbon::now()->getTimestamp(), self::RESULT_TTL)]));
 
         return self::kept($version, $key, self::RESULT_TTL, fn (): array => $this->count($workspaceId, $userId, $filters, $query, $zone, $version, $place, $sources));
     }
@@ -328,7 +328,7 @@ final class LibraryFacets
     /**
      * @param  Filters  $filters
      * @param  list<string>|null  $sources
-     * @return array{total: int, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}
+     * @return array{total: int, kinds: array<string, int>, sections: array<string, list<array<string, mixed>>>, needs_you: array{count: int, failed: int, waiting: int, stuck: int}}
      */
     private function count(int $workspaceId, int $userId, array $filters, ?string $query, string $zone, string $version, string $place = 'all', ?array $sources = null): array
     {
@@ -346,10 +346,13 @@ final class LibraryFacets
 
         $counts = array_fill_keys(LibraryFilters::SECTIONS, []);
         $total = 0;
+        // Since 2.0.0-q: what the filters and the search keep, by kind (the tabs' counts; they add up to the total).
+        $kinds = array_fill_keys(LibraryFilters::KIND_NAMES, 0);
         foreach ($rows as $row) {
             $failed = self::passes($row, $filters, $ranges);
             if ($failed === true) {
                 $total++;
+                $kinds[LibraryFilters::kind($row['source'])]++;
             }
             // A row counts in a section's options when every other section keeps it: it failed none, or only that one.
             foreach (LibraryFilters::SECTIONS as $section) {
@@ -367,6 +370,7 @@ final class LibraryFacets
 
         return [
             'total' => $total,
+            'kinds' => $kinds,
             'sections' => $this->options($workspaceId, $userId, $all, $counts, $filters),
             'needs_you' => $this->needsYou($workspaceId, $userId),
         ];

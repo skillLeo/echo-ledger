@@ -76,8 +76,9 @@ final class LibraryFilterBar
             'language' => $value === LibraryFilters::UNKNOWN_LANGUAGE ? __('Unknown') : __(LanguageChoice::label($value)),
             'status' => match ($value) {
                 'transcribed' => __('Transcribed'),
-                'not_transcribed' => __('Not transcribed'),
-                'processing' => __('Processing'),
+                // The glossary's names (docs/PLAN_V2_1_POLISH.md section 1); the values stay the API's.
+                'not_transcribed' => __('Audio only'),
+                'processing' => __('Transcribing…'),
                 default => __('Failed'),
             },
             'labels' => is_string($option['name'] ?? null) ? $option['name'] : $value,
@@ -175,14 +176,15 @@ final class LibraryFilterBar
 
     /**
      * The Library's places by key, in the console's language: All recordings first (docs/PLAN_NAV_3_LEVELS.md section 0;
-     * nothing is called the Inbox), then Needs you, Unread, Important, Not transcribed and Audio only.
+     * nothing is called the Inbox), then Needs you, Unread, Important and Audio only. Since v2.1 Not transcribed is Audio
+     * only (docs/PLAN_V2_1_POLISH.md section 1): one name and one definition, the recordings whose rows say Audio only.
      *
      * @return array<string, string>
      */
     public static function placeNames(): array
     {
         return ['all' => __('All recordings'), 'needs_you' => __('Needs you'), 'unread' => __('Unread'), 'important' => __('Important'),
-            'not_transcribed' => __('Not transcribed'), 'audio_only' => __('Audio only')];
+            'audio_only' => __('Audio only')];
     }
 
     /**
@@ -204,16 +206,24 @@ final class LibraryFilterBar
         $library = CaptureSessionResource::getUrl('index');
         $onLibrary = rtrim($path, '/') === rtrim((string) parse_url($library, PHP_URL_PATH), '/');
         $tab = is_string($query['tab'] ?? null) ? $query['tab'] : 'all';
+        // Old links to Not transcribed (and the older Untranscribed) open Audio only.
+        $tab = in_array($tab, ['not_transcribed', 'untranscribed'], true) ? 'audio_only' : $tab;
         $plain = $onLibrary && empty($query['f']) && empty($query['v']) && empty($query['search']);
         $facets = app(LibraryFacets::class);
         $counts = $facets->libraryCounts($workspaceId, $user->id);
 
         $places = [];
-        $icons = ['all' => 'library', 'needs_you' => 'alert', 'unread' => 'inbox', 'important' => 'flag', 'not_transcribed' => 'transcript', 'audio_only' => 'mic'];
+        $icons = ['all' => 'library', 'needs_you' => 'alert', 'unread' => 'inbox', 'important' => 'flag', 'audio_only' => 'mic'];
         $names = self::placeNames();
-        foreach (LibraryFacets::PLACES as $place) {
+        foreach (array_keys($names) as $place) {
+            // Audio only counts what its rows say (the engine's `not_transcribed`, LibraryFilters::state).
+            $count = match ($place) {
+                'all' => 0,
+                'audio_only' => $counts['not_transcribed'],
+                default => $counts[$place],
+            };
             $places[] = ['key' => $place, 'label' => $names[$place], 'icon' => $icons[$place], 'url' => $place === 'all' ? $library : $library.'?tab='.$place,
-                'count' => $place === 'all' ? 0 : $counts[$place], 'strong' => in_array($place, ['needs_you', 'unread'], true),
+                'count' => $count, 'strong' => in_array($place, ['needs_you', 'unread'], true),
                 'active' => $plain && ($place === 'all' ? in_array($tab, ['all', ''], true) : $tab === $place)];
         }
         $shared = [];
