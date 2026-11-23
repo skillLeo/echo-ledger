@@ -34,8 +34,10 @@ const WINDOWS = [
 /**
  * The full-screen pictures kept from 2.0.12 (scripts/baselines/titlebar-fullscreen), compared pixel for pixel on every
  * run, with no tolerance. A picture is only the same on the machine, browser and fonts it was made with, written down
- * next to them in made-on.json by `--baseline` (the first ones: MADE_ON below). On another machine, or after a Playwright
- * update, make them again from 2.0.12's code (git worktree of the v2.0.12 tag with this script and the fixture) first.
+ * next to them in made-on.json by `--baseline`. These were made from the v2.0.12 tag on 2026-11-23, on a Mac15,6
+ * (macOS 27.2.1, arm64) with Playwright 1.64.1's Chromium 156.0.8078.4 and the app's own Inter (100–900, the only face
+ * the page loads). On another machine, or after a Playwright update, make them again from 2.0.12's code first (a
+ * worktree of the v2.0.12 tag with this script, the fixture and src/lib/titlebar*.{ts,js}, run with --baseline).
  */
 const BASELINE_CASES = new Set(["1024-en-light", "1280-en-light", "1440-en-light", "1024-ur-dark", "1280-ur-dark", "1440-ur-dark"]);
 const baselines = join(desktop, "scripts", "baselines", "titlebar-fullscreen");
